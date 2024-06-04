@@ -1,0 +1,27 @@
+{
+    "0": {
+        "dateStart": null,
+        "dateEnd": null,
+        "alert": "Welcome to Tournament Stream Helper!\nThis program is made possible because of great efforts from @joao_shino and the community such as @MathiasWolfbrok specially with testing and contributions to game assets.\nBe sure to check out the readme on GitHub for your initial setup and contribute with game assets if possible. If you have any questions, issues, suggestions or just want to see what other people are doing with TSH, check out our Discord channel!\nWe hope you have a great experience with TSH!"
+    },
+    "2": {
+        "dateStart": null,
+        "dateEnd": 1683460289,
+        "alert": "WARNING FOR 5.2 and 5.21 USERS:\n\nThe updater on Tournament Stream Helper 5.2 and 5.21 is broken, if you want to update the software to 5.22 and above please download the latest Github release and extract all files except the layout and user_data folders to your TSH install folder."
+    },
+    "3": {
+        "dateStart": null,
+        "dateEnd": 1683583537,
+        "alert": "WARNING:\n\nSTARTGG SUPPORT IS CURRENTLY BROKEN ON TSH DUE TO MAJOR CHANGES ON THE PLAYER DATA API.\nAll imports and data (Bracket, player data, set selector, top 8, etc.) are affected\n\nWe are currently investigating the situation and will push a fix as soon as possible. Thank you for your patience.\nIn the meantime, remember that data can still be manually inputted in the software."
+    },
+    "4": {
+        "dateStart": null,
+        "dateEnd": 1707507578,
+        "alert": "WARNING:\n\nA MAJOR OUTAGE IS CURRENTLY OCCURING ON THE ASSET REPOSITORY.\nAsset Downloads are currently no longer available in the Asset Downloader.\nPlease visit https://github.com/joaorb64/TournamentStreamHelper/issues/704 for more information and potential workarounds."
+    },
+    "5": {
+        "dateStart": null,
+        "dateEnd": 1707850800,
+        "alert": "UPDATE:\n\nWe are now fairly confident that the asset repository outage is now over, and asset packs should now once again be available from both the Asset Downloader and the Asset Portal. Thank you for your patience."
+    }
+}
