@@ -1,3 +1,4 @@
+import sys
 import aiofiles
 import aiofiles.os
 import aiofiles.ospath
@@ -23,8 +24,6 @@ program_context = {
 
 async def on_startup(app: FastAPI):
     global program_context
-
-    logger.debug("starting...")
     async with aiofiles.open('pyproject.toml', mode='r', encoding='utf-8') as f:
         # pyproject.toml likely included in production builds as it makes
         # updating the version easier, less redundant, etc.
@@ -45,7 +44,13 @@ app.socketio = AsyncServer(async_mode='asgi')
 templates = Jinja2Templates(directory='./dist')
 
 # react assets (/dist/assets)
-app.mount("/assets", StaticFiles(directory="./dist/assets"), name="assets")
+try:
+    app.mount("/assets", StaticFiles(directory="./dist/assets"), name="assets")
+except:
+    print("Note: ./dist/assets was not found, you may want " +
+                     "to run 'npm run build' so that the " +
+                     "server can find it.")
+    sys.exit(1)
 
 # /api/v1/* | api_v1_*
 app.include_router(router_v1)
