@@ -7,7 +7,8 @@ from hypercorn.asyncio import serve
 from socketio import ASGIApp
 from loguru import logger
 
-from server import settings, server
+from server import server
+from server.settings import Settings
 
 async def main():
     logger.add(
@@ -28,14 +29,14 @@ async def main():
 
     logger.info("Server is starting")
 
-    await settings.load()
+    await Settings.Load()
 
     config = Config()
-    config.log.access_logger = logger.bind(name="access_logger")
+    config.log.access_logger = None
     config.log.error_logger = logger.bind(name="error_logger")
 
-    host = await settings.get("server.host")
-    port = await settings.get("server.port")
+    host = await Settings.Get("server.host")
+    port = await Settings.Get("server.port")
     config.bind = [f"{host}:{port}"]
 
     await serve(

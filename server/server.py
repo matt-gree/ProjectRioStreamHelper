@@ -1,8 +1,8 @@
-import sys
+import asyncio
 import aiofiles
 import aiofiles.os
 import aiofiles.ospath
-import tomllib
+import orjson
 
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
@@ -12,26 +12,35 @@ from fastapi.templating import Jinja2Templates
 from socketio import AsyncServer
 from loguru import logger
 
-from server import settings
+from server.settings import Settings, Config
 from server.api import router_v1
 
-program_context = {
-    "name": "TournamentStreamHelper",
-    "version": "?",
-    "description": "",
-    "authors": []
-}
-
 async def on_startup(app: FastAPI):
-    global program_context
-    async with aiofiles.open('pyproject.toml', mode='r', encoding='utf-8') as f:
-        # pyproject.toml likely included in production builds as it makes
-        # updating the version easier, less redundant, etc.
-        program_context = tomllib.loads(await f.read())["tool"]["poetry"]
+    await Config.Load()
+
+    if await Settings.Get("server.dev") == True:
+        logger.info("For dev work, please use the server URL below instead of Vite's!")
 
 async def on_shutdown(app: FastAPI):
-    logger.debug("shutting down...")
-    await settings.save()
+    await Settings.Save()
+
+async def load_manifest() -> dict:
+    css = []
+    js = []
+
+    if await aiofiles.ospath.exists("./dist/.vite/manifest.json") == True:
+        manifest = {}
+        if await Settings.Get("server.dev") == False:
+            async with aiofiles.open("./dist/.vite/manifest.json", "rb") as file:
+                manifest = await asyncio.to_thread(orjson.loads, await file.read())
+
+        for name in manifest:
+            js.append(manifest[name].file)
+            if "css" in manifest[name]:
+                for name in manifest[name].css:
+                    css.append(name)
+
+    return {"css": css, "js": js}
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -40,17 +49,11 @@ async def lifespan(app: FastAPI):
     await on_shutdown(app)
 
 app = FastAPI(lifespan=lifespan)
-app.socketio = AsyncServer(async_mode='asgi')
-templates = Jinja2Templates(directory='./dist')
+app.socketio = AsyncServer(async_mode="asgi")
+templates = Jinja2Templates(directory="./dist")
 
 # react assets (/dist/assets)
-try:
-    app.mount("/assets", StaticFiles(directory="./dist/assets"), name="assets")
-except:
-    print("Note: ./dist/assets was not found, you may want " +
-                     "to run 'npm run build' so that the " +
-                     "server can find it.")
-    sys.exit(1)
+app.mount("/assets", StaticFiles(directory="./dist/assets"), name="assets")
 
 # /api/v1/* | api_v1_*
 app.include_router(router_v1)
@@ -58,7 +61,7 @@ app.include_router(router_v1)
 # tsh_info.json
 @app.get("/tsh_info.json", response_class=ORJSONResponse)
 async def tsh_info() -> ORJSONResponse:
-    return ORJSONResponse([program_context])
+    return ORJSONResponse([Config.config])
 
 # root (/index.html etc)
 @app.get("/", response_class=HTMLResponse)
@@ -66,5 +69,10 @@ async def index(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(
         request=request,
         name="index.html",
-        context=program_context
+        context={
+            "name": Config.config["name"],
+            "version": Config.config["version"],
+            "settings": Settings.settings,
+            "manifest": await load_manifest()
+        }
     )
