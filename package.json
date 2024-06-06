@@ -4,8 +4,8 @@
   "version": "6.0.0",
   "type": "module",
   "scripts": {
-    "setup": "python3 -m venv venv && . venv/bin/activate && pip install poetry && poetry install && deactivate && vite build",
-    "setup:win": "python -m venv venv && .\\venv\\Scripts\\activate && pip install poetry && poetry install && .\\venv\\Scripts\\deactivate && vite build",
+    "setup": "npm install && python3 -m venv venv && . venv/bin/activate && pip install poetry && poetry install && deactivate && vite build",
+    "setup:win": "npm install && python -m venv venv && .\\venv\\Scripts\\activate && pip install poetry && poetry install && .\\venv\\Scripts\\deactivate && vite build",
     "dev": "concurrently -n vite,server \"vite\" \"npm run server\"",
     "dev:win": "concurrently -n vite,server \"vite\" \"npm run server:win\"",
     "server": ". venv/bin/activate && venv/bin/python3 main.py && deactivate",
