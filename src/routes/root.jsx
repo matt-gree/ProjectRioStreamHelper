@@ -1,23 +1,28 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import '../css/root.css';
 
 export default function Root() {
-  const [count, setCount] = useState(0)
+  const [connected, setConnected] = useState(window.socket.connected);
+
+  useEffect(() => {
+    const onConnect = () => {
+      setConnected(true);
+    }
+    const onDisconnect = () => {
+      setConnected(false);
+    }
+    window.socket.on('connect', onConnect);
+    window.socket.on('disconnect', onDisconnect);
+
+    return () => {
+      window.socket.off('connect', onConnect);
+      window.socket.off('disconnect', onDisconnect);
+    }
+  });
 
   return (
     <>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/Root.jsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
+      <h1>{connected ? 'Connected' : 'Not Connected'}</h1>
     </>
   )
 }

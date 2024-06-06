@@ -24,6 +24,7 @@
     "react-intl": "^6.6.8",
     "react-router-dom": "^6.23.1",
     "react-use-websocket": "^4.8.1",
+    "socket.io-client": "^4.7.5",
     "zustand": "^4.5.2"
   },
   "devDependencies": {
@@ -31,10 +32,6 @@
     "@types/react-dom": "^18.2.22",
     "@vitejs/plugin-react": "^4.2.1",
     "concurrently": "^8.2.2",
-    "eslint": "^9.4.0",
-    "eslint-plugin-react": "^7.34.1",
-    "eslint-plugin-react-hooks": "^4.6.0",
-    "eslint-plugin-react-refresh": "^0.4.6",
     "prop-types": "^15.8.1",
     "vite": "^5.2.0"
   }
