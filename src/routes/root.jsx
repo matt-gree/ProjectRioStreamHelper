@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { FormattedMessage } from 'react-intl';
 import '../css/root.css';
 
 export default function Root() {
@@ -22,7 +23,10 @@ export default function Root() {
 
   return (
     <>
-      <h1>{connected ? 'Connected' : 'Not Connected'}</h1>
+      <h1>{connected ? 
+        <FormattedMessage id="status.connected" /> : 
+        <FormattedMessage id="status.not_connected" />
+      }</h1>
     </>
   )
 }
