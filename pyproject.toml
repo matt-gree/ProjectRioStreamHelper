@@ -19,6 +19,8 @@ websockets = "^12.0"
 python-socketio = "^5.11.2"
 aiofiles = "^23.2.1"
 uvicorn = "^0.30.1"
+pillow = "^10.3.0"
+pystray = "^0.19.5"
 
 
 [build-system]

@@ -7,7 +7,8 @@ from socketio import ASGIApp
 from loguru import logger
 
 from server import server
-from server.settings import Settings
+from server.settings import Settings, Config as TSHConfig
+from server.tray import Tray
 from server.utils.uvilogger import setup_logger
 
 async def main() -> int:
@@ -27,6 +28,7 @@ async def main() -> int:
         rotation="20 MB"
     )
 
+    await TSHConfig.Load()
     await Settings.Load()
 
     uvi = Server(Config(
@@ -41,7 +43,22 @@ async def main() -> int:
     ))
 
     setup_logger()
-    await uvi.serve()
+    tray = Tray.create_tray()
+
+    try:
+        tasks, _ = await asyncio.wait([
+            asyncio.create_task(
+                uvi.serve(), name="uvicorn"
+            ),
+            asyncio.create_task(
+                asyncio.to_thread(tray.run), name="tray"
+            )
+        ])
+        for task in tasks:
+            if task.exception():
+                raise task.exception()
+    except (asyncio.exceptions.CancelledError, KeyboardInterrupt):
+        pass
 
     return 0
 

@@ -11,18 +11,27 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from socketio import AsyncServer
 from loguru import logger
+from webbrowser import open_new_tab
 
 from server.settings import Settings, Config
+from server.tray import Tray
 from server.api import router_v1
 
 async def on_startup(app: FastAPI):
-    await Config.Load()
-
     if await Settings.Get("server.dev") == True:
         logger.info("For dev work, please use the server URL below instead of Vite's!")
 
+    host = await Settings.Get("server.host")
+    if host == "0.0.0.0":
+        host = "127.0.0.1"
+
+    port = await Settings.Get("server.port")
+    if await Settings.Get("server.autostart", False) == True:
+        await asyncio.to_thread(open_new_tab, f"http://{host}:{port}")
+
 async def on_shutdown(app: FastAPI):
     await Settings.Save()
+    Tray.icon.stop()
 
 async def load_manifest() -> dict:
     css = []

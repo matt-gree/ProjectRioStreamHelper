@@ -1,12 +1,20 @@
 import orjson
 import asyncio
 import aiofiles
+import aiofiles.ospath
 import tomllib
 
 from server.utils.deep_dict import deep_get, deep_set, deep_unset
 
 class Settings:
-    settings = {}
+    settings = {
+        "server": {
+            "host": "0.0.0.0",
+            "port": 5260,
+            "dev": True,
+            "autostart": True
+        }
+    }
 
     @classmethod
     async def Save(cls) -> None:
@@ -16,6 +24,10 @@ class Settings:
 
     @classmethod
     async def Load(cls) -> dict:
+        if await aiofiles.ospath.exists("./user_data/settings.json") == False:
+            # Create file if it doesn't exist
+            await cls.Save()
+
         async with aiofiles.open("./user_data/settings.json", "rb") as file:
             cls.settings = await asyncio.to_thread(orjson.loads, await file.read())
             return cls.settings
@@ -51,3 +63,5 @@ class Config:
             cls.config["version"] = context["version"]
             cls.config["description"] = context["description"]
             cls.config["authors"] = context["authors"]
+
+        return cls.config
