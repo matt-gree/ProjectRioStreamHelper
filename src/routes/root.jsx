@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { FormattedMessage } from 'react-intl';
+import { useSocket } from '../context/socket';
 import '../css/root.css';
 
 export default function Root() {
-  const [connected, setConnected] = useState(window.socket.connected);
+  const [connected, setConnected] = useState(false);
+  const socket = useSocket();
 
   useEffect(() => {
     const onConnect = () => {
@@ -12,14 +14,14 @@ export default function Root() {
     const onDisconnect = () => {
       setConnected(false);
     }
-    window.socket.on('connect', onConnect);
-    window.socket.on('disconnect', onDisconnect);
+    socket.on('connect', onConnect);
+    socket.on('disconnect', onDisconnect);
 
     return () => {
-      window.socket.off('connect', onConnect);
-      window.socket.off('disconnect', onDisconnect);
+      socket.off('connect', onConnect);
+      socket.off('disconnect', onDisconnect);
     }
-  });
+  }, [socket]);
 
   return (
     <>

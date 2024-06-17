@@ -39,7 +39,6 @@ def method(*args, **kwargs):
         id = kwargs.pop("id", "")
 
         # Remove Socketio extra params
-        handler = kwargs.pop("handler", None)
         namespace = kwargs.pop("namespace", None)
         version = kwargs.pop("version", 1)
 
