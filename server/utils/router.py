@@ -1,5 +1,6 @@
 import orjson
 from functools import partial
+from fastapi.responses import Response, JSONResponse
 from server import app
 
 async def on_socketio_event(sid, data, event_id, func):
@@ -12,11 +13,24 @@ async def on_socketio_event(sid, data, event_id, func):
 
     content = await func(**parsed, session_id=sid)
 
+    if content == None:
+        return
+    
     if isinstance(content, dict) and uuid != "":
         content["uuid"] = uuid
 
-    if content != None:
-        await app.socketio.emit(event_id, content, json=True, to=sid)
+    isJson = True
+    if isinstance(content, JSONResponse):
+        content = content.body.decode(content.charset)
+    else:
+        isJson = False
+        if isinstance(content, Response):
+            content = content.body.decode(content.charset)
+
+    if sid == None or sid == '':
+        await app.socketio.emit(event_id, content, json=isJson)
+    else:
+        await app.socketio.emit(event_id, content, json=isJson, to=sid)
 
 def method(*args, **kwargs):
     def wrapper(func):
@@ -24,14 +38,12 @@ def method(*args, **kwargs):
         del kwargs["session_id"]
 
         # Remove Socketio Event ID
-        id = kwargs.get("id", "")
-        del kwargs["id"]
+        id = kwargs.pop("id", "")
 
         # Remove Socketio extra params
-        handler = kwargs.get("handler", None)
-        del kwargs["handler"]
-        namespace = kwargs.get("namespace", None)
-        del kwargs["namespace"]
+        handler = kwargs.pop("handler", None)
+        namespace = kwargs.pop("namespace", None)
+        version = kwargs.pop("version", 1)
 
         # Call router.get() with async func
         router = args[0]
@@ -39,7 +51,7 @@ def method(*args, **kwargs):
 
         if id != "":
             app.socketio.on(
-                id, 
+                f"v{version}:{id}", 
                 handler=handler, 
                 namespace=namespace
             )(partial(
