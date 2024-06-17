@@ -1,10 +1,13 @@
 from server.utils.router import method
+from fastapi import APIRouter
 from fastapi.responses import ORJSONResponse
-from server.api import router_v1
 
+# This only needs to be declared once in the file
+router = APIRouter()
+
+# /api/v1/update_team
 @method(
-        # Method and endpoint (/api/v1/update_team)
-        router_v1.post, "/update_team",
+        router.post, "/update_team",
         # Version and Socketio ID (v1:update_team)
         version="1", id="update_team",
         # Parameters for FastAPI

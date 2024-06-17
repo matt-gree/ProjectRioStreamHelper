@@ -6,7 +6,7 @@ from uvicorn import Config, Server
 from socketio import ASGIApp
 from loguru import logger
 
-from server import server
+from server import server, socketio
 from server.settings import Settings, Config as TSHConfig
 from server.tray import Tray
 from server.utils.uvilogger import setup_logger
@@ -14,7 +14,7 @@ from server.utils.uvilogger import setup_logger
 async def main() -> int:
     logger.add(
         "./logs/tsh_info.txt",
-        format="[{time:YYYY-MM-DD HH:mm:ss}] - {level} - {file}:{function}:{line} | {message}",
+        format="[{time:YYYY-MM-DD HH:mm:ss}] - {level} - {file}:{function}:{line} | {message} | {extra}",
         encoding="utf-8",
         level="INFO",
         rotation="20 MB"
@@ -22,7 +22,7 @@ async def main() -> int:
 
     logger.add(
         "./logs/tsh_error.txt",
-        format="[{time:YYYY-MM-DD HH:mm:ss}] - {level} - {file}:{function}:{line} | {message}",
+        format="[{time:YYYY-MM-DD HH:mm:ss}] - {level} - {file}:{function}:{line} | {message} | {extra}",
         encoding="utf-8",
         level="ERROR",
         rotation="20 MB"
@@ -33,7 +33,7 @@ async def main() -> int:
 
     uvi = Server(Config(
         app=ASGIApp(
-            server.app.socketio,
+            socketio,
             other_asgi_app=server.app
         ),
         host=await Settings.Get("server.host","127.0.0.1"),

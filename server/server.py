@@ -9,13 +9,12 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, ORJSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from socketio import AsyncServer
 from loguru import logger
 from webbrowser import open_new_tab
 
+from server.api import router_v1
 from server.settings import Settings, Config
 from server.tray import Tray
-from server.api import router_v1
 
 async def on_startup(app: FastAPI):
     if await Settings.Get("server.dev") == True:
@@ -58,7 +57,6 @@ async def lifespan(app: FastAPI):
     await on_shutdown(app)
 
 app = FastAPI(lifespan=lifespan)
-app.socketio = AsyncServer(async_mode="asgi")
 templates = Jinja2Templates(directory="./dist")
 
 # react assets (/dist/assets)
