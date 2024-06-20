@@ -4,30 +4,16 @@ from functools import partial
 from fastapi.responses import Response, JSONResponse
 from server import socketio
 
-async def on_socketio_event(sid, data, event_id, func):
+async def on_socketio_event(sid, data, func):
     parsed = await asyncio.to_thread(orjson.loads, data)
-
-    uuid = ""
-    if isinstance(parsed, dict):
-        uuid = parsed.pop("uuid", "")
-
     content = await func(**parsed, session_id=sid)
 
-    isJson = True
     if isinstance(content, JSONResponse):
         content = await asyncio.to_thread(content.body.decode, content.charset)
-    else:
-        isJson = False
-        if isinstance(content, Response):
-            content = await asyncio.to_thread(content.body.decode, content.charset)
+    elif isinstance(content, Response):
+        content = await asyncio.to_thread(content.body.decode, content.charset)
 
-    if isinstance(content, dict) and uuid != "":
-        content["uuid"] = uuid
-
-    if sid == None or sid == "":
-        await socketio.emit(event_id, content, json=isJson)
-    else:
-        await socketio.emit(event_id, content, json=isJson, to=sid)
+    return content
 
 def method(*args, **kwargs):
     def wrapper(func):
@@ -49,7 +35,6 @@ def method(*args, **kwargs):
         if id != "":
             handler = partial(
                 on_socketio_event,
-                event_id=id,
                 func=func
             )
 

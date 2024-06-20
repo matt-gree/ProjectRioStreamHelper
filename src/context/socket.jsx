@@ -51,6 +51,9 @@ export const useSocket = () => {
 
 export const useSocketSubscribe = (eventName, eventHandler) => {
     const { socket } = useContext(SocketContext);
+    if(!socket) {
+        throw new Error('Unknown error involving Socket.io context');
+    }
 
     useEffect(() => {
         socket.on(eventName, eventHandler);
@@ -59,3 +62,19 @@ export const useSocketSubscribe = (eventName, eventHandler) => {
         }
     }, [eventHandler]);
 }
+
+export const useSocketCallback = (...args) => new Promise((resolve, reject) => {
+    const { socket } = useContext(SocketContext);
+    if(!socket) {
+        reject(new Error('Unknown error involving Socket.io context'));
+        return;
+    }
+
+    try {
+        socket.emit(...args, cb => {
+            resolve(cb);
+        });
+    } catch(e) {
+        reject(e);
+    }
+});
