@@ -8,9 +8,7 @@ async def on_socketio_event(sid, data, func):
     parsed = await asyncio.to_thread(orjson.loads, data)
     content = await func(**parsed, session_id=sid)
 
-    if isinstance(content, JSONResponse):
-        content = await asyncio.to_thread(content.body.decode, content.charset)
-    elif isinstance(content, Response):
+    if isinstance(content, Response):
         content = await asyncio.to_thread(content.body.decode, content.charset)
 
     return content
