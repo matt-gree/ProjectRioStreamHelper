@@ -1,49 +1,35 @@
-import orjson
-import asyncio
 import aiofiles
 import aiofiles.ospath
 import tomllib
 
-from server.utils.deep_dict import deep_get, deep_set, deep_unset
+from functools import lru_cache
+from pydantic import BaseModel
+from pydantic_settings import BaseSettings, JsonConfigSettingsSource, PydanticBaseSettingsSource, SettingsConfigDict
 
-class Settings:
-    settings = {
-        "server": {
-            "host": "0.0.0.0",
-            "port": 5260,
-            "dev": True,
-            "autostart": True
-        }
-    }
+class ServerSettings(BaseModel):
+    host: str = "0.0.0.0"
+    port: int = 5260
+    dev: bool = True
+    autostart: bool = True
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(json_file='./user_data/settings.json', json_file_encoding='utf-8')
 
-    @classmethod
-    async def Save(cls) -> None:
-        async with aiofiles.open("./user_data/settings.json", "wb") as file:
-            contents = await asyncio.to_thread(orjson.dumps, cls.settings, option=orjson.OPT_NON_STR_KEYS)
-            await file.write(contents)
+    server: ServerSettings = ServerSettings()
 
     @classmethod
-    async def Load(cls) -> dict:
-        if await aiofiles.ospath.exists("./user_data/settings.json") == False:
-            # Create file if it doesn't exist
-            await cls.Save()
+    def settings_customise_sources(
+        cls, 
+        settings_cls: BaseSettings, 
+        init_settings: PydanticBaseSettingsSource, 
+        env_settings: PydanticBaseSettingsSource, 
+        dotenv_settings: PydanticBaseSettingsSource, 
+        file_secret_settings: PydanticBaseSettingsSource
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        return init_settings, dotenv_settings, env_settings, JsonConfigSettingsSource(settings_cls), file_secret_settings
 
-        async with aiofiles.open("./user_data/settings.json", "rb") as file:
-            cls.settings = await asyncio.to_thread(orjson.loads, await file.read())
-            return cls.settings
-    
-    @classmethod
-    async def Set(cls, key: str, value):
-        await deep_set(cls.settings, key, value)
-
-    @classmethod
-    async def Unset(cls, key: str):
-        await deep_unset(cls.settings, key)
-        await cls.Save()
-
-    @classmethod
-    async def Get(cls, key: str, default=None):
-        return await deep_get(cls.settings, key, default)
+@lru_cache
+def get_settings():
+    return Settings()
     
 class Config:
     config = {
