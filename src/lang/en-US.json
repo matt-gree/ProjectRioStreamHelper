@@ -1,5 +1,5 @@
 {
     "app.title": "TournamentStreamHelper",
-    "status.connected": "Connected",
-    "status.not_connected": "Not Connected"
+    "fields.set_tournament": "Set Tournament",
+    "fields.load_from_startgg_user": "Load Tournament and Sets from StartGG User"
 }
