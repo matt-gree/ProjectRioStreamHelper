@@ -24,7 +24,7 @@ async def state_get(key: str | None = None, session_id: str | None = None) -> OR
 )
 async def state_set(key: str = "", value: str | None = None, session_id: str | None = None):
     try:
-        await State.Set(key, value, notify=False)
+        await State.Set(key, value, session_id=session_id)
     except Exception as e:
         return ORJSONResponse({
             "error": e
@@ -41,7 +41,7 @@ async def state_set(key: str = "", value: str | None = None, session_id: str | N
 )
 async def state_unset(key: str = "", session_id: str | None = None):
     try:
-        await State.Unset(key, notify=False)
+        await State.Unset(key, session_id=session_id)
     except Exception as e:
         return ORJSONResponse({
             "error": e

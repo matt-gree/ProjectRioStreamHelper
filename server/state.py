@@ -137,23 +137,23 @@ class State:
         cls.changed_keys.append(final_key)
 
     @classmethod
-    async def Set(cls, key: str, value, notify: bool = True):
+    async def Set(cls, key: str, value, session_id: str | None = None):
         await deep_set(cls.state, key, value)
         await cls._add_changed_key(key)
-        if notify:
-            await socketio.emit('v1.state.set', {
-                "key": key,
-                "value": value
-            })
+        await socketio.emit('v1.state.set', {
+            "key": key,
+            "value": value,
+            "sid": session_id
+        })
 
     @classmethod
-    async def Unset(cls, key: str, notify: bool = True):
+    async def Unset(cls, key: str, session_id: str | None = None):
         await deep_unset(cls.state, key)
         await cls._add_changed_key(key)
-        if notify:
-            await socketio.emit('v1.state.unset', {
-                "key": key
-            })
+        await socketio.emit('v1.state.unset', {
+            "key": key,
+            "sid": session_id
+        })
 
     @classmethod
     async def Get(cls, key: str, default=None):

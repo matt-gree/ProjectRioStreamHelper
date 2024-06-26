@@ -38,50 +38,78 @@ export const SocketProvider = ({children}) => {
     }, [socket]);
 
     useEffect(() => {
-        const doSet = (resp) => stateStore.setItem(resp.key, resp.value);
-        const doUnset = (resp) => stateStore.setItem(resp.key, null);
+        const doSet = (resp) => {
+            if("sid" in resp && resp.sid === socket.id) return;
+            stateStore.setItem(resp.key, resp.value, false);
+        }
 
-        socket.emit('v1.state.get', {}, resp => {
-            if('error' in resp) {
-                console.error(resp.error);
-                return;
-            }
+        const doUnset = (resp) => {
+            if("sid" in resp && resp.sid === socket.id) return;
+            stateStore.deleteItem(resp.key, false);
+        }
 
-            stateStore.mergeItems(resp);
+        if(!useStateStore.getState().loaded) {
+            socket.emit('v1.state.get', {}, resp => {
+                if('error' in resp) {
+                    console.error(resp.error);
+                    return;
+                }
+    
+                stateStore.mergeItems(resp);
+                socket.on('v1.state.set', doSet);
+                socket.on('v1.state.unset', doUnset);
+                stateStore.setLoaded(true);
+            });
+        } else {
             socket.on('v1.state.set', doSet);
             socket.on('v1.state.unset', doUnset);
-            stateStore.setLoaded();
-        });
+        }
 
         return () => {
             socket.off('v1.state.set', doSet);
             socket.off('v1.state.unset', doUnset);
+            stateStore.setLoaded(false);
         }
-    }, [stateStore]);
+    }, [socket]);
 
     useEffect(() => {
-        const doSet = (resp) => settingsStore.setItem(resp.key, resp.value);
-        const doUnset = (resp) => settingsStore.setItem(resp.key, null);
+        const doSet = (resp) => {
+            if("sid" in resp && resp.sid === socket.id) return;
+            settingsStore.setItem(resp.key, resp.value, false);
+        }
 
-        socket.emit('v1.settings.get', {}, resp => {
-            if('error' in resp) {
-                console.error(resp.error);
-                return;
-            }
+        const doUnset = (resp) => {
+            if("sid" in resp && resp.sid === socket.id) return;
+            settingsStore.deleteItem(resp.key, false);
+        }
 
-            settingsStore.mergeItems(resp);
+        if(!useSettingsStore.getState().loaded) {
+            socket.emit('v1.settings.get', {}, resp => {
+                if('error' in resp) {
+                    console.error(resp.error);
+                    return;
+                }
+    
+                settingsStore.mergeItems(resp);
+                socket.on('v1.settings.set', doSet);
+                socket.on('v1.settings.unset', doUnset);
+                settingsStore.setLoaded(true);
+            });
+        } else {
             socket.on('v1.settings.set', doSet);
             socket.on('v1.settings.unset', doUnset);
-            settingsStore.setLoaded(true);
-        });
+        }
 
         return () => {
             socket.off('v1.settings.set', doSet);
             socket.off('v1.settings.unset', doUnset);
+            settingsStore.setLoaded(false);
         }
-    }, [settingsStore]);
+    }, [socket]);
 
     useEffect(() => {
+        if(useConfigStore.getState().loaded) return;
+
         socket.emit('v1.config.get', {}, resp => {
             if('error' in resp) {
                 console.error(resp.error);
@@ -89,11 +117,11 @@ export const SocketProvider = ({children}) => {
             }
 
             configStore.mergeItems(resp);
-            configStore.setLoaded();
+            configStore.setLoaded(true);
         });
 
         return () => {}
-    }, [configStore]);
+    }, [socket]);
 
     return (
         <SocketContext.Provider value={{
