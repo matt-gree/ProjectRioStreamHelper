@@ -2,7 +2,6 @@ import asyncio
 import aiofiles
 import aiofiles.os
 import aiofiles.ospath
-import orjson
 
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
@@ -10,12 +9,12 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from loguru import logger
-from webbrowser import open_new_tab
 
 from server.api import router_v1
 from server.settings import Settings, Config
 from server.state import State
 from server.tray import Tray
+from server.utils import json
 
 async def load_manifest() -> dict:
     css = []
@@ -25,7 +24,7 @@ async def load_manifest() -> dict:
         manifest = {}
         if await Settings.Get("server.dev") == False:
             async with aiofiles.open("./dist/.vite/manifest.json", "rb") as file:
-                manifest = await asyncio.to_thread(orjson.loads, await file.read())
+                manifest = await json.loads(await file.read())
 
         for name in manifest:
             logger.debug("[manifest] adding js: {}", manifest[name].file)
@@ -40,15 +39,6 @@ async def load_manifest() -> dict:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # on_startup
-    host = await Settings.Get("server.host", "0.0.0.0")
-    port = str(await Settings.Get("server.port", 5260))
-
-    if host == "0.0.0.0":
-        host = "127.0.0.1"
-
-    if await Settings.Get("server.autostart", True) == True:
-        await asyncio.to_thread(open_new_tab, f"http://{host}:{port}")
-
     consumer = asyncio.create_task(State.Consumer())
     await State.Load()
 

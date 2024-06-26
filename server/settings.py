@@ -74,7 +74,8 @@ class Config:
         "name": "TournamentStreamHelper",
         "version": "?",
         "description": "",
-        "authors": []
+        "authors": [],
+        "server_url": ""
     }
 
     @classmethod
@@ -89,3 +90,7 @@ class Config:
             cls.config["authors"] = context["authors"]
 
         return cls.config
+    
+    @classmethod
+    async def SetServerURL(cls, url: str):
+        cls.config["server_url"] = url
