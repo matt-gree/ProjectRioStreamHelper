@@ -21,10 +21,13 @@ async def on_socketio_event(sid, data, func):
             "error": e
         }
 
-    content = await asyncio.to_thread(
-        orjson.loads,
-        content
-    )
+    if isinstance(content, str):
+        # Send actual JSON since FastHTTP's encoder likes bytes/str
+        content = await asyncio.to_thread(
+            orjson.loads,
+            content
+        )
+
     return content
 
 def method(*args, **kwargs):
