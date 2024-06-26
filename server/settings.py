@@ -1,46 +1,74 @@
+import asyncio
 import aiofiles
 import aiofiles.ospath
 import tomllib
+import orjson
 
-from asyncio import to_thread
-from functools import lru_cache
-from pydantic import BaseModel
-from pydantic_settings import BaseSettings, JsonConfigSettingsSource, PydanticBaseSettingsSource, SettingsConfigDict
-
-class GeneralSettings(BaseModel):
-    disable_export: bool = False
-class ServerSettings(BaseModel):
-    host: str = "0.0.0.0"
-    port: int = 5260
-    dev: bool = True
-    autostart: bool = True
-class Settings(BaseSettings):
-    model_config = SettingsConfigDict(json_file='./user_data/settings.json', json_file_encoding='utf-8')
-
-    server: ServerSettings = ServerSettings()
-    general: GeneralSettings = GeneralSettings()
+from loguru import logger
+from server import socketio
+from server.utils import json
+from server.utils.deep_dict import deep_set, deep_unset, deep_get
+class Settings:
+    settings = {
+        "server": {
+            "host": "0.0.0.0",
+            "port": 5260,
+            "dev": True,
+            "autostart": True
+        },
+        "general": {
+            "disable_export": False
+        }
+    }
 
     @classmethod
-    def settings_customise_sources(
-        cls, 
-        settings_cls: BaseSettings, 
-        init_settings: PydanticBaseSettingsSource, 
-        env_settings: PydanticBaseSettingsSource, 
-        dotenv_settings: PydanticBaseSettingsSource, 
-        file_secret_settings: PydanticBaseSettingsSource
-    ) -> tuple[PydanticBaseSettingsSource, ...]:
-        return init_settings, dotenv_settings, env_settings, JsonConfigSettingsSource(settings_cls), file_secret_settings
+    async def Save(cls):
+        async with aiofiles.open('./user_data/settings.json', 'wb') as f:
+            content = await json.dumps(cls.settings)
+            await f.write(content)
 
-@lru_cache
-def get_settings():
-    return Settings()
+    @classmethod
+    async def Load(cls) -> dict:
+        try:
+            async with aiofiles.open('./user_data/settings.json', 'rb') as f:
+                cls.settings = await asyncio.to_thread(
+                    orjson.loads,
+                    await f.read()
+                )
+        except:
+            logger.debug("using default settings dict")
 
-async def save_settings():
-    async with aiofiles.open('./user_data/settings.json', mode='w', encoding='utf-8') as f:
-        settings = get_settings()
-        settings_dump = await to_thread(settings.model_dump_json, indent=2)
-        await f.write(settings_dump)
-    
+    @classmethod
+    async def Set(cls, key: str, value, session_id: str | None = None):
+        await deep_set(cls.settings, key, value)
+        await asyncio.wait([
+            asyncio.create_task(
+                socketio.emit('v1.settings.set', {
+                    "key": key,
+                    "value": value,
+                    "sid": session_id
+                })
+            ),
+            asyncio.create_task(cls.Save())
+        ])
+
+    @classmethod
+    async def Unset(cls, key: str, session_id: str | None = None):
+        await deep_unset(cls.settings, key)
+        await asyncio.wait([
+            asyncio.create_task(
+                socketio.emit('v1.settings.unset', {
+                    "key": key,
+                    "sid": session_id
+                })
+            ),
+            asyncio.create_task(cls.Save())
+        ])
+
+    @classmethod
+    async def Get(cls, key: str, default=None):
+        return await deep_get(cls.settings, key, default)
+
 class Config:
     config = {
         "name": "TournamentStreamHelper",

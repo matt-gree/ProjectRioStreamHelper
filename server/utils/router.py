@@ -4,6 +4,7 @@ from functools import partial
 from loguru import logger
 from fastapi.responses import Response
 from server import socketio
+from server.utils import json
 
 async def on_socketio_event(sid, data, func):
     content = None
@@ -23,10 +24,7 @@ async def on_socketio_event(sid, data, func):
 
     if isinstance(content, str):
         # Send actual JSON since FastHTTP's encoder likes bytes/str
-        content = await asyncio.to_thread(
-            orjson.loads,
-            content
-        )
+        content = await json.loads(content)
 
     return content
 

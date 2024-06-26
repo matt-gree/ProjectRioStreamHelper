@@ -7,7 +7,7 @@ from socketio import ASGIApp
 from loguru import logger
 
 from server import server, socketio
-from server.settings import get_settings, Config as TSHConfig
+from server.settings import Settings, Config as TSHConfig
 from server.tray import Tray
 from server.utils.uvilogger import setup_logger
 
@@ -28,17 +28,19 @@ async def main() -> int:
         rotation="20 MB"
     )
 
-    await TSHConfig.Load()
-    settings = get_settings()
+    await asyncio.wait([
+        asyncio.create_task(TSHConfig.Load()),
+        asyncio.create_task(Settings.Load())
+    ])
 
     uvi = Server(Config(
         app=ASGIApp(
             socketio,
             other_asgi_app=server.app
         ),
-        host=settings.server.host,
-        port=settings.server.port,
-        reload=settings.server.dev,
+        host=await Settings.Get("host", "0.0.0.0"),
+        port=await Settings.Get("port", 5260),
+        reload=await Settings.Get("dev", False),
         loop=asyncio.get_event_loop()
     ))
 

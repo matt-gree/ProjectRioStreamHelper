@@ -1,4 +1,3 @@
-import orjson
 import asyncio
 import aiofiles
 import httpx
@@ -10,8 +9,9 @@ from functools import partial
 from loguru import logger
 from PIL import Image
 from server import socketio
-from server.settings import get_settings
+from server.settings import Settings
 from server.utils.deep_dict import deep_clone, deep_set, deep_unset, deep_get
+from server.utils import json
 
 class State:
     state = {}
@@ -22,17 +22,10 @@ class State:
 
     @classmethod
     async def Export(cls, diff):
-        settings = get_settings()
+        await cls.SaveImmediately()
 
-        async with aiofiles.open('./user_data/state.json', 'wb') as f:
-            dumps = await asyncio.to_thread(
-                orjson.dumps,
-                cls.state,
-                option=orjson.OPT_NON_STR_KEYS | orjson.OPT_INDENT_2
-            )
-            await f.write(dumps)
-
-        if not settings.general.disable_export:
+        disable_export = await Settings.Get("general.disable_export", False)
+        if not disable_export:
             merged_diffs = list(diff.get("values_changed", {}).items())
             merged_diffs.extend(list(diff.get("type_changes", {}).items()))
 
@@ -108,25 +101,16 @@ class State:
     @classmethod
     async def SaveImmediately(cls):
         async with aiofiles.open('./user_data/state.json', 'wb') as f:
-            dumps = await asyncio.to_thread(
-                orjson.dumps,
-                cls.state,
-                option=orjson.OPT_NON_STR_KEYS | orjson.OPT_INDENT_2
-            )
-            await f.write(dumps)
+            d = await json.dumps(cls.state)
+            await f.write(d)
 
     @classmethod
     async def Load(cls):
         try:
             async with aiofiles.open('./user_data/state.json', 'rb') as f:
-                cls.state = await asyncio.to_thread(
-                    orjson.loads,
-                    await f.read()
-                )
+                cls.state = await json.loads(await f.read())
         except:
-            logger.info("unable to load state.json, creating")
-            async with aiofiles.open('./user_data/state.json', 'wb') as f:
-                await f.write(await asyncio.to_thread(orjson.dumps, cls.state))
+            logger.debug("unable to load state.json, using default dict")
 
     @classmethod
     async def _add_changed_key(cls, key: str):
@@ -139,21 +123,29 @@ class State:
     @classmethod
     async def Set(cls, key: str, value, session_id: str | None = None):
         await deep_set(cls.state, key, value)
-        await cls._add_changed_key(key)
-        await socketio.emit('v1.state.set', {
-            "key": key,
-            "value": value,
-            "sid": session_id
-        })
+        await asyncio.wait([
+            asyncio.create_task(cls._add_changed_key(key)),
+            asyncio.create_task(
+                socketio.emit('v1.state.set', {
+                    "key": key,
+                    "value": value,
+                    "sid": session_id
+                })
+            )
+        ])
 
     @classmethod
     async def Unset(cls, key: str, session_id: str | None = None):
         await deep_unset(cls.state, key)
-        await cls._add_changed_key(key)
-        await socketio.emit('v1.state.unset', {
-            "key": key,
-            "sid": session_id
-        })
+        await asyncio.wait([
+            asyncio.create_task(cls._add_changed_key(key)),
+            asyncio.create_task(
+                socketio.emit('v1.state.unset', {
+                    "key": key,
+                    "sid": session_id
+                })
+            )
+        ])
 
     @classmethod
     async def Get(cls, key: str, default=None):
