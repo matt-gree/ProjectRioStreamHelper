@@ -17,6 +17,5 @@ export default function App() {
                 <RouterProvider router={router} />
             </IntlProvider>
         </SocketProvider>
-
     )
 }

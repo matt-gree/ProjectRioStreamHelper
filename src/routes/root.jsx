@@ -1,30 +1,12 @@
-//import { useState, useEffect } from 'react';
-import { FormattedMessage } from 'react-intl';
-//import { useSocket } from '../context/socket';
+import { useStoresLoaded } from '../context/store';
 
 import TSHFields from './fields';
 
 export default function Root() {
-//  const [connected, setConnected] = useState(false);
-//  const socket = useSocket();
-
-//  useEffect(() => {
-//    const onConnect = () => {
-//      setConnected(true);
-//    }
-//    const onDisconnect = () => {
-//      setConnected(false);
-//    }
-//    socket.on('connect', onConnect);
-//    socket.on('disconnect', onDisconnect);
-
-//    return () => {
-//      socket.off('connect', onConnect);
-//      socket.off('disconnect', onDisconnect);
-//    }
-//  }, [socket]);
+  const isLoaded = useStoresLoaded();
 
   return (
+    isLoaded ?
     <div style={{ 
       position: 'absolute',
       margin: 0,
@@ -37,5 +19,7 @@ export default function Root() {
     }}>
       <TSHFields />
     </div>
+    :
+    <p>Loading...</p>
   )
 }

@@ -1,4 +1,5 @@
 import * as React from 'react';
+
 import AppBar from '@mui/material/AppBar';
 import Box from '@mui/material/Box';
 import Toolbar from '@mui/material/Toolbar';
@@ -11,7 +12,12 @@ import Stack from '@mui/material/Stack';
 import Button from '@mui/material/Button';
 import { FormattedMessage } from 'react-intl';
 
+import { useConfigStore } from '../context/store';
+
 export default function TSHFields() {
+    const app_name = useConfigStore(state => state.name);
+    const app_version = useConfigStore(state => state.version);
+
     return (
         <Box sx={{ flexGrow: 1 }}>
             <AppBar 
@@ -31,7 +37,7 @@ export default function TSHFields() {
                         <MenuIcon />
                     </IconButton>
                     <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-                        TournamentStreamHelper v6.0.0
+                        {app_name} v{app_version}
                     </Typography>
                 </Toolbar>
             </AppBar>

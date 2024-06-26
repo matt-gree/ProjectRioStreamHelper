@@ -1,16 +1,30 @@
 import orjson
 import asyncio
 from functools import partial
-from fastapi.responses import Response, JSONResponse
+from loguru import logger
+from fastapi.responses import Response
 from server import socketio
 
 async def on_socketio_event(sid, data, func):
-    parsed = await asyncio.to_thread(orjson.loads, data)
-    content = await func(**parsed, session_id=sid)
+    content = None
 
-    if isinstance(content, Response):
-        content = await asyncio.to_thread(content.body.decode, content.charset)
+    try:
+        content = await func(**data, session_id=sid)
+        if isinstance(content, Response):
+            content = await asyncio.to_thread(
+                content.body.decode, 
+                content.charset
+            )
+    except Exception as e:
+        logger.exception("error while parsing socketio event")
+        content = {
+            "error": e
+        }
 
+    content = await asyncio.to_thread(
+        orjson.loads,
+        content
+    )
     return content
 
 def method(*args, **kwargs):

@@ -14,33 +14,9 @@ from typing_extensions import Annotated
 from webbrowser import open_new_tab
 
 from server.api import router_v1
-from server.settings import get_settings, Settings, Config
+from server.settings import get_settings, save_settings, Settings, Config
+from server.state import State
 from server.tray import Tray
-
-async def on_startup(
-        app: FastAPI
-):
-    settings = get_settings()
-
-    if settings.server.dev == True:
-        logger.info("For dev work, please use the server URL below instead of Vite's!")
-
-    host = settings.server.host
-    if host == "0.0.0.0":
-        host = "127.0.0.1"
-
-    if settings.server.autostart == True:
-        await asyncio.to_thread(open_new_tab, f"http://{host}:{settings.server.port}")
-
-async def on_shutdown(
-        app: FastAPI
-):
-    Tray.icon.stop()
-
-    async with aiofiles.open('./user_data/settings.json', mode='w', encoding='utf-8') as f:
-        settings = get_settings()
-        settings_dump = await asyncio.to_thread(settings.model_dump_json, indent=2)
-        await f.write(settings_dump)
 
 async def load_manifest() -> dict:
     settings = get_settings()
@@ -62,10 +38,34 @@ async def load_manifest() -> dict:
     return {"css": css, "js": js}
 
 @asynccontextmanager
-async def lifespan(*args, **kwargs):
-    await on_startup(*args, **kwargs)
+async def lifespan(app: FastAPI):
+    # on_startup
+    settings = get_settings()
+
+    if settings.server.dev == True:
+        logger.info("For dev work, please use the server URL below instead of Vite's!")
+
+    host = settings.server.host
+    if host == "0.0.0.0":
+        host = "127.0.0.1"
+
+    if settings.server.autostart == True:
+        await asyncio.to_thread(open_new_tab, f"http://{host}:{settings.server.port}")
+
+    consumer = asyncio.create_task(State.Consumer())
+    await State.Load()
+
+    # wait for signal for shutdown
     yield
-    await on_shutdown(*args, **kwargs)
+
+    # on_shutdown
+    consumer.cancel()
+
+    await asyncio.wait([
+        asyncio.create_task(asyncio.to_thread(Tray.icon.stop)),
+        asyncio.create_task(save_settings()),
+        asyncio.create_task(State.SaveImmediately())
+    ], timeout=5.0)
 
 app = FastAPI(lifespan=lifespan)
 templates = Jinja2Templates(directory="./dist")
