@@ -1,6 +1,6 @@
 from pystray import Icon, Menu, MenuItem
 from PIL import Image
-from server.settings import Settings, Config
+from server.settings import Config
 from loguru import logger
 from os import kill, getpid
 from signal import SIGINT
@@ -11,10 +11,7 @@ class Tray:
 
     @classmethod
     def on_open(cls):
-        logger.debug("user requests open")
-        host = Settings.settings["server"]["host"]
-        port = Settings.settings["server"]["port"]
-        webbrowser.open_new_tab(f"http://{host}:{port}/")
+        webbrowser.open_new_tab(Config.config["server_url"])
 
     @classmethod
     def on_exit(cls):

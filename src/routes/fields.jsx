@@ -53,7 +53,7 @@ export default function TSHFields() {
             >
                     <Button variant="outlined" fullWidth>
                         <FormattedMessage
-                            id="fields.set_tournament"
+                            id="tsh.set_tournament"
                             defaultMessage="Set Tournament"
                         />
                     </Button>
@@ -74,7 +74,7 @@ export default function TSHFields() {
             >
                     <Button variant="outlined" fullWidth>
                         <FormattedMessage
-                            id="fields.load_from_startgg_user"
+                            id="tsh.load_tournament_and_sets"
                             defaultMessage="Load Tournament and Sets from StartGG User"
                         />
                     </Button>

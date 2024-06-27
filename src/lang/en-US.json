@@ -1,5 +1,18 @@
 {
-    "app.title": "TournamentStreamHelper",
-    "fields.set_tournament": "Set Tournament",
-    "fields.load_from_startgg_user": "Load Tournament and Sets from StartGG User"
+    "about": "About",
+    "about.contributors": "Contributors:",
+    "bracket": "Bracket",
+    "bracket.phase_group": "Phase Group",
+    "bracket.limit_exported_bracket": "Limit exported bracket",
+    "bracket.phase": "Phase",
+    "bracket.winners_only": "Winners Only",
+    "bracket.progressions_in": "Progressions in",
+    "bracket.progressions_out": "Progressions out",
+    "bracket.players": " players",
+    "bracket.top": "Top ",
+    "bracket.tournament_info": "Tournament Info",
+    "bracket.tournament_name": "Tournament Name",
+    "bracket.address": "Address",
+    "tsh.set_tournament": "Set tournament",
+    "tsh.load_tournament_and_sets": "Load tournament and sets from StartGG user"
 }

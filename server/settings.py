@@ -17,8 +17,22 @@ class Settings:
             "autostart": True
         },
         "general": {
-            "disable_export": False
-        }
+            "disable_export": False,
+            "profanity_filter": True,
+            "control_score_from_stage_strike": True,
+            "disable_autoupdate": False,
+            "disable_overwrite": False
+        },
+        "hotkeys": {
+            "load_set": None,
+            "team1_score_up": None,
+            "team1_score_down": None,
+            "team2_score_up": None,
+            "team2_score_down": None,
+            "reset_scores": None,
+            "swap_teams": None
+        },
+        "lang": "en-US"
     }
 
     @classmethod
