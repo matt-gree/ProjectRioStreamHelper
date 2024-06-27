@@ -1,10 +1,10 @@
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 
-export default function ScoreboardManager() {
+export default function Bracket() {
     return (
         <Box p={3}>
-            <Typography>Scoreboard Tab</Typography>
+            <Typography>Bracket Tab</Typography>
         </Box>
     )
 }

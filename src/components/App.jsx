@@ -1,22 +1,20 @@
-import { RouterProvider } from 'react-router-dom';
-import { IntlProvider } from 'react-intl';
-import { useSettingsStore } from '../context/store';
-import { SocketProvider } from '../context/socket';
-import { router } from './router';
-import { locales } from '../lang/locales';
+import Providers from './providers';
+import { useStoresLoaded } from '../context/store';
+import { HashRouter } from 'react-router-dom';
+import Root from '../routes/root';
 
 export default function App() {
-    const locale = useSettingsStore(state => state.lang);
-    const usersLocale = locale ? locale : 'en-US';
+    const loaded = useStoresLoaded();
 
     return (
-        <SocketProvider>
-            <IntlProvider 
-                locale={usersLocale}
-                messages={locales[usersLocale].messages}
-            >
-                <RouterProvider router={router} />
-            </IntlProvider>
-        </SocketProvider>
+        <HashRouter>
+            <Providers>
+                { loaded ?
+                <Root />
+                :
+                <p>Loading...</p>
+                }
+            </Providers>
+        </HashRouter>
     )
 }
