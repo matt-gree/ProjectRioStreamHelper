@@ -21,7 +21,7 @@
     "@fontsource/material-icons": "^5.0.18",
     "@fontsource/roboto": "^5.0.13",
     "@mui/icons-material": "^5.15.20",
-    "@mui/material": "^5.15.20",
+    "@mui/material": "^5.16.7",
     "ramda": "^0.30.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
