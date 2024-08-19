@@ -28,7 +28,7 @@
     "react-intl": "^6.6.8",
     "react-router-dom": "^6.23.1",
     "socket.io-client": "^4.7.5",
-    "zustand": "^4.5.2"
+    "zustand": "^4.5.5"
   },
   "devDependencies": {
     "@types/react": "^18.2.66",
