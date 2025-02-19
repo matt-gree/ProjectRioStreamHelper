@@ -1,9 +1,8 @@
 import asyncio
-import aiofiles
-import aiofiles.ospath
 import tomllib
 import orjson
 
+from aiopath import AsyncPath
 from loguru import logger
 from server import socketio
 from server.utils import json
@@ -34,17 +33,18 @@ class Settings:
         },
         "lang": "en-US"
     }
+    _settings_out = AsyncPath('./user_data/settings.json')
 
     @classmethod
     async def Save(cls):
-        async with aiofiles.open('./user_data/settings.json', 'wb') as f:
+        async with cls._settings_out.open(mode='wb') as f:
             content = await json.dumps(cls.settings)
             await f.write(content)
 
     @classmethod
     async def Load(cls) -> dict:
         try:
-            async with aiofiles.open('./user_data/settings.json', 'rb') as f:
+            async with cls._settings_out.open(mode='rb', encoding='utf-8') as f:
                 cls.settings = await asyncio.to_thread(
                     orjson.loads,
                     await f.read()
@@ -94,14 +94,14 @@ class Config:
 
     @classmethod
     async def Load(cls) -> dict:
-        async with aiofiles.open('pyproject.toml', mode='r', encoding='utf-8') as f:
-            # pyproject.toml likely included in production builds as it makes
-            # updating the version easier, less redundant, etc.
-            context = tomllib.loads(await f.read())["tool"]["poetry"]
-            cls.config["name"] = context["name"]
-            cls.config["version"] = context["version"]
-            cls.config["description"] = context["description"]
-            cls.config["authors"] = context["authors"]
+        _pyproject_toml = await AsyncPath('./pyproject.toml').read_text(encoding='utf-8')
+        context = await asyncio.to_thread(tomllib.loads, _pyproject_toml)
+        context = context["tool"]["poetry"]
+
+        cls.config["name"] = context["name"]
+        cls.config["version"] = context["version"]
+        cls.config["description"] = context["description"]
+        cls.config["authors"] = context["authors"]
 
         return cls.config
     

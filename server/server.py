@@ -1,8 +1,6 @@
 import asyncio
-import aiofiles
-import aiofiles.os
-import aiofiles.ospath
 
+from aiopath import AsyncPath
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
@@ -20,10 +18,11 @@ async def load_manifest() -> dict:
     css = []
     js = []
 
-    if await aiofiles.ospath.exists("./dist/.vite/manifest.json") == True:
+    manifest_json = AsyncPath("./dist/.vite/manifest.json")
+    if await manifest_json.exists() == True:
         manifest = {}
         if await Settings.Get("server.dev") == False:
-            async with aiofiles.open("./dist/.vite/manifest.json", "rb") as file:
+            async with manifest_json.open(mode="rb", encoding="utf-8") as file:
                 manifest = await json.loads(await file.read())
 
         for name in manifest:

@@ -4,6 +4,7 @@ from server.settings import Config
 from loguru import logger
 from os import kill, getpid
 from signal import SIGINT
+from pathlib import Path
 import webbrowser
 
 class Tray:
@@ -31,7 +32,7 @@ class Tray:
             MenuItem(text="Exit", action=cls.on_exit, default=False)
         ]
 
-        logo = Image.open("./dist/logo.png", mode="r")
+        logo = Image.open(str(Path("./dist/logo.png")), mode="r")
         cls.icon = Icon(
             name=Config.config["name"], 
             icon=logo, 
