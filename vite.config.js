@@ -9,6 +9,9 @@ export default defineConfig({
       input: './src/main.jsx'
     }
   },
+  server: {
+    host: true,   // Listen on 0.0.0.0 so other devices can connect
+  },
   plugins: [
     react()
   ],
