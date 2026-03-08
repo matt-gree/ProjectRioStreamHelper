@@ -2,7 +2,8 @@ from fastapi import APIRouter
 from server.api.v1 import (
     update_team,
     state,
-    settings
+    settings,
+    rio
 )
 
 router_v1 = APIRouter(
@@ -13,3 +14,4 @@ router_v1 = APIRouter(
 router_v1.include_router(update_team.router)
 router_v1.include_router(state.router)
 router_v1.include_router(settings.router)
+router_v1.include_router(rio.router)

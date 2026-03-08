@@ -4,7 +4,7 @@ version = "6.0.0"
 description = "Tournament scoreboard helper and overlays for fighting game tournaments"
 authors = ["João Ribeiro Bezerra <joaorb64@gmail.com>", "Isatis <isatis@foxes.gay>", "Mathias Wolfbrok <wolfy76700>", "Eion Dailey <zombiehdgaming>"]
 readme = "README.md"
-package-mode = false
+packages = [{include = "server"}]
 
 [tool.poetry.dependencies]
 python = ">=3.12,<3.14"
@@ -25,6 +25,7 @@ aiopath = "^0.7.7"
 aiomisc = "^17.6.3"
 pythonnet = "^3.0.5"
 toga = "^0.4.9"
+pyrio = {git = "https://github.com/matt-gree/pyrio.git"}
 
 [build-system]
 requires = ["poetry-core"]

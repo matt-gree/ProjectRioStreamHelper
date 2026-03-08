@@ -31,6 +31,12 @@ class Settings:
             "reset_scores": None,
             "swap_teams": None
         },
+        "project_rio": {
+            "hud_path": "",
+            "pinned_player": "",
+            "pinned_side": "Team 1",
+            "pinned_hud_only": False
+        },
         "lang": "en-US"
     }
     _settings_out = AsyncPath('./user_data/settings.json')
