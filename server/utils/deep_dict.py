@@ -36,4 +36,4 @@ async def deep_unset(dictionary: dict, keys: str):
 
 async def deep_clone(dictionary: dict):
     packed = await to_thread(packb, dictionary)
-    return await to_thread(unpackb(packed, strict_map_key=False))
+    return await to_thread(unpackb, packed, strict_map_key=False)

@@ -75,7 +75,7 @@ class State:
         try:
             while True:
                 item = await cls.queue.get()
-                await item
+                await item()
                 cls.queue.task_done()
         except asyncio.exceptions.CancelledError:
             return
@@ -178,7 +178,7 @@ class State:
 
         _p = AsyncPath(f"{cls._stream_labels_out}/{pathdirs}")
         if await _p.is_dir() == False:
-            await _p.makedirs(parents=True, exist_ok=True)
+            await _p.mkdir(parents=True, exist_ok=True)
 
         if isinstance(di, dict):
             for k, i in di.items():
