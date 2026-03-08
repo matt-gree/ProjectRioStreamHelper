@@ -1,6 +1,6 @@
 import { createContext, useContext, useMemo, useEffect } from 'react';
 import { io } from 'socket.io-client';
-import { useStateStore, useSettingsStore, useConfigStore } from './store';
+import { useStateStore, useSettingsStore, useConfigStore, setSocketRef } from './store';
 
 export const SocketContext = createContext({
     socket: null
@@ -20,10 +20,16 @@ export const SocketProvider = ({children}) => {
             []
     );
 
+    // Register the socket reference so Zustand store actions can emit
+    useEffect(() => {
+        setSocketRef(socket);
+        return () => setSocketRef(null);
+    }, [socket]);
+
     useEffect(() => {
         if(!socket.connected) {
             socket.connect();
-            
+
             socket.on('error', err => {
                 console.error('Socket.io event error', err);
             });
@@ -38,14 +44,44 @@ export const SocketProvider = ({children}) => {
     }, [socket]);
 
     useEffect(() => {
+        // Batch incoming SocketIO events so rapid-fire updates
+        // (e.g. swap teams) are applied in a single Zustand set().
+        // We use requestAnimationFrame so all events arriving within
+        // a single frame (~16ms) are flushed together before paint.
+        let setPending = [];
+        let unsetPending = [];
+        let rafId = null;
+
+        const flushState = () => {
+            rafId = null;
+            if (setPending.length > 0) {
+                const batch = setPending;
+                setPending = [];
+                stateStore.setItems(batch, false);
+            }
+            if (unsetPending.length > 0) {
+                const batch = unsetPending;
+                unsetPending = [];
+                stateStore.deleteItems(batch, false);
+            }
+        };
+
+        const scheduleFlush = () => {
+            if (rafId === null) {
+                rafId = requestAnimationFrame(flushState);
+            }
+        };
+
         const doSet = (resp) => {
             if("sid" in resp && resp.sid === socket.id) return;
-            stateStore.setItem(resp.key, resp.value, false);
+            setPending.push({ key: resp.key, value: resp.value });
+            scheduleFlush();
         }
 
         const doUnset = (resp) => {
             if("sid" in resp && resp.sid === socket.id) return;
-            stateStore.deleteItem(resp.key, false);
+            unsetPending.push(resp.key);
+            scheduleFlush();
         }
 
         if(!useStateStore.getState().loaded) {
@@ -54,7 +90,7 @@ export const SocketProvider = ({children}) => {
                     console.error(resp.error);
                     return;
                 }
-    
+
                 stateStore.mergeItems(resp);
                 socket.on('v1.state.set', doSet);
                 socket.on('v1.state.unset', doUnset);
@@ -66,6 +102,7 @@ export const SocketProvider = ({children}) => {
         }
 
         return () => {
+            if (rafId !== null) cancelAnimationFrame(rafId);
             socket.off('v1.state.set', doSet);
             socket.off('v1.state.unset', doUnset);
             stateStore.setLoaded(false);
@@ -73,14 +110,44 @@ export const SocketProvider = ({children}) => {
     }, [socket]);
 
     useEffect(() => {
+        let setPending = [];
+        let unsetPending = [];
+        let rafId = null;
+
+        const flushSettings = () => {
+            rafId = null;
+            if (setPending.length > 0) {
+                const batch = setPending;
+                setPending = [];
+                for (const { key, value } of batch) {
+                    settingsStore.setItem(key, value, false);
+                }
+            }
+            if (unsetPending.length > 0) {
+                const batch = unsetPending;
+                unsetPending = [];
+                for (const key of batch) {
+                    settingsStore.deleteItem(key, false);
+                }
+            }
+        };
+
+        const scheduleFlush = () => {
+            if (rafId === null) {
+                rafId = requestAnimationFrame(flushSettings);
+            }
+        };
+
         const doSet = (resp) => {
             if("sid" in resp && resp.sid === socket.id) return;
-            settingsStore.setItem(resp.key, resp.value, false);
+            setPending.push({ key: resp.key, value: resp.value });
+            scheduleFlush();
         }
 
         const doUnset = (resp) => {
             if("sid" in resp && resp.sid === socket.id) return;
-            settingsStore.deleteItem(resp.key, false);
+            unsetPending.push(resp.key);
+            scheduleFlush();
         }
 
         if(!useSettingsStore.getState().loaded) {
@@ -89,7 +156,7 @@ export const SocketProvider = ({children}) => {
                     console.error(resp.error);
                     return;
                 }
-    
+
                 settingsStore.mergeItems(resp);
                 socket.on('v1.settings.set', doSet);
                 socket.on('v1.settings.unset', doUnset);
@@ -101,6 +168,7 @@ export const SocketProvider = ({children}) => {
         }
 
         return () => {
+            if (rafId !== null) cancelAnimationFrame(rafId);
             socket.off('v1.settings.set', doSet);
             socket.off('v1.settings.unset', doUnset);
             settingsStore.setLoaded(false);
@@ -151,19 +219,3 @@ export const useSocketSubscribe = (eventName, eventHandler) => {
         }
     }, [eventHandler]);
 }
-
-export const useSocketCallback = (...args) => new Promise((resolve, reject) => {
-    const { socket } = useContext(SocketContext);
-    if(!socket) {
-        reject(new Error('Unknown error involving Socket.io context'));
-        return;
-    }
-
-    try {
-        socket.emit(...args, cb => {
-            resolve(cb);
-        });
-    } catch(e) {
-        reject(e);
-    }
-});
