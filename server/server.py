@@ -9,6 +9,7 @@ from fastapi.templating import Jinja2Templates
 from loguru import logger
 
 from server.api import router_v1
+from server.rio.provider import RioGameDataProvider
 from server.settings import Settings, Config
 from server.state import State
 from server.tray import Tray
@@ -26,12 +27,12 @@ async def load_manifest() -> dict:
                 manifest = await json.loads(await file.read())
 
         for name in manifest:
-            logger.debug("[manifest] adding js: {}", manifest[name].file)
-            js.append(manifest[name].file)
+            logger.debug("[manifest] adding js: {}", manifest[name]["file"])
+            js.append(manifest[name]["file"])
             if "css" in manifest[name]:
-                for name in manifest[name].css:
-                    logger.debug("[manifest] adding css: {}", name)
-                    css.append(name)
+                for css_file in manifest[name]["css"]:
+                    logger.debug("[manifest] adding css: {}", css_file)
+                    css.append(css_file)
 
     return {"css": css, "js": js}
 
@@ -40,18 +41,22 @@ async def lifespan(app: FastAPI):
     # on_startup
     consumer = asyncio.create_task(State.Consumer())
     await State.Load()
+    await RioGameDataProvider.Start()
 
     # wait for signal for shutdown
     yield
 
     # on_shutdown
+    await RioGameDataProvider.Stop()
     consumer.cancel()
 
-    await asyncio.wait([
-        asyncio.create_task(asyncio.to_thread(Tray.icon.stop)),
+    shutdown_tasks = [
         asyncio.create_task(Settings.Save()),
         asyncio.create_task(State.SaveImmediately())
-    ], timeout=5.0)
+    ]
+    if Tray.icon:
+        shutdown_tasks.append(asyncio.create_task(asyncio.to_thread(Tray.icon.stop)))
+    await asyncio.wait(shutdown_tasks, timeout=5.0)
 
 app = FastAPI(lifespan=lifespan)
 templates = Jinja2Templates(directory="./dist")
@@ -67,6 +72,10 @@ app.include_router(router_v1)
 async def index(
     request: Request
 ) -> HTMLResponse:
+    # In dev mode, use the request's host so the page works from any device.
+    vite_host = request.headers.get("host", "localhost").split(":")[0]
+    vite_port = await Settings.Get("server.vite_port", 5173)
+
     return templates.TemplateResponse(
         request=request,
         name="index.html",
@@ -74,6 +83,8 @@ async def index(
             "name": Config.config["name"],
             "version": Config.config["version"],
             "settings": Settings.settings,
-            "manifest": await load_manifest()
+            "manifest": await load_manifest(),
+            "vite_host": vite_host,
+            "vite_port": vite_port,
         }
     )
