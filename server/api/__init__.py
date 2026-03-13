@@ -3,7 +3,9 @@ from server.api.v1 import (
     update_team,
     state,
     settings,
-    rio
+    rio,
+    scoreboards,
+    game_pool,
 )
 
 router_v1 = APIRouter(
@@ -15,3 +17,5 @@ router_v1.include_router(update_team.router)
 router_v1.include_router(state.router)
 router_v1.include_router(settings.router)
 router_v1.include_router(rio.router)
+router_v1.include_router(scoreboards.router)
+router_v1.include_router(game_pool.router)

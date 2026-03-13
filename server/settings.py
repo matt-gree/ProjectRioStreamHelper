@@ -7,6 +7,25 @@ from loguru import logger
 from server import socketio
 from server.utils import json
 from server.utils.deep_dict import deep_set, deep_unset, deep_get
+
+
+def _deep_merge(defaults: dict, loaded: dict) -> dict:
+    """Merge loaded settings on top of defaults.
+
+    Loaded values take precedence, but any keys present in defaults
+    that are missing from loaded are preserved. This ensures new
+    default keys are automatically available after upgrades without
+    needing explicit migration code.
+    """
+    result = dict(defaults)
+    for key, value in loaded.items():
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            result[key] = _deep_merge(result[key], value)
+        else:
+            result[key] = value
+    return result
+
+
 class Settings:
     settings = {
         "server": {
@@ -37,6 +56,14 @@ class Settings:
             "pinned_side": "Team 1",
             "pinned_hud_only": False
         },
+        "scoreboards": {
+            "active": [1],
+            "hud_target": 1,
+            "aliases": {},
+            "sources": {
+                "1": {"type": "manual", "api_game_id": None}
+            }
+        },
         "lang": "en-US"
     }
     _settings_out = AsyncPath('./user_data/settings.json')
@@ -51,10 +78,11 @@ class Settings:
     async def Load(cls) -> dict:
         try:
             async with cls._settings_out.open(mode='rb', encoding='utf-8') as f:
-                cls.settings = await asyncio.to_thread(
+                loaded = await asyncio.to_thread(
                     orjson.loads,
                     await f.read()
                 )
+                cls.settings = _deep_merge(cls.settings, loaded)
         except:
             logger.debug("using default settings dict")
 

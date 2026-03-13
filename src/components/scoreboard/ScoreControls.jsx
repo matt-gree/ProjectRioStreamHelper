@@ -14,10 +14,16 @@ const num = (v, fallback = 0) => {
     return Number.isFinite(n) ? n : fallback;
 };
 
+const sourceOptions = [
+    { value: 'manual', label: 'Manual' },
+    { value: 'hud', label: 'HUD File' },
+    { value: 'api', label: 'API Game' },
+];
+
 /**
  * Central score column: scores, baseball state, match info.
  */
-export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams }) {
+export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, sourceType = 'manual', onSetSource }) {
     const base = `score.${scoreboardNumber}`;
     const setItem = useStateStore(s => s.setItem);
 
@@ -74,6 +80,19 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams }) {
     return (
         <Paper withBorder p="sm">
             <Stack gap="sm">
+                {/* ---- Data Source ---- */}
+                {onSetSource && (
+                    <Select
+                        label="Data Source"
+                        data={sourceOptions}
+                        value={sourceType}
+                        onChange={val => onSetSource(val)}
+                        size="xs"
+                    />
+                )}
+
+                <Divider />
+
                 {/* ---- Scores ---- */}
                 <Text size="sm" fw={700} ta="center">Score</Text>
                 <Group justify="center" gap="md">

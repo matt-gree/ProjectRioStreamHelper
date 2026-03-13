@@ -2,6 +2,7 @@ from server.utils.router import method
 from fastapi import APIRouter
 from fastapi.responses import ORJSONResponse
 from server.rio.provider import RioGameDataProvider
+from server.settings import Settings
 
 router = APIRouter()
 
@@ -34,10 +35,20 @@ async def rio_refresh(session_id: str | None = None) -> ORJSONResponse:
     version="1", id="rio.swap",
     response_class=ORJSONResponse
 )
-async def rio_swap(session_id: str | None = None) -> ORJSONResponse:
-    """Toggle team sides (manual swap)."""
+async def rio_swap(
+    scoreboard_number: int | None = None,
+    session_id: str | None = None,
+) -> ORJSONResponse:
+    """Toggle team sides (manual swap) for the HUD-linked scoreboard."""
+    hud_target = await Settings.Get("scoreboards.hud_target", 1)
+    if scoreboard_number is not None and scoreboard_number != hud_target:
+        return ORJSONResponse({
+            "success": False,
+            "error": f"Scoreboard {scoreboard_number} is not HUD-linked",
+        })
+
     await RioGameDataProvider.toggle_sides_swapped()
     return ORJSONResponse({
         "success": True,
-        "sides_swapped": RioGameDataProvider._sides_swapped
+        "sides_swapped": RioGameDataProvider._sides_swapped,
     })

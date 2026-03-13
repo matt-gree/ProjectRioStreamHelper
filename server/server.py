@@ -1,4 +1,5 @@
 import asyncio
+from pathlib import Path
 
 from aiopath import AsyncPath
 from contextlib import asynccontextmanager
@@ -9,6 +10,7 @@ from fastapi.templating import Jinja2Templates
 from loguru import logger
 
 from server.api import router_v1
+from server.rio.game_pool import RioGamePool
 from server.rio.provider import RioGameDataProvider
 from server.settings import Settings, Config
 from server.state import State
@@ -42,11 +44,13 @@ async def lifespan(app: FastAPI):
     consumer = asyncio.create_task(State.Consumer())
     await State.Load()
     await RioGameDataProvider.Start()
+    await RioGamePool.Start()
 
     # wait for signal for shutdown
     yield
 
     # on_shutdown
+    await RioGamePool.Stop()
     await RioGameDataProvider.Stop()
     consumer.cancel()
 
@@ -59,10 +63,14 @@ async def lifespan(app: FastAPI):
     await asyncio.wait(shutdown_tasks, timeout=5.0)
 
 app = FastAPI(lifespan=lifespan)
-templates = Jinja2Templates(directory="./dist")
 
-# react assets (/dist/assets)
-app.mount("/assets", StaticFiles(directory="./dist/assets"), name="assets")
+# In dev mode dist/ may not exist yet; fall back to public/ for the template
+_template_dir = "./dist" if Path("./dist").is_dir() else "./public"
+templates = Jinja2Templates(directory=_template_dir)
+
+# react assets (/dist/assets) — only mount if built; in dev mode Vite serves these
+if Path("./dist/assets").is_dir():
+    app.mount("/assets", StaticFiles(directory="./dist/assets"), name="assets")
 
 # /api/v1/* | api_v1_*
 app.include_router(router_v1)

@@ -37,6 +37,43 @@ async def get_user_hud_path() -> Path | None:
     return None
 
 
+async def apply_parsed_game_to_state(parsed: dict, scoreboard_number: int):
+    """Write parsed game data into State under score.{scoreboard_number}.
+
+    Shared by RioGameDataProvider (HUD) and RioGamePool (API).
+    """
+    sb = f"score.{scoreboard_number}"
+
+    await State.Set(f"{sb}.score_left", parsed.get("team1score", 0))
+    await State.Set(f"{sb}.score_right", parsed.get("team2score", 0))
+    await State.Set(f"{sb}.inning", parsed.get("inning", 1))
+    await State.Set(f"{sb}.half_inning", parsed.get("half_inning", "Top"))
+    await State.Set(f"{sb}.outs", parsed.get("outs", 0))
+    await State.Set(f"{sb}.strikes", parsed.get("strikes", 0))
+    await State.Set(f"{sb}.balls", parsed.get("balls", 0))
+    await State.Set(f"{sb}.batter", parsed.get("batter", ""))
+    await State.Set(f"{sb}.pitcher", parsed.get("pitcher", ""))
+    await State.Set(f"{sb}.cbRioRunnerOn1", parsed.get("runnerOn1", False))
+    await State.Set(f"{sb}.cbRioRunnerOn2", parsed.get("runnerOn2", False))
+    await State.Set(f"{sb}.cbRioRunnerOn3", parsed.get("runnerOn3", False))
+
+    entrants = parsed.get("entrants", [[{}], [{}]])
+    for team_idx in range(2):
+        team_num = team_idx + 1
+        player = entrants[team_idx][0] if entrants[team_idx] else {}
+        prefix = f"{sb}.team.{team_num}.player.1"
+
+        await State.Set(f"{prefix}.rioName", player.get("rioName", ""))
+        await State.Set(f"{prefix}.msb_team", player.get("msb_team", ""))
+        await State.Set(f"{prefix}.rio_captainIndex", player.get("captainIndex", 0))
+
+        roster = player.get("roster", [])
+        for char_idx, char_name in enumerate(roster):
+            await State.Set(f"{prefix}.character.{char_idx}.name", char_name)
+
+    await State.Save()
+
+
 class RioGameDataProvider:
     """Async singleton that watches the Project Rio HUD file and pushes
     game state updates to the central State store.
@@ -164,38 +201,18 @@ class RioGameDataProvider:
         return data
 
     @classmethod
+    def _reset_side_preservation(cls):
+        """Reset side preservation state when HUD target changes."""
+        cls._prev_player_sides = {}
+        cls._prev_inning = None
+        cls._sides_swapped = False
+        cls._user_overridden = False
+
+    @classmethod
     async def _apply_game_to_state(cls, parsed: dict):
-        """Push all parsed game data into the State store."""
-        sb = "score.1"
-
-        await State.Set(f"{sb}.score_left", parsed.get("team1score", 0))
-        await State.Set(f"{sb}.score_right", parsed.get("team2score", 0))
-        await State.Set(f"{sb}.inning", parsed.get("inning", 1))
-        await State.Set(f"{sb}.half_inning", parsed.get("half_inning", "Top"))
-        await State.Set(f"{sb}.outs", parsed.get("outs", 0))
-        await State.Set(f"{sb}.strikes", parsed.get("strikes", 0))
-        await State.Set(f"{sb}.balls", parsed.get("balls", 0))
-        await State.Set(f"{sb}.batter", parsed.get("batter", ""))
-        await State.Set(f"{sb}.pitcher", parsed.get("pitcher", ""))
-        await State.Set(f"{sb}.cbRioRunnerOn1", parsed.get("runnerOn1", False))
-        await State.Set(f"{sb}.cbRioRunnerOn2", parsed.get("runnerOn2", False))
-        await State.Set(f"{sb}.cbRioRunnerOn3", parsed.get("runnerOn3", False))
-
-        entrants = parsed.get("entrants", [[{}], [{}]])
-        for team_idx in range(2):
-            team_num = team_idx + 1
-            player = entrants[team_idx][0] if entrants[team_idx] else {}
-            prefix = f"{sb}.team.{team_num}.player.1"
-
-            await State.Set(f"{prefix}.rioName", player.get("rioName", ""))
-            await State.Set(f"{prefix}.msb_team", player.get("msb_team", ""))
-            await State.Set(f"{prefix}.rio_captainIndex", player.get("captainIndex", 0))
-
-            roster = player.get("roster", [])
-            for char_idx, char_name in enumerate(roster):
-                await State.Set(f"{prefix}.character.{char_idx}.name", char_name)
-
-        await State.Save()
+        """Push all parsed game data into the HUD target scoreboard."""
+        target = await Settings.Get("scoreboards.hud_target", 1)
+        await apply_parsed_game_to_state(parsed, target)
 
     # --- Player side preservation (3-layer system) ---
 
