@@ -7,6 +7,7 @@ import Commentary from './commentary/commentary';
 import PlayerList from './player_list/player_list';
 import ScoreboardManager from './scoreboard_manager/scoreboard_manager';
 import TournamentInfo from "./tournament_info/tournament_info";
+import LayoutBrowser from "./layouts/layouts";
 
 const allTabs = [
   { name: "Scoreboard", path: "/" },
@@ -14,6 +15,7 @@ const allTabs = [
   { name: "Bracket", path: "/bracket" },
   { name: "Commentary", path: "/commentary" },
   { name: "Player List", path: "/player_list" },
+  { name: "Layouts", path: "/layouts" },
 ];
 
 export default function Root() {
@@ -43,6 +45,7 @@ export default function Root() {
           <Route path="/bracket" element={<Bracket />} />
           <Route path="/commentary" element={<Commentary />} />
           <Route path="/player_list" element={<PlayerList />} />
+          <Route path="/layouts" element={<LayoutBrowser />} />
         </Routes>
       </Box>
     </Box>

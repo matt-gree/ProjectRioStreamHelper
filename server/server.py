@@ -72,6 +72,72 @@ templates = Jinja2Templates(directory=_template_dir)
 if Path("./dist/assets").is_dir():
     app.mount("/assets", StaticFiles(directory="./dist/assets"), name="assets")
 
+# game assets (character icons, team logos) — served from public/game_assets/
+if Path("./public/game_assets").is_dir():
+    app.mount("/game_assets", StaticFiles(directory="./public/game_assets"), name="game_assets")
+
+# OBS browser source layouts — served from public/layout/
+_layout_dir = Path("./public/layout")
+
+@app.get("/layout", response_class=HTMLResponse)
+@app.get("/layout/", response_class=HTMLResponse)
+async def layout_index(request: Request) -> HTMLResponse:
+    """Browse available OBS layout files."""
+    host = request.headers.get("host", "localhost:5260")
+    base = f"http://{host}"
+    layouts: list[dict] = []
+
+    if _layout_dir.is_dir():
+        for group in sorted(_layout_dir.iterdir()):
+            if not group.is_dir():
+                continue
+            files = sorted(f for f in group.iterdir() if f.suffix == ".html")
+            for f in files:
+                rel = f.relative_to(_layout_dir)
+                layouts.append({
+                    "group": group.name,
+                    "name": f.stem,
+                    "url": f"{base}/layout/{rel}",
+                })
+
+    rows = ""
+    for l in layouts:
+        rows += (
+            f'<tr>'
+            f'<td>{l["group"]}</td>'
+            f'<td><a href="{l["url"]}" target="_blank">{l["name"]}</a></td>'
+            f'<td><input type="text" value="{l["url"]}" readonly '
+            f'onclick="this.select();document.execCommand(\'copy\')" '
+            f'style="width:100%;border:1px solid #ccc;padding:4px;cursor:pointer" '
+            f'title="Click to copy"/></td>'
+            f'</tr>'
+        )
+
+    html = f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"/><title>OBS Layouts</title>
+<style>
+  body {{ font-family: system-ui, sans-serif; max-width: 900px; margin: 40px auto; padding: 0 20px; }}
+  h1 {{ margin-bottom: 4px; }}
+  p {{ color: #666; margin-top: 0; }}
+  table {{ width: 100%; border-collapse: collapse; }}
+  th, td {{ text-align: left; padding: 8px 12px; border-bottom: 1px solid #eee; }}
+  th {{ background: #f5f5f5; }}
+  a {{ color: #0066cc; }}
+</style></head>
+<body>
+  <h1>OBS Browser Source Layouts</h1>
+  <p>Click a URL field to copy it, then paste into OBS as a Browser Source.</p>
+  <table>
+    <tr><th>Group</th><th>Layout</th><th>URL (click to copy)</th></tr>
+    {rows}
+  </table>
+  {('<p style="color:#999">No layouts found in <code>public/layout/</code></p>' if not layouts else '')}
+</body></html>"""
+    return HTMLResponse(html)
+
+if _layout_dir.is_dir():
+    app.mount("/layout", StaticFiles(directory="./public/layout", html=True), name="layout")
+
 # /api/v1/* | api_v1_*
 app.include_router(router_v1)
 

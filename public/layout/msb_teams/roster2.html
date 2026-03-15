@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    body {
+      overflow: hidden;
+      margin: 0;
+      width: 1920px;
+      height: 1080px;
+      background: transparent;
+      filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.12))
+        drop-shadow(0 3px 1px rgba(0, 0, 0, 0.14))
+        drop-shadow(0 1px 5px rgba(0, 0, 0, 0.12))
+        drop-shadow(0 -1px 2px rgba(0, 0, 0, 0.1));
+    }
+    .roster-container {
+      overflow: hidden;
+      width: 100%;
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      display: grid;
+      column-gap: 4px;
+      row-gap: 4px;
+      grid-template-columns: 1.5fr 1fr 1fr 1fr 1fr;
+      grid-template-rows: 1fr 1fr;
+    }
+    .captain-container {
+      grid-column-start: 1;
+      grid-column-end: 2;
+      grid-row-start: 1;
+      grid-row-end: 3;
+      place-content: center;
+    }
+    .captain-container img {
+      width: 95%;
+      height: 95%;
+      object-fit: contain;
+    }
+    .character-container {
+      place-content: center;
+    }
+    .character-container img {
+      width: 95%;
+      height: 95%;
+      object-fit: contain;
+    }
+  </style>
+</head>
+<body>
+  <div class="roster-container" id="roster-container"></div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script>
+    const TEAM_NUM = 2;
+    const SCOREBOARD = 1;
+
+    const BASE_URL = (window.location.protocol === 'file:')
+      ? 'http://localhost:5260'
+      : window.location.origin;
+
+    let state = {};
+
+    function deepSet(obj, path, value) {
+      const keys = path.split('.');
+      let cur = obj;
+      for (let i = 0; i < keys.length - 1; i++) {
+        if (!(keys[i] in cur) || typeof cur[keys[i]] !== 'object' || cur[keys[i]] === null) {
+          cur[keys[i]] = {};
+        }
+        cur = cur[keys[i]];
+      }
+      cur[keys[keys.length - 1]] = value;
+    }
+
+    function deepGet(obj, path) {
+      const keys = path.split('.');
+      let cur = obj;
+      for (const k of keys) {
+        if (cur == null || typeof cur !== 'object') return undefined;
+        cur = cur[k];
+      }
+      return cur;
+    }
+
+    function deepUnset(obj, path) {
+      const keys = path.split('.');
+      let cur = obj;
+      for (let i = 0; i < keys.length - 1; i++) {
+        if (cur == null || typeof cur !== 'object') return;
+        cur = cur[keys[i]];
+      }
+      if (cur != null && typeof cur === 'object') {
+        delete cur[keys[keys.length - 1]];
+      }
+    }
+
+    function render() {
+      const container = document.getElementById('roster-container');
+      container.innerHTML = '';
+
+      const player = deepGet(state, `score.${SCOREBOARD}.team.${TEAM_NUM}.player.1`);
+      if (!player) return;
+
+      const captainIndex = player.rio_captainIndex;
+      const hasCaptain = captainIndex != null && captainIndex >= 0 && captainIndex <= 8;
+
+      if (hasCaptain) {
+        const char = deepGet(player, `character.${captainIndex}`);
+        const name = char?.name || '';
+        const div = document.createElement('div');
+        div.className = 'captain-container';
+        const img = document.createElement('img');
+        img.src = name
+          ? `${BASE_URL}/game_assets/rio_characterIcons/${encodeURIComponent(name)}.png`
+          : '';
+        img.onerror = () => img.style.display = 'none';
+        div.appendChild(img);
+        container.appendChild(div);
+      }
+
+      for (let i = 0; i < 9; i++) {
+        if (hasCaptain && i === captainIndex) continue;
+
+        const char = deepGet(player, `character.${i}`);
+        const name = char?.name || '';
+
+        const div = document.createElement('div');
+        if (!hasCaptain && i === 0) {
+          div.className = 'captain-container';
+        } else {
+          div.className = 'character-container';
+        }
+
+        const img = document.createElement('img');
+        img.src = name
+          ? `${BASE_URL}/game_assets/rio_characterIcons/${encodeURIComponent(name)}.png`
+          : '';
+        img.onerror = () => img.style.display = 'none';
+        div.appendChild(img);
+        container.appendChild(div);
+      }
+    }
+
+    async function fetchState() {
+      try {
+        const resp = await fetch(`${BASE_URL}/api/v1/state`);
+        if (resp.ok) {
+          state = await resp.json();
+          render();
+          return true;
+        }
+      } catch (e) {}
+      return false;
+    }
+
+    async function bootstrap() {
+      await fetchState();
+
+      const socket = io(BASE_URL, { transports: ['websocket', 'polling'] });
+
+      socket.on('connect', () => {
+        console.log('[roster2] SocketIO connected');
+        socket.emit('v1.state.get', {}, (fullState) => {
+          if (fullState && !fullState.error) {
+            state = fullState;
+            render();
+          }
+        });
+      });
+
+      socket.on('connect_error', (err) => {
+        console.warn('[roster2] SocketIO connect error:', err.message);
+      });
+
+      socket.on('v1.state.set', (msg) => {
+        if (msg.sid === socket.id) return;
+        deepSet(state, msg.key, msg.value);
+        if (msg.key.startsWith(`score.${SCOREBOARD}.team.${TEAM_NUM}.`)) {
+          render();
+        }
+      });
+
+      socket.on('v1.state.unset', (msg) => {
+        if (msg.sid === socket.id) return;
+        deepUnset(state, msg.key);
+        if (msg.key.startsWith(`score.${SCOREBOARD}.team.${TEAM_NUM}.`)) {
+          render();
+        }
+      });
+
+    }
+
+    bootstrap();
+  </script>
+</body>
+</html>
