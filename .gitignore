@@ -277,3 +277,4 @@ out
 user_data/settings.json
 user_data/state.json
 user_data/stream_labels/
+.DS_Store
