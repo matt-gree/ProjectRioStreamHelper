@@ -5,17 +5,9 @@ from typing import Callable, Awaitable
 
 from loguru import logger
 from server.rio.pyrio.stat_file_parser import HudObj
-from server.rio.pyrio.lookup import LookupDicts, Lookup
+from server.rio.pyrio.lookup import lookup
 
 from server.utils import json
-
-_lookup_instance = None
-
-def get_lookup():
-    global _lookup_instance
-    if _lookup_instance is None:
-        _lookup_instance = Lookup()
-    return _lookup_instance
 
 
 class HudWatcher:
@@ -96,6 +88,7 @@ class HudWatcher:
         """Convert HudObj into a flat game dict matching the Project Rio API format.
 
         Ported from the old RioHUDWatcher.convert_hud_data_format().
+        Uses pyrio's HudObj methods for all data access.
         """
         game = {
             "away_captain": hud_data.captain_index(1),
@@ -119,16 +112,19 @@ class HudWatcher:
             "tag_set": -1,
             "balls": hud_data.balls(),
             "strikes": hud_data.strikes(),
+            "event_num": hud_data.event_number,
         }
 
-        def flatten_roster_dict(roster_dict: dict, team_name: str) -> dict:
-            flat = {}
-            for index, data in roster_dict.items():
-                key = f"{team_name}_roster_{index}_char"
-                flat[key] = get_lookup().lookup(LookupDicts.CHAR_NAME, data["char_id"])
-            return flat
+        # Roster data using pyrio's HudObj methods
+        for team_idx in range(2):
+            team_name = "away" if team_idx == 0 else "home"
+            roster = hud_data.roster(team_idx)
+            for index, data in roster.items():
+                game[f"{team_name}_roster_{index}_char"] = data["char_id"]
 
-        game.update(flatten_roster_dict(hud_data.roster(0), "away"))
-        game.update(flatten_roster_dict(hud_data.roster(1), "home"))
+            # Per-character stats from HUD file via pyrio methods
+            for i in range(9):
+                game[f"{team_name}_roster_{i}_offensive"] = hud_data.character_offensive_stats(team_idx, i)
+                game[f"{team_name}_roster_{i}_defensive"] = hud_data.character_defensive_stats(team_idx, i)
 
         return game

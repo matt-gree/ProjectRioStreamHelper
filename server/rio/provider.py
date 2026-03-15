@@ -2,10 +2,11 @@ import platform
 from pathlib import Path
 
 from loguru import logger
-from server.rio.pyrio.lookup import LookupDicts
+from server.rio.pyrio.lookup import lookup
 from server.rio.pyrio.team_name_algo import team_name
 
-from server.rio.hud_watcher import HudWatcher, get_lookup
+from server.rio.hud_watcher import HudWatcher
+from server.rio.stats_tracker import StatsTracker
 from server.settings import Settings
 from server.state import State
 
@@ -140,10 +141,15 @@ class RioGameDataProvider:
         """Immediate one-shot read of the HUD file. Updates state and returns parsed game."""
         await cls.ReloadHudPath()
         if cls.hud_watcher and cls.hud_watcher.latest_game_data:
-            parsed = cls.parse_game_data(cls.hud_watcher.latest_game_data)
+            game_json = cls.hud_watcher.latest_game_data
+            StatsTracker.on_hud_update(game_json)
+            parsed = cls.parse_game_data(game_json)
             parsed = cls._preserve_player_sides(parsed)
             cls.current_game = parsed
             await cls._apply_game_to_state(parsed)
+
+            target = await Settings.Get("scoreboards.hud_target", 1)
+            await StatsTracker.push_stats_to_state(target, cls._sides_swapped)
             return parsed
         return None
 
@@ -162,7 +168,7 @@ class RioGameDataProvider:
             for i in range(2):
                 team = "home" if i == 1 else "away"
                 roster = [
-                    get_lookup().lookup(LookupDicts.CHAR_NAME, game_json[f"{team}_roster_{j}_char"])
+                    game_json[f"{team}_roster_{j}_char"]
                     for j in range(9)
                 ]
                 data["entrants"][i][0]["roster"] = roster
@@ -207,6 +213,7 @@ class RioGameDataProvider:
         cls._prev_inning = None
         cls._sides_swapped = False
         cls._user_overridden = False
+        StatsTracker.reset()
 
     @classmethod
     async def _apply_game_to_state(cls, parsed: dict):
@@ -219,10 +226,22 @@ class RioGameDataProvider:
     @classmethod
     async def _on_hud_game_update(cls, game_json: dict):
         """Callback from HudWatcher when the HUD file changes."""
+        # Check for new game before parsing (uses raw inning from game_json)
+        current_inning = game_json.get("inning", 1)
+        if cls._is_new_game(current_inning):
+            await StatsTracker.on_new_game(game_json)
+
+        # Update HUD stats on every event
+        StatsTracker.on_hud_update(game_json)
+
         parsed = cls.parse_game_data(game_json)
         parsed = cls._preserve_player_sides(parsed)
         cls.current_game = parsed
         await cls._apply_game_to_state(parsed)
+
+        # Push merged stats to state after game data
+        target = await Settings.Get("scoreboards.hud_target", 1)
+        await StatsTracker.push_stats_to_state(target, cls._sides_swapped)
 
     @classmethod
     def _is_new_game(cls, current_inning: int) -> bool:
@@ -251,6 +270,10 @@ class RioGameDataProvider:
             parsed = cls._preserve_player_sides(parsed)
             cls.current_game = parsed
             await cls._apply_game_to_state(parsed)
+
+            # Re-push stats with new swap state
+            target = await Settings.Get("scoreboards.hud_target", 1)
+            await StatsTracker.push_stats_to_state(target, cls._sides_swapped)
 
     @classmethod
     async def _pin_wants_swap(cls, player0: str, player1: str) -> bool | None:
