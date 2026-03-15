@@ -1,8 +1,62 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
     Stack, Paper, Text, Group, Grid, UnstyledButton,
-    CopyButton, ActionIcon, Tooltip, Box, Loader, Alert,
+    CopyButton, ActionIcon, Button, Tooltip, Box, Loader, Alert,
 } from '@mantine/core';
+
+const NATIVE_W = 1920;
+const NATIVE_H = 1080;
+const PREVIEW_HEIGHT = 500;
+
+function ScaledIframe({ src }) {
+    const containerRef = useRef(null);
+    const [dims, setDims] = useState({ scale: 0.2, offsetX: 0, offsetY: 0 });
+
+    useEffect(() => {
+        const el = containerRef.current;
+        if (!el) return;
+        const observer = new ResizeObserver(([entry]) => {
+            const { width, height } = entry.contentRect;
+            const scale = Math.min(width / NATIVE_W, height / NATIVE_H);
+            const scaledW = NATIVE_W * scale;
+            const scaledH = NATIVE_H * scale;
+            setDims({
+                scale,
+                offsetX: (width - scaledW) / 2,
+                offsetY: (height - scaledH) / 2,
+            });
+        });
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, []);
+
+    return (
+        <Box
+            ref={containerRef}
+            style={{
+                position: 'relative',
+                height: PREVIEW_HEIGHT,
+                background: '#1a1a1a',
+                overflow: 'hidden',
+            }}
+        >
+            <iframe
+                src={src}
+                style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: `${NATIVE_W}px`,
+                    height: `${NATIVE_H}px`,
+                    border: 'none',
+                    transform: `translate(${dims.offsetX}px, ${dims.offsetY}px) scale(${dims.scale})`,
+                    transformOrigin: 'top left',
+                }}
+                title="Layout Preview"
+            />
+        </Box>
+    );
+}
 
 export default function LayoutBrowser() {
     const [layouts, setLayouts] = useState([]);
@@ -18,7 +72,6 @@ export default function LayoutBrowser() {
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             const data = await resp.json();
             setLayouts(data);
-            // Auto-select first layout
             if (data.length > 0 && !selected) {
                 setSelected(data[0].url);
             }
@@ -33,7 +86,6 @@ export default function LayoutBrowser() {
         fetchLayouts();
     }, [fetchLayouts]);
 
-    // Group layouts by folder
     const groups = {};
     for (const l of layouts) {
         if (!groups[l.group]) groups[l.group] = [];
@@ -41,10 +93,10 @@ export default function LayoutBrowser() {
     }
 
     return (
-        <Grid gutter="md" style={{ height: 'calc(100vh - 120px)' }}>
+        <Grid gutter="md">
             {/* Left panel: layout list */}
             <Grid.Col span={4}>
-                <Stack gap="xs" style={{ height: '100%', overflow: 'auto' }}>
+                <Stack gap="xs" style={{ maxHeight: PREVIEW_HEIGHT + 40, overflow: 'auto' }}>
                     <Text size="lg" fw={700}>OBS Layouts</Text>
                     <Text size="xs" c="dimmed">
                         Select a layout to preview. Copy the URL into an OBS Browser Source.
@@ -72,21 +124,20 @@ export default function LayoutBrowser() {
                                                 : '1px solid transparent',
                                         })}
                                     >
-                                        <Group justify="space-between" wrap="nowrap">
-                                            <Text size="sm" truncate>{item.name}</Text>
+                                        <Group justify="space-between" wrap="nowrap" gap={4}>
+                                            <Text size="sm" truncate style={{ minWidth: 0, flex: 1 }}>{item.name}</Text>
                                             <CopyButton value={item.url}>
                                                 {({ copied, copy }) => (
                                                     <Tooltip label={copied ? 'Copied!' : 'Copy URL'}>
                                                         <ActionIcon
                                                             variant="subtle"
                                                             color={copied ? 'teal' : 'gray'}
-                                                            size="sm"
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
                                                                 copy();
                                                             }}
                                                         >
-                                                            <Text size="xs">{copied ? '\u2713' : '\u2398'}</Text>
+                                                            {copied ? '\u2713' : '\u2398'}
                                                         </ActionIcon>
                                                     </Tooltip>
                                                 )}
@@ -108,48 +159,27 @@ export default function LayoutBrowser() {
 
             {/* Right panel: iframe preview */}
             <Grid.Col span={8}>
-                <Paper
-                    withBorder
-                    style={{
-                        height: '100%',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        overflow: 'hidden',
-                    }}
-                >
+                <Paper withBorder style={{ overflow: 'hidden' }}>
                     {selected ? (
                         <>
-                            <Group p="xs" justify="space-between" style={{ borderBottom: '1px solid var(--mantine-color-gray-3)' }}>
-                                <Text size="xs" c="dimmed" truncate style={{ flex: 1 }}>{selected}</Text>
+                            <Group p="xs" justify="space-between" wrap="nowrap" gap={4} style={{ borderBottom: '1px solid var(--mantine-color-gray-3)' }}>
+                                <Text size="xs" c="dimmed" truncate style={{ flex: 1, minWidth: 0 }}>{selected}</Text>
                                 <CopyButton value={selected}>
                                     {({ copied, copy }) => (
                                         <Tooltip label={copied ? 'Copied!' : 'Copy URL'}>
-                                            <ActionIcon variant="subtle" color={copied ? 'teal' : 'gray'} size="sm" onClick={copy}>
-                                                <Text size="xs">{copied ? '\u2713' : 'Copy'}</Text>
-                                            </ActionIcon>
+                                            <Button variant="subtle" size="compact-xs" color={copied ? 'teal' : 'gray'} onClick={copy}>
+                                                {copied ? 'Copied' : 'Copy'}
+                                            </Button>
                                         </Tooltip>
                                     )}
                                 </CopyButton>
                             </Group>
-                            <Box style={{ flex: 1, position: 'relative', background: '#1a1a1a' }}>
-                                <iframe
-                                    key={selected}
-                                    src={selected}
-                                    style={{
-                                        width: '1920px',
-                                        height: '1080px',
-                                        border: 'none',
-                                        transform: 'scale(0.45)',
-                                        transformOrigin: 'top left',
-                                    }}
-                                    title="Layout Preview"
-                                />
-                            </Box>
+                            <ScaledIframe key={selected} src={selected} />
                         </>
                     ) : (
                         <Box
                             style={{
-                                flex: 1,
+                                height: PREVIEW_HEIGHT,
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
