@@ -8,7 +8,6 @@ import asyncio
 
 import pandas as pd
 from loguru import logger
-from server.rio.pyrio.lookup import lookup
 from server.rio import stats_api
 from server.state import State
 from server.settings import Settings

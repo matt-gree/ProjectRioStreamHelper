@@ -2,7 +2,6 @@ import platform
 from pathlib import Path
 
 from loguru import logger
-from server.rio.pyrio.lookup import lookup
 from server.rio.pyrio.team_name_algo import team_name
 
 from server.rio.hud_watcher import HudWatcher

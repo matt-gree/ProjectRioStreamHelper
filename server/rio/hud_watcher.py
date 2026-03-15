@@ -5,8 +5,6 @@ from typing import Callable, Awaitable
 
 from loguru import logger
 from server.rio.pyrio.stat_file_parser import HudObj
-from server.rio.pyrio.lookup import lookup
-
 from server.utils import json
 
 
