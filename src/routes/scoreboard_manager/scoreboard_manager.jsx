@@ -1,11 +1,12 @@
 import { useState, useCallback } from 'react';
 import {
-    Tabs, Grid, ActionIcon, Group, Text, Badge, Tooltip, CloseButton,
-    TextInput, Popover,
+    Tabs, Grid, Stack, ActionIcon, Group, Text, Badge, Tooltip, CloseButton,
+    TextInput, Popover, Box,
 } from '@mantine/core';
 import { useSettingsStore, useStateStore } from '../../context/store';
 import TeamPanel from '../../components/scoreboard/TeamPanel';
 import ScoreControls from '../../components/scoreboard/ScoreControls';
+import ActiveMatchupStats from '../../components/scoreboard/ActiveMatchupStats';
 
 /**
  * A single scoreboard instance (team panels + score controls).
@@ -50,34 +51,42 @@ function ScoreboardTab({ scoreboardNumber }) {
     }, [scoreboardNumber]);
 
     return (
-        <Grid gutter="md" align="flex-start">
-            <Grid.Col span={{ base: 12, md: 4 }}>
-                <TeamPanel
-                    scoreboardNumber={scoreboardNumber}
-                    teamNumber={1}
-                    playerCount={1}
-                    label="Team 1 (Away)"
-                />
-            </Grid.Col>
+        <Stack gap="md">
+            <Grid gutter="md" align="flex-start">
+                <Grid.Col span={{ base: 12, md: 4 }}>
+                    <TeamPanel
+                        scoreboardNumber={scoreboardNumber}
+                        teamNumber={1}
+                        playerCount={1}
+                        sourceType={sourceType}
+                    />
+                </Grid.Col>
 
-            <Grid.Col span={{ base: 12, md: 4 }}>
-                <ScoreControls
-                    scoreboardNumber={scoreboardNumber}
-                    onSwapTeams={handleSwapTeams}
-                    sourceType={sourceType}
-                    onSetSource={handleSetSource}
-                />
-            </Grid.Col>
+                <Grid.Col span={{ base: 12, md: 4 }}>
+                    <ScoreControls
+                        scoreboardNumber={scoreboardNumber}
+                        onSwapTeams={handleSwapTeams}
+                        sourceType={sourceType}
+                        onSetSource={handleSetSource}
+                    />
+                </Grid.Col>
 
-            <Grid.Col span={{ base: 12, md: 4 }}>
-                <TeamPanel
-                    scoreboardNumber={scoreboardNumber}
-                    teamNumber={2}
-                    playerCount={1}
-                    label="Team 2 (Home)"
-                />
-            </Grid.Col>
-        </Grid>
+                <Grid.Col span={{ base: 12, md: 4 }}>
+                    <TeamPanel
+                        scoreboardNumber={scoreboardNumber}
+                        teamNumber={2}
+                        playerCount={1}
+                        sourceType={sourceType}
+                    />
+                </Grid.Col>
+            </Grid>
+
+            <Grid gutter="md">
+                <Grid.Col span={{ base: 12, md: 6 }}>
+                    <ActiveMatchupStats scoreboardNumber={scoreboardNumber} />
+                </Grid.Col>
+            </Grid>
+        </Stack>
     );
 }
 
@@ -109,12 +118,16 @@ function RenamePopover({ sbId, currentAlias }) {
     return (
         <Popover opened={opened} onChange={setOpened} position="bottom" withArrow>
             <Popover.Target>
-                <ActionIcon
-                    variant="subtle" size="xs"
+                <Box
+                    component="span"
+                    role="button"
+                    tabIndex={0}
+                    style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center' }}
                     onClick={(e) => { e.stopPropagation(); setValue(currentAlias); setOpened(true); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); setValue(currentAlias); setOpened(true); } }}
                 >
                     <Text size="xs" lh={1}>&#9998;</Text>
-                </ActionIcon>
+                </Box>
             </Popover.Target>
             <Popover.Dropdown onClick={(e) => e.stopPropagation()}>
                 <TextInput
@@ -125,9 +138,16 @@ function RenamePopover({ sbId, currentAlias }) {
                     onKeyDown={handleKeyDown}
                     autoFocus
                     rightSection={
-                        <ActionIcon size="xs" variant="filled" onClick={handleSave}>
+                        <Box
+                            component="span"
+                            role="button"
+                            tabIndex={0}
+                            style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center' }}
+                            onClick={handleSave}
+                            onKeyDown={(e) => { if (e.key === 'Enter') handleSave(); }}
+                        >
                             <Text size="xs" lh={1}>&#10003;</Text>
-                        </ActionIcon>
+                        </Box>
                     }
                 />
             </Popover.Dropdown>
@@ -188,6 +208,8 @@ export default function ScoreboardManager() {
                                     <RenamePopover sbId={sbId} currentAlias={alias} />
                                     {active.length > 1 && (
                                         <CloseButton
+                                            component="div"
+                                            role="button"
                                             size="xs"
                                             variant="subtle"
                                             onClick={(e) => handleRemoveScoreboard(e, sbId)}

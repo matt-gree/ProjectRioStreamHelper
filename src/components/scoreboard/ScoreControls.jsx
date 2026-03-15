@@ -1,10 +1,11 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect, useState, useMemo, useRef } from 'react';
 import {
     NumberInput, Select, Checkbox, Button, Group, Stack,
-    Paper, Text, TextInput, Grid, Divider, ActionIcon
+    Paper, Text, TextInput, Grid, Divider, ActionIcon,
+    Popover, Badge, Loader,
 } from '@mantine/core';
-import { useStateStore } from '../../context/store';
-import { HALF_INNINGS } from '../../data/msb';
+import { useStateStore, useSettingsStore } from '../../context/store';
+import { HALF_INNINGS, ROSTER_SIZE } from '../../data/msb';
 
 const halfInningOptions = HALF_INNINGS.map(h => ({ value: h, label: h }));
 
@@ -21,15 +22,40 @@ const sourceOptions = [
 ];
 
 /**
+ * Build character name options from a team's roster in state.
+ */
+function useRosterOptions(scoreboardNumber, teamNumber) {
+    const roster = useStateStore(
+        s => s?.score?.[scoreboardNumber]?.team?.[teamNumber]?.player?.[1]?.character
+    );
+    return useMemo(() => {
+        const seen = new Set();
+        const opts = [];
+        for (let i = 0; i < ROSTER_SIZE; i++) {
+            const name = roster?.[i]?.name;
+            if (name && !seen.has(name)) {
+                seen.add(name);
+                opts.push({ value: name, label: name });
+            }
+        }
+        return opts;
+    }, [roster]);
+}
+
+/**
  * Central score column: scores, baseball state, match info.
  */
 export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, sourceType = 'manual', onSetSource }) {
     const base = `score.${scoreboardNumber}`;
     const setItem = useStateStore(s => s.setItem);
+    const settingsSetItem = useSettingsStore(s => s.setItem);
 
     // Team scores
     const scoreLeft  = useStateStore(s => num(s?.score?.[scoreboardNumber]?.score_left, 0));
     const scoreRight = useStateStore(s => num(s?.score?.[scoreboardNumber]?.score_right, 0));
+
+    // Home team designation (1 or 2, default 2)
+    const homeTeam = useStateStore(s => num(s?.score?.[scoreboardNumber]?.home_team, 2));
 
     // Baseball state
     const inning      = useStateStore(s => num(s?.score?.[scoreboardNumber]?.inning, 1));
@@ -49,6 +75,84 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, sourc
     const bestOf   = useStateStore(s => num(s?.score?.[scoreboardNumber]?.best_of, 3));
     const phase    = useStateStore(s => s?.score?.[scoreboardNumber]?.phase ?? '');
     const match    = useStateStore(s => s?.score?.[scoreboardNumber]?.match ?? '');
+
+    // Game mode
+    const statsTag = useSettingsStore(s => s?.project_rio?.stats_tag ?? '');
+    const [gameModes, setGameModes] = useState([]);
+    const [diagOpen, setDiagOpen] = useState(false);
+    const [diagnostics, setDiagnostics] = useState(null);
+    const [fetchingStats, setFetchingStats] = useState(false);
+    const prevTagRef = useRef(statsTag);
+
+    useEffect(() => {
+        fetch('/api/v1/rio/game-modes')
+            .then(r => r.json())
+            .then(data => {
+                const opts = Object.entries(data).map(([name, id]) => ({
+                    value: name,
+                    label: name,
+                }));
+                setGameModes(opts);
+            })
+            .catch(() => {});
+    }, []);
+
+    // Poll diagnostics while a fetch is in progress
+    const pollRef = useRef(null);
+    const pollDiagnostics = useCallback(() => {
+        if (pollRef.current) clearInterval(pollRef.current);
+        pollRef.current = setInterval(() => {
+            fetch('/api/v1/rio/stats/diagnostics')
+                .then(r => r.json())
+                .then(d => {
+                    setDiagnostics(d);
+                    if (d.status !== 'loading') {
+                        clearInterval(pollRef.current);
+                        pollRef.current = null;
+                        setFetchingStats(false);
+                    }
+                })
+                .catch(() => {});
+        }, 500);
+    }, []);
+
+    // Auto-fetch stats when game mode changes
+    useEffect(() => {
+        if (prevTagRef.current !== statsTag) {
+            prevTagRef.current = statsTag;
+            setFetchingStats(true);
+            setDiagOpen(true);
+            // Fire refresh (don't await — we poll diagnostics instead)
+            fetch('/api/v1/rio/stats/refresh', { method: 'POST' })
+                .catch(() => {});
+            // Start polling diagnostics after a short delay for the loading state to be set
+            setTimeout(pollDiagnostics, 200);
+        }
+    }, [statsTag, pollDiagnostics]);
+
+    // Cleanup poll on unmount
+    useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
+
+    const handleGameModeChange = useCallback((val) => {
+        settingsSetItem('project_rio.stats_tag', val ?? '');
+    }, [settingsSetItem]);
+
+    const handleInspect = useCallback(() => {
+        setDiagOpen(true);
+        fetch('/api/v1/rio/stats/diagnostics')
+            .then(r => r.json())
+            .then(d => setDiagnostics(d))
+            .catch(() => {});
+    }, []);
+
+    // Determine batting/fielding teams based on half inning + home designation
+    // Top = away bats, Bottom = home bats
+    const awayTeam = homeTeam === 2 ? 1 : 2;
+    const battingTeam = halfInning === 'Top' ? awayTeam : homeTeam;
+    const fieldingTeam = halfInning === 'Top' ? homeTeam : awayTeam;
+
+    const batterOptions = useRosterOptions(scoreboardNumber, battingTeam);
+    const pitcherOptions = useRosterOptions(scoreboardNumber, fieldingTeam);
 
     const set = useCallback((field, value) => {
         setItem(`${base}.${field}`, value);
@@ -90,6 +194,89 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, sourc
                         size="xs"
                     />
                 )}
+
+                {/* ---- Game Mode ---- */}
+                <Group gap={4} align="flex-end">
+                    <Select
+                        label="Game Mode"
+                        placeholder="Select game mode"
+                        data={gameModes}
+                        value={statsTag || null}
+                        onChange={handleGameModeChange}
+                        size="xs"
+                        searchable
+                        clearable
+                        style={{ flex: 1 }}
+                    />
+                    <Popover opened={diagOpen} onChange={setDiagOpen} position="bottom-end" withArrow width={320}>
+                        <Popover.Target>
+                            <ActionIcon
+                                ref={undefined}
+                                variant="subtle"
+                                size="sm"
+                                onClick={handleInspect}
+                                title="Inspect stats fetch"
+                            >
+                                {fetchingStats ? <Loader size={12} /> : <Text size="xs" lh={1}>&#8505;</Text>}
+                            </ActionIcon>
+                        </Popover.Target>
+                        <Popover.Dropdown>
+                            <Stack gap="xs">
+                                <Text size="xs" fw={600}>Stats Fetch Diagnostics</Text>
+                                {diagnostics?.fetched_at ? (
+                                    <>
+                                        {diagnostics.error && (
+                                            <Text size="xs" c="red">{diagnostics.error}</Text>
+                                        )}
+                                        {diagnostics.url && (
+                                            <div>
+                                                <Text size="xs" c="dimmed">URL Pattern</Text>
+                                                <Text size="xs" style={{ wordBreak: 'break-all' }}>{diagnostics.url}</Text>
+                                            </div>
+                                        )}
+                                        {diagnostics.tag && (
+                                            <Group gap={4}>
+                                                <Text size="xs" c="dimmed">Tag:</Text>
+                                                <Badge size="xs" variant="light">{diagnostics.tag}</Badge>
+                                            </Group>
+                                        )}
+                                        {Object.keys(diagnostics.players).length > 0 && (
+                                            <>
+                                                <Divider />
+                                                {Object.entries(diagnostics.players).map(([name, info]) => (
+                                                    <Group key={name} justify="space-between">
+                                                        <Text size="xs">{name}</Text>
+                                                        {info.status === 'loading' ? (
+                                                            <Group gap={4}>
+                                                                <Loader size={10} />
+                                                                <Text size="xs" c="dimmed">Loading...</Text>
+                                                            </Group>
+                                                        ) : info.error ? (
+                                                            <Badge size="xs" color="red" variant="filled">Error</Badge>
+                                                        ) : (
+                                                            <Badge
+                                                                size="xs"
+                                                                color={info.char_count > 0 ? 'green' : 'yellow'}
+                                                                variant="filled"
+                                                            >
+                                                                {info.char_count} chars
+                                                            </Badge>
+                                                        )}
+                                                    </Group>
+                                                ))}
+                                            </>
+                                        )}
+                                        <Text size="xs" c="dimmed" ta="right">
+                                            {new Date(diagnostics.fetched_at).toLocaleTimeString()}
+                                        </Text>
+                                    </>
+                                ) : (
+                                    <Text size="xs" c="dimmed">No stats have been fetched yet.</Text>
+                                )}
+                            </Stack>
+                        </Popover.Dropdown>
+                    </Popover>
+                </Group>
 
                 <Divider />
 
@@ -235,19 +422,27 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, sourc
                 {/* Batter / Pitcher */}
                 <Grid gutter="xs">
                     <Grid.Col span={6}>
-                        <TextInput
+                        <Select
                             label="Batter"
-                            value={batter}
-                            onChange={e => set('batter', e.currentTarget.value)}
+                            placeholder="Select batter"
+                            data={batterOptions}
+                            value={batter || null}
+                            onChange={val => set('batter', val ?? '')}
                             size="xs"
+                            searchable
+                            clearable
                         />
                     </Grid.Col>
                     <Grid.Col span={6}>
-                        <TextInput
+                        <Select
                             label="Pitcher"
-                            value={pitcher}
-                            onChange={e => set('pitcher', e.currentTarget.value)}
+                            placeholder="Select pitcher"
+                            data={pitcherOptions}
+                            value={pitcher || null}
+                            onChange={val => set('pitcher', val ?? '')}
                             size="xs"
+                            searchable
+                            clearable
                         />
                     </Grid.Col>
                 </Grid>

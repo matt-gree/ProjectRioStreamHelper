@@ -1,27 +1,27 @@
 import { useCallback } from 'react';
-import { TextInput, Checkbox, Stack, Paper, Text, ScrollArea } from '@mantine/core';
+import { Stack, Paper, Text, Group, Badge, UnstyledButton } from '@mantine/core';
 import { useStateStore } from '../../context/store';
 import PlayerSlot from './PlayerSlot';
 
 /**
- * One team column containing team name + N player slots.
+ * One team column containing a single player slot.
  *
  * Props:
  *   scoreboardNumber: number (usually 1)
  *   teamNumber: 1 | 2
  *   playerCount: number of player slots (default 1)
- *   label: display label ("Team 1" / "Team 2")
  */
-export default function TeamPanel({ scoreboardNumber = 1, teamNumber, playerCount = 1, label }) {
-    const basePath = `score.${scoreboardNumber}.team.${teamNumber}`;
+export default function TeamPanel({ scoreboardNumber = 1, teamNumber, playerCount = 1, sourceType = 'manual' }) {
     const setItem = useStateStore(s => s.setItem);
+    const homeTeam = useStateStore(
+        s => Number(s?.score?.[scoreboardNumber]?.home_team ?? 2)
+    );
 
-    const teamName = useStateStore(s => s?.score?.[scoreboardNumber]?.team?.[teamNumber]?.teamName ?? '');
-    const losers   = useStateStore(s => s?.score?.[scoreboardNumber]?.team?.[teamNumber]?.losers ?? false);
+    const isHome = homeTeam === teamNumber;
 
-    const set = useCallback((field, value) => {
-        setItem(`${basePath}.${field}`, value);
-    }, [basePath, setItem]);
+    const toggleHome = useCallback(() => {
+        setItem(`score.${scoreboardNumber}.home_team`, teamNumber);
+    }, [scoreboardNumber, teamNumber, setItem]);
 
     const playerSlots = [];
     for (let p = 1; p <= playerCount; p++) {
@@ -31,6 +31,7 @@ export default function TeamPanel({ scoreboardNumber = 1, teamNumber, playerCoun
                 scoreboardNumber={scoreboardNumber}
                 teamNumber={teamNumber}
                 playerNumber={p}
+                sourceType={sourceType}
             />
         );
     }
@@ -38,25 +39,17 @@ export default function TeamPanel({ scoreboardNumber = 1, teamNumber, playerCoun
     return (
         <Paper withBorder p="sm" style={{ flex: 1 }}>
             <Stack gap="xs">
-                <Text size="sm" fw={700} ta="center">{label || `Team ${teamNumber}`}</Text>
-                <TextInput
-                    label="Team Name"
-                    placeholder="Team name"
-                    size="xs"
-                    value={teamName}
-                    onChange={e => set('teamName', e.currentTarget.value)}
-                />
-                <Checkbox
-                    label="Losers"
-                    size="xs"
-                    checked={losers}
-                    onChange={e => set('losers', e.currentTarget.checked)}
-                />
-                <ScrollArea.Autosize mah={500} type="auto">
-                    <Stack gap={0}>
-                        {playerSlots}
-                    </Stack>
-                </ScrollArea.Autosize>
+                <Group justify="space-between">
+                    <Text size="sm" fw={700}>Team {teamNumber}</Text>
+                    <UnstyledButton onClick={toggleHome}>
+                        {isHome ? (
+                            <Badge size="sm" color="blue" variant="filled">Home</Badge>
+                        ) : (
+                            <Badge size="sm" color="gray" variant="light">Away</Badge>
+                        )}
+                    </UnstyledButton>
+                </Group>
+                {playerSlots}
             </Stack>
         </Paper>
     );

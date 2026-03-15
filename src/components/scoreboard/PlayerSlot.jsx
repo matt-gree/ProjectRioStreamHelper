@@ -1,11 +1,12 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import {
-    TextInput, Select, Radio, Group, Stack, Grid, Paper,
-    Text, Collapse, ActionIcon, Autocomplete
+    TextInput, Select, Radio, Checkbox, Group, Stack, Grid, Paper,
+    Text, Collapse, ActionIcon, UnstyledButton,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { useStateStore } from '../../context/store';
 import { MSB_CHARACTERS, MSB_TEAMS, ROSTER_SIZE } from '../../data/msb';
+import CharacterStatEditor from './CharacterStatEditor';
 
 const characterOptions = MSB_CHARACTERS.map(c => ({ value: c, label: c }));
 const teamOptions = MSB_TEAMS.map(t => ({ value: t, label: t }));
@@ -18,9 +19,10 @@ const teamOptions = MSB_TEAMS.map(t => ({ value: t, label: t }));
  *   teamNumber: 1 | 2
  *   playerNumber: 1-based player index
  */
-export default function PlayerSlot({ scoreboardNumber = 1, teamNumber, playerNumber }) {
+export default function PlayerSlot({ scoreboardNumber = 1, teamNumber, playerNumber, sourceType = 'manual' }) {
     const basePath = `score.${scoreboardNumber}.team.${teamNumber}.player.${playerNumber}`;
     const [detailsOpen, { toggle: toggleDetails }] = useDisclosure(false);
+    const [activeCharDetail, setActiveCharDetail] = useState(null);
 
     // ---- selectors (subscribe to individual keys to minimise re-renders) ----
     const name       = useStateStore(s => s?.score?.[scoreboardNumber]?.team?.[teamNumber]?.player?.[playerNumber]?.name ?? '');
@@ -31,6 +33,7 @@ export default function PlayerSlot({ scoreboardNumber = 1, teamNumber, playerNum
     const country    = useStateStore(s => s?.score?.[scoreboardNumber]?.team?.[teamNumber]?.player?.[playerNumber]?.country ?? '');
     const pronoun    = useStateStore(s => s?.score?.[scoreboardNumber]?.team?.[teamNumber]?.player?.[playerNumber]?.pronoun ?? '');
     const twitter    = useStateStore(s => s?.score?.[scoreboardNumber]?.team?.[teamNumber]?.player?.[playerNumber]?.twitter ?? '');
+    const losers     = useStateStore(s => s?.score?.[scoreboardNumber]?.team?.[teamNumber]?.losers ?? false);
 
     const setItem = useStateStore(s => s.setItem);
 
@@ -53,8 +56,12 @@ export default function PlayerSlot({ scoreboardNumber = 1, teamNumber, playerNum
         set('rio_captainIndex', index);
     }, [set]);
 
+    const setTeamField = useCallback((field, value) => {
+        setItem(`score.${scoreboardNumber}.team.${teamNumber}.${field}`, value);
+    }, [scoreboardNumber, teamNumber, setItem]);
+
     return (
-        <Paper withBorder p="xs" mb="xs">
+        <Stack gap="xs">
             {/* Main row: name + team prefix + Rio name */}
             <Grid gutter="xs" align="flex-end">
                 <Grid.Col span={4}>
@@ -139,35 +146,65 @@ export default function PlayerSlot({ scoreboardNumber = 1, teamNumber, playerNum
                         />
                     </Grid.Col>
                 </Grid>
+                <Checkbox
+                    label="Losers"
+                    size="xs"
+                    checked={losers}
+                    onChange={e => setTeamField('losers', e.currentTarget.checked)}
+                />
             </Collapse>
 
-            {/* Character roster (9 slots) */}
-            <Text size="xs" fw={600} mt="xs" mb={4}>Roster</Text>
-            <Grid gutter={4}>
-                {roster.map((charName, i) => (
-                    <Grid.Col span={4} key={i}>
-                        <Group gap={4} wrap="nowrap">
-                            <Radio
-                                size="xs"
-                                checked={captain === i}
-                                onChange={() => setCaptain(i)}
-                                title="Captain"
-                                styles={{ radio: { cursor: 'pointer' } }}
-                            />
-                            <Select
-                                placeholder={`Slot ${i + 1}`}
-                                data={characterOptions}
-                                size="xs"
-                                searchable
-                                clearable
-                                value={charName || null}
-                                onChange={val => setCharacter(i, val ?? '')}
-                                style={{ flex: 1 }}
-                            />
-                        </Group>
-                    </Grid.Col>
-                ))}
-            </Grid>
-        </Paper>
+            {/* Character roster / stat editor drill-in */}
+            {activeCharDetail !== null ? (
+                <CharacterStatEditor
+                    scoreboardNumber={scoreboardNumber}
+                    teamNumber={teamNumber}
+                    charIndex={activeCharDetail}
+                    charName={roster[activeCharDetail]}
+                    onBack={() => setActiveCharDetail(null)}
+                    characterOptions={characterOptions}
+                    onCharacterChange={(val) => setCharacter(activeCharDetail, val ?? '')}
+                    isCaptain={captain === activeCharDetail}
+                    onSetCaptain={() => setCaptain(activeCharDetail)}
+                    sourceType={sourceType}
+                />
+            ) : (
+                <>
+                    <Text size="xs" fw={600} mt="xs" mb={4}>Roster</Text>
+                    <Grid gutter={4}>
+                        {roster.map((charName, i) => (
+                            <Grid.Col span={4} key={i}>
+                                <Group gap={4} wrap="nowrap">
+                                    <Radio
+                                        size="xs"
+                                        checked={captain === i}
+                                        onChange={() => setCaptain(i)}
+                                        title="Captain"
+                                        styles={{ radio: { cursor: 'pointer' } }}
+                                    />
+                                    <UnstyledButton
+                                        onClick={() => setActiveCharDetail(i)}
+                                        style={{ flex: 1, minWidth: 0 }}
+                                    >
+                                        <Paper
+                                            withBorder px={6} py={4}
+                                            style={{ cursor: 'pointer' }}
+                                        >
+                                            <Text
+                                                size="xs"
+                                                truncate
+                                                c={charName ? undefined : 'dimmed'}
+                                            >
+                                                {charName || `Slot ${i + 1}`}
+                                            </Text>
+                                        </Paper>
+                                    </UnstyledButton>
+                                </Group>
+                            </Grid.Col>
+                        ))}
+                    </Grid>
+                </>
+            )}
+        </Stack>
     );
 }
