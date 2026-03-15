@@ -1,0 +1,3 @@
+[submodule "server/rio/pyrio"]
+	path = server/rio/pyrio
+	url = https://github.com/matt-gree/pyrio.git
