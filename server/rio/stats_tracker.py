@@ -164,6 +164,9 @@ class StatsTracker:
     # Flat DataFrame from pyrio with columns: username, char_name, Batting_*, Pitching_*
     _api_stats: pd.DataFrame = pd.DataFrame()
 
+    # Indexed lookup: (username, char_name) -> row dict for O(1) access
+    _api_index: dict[tuple[str, str], pd.Series] = {}
+
     # Current game HUD stats: {team_idx: {roster_idx: {batting: {...}, pitching: {...}}}}
     _hud_stats: dict[int, dict] = {}
 
@@ -183,6 +186,7 @@ class StatsTracker:
     def reset(cls):
         """Reset all stats state."""
         cls._api_stats = pd.DataFrame()
+        cls._api_index = {}
         cls._hud_stats = {}
         cls._players = ["", ""]
         cls._rosters = {}
@@ -192,15 +196,19 @@ class StatsTracker:
         cls._fetch_task = None
 
     @classmethod
-    def _get_api_row(cls, username: str, char_name: str) -> pd.Series | None:
-        """Look up a single character row from the API DataFrame."""
+    def _build_index(cls):
+        """Build a (username, char_name) -> row dict for O(1) lookups."""
+        cls._api_index = {}
         if cls._api_stats.empty:
-            return None
-        mask = (cls._api_stats["username"] == username) & (cls._api_stats["char_name"] == char_name)
-        rows = cls._api_stats[mask]
-        if rows.empty:
-            return None
-        return rows.iloc[0]
+            return
+        for _, row in cls._api_stats.iterrows():
+            key = (row["username"], row["char_name"])
+            cls._api_index[key] = row
+
+    @classmethod
+    def _get_api_row(cls, username: str, char_name: str) -> pd.Series | None:
+        """Look up a single character row via indexed dict (O(1))."""
+        return cls._api_index.get((username, char_name))
 
     @classmethod
     async def on_new_game(cls, game_json: dict):
@@ -241,6 +249,7 @@ class StatsTracker:
         """
         try:
             cls._api_stats = await stats_api.fetch_character_stats(usernames, tag)
+            cls._build_index()
             cls._api_ready = True
             if not cls._api_stats.empty:
                 users = cls._api_stats["username"].unique().tolist()
@@ -275,8 +284,9 @@ class StatsTracker:
 
     @classmethod
     async def push_stats_to_state(cls, scoreboard_number: int, sides_swapped: bool):
-        """Merge historical + current stats and push to State."""
+        """Merge historical + current stats and push to State via single batch."""
         sb = f"score.{scoreboard_number}"
+        entries = []
 
         # Map display team index to data team index (accounting for swap)
         for display_team in range(2):
@@ -292,9 +302,7 @@ class StatsTracker:
 
                 prefix = f"{sb}.stats.team.{team_num}.character.{char_idx}"
 
-                await State.Set(f"{prefix}.name", char_name)
-
-                # Get API stats for this character from the flat DataFrame
+                # Get API stats for this character via indexed lookup (O(1))
                 api_row = cls._get_api_row(username, char_name)
                 api_batting = _extract_api_batting(api_row) if api_row is not None else _empty_batting()
                 api_pitching = _extract_api_pitching(api_row) if api_row is not None else _empty_pitching()
@@ -308,15 +316,19 @@ class StatsTracker:
                 merged_batting = _merge_batting(api_batting, hud_batting)
                 merged_pitching = _merge_pitching(api_pitching, hud_pitching)
 
-                await State.Set(f"{prefix}.api.batting", api_batting)
-                await State.Set(f"{prefix}.api.pitching", api_pitching)
-                await State.Set(f"{prefix}.batting", merged_batting)
-                await State.Set(f"{prefix}.pitching", merged_pitching)
-                await State.Set(f"{prefix}.current_game", {
-                    "batting": hud_batting,
-                    "pitching": hud_pitching,
-                })
+                entries.extend([
+                    (f"{prefix}.name", char_name),
+                    (f"{prefix}.api.batting", api_batting),
+                    (f"{prefix}.api.pitching", api_pitching),
+                    (f"{prefix}.batting", merged_batting),
+                    (f"{prefix}.pitching", merged_pitching),
+                    (f"{prefix}.current_game", {
+                        "batting": hud_batting,
+                        "pitching": hud_pitching,
+                    }),
+                ])
 
+        await State.SetBatch(entries)
         await State.Save()
 
     @classmethod

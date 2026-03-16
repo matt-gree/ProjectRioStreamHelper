@@ -41,24 +41,27 @@ async def apply_parsed_game_to_state(parsed: dict, scoreboard_number: int):
     """Write parsed game data into State under score.{scoreboard_number}.
 
     Shared by RioGameDataProvider (HUD) and RioGamePool (API).
+    Uses SetBatch to emit a single SocketIO event instead of 30+ individual ones.
     """
     sb = f"score.{scoreboard_number}"
 
-    await State.Set(f"{sb}.score_left", parsed.get("team1score", 0))
-    await State.Set(f"{sb}.score_right", parsed.get("team2score", 0))
-    await State.Set(f"{sb}.inning", parsed.get("inning", 1))
-    await State.Set(f"{sb}.half_inning", parsed.get("half_inning", "Top"))
-    await State.Set(f"{sb}.outs", parsed.get("outs", 0))
-    await State.Set(f"{sb}.strikes", parsed.get("strikes", 0))
-    await State.Set(f"{sb}.balls", parsed.get("balls", 0))
-    await State.Set(f"{sb}.batter", parsed.get("batter", ""))
-    await State.Set(f"{sb}.pitcher", parsed.get("pitcher", ""))
-    await State.Set(f"{sb}.cbRioRunnerOn1", parsed.get("runnerOn1", False))
-    await State.Set(f"{sb}.cbRioRunnerOn2", parsed.get("runnerOn2", False))
-    await State.Set(f"{sb}.cbRioRunnerOn3", parsed.get("runnerOn3", False))
-    await State.Set(f"{sb}.runner1Name", parsed.get("runner1Name", ""))
-    await State.Set(f"{sb}.runner2Name", parsed.get("runner2Name", ""))
-    await State.Set(f"{sb}.runner3Name", parsed.get("runner3Name", ""))
+    entries = [
+        (f"{sb}.score_left", parsed.get("team1score", 0)),
+        (f"{sb}.score_right", parsed.get("team2score", 0)),
+        (f"{sb}.inning", parsed.get("inning", 1)),
+        (f"{sb}.half_inning", parsed.get("half_inning", "Top")),
+        (f"{sb}.outs", parsed.get("outs", 0)),
+        (f"{sb}.strikes", parsed.get("strikes", 0)),
+        (f"{sb}.balls", parsed.get("balls", 0)),
+        (f"{sb}.batter", parsed.get("batter", "")),
+        (f"{sb}.pitcher", parsed.get("pitcher", "")),
+        (f"{sb}.cbRioRunnerOn1", parsed.get("runnerOn1", False)),
+        (f"{sb}.cbRioRunnerOn2", parsed.get("runnerOn2", False)),
+        (f"{sb}.cbRioRunnerOn3", parsed.get("runnerOn3", False)),
+        (f"{sb}.runner1Name", parsed.get("runner1Name", "")),
+        (f"{sb}.runner2Name", parsed.get("runner2Name", "")),
+        (f"{sb}.runner3Name", parsed.get("runner3Name", "")),
+    ]
 
     entrants = parsed.get("entrants", [[{}], [{}]])
     for team_idx in range(2):
@@ -66,14 +69,15 @@ async def apply_parsed_game_to_state(parsed: dict, scoreboard_number: int):
         player = entrants[team_idx][0] if entrants[team_idx] else {}
         prefix = f"{sb}.team.{team_num}.player.1"
 
-        await State.Set(f"{prefix}.rioName", player.get("rioName", ""))
-        await State.Set(f"{prefix}.msb_team", player.get("msb_team", ""))
-        await State.Set(f"{prefix}.rio_captainIndex", player.get("captainIndex", 0))
+        entries.append((f"{prefix}.rioName", player.get("rioName", "")))
+        entries.append((f"{prefix}.msb_team", player.get("msb_team", "")))
+        entries.append((f"{prefix}.rio_captainIndex", player.get("captainIndex", 0)))
 
         roster = player.get("roster", [])
         for char_idx, char_name in enumerate(roster):
-            await State.Set(f"{prefix}.character.{char_idx}.name", char_name)
+            entries.append((f"{prefix}.character.{char_idx}.name", char_name))
 
+    await State.SetBatch(entries)
     await State.Save()
 
 

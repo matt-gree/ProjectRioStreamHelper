@@ -78,6 +78,16 @@ export const SocketProvider = ({children}) => {
             scheduleFlush();
         }
 
+        const doBatchSet = (resp) => {
+            if("sid" in resp && resp.sid === socket.id) return;
+            if(resp.items && resp.items.length > 0) {
+                for (const item of resp.items) {
+                    setPending.push({ key: item.key, value: item.value });
+                }
+                scheduleFlush();
+            }
+        }
+
         const doUnset = (resp) => {
             if("sid" in resp && resp.sid === socket.id) return;
             unsetPending.push(resp.key);
@@ -93,17 +103,20 @@ export const SocketProvider = ({children}) => {
 
                 stateStore.mergeItems(resp);
                 socket.on('v1.state.set', doSet);
+                socket.on('v1.state.set_batch', doBatchSet);
                 socket.on('v1.state.unset', doUnset);
                 stateStore.setLoaded(true);
             });
         } else {
             socket.on('v1.state.set', doSet);
+            socket.on('v1.state.set_batch', doBatchSet);
             socket.on('v1.state.unset', doUnset);
         }
 
         return () => {
             if (rafId !== null) cancelAnimationFrame(rafId);
             socket.off('v1.state.set', doSet);
+            socket.off('v1.state.set_batch', doBatchSet);
             socket.off('v1.state.unset', doUnset);
             stateStore.setLoaded(false);
         }

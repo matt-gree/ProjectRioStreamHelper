@@ -1,9 +1,9 @@
 import asyncio
-import os
 from pathlib import Path
 from typing import Callable, Awaitable
 
 from loguru import logger
+from watchfiles import awatch, Change
 from server.rio.pyrio.stat_file_parser import HudObj
 from server.utils import json
 
@@ -11,9 +11,10 @@ from server.utils import json
 class HudWatcher:
     """Async file watcher for Project Rio's decoded.hud.json.
 
-    Polls the file's mtime every 100ms. When a change is detected,
-    reads and parses the file via pyrio's HudObj, converts to a flat
-    game dict, and calls the on_update callback.
+    Uses OS-level file events (kqueue on macOS, inotify on Linux,
+    ReadDirectoryChanges on Windows) via the watchfiles library.
+    This means zero CPU usage between HUD events — the OS kernel
+    notifies us only when the file actually changes.
     """
 
     def __init__(self, hud_file: Path, on_update: Callable[[dict], Awaitable[None]]):
@@ -21,12 +22,15 @@ class HudWatcher:
         self.on_update = on_update
         self.latest_game_data: dict | None = None
         self._task: asyncio.Task | None = None
+        self._stop_event = asyncio.Event()
 
     def start(self):
+        self._stop_event.clear()
         self._task = asyncio.create_task(self._watch_loop())
-        logger.info(f"[HudWatcher] Watching {self.hud_file}")
+        logger.info(f"[HudWatcher] Watching {self.hud_file} (OS-level events via watchfiles)")
 
     async def stop(self):
+        self._stop_event.set()
         if self._task and not self._task.done():
             self._task.cancel()
             try:
@@ -51,26 +55,34 @@ class HudWatcher:
         return None
 
     async def _watch_loop(self):
-        last_mtime = 0.0
-        while True:
-            try:
-                mtime = await asyncio.to_thread(self._get_mtime)
-                if mtime is not None and mtime != last_mtime:
-                    last_mtime = mtime
-                    game = await self.reload()
-                    if game is not None and self.on_update:
-                        await self.on_update(game)
-            except asyncio.CancelledError:
-                raise
-            except Exception as e:
-                logger.error(f"[HudWatcher] Watch loop error: {e}")
-            await asyncio.sleep(0.1)
+        """Watch the HUD file's parent directory for changes to the target file."""
+        watch_dir = self.hud_file.parent
+        target_name = self.hud_file.name
 
-    def _get_mtime(self) -> float | None:
         try:
-            return os.stat(self.hud_file).st_mtime
-        except FileNotFoundError:
-            return None
+            async for changes in awatch(
+                watch_dir,
+                watch_filter=lambda change, path: Path(path).name == target_name,
+                stop_event=self._stop_event,
+                debounce=300,
+                step=200,
+            ):
+                # Any modification to the target file triggers a read
+                has_modify = any(
+                    change_type in (Change.modified, Change.added)
+                    for change_type, _ in changes
+                )
+                if has_modify:
+                    try:
+                        game = await self.reload()
+                        if game is not None and self.on_update:
+                            await self.on_update(game)
+                    except Exception as e:
+                        logger.error(f"[HudWatcher] Error processing HUD update: {e}")
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logger.error(f"[HudWatcher] Watch loop fatal error: {e}")
 
     def _read_and_parse(self) -> dict | None:
         """Read the HUD file and convert to flat game dict. Runs in thread."""

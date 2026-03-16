@@ -205,24 +205,32 @@
         console.warn('[roster1] SocketIO connect error:', err.message);
       });
 
+      function shouldRender(key) {
+        return key.startsWith(`score.${SCOREBOARD}.team.${TEAM_NUM}.`)
+            || key === `score.${SCOREBOARD}.half_inning`
+            || key === `score.${SCOREBOARD}.home_team`;
+      }
+
       socket.on('v1.state.set', (msg) => {
         if (msg.sid === socket.id) return;
         deepSet(state, msg.key, msg.value);
-        if (msg.key.startsWith(`score.${SCOREBOARD}.team.${TEAM_NUM}.`)
-            || msg.key === `score.${SCOREBOARD}.half_inning`
-            || msg.key === `score.${SCOREBOARD}.home_team`) {
-          render();
+        if (shouldRender(msg.key)) render();
+      });
+
+      socket.on('v1.state.set_batch', (msg) => {
+        if (msg.sid === socket.id) return;
+        let needsRender = false;
+        for (const item of msg.items) {
+          deepSet(state, item.key, item.value);
+          if (shouldRender(item.key)) needsRender = true;
         }
+        if (needsRender) render();
       });
 
       socket.on('v1.state.unset', (msg) => {
         if (msg.sid === socket.id) return;
         deepUnset(state, msg.key);
-        if (msg.key.startsWith(`score.${SCOREBOARD}.team.${TEAM_NUM}.`)
-            || msg.key === `score.${SCOREBOARD}.half_inning`
-            || msg.key === `score.${SCOREBOARD}.home_team`) {
-          render();
-        }
+        if (shouldRender(msg.key)) render();
       });
 
     }

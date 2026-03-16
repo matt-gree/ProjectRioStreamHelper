@@ -1,15 +1,15 @@
 import asyncio
+import copy
 import httpx
 
 from aiopath import AsyncPath
 from shutil import rmtree
-from deepdiff import DeepDiff, extract
 from functools import partial
 from loguru import logger
 from PIL import Image
 from server import socketio
 from server.settings import Settings
-from server.utils.deep_dict import deep_clone, deep_set, deep_unset, deep_get
+from server.utils.deep_dict import deep_set, deep_unset, deep_get
 from server.utils import json
 
 class State:
@@ -21,54 +21,32 @@ class State:
     _program_state_out = AsyncPath("./user_data/state.json")
 
     @classmethod
-    async def Export(cls, diff):
+    async def Export(cls, changes: list[dict]):
+        """Export changed keys to stream label files and save state JSON.
+
+        Args:
+            changes: list of {"key": dot.path, "old": old_value, "new": new_value, "action": "set"|"unset"}
+        """
         await cls.SaveImmediately()
 
         disable_export = await Settings.Get("general.disable_export", False)
         if not disable_export:
-            merged_diffs = list(diff.get("values_changed", {}).items())
-            merged_diffs.extend(list(diff.get("type_changes", {}).items()))
+            for change in changes:
+                key = change["key"]
+                filename = key.replace(".", "/")
+                action = change["action"]
 
-            for changed_key, change in merged_diffs:
-                filename = "/".join(
-                    changed_key[5:]
-                    .replace("'", "")
-                    .replace("]", "")
-                    .replace("/", "_")
-                    .split("[")
-                )
-
-                if change.get("new_type") == type(None):
-                    await cls._remove_files_dict(filename, extract(cls.last_state, changed_key))
+                if action == "unset":
+                    old_val = change["old"]
+                    if old_val is not None:
+                        await cls._remove_files_dict(filename, old_val)
                 else:
-                    await cls._create_files_dict(filename, change.get("new_value"))
-
-            for key in diff.get("dictionary_item_removed", {}):
-                item = extract(cls.last_state, key)
-                filename = "/".join(
-                    key[5:]
-                    .replace("'", "")
-                    .replace("]", "")
-                    .replace("/", "_")
-                    .split("[")
-                )
-                await cls._remove_files_dict(filename, item)
-
-            for key in diff.get("dictionary_item_added", {}):
-                try:
-                    item = extract(cls.state, key)
-                    path = "/".join(
-                        key[5:]
-                        .replace("'", "")
-                        .replace("]", "")
-                        .replace("/", "_")
-                        .split("[")
-                    )
-                    await cls._create_files_dict(path, item)
-                except:
-                    logger.exception("error while creating dict files")
-    
-        cls.last_state = await deep_clone(cls.state)
+                    new_val = change["new"]
+                    old_val = change["old"]
+                    if new_val is None and old_val is not None:
+                        await cls._remove_files_dict(filename, old_val)
+                    elif new_val is not None:
+                        await cls._create_files_dict(filename, new_val)
 
     @classmethod
     async def Consumer(cls):
@@ -84,19 +62,42 @@ class State:
 
     @classmethod
     async def Save(cls):
-        diff = await asyncio.to_thread(
-            DeepDiff,
-            cls.last_state,
-            cls.state,
-            include_paths=cls.changed_keys
-        )
+        """Compute changes from tracked keys and queue export."""
+        changes = cls._compute_changes()
         cls.changed_keys = []
 
-        if len(diff) > 0:
-            await cls.queue.put(partial(
-                cls.Export,
-                diff=diff
-            ))
+        if changes:
+            # Update last_state snapshot for changed paths only
+            for change in changes:
+                key = change["key"]
+                if change["action"] == "unset":
+                    _sync_deep_unset(cls.last_state, key)
+                else:
+                    _sync_deep_set(cls.last_state, key, copy.deepcopy(change["new"]))
+
+            await cls.queue.put(partial(cls.Export, changes=changes))
+
+    @classmethod
+    def _compute_changes(cls) -> list[dict]:
+        """Build a list of changes by comparing tracked keys between last_state and state."""
+        changes = []
+        seen = set()
+        for key in cls.changed_keys:
+            if key in seen:
+                continue
+            seen.add(key)
+
+            old_val = _sync_deep_get(cls.last_state, key)
+            new_val = _sync_deep_get(cls.state, key)
+
+            if old_val != new_val:
+                changes.append({
+                    "key": key,
+                    "old": old_val,
+                    "new": new_val,
+                    "action": "set",
+                })
+        return changes
 
     @classmethod
     async def SaveImmediately(cls):
@@ -111,46 +112,50 @@ class State:
                 cls.state = await json.loads(await f.read())
         except:
             logger.debug("unable to load state.json, using default dict")
-
-    @classmethod
-    async def _add_changed_key(cls, key: str):
-        final_key = "root"
-        for k in key.split("."):
-            final_key += f"['{k}']"
-        
-        cls.changed_keys.append(final_key)
+        cls.last_state = copy.deepcopy(cls.state)
 
     @classmethod
     async def Set(cls, key: str, value, session_id: str | None = None):
         await deep_set(cls.state, key, value)
-        await asyncio.wait([
-            asyncio.create_task(cls._add_changed_key(key)),
-            asyncio.create_task(
-                socketio.emit('v1.state.set', {
-                    "key": key,
-                    "value": value,
-                    "sid": session_id
-                })
-            )
-        ])
+        cls.changed_keys.append(key)
+        await socketio.emit('v1.state.set', {
+            "key": key,
+            "value": value,
+            "sid": session_id
+        })
+
+    @classmethod
+    async def SetBatch(cls, entries: list[tuple[str, object]], session_id: str | None = None):
+        """Set multiple keys at once and emit a single batched SocketIO event.
+
+        Args:
+            entries: list of (key, value) tuples
+            session_id: optional session ID to echo-filter on the frontend
+        """
+        items = []
+        for key, value in entries:
+            await deep_set(cls.state, key, value)
+            cls.changed_keys.append(key)
+            items.append({"key": key, "value": value})
+
+        await socketio.emit('v1.state.set_batch', {
+            "items": items,
+            "sid": session_id
+        })
 
     @classmethod
     async def Unset(cls, key: str, session_id: str | None = None):
         await deep_unset(cls.state, key)
-        await asyncio.wait([
-            asyncio.create_task(cls._add_changed_key(key)),
-            asyncio.create_task(
-                socketio.emit('v1.state.unset', {
-                    "key": key,
-                    "sid": session_id
-                })
-            )
-        ])
+        cls.changed_keys.append(key)
+        await socketio.emit('v1.state.unset', {
+            "key": key,
+            "sid": session_id
+        })
 
     @classmethod
     async def Get(cls, key: str, default=None):
         return await deep_get(cls.state, key, default)
-    
+
     @classmethod
     async def _download_image(cls, url: str, dlpath: str):
         try:
@@ -227,10 +232,40 @@ class State:
                     await _p.unlink()
             except:
                 logger.exception("unable to remove file")
-        
+
         try:
             _p = AsyncPath(f"{cls._stream_labels_out}/{path}")
             if await _p.exists() == True:
                 await asyncio.to_thread(rmtree, str(_p))
         except:
             logger.exception("unable to remove directory")
+
+
+# --- Synchronous helpers for internal use (no thread hops) ---
+
+def _sync_deep_get(dictionary: dict, keys: str, default=None):
+    d = dictionary
+    for key in keys.split("."):
+        if isinstance(d, dict):
+            d = d.get(key, default)
+        else:
+            return default
+    return d
+
+def _sync_deep_set(dictionary: dict, keys: str, value):
+    d = dictionary
+    parts = keys.split(".")
+    for key in parts[:-1]:
+        if key not in d:
+            d[key] = {}
+        d = d[key]
+    d[parts[-1]] = value
+
+def _sync_deep_unset(dictionary: dict, keys: str):
+    d = dictionary
+    parts = keys.split(".")
+    for key in parts[:-1]:
+        if key not in d:
+            return
+        d = d[key]
+    d.pop(parts[-1], None)

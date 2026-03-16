@@ -10,7 +10,7 @@ packages = [{include = "server"}]
 python = ">=3.12,<3.14"
 fastapi = "^0.111.0"
 httpx = {extras = ["http2"], version = "^0.28.1"}
-deepdiff = "^7.0.1"
+watchfiles = ">=0.21"
 asyncio = "^3.4.3"
 python-dateutil = "^2.9.0.post0"
 loguru = "^0.7.2"

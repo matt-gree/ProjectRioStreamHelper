@@ -312,6 +312,14 @@
         render();
       });
 
+      socket.on('v1.state.set_batch', (msg) => {
+        if (msg.sid === socket.id) return;
+        for (const item of msg.items) {
+          deepSet(state, item.key, item.value);
+        }
+        render();
+      });
+
       socket.on('v1.state.unset', (msg) => {
         if (msg.sid === socket.id) return;
         deepUnset(state, msg.key);

@@ -1,11 +1,9 @@
 from functools import reduce
-from msgpack import unpackb, packb
-from asyncio import to_thread
+
 
 async def deep_get(dictionary: dict, keys: str, default=None):
     nested_keys = keys.split(".")
-    return await to_thread(
-        reduce,
+    return reduce(
         lambda d, key: d.get(key, default) if isinstance(d, dict) else default,
         nested_keys,
         dictionary
@@ -19,7 +17,7 @@ async def deep_set(dictionary: dict, keys: str, value):
         if key not in d:
             d[key] = {}
         d = d[key]
-    
+
     d[nested_keys[-1]] = value
 
 async def deep_unset(dictionary: dict, keys: str):
@@ -33,7 +31,3 @@ async def deep_unset(dictionary: dict, keys: str):
 
     if nested_keys[-1] in d:
         del d[nested_keys[-1]]
-
-async def deep_clone(dictionary: dict):
-    packed = await to_thread(packb, dictionary)
-    return await to_thread(unpackb, packed, strict_map_key=False)

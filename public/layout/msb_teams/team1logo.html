@@ -112,6 +112,16 @@
         }
       });
 
+      socket.on('v1.state.set_batch', (msg) => {
+        if (msg.sid === socket.id) return;
+        let needsRender = false;
+        for (const item of msg.items) {
+          deepSet(state, item.key, item.value);
+          if (item.key === STATE_KEY || item.key.startsWith(STATE_KEY + '.')) needsRender = true;
+        }
+        if (needsRender) render();
+      });
+
     }
 
     bootstrap();
