@@ -4,7 +4,7 @@ from pathlib import Path
 from aiopath import AsyncPath
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from loguru import logger
@@ -137,6 +137,11 @@ async def layout_index(request: Request) -> HTMLResponse:
 
 if _layout_dir.is_dir():
     app.mount("/layout", StaticFiles(directory="./public/layout", html=True), name="layout")
+
+# Favicon
+@app.get("/favicon.png")
+async def favicon():
+    return FileResponse("./public/favicon.png", media_type="image/png")
 
 # /api/v1/* | api_v1_*
 app.include_router(router_v1)

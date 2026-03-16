@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import {
-    TextInput, Select, Radio, Checkbox, Group, Stack, Grid, Paper,
-    Text, Collapse, ActionIcon, UnstyledButton,
+    TextInput, Select, Checkbox, Group, Stack, Grid, Paper,
+    Text, Collapse, ActionIcon, UnstyledButton, Tooltip,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { useStateStore } from '../../context/store';
@@ -10,6 +10,15 @@ import CharacterStatEditor from './CharacterStatEditor';
 
 const characterOptions = MSB_CHARACTERS.map(c => ({ value: c, label: c }));
 const teamOptions = MSB_TEAMS.map(t => ({ value: t, label: t }));
+
+const charIconUrl = (name) => `/game_assets/rio_characterIcons/${encodeURIComponent(name)}.png`;
+
+const renderCharOption = ({ option }) => (
+    <Group gap="xs" wrap="nowrap">
+        <img src={charIconUrl(option.value)} alt="" width={20} height={20} style={{ objectFit: 'contain' }} />
+        <span>{option.label}</span>
+    </Group>
+);
 
 /**
  * A single player slot within a team panel.
@@ -172,36 +181,55 @@ export default function PlayerSlot({ scoreboardNumber = 1, teamNumber, playerNum
                 <>
                     <Text size="xs" fw={600} mt="xs" mb={4}>Roster</Text>
                     <Grid gutter={4}>
-                        {roster.map((charName, i) => (
-                            <Grid.Col span={4} key={i}>
-                                <Group gap={4} wrap="nowrap">
-                                    <Radio
-                                        size="xs"
-                                        checked={captain === i}
-                                        onChange={() => setCaptain(i)}
-                                        title="Captain"
-                                        styles={{ radio: { cursor: 'pointer' } }}
-                                    />
-                                    <UnstyledButton
-                                        onClick={() => setActiveCharDetail(i)}
-                                        style={{ flex: 1, minWidth: 0 }}
+                        {roster.map((charName, i) => {
+                            const isCaptain = captain === i;
+                            return (
+                                <Grid.Col span={4} key={i}>
+                                    <Paper
+                                        withBorder
+                                        style={{
+                                            display: 'flex',
+                                            overflow: 'hidden',
+                                            borderColor: isCaptain ? 'var(--mantine-color-yellow-5)' : undefined,
+                                        }}
                                     >
-                                        <Paper
-                                            withBorder px={6} py={4}
-                                            style={{ cursor: 'pointer' }}
+                                        <UnstyledButton
+                                            onClick={() => setActiveCharDetail(i)}
+                                            style={{ flex: 1, minWidth: 0, padding: '4px 6px' }}
                                         >
-                                            <Text
-                                                size="xs"
-                                                truncate
-                                                c={charName ? undefined : 'dimmed'}
+                                            <Group gap={4} wrap="nowrap">
+                                                {charName && (
+                                                    <img src={charIconUrl(charName)} alt="" width={16} height={16} style={{ objectFit: 'contain', flexShrink: 0 }} />
+                                                )}
+                                                <Text size="xs" truncate c={charName ? undefined : 'dimmed'}>
+                                                    {charName || `Slot ${i + 1}`}
+                                                </Text>
+                                            </Group>
+                                        </UnstyledButton>
+                                        <Tooltip label="Set captain" position="top" withArrow>
+                                            <UnstyledButton
+                                                onClick={() => setCaptain(i)}
+                                                style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    width: 22,
+                                                    flexShrink: 0,
+                                                    borderLeft: '1px solid var(--mantine-color-default-border)',
+                                                    backgroundColor: isCaptain ? 'var(--mantine-color-yellow-5)' : undefined,
+                                                    color: isCaptain ? 'var(--mantine-color-dark-9)' : 'var(--mantine-color-dimmed)',
+                                                    fontWeight: 700,
+                                                    fontSize: 11,
+                                                    transition: 'background-color 150ms, color 150ms',
+                                                }}
                                             >
-                                                {charName || `Slot ${i + 1}`}
-                                            </Text>
-                                        </Paper>
-                                    </UnstyledButton>
-                                </Group>
-                            </Grid.Col>
-                        ))}
+                                                C
+                                            </UnstyledButton>
+                                        </Tooltip>
+                                    </Paper>
+                                </Grid.Col>
+                            );
+                        })}
                     </Grid>
                 </>
             )}

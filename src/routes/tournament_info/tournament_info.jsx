@@ -1,7 +1,8 @@
 import { useCallback } from 'react';
 import {
-    TextInput, NumberInput, Stack, Paper, Text, Grid, Divider
+    TextInput, NumberInput, Stack, Paper, Text, Grid, Group, Divider, Button
 } from '@mantine/core';
+import { FormattedMessage } from 'react-intl';
 import { useStateStore } from '../../context/store';
 
 export default function TournamentInfo() {
@@ -39,7 +40,15 @@ export default function TournamentInfo() {
 
     return (
         <Stack gap="md" maw={700}>
-            <Text size="lg" fw={700}>Tournament Info</Text>
+            <Group justify="space-between">
+                <Text size="lg" fw={700}>Tournament Info</Text>
+                <Button variant="outline" size="xs">
+                    <FormattedMessage
+                        id="tsh.set_tournament"
+                        defaultMessage="Set Tournament"
+                    />
+                </Button>
+            </Group>
             <Paper withBorder p="md">
                 <Stack gap="sm">
                     <Grid gutter="sm">

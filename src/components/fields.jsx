@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { Group, Button, Title, Box, ActionIcon, Text } from '@mantine/core';
-import { FormattedMessage } from 'react-intl';
+import { Group, Title, Box, ActionIcon, Text } from '@mantine/core';
 import { useConfigStore } from '../context/store';
 import SettingsModal from './SettingsModal';
 
@@ -12,9 +11,12 @@ export default function TSHFields() {
     return (
         <Box px="md" pt="sm" pb="xs">
             <Group justify="space-between" mb="xs">
-                <Title order={4}>
-                    {app_name || 'TSH'} {app_version ? `v${app_version}` : ''}
-                </Title>
+                <Group gap="xs" align="center">
+                    <img src="/favicon.png" alt="" width={24} height={24} />
+                    <Title order={4}>
+                        {app_name || 'TSH'} {app_version ? `v${app_version}` : ''}
+                    </Title>
+                </Group>
                 <ActionIcon
                     variant="subtle"
                     size="md"
@@ -23,14 +25,6 @@ export default function TSHFields() {
                 >
                     <Text size="md" lh={1}>&#9881;</Text>
                 </ActionIcon>
-            </Group>
-            <Group gap="xs" grow>
-                <Button variant="outline" size="xs">
-                    <FormattedMessage
-                        id="tsh.set_tournament"
-                        defaultMessage="Set Tournament"
-                    />
-                </Button>
             </Group>
             <SettingsModal opened={settingsOpen} onClose={() => setSettingsOpen(false)} />
         </Box>

@@ -20,26 +20,32 @@ function ScoreboardTab({ scoreboardNumber }) {
     );
 
     const handleSwapTeams = useCallback(async () => {
-        if (sourceType === 'hud') {
-            try {
-                const resp = await fetch(
-                    `/api/v1/rio/swap?scoreboard_number=${scoreboardNumber}`,
-                    { method: 'POST' },
-                );
-                const data = await resp.json();
-                if (data.success) return;
-            } catch { /* fall through to client-side swap */ }
-        }
-
         const state = useStateStore.getState();
         const base = state?.score?.[scoreboardNumber];
         const sb = `score.${scoreboardNumber}`;
+        const currentHome = Number(base?.home_team ?? 2);
+        const newHome = currentHome === 1 ? 2 : 1;
+
+        if (sourceType === 'hud') {
+            // Flip home_team client-side immediately (server handles team data swap)
+            setItems([
+                { key: `${sb}.home_team`, value: newHome },
+            ]);
+            try {
+                await fetch(
+                    `/api/v1/rio/swap?scoreboard_number=${scoreboardNumber}`,
+                    { method: 'POST' },
+                );
+            } catch { /* server swap failed, but home_team is already flipped */ }
+            return;
+        }
 
         setItems([
             { key: `${sb}.team.1`, value: base?.team?.[2] ?? {} },
             { key: `${sb}.team.2`, value: base?.team?.[1] ?? {} },
             { key: `${sb}.score_left`, value: base?.score_right ?? 0 },
             { key: `${sb}.score_right`, value: base?.score_left ?? 0 },
+            { key: `${sb}.home_team`, value: newHome },
             { key: `${sb}.teamsSwapped`, value: !(base?.teamsSwapped ?? false) },
         ]);
     }, [scoreboardNumber, setItems, sourceType]);
@@ -52,8 +58,8 @@ function ScoreboardTab({ scoreboardNumber }) {
 
     return (
         <Stack gap="md">
-            <Grid gutter="md" align="flex-start">
-                <Grid.Col span={{ base: 12, md: 4 }}>
+            <Grid gutter="md" align="flex-start" columns={10}>
+                <Grid.Col span={{ base: 10, md: 4 }}>
                     <TeamPanel
                         scoreboardNumber={scoreboardNumber}
                         teamNumber={1}
@@ -62,7 +68,7 @@ function ScoreboardTab({ scoreboardNumber }) {
                     />
                 </Grid.Col>
 
-                <Grid.Col span={{ base: 12, md: 4 }}>
+                <Grid.Col span={{ base: 10, md: 2 }}>
                     <ScoreControls
                         scoreboardNumber={scoreboardNumber}
                         onSwapTeams={handleSwapTeams}
@@ -71,7 +77,7 @@ function ScoreboardTab({ scoreboardNumber }) {
                     />
                 </Grid.Col>
 
-                <Grid.Col span={{ base: 12, md: 4 }}>
+                <Grid.Col span={{ base: 10, md: 4 }}>
                     <TeamPanel
                         scoreboardNumber={scoreboardNumber}
                         teamNumber={2}

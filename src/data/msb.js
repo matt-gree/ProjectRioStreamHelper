@@ -1,5 +1,5 @@
 // Mario Superstar Baseball character and team data
-// Source: TournamentStreamHelper/user_data/games/msb/base_files/config.json
+// Source: ProjectRioStreamHelper/user_data/games/msb/base_files/config.json
 
 export const MSB_CHARACTERS = [
   "Baby Luigi", "Baby Mario", "Birdo", "Boo", "Bowser", "Bowser Jr",

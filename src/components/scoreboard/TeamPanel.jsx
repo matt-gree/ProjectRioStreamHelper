@@ -19,9 +19,13 @@ export default function TeamPanel({ scoreboardNumber = 1, teamNumber, playerCoun
 
     const isHome = homeTeam === teamNumber;
 
+    const otherTeam = teamNumber === 1 ? 2 : 1;
+
     const toggleHome = useCallback(() => {
-        setItem(`score.${scoreboardNumber}.home_team`, teamNumber);
-    }, [scoreboardNumber, teamNumber, setItem]);
+        // If this team is home, make the other team home (i.e. make this one away)
+        // If this team is away, make this team home
+        setItem(`score.${scoreboardNumber}.home_team`, isHome ? otherTeam : teamNumber);
+    }, [scoreboardNumber, teamNumber, otherTeam, isHome, setItem]);
 
     const playerSlots = [];
     for (let p = 1; p <= playerCount; p++) {

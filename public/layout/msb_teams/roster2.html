@@ -23,7 +23,7 @@
       display: grid;
       column-gap: 4px;
       row-gap: 4px;
-      grid-template-columns: 1.5fr 1fr 1fr 1fr 1fr;
+      grid-template-columns: 1.5fr 1fr 1fr 1fr 1fr 1.5fr;
       grid-template-rows: 1fr 1fr;
     }
     .captain-container {
@@ -36,6 +36,18 @@
     .captain-container img {
       width: 95%;
       height: 95%;
+      object-fit: contain;
+    }
+    .role-container {
+      grid-column-start: 6;
+      grid-column-end: 7;
+      grid-row-start: 1;
+      grid-row-end: 3;
+      place-content: center;
+    }
+    .role-container img {
+      width: 85%;
+      height: 85%;
       object-fit: contain;
     }
     .character-container {
@@ -96,6 +108,14 @@
       }
     }
 
+    function getTeamRole() {
+      const homeTeam = Number(deepGet(state, `score.${SCOREBOARD}.home_team`) ?? 2);
+      const halfInning = deepGet(state, `score.${SCOREBOARD}.half_inning`) ?? 'Top';
+      const awayTeam = homeTeam === 2 ? 1 : 2;
+      const battingTeam = halfInning === 'Top' ? awayTeam : homeTeam;
+      return battingTeam === TEAM_NUM ? 'batting' : 'pitching';
+    }
+
     function render() {
       const container = document.getElementById('roster-container');
       container.innerHTML = '';
@@ -141,6 +161,18 @@
         div.appendChild(img);
         container.appendChild(div);
       }
+
+      // Render bat/glove role icon (right side, same size as captain)
+      const role = getTeamRole();
+      const roleDiv = document.createElement('div');
+      roleDiv.className = 'role-container';
+      const roleImg = document.createElement('img');
+      roleImg.src = role === 'batting'
+        ? `${BASE_URL}/game_assets/rio_bat_glove/bat.png`
+        : `${BASE_URL}/game_assets/rio_bat_glove/glove.png`;
+      roleImg.onerror = () => roleImg.style.display = 'none';
+      roleDiv.appendChild(roleImg);
+      container.appendChild(roleDiv);
     }
 
     async function fetchState() {
@@ -177,7 +209,9 @@
       socket.on('v1.state.set', (msg) => {
         if (msg.sid === socket.id) return;
         deepSet(state, msg.key, msg.value);
-        if (msg.key.startsWith(`score.${SCOREBOARD}.team.${TEAM_NUM}.`)) {
+        if (msg.key.startsWith(`score.${SCOREBOARD}.team.${TEAM_NUM}.`)
+            || msg.key === `score.${SCOREBOARD}.half_inning`
+            || msg.key === `score.${SCOREBOARD}.home_team`) {
           render();
         }
       });
@@ -185,7 +219,9 @@
       socket.on('v1.state.unset', (msg) => {
         if (msg.sid === socket.id) return;
         deepUnset(state, msg.key);
-        if (msg.key.startsWith(`score.${SCOREBOARD}.team.${TEAM_NUM}.`)) {
+        if (msg.key.startsWith(`score.${SCOREBOARD}.team.${TEAM_NUM}.`)
+            || msg.key === `score.${SCOREBOARD}.half_inning`
+            || msg.key === `score.${SCOREBOARD}.home_team`) {
           render();
         }
       });

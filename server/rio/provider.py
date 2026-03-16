@@ -56,6 +56,9 @@ async def apply_parsed_game_to_state(parsed: dict, scoreboard_number: int):
     await State.Set(f"{sb}.cbRioRunnerOn1", parsed.get("runnerOn1", False))
     await State.Set(f"{sb}.cbRioRunnerOn2", parsed.get("runnerOn2", False))
     await State.Set(f"{sb}.cbRioRunnerOn3", parsed.get("runnerOn3", False))
+    await State.Set(f"{sb}.runner1Name", parsed.get("runner1Name", ""))
+    await State.Set(f"{sb}.runner2Name", parsed.get("runner2Name", ""))
+    await State.Set(f"{sb}.runner3Name", parsed.get("runner3Name", ""))
 
     entrants = parsed.get("entrants", [[{}], [{}]])
     for team_idx in range(2):
@@ -197,6 +200,9 @@ class RioGameDataProvider:
             data["runnerOn1"] = game_json["runner_on_first"]
             data["runnerOn2"] = game_json["runner_on_second"]
             data["runnerOn3"] = game_json["runner_on_third"]
+            data["runner1Name"] = game_json.get("runner_1b_name", "")
+            data["runner2Name"] = game_json.get("runner_2b_name", "")
+            data["runner3Name"] = game_json.get("runner_3b_name", "")
 
             data["game_mode"] = game_json.get("tag_set", -1)
 

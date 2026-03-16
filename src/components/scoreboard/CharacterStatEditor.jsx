@@ -1,9 +1,18 @@
 import { useCallback, useMemo, useState } from 'react';
 import {
-    NumberInput, Select, Radio, Stack, Grid, Paper, Text, Group, ActionIcon,
-    Divider, Tooltip, SegmentedControl,
+    NumberInput, Select, Stack, Grid, Paper, Text, Group, ActionIcon,
+    Divider, Tooltip, SegmentedControl, UnstyledButton,
 } from '@mantine/core';
 import { useStateStore } from '../../context/store';
+const charIconUrl = (name) => `/game_assets/rio_characterIcons/${encodeURIComponent(name)}.png`;
+
+const renderCharOption = ({ option }) => (
+    <Group gap="xs" wrap="nowrap">
+        <img src={charIconUrl(option.value)} alt="" width={20} height={20} style={{ objectFit: 'contain' }} />
+        <span>{option.label}</span>
+    </Group>
+);
+
 import {
     BATTING_RAW_KEYS, PITCHING_RAW_KEYS,
     BATTING_LABELS, PITCHING_LABELS,
@@ -74,18 +83,34 @@ export default function CharacterStatEditor({
                         searchable
                         clearable
                         style={{ flex: 1 }}
+                        renderOption={renderCharOption}
+                        leftSection={charName ? <img src={charIconUrl(charName)} alt="" width={16} height={16} style={{ objectFit: 'contain' }} /> : undefined}
+                        leftSectionPointerEvents="none"
                     />
                 ) : (
                     <Text size="sm" fw={700}>{charName || `Slot ${charIndex + 1}`}</Text>
                 )}
                 {onSetCaptain && (
-                    <Tooltip label="Captain" position="right">
-                        <Radio
-                            size="xs"
-                            checked={!!isCaptain}
-                            onChange={onSetCaptain}
-                            styles={{ radio: { cursor: 'pointer' } }}
-                        />
+                    <Tooltip label={isCaptain ? 'Captain' : 'Set captain'} position="right" withArrow>
+                        <UnstyledButton
+                            onClick={onSetCaptain}
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                width: 22,
+                                height: 22,
+                                borderRadius: 4,
+                                border: '1px solid var(--mantine-color-default-border)',
+                                backgroundColor: isCaptain ? 'var(--mantine-color-yellow-5)' : undefined,
+                                color: isCaptain ? 'var(--mantine-color-dark-9)' : 'var(--mantine-color-dimmed)',
+                                fontWeight: 700,
+                                fontSize: 11,
+                                transition: 'background-color 150ms, color 150ms',
+                            }}
+                        >
+                            C
+                        </UnstyledButton>
                     </Tooltip>
                 )}
             </Group>

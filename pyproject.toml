@@ -1,6 +1,6 @@
 [tool.poetry]
-name = "TournamentStreamHelper"
-version = "6.0.0"
+name = "ProjectRioStreamHelper"
+version = "1.0.0"
 description = "Tournament scoreboard helper and overlays for fighting game tournaments"
 authors = ["João Ribeiro Bezerra <joaorb64@gmail.com>", "Isatis <isatis@foxes.gay>", "Mathias Wolfbrok <wolfy76700>", "Eion Dailey <zombiehdgaming>"]
 readme = "README.md"

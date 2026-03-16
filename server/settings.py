@@ -119,7 +119,7 @@ class Settings:
 
 class Config:
     config = {
-        "name": "TournamentStreamHelper",
+        "name": "ProjectRioStreamHelper",
         "version": "?",
         "description": "",
         "authors": [],

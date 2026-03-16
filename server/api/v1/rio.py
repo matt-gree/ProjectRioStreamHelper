@@ -48,6 +48,7 @@ async def rio_swap(
         })
 
     await RioGameDataProvider.toggle_sides_swapped()
+
     return ORJSONResponse({
         "success": True,
         "sides_swapped": RioGameDataProvider._sides_swapped,
