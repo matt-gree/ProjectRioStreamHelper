@@ -93,6 +93,9 @@ class RioGameDataProvider:
     hud_watcher: HudWatcher | None = None
     current_game: dict | None = None
 
+    # Cached settings — avoids async Settings.Get() on every HUD event
+    _hud_target: int = 1
+
     # Player side preservation state
     _prev_player_sides: dict = {}
     _prev_inning: int | None = None
@@ -102,6 +105,8 @@ class RioGameDataProvider:
     @classmethod
     async def Start(cls):
         """Resolve HUD path and start the file watcher."""
+        cls._hud_target = await Settings.Get("scoreboards.hud_target", 1)
+
         hud_path = await get_user_hud_path()
         if not hud_path:
             logger.warning(f"[RioGameDataProvider] HUD file not found. "
@@ -154,8 +159,7 @@ class RioGameDataProvider:
             cls.current_game = parsed
             await cls._apply_game_to_state(parsed)
 
-            target = await Settings.Get("scoreboards.hud_target", 1)
-            await StatsTracker.push_stats_to_state(target, cls._sides_swapped)
+            await StatsTracker.push_stats_to_state(cls._hud_target, cls._sides_swapped)
             return parsed
         return None
 
@@ -222,13 +226,14 @@ class RioGameDataProvider:
         cls._prev_inning = None
         cls._sides_swapped = False
         cls._user_overridden = False
+        # Refresh cached target from settings (sync read — settings are in-memory)
+        cls._hud_target = Settings.settings.get("scoreboards", {}).get("hud_target", 1)
         StatsTracker.reset()
 
     @classmethod
     async def _apply_game_to_state(cls, parsed: dict):
         """Push all parsed game data into the HUD target scoreboard."""
-        target = await Settings.Get("scoreboards.hud_target", 1)
-        await apply_parsed_game_to_state(parsed, target)
+        await apply_parsed_game_to_state(parsed, cls._hud_target)
 
     # --- Player side preservation (3-layer system) ---
 
@@ -249,8 +254,7 @@ class RioGameDataProvider:
         await cls._apply_game_to_state(parsed)
 
         # Push merged stats to state after game data
-        target = await Settings.Get("scoreboards.hud_target", 1)
-        await StatsTracker.push_stats_to_state(target, cls._sides_swapped)
+        await StatsTracker.push_stats_to_state(cls._hud_target, cls._sides_swapped)
 
     @classmethod
     def _is_new_game(cls, current_inning: int) -> bool:
@@ -281,8 +285,7 @@ class RioGameDataProvider:
             await cls._apply_game_to_state(parsed)
 
             # Re-push stats with new swap state
-            target = await Settings.Get("scoreboards.hud_target", 1)
-            await StatsTracker.push_stats_to_state(target, cls._sides_swapped)
+            await StatsTracker.push_stats_to_state(cls._hud_target, cls._sides_swapped)
 
     @classmethod
     async def _pin_wants_swap(cls, player0: str, player1: str) -> bool | None:

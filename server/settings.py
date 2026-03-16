@@ -35,7 +35,7 @@ class Settings:
             "autostart": True
         },
         "general": {
-            "disable_export": False,
+            "disable_export": True,
             "profanity_filter": True,
             "control_score_from_stage_strike": True,
             "disable_autoupdate": False,
@@ -89,29 +89,25 @@ class Settings:
     @classmethod
     async def Set(cls, key: str, value, session_id: str | None = None):
         await deep_set(cls.settings, key, value)
-        await asyncio.wait([
-            asyncio.create_task(
-                socketio.emit('v1.settings.set', {
-                    "key": key,
-                    "value": value,
-                    "sid": session_id
-                })
-            ),
-            asyncio.create_task(cls.Save())
-        ])
+        await asyncio.gather(
+            socketio.emit('v1.settings.set', {
+                "key": key,
+                "value": value,
+                "sid": session_id
+            }),
+            cls.Save()
+        )
 
     @classmethod
     async def Unset(cls, key: str, session_id: str | None = None):
         await deep_unset(cls.settings, key)
-        await asyncio.wait([
-            asyncio.create_task(
-                socketio.emit('v1.settings.unset', {
-                    "key": key,
-                    "sid": session_id
-                })
-            ),
-            asyncio.create_task(cls.Save())
-        ])
+        await asyncio.gather(
+            socketio.emit('v1.settings.unset', {
+                "key": key,
+                "sid": session_id
+            }),
+            cls.Save()
+        )
 
     @classmethod
     async def Get(cls, key: str, default=None):

@@ -1,9 +1,10 @@
-import { useCallback, useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import {
     TextInput, Select, Checkbox, Group, Stack, Grid, Paper,
     Text, Collapse, ActionIcon, UnstyledButton, Tooltip,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
+import { useShallow } from 'zustand/react/shallow';
 import { useStateStore } from '../../context/store';
 import { MSB_CHARACTERS, MSB_TEAMS, ROSTER_SIZE } from '../../data/msb';
 import CharacterStatEditor from './CharacterStatEditor';
@@ -28,20 +29,25 @@ const renderCharOption = ({ option }) => (
  *   teamNumber: 1 | 2
  *   playerNumber: 1-based player index
  */
-export default function PlayerSlot({ scoreboardNumber = 1, teamNumber, playerNumber, sourceType = 'manual' }) {
+export default memo(function PlayerSlot({ scoreboardNumber = 1, teamNumber, playerNumber, sourceType = 'manual' }) {
     const basePath = `score.${scoreboardNumber}.team.${teamNumber}.player.${playerNumber}`;
     const [detailsOpen, { toggle: toggleDetails }] = useDisclosure(false);
     const [activeCharDetail, setActiveCharDetail] = useState(null);
 
-    // ---- selectors (subscribe to individual keys to minimise re-renders) ----
-    const name       = useStateStore(s => s?.score?.[scoreboardNumber]?.team?.[teamNumber]?.player?.[playerNumber]?.name ?? '');
-    const teamPrefix = useStateStore(s => s?.score?.[scoreboardNumber]?.team?.[teamNumber]?.player?.[playerNumber]?.team ?? '');
-    const rioName    = useStateStore(s => s?.score?.[scoreboardNumber]?.team?.[teamNumber]?.player?.[playerNumber]?.rioName ?? '');
-    const msbTeam    = useStateStore(s => s?.score?.[scoreboardNumber]?.team?.[teamNumber]?.player?.[playerNumber]?.msb_team ?? '');
-    const captain    = useStateStore(s => s?.score?.[scoreboardNumber]?.team?.[teamNumber]?.player?.[playerNumber]?.rio_captainIndex ?? 0);
-    const country    = useStateStore(s => s?.score?.[scoreboardNumber]?.team?.[teamNumber]?.player?.[playerNumber]?.country ?? '');
-    const pronoun    = useStateStore(s => s?.score?.[scoreboardNumber]?.team?.[teamNumber]?.player?.[playerNumber]?.pronoun ?? '');
-    const twitter    = useStateStore(s => s?.score?.[scoreboardNumber]?.team?.[teamNumber]?.player?.[playerNumber]?.twitter ?? '');
+    // Single shallow selector for the whole player object — Zustand's useShallow
+    // does a shallow equality check so we only re-render when the player sub-tree
+    // actually changes, not on every unrelated state update.
+    const player = useStateStore(useShallow(
+        s => s?.score?.[scoreboardNumber]?.team?.[teamNumber]?.player?.[playerNumber]
+    ));
+    const name       = player?.name ?? '';
+    const teamPrefix = player?.team ?? '';
+    const rioName    = player?.rioName ?? '';
+    const msbTeam    = player?.msb_team ?? '';
+    const captain    = player?.rio_captainIndex ?? 0;
+    const country    = player?.country ?? '';
+    const pronoun    = player?.pronoun ?? '';
+    const twitter    = player?.twitter ?? '';
     const losers     = useStateStore(s => s?.score?.[scoreboardNumber]?.team?.[teamNumber]?.losers ?? false);
 
     const setItem = useStateStore(s => s.setItem);
@@ -50,12 +56,15 @@ export default function PlayerSlot({ scoreboardNumber = 1, teamNumber, playerNum
         setItem(`${basePath}.${field}`, value);
     }, [basePath, setItem]);
 
-    // Build roster array from state
-    const roster = [];
-    const rosterState = useStateStore(s => s?.score?.[scoreboardNumber]?.team?.[teamNumber]?.player?.[playerNumber]?.character);
-    for (let i = 0; i < ROSTER_SIZE; i++) {
-        roster.push(rosterState?.[i]?.name ?? '');
-    }
+    // Build roster array from character state, memoized to avoid re-creating on every render
+    const rosterState = player?.character;
+    const roster = useMemo(() => {
+        const r = [];
+        for (let i = 0; i < ROSTER_SIZE; i++) {
+            r.push(rosterState?.[i]?.name ?? '');
+        }
+        return r;
+    }, [rosterState]);
 
     const setCharacter = useCallback((index, charName) => {
         setItem(`${basePath}.character.${index}.name`, charName);
@@ -235,4 +244,4 @@ export default function PlayerSlot({ scoreboardNumber = 1, teamNumber, playerNum
             )}
         </Stack>
     );
-}
+});
