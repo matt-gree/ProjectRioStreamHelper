@@ -90,9 +90,14 @@ async def fetch_character_stats(
     global _last_fetch_info
     from datetime import datetime, timezone
 
-    # Normalize tag: lowercase, no spaces (API convention)
+    # Remove all whitespace from string parameters
+    usernames = ["".join(u.split()) for u in usernames]
+    usernames = [u for u in usernames if u]
     if tag:
-        tag = tag.lower().replace(" ", "")
+        tag = "".join(tag.split())
+
+    if not usernames:
+        return pd.DataFrame()
 
     client = _get_client()
     player_diag = {}

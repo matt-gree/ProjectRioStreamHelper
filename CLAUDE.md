@@ -2,11 +2,13 @@
 
 ## Project Overview
 
-This is a fork of TournamentStreamHelper (TSH), a Qt6/PySide6 desktop application for managing tournament stream overlays in OBS. This fork is **specifically adapted for Mario Superstar Baseball (MSB)** via the Project Rio mod. The upstream TSH supports 90+ fighting games; this fork strips that to focus on a single game.
+This is a web-based rewrite of TournamentStreamHelper (TSH), adapted for **Mario Superstar Baseball (MSB)** via the Project Rio mod. It manages tournament stream overlays for OBS via browser sources. The upstream TSH supports 90+ fighting games with Qt/PySide6; this fork strips that to focus on a single game with a modern web stack.
 
-**Tech stack:** Python 3.10+, PySide6 (via `qtpy`), Flask + Flask-SocketIO, qasync, orjson, pyrio (custom library)
+**Tech stack:** Python 3.12+, FastAPI + python-socketio, asyncio, orjson, watchfiles, pyrio (git submodule), React 19 + Zustand + Mantine 7
 
-**Entry point:** `main.py` → sets `QT_API=pyside6`, creates `qasync.QEventLoop`, instantiates `src.Window()`
+**Server entry point:** `server/` package — FastAPI + SocketIO on configurable port (default 5260)
+
+**Frontend:** `src/` — React SPA served by the FastAPI server
 
 ---
 
@@ -15,146 +17,97 @@ This is a fork of TournamentStreamHelper (TSH), a Qt6/PySide6 desktop applicatio
 ### Core Data Flow
 
 ```
-Project Rio Game → decoded.hud.json → RioHUDWatcher → RioGameDataProvider
-                                                            ↓
-Project Rio API ─────────────────────────────────→ RioGameDataProvider
-                                                            ↓
-                                                   TSHScoreboardWidget
-                                                            ↓
-                                                      StateManager
-                                                       ↓        ↓
-                                              ./out/ files   WebServer (SocketIO :5000)
-                                                       ↓        ↓
-                                                OBS text sources  OBS browser sources
+Project Rio Game → decoded.hud.json → HudWatcher (watchfiles)
+                                            ↓
+Project Rio API ──────────────→ RioGameDataProvider ← StatsTracker
+                                            ↓
+                                    State.SetBatch()
+                                      ↓         ↓
+                          stream_labels/   SocketIO v1.state.set_batch
+                          (off by default)       ↓
+                                          React UI + OBS overlays
 ```
 
 ### Module Organization
 
 ```
-src/
-├── TournamentStreamHelper.py   # Main window (Window class), app entry
-├── StateManager.py             # Central state → JSON export + SocketIO broadcast
-├── SettingsManager.py          # User settings persistence (./user_data/settings.json)
-├── RioGameDataProvider.py      # Project Rio HUD watcher + API integration
-├── TSHScoreboardWidget.py      # Main scoreboard UI (score, inning, runners, etc.)
-├── TSHScoreboardPlayerWidget.py # Per-player widget (name, characters, captain, country)
-├── TSHScoreboardManager.py     # Manages multiple scoreboard tabs
-├── TSHScoreboardStageWidget.py # Stage/ruleset configuration
-├── TSHGameAssetManager.py      # Game asset loading (characters, stages, icons)
-├── TSHPlayerDB.py              # Local player database (CSV-backed)
-├── TSHWebServer.py             # Flask + SocketIO server (port 5000)
-├── TSHWebServerActions.py      # Web endpoint action handlers
-├── TSHSelectSetWindow.py       # Match selection dialog
-├── TSHBracketWidget.py         # Bracket display and management
-├── TSHCommentaryWidget.py      # Commentator info management
-├── TSHPlayerListWidget.py      # Player list entry UI
-├── TSHPlayerList.py            # Base player list container
-├── TSHPlayerListSlotWidget.py  # Individual player slot
-├── TSHTournamentInfoWidget.py  # Tournament metadata display
-├── TSHThumbnailSettingsWidget.py # YouTube thumbnail generation (optional)
-├── TSHNotesWidget.py           # Free-form notes (4 slots)
-├── TSHAboutWidget.py           # About dialog
-├── TSHAlertNotification.py     # App alert system (fetches from GitHub)
-├── TSHAssetDownloader.py       # Game asset download manager
-├── TSHHotkeys.py               # Global keyboard shortcuts (pynput)
-├── Workers.py                  # QRunnable-based worker pattern
-├── Helpers/
-│   ├── TSHCountryHelper.py     # US/CA country+state data (simplified from 37MB JSON)
-│   ├── TSHDictHelper.py        # deep_get/deep_set/deep_clone utilities
-│   ├── TSHDirHelper.py         # Path resolution (PyInstaller support)
-│   ├── TSHLocaleHelper.py      # Internationalization/translations
-│   ├── TSHControllerHelper.py  # Controller database
-│   └── TSHBadWordFilter.py     # Profanity filter (trie-based)
-├── TournamentDataProvider/
-│   ├── __init__.py             # Base TournamentDataProvider class
-│   ├── StartGGDataProvider.py  # start.gg GraphQL API integration
-│   └── ChallongeDataProvider.py # Challonge API integration
-├── Settings/
-│   └── TSHSettingsWindow.py    # Settings dialog
-└── layout/                     # Qt Designer .ui files
-    ├── TSHScoreboardScore.ui   # 588 lines — score entry (largest game UI)
-    ├── TSHScoreboardPlayer.ui  # 309 lines — player data entry
-    ├── TSHScoreboardStage.ui   # 445 lines — stage strike
-    ├── TSHScoreboardTeam.ui    # 214 lines — team display
-    ├── TSHThumbnailSettings.ui # 1184 lines — thumbnail config (largest overall)
-    ├── TSHCommentary.ui        # 118 lines
-    ├── TSHCommentator.ui       # 254 lines
-    ├── TSHBracket.ui           # 213 lines
-    ├── TSHTournamentInfo.ui    # 224 lines
-    └── TSHAbout.ui             # 93 lines
+server/
+├── __init__.py              # FastAPI app + SocketIO setup
+├── state.py                 # Central state store (Set, SetBatch, Save, Export)
+├── settings.py              # Settings + Config persistence
+├── routes/                  # FastAPI route handlers
+├── rio/
+│   ├── provider.py          # RioGameDataProvider — HUD→State pipeline
+│   ├── hud_watcher.py       # HudWatcher — OS-level file watching via watchfiles
+│   ├── stats_tracker.py     # StatsTracker — merges API + HUD character stats
+│   ├── stats_api.py         # Project Rio API client
+│   └── pyrio/               # Git submodule (matt-gree/pyrio)
+└── utils/
+    ├── deep_dict.py         # deep_get/deep_set/deep_unset
+    └── json.py              # orjson wrapper with thread threshold
+
+src/                         # React frontend (Vite + React 19 + Mantine 7)
+├── components/
+│   └── scoreboard/          # Scoreboard UI components (PlayerSlot, ScoreControls, etc.)
+├── context/
+│   ├── store.jsx            # Zustand stores (state, settings, config)
+│   └── socket.jsx           # SocketIO provider with RAF batching
+└── data/                    # Static data (MSB characters, teams)
+
+public/
+├── overlays/                # OBS browser source HTML files
+└── game_assets/             # Character icons, team logos, etc.
 ```
 
-### Assets Structure
+### Data Files
 
 ```
-assets/
-├── rio_teamLogos/          # 6.2 MB — 50 MSB team logo PNGs
-├── rio_characterIcons/     # 396 KB — 56 character portrait PNGs
-├── rio_scoreboard/         # 7.6 MB — Runner base graphics, baseball bat, ball
-├── country_flag/           # Country flag PNGs (us.png, ca.png, etc.)
-├── state_flag/US/          # US state flag PNGs
-├── state_flag/CA/          # Canadian province flag PNGs
-├── icons/                  # UI icons (SVG)
-├── characters.json         # 3.5 MB — start.gg character mappings (cached)
-└── versions.json           # App version info
-
 user_data/
-├── games/msb/base_files/   # MSB game config (config.json + character variants)
-├── settings.json           # User preferences
-├── local_players.csv       # Player database
-├── pronouns_list.txt       # Pronoun autocomplete list
-├── additional_flag/        # Custom flag images
-└── alerts_red.json         # Dismissed alert IDs
-
-out/                        # Exported state (consumed by OBS)
-├── program_state.json      # Full state dump
-└── score/1/team/1/...      # Individual text/image files per state key
+├── settings.json           # User preferences (loaded by Settings class)
+├── state.json              # Persisted application state
+├── stream_labels/          # Exported state as text files (disabled by default)
+└── games/msb/base_files/   # MSB game config (config.json + character variants)
 ```
 
 ---
 
 ## Singleton Pattern
 
-The app uses class-level singletons created at **module import time**. This is a fundamental architectural constraint — these run before `Window.__init__`:
+The server uses class-level singletons with `@classmethod` methods. State is shared via class variables:
 
-| Singleton | Created | What Happens at Import |
-|-----------|---------|----------------------|
-| `SettingsManager` | `SettingsManager.py:46` | Loads `settings.json` from disk |
-| `StateManager` | `StateManager.py:294` | Creates `./out/`, loads `program_state.json` |
-| `TSHScoreboardManager.instance` | `TSHScoreboardManager.py:98` | Creates QTabWidget |
-| `TSHGameAssetManager.instance` | `TSHGameAssetManager.py:1138` | Empty init (loading deferred) |
-| `TSHAlertNotification.instance` | `TSHAlertNotification.py:116` | Connects signals |
-| `TSHTournamentDataProvider.instance` | `TSHTournamentDataProvider.py:408` | Creates thread pool |
-| `TSHCountryHelper.instance` | `TSHCountryHelper.py:229` | Builds US/CA model (inline data) |
-| `TSHHotkeys.instance` | `TSHHotkeys.py:112` | Loads user hotkey config |
-| `RioGameDataProvider.instance` | `RioGameDataProvider.py:276` | Starts HUD file watcher |
-
-**Implication:** Import order matters. Circular imports are avoided by deferring some imports. All singletons share state via class variables, not instance variables.
+| Class | Purpose |
+|-------|---------|
+| `State` | Central state store — in-memory dict + SocketIO broadcast + file export |
+| `Settings` | User settings persistence (`user_data/settings.json`) |
+| `RioGameDataProvider` | HUD watcher lifecycle + game data parsing + side preservation |
+| `StatsTracker` | Per-character stats merging (API historical + HUD current game) |
+| `HudWatcher` | File watcher instance (owned by RioGameDataProvider) |
 
 ---
 
-## StateManager — The Central Nervous System
+## State — The Central Nervous System
 
-Every UI change flows through `StateManager.Set(key, value)`. This:
+Every change flows through `State.Set(key, value)` or `State.SetBatch(entries)`. This:
 1. Updates the in-memory `state` dict
-2. Schedules a **debounced save** (50ms)
-3. On save: computes `DeepDiff` against last saved state
-4. Exports changed keys as individual files in `./out/`
-5. Broadcasts full state via SocketIO to web clients
+2. Tracks changed keys in `changed_keys` list
+3. On `Save()`: compares only tracked keys against `last_state` snapshot
+4. Exports changed keys as individual stream label files
+5. Broadcasts to web clients via SocketIO (`v1.state.set` or `v1.state.set_batch`)
 
 **Key patterns:**
-- `StateManager.BlockSaving()` / `ReleaseSaving()` — bracket saves during batch updates
-- `StateManager.Set("score.1.team.1.teamName", "Player1")` — dot-notation keys
-- Text values → `./out/score/1/team/1/teamName.txt`
-- File paths (`./foo.png`) → copied to `./out/`
-- HTTP image URLs → downloaded async, saved to `./out/`
+- `State.Set("score.1.team.1.teamName", "Player1")` — single key, emits individual SocketIO event
+- `State.SetBatch([(key1, val1), (key2, val2), ...])` — multiple keys, emits single `v1.state.set_batch` event
+- `State.Save()` — computes diff from tracked keys only (no full-state diff library)
+- `last_state` updated selectively via `copy.deepcopy` of changed paths only
+- Text values → `./user_data/stream_labels/score/1/team/1/teamName.txt`
+- File export is off by default (`general.disable_export: True`)
 
 ---
 
 ## Rio/MSB Integration
 
 ### Data Sources
-1. **Local HUD file** (`decoded.hud.json`) — watched by `RioHUDWatcher` with `QFileSystemWatcher` + 100ms debounce
+1. **Local HUD file** (`decoded.hud.json`) — watched by `HudWatcher` using OS-level events via `watchfiles` (kqueue on macOS, inotify on Linux, ReadDirectoryChanges on Windows). Zero CPU usage between events.
 2. **Server API** (`https://api.projectrio.app/populate_db/ongoing_game/`) — polled on demand with 5s timeout
 
 ### pyrio Library (git submodule: matt-gree/pyrio)
@@ -176,9 +129,9 @@ score.{N}.team.{T}.player.{P}.character.{C} (roster of 9)
 
 ---
 
-## Web Server (Port 5000)
+## Web Server (Port 5260)
 
-Flask + SocketIO, runs in QThread. Key endpoints:
+FastAPI + python-socketio. Key endpoints:
 - `GET /program-state` — full state JSON
 - `GET /ruleset` — current match ruleset
 - Score control: `/scoreboard1-team1-scoreup`, `-scoredown`, `-swap-teams`
@@ -187,74 +140,26 @@ Flask + SocketIO, runs in QThread. Key endpoints:
 - Commentary: `/update-commentary-<N>`, `/get-comms`
 - Bracket: `/update-bracket`
 
-All mutations emit Qt signals that are handled on the main thread.
-
----
-
-## Player Widget Hierarchy
-
-Each scoreboard creates **2 teams × N players × 9 character slots**:
-
-```
-TSHScoreboardWidget
-├── team1column (QWidget from TSHScoreboardTeam.ui)
-│   └── QScrollArea → QVBoxLayout
-│       └── TSHScoreboardPlayerWidget × playerCount
-│           ├── QLineEdit: name, team, real_name, twitter, pronoun, rioName
-│           ├── QComboBox: country, state, msb_team, controller
-│           ├── QPlainTextEdit: custom_textbox
-│           └── character_elements × 9:
-│               ├── QComboBox: character selection
-│               ├── QComboBox: color/skin selection
-│               ├── QComboBox: variant (hidden for MSB)
-│               ├── QRadioButton: captain selector
-│               └── QPushButton × 2: move up/down
-├── scoreColumn (QWidget from TSHScoreboardScore.ui)
-│   ├── QSpinBox: score_left, score_right, best_of, inning, outs, strikes, balls
-│   ├── QComboBox: phase, match, half_inning, batter, pitcher
-│   └── QCheckBox: cbRioRunnerOn1/2/3
-└── team2column (same as team1column)
-```
-
-**Widget count per scoreboard:** ~373 QWidget objects (125 per player widget due to 9 char slots × ~10 widgets each, plus score/team controls)
-
----
-
-## Threading Model
-
-The app mixes three threading paradigms:
-1. **QThread** — WebServer, update checker, layout downloader, game asset loader
-2. **QThreadPool + QRunnable (Workers.py)** — API calls, data fetches
-3. **Python threading.Thread** — StateManager export, image downloads, debounce timers
-
-**Critical shared lock:** `TSHScoreboardPlayerWidget.dataLock` is a **CLASS variable** (shared by all 18 player widget instances). This is a known architectural issue.
-
-**GIL consideration:** Python's GIL means threads don't achieve true parallelism for CPU work, but they do help with I/O-bound operations (network, file writes).
+All mutations are handled via SocketIO events or REST endpoints.
 
 ---
 
 ## Known Limitations & Technical Debt
 
-### Architectural
-- **Class-level mutable state**: `dataLock`, `signals`, `characterModel` are CLASS variables shared across all instances of `TSHScoreboardPlayerWidget`
-- **Singleton anti-pattern**: 9+ singletons created at import time, not thread-safe construction
-- **Mixed threading**: QThread + threading.Thread + QThreadPool used inconsistently
-- **No dependency injection**: All singletons accessed via `ClassName.instance`
-
-### Performance (Mitigated)
-- **StateManager debouncing** (50ms) — prevents I/O storms on rapid changes
-- **SettingsManager debouncing** (200ms) — prevents disk thrashing
-- **Signal cascade guards** — `_initializing` and `_building_characters` flags prevent init storms
-- **Country data simplified** — US/CA inline data replaces 37MB JSON (saves ~200MB RAM)
-- **Lookup caching** — single pyrio `Lookup()` instance instead of one per character
-- **Background startup** — update checks, layout downloads moved off main thread
+### Performance (Optimized)
+- **State.SetBatch()** — bulk state updates emit a single `v1.state.set_batch` SocketIO event instead of 100+ individual ones
+- **Changed-key tracking** — `State.Save()` diffs only tracked keys via direct comparison, no DeepDiff library
+- **Selective snapshots** — `last_state` updated via `copy.deepcopy` of changed paths only, no full-state clone
+- **Event-based HUD watching** — `watchfiles` library uses OS kernel events (kqueue/inotify), zero polling
+- **Indexed DataFrame lookups** — `StatsTracker._api_index` dict for O(1) character stat access
+- **Cached hot-path settings** — `_hud_target` cached as class variable, avoids async reads per HUD event
+- **File export off by default** — `general.disable_export: True` skips stream label file I/O
+- **Frontend RAF batching** — SocketIO events batched via `requestAnimationFrame` before React state update
+- **React.memo + useShallow** — `PlayerSlot` wrapped in `memo()`, single shallow Zustand selector replaces 20+ individual ones
 
 ### Remaining Concerns
-- `deep_clone()` in TSHDictHelper uses msgpack `packb()/unpackb()` — called on every state save
-- WebServer broadcasts **entire state** on every change (no delta protocol)
-- `QCoreApplication.processEvents()` still used in some paths (potential reentrancy)
-- Controller database download (50-100MB) happens on init if not cached
-- Some web action handlers use blocking `QEventLoop().exec_()` pattern
+- WebServer broadcasts **entire state** on initial connect (incremental updates via batch after that)
+- pandas is a large dependency (~50MB) but required by pyrio
 
 ---
 
@@ -268,7 +173,7 @@ pip install -r dependencies/requirements.txt
 python main.py
 ```
 
-**Dependencies:** PySide6, qasync, flask, flask-socketio, requests, orjson, deepdiff, loguru, pynput, Pillow, py7zr, msgpack, pyrio (git submodule)
+**Dependencies:** fastapi, uvicorn, python-socketio, httpx, orjson, watchfiles, loguru, Pillow, pandas, pyrio (git submodule)
 
 **Platform paths for HUD file:**
 - macOS: `~/Library/Application Support/Project Rio/HudFiles/decoded.hud.json`
@@ -280,11 +185,11 @@ python main.py
 ## Testing
 
 No automated test suite exists. Manual testing:
-1. Launch with `python main.py`
-2. Verify scoreboard loads without errors in terminal
-3. Check `localhost:5000/program-state` returns valid JSON
+1. Start the dev server (`npm run dev` for frontend, `python -m server` or equivalent for backend)
+2. Verify the React UI loads without errors
+3. Check `localhost:5260/api/v1/state` returns valid JSON
 4. Test HUD file watching by modifying `decoded.hud.json`
-5. Test API integration via "Load Live Games" button
+5. Test OBS overlays by adding browser sources pointed at `localhost:5260/overlays/`
 
 ---
 
@@ -330,11 +235,97 @@ When streamers play back-to-back games, Project Rio can randomly assign them to 
 
 | Task | Files to Modify |
 |------|----------------|
-| Add new MSB UI elements | `TSHScoreboardWidget.py`, `layout/TSHScoreboardScore.ui` |
-| Change game data parsing | `RioGameDataProvider.py` |
-| Modify state export format | `StateManager.py` |
-| Add web API endpoints | `TSHWebServer.py`, `TSHWebServerActions.py` |
-| Change player widget fields | `TSHScoreboardPlayerWidget.py`, `layout/TSHScoreboardPlayer.ui` |
-| Modify settings | `Settings/TSHSettingsWindow.py`, `SettingsManager.py` |
+| Change game data parsing | `server/rio/provider.py`, `server/rio/hud_watcher.py` |
+| Add/modify state keys | `server/state.py` |
+| Add API endpoints | `server/routes/` |
+| Modify settings schema | `server/settings.py` |
+| Add frontend UI components | `src/components/` |
+| Add/modify OBS overlays | `public/overlays/` |
 | Update character data | `user_data/games/msb/base_files/config.json` |
-| Add/modify team logos | `assets/rio_teamLogos/` |
+| Add/modify team logos | `public/game_assets/rio_teamLogos/` |
+
+---
+
+## Performance Guidelines
+
+This application runs alongside games — **performance is a hard requirement, not a nice-to-have.** The patterns below were established to eliminate game stuttering caused by the HUD update hot path. All new code must follow them.
+
+See `docs/performance/` for the full analysis that motivated these patterns.
+
+### Backend: State Updates
+
+**Always use `State.SetBatch()` when writing multiple keys.** A single HUD event touches 30-100+ state keys. Each `State.Set()` emits a separate SocketIO event. Using SetBatch collapses these into one `v1.state.set_batch` event.
+
+```python
+# WRONG — 30 SocketIO events, 30 React re-render triggers
+for key, value in entries:
+    await State.Set(key, value)
+
+# RIGHT — 1 SocketIO event, 1 React re-render trigger
+await State.SetBatch(entries)
+await State.Save()
+```
+
+**Never add DeepDiff, msgpack, or full-state cloning back to the hot path.** State change detection uses the `changed_keys` list — keys are tracked at write time and compared directly in `_compute_changes()`. The `last_state` snapshot is updated selectively with `copy.deepcopy` of only changed values.
+
+**Cache frequently-read settings as class variables.** Avoid `await Settings.Get()` in callbacks that fire on every HUD event. Instead, read the setting once in `Start()` or a reset method and store it as a class variable. Example: `RioGameDataProvider._hud_target`.
+
+**Use indexed lookups for repeated DataFrame/dict access.** `StatsTracker._api_index` is a `{(username, char_name): row}` dict built once after API fetch, providing O(1) lookups instead of O(n) DataFrame boolean masks on every HUD event.
+
+### Backend: File Watching
+
+**Use OS-level file events, not polling.** `HudWatcher` uses the `watchfiles` library which wraps kqueue (macOS), inotify (Linux), and ReadDirectoryChanges (Windows). This means zero CPU between events. Never replace this with `asyncio.sleep()` polling loops.
+
+### Backend: Async Patterns
+
+**Use `asyncio.gather()` for concurrent awaits, not `asyncio.wait()`.** `asyncio.wait` silently swallows exceptions unless you explicitly check results. `asyncio.gather` propagates errors.
+
+```python
+# WRONG — exceptions silently dropped
+await asyncio.wait([asyncio.create_task(emit()), asyncio.create_task(save())])
+
+# RIGHT — exceptions propagate
+await asyncio.gather(emit(), save())
+```
+
+**Keep `deep_get`/`deep_set`/`deep_unset` as trivial dict traversals.** These run in the async event loop but are pure CPU (no I/O). They don't need `asyncio.to_thread()` — the overhead of thread dispatch far exceeds the cost of a dict walk.
+
+### Frontend: React Components
+
+**Wrap data-connected components in `React.memo()`.** Any component that reads from Zustand and renders inside a parent that re-renders frequently must be memoized. Without `memo()`, a parent re-render forces a full subtree rebuild even if props/state haven't changed.
+
+```javascript
+// WRONG — re-renders on every parent update
+export default function PlayerSlot({ scoreboardNumber, teamNumber, playerNumber }) { ... }
+
+// RIGHT — skips re-render when props unchanged
+export default memo(function PlayerSlot({ scoreboardNumber, teamNumber, playerNumber }) { ... });
+```
+
+**Use a single `useShallow` selector per component, not N individual selectors.** Each `useStateStore()` call is a separate subscription. With 20 selectors in one component, a single state change can trigger 20 subscription checks. One shallow selector on the parent object does one check.
+
+```javascript
+// WRONG — 11 subscriptions, 11 equality checks per state change
+const name = useStateStore(s => s?.score?.[sb]?.team?.[t]?.player?.[p]?.name ?? '');
+const team = useStateStore(s => s?.score?.[sb]?.team?.[t]?.player?.[p]?.team ?? '');
+// ... 9 more
+
+// RIGHT — 1 subscription, shallow equality on the player object
+const player = useStateStore(useShallow(
+    s => s?.score?.[sb]?.team?.[t]?.player?.[p]
+));
+const name = player?.name ?? '';
+const team = player?.team ?? '';
+```
+
+**Use `useMemo` for derived data.** Arrays and objects derived from state should be memoized to prevent unnecessary re-renders of child components that receive them as props.
+
+### Frontend: SocketIO Events
+
+**Handle `v1.state.set_batch` in all SocketIO consumers.** The backend emits batch events for HUD updates. The React frontend (`src/context/socket.jsx`) and all OBS overlay HTML files must handle this event alongside `v1.state.set`.
+
+**Use `requestAnimationFrame` batching for incoming events.** Multiple SocketIO events arriving within a single frame (~16ms) are collected into pending arrays and flushed together in one Zustand `setItems()` call before paint.
+
+### OBS Overlays
+
+**Batch rendering in overlay HTML files.** When an overlay receives a `v1.state.set_batch` event, apply all items to local state first, then call the render function once — not once per item.

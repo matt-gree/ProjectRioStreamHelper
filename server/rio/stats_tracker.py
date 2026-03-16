@@ -332,10 +332,28 @@ class StatsTracker:
         await State.Save()
 
     @classmethod
+    async def _read_players_from_state(cls) -> list[str]:
+        """Read current player rioNames from State for all active scoreboards.
+
+        Falls back to cls._players if State has no names (e.g. HUD-only flow).
+        """
+        names = set()
+        scoreboards = await Settings.Get("scoreboards.active", [1])
+        for sb in scoreboards:
+            for t in (1, 2):
+                name = await State.Get(f"score.{sb}.team.{t}.player.1.rioName")
+                if name and str(name).strip():
+                    names.add(str(name).strip())
+        if names:
+            return list(names)
+        # Fallback to cached HUD players
+        return [p for p in cls._players if p]
+
+    @classmethod
     async def refresh_api_stats(cls):
         """Force re-fetch API stats for current players and push to state."""
         tag = await Settings.Get("project_rio.stats_tag", None)
-        usernames = [p for p in cls._players if p]
+        usernames = await cls._read_players_from_state()
         if usernames:
             cls._api_ready = False
             await cls._fetch_api_stats(usernames, tag, push=True)

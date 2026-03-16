@@ -57,42 +57,37 @@ function ScoreboardTab({ scoreboardNumber }) {
     }, [scoreboardNumber]);
 
     return (
-        <Stack gap="md">
-            <Grid gutter="md" align="flex-start" columns={10}>
-                <Grid.Col span={{ base: 10, md: 4 }}>
+        <Grid gutter="md" align="flex-start" columns={10}>
+            <Grid.Col span={{ base: 10, md: 4 }}>
+                <Stack gap="md">
                     <TeamPanel
                         scoreboardNumber={scoreboardNumber}
                         teamNumber={1}
                         playerCount={1}
                         sourceType={sourceType}
                     />
-                </Grid.Col>
-
-                <Grid.Col span={{ base: 10, md: 2 }}>
-                    <ScoreControls
-                        scoreboardNumber={scoreboardNumber}
-                        onSwapTeams={handleSwapTeams}
-                        sourceType={sourceType}
-                        onSetSource={handleSetSource}
-                    />
-                </Grid.Col>
-
-                <Grid.Col span={{ base: 10, md: 4 }}>
-                    <TeamPanel
-                        scoreboardNumber={scoreboardNumber}
-                        teamNumber={2}
-                        playerCount={1}
-                        sourceType={sourceType}
-                    />
-                </Grid.Col>
-            </Grid>
-
-            <Grid gutter="md">
-                <Grid.Col span={{ base: 12, md: 6 }}>
                     <ActiveMatchupStats scoreboardNumber={scoreboardNumber} />
-                </Grid.Col>
-            </Grid>
-        </Stack>
+                </Stack>
+            </Grid.Col>
+
+            <Grid.Col span={{ base: 10, md: 2 }}>
+                <ScoreControls
+                    scoreboardNumber={scoreboardNumber}
+                    onSwapTeams={handleSwapTeams}
+                    sourceType={sourceType}
+                    onSetSource={handleSetSource}
+                />
+            </Grid.Col>
+
+            <Grid.Col span={{ base: 10, md: 4 }}>
+                <TeamPanel
+                    scoreboardNumber={scoreboardNumber}
+                    teamNumber={2}
+                    playerCount={1}
+                    sourceType={sourceType}
+                />
+            </Grid.Col>
+        </Grid>
     );
 }
 

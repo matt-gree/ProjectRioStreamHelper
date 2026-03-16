@@ -218,12 +218,15 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, sourc
         }, 500);
     }, []);
 
-    // Auto-fetch stats when game mode changes
+    // Auto-fetch stats when game mode changes (skip if blank)
     useEffect(() => {
         if (prevTagRef.current !== statsTag) {
             prevTagRef.current = statsTag;
+            if (!statsTag) {
+                setDiagnostics(null);
+                return;
+            }
             setFetchingStats(true);
-            setDiagOpen(true);
             // Fire refresh (don't await — we poll diagnostics instead)
             fetch('/api/v1/rio/stats/refresh', { method: 'POST' })
                 .catch(() => {});
@@ -246,6 +249,13 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, sourc
             .then(d => setDiagnostics(d))
             .catch(() => {});
     }, []);
+
+    const handleRefreshStats = useCallback(() => {
+        setFetchingStats(true);
+        fetch('/api/v1/rio/stats/refresh', { method: 'POST' })
+            .catch(() => {});
+        setTimeout(pollDiagnostics, 200);
+    }, [pollDiagnostics]);
 
     // Determine batting/fielding teams based on half inning + home designation
     // Top = away bats, Bottom = home bats
@@ -321,10 +331,9 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, sourc
                         clearable
                         style={{ flex: 1 }}
                     />
-                    <Popover opened={diagOpen} onChange={setDiagOpen} position="bottom-end" withArrow width={320}>
+                    <Popover opened={diagOpen && diagnostics != null} onChange={setDiagOpen} position="bottom-end" withArrow width={320}>
                         <Popover.Target>
                             <ActionIcon
-                                ref={undefined}
                                 variant="subtle"
                                 size="sm"
                                 onClick={handleInspect}
@@ -386,6 +395,15 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, sourc
                                 ) : (
                                     <Text size="xs" c="dimmed">No stats have been fetched yet.</Text>
                                 )}
+                                <Button
+                                    size="compact-xs"
+                                    variant="light"
+                                    fullWidth
+                                    onClick={handleRefreshStats}
+                                    loading={fetchingStats}
+                                >
+                                    Refresh Stats
+                                </Button>
                             </Stack>
                         </Popover.Dropdown>
                     </Popover>

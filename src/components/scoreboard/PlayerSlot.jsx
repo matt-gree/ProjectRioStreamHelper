@@ -1,6 +1,6 @@
 import { memo, useCallback, useMemo, useState } from 'react';
 import {
-    TextInput, Select, Checkbox, Group, Stack, Grid, Paper,
+    TextInput, Select, Group, Stack, Grid, Paper,
     Text, Collapse, ActionIcon, UnstyledButton, Tooltip,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
@@ -13,10 +13,18 @@ const characterOptions = MSB_CHARACTERS.map(c => ({ value: c, label: c }));
 const teamOptions = MSB_TEAMS.map(t => ({ value: t, label: t }));
 
 const charIconUrl = (name) => `/game_assets/rio_characterIcons/${encodeURIComponent(name)}.png`;
+const teamIconUrl = (name) => `/game_assets/rio_teamLogos/${encodeURIComponent(name)}.png`;
 
 const renderCharOption = ({ option }) => (
     <Group gap="xs" wrap="nowrap">
         <img src={charIconUrl(option.value)} alt="" width={20} height={20} style={{ objectFit: 'contain' }} />
+        <span>{option.label}</span>
+    </Group>
+);
+
+const renderTeamOption = ({ option }) => (
+    <Group gap="xs" wrap="nowrap">
+        <img src={teamIconUrl(option.value)} alt="" width={20} height={20} style={{ objectFit: 'contain' }} />
         <span>{option.label}</span>
     </Group>
 );
@@ -45,10 +53,10 @@ export default memo(function PlayerSlot({ scoreboardNumber = 1, teamNumber, play
     const rioName    = player?.rioName ?? '';
     const msbTeam    = player?.msb_team ?? '';
     const captain    = player?.rio_captainIndex ?? 0;
+    const fullName   = player?.full_name ?? '';
     const country    = player?.country ?? '';
+    const state      = player?.state ?? '';
     const pronoun    = player?.pronoun ?? '';
-    const twitter    = player?.twitter ?? '';
-    const losers     = useStateStore(s => s?.score?.[scoreboardNumber]?.team?.[teamNumber]?.losers ?? false);
 
     const setItem = useStateStore(s => s.setItem);
 
@@ -74,13 +82,9 @@ export default memo(function PlayerSlot({ scoreboardNumber = 1, teamNumber, play
         set('rio_captainIndex', index);
     }, [set]);
 
-    const setTeamField = useCallback((field, value) => {
-        setItem(`score.${scoreboardNumber}.team.${teamNumber}.${field}`, value);
-    }, [scoreboardNumber, teamNumber, setItem]);
-
     return (
         <Stack gap="xs">
-            {/* Main row: name + team prefix + Rio name */}
+            {/* Main row: tag + prefix + Rio name */}
             <Grid gutter="xs" align="flex-end">
                 <Grid.Col span={4}>
                     <TextInput
@@ -91,16 +95,16 @@ export default memo(function PlayerSlot({ scoreboardNumber = 1, teamNumber, play
                         onChange={e => set('name', e.currentTarget.value)}
                     />
                 </Grid.Col>
-                <Grid.Col span={3}>
+                <Grid.Col span={2}>
                     <TextInput
                         label="Prefix"
-                        placeholder="Team/Sponsor"
+                        placeholder="Sponsor"
                         size="xs"
                         value={teamPrefix}
                         onChange={e => set('team', e.currentTarget.value)}
                     />
                 </Grid.Col>
-                <Grid.Col span={3}>
+                <Grid.Col span={4}>
                     <TextInput
                         label="Rio Name"
                         placeholder="Online ID"
@@ -125,15 +129,21 @@ export default memo(function PlayerSlot({ scoreboardNumber = 1, teamNumber, play
             <Collapse in={detailsOpen}>
                 <Grid gutter="xs" mt="xs">
                     <Grid.Col span={4}>
-                        <Select
-                            label="MSB Team"
-                            placeholder="Select team"
-                            data={teamOptions}
+                        <TextInput
+                            label="Full Name"
+                            placeholder="First Last"
                             size="xs"
-                            searchable
-                            clearable
-                            value={msbTeam || null}
-                            onChange={val => set('msb_team', val ?? '')}
+                            value={fullName}
+                            onChange={e => set('full_name', e.currentTarget.value)}
+                        />
+                    </Grid.Col>
+                    <Grid.Col span={2}>
+                        <TextInput
+                            label="State"
+                            placeholder="NY, CA..."
+                            size="xs"
+                            value={state}
+                            onChange={e => set('state', e.currentTarget.value)}
                         />
                     </Grid.Col>
                     <Grid.Col span={3}>
@@ -154,22 +164,7 @@ export default memo(function PlayerSlot({ scoreboardNumber = 1, teamNumber, play
                             onChange={e => set('pronoun', e.currentTarget.value)}
                         />
                     </Grid.Col>
-                    <Grid.Col span={2}>
-                        <TextInput
-                            label="Twitter"
-                            placeholder="@handle"
-                            size="xs"
-                            value={twitter}
-                            onChange={e => set('twitter', e.currentTarget.value)}
-                        />
-                    </Grid.Col>
                 </Grid>
-                <Checkbox
-                    label="Losers"
-                    size="xs"
-                    checked={losers}
-                    onChange={e => setTeamField('losers', e.currentTarget.checked)}
-                />
             </Collapse>
 
             {/* Character roster / stat editor drill-in */}
@@ -188,7 +183,18 @@ export default memo(function PlayerSlot({ scoreboardNumber = 1, teamNumber, play
                 />
             ) : (
                 <>
-                    <Text size="xs" fw={600} mt="xs" mb={4}>Roster</Text>
+                    <Select
+                        placeholder="MSB Team"
+                        data={teamOptions}
+                        size="xs"
+                        searchable
+                        clearable
+                        value={msbTeam || null}
+                        onChange={val => set('msb_team', val ?? '')}
+                        renderOption={renderTeamOption}
+                        leftSection={msbTeam ? <img src={teamIconUrl(msbTeam)} alt="" width={16} height={16} style={{ objectFit: 'contain' }} /> : null}
+                        mt="xs"
+                    />
                     <Grid gutter={4}>
                         {roster.map((charName, i) => {
                             const isCaptain = captain === i;

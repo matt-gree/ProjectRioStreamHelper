@@ -8,7 +8,7 @@
     <link rel="apple-touch-icon" href="/favicon.png" />
 {% if settings.server.dev %}
     <script type="module">
-      import RefreshRuntime from 'http://localhost:5173/@react-refresh';
+      import RefreshRuntime from 'http://{{ vite_host }}:{{ vite_port }}/@react-refresh';
       RefreshRuntime.injectIntoGlobalHook(window);
       window.$RefreshReg$ = () => {};
       window.$RefreshSig$ = (type) => type;
@@ -23,8 +23,8 @@
   <body>
     <div id="root"></div>
 {% if settings.server.dev %}
-    <script type="module" src="http://localhost:5173/@vite/client"></script>
-    <script type="module" src="http://localhost:5173/src/main.jsx"></script>
+    <script type="module" src="http://{{ vite_host }}:{{ vite_port }}/@vite/client"></script>
+    <script type="module" src="http://{{ vite_host }}:{{ vite_port }}/src/main.jsx"></script>
 {% else %}
 {% for js in manifest.js %}
     <script type="module" src="/{{ js }}"></script>

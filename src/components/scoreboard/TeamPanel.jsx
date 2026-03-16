@@ -16,16 +16,27 @@ export default function TeamPanel({ scoreboardNumber = 1, teamNumber, playerCoun
     const homeTeam = useStateStore(
         s => Number(s?.score?.[scoreboardNumber]?.home_team ?? 2)
     );
+    const losers = useStateStore(
+        s => s?.score?.[scoreboardNumber]?.team?.[teamNumber]?.losers ?? false
+    );
 
     const isHome = homeTeam === teamNumber;
-
     const otherTeam = teamNumber === 1 ? 2 : 1;
 
     const toggleHome = useCallback(() => {
-        // If this team is home, make the other team home (i.e. make this one away)
-        // If this team is away, make this team home
         setItem(`score.${scoreboardNumber}.home_team`, isHome ? otherTeam : teamNumber);
     }, [scoreboardNumber, teamNumber, otherTeam, isHome, setItem]);
+
+    const toggleLosers = useCallback(() => {
+        if (losers) {
+            // Already on for this team — toggle off
+            setItem(`score.${scoreboardNumber}.team.${teamNumber}.losers`, false);
+        } else {
+            // Turn on for this team, turn off for the other
+            setItem(`score.${scoreboardNumber}.team.${teamNumber}.losers`, true);
+            setItem(`score.${scoreboardNumber}.team.${otherTeam}.losers`, false);
+        }
+    }, [scoreboardNumber, teamNumber, otherTeam, losers, setItem]);
 
     const playerSlots = [];
     for (let p = 1; p <= playerCount; p++) {
@@ -45,13 +56,18 @@ export default function TeamPanel({ scoreboardNumber = 1, teamNumber, playerCoun
             <Stack gap="xs">
                 <Group justify="space-between">
                     <Text size="sm" fw={700}>Team {teamNumber}</Text>
-                    <UnstyledButton onClick={toggleHome}>
-                        {isHome ? (
-                            <Badge size="sm" color="blue" variant="filled">Home</Badge>
-                        ) : (
-                            <Badge size="sm" color="gray" variant="light">Away</Badge>
-                        )}
-                    </UnstyledButton>
+                    <Group gap={4}>
+                        <UnstyledButton onClick={toggleLosers}>
+                            <Badge size="sm" color={losers ? 'red' : 'gray'} variant={losers ? 'filled' : 'light'}>L</Badge>
+                        </UnstyledButton>
+                        <UnstyledButton onClick={toggleHome}>
+                            {isHome ? (
+                                <Badge size="sm" color="blue" variant="filled">Home</Badge>
+                            ) : (
+                                <Badge size="sm" color="gray" variant="light">Away</Badge>
+                            )}
+                        </UnstyledButton>
+                    </Group>
                 </Group>
                 {playerSlots}
             </Stack>
