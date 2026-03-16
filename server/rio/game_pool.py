@@ -1,20 +1,47 @@
 import asyncio
+import math
 
+import numpy as np
+import pandas as pd
 from loguru import logger
 from server import socketio
-from server.rio.provider import apply_parsed_game_to_state
+from server.rio.provider import (
+    RioGameDataProvider,
+    apply_parsed_game_to_state,
+    apply_completed_game_to_state,
+)
+from server.rio import stats_api
+from server.rio.stats_api import get_last_completed_fetch_info
 from server.settings import Settings
-from server.state import State
 
 
-class RioGamePool:
+def _sanitize_row(d: dict) -> dict:
+    """Convert pandas/numpy types to JSON-safe Python types."""
+    out = {}
+    for k, v in d.items():
+        if isinstance(v, (pd.Timestamp,)):
+            out[k] = v.isoformat() if pd.notna(v) else None
+        elif isinstance(v, (np.integer,)):
+            out[k] = int(v)
+        elif isinstance(v, (np.floating,)):
+            out[k] = None if math.isnan(v) else float(v)
+        elif isinstance(v, (np.bool_,)):
+            out[k] = bool(v)
+        elif isinstance(v, float) and math.isnan(v):
+            out[k] = None
+        elif v is pd.NaT:
+            out[k] = None
+        else:
+            out[k] = v
+    return out
+
+
+class OngoingGamePool:
     """Shared pool of ongoing Project Rio games fetched from the API.
 
     One singleton polls the API periodically. Individual scoreboards
     select games from this pool by game_id rather than making their
     own API calls.
-
-    Stubbed until pyrio.api is available.
     """
 
     games: dict = {}  # game_id -> parsed game dict
@@ -25,7 +52,7 @@ class RioGamePool:
     async def Start(cls, poll_interval: float = 10.0):
         cls._poll_interval = poll_interval
         cls._poll_task = asyncio.create_task(cls._poll_loop())
-        logger.info("[RioGamePool] Started polling (interval={}s)", poll_interval)
+        logger.info("[OngoingGamePool] Started polling (interval={}s)", poll_interval)
 
     @classmethod
     async def Stop(cls):
@@ -35,7 +62,7 @@ class RioGamePool:
                 await cls._poll_task
             except asyncio.CancelledError:
                 pass
-        logger.info("[RioGamePool] Stopped")
+        logger.info("[OngoingGamePool] Stopped")
 
     @classmethod
     async def _poll_loop(cls):
@@ -45,43 +72,178 @@ class RioGamePool:
             except asyncio.CancelledError:
                 raise
             except Exception:
-                logger.exception("[RioGamePool] Poll error")
+                logger.exception("[OngoingGamePool] Poll error")
             await asyncio.sleep(cls._poll_interval)
 
     @classmethod
     async def _fetch_games(cls):
-        """Fetch ongoing games from Project Rio API.
+        """Fetch ongoing games from Project Rio API."""
+        raw = await stats_api.fetch_ongoing_games()
+        if not raw:
+            return
 
-        TODO: Replace with actual pyrio.api call when available:
-            from server.rio.pyrio.api import fetch_ongoing_games
-            raw_games = await fetch_ongoing_games()
-            new_games = {}
-            for g in raw_games:
-                parsed = RioGameDataProvider.parse_game_data(g)
-                new_games[g["game_id"]] = parsed
-            cls.games = new_games
-            await socketio.emit('v1.game_pool.update', cls.list_games())
-        """
-        pass
+        new_games = {}
+        games_list = raw if isinstance(raw, list) else raw.get("games", [raw])
+        for g in games_list:
+            game_id = g.get("game_id")
+            if game_id is None:
+                continue
+            parsed = RioGameDataProvider.parse_game_data(g)
+            parsed["game_id"] = game_id
+            parsed["source_type"] = "ongoing_api"
+            parsed["game_completed"] = False
+            new_games[game_id] = parsed
+
+        cls.games = new_games
+        await socketio.emit("v1.game_pool.ongoing_update", cls.list_games())
 
     @classmethod
-    def get_game(cls, game_id: str) -> dict | None:
-        return cls.games.get(game_id)
+    def get_game(cls, game_id) -> dict | None:
+        return cls.games.get(game_id) or cls.games.get(str(game_id))
 
     @classmethod
     def list_games(cls) -> list:
         return list(cls.games.values())
 
     @classmethod
-    async def apply_game_to_scoreboard(cls, game_id: str, scoreboard_number: int) -> bool:
-        """Apply a specific API game's data to a scoreboard's state."""
+    async def apply_game_to_scoreboard(cls, game_id, scoreboard_number: int) -> bool:
+        """Apply a specific ongoing API game's data to a scoreboard's state."""
         game = cls.get_game(game_id)
         if not game:
             return False
 
         await apply_parsed_game_to_state(game, scoreboard_number)
 
-        # Update the scoreboard's source config
         await Settings.Set(f"scoreboards.sources.{scoreboard_number}",
-                           {"type": "api", "api_game_id": game_id})
+                           {"type": "ongoing_api", "api_game_id": game_id})
         return True
+
+
+class CompletedGamePool:
+    """Pool of completed Project Rio games fetched from the /games endpoint.
+
+    Stores processed game data from pyrio's DataFrame output. Auto-poll is
+    optional (default off); games can be fetched on-demand via refresh.
+    """
+
+    games: dict = {}  # game_id -> game dict
+    _poll_task: asyncio.Task | None = None
+    _auto_poll: bool = False
+    _poll_interval: float = 60.0
+    _filters: dict = {}
+
+    @classmethod
+    async def Start(cls):
+        cls._auto_poll = False
+        cls._poll_interval = await Settings.Get("completed_games.poll_interval", 60.0)
+        cls._filters = await Settings.Get("completed_games.filters", {})
+        # Always start with auto-poll off regardless of previous session state
+        await Settings.Set("completed_games.auto_poll", False)
+        logger.info("[CompletedGamePool] Initialized (auto_poll=False)")
+
+    @classmethod
+    async def Stop(cls):
+        cls._stop_polling()
+        cls.games = {}
+        cls._filters = {}
+        logger.info("[CompletedGamePool] Stopped and cleared cache")
+
+    @classmethod
+    def _start_polling(cls):
+        if cls._poll_task and not cls._poll_task.done():
+            return
+        cls._poll_task = asyncio.create_task(cls._poll_loop())
+
+    @classmethod
+    def _stop_polling(cls):
+        if cls._poll_task and not cls._poll_task.done():
+            cls._poll_task.cancel()
+        cls._poll_task = None
+
+    @classmethod
+    async def _poll_loop(cls):
+        while True:
+            try:
+                await cls.refresh()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("[CompletedGamePool] Poll error")
+            await asyncio.sleep(cls._poll_interval)
+
+    @classmethod
+    async def refresh(cls, filters: dict | None = None):
+        """Fetch completed games from the API. Uses stored filters if none provided."""
+        if filters is not None:
+            cls._filters = filters
+            await Settings.Set("completed_games.filters", filters)
+
+        df = await stats_api.fetch_completed_games(**cls._filters)
+        diag = get_last_completed_fetch_info()
+        if df.empty:
+            cls.games = {}
+            await socketio.emit("v1.game_pool.completed_update", {
+                "games": [],
+                "diagnostics": diag,
+            })
+            return
+
+        new_games = {}
+        for _, row in df.iterrows():
+            game = _sanitize_row(row.to_dict())
+            game_id = game.get("game_id")
+            if game_id is None:
+                continue
+            # Mark as completed
+            game["source_type"] = "completed_api"
+            game["game_completed"] = True
+            new_games[game_id] = game
+
+        cls.games = new_games
+        await socketio.emit("v1.game_pool.completed_update", {
+            "games": cls.list_games(),
+            "diagnostics": diag,
+        })
+
+    @classmethod
+    async def set_auto_poll(cls, enabled: bool, interval: float | None = None):
+        """Enable or disable auto-polling. Restarts the poll loop if interval changes."""
+        cls._auto_poll = enabled
+        await Settings.Set("completed_games.auto_poll", enabled)
+        if interval is not None:
+            cls._poll_interval = interval
+            await Settings.Set("completed_games.poll_interval", interval)
+
+        # Always stop existing task first so interval changes take effect
+        cls._stop_polling()
+        if enabled:
+            cls._start_polling()
+            logger.info("[CompletedGamePool] Auto-poll enabled (interval={}s, filters={})",
+                        cls._poll_interval, cls._filters)
+        else:
+            logger.info("[CompletedGamePool] Auto-poll disabled")
+
+    @classmethod
+    def get_game(cls, game_id) -> dict | None:
+        return cls.games.get(game_id) or cls.games.get(str(game_id))
+
+    @classmethod
+    def list_games(cls) -> list:
+        return list(cls.games.values())
+
+    @classmethod
+    async def apply_game_to_scoreboard(cls, game_id, scoreboard_number: int) -> bool:
+        """Apply a completed game's data to a scoreboard's state."""
+        game = cls.get_game(game_id)
+        if not game:
+            return False
+
+        await apply_completed_game_to_state(game, scoreboard_number)
+
+        await Settings.Set(f"scoreboards.sources.{scoreboard_number}",
+                           {"type": "completed_api", "api_game_id": game_id})
+        return True
+
+
+# Backward-compatible alias for imports that reference the old name
+RioGamePool = OngoingGamePool

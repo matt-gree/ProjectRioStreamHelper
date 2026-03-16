@@ -81,6 +81,91 @@ async def apply_parsed_game_to_state(parsed: dict, scoreboard_number: int):
     await State.Save()
 
 
+async def apply_completed_game_to_state(game: dict, scoreboard_number: int):
+    """Write completed game data into State under score.{scoreboard_number}.
+
+    Completed games from the /games API have limited data compared to HUD/ongoing:
+    - No full roster — only captain is available (placed in character slot 0)
+    - No live game state (batter, pitcher, runners, count)
+    - Includes final scores, ELO changes, timestamps, stadium, game mode
+    """
+    sb = f"score.{scoreboard_number}"
+
+    # Convert pandas Timestamps to ISO strings if present
+    def _ts(val):
+        if hasattr(val, "isoformat"):
+            return val.isoformat()
+        return val
+
+    entries = [
+        # Scores
+        (f"{sb}.score_left", game.get("away_score", 0)),
+        (f"{sb}.score_right", game.get("home_score", 0)),
+
+        # Game metadata
+        (f"{sb}.source_type", "completed_api"),
+        (f"{sb}.game_id", game.get("game_id")),
+        (f"{sb}.game_completed", True),
+        (f"{sb}.date_time_start", _ts(game.get("date_time_start"))),
+        (f"{sb}.date_time_end", _ts(game.get("date_time_end"))),
+        (f"{sb}.innings_played", game.get("innings_played", 0)),
+        (f"{sb}.innings_selected", game.get("innings_selected", 0)),
+        (f"{sb}.stadium", game.get("stadium", "")),
+        (f"{sb}.game_mode", game.get("game_mode", "")),
+
+        # ELO
+        (f"{sb}.winner_incoming_elo", game.get("winner_incoming_elo")),
+        (f"{sb}.winner_result_elo", game.get("winner_result_elo")),
+        (f"{sb}.loser_incoming_elo", game.get("loser_incoming_elo")),
+        (f"{sb}.loser_result_elo", game.get("loser_result_elo")),
+
+        # Winner/loser (processed columns from pyrio)
+        (f"{sb}.winner_user", game.get("winner_user", "")),
+        (f"{sb}.loser_user", game.get("loser_user", "")),
+        (f"{sb}.winner_score", game.get("winner_score", 0)),
+        (f"{sb}.loser_score", game.get("loser_score", 0)),
+
+        # Final inning state (game is over)
+        (f"{sb}.inning", game.get("innings_played", 9)),
+        (f"{sb}.half_inning", "Final"),
+        (f"{sb}.outs", 0),
+        (f"{sb}.strikes", 0),
+        (f"{sb}.balls", 0),
+        (f"{sb}.batter", ""),
+        (f"{sb}.pitcher", ""),
+        (f"{sb}.cbRioRunnerOn1", False),
+        (f"{sb}.cbRioRunnerOn2", False),
+        (f"{sb}.cbRioRunnerOn3", False),
+        (f"{sb}.runner1Name", ""),
+        (f"{sb}.runner2Name", ""),
+        (f"{sb}.runner3Name", ""),
+    ]
+
+    # Team data — captain only, no full roster
+    away_captain = game.get("away_captain", "")
+    home_captain = game.get("home_captain", "")
+    team_data = [
+        (game.get("away_user", ""), away_captain),
+        (game.get("home_user", ""), home_captain),
+    ]
+
+    for team_idx, (username, captain) in enumerate(team_data):
+        team_num = team_idx + 1
+        prefix = f"{sb}.team.{team_num}.player.1"
+
+        entries.append((f"{prefix}.rioName", username))
+        entries.append((f"{prefix}.msb_team", ""))
+        entries.append((f"{prefix}.rio_captainIndex", 0))
+
+        # Captain in slot 0, clear remaining slots
+        entries.append((f"{prefix}.character.0.name", captain))
+        for char_idx in range(1, 9):
+            entries.append((f"{prefix}.character.{char_idx}.name", None))
+
+    await State.SetBatch(entries)
+    await State.Save()
+
+
 class RioGameDataProvider:
     """Async singleton that watches the Project Rio HUD file and pushes
     game state updates to the central State store.

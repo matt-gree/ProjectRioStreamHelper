@@ -110,6 +110,10 @@ async def set_scoreboard_source(
     if sb_id not in active:
         return ORJSONResponse({"success": False, "error": "Scoreboard not found"})
 
+    valid_types = ("manual", "hud", "ongoing_api", "completed_api")
+    if source_type not in valid_types:
+        return ORJSONResponse({"success": False, "error": f"Invalid source type. Must be one of: {valid_types}"})
+
     if source_type == "hud":
         # Unlink previous HUD target
         old_target = await Settings.Get("scoreboards.hud_target", 1)

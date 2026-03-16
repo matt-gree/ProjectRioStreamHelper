@@ -210,7 +210,9 @@
       function shouldRender(key) {
         return key.startsWith(`score.${SCOREBOARD}.team.${TEAM_NUM}.`)
             || key === `score.${SCOREBOARD}.half_inning`
-            || key === `score.${SCOREBOARD}.home_team`;
+            || key === `score.${SCOREBOARD}.home_team`
+            || key === `score.${SCOREBOARD}.source_type`
+            || key === `score.${SCOREBOARD}.game_completed`;
       }
 
       socket.on('v1.state.set', (msg) => {

@@ -55,4 +55,4 @@ export const MSB_TEAMS = [
 
 export const ROSTER_SIZE = 9;
 
-export const HALF_INNINGS = ["Top", "Bottom"];
+export const HALF_INNINGS = ["Top", "Bottom", "Final"];

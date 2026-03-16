@@ -23,10 +23,23 @@ _last_fetch_info: dict = {
     "fetched_at": None,
 }
 
+# Diagnostic state for the last completed games fetch
+_last_completed_fetch_info: dict = {
+    "url": None,
+    "count": 0,
+    "fetched_at": None,
+    "error": None,
+}
+
 
 def get_last_fetch_info() -> dict:
     """Return diagnostic info about the last stats fetch."""
     return _last_fetch_info.copy()
+
+
+def get_last_completed_fetch_info() -> dict:
+    """Return diagnostic info about the last completed games fetch."""
+    return _last_completed_fetch_info.copy()
 
 
 def set_no_players_diagnostic(tag: str | None) -> None:
@@ -160,6 +173,97 @@ async def fetch_character_stats(
     }
 
     return df
+
+
+async def fetch_completed_games(
+    tag: list[str] | None = None,
+    username: list[str] | None = None,
+    vs_username: list[str] | None = None,
+    exclude_username: list[str] | None = None,
+    start_time: int | None = None,
+    end_time: int | None = None,
+    stadium: int | None = None,
+    limit_games: int | None = None,
+    captain: str | None = None,
+    vs_captain: str | None = None,
+    exclude_tag: list[str] | None = None,
+    include_teams: bool | None = None,
+) -> pd.DataFrame:
+    """Fetch completed games from the Project Rio API.
+
+    Uses pyrio's get_games() which returns a processed DataFrame with
+    winner/loser columns, resolved timestamps, stadium names, and game mode names.
+    """
+    global _last_completed_fetch_info
+    from datetime import datetime, timezone
+    from urllib.parse import urlencode
+
+    client = _get_client()
+    params = {}
+    if tag:
+        params["tag"] = tag
+    if username:
+        params["username"] = username
+    if vs_username:
+        params["vs_username"] = vs_username
+    if exclude_username:
+        params["exclude_username"] = exclude_username
+    if start_time is not None:
+        params["start_time"] = start_time
+    if end_time is not None:
+        params["end_time"] = end_time
+    if stadium is not None:
+        params["stadium"] = stadium
+    if limit_games is not None:
+        params["limit_games"] = limit_games
+    if captain:
+        params["captain"] = captain
+    if vs_captain:
+        params["vs_captain"] = vs_captain
+    if exclude_tag:
+        params["exclude_tag"] = exclude_tag
+    if include_teams is not None:
+        params["include_teams"] = include_teams
+
+    # Build the diagnostic URL matching what pyrio will send to the Rio API
+    qs_parts = []
+    for k, v in params.items():
+        if isinstance(v, list):
+            for item in v:
+                qs_parts.append((k, item))
+        else:
+            qs_parts.append((k, v))
+    diag_url = f"{client.base_url}/games/?{urlencode(qs_parts)}" if qs_parts else f"{client.base_url}/games/"
+
+    try:
+        df = await asyncio.to_thread(client.get_games, params)
+        count = len(df)
+        logger.info(f"[StatsAPI] Fetched {count} completed games")
+        _last_completed_fetch_info = {
+            "url": diag_url,
+            "count": count,
+            "fetched_at": datetime.now(timezone.utc).isoformat(),
+            "error": None,
+        }
+        return df
+    except RioAPIError as e:
+        logger.warning(f"[StatsAPI] API error fetching completed games: {e}")
+        _last_completed_fetch_info = {
+            "url": diag_url,
+            "count": 0,
+            "fetched_at": datetime.now(timezone.utc).isoformat(),
+            "error": str(e),
+        }
+        return pd.DataFrame()
+    except Exception as e:
+        logger.error(f"[StatsAPI] Unexpected error fetching completed games: {e}")
+        _last_completed_fetch_info = {
+            "url": diag_url,
+            "count": 0,
+            "fetched_at": datetime.now(timezone.utc).isoformat(),
+            "error": str(e),
+        }
+        return pd.DataFrame()
 
 
 async def fetch_ongoing_games() -> dict:

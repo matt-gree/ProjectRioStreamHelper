@@ -7,6 +7,7 @@ import { useSettingsStore, useStateStore } from '../../context/store';
 import TeamPanel from '../../components/scoreboard/TeamPanel';
 import ScoreControls from '../../components/scoreboard/ScoreControls';
 import ActiveMatchupStats from '../../components/scoreboard/ActiveMatchupStats';
+import RotationControls from '../../components/scoreboard/RotationControls';
 
 /**
  * A single scoreboard instance (team panels + score controls).
@@ -93,7 +94,9 @@ function ScoreboardTab({ scoreboardNumber }) {
 
 const SOURCE_BADGE = {
     hud: { color: 'green', label: 'HUD' },
-    api: { color: 'blue', label: 'API' },
+    ongoing_api: { color: 'blue', label: 'Live API' },
+    completed_api: { color: 'violet', label: 'Completed' },
+    api: { color: 'blue', label: 'API' },  // backward compat
 };
 
 /**
@@ -230,7 +233,10 @@ export default function ScoreboardManager() {
 
             {active.map(sbId => (
                 <Tabs.Panel key={sbId} value={String(sbId)}>
-                    <ScoreboardTab scoreboardNumber={sbId} />
+                    <Stack gap="md">
+                        <ScoreboardTab scoreboardNumber={sbId} />
+                        <RotationControls scoreboardNumber={sbId} />
+                    </Stack>
                 </Tabs.Panel>
             ))}
         </Tabs>

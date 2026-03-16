@@ -10,7 +10,8 @@ from fastapi.templating import Jinja2Templates
 from loguru import logger
 
 from server.api import router_v1
-from server.rio.game_pool import RioGamePool
+from server.rio.game_pool import OngoingGamePool, CompletedGamePool
+from server.rio.rotation import RotationManager
 from server.rio.provider import RioGameDataProvider
 from server.settings import Settings, Config
 from server.state import State
@@ -44,13 +45,17 @@ async def lifespan(app: FastAPI):
     consumer = asyncio.create_task(State.Consumer())
     await State.Load()
     await RioGameDataProvider.Start()
-    await RioGamePool.Start()
+    await OngoingGamePool.Start()
+    await CompletedGamePool.Start()
+    await RotationManager.Start()
 
     # wait for signal for shutdown
     yield
 
     # on_shutdown
-    await RioGamePool.Stop()
+    await RotationManager.Stop()
+    await CompletedGamePool.Stop()
+    await OngoingGamePool.Stop()
     await RioGameDataProvider.Stop()
     consumer.cancel()
 
