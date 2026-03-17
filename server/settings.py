@@ -64,6 +64,21 @@ class Settings:
                 "1": {"type": "manual", "api_game_id": None}
             }
         },
+        "overlays": {
+            "scoreboard": {
+                "showCaptains": True,
+                "showElo": True,
+                "showTeamLogos": True,
+                "accentColor": "#f59e0b"
+            },
+            "roster": {
+                "accentColor": "#f59e0b"
+            },
+            "stats": {
+                "accentColor": "#f59e0b"
+            },
+            "teamlogo": {}
+        },
         "lang": "en-US"
     }
     _settings_out = AsyncPath('./user_data/settings.json')

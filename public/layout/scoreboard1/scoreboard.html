@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --accent: #f59e0b;
+      --accent-rgb: 245, 158, 11;
+      --name-size: 18px;
+      --score-size: 42px;
+      --inning-size: 20px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      overflow: hidden;
+      width: 800px;
+      height: 400px;
+      background: transparent;
+      font-family: 'Inter', sans-serif;
+      color: #fff;
+    }
+
+    /* ── Card shell ── */
+    #overlay {
+      width: 800px;
+      height: 400px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #card {
+      width: 760px;
+      background: rgba(15, 15, 25, 0.88);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      padding: 18px 20px;
+      overflow: hidden;
+      filter: drop-shadow(0 4px 20px rgba(0, 0, 0, 0.5));
+      transition: opacity 0.15s ease, transform 0.15s ease;
+    }
+
+    .hidden { display: none !important; }
+
+    /* ── Slide animations ── */
+    @keyframes slideOutLeft {
+      from { transform: translateX(0); opacity: 1; }
+      to   { transform: translateX(-50px); opacity: 0; }
+    }
+    @keyframes slideInRight {
+      from { transform: translateX(50px); opacity: 0; }
+      to   { transform: translateX(0); opacity: 1; }
+    }
+    .slide-out { animation: slideOutLeft 180ms ease-in forwards; }
+    .slide-in  { animation: slideInRight 180ms ease-out forwards; }
+
+    /* ── TOP ROW: names, logos, score, inning ── */
+    .top-row {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .top-row:last-child { margin-bottom: 0; }
+
+    .team-side {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .team-side.right { justify-content: flex-end; }
+
+    .team-logo {
+      width: 40px;
+      height: 40px;
+      object-fit: contain;
+      flex-shrink: 0;
+    }
+
+    .player-name {
+      font-size: var(--name-size);
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-width: 0;
+      flex: 1;
+    }
+
+    .score-center {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+    }
+
+    .score-num {
+      font-size: var(--score-size);
+      font-weight: 800;
+      color: var(--accent);
+      min-width: 48px;
+      text-align: center;
+      line-height: 1;
+    }
+
+    .inning-display {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+    }
+    .inning-half {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: rgba(255, 255, 255, 0.6);
+    }
+    .inning-num {
+      font-size: var(--inning-size);
+      font-weight: 800;
+      line-height: 1;
+    }
+
+    .final-badge {
+      background: #ef4444;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      padding: 3px 10px;
+      border-radius: 4px;
+    }
+
+    .score-dash {
+      font-size: 24px;
+      font-weight: 300;
+      color: rgba(255, 255, 255, 0.25);
+    }
+
+    /* ── MIDDLE ROW: batter, pitcher, outs, diamond ── */
+    .game-state-row {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+      min-height: 48px;
+    }
+
+    .active-player {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .active-player.right {
+      justify-content: flex-end;
+      flex-direction: row-reverse;
+    }
+
+    .active-icon {
+      width: 36px;
+      height: 36px;
+      object-fit: contain;
+      flex-shrink: 0;
+    }
+
+    .active-info {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .active-name {
+      font-size: 13px;
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 160px;
+    }
+
+    .role-tag {
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 1px 5px;
+      border-radius: 3px;
+      width: fit-content;
+    }
+    .role-tag.batting { background: #d97706; }
+    .role-tag.pitching { background: #2563eb; }
+
+    /* ── Outs + Count + Diamond center cluster ── */
+    .situation-center {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .count-display {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+    }
+    .count-row {
+      display: flex;
+      gap: 3px;
+      align-items: center;
+    }
+    .count-label {
+      font-size: 9px;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.4);
+      width: 12px;
+      text-align: right;
+    }
+    .count-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      background: rgba(255, 255, 255, 0.05);
+    }
+    .count-dot.ball-active { background: #22c55e; border-color: #22c55e; }
+    .count-dot.strike-active { background: #ef4444; border-color: #ef4444; }
+
+    .outs-display {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+    }
+    .outs-label {
+      font-size: 9px;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.4);
+      text-transform: uppercase;
+    }
+    .outs-row {
+      display: flex;
+      gap: 4px;
+    }
+    .out-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      border: 1.5px solid rgba(255, 255, 255, 0.2);
+      background: rgba(255, 255, 255, 0.05);
+    }
+    .out-dot.active { background: #ef4444; border-color: #ef4444; }
+
+    /* ── Diamond with runner icons ── */
+    .diamond-wrap {
+      position: relative;
+      width: 64px;
+      height: 64px;
+    }
+    .diamond-shape {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      width: 48px;
+      height: 48px;
+      transform: rotate(45deg);
+      border: 1.5px solid rgba(255, 255, 255, 0.15);
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 3px;
+    }
+    .base-slot {
+      position: absolute;
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .base-slot img {
+      width: 24px;
+      height: 24px;
+      object-fit: contain;
+    }
+    .base-empty {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.1);
+    }
+    /* Position bases on diamond: 1B=right, 2B=top, 3B=left */
+    .base-1 { top: 20px; right: -4px; }
+    .base-2 { top: -4px; left: 20px; }
+    .base-3 { top: 20px; left: -4px; }
+
+    /* ── ROSTER ROW ── */
+    .roster-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .roster-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 3px;
+      justify-content: center;
+    }
+    .roster-grid.left { justify-content: flex-start; }
+    .roster-grid.right { justify-content: flex-end; }
+
+    .roster-char {
+      width: 28px;
+      height: 28px;
+      object-fit: contain;
+      border-radius: 4px;
+      border: 1.5px solid transparent;
+    }
+    .roster-char.captain {
+      width: 36px;
+      height: 36px;
+      border-color: var(--accent);
+      border-radius: 6px;
+    }
+
+    /* ── COMPLETED MODE ── */
+    .completed-layout {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 320px;
+      gap: 20px;
+    }
+
+    .completed-main {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 24px;
+    }
+
+    .completed-team {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .completed-team.right { flex-direction: row-reverse; }
+
+    .captain-icon {
+      width: 56px;
+      height: 56px;
+      object-fit: contain;
+      border: 2px solid var(--accent);
+      border-radius: 10px;
+      background: rgba(var(--accent-rgb), 0.08);
+    }
+
+    .completed-name {
+      font-size: 20px;
+      font-weight: 700;
+      max-width: 180px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .completed-score-block {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .completed-score-nums {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    /* ── ELO ROW ── */
+    .elo-row {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 16px;
+      align-items: center;
+    }
+
+    .elo-block {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .elo-block.right { justify-content: flex-end; }
+
+    .elo-prev {
+      color: rgba(255, 255, 255, 0.45);
+    }
+    .elo-arrow {
+      font-size: 11px;
+    }
+    .elo-new {
+      font-weight: 700;
+    }
+    .elo-delta {
+      font-size: 11px;
+      font-weight: 800;
+      padding: 1px 5px;
+      border-radius: 3px;
+    }
+    .elo-gain { color: #22c55e; background: rgba(34, 197, 94, 0.12); }
+    .elo-loss { color: #ef4444; background: rgba(239, 68, 68, 0.12); }
+
+    .meta-center {
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.4);
+      text-align: center;
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+  <div id="overlay">
+    <div id="card" class="hidden"></div>
+  </div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="/layout/lib/overlay-base.js"></script>
+  <script>
+    /* ── Config from URL params ── */
+    const params = new URLSearchParams(window.location.search);
+    const SB = parseInt(params.get('scoreboard')) || 1;
+    const SIZE = params.get('size') || 'l';
+
+    const { deepGet, charImg, logoImg, applyAccentColor, BASE_URL, state, settings } = OverlayBase;
+
+    /* ── Size configuration ── */
+    const SIZE_CONFIG = {
+      xs: { w: 400,  h: 50,  showGameState: false, showRoster: false, showCount: false, showDiamond: false },
+      s:  { w: 500,  h: 80,  showGameState: false, showRoster: false, showCount: false, showDiamond: false },
+      m:  { w: 600,  h: 200, showGameState: true,  showRoster: false, showCount: true,  showDiamond: true  },
+      l:  { w: 800,  h: 400, showGameState: true,  showRoster: true,  showCount: true,  showDiamond: true  },
+      xl: { w: 1000, h: 500, showGameState: true,  showRoster: true,  showCount: true,  showDiamond: true  },
+    };
+    const sizeConf = SIZE_CONFIG[SIZE] || SIZE_CONFIG.l;
+
+    // Apply dynamic dimensions
+    document.body.style.width = sizeConf.w + 'px';
+    document.body.style.height = sizeConf.h + 'px';
+    document.getElementById('overlay').style.width = sizeConf.w + 'px';
+    document.getElementById('overlay').style.height = sizeConf.h + 'px';
+
+    // Scale card width
+    const cardPadX = SIZE === 'xs' ? 8 : SIZE === 's' ? 12 : 20;
+    const cardPadY = SIZE === 'xs' ? 4 : SIZE === 's' ? 6 : 18;
+    const cardEl = document.getElementById('card');
+    cardEl.style.width = (sizeConf.w - 40) + 'px';
+    cardEl.style.padding = cardPadY + 'px ' + cardPadX + 'px';
+
+    // Scale font sizes for smaller variants
+    if (SIZE === 'xs' || SIZE === 's') {
+      document.documentElement.style.setProperty('--name-size', SIZE === 'xs' ? '12px' : '14px');
+      document.documentElement.style.setProperty('--score-size', SIZE === 'xs' ? '22px' : '28px');
+      document.documentElement.style.setProperty('--inning-size', SIZE === 'xs' ? '10px' : '14px');
+    }
+
+    let prevGameKey = '';
+
+    /* ── Settings getters ── */
+    function showCaptains() {
+      return deepGet(settings, 'overlays.scoreboard.showCaptains', true) !== false;
+    }
+    function showElo() {
+      return deepGet(settings, 'overlays.scoreboard.showElo', true) !== false;
+    }
+    function showTeamLogos() {
+      return deepGet(settings, 'overlays.scoreboard.showTeamLogos', true) !== false;
+    }
+
+    /* ── Game change detection + animation ── */
+    function getGameKey() {
+      const id = deepGet(state, `score.${SB}.game_id`);
+      const p1 = deepGet(state, `score.${SB}.team.1.player.1.rioName`, '');
+      const p2 = deepGet(state, `score.${SB}.team.2.player.1.rioName`, '');
+      return `${id}|${p1}|${p2}`;
+    }
+
+    function animateTransition(callback) {
+      const card = document.getElementById('card');
+      card.classList.remove('slide-in');
+      card.classList.add('slide-out');
+      setTimeout(() => {
+        callback();
+        card.classList.remove('slide-out');
+        card.classList.add('slide-in');
+        setTimeout(() => card.classList.remove('slide-in'), 200);
+      }, 200);
+    }
+
+    /* ── Count/outs builders ── */
+    function buildCount(balls, strikes) {
+      let html = '<div class="count-display">';
+      html += '<div class="count-row"><span class="count-label">B</span>';
+      for (let i = 0; i < 4; i++)
+        html += `<span class="count-dot${i < balls ? ' ball-active' : ''}"></span>`;
+      html += '</div>';
+      html += '<div class="count-row"><span class="count-label">S</span>';
+      for (let i = 0; i < 3; i++)
+        html += `<span class="count-dot${i < strikes ? ' strike-active' : ''}"></span>`;
+      html += '</div>';
+      html += '</div>';
+      return html;
+    }
+
+    function buildOuts(outs) {
+      let html = '<div class="outs-display"><span class="outs-label">Outs</span><div class="outs-row">';
+      for (let i = 0; i < 3; i++)
+        html += `<span class="out-dot${i < outs ? ' active' : ''}"></span>`;
+      html += '</div></div>';
+      return html;
+    }
+
+    function buildDiamond() {
+      const r1 = deepGet(state, `score.${SB}.cbRioRunnerOn1`, false);
+      const r2 = deepGet(state, `score.${SB}.cbRioRunnerOn2`, false);
+      const r3 = deepGet(state, `score.${SB}.cbRioRunnerOn3`, false);
+      const r1Name = deepGet(state, `score.${SB}.runner1Name`, '');
+      const r2Name = deepGet(state, `score.${SB}.runner2Name`, '');
+      const r3Name = deepGet(state, `score.${SB}.runner3Name`, '');
+
+      let html = '<div class="diamond-wrap"><div class="diamond-shape"></div>';
+      html += `<div class="base-slot base-1">${r1 && r1Name ? charImg(r1Name, '', 24) : '<span class="base-empty"></span>'}</div>`;
+      html += `<div class="base-slot base-2">${r2 && r2Name ? charImg(r2Name, '', 24) : '<span class="base-empty"></span>'}</div>`;
+      html += `<div class="base-slot base-3">${r3 && r3Name ? charImg(r3Name, '', 24) : '<span class="base-empty"></span>'}</div>`;
+      html += '</div>';
+      return html;
+    }
+
+    /* ── Roster builder ── */
+    function buildRoster(teamNum) {
+      const player = deepGet(state, `score.${SB}.team.${teamNum}.player.1`);
+      if (!player) return '';
+      const captainIdx = player.rio_captainIndex;
+      const hasCaptain = captainIdx != null && captainIdx >= 0 && captainIdx <= 8;
+      const side = teamNum === 1 ? 'left' : 'right';
+
+      let html = `<div class="roster-grid ${side}">`;
+      for (let i = 0; i < 9; i++) {
+        const char = deepGet(player, `character.${i}`);
+        const name = char?.name;
+        if (!name) continue;
+        const isCap = hasCaptain && i === captainIdx;
+        html += charImg(name, `roster-char${isCap ? ' captain' : ''}`, isCap ? 36 : 28);
+      }
+      html += '</div>';
+      return html;
+    }
+
+    /* ── Live mode ── */
+    function buildLive() {
+      const p1 = deepGet(state, `score.${SB}.team.1.player.1.rioName`, '');
+      const p2 = deepGet(state, `score.${SB}.team.2.player.1.rioName`, '');
+      const team1 = deepGet(state, `score.${SB}.team.1.player.1.msb_team`, '');
+      const team2 = deepGet(state, `score.${SB}.team.2.player.1.msb_team`, '');
+      const sL = deepGet(state, `score.${SB}.score_left`, 0);
+      const sR = deepGet(state, `score.${SB}.score_right`, 0);
+      const inn = deepGet(state, `score.${SB}.inning`, '');
+      const half = deepGet(state, `score.${SB}.half_inning`, '');
+      const outs = parseInt(deepGet(state, `score.${SB}.outs`, 0)) || 0;
+      const balls = parseInt(deepGet(state, `score.${SB}.balls`, 0)) || 0;
+      const strikes = parseInt(deepGet(state, `score.${SB}.strikes`, 0)) || 0;
+      const batter = deepGet(state, `score.${SB}.batter`, '');
+      const pitcher = deepGet(state, `score.${SB}.pitcher`, '');
+
+      const isFinal = half === 'Final';
+      const halfShort = half === 'Bottom' ? 'BOT' : half === 'Top' ? 'TOP' : half.toUpperCase();
+
+      let html = '';
+
+      // Top row
+      const showLogos = showTeamLogos() && SIZE !== 'xs';
+      html += '<div class="top-row">';
+      html += '<div class="team-side">';
+      if (showLogos && team1) html += logoImg(team1, 'team-logo');
+      html += `<span class="player-name">${p1}</span>`;
+      html += '</div>';
+
+      html += '<div class="score-center">';
+      html += `<span class="score-num">${sL}</span>`;
+      if (SIZE !== 'xs') {
+        html += '<div class="inning-display">';
+        if (isFinal) {
+          html += '<span class="final-badge">Final</span>';
+        } else {
+          html += `<span class="inning-half">${halfShort}</span>`;
+          html += `<span class="inning-num">${inn}</span>`;
+        }
+        html += '</div>';
+      } else {
+        html += '<span class="score-dash">&ndash;</span>';
+      }
+      html += `<span class="score-num">${sR}</span>`;
+      html += '</div>';
+
+      html += '<div class="team-side right">';
+      html += `<span class="player-name">${p2}</span>`;
+      if (showLogos && team2) html += logoImg(team2, 'team-logo');
+      html += '</div>';
+      html += '</div>';
+
+      // Game state row (skip if Final or size too small)
+      if (!isFinal && sizeConf.showGameState) {
+        html += '<div class="game-state-row">';
+
+        // Batter
+        html += '<div class="active-player">';
+        if (batter) html += charImg(batter, 'active-icon');
+        html += '<div class="active-info">';
+        html += `<span class="active-name">${batter}</span>`;
+        html += '<span class="role-tag batting">AB</span>';
+        html += '</div></div>';
+
+        // Center situation
+        html += '<div class="situation-center">';
+        if (sizeConf.showCount) html += buildCount(balls, strikes);
+        if (sizeConf.showDiamond) html += buildDiamond();
+        html += buildOuts(outs);
+        html += '</div>';
+
+        // Pitcher
+        html += '<div class="active-player right">';
+        if (pitcher) html += charImg(pitcher, 'active-icon');
+        html += '<div class="active-info">';
+        html += `<span class="active-name">${pitcher}</span>`;
+        html += '<span class="role-tag pitching">P</span>';
+        html += '</div></div>';
+
+        html += '</div>';
+      }
+
+      // Roster row (only for l and xl)
+      if (sizeConf.showRoster) {
+        html += '<div class="roster-row">';
+        html += buildRoster(1);
+        html += buildRoster(2);
+        html += '</div>';
+      }
+
+      return html;
+    }
+
+    /* ── Completed mode ── */
+    function buildCompleted() {
+      const p1 = deepGet(state, `score.${SB}.team.1.player.1.rioName`, '');
+      const p2 = deepGet(state, `score.${SB}.team.2.player.1.rioName`, '');
+      const sL = deepGet(state, `score.${SB}.score_left`, 0);
+      const sR = deepGet(state, `score.${SB}.score_right`, 0);
+      const cap1 = deepGet(state, `score.${SB}.team.1.player.1.character.0.name`, '');
+      const cap2 = deepGet(state, `score.${SB}.team.2.player.1.character.0.name`, '');
+      const innings = deepGet(state, `score.${SB}.innings_played`, '');
+      const stadium = deepGet(state, `score.${SB}.stadium`, '');
+
+      // Determine winner/loser for ELO display
+      const winnerUser = deepGet(state, `score.${SB}.winner_user`, '');
+      const loserUser = deepGet(state, `score.${SB}.loser_user`, '');
+      const wInElo = deepGet(state, `score.${SB}.winner_incoming_elo`);
+      const wOutElo = deepGet(state, `score.${SB}.winner_result_elo`);
+      const lInElo = deepGet(state, `score.${SB}.loser_incoming_elo`);
+      const lOutElo = deepGet(state, `score.${SB}.loser_result_elo`);
+
+      // Map p1/p2 to winner/loser
+      const p1IsWinner = p1 === winnerUser;
+      const p1InElo = p1IsWinner ? wInElo : lInElo;
+      const p1OutElo = p1IsWinner ? wOutElo : lOutElo;
+      const p2InElo = p1IsWinner ? lInElo : wInElo;
+      const p2OutElo = p1IsWinner ? lOutElo : wOutElo;
+
+      let html = '<div class="completed-layout">';
+
+      // Main score row
+      html += '<div class="completed-main">';
+
+      html += '<div class="completed-team">';
+      if (showCaptains() && cap1) html += charImg(cap1, 'captain-icon');
+      html += `<span class="completed-name">${p1}</span>`;
+      html += '</div>';
+
+      html += '<div class="completed-score-block">';
+      html += '<div class="completed-score-nums">';
+      html += `<span class="score-num">${sL}</span>`;
+      html += '<span class="score-dash">&mdash;</span>';
+      html += `<span class="score-num">${sR}</span>`;
+      html += '</div>';
+      html += '<span class="final-badge">Final</span>';
+      html += '</div>';
+
+      html += '<div class="completed-team right">';
+      if (showCaptains() && cap2) html += charImg(cap2, 'captain-icon');
+      html += `<span class="completed-name">${p2}</span>`;
+      html += '</div>';
+
+      html += '</div>';
+
+      // ELO + meta row
+      const hasElo = showElo() && p1InElo != null && p1OutElo != null;
+      if (hasElo || stadium || innings) {
+        html += '<div class="elo-row">';
+
+        // P1 ELO
+        if (hasElo) {
+          const d1 = Math.round(p1OutElo - p1InElo);
+          const cls1 = d1 >= 0 ? 'elo-gain' : 'elo-loss';
+          const sign1 = d1 >= 0 ? '+' : '';
+          html += '<div class="elo-block">';
+          html += `<span class="elo-prev">${Math.round(p1InElo)}</span>`;
+          html += `<span class="elo-arrow">&rarr;</span>`;
+          html += `<span class="elo-new">${Math.round(p1OutElo)}</span>`;
+          html += `<span class="elo-delta ${cls1}">${sign1}${d1}</span>`;
+          html += '</div>';
+        } else {
+          html += '<div></div>';
+        }
+
+        // Center meta
+        const metaParts = [];
+        if (stadium) metaParts.push(stadium);
+        if (innings) metaParts.push(`${innings} inn`);
+        html += `<div class="meta-center">${metaParts.join(' &middot; ')}</div>`;
+
+        // P2 ELO
+        if (hasElo) {
+          const d2 = Math.round(p2OutElo - p2InElo);
+          const cls2 = d2 >= 0 ? 'elo-gain' : 'elo-loss';
+          const sign2 = d2 >= 0 ? '+' : '';
+          html += '<div class="elo-block right">';
+          html += `<span class="elo-prev">${Math.round(p2InElo)}</span>`;
+          html += `<span class="elo-arrow">&rarr;</span>`;
+          html += `<span class="elo-new">${Math.round(p2OutElo)}</span>`;
+          html += `<span class="elo-delta ${cls2}">${sign2}${d2}</span>`;
+          html += '</div>';
+        } else {
+          html += '<div></div>';
+        }
+
+        html += '</div>';
+      }
+
+      html += '</div>';
+      return html;
+    }
+
+    /* ── Render ── */
+    function render() {
+      applyAccentColor('scoreboard');
+      const card = document.getElementById('card');
+      const p1 = deepGet(state, `score.${SB}.team.1.player.1.rioName`, '');
+      const p2 = deepGet(state, `score.${SB}.team.2.player.1.rioName`, '');
+
+      if (!p1 && !p2) {
+        card.classList.add('hidden');
+        return;
+      }
+
+      const sourceType = deepGet(state, `score.${SB}.source_type`, '');
+      const gameCompleted = deepGet(state, `score.${SB}.game_completed`, false);
+
+      const isCompleted = sourceType === 'completed_api' || gameCompleted === true;
+
+      // Check for game change
+      const newKey = getGameKey();
+      const gameChanged = prevGameKey !== '' && newKey !== prevGameKey;
+      prevGameKey = newKey;
+
+      const doRender = () => {
+        card.innerHTML = isCompleted ? buildCompleted() : buildLive();
+        card.classList.remove('hidden');
+      };
+
+      if (gameChanged) {
+        animateTransition(doRender);
+      } else {
+        doRender();
+      }
+    }
+
+    /* ── Init via OverlayBase ── */
+    OverlayBase.init({
+      render,
+      shouldRender: (key) => key.startsWith(`score.${SB}.`),
+      shouldRenderSettings: (key) => key.startsWith('overlays.'),
+      fetchSettings: true,
+    });
+  </script>
+</body>
+</html>

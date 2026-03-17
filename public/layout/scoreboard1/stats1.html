@@ -106,50 +106,14 @@
   <div class="stats-bar hidden" id="stats-bar"></div>
 
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="/layout/lib/overlay-base.js"></script>
   <script>
+    const params = new URLSearchParams(window.location.search);
+    const SCOREBOARD = parseInt(params.get('scoreboard')) || 1;
     const TEAM_NUM = 1;
-    const SCOREBOARD = 1;
+    const { deepGet, BASE_URL, state } = OverlayBase;
 
-    const BASE_URL = (window.location.protocol === 'file:')
-      ? 'http://localhost:5260'
-      : window.location.origin;
-
-    let state = {};
     let prevCharName = '';
-
-    function deepSet(obj, path, value) {
-      const keys = path.split('.');
-      let cur = obj;
-      for (let i = 0; i < keys.length - 1; i++) {
-        if (!(keys[i] in cur) || typeof cur[keys[i]] !== 'object' || cur[keys[i]] === null) {
-          cur[keys[i]] = {};
-        }
-        cur = cur[keys[i]];
-      }
-      cur[keys[keys.length - 1]] = value;
-    }
-
-    function deepGet(obj, path) {
-      const keys = path.split('.');
-      let cur = obj;
-      for (const k of keys) {
-        if (cur == null || typeof cur !== 'object') return undefined;
-        cur = cur[k];
-      }
-      return cur;
-    }
-
-    function deepUnset(obj, path) {
-      const keys = path.split('.');
-      let cur = obj;
-      for (let i = 0; i < keys.length - 1; i++) {
-        if (cur == null || typeof cur !== 'object') return;
-        cur = cur[keys[i]];
-      }
-      if (cur != null && typeof cur === 'object') {
-        delete cur[keys[keys.length - 1]];
-      }
-    }
 
     function deriveBatting(raw) {
       const ab = raw.at_bats || 0;
@@ -269,7 +233,6 @@
       prevCharName = charName;
 
       if (changed && !bar.classList.contains('hidden')) {
-        // Slide out, swap content, slide in
         bar.classList.add('slide-out');
         bar.classList.remove('slide-in');
         setTimeout(() => {
@@ -284,50 +247,7 @@
       }
     }
 
-    async function fetchState() {
-      try {
-        const resp = await fetch(`${BASE_URL}/api/v1/state`);
-        if (resp.ok) {
-          state = await resp.json();
-          render();
-          return true;
-        }
-      } catch (e) {}
-      return false;
-    }
-
-    async function bootstrap() {
-      await fetchState();
-      const socket = io(BASE_URL, { transports: ['websocket', 'polling'] });
-
-      socket.on('connect', () => {
-        socket.emit('v1.state.get', {}, (fullState) => {
-          if (fullState && !fullState.error) { state = fullState; render(); }
-        });
-      });
-
-      socket.on('v1.state.set', (msg) => {
-        if (msg.sid === socket.id) return;
-        deepSet(state, msg.key, msg.value);
-        render();
-      });
-
-      socket.on('v1.state.set_batch', (msg) => {
-        if (msg.sid === socket.id) return;
-        for (const item of msg.items) {
-          deepSet(state, item.key, item.value);
-        }
-        render();
-      });
-
-      socket.on('v1.state.unset', (msg) => {
-        if (msg.sid === socket.id) return;
-        deepUnset(state, msg.key);
-        render();
-      });
-    }
-
-    bootstrap();
+    OverlayBase.init({ render });
   </script>
 </body>
 </html>

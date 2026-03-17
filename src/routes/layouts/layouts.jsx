@@ -1,11 +1,33 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
     Stack, Paper, Text, Group, Grid, UnstyledButton,
-    CopyButton, ActionIcon, Button, Tooltip, Box, Loader, Alert, Tabs, Badge,
+    CopyButton, ActionIcon, Button, Tooltip, Box, Loader, Alert, Tabs, Badge, Switch,
+    Collapse, ColorInput, FileButton, Image, TextInput,
 } from '@mantine/core';
 import { useSettingsStore } from '../../context/store';
+import { useShallow } from 'zustand/react/shallow';
 
 const PREVIEW_HEIGHT = 500;
+
+// ── Per-layout-type settings definitions ──
+// Each entry: { key, type, label, description? }
+// Supported control types: 'switch', 'color', 'logo'
+const LAYOUT_SETTINGS = {
+    scoreboard: [
+        { key: 'showCaptains', type: 'switch', label: 'Show Captains', description: 'Display captain character icons' },
+        { key: 'showElo', type: 'switch', label: 'Show ELO', description: 'Display ELO ratings on completed games' },
+        { key: 'showTeamLogos', type: 'switch', label: 'Show Team Logos', description: 'Display MSB team logos' },
+        { key: 'accentColor', type: 'color', label: 'Accent Color', description: 'Primary highlight color' },
+        { key: 'tournamentLogo', type: 'logo', label: 'Tournament Logo', description: 'Shown on the overlay' },
+    ],
+    roster: [
+        { key: 'accentColor', type: 'color', label: 'Accent Color', description: 'Primary highlight color' },
+    ],
+    stats: [
+        { key: 'accentColor', type: 'color', label: 'Accent Color', description: 'Primary highlight color' },
+    ],
+    teamlogo: [],
+};
 
 function ScaledIframe({ src }) {
     const containerRef = useRef(null);
@@ -25,12 +47,10 @@ function ScaledIframe({ src }) {
         });
     }, []);
 
-    // Recalc when native size changes
     useEffect(() => {
         if (nativeSize) recalc(nativeSize.w, nativeSize.h);
     }, [nativeSize, recalc]);
 
-    // Recalc on container resize
     useEffect(() => {
         const el = containerRef.current;
         if (!el || !nativeSize) return;
@@ -47,7 +67,6 @@ function ScaledIframe({ src }) {
                 const style = doc.defaultView.getComputedStyle(doc.body);
                 const cssW = parseFloat(style.width);
                 const cssH = parseFloat(style.height);
-                // Use explicit CSS body dimensions if set, otherwise fall back to scroll size
                 const w = cssW > 0 ? cssW : doc.body.scrollWidth;
                 const h = cssH > 0 ? cssH : doc.body.scrollHeight;
                 if (w > 0 && h > 0) {
@@ -57,7 +76,6 @@ function ScaledIframe({ src }) {
                 // cross-origin — keep defaults
             }
         };
-        // Defer to ensure styles and layout are fully applied
         requestAnimationFrame(readSize);
     }, []);
 
@@ -96,18 +114,63 @@ function ScaledIframe({ src }) {
 
 const SOURCE_COLORS = { hud: 'green', api: 'blue', manual: 'gray' };
 
+function LayoutItem({ item, selected, onSelect, activeTab }) {
+    const copyUrl = useMemo(() => {
+        try {
+            const u = new URL(item.url);
+            u.searchParams.set('scoreboard', activeTab);
+            return u.toString();
+        } catch { return item.url; }
+    }, [item.url, activeTab]);
+
+    return (
+        <UnstyledButton
+            onClick={() => onSelect(item)}
+            p="xs"
+            style={(theme) => ({
+                borderRadius: theme.radius.sm,
+                backgroundColor: selected?.url === item.url
+                    ? theme.colors.blue[0]
+                    : 'transparent',
+                border: selected?.url === item.url
+                    ? `1px solid ${theme.colors.blue[3]}`
+                    : '1px solid transparent',
+            })}
+        >
+            <Group justify="space-between" wrap="nowrap" gap={4}>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                    <Text size="sm" truncate>
+                        {item.sizeVariant
+                            ? `${item.sizeLabel} (${item.sizeVariant.toUpperCase()})`
+                            : item.name}
+                    </Text>
+                    {item.width && item.height && (
+                        <Text size="xs" c="dimmed">{item.width} x {item.height}</Text>
+                    )}
+                </div>
+                <CopyButton value={copyUrl}>
+                    {({ copied, copy }) => (
+                        <Tooltip label={copied ? 'Copied!' : 'Copy URL'}>
+                            <ActionIcon
+                                variant="subtle"
+                                color={copied ? 'teal' : 'gray'}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    copy();
+                                }}
+                            >
+                                {copied ? '\u2713' : '\u2398'}
+                            </ActionIcon>
+                        </Tooltip>
+                    )}
+                </CopyButton>
+            </Group>
+        </UnstyledButton>
+    );
+}
+
 function LayoutList({ layouts, selected, onSelect }) {
-    // Group by the subfolder name (last part of group path, e.g. "hud" from "scoreboard1/hud")
-    const groups = useMemo(() => {
-        const g = {};
-        for (const l of layouts) {
-            const parts = l.group.split('/');
-            const label = parts[parts.length - 1] || 'other';
-            if (!g[label]) g[label] = [];
-            g[label].push(l);
-        }
-        return g;
-    }, [layouts]);
+    const [expandedGroups, setExpandedGroups] = useState({});
 
     if (layouts.length === 0) {
         return (
@@ -117,54 +180,218 @@ function LayoutList({ layouts, selected, onSelect }) {
         );
     }
 
-    return Object.entries(groups).map(([label, items]) => (
-        <Paper key={label} withBorder p="xs">
-            <Text size="sm" fw={600} mb={4} tt="uppercase">{label}</Text>
-            <Stack gap={4}>
-                {items.map((item) => (
-                    <UnstyledButton
-                        key={item.url}
-                        onClick={() => onSelect(item.url)}
-                        p="xs"
-                        style={(theme) => ({
-                            borderRadius: theme.radius.sm,
-                            backgroundColor: selected === item.url
-                                ? theme.colors.blue[0]
-                                : 'transparent',
-                            border: selected === item.url
-                                ? `1px solid ${theme.colors.blue[3]}`
-                                : '1px solid transparent',
-                        })}
+    // Separate: grouped (size variants) vs ungrouped (standalone)
+    const groups = {};    // parentName -> items[]
+    const standalone = [];
+    for (const item of layouts) {
+        if (item.parentName && item.sizeVariant) {
+            const key = `${item.group}/${item.parentName}`;
+            if (!groups[key]) groups[key] = { parentName: item.parentName, items: [] };
+            groups[key].items.push(item);
+        } else {
+            standalone.push(item);
+        }
+    }
+
+    const toggleGroup = (key) => {
+        setExpandedGroups(prev => ({ ...prev, [key]: !prev[key] }));
+    };
+
+    // Check if any item in a group is selected
+    const isGroupActive = (items) => items.some(i => i.url === selected?.url);
+
+    return (
+        <Stack gap={4}>
+            {/* Collapsible size-variant groups */}
+            {Object.entries(groups).map(([key, { parentName, items }]) => {
+                const open = expandedGroups[key] || isGroupActive(items);
+                return (
+                    <div key={key}>
+                        <UnstyledButton
+                            onClick={() => toggleGroup(key)}
+                            p="xs"
+                            style={(theme) => ({
+                                borderRadius: theme.radius.sm,
+                                width: '100%',
+                                backgroundColor: isGroupActive(items)
+                                    ? theme.colors.blue[0]
+                                    : 'transparent',
+                            })}
+                        >
+                            <Group justify="space-between" wrap="nowrap">
+                                <Text size="sm" fw={600}>{parentName}</Text>
+                                <Text size="xs" c="dimmed">
+                                    {open ? '\u25B4' : '\u25BE'} {items.length} sizes
+                                </Text>
+                            </Group>
+                        </UnstyledButton>
+                        <Collapse in={open}>
+                            <Stack gap={2} pl="sm">
+                                {items.map((item) => (
+                                    <LayoutItem
+                                        key={item.url}
+                                        item={item}
+                                        selected={selected}
+                                        onSelect={onSelect}
+                                    />
+                                ))}
+                            </Stack>
+                        </Collapse>
+                    </div>
+                );
+            })}
+
+            {/* Standalone layouts (no size variants) */}
+            {standalone.map((item) => (
+                <LayoutItem
+                    key={item.url}
+                    item={item}
+                    selected={selected}
+                    onSelect={onSelect}
+                />
+            ))}
+        </Stack>
+    );
+}
+
+// ── Tournament Logo Upload ──
+function LogoUpload({ label, description }) {
+    const [logoInfo, setLogoInfo] = useState(null); // { exists, url }
+    const [uploading, setUploading] = useState(false);
+
+    const fetchLogo = useCallback(async () => {
+        try {
+            const resp = await fetch('/api/v1/branding/logo');
+            if (resp.ok) setLogoInfo(await resp.json());
+        } catch (e) { /* ignore */ }
+    }, []);
+
+    useEffect(() => { fetchLogo(); }, [fetchLogo]);
+
+    const handleUpload = useCallback(async (file) => {
+        if (!file) return;
+        setUploading(true);
+        try {
+            const form = new FormData();
+            form.append('file', file);
+            const resp = await fetch('/api/v1/branding/logo', { method: 'POST', body: form });
+            if (resp.ok) setLogoInfo(await resp.json());
+        } catch (e) { /* ignore */ }
+        setUploading(false);
+    }, []);
+
+    const handleRemove = useCallback(async () => {
+        try {
+            const resp = await fetch('/api/v1/branding/logo', { method: 'DELETE' });
+            if (resp.ok) setLogoInfo(await resp.json());
+        } catch (e) { /* ignore */ }
+    }, []);
+
+    return (
+        <div>
+            <Text size="sm" fw={500}>{label}</Text>
+            {description && <Text size="xs" c="dimmed" mb={4}>{description}</Text>}
+            <Group gap="sm" align="center">
+                {logoInfo?.exists && logoInfo.url && (
+                    <Image
+                        src={logoInfo.url + '?t=' + Date.now()}
+                        alt="Tournament logo"
+                        w={48}
+                        h={48}
+                        fit="contain"
+                        radius="sm"
+                        style={{ border: '1px solid var(--mantine-color-gray-3)' }}
+                    />
+                )}
+                <FileButton onChange={handleUpload} accept="image/png,image/jpeg,image/svg+xml,image/webp">
+                    {(props) => (
+                        <Button
+                            {...props}
+                            variant="light"
+                            size="compact-xs"
+                            loading={uploading}
+                        >
+                            {logoInfo?.exists ? 'Replace' : 'Upload'}
+                        </Button>
+                    )}
+                </FileButton>
+                {logoInfo?.exists && (
+                    <Button
+                        variant="subtle"
+                        size="compact-xs"
+                        color="red"
+                        onClick={handleRemove}
                     >
-                        <Group justify="space-between" wrap="nowrap" gap={4}>
-                            <div style={{ minWidth: 0, flex: 1 }}>
-                                <Text size="sm" truncate>{item.name}</Text>
-                                {item.width && item.height && (
-                                    <Text size="xs" c="dimmed">{item.width} x {item.height}</Text>
-                                )}
-                            </div>
-                            <CopyButton value={item.url}>
-                                {({ copied, copy }) => (
-                                    <Tooltip label={copied ? 'Copied!' : 'Copy URL'}>
-                                        <ActionIcon
-                                            variant="subtle"
-                                            color={copied ? 'teal' : 'gray'}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                copy();
-                                            }}
-                                        >
-                                            {copied ? '\u2713' : '\u2398'}
-                                        </ActionIcon>
-                                    </Tooltip>
-                                )}
-                            </CopyButton>
-                        </Group>
-                    </UnstyledButton>
-                ))}
-            </Stack>
-        </Paper>
-    ));
+                        Remove
+                    </Button>
+                )}
+            </Group>
+        </div>
+    );
+}
+
+// ── Per-layout settings panel ──
+function LayoutSettingsPanel({ layoutType }) {
+    const settingsDefs = LAYOUT_SETTINGS[layoutType];
+    const overlaySettings = useSettingsStore(useShallow(s => s?.overlays?.[layoutType]));
+    const setItem = useSettingsStore(s => s.setItem);
+
+    if (!settingsDefs || settingsDefs.length === 0) return null;
+
+    return (
+        <Stack gap="xs">
+            {settingsDefs.map((def) => {
+                const settingsKey = `overlays.${layoutType}.${def.key}`;
+
+                if (def.type === 'switch') {
+                    const checked = overlaySettings?.[def.key] !== false;
+                    return (
+                        <Switch
+                            key={def.key}
+                            label={def.label}
+                            description={def.description}
+                            size="sm"
+                            checked={checked}
+                            onChange={(e) => setItem(settingsKey, e.currentTarget.checked)}
+                        />
+                    );
+                }
+
+                if (def.type === 'color') {
+                    const value = overlaySettings?.[def.key] ?? '#f59e0b';
+                    return (
+                        <div key={def.key}>
+                            <ColorInput
+                                label={def.label}
+                                description={def.description}
+                                size="sm"
+                                value={value}
+                                onChange={(color) => setItem(settingsKey, color)}
+                                format="hex"
+                                swatches={[
+                                    '#f59e0b', '#ef4444', '#22c55e', '#3b82f6',
+                                    '#a855f7', '#ec4899', '#14b8a6', '#f97316',
+                                    '#6366f1', '#64748b',
+                                ]}
+                            />
+                        </div>
+                    );
+                }
+
+                if (def.type === 'logo') {
+                    return (
+                        <LogoUpload
+                            key={def.key}
+                            label={def.label}
+                            description={def.description}
+                        />
+                    );
+                }
+
+                return null;
+            })}
+        </Stack>
+    );
 }
 
 export default function LayoutBrowser() {
@@ -177,6 +404,8 @@ export default function LayoutBrowser() {
     const [error, setError] = useState(null);
     const [selected, setSelected] = useState(null);
     const [activeTab, setActiveTab] = useState(String(active[0] ?? 1));
+    const [settingsOpen, setSettingsOpen] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
 
     const fetchLayouts = useCallback(async () => {
         setLoading(true);
@@ -196,36 +425,53 @@ export default function LayoutBrowser() {
         fetchLayouts();
     }, [fetchLayouts]);
 
-    // Filter layouts for the active tab's scoreboard and source type
+    // Filter layouts — show all scoreboard layouts for every tab (files live in
+    // scoreboard1/ but work for any scoreboard via URL params). Apply search.
     const filteredLayouts = useMemo(() => {
-        const sbId = activeTab;
-        const src = sources[sbId] ?? sources[String(sbId)];
-        const srcType = src?.type ?? 'manual';
-
-        // Match layouts whose group starts with "scoreboard{N}/"
-        // For hud/api types, also match the subfolder
-        // For manual, show all layouts for that scoreboard
+        const q = searchQuery.toLowerCase().trim();
         return allLayouts.filter(l => {
-            const prefix = `scoreboard${sbId}/`;
-            if (!l.group.startsWith(prefix)) return false;
-            if (srcType === 'manual') return true;
-            const subfolder = l.group.slice(prefix.length).split('/')[0];
-            return subfolder === srcType;
+            if (!l.group.startsWith('scoreboard')) return false;
+            if (q && !l.name.toLowerCase().includes(q)) return false;
+            return true;
         });
-    }, [allLayouts, activeTab, sources]);
+    }, [allLayouts, searchQuery]);
 
     // Auto-select first layout when tab changes
     useEffect(() => {
         if (filteredLayouts.length > 0) {
             setSelected(prev => {
-                // Keep selection if it's still in the filtered list
-                if (prev && filteredLayouts.some(l => l.url === prev)) return prev;
-                return filteredLayouts[0].url;
+                if (prev && filteredLayouts.some(l => l.url === prev.url)) return prev;
+                return filteredLayouts[0];
             });
         } else {
             setSelected(null);
         }
     }, [filteredLayouts]);
+
+    // Clear search on tab switch
+    useEffect(() => {
+        setSearchQuery('');
+    }, [activeTab]);
+
+    // Close settings panel when layout selection changes
+    useEffect(() => {
+        setSettingsOpen(false);
+    }, [selected?.url]);
+
+    const selectedType = selected?.type;
+    const hasSettings = selectedType && LAYOUT_SETTINGS[selectedType]?.length > 0;
+
+    // Build the URL with the active scoreboard number injected as a query param
+    const selectedUrl = useMemo(() => {
+        if (!selected?.url) return null;
+        try {
+            const u = new URL(selected.url);
+            u.searchParams.set('scoreboard', activeTab);
+            return u.toString();
+        } catch {
+            return selected.url;
+        }
+    }, [selected?.url, activeTab]);
 
     return (
         <Stack gap="md">
@@ -257,6 +503,13 @@ export default function LayoutBrowser() {
                             Select a layout to preview. Copy the URL into an OBS Browser Source.
                         </Text>
 
+                        <TextInput
+                            placeholder="Search layouts..."
+                            size="xs"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.currentTarget.value)}
+                        />
+
                         {loading && <Loader size="sm" />}
                         {error && <Alert color="red" title="Error">{error}</Alert>}
 
@@ -268,24 +521,38 @@ export default function LayoutBrowser() {
                     </Stack>
                 </Grid.Col>
 
-                {/* Right panel: iframe preview */}
+                {/* Right panel: iframe preview + settings */}
                 <Grid.Col span={8}>
                     <Paper withBorder style={{ overflow: 'hidden' }}>
-                        {selected ? (
+                        {selected && selectedUrl ? (
                             <>
                                 <Group p="xs" justify="space-between" wrap="nowrap" gap={4} style={{ borderBottom: '1px solid var(--mantine-color-gray-3)' }}>
-                                    <Text size="xs" c="dimmed" truncate style={{ flex: 1, minWidth: 0 }}>{selected}</Text>
-                                    <CopyButton value={selected}>
-                                        {({ copied, copy }) => (
-                                            <Tooltip label={copied ? 'Copied!' : 'Copy URL'}>
-                                                <Button variant="subtle" size="compact-xs" color={copied ? 'teal' : 'gray'} onClick={copy}>
-                                                    {copied ? 'Copied' : 'Copy'}
-                                                </Button>
+                                    <Text size="xs" c="dimmed" truncate style={{ flex: 1, minWidth: 0 }}>{selectedUrl}</Text>
+                                    <Group gap={4} wrap="nowrap">
+                                        {hasSettings && (
+                                            <Tooltip label={settingsOpen ? 'Close settings' : 'Layout settings'}>
+                                                <ActionIcon
+                                                    variant={settingsOpen ? 'filled' : 'subtle'}
+                                                    color={settingsOpen ? 'blue' : 'gray'}
+                                                    size="sm"
+                                                    onClick={() => setSettingsOpen(o => !o)}
+                                                >
+                                                    {'\u2699'}
+                                                </ActionIcon>
                                             </Tooltip>
                                         )}
-                                    </CopyButton>
+                                        <CopyButton value={selectedUrl}>
+                                            {({ copied, copy }) => (
+                                                <Tooltip label={copied ? 'Copied!' : 'Copy URL'}>
+                                                    <Button variant="subtle" size="compact-xs" color={copied ? 'teal' : 'gray'} onClick={copy}>
+                                                        {copied ? 'Copied' : 'Copy'}
+                                                    </Button>
+                                                </Tooltip>
+                                            )}
+                                        </CopyButton>
+                                    </Group>
                                 </Group>
-                                <ScaledIframe key={selected} src={selected} />
+                                <ScaledIframe key={selectedUrl} src={selectedUrl} />
                             </>
                         ) : (
                             <Box
@@ -300,6 +567,18 @@ export default function LayoutBrowser() {
                             </Box>
                         )}
                     </Paper>
+
+                    {/* Per-layout settings panel */}
+                    {hasSettings && (
+                        <Collapse in={settingsOpen}>
+                            <Paper withBorder p="sm" mt="xs">
+                                <Text size="sm" fw={600} mb="xs" tt="capitalize">
+                                    {selectedType} Settings
+                                </Text>
+                                <LayoutSettingsPanel layoutType={selectedType} />
+                            </Paper>
+                        </Collapse>
+                    )}
                 </Grid.Col>
             </Grid>
         </Stack>

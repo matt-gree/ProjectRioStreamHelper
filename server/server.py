@@ -143,6 +143,11 @@ async def layout_index(request: Request) -> HTMLResponse:
 if _layout_dir.is_dir():
     app.mount("/layout", StaticFiles(directory="./public/layout", html=True), name="layout")
 
+# Tournament branding assets (logos) — served from user_data/branding/
+_branding_dir = Path("./user_data/branding")
+_branding_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/branding", StaticFiles(directory=str(_branding_dir)), name="branding")
+
 # Favicon
 @app.get("/favicon.png")
 async def favicon():

@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    body {
+      overflow: hidden;
+      margin: 0;
+      width: 452px;
+      height: 140px;
+      background: transparent;
+      filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.12))
+        drop-shadow(0 3px 1px rgba(0, 0, 0, 0.14))
+        drop-shadow(0 1px 5px rgba(0, 0, 0, 0.12))
+        drop-shadow(0 -1px 2px rgba(0, 0, 0, 0.1));
+    }
+    .roster-container {
+      display: inline-grid;
+      column-gap: 4px;
+      row-gap: 4px;
+      grid-template-columns: 104px repeat(4, 52px) 104px;
+      grid-template-rows: 60px 60px;
+      padding: 8px;
+    }
+    .captain-container {
+      grid-column: 1;
+      grid-row: 1 / 3;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .captain-container img { width: 104px; height: auto; object-fit: contain; }
+    .role-container {
+      grid-column: 6;
+      grid-row: 1 / 3;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .role-container img { width: 104px; height: auto; object-fit: contain; }
+    .character-container { display: flex; align-items: center; justify-content: center; }
+    .character-container img { width: 52px; height: auto; object-fit: contain; }
+  </style>
+</head>
+<body>
+  <div class="roster-container" id="roster-container"></div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="/layout/lib/overlay-base.js"></script>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const SCOREBOARD = parseInt(params.get('scoreboard')) || 1;
+    const TEAM_NUM = 1;
+    const { deepGet, BASE_URL, state } = OverlayBase;
+
+    function getTeamRole() {
+      const homeTeam = Number(deepGet(state, `score.${SCOREBOARD}.home_team`) ?? 2);
+      const halfInning = deepGet(state, `score.${SCOREBOARD}.half_inning`) ?? 'Top';
+      const awayTeam = homeTeam === 2 ? 1 : 2;
+      const battingTeam = halfInning === 'Top' ? awayTeam : homeTeam;
+      return battingTeam === TEAM_NUM ? 'batting' : 'pitching';
+    }
+
+    function render() {
+      const container = document.getElementById('roster-container');
+      container.innerHTML = '';
+
+      const player = deepGet(state, `score.${SCOREBOARD}.team.${TEAM_NUM}.player.1`);
+      if (!player) return;
+
+      const captainIndex = player.rio_captainIndex;
+      const hasCaptain = captainIndex != null && captainIndex >= 0 && captainIndex <= 8;
+
+      if (hasCaptain) {
+        const name = deepGet(player, `character.${captainIndex}`)?.name || '';
+        const div = document.createElement('div');
+        div.className = 'captain-container';
+        const img = document.createElement('img');
+        img.src = name ? `${BASE_URL}/game_assets/rio_characterIcons/${encodeURIComponent(name)}.png` : '';
+        img.onerror = () => img.style.display = 'none';
+        div.appendChild(img);
+        container.appendChild(div);
+      }
+
+      for (let i = 0; i < 9; i++) {
+        if (hasCaptain && i === captainIndex) continue;
+        const name = deepGet(player, `character.${i}`)?.name || '';
+        const div = document.createElement('div');
+        div.className = (!hasCaptain && i === 0) ? 'captain-container' : 'character-container';
+        const img = document.createElement('img');
+        img.src = name ? `${BASE_URL}/game_assets/rio_characterIcons/${encodeURIComponent(name)}.png` : '';
+        img.onerror = () => img.style.display = 'none';
+        div.appendChild(img);
+        container.appendChild(div);
+      }
+
+      const role = getTeamRole();
+      const roleDiv = document.createElement('div');
+      roleDiv.className = 'role-container';
+      const roleImg = document.createElement('img');
+      roleImg.src = role === 'batting'
+        ? `${BASE_URL}/game_assets/rio_bat_glove/bat.png`
+        : `${BASE_URL}/game_assets/rio_bat_glove/glove.png`;
+      roleImg.onerror = () => roleImg.style.display = 'none';
+      roleDiv.appendChild(roleImg);
+      container.appendChild(roleDiv);
+    }
+
+    OverlayBase.init({
+      render,
+      shouldRender: (key) =>
+        key.startsWith(`score.${SCOREBOARD}.team.${TEAM_NUM}.`)
+        || key === `score.${SCOREBOARD}.half_inning`
+        || key === `score.${SCOREBOARD}.home_team`
+        || key === `score.${SCOREBOARD}.source_type`
+        || key === `score.${SCOREBOARD}.game_completed`,
+    });
+  </script>
+</body>
+</html>
