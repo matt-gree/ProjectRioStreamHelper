@@ -269,10 +269,10 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, sourc
 
     const handleRefreshStats = useCallback(() => {
         setFetchingStats(true);
-        fetch('/api/v1/rio/stats/refresh', { method: 'POST' })
+        fetch(`/api/v1/rio/stats/refresh?scoreboard=${scoreboardNumber}`, { method: 'POST' })
             .catch(() => {});
         setTimeout(pollDiagnostics, 200);
-    }, [pollDiagnostics]);
+    }, [scoreboardNumber, pollDiagnostics]);
 
     // Determine batting/fielding teams based on half inning + home designation
     // Top = away bats, Bottom = home bats

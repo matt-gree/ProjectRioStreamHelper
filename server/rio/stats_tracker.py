@@ -332,13 +332,20 @@ class StatsTracker:
         await State.Save()
 
     @classmethod
-    async def _read_players_from_state(cls) -> list[str]:
-        """Read current player rioNames from State for all active scoreboards.
+    async def _read_players_from_state(cls, scoreboard_number: int | None = None) -> list[str]:
+        """Read current player rioNames from State.
+
+        Args:
+            scoreboard_number: If given, read only from that scoreboard.
+                               If None, read from all active scoreboards.
 
         Falls back to cls._players if State has no names (e.g. HUD-only flow).
         """
         names = set()
-        scoreboards = await Settings.Get("scoreboards.active", [1])
+        if scoreboard_number is not None:
+            scoreboards = [scoreboard_number]
+        else:
+            scoreboards = await Settings.Get("scoreboards.active", [1])
         for sb in scoreboards:
             for t in (1, 2):
                 name = await State.Get(f"score.{sb}.team.{t}.player.1.rioName")
@@ -350,15 +357,84 @@ class StatsTracker:
         return [p for p in cls._players if p]
 
     @classmethod
-    async def refresh_api_stats(cls):
-        """Force re-fetch API stats for current players and push to state."""
+    async def refresh_api_stats(cls, scoreboard_number: int | None = None):
+        """Force re-fetch API stats for current players and push to state.
+
+        Args:
+            scoreboard_number: If given, only fetch stats for players on that
+                               scoreboard. If None, uses all active scoreboards.
+        """
         tag = await Settings.Get("project_rio.stats_tag", None)
-        usernames = await cls._read_players_from_state()
+        usernames = await cls._read_players_from_state(scoreboard_number)
         if usernames:
             cls._api_ready = False
             await cls._fetch_api_stats(usernames, tag, push=True)
         else:
             stats_api.set_no_players_diagnostic(tag)
+
+    @classmethod
+    async def push_api_stats_for_scoreboard(cls, scoreboard_number: int):
+        """Push API-only stats to state for a scoreboard (no HUD merge).
+
+        Used by rotation/game pool when applying API games to scoreboards.
+        Reads player names and rosters from State, looks up pre-fetched API
+        stats, and writes them to state. No HUD stats are involved.
+        """
+        sb = f"score.{scoreboard_number}"
+        entries = []
+
+        for team_num in (1, 2):
+            prefix = f"{sb}.team.{team_num}.player.1"
+            username = await State.Get(f"{prefix}.rioName", "")
+            if not username:
+                continue
+
+            for char_idx in range(9):
+                char_name = await State.Get(f"{prefix}.character.{char_idx}.name")
+                if not char_name:
+                    continue
+
+                stat_prefix = f"{sb}.stats.team.{team_num}.character.{char_idx}"
+
+                api_row = cls._get_api_row(str(username), str(char_name))
+                api_batting = _extract_api_batting(api_row) if api_row is not None else _empty_batting()
+                api_pitching = _extract_api_pitching(api_row) if api_row is not None else _empty_pitching()
+
+                # For API-only games, merged = API stats (no HUD component)
+                empty_bat = _empty_batting()
+                empty_pit = _empty_pitching()
+                merged_batting = _merge_batting(api_batting, empty_bat)
+                merged_pitching = _merge_pitching(api_pitching, empty_pit)
+
+                entries.extend([
+                    (f"{stat_prefix}.name", char_name),
+                    (f"{stat_prefix}.api.batting", api_batting),
+                    (f"{stat_prefix}.api.pitching", api_pitching),
+                    (f"{stat_prefix}.batting", merged_batting),
+                    (f"{stat_prefix}.pitching", merged_pitching),
+                    (f"{stat_prefix}.current_game", {
+                        "batting": empty_bat,
+                        "pitching": empty_pit,
+                    }),
+                ])
+
+        if entries:
+            await State.SetBatch(entries)
+            await State.Save()
+
+    @classmethod
+    async def prefetch_for_players(cls, usernames: list[str]):
+        """Fetch and cache API stats for a list of players.
+
+        Used by rotation manager to pre-cache stats for all players in a
+        rotation so individual game switches don't need API calls.
+        """
+        unique = list({u for u in usernames if u})
+        if not unique:
+            return
+        tag = await Settings.Get("project_rio.stats_tag", None)
+        await cls._fetch_api_stats(unique, tag, push=False)
+        logger.info(f"[StatsTracker] Pre-fetched stats for {len(unique)} rotation players")
 
     @classmethod
     def get_all_stats(cls) -> dict:

@@ -80,10 +80,10 @@ export default function ActiveMatchupStats({ scoreboardNumber = 1 }) {
     const handleRefresh = useCallback(async () => {
         setRefreshing(true);
         try {
-            await fetch('/api/v1/rio/stats/refresh', { method: 'POST' });
+            await fetch(`/api/v1/rio/stats/refresh?scoreboard=${scoreboardNumber}`, { method: 'POST' });
         } catch { /* ignore */ }
         setRefreshing(false);
-    }, []);
+    }, [scoreboardNumber]);
 
     const teamName = (num) =>
         scoreState?.team?.[num]?.teamName || `Team ${num}`;

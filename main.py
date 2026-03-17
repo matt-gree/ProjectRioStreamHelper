@@ -97,6 +97,10 @@ if __name__ == '__main__':
     multiprocessing.freeze_support()
 
     if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+        # Change working directory to the executable's location so that
+        # relative paths (./dist, ./public, ./user_data) resolve correctly.
+        os.chdir(os.path.dirname(sys.executable))
+        os.makedirs('./logs', exist_ok=True)
         sys.stderr = open('./logs/tsh_error.txt', 'w', encoding='utf-8')
         sys.stdout = open('./logs/tsh_info.txt', 'w', encoding='utf-8')
 

@@ -50,9 +50,16 @@ async def rio_stats_character(
     version="1", id="rio.stats.refresh",
     response_class=ORJSONResponse
 )
-async def rio_stats_refresh(session_id: str | None = None) -> ORJSONResponse:
-    """Force re-fetch character stats from the Project Rio API."""
-    await StatsTracker.refresh_api_stats()
+async def rio_stats_refresh(
+    scoreboard: int | None = None,
+    session_id: str | None = None,
+) -> ORJSONResponse:
+    """Force re-fetch character stats from the Project Rio API.
+
+    Args:
+        scoreboard: If given, only fetch stats for players on that scoreboard.
+    """
+    await StatsTracker.refresh_api_stats(scoreboard_number=scoreboard)
     return ORJSONResponse({
         "success": True,
         "api_ready": StatsTracker._api_ready,

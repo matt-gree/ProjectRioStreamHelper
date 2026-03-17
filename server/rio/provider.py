@@ -37,15 +37,21 @@ async def get_user_hud_path() -> Path | None:
     return None
 
 
-async def apply_parsed_game_to_state(parsed: dict, scoreboard_number: int):
+async def apply_parsed_game_to_state(parsed: dict, scoreboard_number: int, home_team: int = 2):
     """Write parsed game data into State under score.{scoreboard_number}.
 
     Shared by RioGameDataProvider (HUD) and RioGamePool (API).
     Uses SetBatch to emit a single SocketIO event instead of 30+ individual ones.
+
+    Args:
+        home_team: Which team number (1 or 2) is the home team. Default 2.
+                   When sides are swapped, pass 1 so the React UI calculates
+                   batting/fielding teams correctly.
     """
     sb = f"score.{scoreboard_number}"
 
     entries = [
+        (f"{sb}.home_team", home_team),
         (f"{sb}.score_left", parsed.get("team1score", 0)),
         (f"{sb}.score_right", parsed.get("team2score", 0)),
         (f"{sb}.inning", parsed.get("inning", 1)),
@@ -98,6 +104,9 @@ async def apply_completed_game_to_state(game: dict, scoreboard_number: int):
         return val
 
     entries = [
+        # Home team designation (completed games always away=1, home=2)
+        (f"{sb}.home_team", 2),
+
         # Scores
         (f"{sb}.score_left", game.get("away_score", 0)),
         (f"{sb}.score_right", game.get("home_score", 0)),
@@ -318,7 +327,8 @@ class RioGameDataProvider:
     @classmethod
     async def _apply_game_to_state(cls, parsed: dict):
         """Push all parsed game data into the HUD target scoreboard."""
-        await apply_parsed_game_to_state(parsed, cls._hud_target)
+        home_team = 1 if cls._sides_swapped else 2
+        await apply_parsed_game_to_state(parsed, cls._hud_target, home_team=home_team)
 
     # --- Player side preservation (3-layer system) ---
 

@@ -1,0 +1,123 @@
+# Build macOS + Windows executables and upload as GitHub Release artifacts.
+#
+# Triggers:
+#   - Push a tag like v1.0.0   → creates a GitHub Release with both zips
+#   - Manual dispatch           → uploads artifacts (no release created)
+
+name: Build Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version label for the artifacts (e.g. v1.0.0-beta)'
+        required: false
+        default: 'dev'
+
+permissions:
+  contents: write   # needed to create releases
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            artifact: TSH-macOS
+            zip_contents: dist/TSH.app
+          - os: windows-latest
+            artifact: TSH-Windows
+            zip_contents: dist/TSH
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # ── Node.js (frontend build) ──
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      # ── Python (PyInstaller) ──
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Poetry
+        run: pipx install poetry
+
+      - name: Configure Poetry (no virtualenvs in CI)
+        run: poetry config virtualenvs.create false
+
+      # Platform-specific: skip packages that won't install cross-platform
+      - name: Install Python dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          poetry install --no-interaction --no-root
+          pip install pyinstaller
+
+      - name: Install Python dependencies (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          poetry install --no-interaction --no-root
+          pip install pyinstaller
+
+      # ── Build executable ──
+      - name: Run PyInstaller
+        run: pyinstaller TSH.spec --noconfirm
+
+      # ── Package ──
+      - name: Create zip (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          cd dist
+          zip -r -q ../${{ matrix.artifact }}.zip TSH.app
+
+      - name: Create zip (Windows)
+        if: runner.os == 'Windows'
+        run: Compress-Archive -Path dist\TSH -DestinationPath ${{ matrix.artifact }}.zip
+
+      # ── Upload artifact (available on every run) ──
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}.zip
+
+  # ── Create GitHub Release (only on tag push) ──
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            artifacts/TSH-macOS/TSH-macOS.zip
+            artifacts/TSH-Windows/TSH-Windows.zip

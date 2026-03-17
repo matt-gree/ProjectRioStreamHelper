@@ -1,0 +1,170 @@
+# -*- mode: python ; coding: utf-8 -*-
+"""PyInstaller spec for TournamentStreamHelper (MSB Fork).
+
+Build:
+    macOS:   pyinstaller TSH.spec
+    Windows: pyinstaller TSH.spec
+
+Prerequisites:
+    1. npm install && npm run build   (creates dist/)
+    2. pip install pyinstaller
+    3. git submodule update --init --recursive
+"""
+import platform
+
+block_cipher = None
+
+# Platform-specific separator for --add-data paths
+SEP = ';' if platform.system() == 'Windows' else ':'
+
+a = Analysis(
+    ['main.py'],
+    pathex=[],
+    binaries=[],
+    datas=[
+        # Frontend build output
+        ('dist/assets', 'dist/assets'),
+        ('dist/game_assets', 'dist/game_assets'),
+        ('dist/layout', 'dist/layout'),
+        ('dist/favicon.png', 'dist'),
+        ('dist/.vite/manifest.json', 'dist/.vite'),
+        ('dist/index.html', 'dist'),
+
+        # Public directory (game assets, layouts, favicon)
+        ('public/game_assets', 'public/game_assets'),
+        ('public/layout', 'public/layout'),
+        ('public/favicon.png', 'public'),
+
+        # Server data files
+        ('server/data', 'server/data'),
+
+        # pyrio submodule data
+        ('server/rio/pyrio/CharNames.csv', 'server/rio/pyrio'),
+
+        # Default user_data game config
+        ('user_data/games', 'user_data/games'),
+    ],
+    hiddenimports=[
+        # FastAPI + ASGI
+        'fastapi',
+        'fastapi.staticfiles',
+        'fastapi.templating',
+        'fastapi.responses',
+        'uvicorn',
+        'uvicorn.logging',
+        'uvicorn.loops',
+        'uvicorn.loops.auto',
+        'uvicorn.protocols',
+        'uvicorn.protocols.http',
+        'uvicorn.protocols.http.auto',
+        'uvicorn.protocols.websockets',
+        'uvicorn.protocols.websockets.auto',
+        'uvicorn.lifespan',
+        'uvicorn.lifespan.on',
+
+        # SocketIO
+        'socketio',
+        'engineio',
+
+        # Core deps
+        'loguru',
+        'orjson',
+        'watchfiles',
+        'httpx',
+        'aiopath',
+        'pillow',
+        'PIL',
+        'pystray',
+        'cryptography',
+
+        # Data science (required by pyrio)
+        'pandas',
+        'numpy',
+
+        # Server modules
+        'server',
+        'server.server',
+        'server.state',
+        'server.settings',
+        'server.tray',
+        'server.rio',
+        'server.rio.provider',
+        'server.rio.hud_watcher',
+        'server.rio.stats_tracker',
+        'server.rio.stats_api',
+        'server.rio.game_pool',
+        'server.rio.rotation',
+        'server.rio.pyrio',
+        'server.api',
+        'server.utils',
+        'server.utils.json',
+        'server.utils.deep_dict',
+
+        # Jinja2 (used by FastAPI templates)
+        'jinja2',
+
+        # Multipart (FastAPI dependency)
+        'multipart',
+        'python_multipart',
+    ],
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludes=[
+        # Exclude dev-only packages to reduce size
+        'tkinter',
+        'matplotlib',
+        'scipy',
+        'pytest',
+        'setuptools',
+    ],
+    win_no_prefer_redirects=False,
+    win_private_assemblies=False,
+    cipher=block_cipher,
+    noarchive=False,
+)
+
+pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+
+exe = EXE(
+    pyz,
+    a.scripts,
+    [],
+    exclude_binaries=True,
+    name='TSH',
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=True,
+    console=False,  # No console window — app opens browser
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    name='TSH',
+)
+
+# macOS .app bundle (only used when building on macOS)
+if platform.system() == 'Darwin':
+    app = BUNDLE(
+        coll,
+        name='TSH.app',
+        icon=None,
+        bundle_identifier='com.tsh.msb',
+        info_plist={
+            'CFBundleShortVersionString': '1.0.0',
+            'CFBundleName': 'TournamentStreamHelper',
+            'NSHighResolutionCapable': True,
+        },
+    )

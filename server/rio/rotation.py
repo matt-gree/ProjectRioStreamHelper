@@ -83,6 +83,10 @@ class RotationManager:
             source_pool=source_pool,
             poll_interval=poll_interval,
         )
+
+        # Pre-fetch stats for all players across all rotation games
+        await cls._prefetch_rotation_stats(game_ids)
+
         state.task = asyncio.create_task(state.run())
         cls._rotations[sb_id] = state
 
@@ -136,6 +140,32 @@ class RotationManager:
             "total_games": len(state.game_ids),
             "interval": state.interval,
         }
+
+    @classmethod
+    async def _prefetch_rotation_stats(cls, game_ids: list):
+        """Collect all unique player names from rotation games and pre-fetch stats."""
+        from server.rio.game_pool import OngoingGamePool, CompletedGamePool
+        from server.rio.stats_tracker import StatsTracker
+
+        usernames = set()
+        for game_id in game_ids:
+            game = OngoingGamePool.get_game(game_id) or CompletedGamePool.get_game(game_id)
+            if not game:
+                continue
+            entrants = game.get("entrants", [])
+            for team in entrants:
+                if team and team[0]:
+                    name = team[0].get("rioName", "")
+                    if name:
+                        usernames.add(name)
+            # Completed games store names differently
+            for key in ("away_user", "home_user"):
+                name = game.get(key, "")
+                if name:
+                    usernames.add(name)
+
+        if usernames:
+            await StatsTracker.prefetch_for_players(list(usernames))
 
     @classmethod
     async def _emit_status(cls, sb_id: int):
@@ -212,11 +242,12 @@ class RotationState:
         await self._apply_current()
 
     async def _apply_current(self):
-        """Apply the current game to the scoreboard."""
+        """Apply the current game to the scoreboard and push stats."""
         if not self.game_ids:
             return
 
         from server.rio.game_pool import OngoingGamePool, CompletedGamePool
+        from server.rio.stats_tracker import StatsTracker
 
         game_id = self.game_ids[self.current_index]
 
@@ -227,5 +258,10 @@ class RotationState:
             await CompletedGamePool.apply_game_to_scoreboard(game_id, self.sb_id)
         else:
             logger.warning("[RotationState] Game {} not found in any pool", game_id)
+            await RotationManager._emit_status(self.sb_id)
+            return
+
+        # Push pre-fetched API stats for this scoreboard's players
+        await StatsTracker.push_api_stats_for_scoreboard(self.sb_id)
 
         await RotationManager._emit_status(self.sb_id)
