@@ -8,6 +8,7 @@ from functools import partial
 from loguru import logger
 from PIL import Image
 from server import socketio
+from server.paths import user_data_dir
 from server.settings import Settings
 from server.utils.deep_dict import deep_set, deep_unset, deep_get
 from server.utils import json
@@ -17,8 +18,8 @@ class State:
     last_state = {}
     changed_keys = []
     queue = asyncio.Queue()
-    _stream_labels_out = AsyncPath("./user_data/stream_labels")
-    _program_state_out = AsyncPath("./user_data/state.json")
+    _stream_labels_out = AsyncPath(str(user_data_dir() / "stream_labels"))
+    _program_state_out = AsyncPath(str(user_data_dir() / "state.json"))
 
     @classmethod
     async def Export(cls, changes: list[dict]):

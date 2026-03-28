@@ -5,10 +5,11 @@ from pathlib import Path
 
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from fastapi.responses import ORJSONResponse
+from server.paths import user_data_dir
 
 router = APIRouter(prefix="/branding", tags=["branding"])
 
-_branding_dir = Path("./user_data/branding")
+_branding_dir = user_data_dir() / "branding"
 _logo_path = _branding_dir / "tournament_logo.png"
 
 _MAX_SIZE = 2 * 1024 * 1024  # 2 MB

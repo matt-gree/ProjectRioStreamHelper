@@ -9,11 +9,12 @@ from typing import Optional
 
 import pandas as pd
 from loguru import logger
+from server.paths import user_data_dir
 from server.rio.pyrio.rio_web import RioWeb
 from server.rio.pyrio.exceptions import RioAPIError
 
 _client: RioWeb | None = None
-_ENV_PATH = Path("user_data/.env")
+_ENV_PATH = user_data_dir() / ".env"
 
 # Diagnostic state for the last stats fetch
 _last_fetch_info: dict = {

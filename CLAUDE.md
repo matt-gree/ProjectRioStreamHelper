@@ -177,7 +177,7 @@ python main.py
 
 **Platform paths for HUD file:**
 - macOS: `~/Library/Application Support/Project Rio/HudFiles/decoded.hud.json`
-- Windows: `~/Documents/Project Rio/HudFiles/decoded.hud.json`
+- Windows: `~/AppData/Roaming/Project Rio/HudFiles/decoded.hud.json`
 - Or set custom path in Settings → Project Rio → HUD File Path
 
 ---

@@ -10,12 +10,12 @@ from fastapi.templating import Jinja2Templates
 from loguru import logger
 
 from server.api import router_v1
+from server.paths import user_data_dir, ensure_game_data
 from server.rio.game_pool import OngoingGamePool, CompletedGamePool
 from server.rio.rotation import RotationManager
 from server.rio.provider import RioGameDataProvider
 from server.settings import Settings, Config
 from server.state import State
-from server.tray import Tray
 from server.utils import json
 
 async def load_manifest() -> dict:
@@ -42,6 +42,7 @@ async def load_manifest() -> dict:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # on_startup
+    ensure_game_data()
     consumer = asyncio.create_task(State.Consumer())
     await State.Load()
     await RioGameDataProvider.Start()
@@ -63,8 +64,12 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(Settings.Save()),
         asyncio.create_task(State.SaveImmediately())
     ]
-    if Tray.icon:
-        shutdown_tasks.append(asyncio.create_task(asyncio.to_thread(Tray.icon.stop)))
+    try:
+        from server.tray import Tray
+        if Tray.icon:
+            shutdown_tasks.append(asyncio.create_task(asyncio.to_thread(Tray.icon.stop)))
+    except Exception:
+        pass
     await asyncio.wait(shutdown_tasks, timeout=5.0)
 
 app = FastAPI(lifespan=lifespan)
@@ -144,7 +149,7 @@ if _layout_dir.is_dir():
     app.mount("/layout", StaticFiles(directory="./public/layout", html=True), name="layout")
 
 # Tournament branding assets (logos) — served from user_data/branding/
-_branding_dir = Path("./user_data/branding")
+_branding_dir = user_data_dir() / "branding"
 _branding_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/branding", StaticFiles(directory=str(_branding_dir)), name="branding")
 

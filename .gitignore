@@ -1,5 +1,6 @@
 # Byte-compiled / optimized / DLL files
 __pycache__/
+cache/
 *.py[cod]
 *$py.class
 
@@ -15,6 +16,7 @@ downloads/
 eggs/
 .eggs/
 lib/
+!public/layout/lib/
 lib64/
 parts/
 sdist/

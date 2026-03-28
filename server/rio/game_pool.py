@@ -47,22 +47,49 @@ class OngoingGamePool:
     games: dict = {}  # game_id -> parsed game dict
     _poll_task: asyncio.Task | None = None
     _poll_interval: float = 10.0
+    _auto_poll: bool = False
 
     @classmethod
-    async def Start(cls, poll_interval: float = 10.0):
-        cls._poll_interval = poll_interval
-        cls._poll_task = asyncio.create_task(cls._poll_loop())
-        logger.info("[OngoingGamePool] Started polling (interval={}s)", poll_interval)
+    async def Start(cls):
+        cls._auto_poll = False
+        cls._poll_interval = await Settings.Get("ongoing_games.poll_interval", 10.0)
+        # Always start with auto-poll off regardless of previous session state
+        await Settings.Set("ongoing_games.auto_poll", False)
+        logger.info("[OngoingGamePool] Initialized (auto_poll=False)")
 
     @classmethod
     async def Stop(cls):
+        cls._stop_polling()
+        cls.games = {}
+        logger.info("[OngoingGamePool] Stopped")
+
+    @classmethod
+    def _start_polling(cls):
+        if cls._poll_task and not cls._poll_task.done():
+            return
+        cls._poll_task = asyncio.create_task(cls._poll_loop())
+
+    @classmethod
+    def _stop_polling(cls):
         if cls._poll_task and not cls._poll_task.done():
             cls._poll_task.cancel()
-            try:
-                await cls._poll_task
-            except asyncio.CancelledError:
-                pass
-        logger.info("[OngoingGamePool] Stopped")
+        cls._poll_task = None
+
+    @classmethod
+    async def set_auto_poll(cls, enabled: bool, interval: float | None = None):
+        """Enable or disable auto-polling."""
+        cls._auto_poll = enabled
+        await Settings.Set("ongoing_games.auto_poll", enabled)
+        if interval is not None:
+            cls._poll_interval = interval
+            await Settings.Set("ongoing_games.poll_interval", interval)
+
+        cls._stop_polling()
+        if enabled:
+            cls._start_polling()
+            logger.info("[OngoingGamePool] Auto-poll enabled (interval={}s)", cls._poll_interval)
+        else:
+            logger.info("[OngoingGamePool] Auto-poll disabled")
 
     @classmethod
     async def _poll_loop(cls):

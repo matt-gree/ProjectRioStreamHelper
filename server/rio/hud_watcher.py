@@ -21,6 +21,7 @@ class HudWatcher:
         self.hud_file = hud_file
         self.on_update = on_update
         self.latest_game_data: dict | None = None
+        self.last_error: str | None = None
         self._task: asyncio.Task | None = None
         self._stop_event = asyncio.Event()
 
@@ -44,13 +45,18 @@ class HudWatcher:
         logger.info(f"[HudWatcher] Updated path to {self.hud_file}")
 
     async def reload(self) -> dict | None:
-        """One-shot read of the HUD file. Returns the game dict or None."""
+        """One-shot read of the HUD file. Returns the game dict or None.
+
+        Sets self.last_error if the read fails, for diagnostics.
+        """
+        self.last_error = None
         try:
             raw = await asyncio.to_thread(self._read_and_parse)
             if raw is not None:
                 self.latest_game_data = raw
                 return raw
         except Exception as e:
+            self.last_error = str(e)
             logger.error(f"[HudWatcher] Error reading HUD file: {e}")
         return None
 

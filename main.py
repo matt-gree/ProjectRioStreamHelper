@@ -1,21 +1,41 @@
 import sys
 import os
+import subprocess
+import threading
 import multiprocessing
 import asyncio
 
 from uvicorn import Config, Server
 from socketio import ASGIApp
 from loguru import logger
-from webbrowser import open_new_tab
 
 from server import server, socketio
 from server.state import State
 from server.settings import Settings, Config as TSHConfig
 from server.utils.uvilogger import setup_logger
 
+# Signals the tray (main thread on macOS) that the server is up and URL is set.
+_server_ready = threading.Event()
+# Set when the server fails to start (e.g. port in use) so the tray can react.
+_server_failed = threading.Event()
+
+
+def _open_browser(url: str):
+    """Open a browser tab. Uses 'open' directly on macOS for frozen-app reliability."""
+    if sys.platform == "darwin":
+        subprocess.Popen(["open", url])
+    else:
+        import webbrowser
+        webbrowser.open_new_tab(url)
+
+
 async def main() -> int:
+    wr = _writable_root()
+    log_dir = os.path.join(wr, 'logs')
+    os.makedirs(log_dir, exist_ok=True)
+
     logger.add(
-        "./logs/tsh_info.txt",
+        os.path.join(log_dir, "tsh_info.txt"),
         format="[{time:YYYY-MM-DD HH:mm:ss}] - {level} - {file}:{function}:{line} | {message} | {extra}",
         encoding="utf-8",
         level="INFO",
@@ -24,7 +44,7 @@ async def main() -> int:
     )
 
     logger.add(
-        "./logs/tsh_error.txt",
+        os.path.join(log_dir, "tsh_error.txt"),
         format="[{time:YYYY-MM-DD HH:mm:ss}] - {level} - {file}:{function}:{line} | {message} | {extra}",
         encoding="utf-8",
         level="ERROR",
@@ -32,10 +52,10 @@ async def main() -> int:
         enqueue=False
     )
 
-    await asyncio.wait([
-        asyncio.create_task(TSHConfig.Load()),
-        asyncio.create_task(Settings.Load())
-    ])
+    await asyncio.gather(
+        TSHConfig.Load(),
+        Settings.Load()
+    )
 
     # TSH_DEV=1 is set by `npm run server` (via package.json).
     # Running python3 main.py directly uses production mode.
@@ -62,7 +82,14 @@ async def main() -> int:
     try:
         task_serve = asyncio.create_task(uvi.serve(), name="uvicorn")
 
+        # Wait for uvicorn to start. If the task finishes before
+        # uvi.started is set, the server failed (e.g. port in use).
         while not uvi.started:
+            if task_serve.done():
+                exc = task_serve.exception()
+                logger.error("Server failed to start: {}", exc or "unknown error")
+                _server_failed.set()
+                return 1
             await asyncio.sleep(0.1)
 
         for uvi_server in uvi.servers:
@@ -77,9 +104,12 @@ async def main() -> int:
         server_url = f"http://{host}:{port}/"
         await TSHConfig.SetServerURL(server_url)
 
+        # Signal the tray (if running on main thread) that the URL is ready.
+        _server_ready.set()
+
         if autostart:
             logger.debug("opening browser to {server_url}", server_url=server_url)
-            await asyncio.to_thread(open_new_tab, server_url)
+            await asyncio.to_thread(_open_browser, server_url)
 
         logger.debug("awaiting server")
         tasks, _ = await asyncio.wait([task_serve])
@@ -92,25 +122,78 @@ async def main() -> int:
 
     return 0
 
+
+def _run_asyncio():
+    """Entry point for the background asyncio thread (macOS frozen mode)."""
+    try:
+        asyncio.run(main())
+    except (asyncio.CancelledError, KeyboardInterrupt):
+        pass
+    except Exception:
+        logger.exception("Server thread exiting due to exception")
+    finally:
+        # If server never became ready, signal failure so the main thread doesn't hang.
+        if not _server_ready.is_set():
+            _server_failed.set()
+
+
+def _writable_root() -> str:
+    """Return a writable root directory for logs and user data.
+
+    On macOS frozen builds, the .app bundle may be on a read-only volume,
+    so we use ~/Library/Application Support/PRSH/ instead.
+    On Windows or dev mode, use the current working directory.
+    """
+    if getattr(sys, 'frozen', False) and sys.platform == 'darwin':
+        app_support = os.path.join(os.path.expanduser('~'), 'Library', 'Application Support', 'PRSH')
+        os.makedirs(app_support, exist_ok=True)
+        return app_support
+    return '.'
+
+
 if __name__ == '__main__':
     # Pyinstaller fix
     multiprocessing.freeze_support()
 
-    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-        # Change working directory to the executable's location so that
-        # relative paths (./dist, ./public, ./user_data) resolve correctly.
-        os.chdir(os.path.dirname(sys.executable))
-        os.makedirs('./logs', exist_ok=True)
-        sys.stderr = open('./logs/tsh_error.txt', 'w', encoding='utf-8')
-        sys.stdout = open('./logs/tsh_info.txt', 'w', encoding='utf-8')
+    frozen = getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS')
+    if frozen:
+        # CWD is set by hooks/runtime_hook_chdir.py before imports ran.
+        # Use a writable root for logs (macOS .app bundles may be read-only).
+        wr = _writable_root()
+        log_dir = os.path.join(wr, 'logs')
+        os.makedirs(log_dir, exist_ok=True)
+        sys.stderr = open(os.path.join(log_dir, 'tsh_error.txt'), 'w', encoding='utf-8')
+        sys.stdout = open(os.path.join(log_dir, 'tsh_info.txt'), 'w', encoding='utf-8')
 
-    ret = 0
-    try:
-        ret = asyncio.run(main())
-    except (asyncio.exceptions.CancelledError, KeyboardInterrupt):
-        pass
-    except:
-        logger.exception("Exiting application due to exception")
-        sys.exit(1)
-    finally:
-        sys.exit(ret)
+    if frozen and sys.platform in ("darwin", "win32"):
+        # pystray must run on the main thread on both macOS and Windows.
+        # Run the asyncio server in a background thread instead.
+        t = threading.Thread(target=_run_asyncio, daemon=True)
+        t.start()
+
+        # Wait for the server to be ready or fail.
+        while not _server_ready.is_set() and not _server_failed.is_set():
+            _server_ready.wait(timeout=0.5)
+
+        if _server_failed.is_set():
+            logger.error("Server failed to start — exiting. Check logs for details (port may be in use).")
+            sys.exit(1)
+
+        try:
+            from server.tray import Tray
+            tray = Tray.create_tray()
+            tray.run()  # blocks main thread; user quits via "Exit" in the tray menu
+        except Exception:
+            logger.exception("Tray failed to start; server will keep running until process is killed")
+            t.join()  # keep main thread alive so the daemon server thread stays up
+    else:
+        ret = 0
+        try:
+            ret = asyncio.run(main())
+        except (asyncio.exceptions.CancelledError, KeyboardInterrupt):
+            pass
+        except Exception:
+            logger.exception("Exiting application due to exception")
+            sys.exit(1)
+        finally:
+            sys.exit(ret)

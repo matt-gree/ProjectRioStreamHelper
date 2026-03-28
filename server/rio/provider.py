@@ -17,7 +17,7 @@ def get_default_hud_file_path() -> Path:
     if system == "Darwin":
         return Path.home() / "Library" / "Application Support" / "Project Rio" / "HudFiles" / "decoded.hud.json"
     elif system == "Windows":
-        return Path.home() / "Documents" / "Project Rio" / "HudFiles" / "decoded.hud.json"
+        return Path.home() / "AppData" / "Roaming" / "Project Rio" / "HudFiles" / "decoded.hud.json"
     else:
         return Path("/invalid/path")
 
@@ -224,15 +224,24 @@ class RioGameDataProvider:
 
     @classmethod
     async def ReloadHudPath(cls):
-        """Re-read the HUD path from settings and restart the watcher if changed."""
+        """Re-read the HUD path from settings and restart the watcher if changed.
+
+        Returns True if the file was successfully read and state was updated,
+        False if the watcher started but the initial read failed.
+        Raises if no valid path is found.
+        """
         new_path = await get_user_hud_path()
         if not new_path:
-            logger.warning("[RioGameDataProvider] No valid HUD path found")
-            return
+            raise FileNotFoundError("No valid HUD path found")
 
         if cls.hud_watcher:
             if cls.hud_watcher.hud_file == new_path:
-                return
+                # Path unchanged — force a re-read
+                game = await cls.hud_watcher.reload()
+                if game:
+                    await cls._on_hud_game_update(game)
+                    return True
+                return False
             await cls.Stop()
 
         cls.hud_watcher = HudWatcher(new_path, on_update=cls._on_hud_game_update)
@@ -240,6 +249,10 @@ class RioGameDataProvider:
         game = await cls.hud_watcher.reload()
         if game:
             await cls._on_hud_game_update(game)
+            return True
+        err = cls.hud_watcher.last_error or "unknown reason"
+        logger.warning(f"[RioGameDataProvider] Watcher started but initial read of {new_path} failed: {err}")
+        return False
 
     @classmethod
     async def FetchHUDGame(cls) -> dict | None:

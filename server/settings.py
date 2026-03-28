@@ -1,10 +1,12 @@
 import asyncio
 import tomllib
 import orjson
+from pathlib import Path
 
 from aiopath import AsyncPath
 from loguru import logger
 from server import socketio
+from server.paths import user_data_dir
 from server.utils import json
 from server.utils.deep_dict import deep_set, deep_unset, deep_get
 
@@ -81,7 +83,7 @@ class Settings:
         },
         "lang": "en-US"
     }
-    _settings_out = AsyncPath('./user_data/settings.json')
+    _settings_out = AsyncPath(str(user_data_dir() / 'settings.json'))
 
     @classmethod
     async def Save(cls):
@@ -131,23 +133,25 @@ class Settings:
 class Config:
     config = {
         "name": "ProjectRioStreamHelper",
-        "version": "?",
-        "description": "",
+        "version": "1.0.0",
+        "description": "Tournament scoreboard helper and overlays for fighting game tournaments",
         "authors": [],
         "server_url": ""
     }
 
     @classmethod
     async def Load(cls) -> dict:
-        _pyproject_toml = await AsyncPath('./pyproject.toml').read_text(encoding='utf-8')
-        context = await asyncio.to_thread(tomllib.loads, _pyproject_toml)
-        context = context["tool"]["poetry"]
-
-        cls.config["name"] = context["name"]
-        cls.config["version"] = context["version"]
-        cls.config["description"] = context["description"]
-        cls.config["authors"] = context["authors"]
-
+        try:
+            text = await asyncio.to_thread(
+                Path('./pyproject.toml').read_text, encoding='utf-8'
+            )
+            context = tomllib.loads(text)["tool"]["poetry"]
+            cls.config["name"] = context["name"]
+            cls.config["version"] = context["version"]
+            cls.config["description"] = context["description"]
+            cls.config["authors"] = context["authors"]
+        except Exception:
+            pass  # frozen build or missing file; hardcoded defaults used
         return cls.config
     
     @classmethod

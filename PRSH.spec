@@ -1,15 +1,16 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller spec for TournamentStreamHelper (MSB Fork).
+"""PyInstaller spec for ProjectRioStreamHelper.
 
 Build:
-    macOS:   pyinstaller TSH.spec
-    Windows: pyinstaller TSH.spec
+    macOS:   pyinstaller PRSH.spec
+    Windows: pyinstaller PRSH.spec
 
 Prerequisites:
     1. npm install && npm run build   (creates dist/)
     2. pip install pyinstaller
     3. git submodule update --init --recursive
 """
+import os
 import platform
 
 block_cipher = None
@@ -30,10 +31,13 @@ a = Analysis(
         ('dist/.vite/manifest.json', 'dist/.vite'),
         ('dist/index.html', 'dist'),
 
-        # Public directory (game assets, layouts, favicon)
+        # Public directory (game assets, layouts, favicon, tray logo)
         ('public/game_assets', 'public/game_assets'),
         ('public/layout', 'public/layout'),
         ('public/favicon.png', 'public'),
+        ('public/logo.png', 'public'),
+        ('public/logo_tray.png', 'public'),
+        ('public/logo_tray.icns', 'public'),
 
         # Server data files
         ('server/data', 'server/data'),
@@ -41,8 +45,8 @@ a = Analysis(
         # pyrio submodule data
         ('server/rio/pyrio/CharNames.csv', 'server/rio/pyrio'),
 
-        # Default user_data game config
-        ('user_data/games', 'user_data/games'),
+        # Default user_data game config (only if directory exists)
+        *([('user_data/games', 'user_data/games')] if os.path.isdir('user_data/games') else []),
     ],
     hiddenimports=[
         # FastAPI + ASGI
@@ -75,6 +79,8 @@ a = Analysis(
         'pillow',
         'PIL',
         'pystray',
+        'pystray._darwin',   # macOS tray backend
+        'pystray._win32',    # Windows tray backend
         'cryptography',
 
         # Data science (required by pyrio)
@@ -96,6 +102,7 @@ a = Analysis(
         'server.rio.rotation',
         'server.rio.pyrio',
         'server.api',
+        'server.paths',
         'server.utils',
         'server.utils.json',
         'server.utils.deep_dict',
@@ -109,7 +116,7 @@ a = Analysis(
     ],
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=[],
+    runtime_hooks=['hooks/runtime_hook_chdir.py'],
     excludes=[
         # Exclude dev-only packages to reduce size
         'tkinter',
@@ -131,7 +138,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='TSH',
+    name='PRSH',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -152,19 +159,21 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='TSH',
+    name='PRSH',
+    contents_directory='.',  # PyInstaller 6.x: keep all files next to executable
+                              # (disables _internal/ subdir so ./dist ./public paths work)
 )
 
 # macOS .app bundle (only used when building on macOS)
 if platform.system() == 'Darwin':
     app = BUNDLE(
         coll,
-        name='TSH.app',
+        name='PRSH.app',
         icon=None,
-        bundle_identifier='com.tsh.msb',
+        bundle_identifier='com.projectrio.streamhelper',
         info_plist={
             'CFBundleShortVersionString': '1.0.0',
-            'CFBundleName': 'TournamentStreamHelper',
+            'CFBundleName': 'ProjectRioStreamHelper',
             'NSHighResolutionCapable': True,
         },
     )
