@@ -84,7 +84,8 @@ def _get_client() -> RioWeb:
     global _client
     if _client is None:
         key = load_rio_key()
-        _client = RioWeb(rio_key=key)
+        cache_dir = str(user_data_dir() / "cache")
+        _client = RioWeb(rio_key=key, cache_dir=cache_dir)
     return _client
 
 
