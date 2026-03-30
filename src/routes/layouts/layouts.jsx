@@ -2,8 +2,9 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
     Stack, Paper, Text, Group, Grid, UnstyledButton,
     CopyButton, ActionIcon, Button, Tooltip, Box, Loader, Alert, Tabs, Badge, Switch,
-    Collapse, ColorInput, FileButton, Image, TextInput,
+    Collapse, ColorInput, FileButton, Image, TextInput, Select, NumberInput,
 } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
 import { useSettingsStore, useStateStore } from '../../context/store';
 import { useShallow } from 'zustand/react/shallow';
 import useTournament from '../../hooks/useTournament';
@@ -594,6 +595,179 @@ function LayoutSettingsPanel({ layoutType }) {
     );
 }
 
+// ── Controller Overlay Panel ──
+function ControllerOverlayPanel({ selected, onSelect }) {
+    const [status, setStatus] = useState(null);
+    const [loading, setLoading] = useState(false);
+
+    const fetchStatus = useCallback(async () => {
+        try {
+            const resp = await fetch('/api/v1/controller/status');
+            setStatus(await resp.json());
+        } catch { /* ignore */ }
+    }, []);
+
+    useEffect(() => { fetchStatus(); }, [fetchStatus]);
+
+    // Poll status while running
+    useEffect(() => {
+        if (!status?.running) return;
+        const id = setInterval(fetchStatus, 5000);
+        return () => clearInterval(id);
+    }, [status?.running, fetchStatus]);
+
+    const handleStart = useCallback(async () => {
+        setLoading(true);
+        try {
+            const resp = await fetch('/api/v1/controller/start', { method: 'POST' });
+            const data = await resp.json();
+            if (data.success) {
+                notifications.show({ message: 'Controller overlay started', color: 'green' });
+                await fetchStatus();
+            } else {
+                notifications.show({ message: data.error || 'Failed to start', color: 'red' });
+            }
+        } catch (e) {
+            notifications.show({ message: 'Failed to start controller overlay', color: 'red' });
+        }
+        setLoading(false);
+    }, [fetchStatus]);
+
+    const handleStop = useCallback(async () => {
+        setLoading(true);
+        try {
+            const resp = await fetch('/api/v1/controller/stop', { method: 'POST' });
+            const data = await resp.json();
+            if (data.success) {
+                notifications.show({ message: 'Controller overlay stopped', color: 'blue' });
+                await fetchStatus();
+            }
+        } catch { /* ignore */ }
+        setLoading(false);
+    }, [fetchStatus]);
+
+    const handleSelectPort = useCallback(async (portNum) => {
+        // Set the controller port on the backend
+        try {
+            await fetch(`/api/v1/controller/player?controller=${portNum}`, { method: 'PUT' });
+            await fetchStatus();
+        } catch { /* ignore */ }
+
+        const overlayUrl = `http://localhost:${status?.port ?? 8069}`;
+        onSelect({
+            group: 'controller',
+            name: `Player ${portNum} Controller`,
+            type: 'controller',
+            url: overlayUrl,
+            width: 512,
+            height: 256,
+            _controllerPort: portNum,
+        });
+    }, [status?.port, onSelect, fetchStatus]);
+
+    if (!status) return <Loader size="xs" />;
+
+    if (!status.available) {
+        return (
+            <Stack gap="xs">
+                <Text size="sm" c="dimmed">
+                    Controller overlay (gc-overlay) not found.
+                </Text>
+                <Text size="xs" c="dimmed">
+                    Place the gc-overlay repository next to this project, or set the path in Settings.
+                </Text>
+            </Stack>
+        );
+    }
+
+    const overlayUrl = `http://localhost:${status.port}`;
+
+    return (
+        <Stack gap="sm">
+            <Group justify="space-between">
+                <Group gap="xs">
+                    <Box
+                        style={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: '50%',
+                            backgroundColor: status.running ? '#22c55e' : '#6b7280',
+                        }}
+                    />
+                    <Text size="sm" fw={600}>
+                        {status.running ? 'Running' : 'Stopped'}
+                    </Text>
+                </Group>
+                <Button
+                    size="compact-xs"
+                    variant={status.running ? 'light' : 'filled'}
+                    color={status.running ? 'red' : 'green'}
+                    onClick={status.running ? handleStop : handleStart}
+                    loading={loading}
+                >
+                    {status.running ? 'Stop' : 'Start'}
+                </Button>
+            </Group>
+
+            {status.running && (
+                <Text size="xs" c="dimmed">OBS Browser Source: 512 x 256</Text>
+            )}
+
+            {/* Port entries */}
+            <Stack gap={4}>
+                {[1, 2, 3, 4].map(portNum => {
+                    const isActive = selected?._controllerPort === portNum;
+                    const isCurrentPort = status.controller === portNum;
+                    return (
+                        <UnstyledButton
+                            key={portNum}
+                            onClick={() => handleSelectPort(portNum)}
+                            p="xs"
+                            style={(theme) => ({
+                                borderRadius: theme.radius.sm,
+                                backgroundColor: isActive ? theme.colors.blue[0] : 'transparent',
+                                border: isActive
+                                    ? `1px solid ${theme.colors.blue[3]}`
+                                    : '1px solid transparent',
+                                opacity: status.running ? 1 : 0.5,
+                            })}
+                            disabled={!status.running}
+                        >
+                            <Group justify="space-between" wrap="nowrap" gap={4}>
+                                <div style={{ minWidth: 0, flex: 1 }}>
+                                    <Text size="sm">Player {portNum}</Text>
+                                    <Text size="xs" c="dimmed">Port {portNum} {isCurrentPort && status.running ? '(active)' : ''}</Text>
+                                </div>
+                                {status.running && (
+                                    <CopyButton value={overlayUrl}>
+                                        {({ copied, copy }) => (
+                                            <Tooltip label={copied ? 'Copied!' : 'Copy URL'}>
+                                                <ActionIcon
+                                                    variant="subtle"
+                                                    color={copied ? 'teal' : 'gray'}
+                                                    onClick={(e) => { e.stopPropagation(); copy(); }}
+                                                >
+                                                    {copied ? '\u2713' : '\u2398'}
+                                                </ActionIcon>
+                                            </Tooltip>
+                                        )}
+                                    </CopyButton>
+                                )}
+                            </Group>
+                        </UnstyledButton>
+                    );
+                })}
+            </Stack>
+
+            {!status.running && (
+                <Text size="xs" c="dimmed" fs="italic">
+                    Start the overlay to preview and copy OBS URLs.
+                </Text>
+            )}
+        </Stack>
+    );
+}
+
 export default function LayoutBrowser() {
     const active = useSettingsStore(s => s?.scoreboards?.active ?? [1]);
     const sources = useSettingsStore(s => s?.scoreboards?.sources ?? {});
@@ -607,7 +781,7 @@ export default function LayoutBrowser() {
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
 
-    // Top-level mode: 'scoreboard' or 'bracket'
+    // Top-level mode: 'scoreboard', 'bracket', or 'controller'
     const [mode, setMode] = useState('scoreboard');
 
     const fetchLayouts = useCallback(async () => {
@@ -698,11 +872,12 @@ export default function LayoutBrowser() {
 
     return (
         <Stack gap="md">
-            {/* Top-level mode tabs: Scoreboards vs Bracket */}
+            {/* Top-level mode tabs */}
             <Tabs value={mode} onChange={setMode} variant="pills">
                 <Tabs.List>
                     <Tabs.Tab value="scoreboard">Scoreboards</Tabs.Tab>
                     <Tabs.Tab value="bracket">Bracket</Tabs.Tab>
+                    <Tabs.Tab value="controller">Controller</Tabs.Tab>
                 </Tabs.List>
             </Tabs>
 
@@ -765,6 +940,13 @@ export default function LayoutBrowser() {
                                 baseUrl={baseUrl}
                             />
                         )}
+
+                        {mode === 'controller' && (
+                            <ControllerOverlayPanel
+                                selected={selected}
+                                onSelect={setSelected}
+                            />
+                        )}
                     </Stack>
                 </Grid.Col>
 
@@ -813,6 +995,8 @@ export default function LayoutBrowser() {
                                 <Text c="dimmed">
                                     {mode === 'bracket'
                                         ? 'Select a bracket phase to preview'
+                                        : mode === 'controller'
+                                        ? 'Start the controller overlay to preview'
                                         : 'Select a layout to preview'}
                                 </Text>
                             </Box>

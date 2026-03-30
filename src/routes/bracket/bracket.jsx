@@ -1,8 +1,9 @@
 import { useCallback, useEffect } from 'react';
 import {
     Text, Paper, Stack, Group, TextInput, Button, Select, Table,
-    Alert, Badge, Checkbox, Pagination, Tooltip,
+    Alert, Badge, Checkbox, Pagination, Tooltip, Skeleton,
 } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
 import { useStateStore, useSettingsStore, useBracketStore } from '../../context/store';
 import useTournament, { detectSource } from '../../hooks/useTournament';
 
@@ -58,7 +59,12 @@ export default function Bracket() {
     const handleLoadEvent = useCallback(async () => {
         if (!url.trim()) return;
         const result = await loadEvent(url.trim());
-        if (!result) return;
+        if (!result) {
+            notifications.show({ message: 'Failed to load tournament', color: 'red' });
+            return;
+        }
+
+        notifications.show({ message: `Loaded: ${result.tournamentName}`, color: 'green' });
 
         update({
             tournament: result,
@@ -104,6 +110,9 @@ export default function Bracket() {
         const result = await loadSet(setId, sbNum);
         if (result) {
             update({ loadedSets: { ...loadedSets, [sbNum]: setId } });
+            notifications.show({ message: `Set loaded into Scoreboard ${sbNum}`, color: 'green' });
+        } else {
+            notifications.show({ message: 'Failed to load set', color: 'red' });
         }
     }, [loadSet, update, loadedSets]);
 
@@ -324,6 +333,28 @@ export default function Bracket() {
                                 />
                             </Group>
                         )}
+                    </Stack>
+                </Paper>
+            )}
+
+            {/* Empty state when no tournament loaded */}
+            {!tournament && !loading && (
+                <Paper withBorder p="xl">
+                    <Stack align="center" gap="xs">
+                        <Text size="sm" c="dimmed">
+                            No tournament loaded. Paste a Start.gg or Challonge URL above to get started.
+                        </Text>
+                    </Stack>
+                </Paper>
+            )}
+
+            {/* Empty state when tournament loaded but no sets for selected phase */}
+            {tournament && selectedPhase && sets.length === 0 && !loading && (
+                <Paper withBorder p="xl">
+                    <Stack align="center" gap="xs">
+                        <Text size="sm" c="dimmed">
+                            No sets found for this phase. Try enabling "Include completed" or selecting a different phase.
+                        </Text>
                     </Stack>
                 </Paper>
             )}

@@ -69,6 +69,12 @@ class Settings:
         "challonge": {
             "api_key": ""
         },
+        "controller_overlay": {
+            "path": "",
+            "port": 8069,
+            "controller": 1,
+            "auto_start": False
+        },
         "overlays": {
             "scoreboard": {
                 "showCaptains": True,

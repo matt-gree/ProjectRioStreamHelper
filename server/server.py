@@ -17,6 +17,7 @@ from server.rio.provider import RioGameDataProvider
 from server.settings import Settings, Config
 from server.startgg.provider import StartGGProvider
 from server.challonge.provider import ChallongeProvider
+from server.controller_overlay import ControllerOverlay
 from server.state import State
 from server.utils import json
 
@@ -53,11 +54,13 @@ async def lifespan(app: FastAPI):
     await RotationManager.Start()
     await StartGGProvider.Start()
     await ChallongeProvider.Start()
+    await ControllerOverlay.Start()
 
     # wait for signal for shutdown
     yield
 
     # on_shutdown
+    await ControllerOverlay.Stop()
     await ChallongeProvider.Stop()
     await StartGGProvider.Stop()
     await RotationManager.Stop()

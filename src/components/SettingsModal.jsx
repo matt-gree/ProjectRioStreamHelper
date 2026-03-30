@@ -1,24 +1,19 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-    Modal, Stack, PasswordInput, Button, Group, Badge, Text, Divider, Loader,
+    Modal, Stack, PasswordInput, Button, Group, Badge, Text, Divider,
     TextInput, ActionIcon, Tooltip,
 } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
 
 
 /**
- * Settings modal with Project Rio API key management and HUD path configuration.
+ * Settings modal with HUD path configuration and Challonge API key.
  */
 export default function SettingsModal({ opened, onClose }) {
-    const [keyValue, setKeyValue] = useState('');
-    const [configured, setConfigured] = useState(false);
-    const [saving, setSaving] = useState(false);
-
     // Challonge API key state
     const [challongeKey, setChallongeKey] = useState('');
     const [challongeConfigured, setChallongeConfigured] = useState(false);
     const [challongeSaving, setChallongeSaving] = useState(false);
-    const [refreshingModes, setRefreshingModes] = useState(false);
-    const [modeCount, setModeCount] = useState(null);
 
     // HUD path state
     const [hudPath, setHudPath] = useState('');
@@ -27,22 +22,6 @@ export default function SettingsModal({ opened, onClose }) {
     const [browsingInProgress, setBrowsingInProgress] = useState(false);
     const [savingPath, setSavingPath] = useState(false);
     const [hudPathError, setHudPathError] = useState('');
-
-    const fetchStatus = useCallback(async () => {
-        try {
-            const resp = await fetch('/api/v1/rio/key/status');
-            const data = await resp.json();
-            setConfigured(!!data.configured);
-        } catch { /* ignore */ }
-    }, []);
-
-    const fetchModeCount = useCallback(async () => {
-        try {
-            const resp = await fetch('/api/v1/rio/game-modes');
-            const data = await resp.json();
-            setModeCount(Object.keys(data).length);
-        } catch { /* ignore */ }
-    }, []);
 
     const fetchHudPath = useCallback(async () => {
         try {
@@ -73,49 +52,21 @@ export default function SettingsModal({ opened, onClose }) {
             if (data.success) {
                 setChallongeConfigured(true);
                 setChallongeKey('');
+                notifications.show({ message: 'Challonge API key saved', color: 'green' });
             }
-        } catch { /* ignore */ }
+        } catch {
+            notifications.show({ message: 'Failed to save Challonge API key', color: 'red' });
+        }
         setChallongeSaving(false);
     }, [challongeKey]);
 
     useEffect(() => {
         if (opened) {
-            fetchStatus();
-            fetchModeCount();
             fetchHudPath();
             fetchChallongeStatus();
-            setKeyValue('');
             setChallongeKey('');
         }
-    }, [opened, fetchStatus, fetchModeCount, fetchHudPath, fetchChallongeStatus]);
-
-    const handleRefreshModes = useCallback(async () => {
-        setRefreshingModes(true);
-        try {
-            const resp = await fetch('/api/v1/rio/game-modes/refresh', { method: 'POST' });
-            const data = await resp.json();
-            if (data.success) setModeCount(data.count);
-        } catch { /* ignore */ }
-        setRefreshingModes(false);
-    }, []);
-
-    const handleSave = useCallback(async () => {
-        if (!keyValue.trim()) return;
-        setSaving(true);
-        try {
-            const resp = await fetch('/api/v1/rio/key', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ key: keyValue.trim() }),
-            });
-            const data = await resp.json();
-            if (data.success) {
-                setConfigured(true);
-                setKeyValue('');
-            }
-        } catch { /* ignore */ }
-        setSaving(false);
-    }, [keyValue]);
+    }, [opened, fetchHudPath, fetchChallongeStatus]);
 
     const handleSetHudPath = useCallback(async (path) => {
         setSavingPath(true);
@@ -128,12 +79,16 @@ export default function SettingsModal({ opened, onClose }) {
                 setResolvedPath(data.resolved || null);
                 if (data.warning) {
                     setHudPathError(data.warning);
+                } else {
+                    notifications.show({ message: path ? 'HUD path updated' : 'HUD path reset to default', color: 'green' });
                 }
             } else {
                 setHudPathError(data.error || 'Failed to set path');
+                notifications.show({ message: data.error || 'Failed to set HUD path', color: 'red' });
             }
         } catch (e) {
             setHudPathError(String(e));
+            notifications.show({ message: 'Failed to set HUD path', color: 'red' });
         }
         setSavingPath(false);
     }, []);
@@ -218,54 +173,6 @@ export default function SettingsModal({ opened, onClose }) {
                 {hudPathError && (
                     <Text size="xs" c="red">{hudPathError}</Text>
                 )}
-
-                <Divider />
-
-                {/* API Key */}
-                <Group justify="space-between">
-                    <Text size="sm">API Key</Text>
-                    <Badge
-                        size="sm"
-                        color={configured ? 'green' : 'red'}
-                        variant="filled"
-                    >
-                        {configured ? 'Configured' : 'Not Set'}
-                    </Badge>
-                </Group>
-                <PasswordInput
-                    placeholder="Enter your Rio API key"
-                    size="xs"
-                    value={keyValue}
-                    onChange={e => setKeyValue(e.currentTarget.value)}
-                />
-                <Button
-                    size="xs"
-                    onClick={handleSave}
-                    disabled={!keyValue.trim() || saving}
-                    loading={saving}
-                >
-                    Save Key
-                </Button>
-
-                <Divider />
-
-                <Group justify="space-between">
-                    <Text size="sm">Game Modes</Text>
-                    {modeCount !== null && (
-                        <Badge size="sm" variant="light">
-                            {modeCount} loaded
-                        </Badge>
-                    )}
-                </Group>
-                <Button
-                    size="xs"
-                    variant="outline"
-                    onClick={handleRefreshModes}
-                    disabled={refreshingModes}
-                    leftSection={refreshingModes ? <Loader size={12} /> : null}
-                >
-                    {refreshingModes ? 'Refreshing...' : 'Refresh Game Modes'}
-                </Button>
 
                 <Divider label="Challonge" labelPosition="center" />
 

@@ -3,6 +3,7 @@ import {
     TextInput, NumberInput, Stack, Paper, Text, Grid, Group, Divider, Button,
     Popover, Alert, Table, Pagination, ScrollArea, UnstyledButton,
 } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
 import { FormattedMessage } from 'react-intl';
 import { useStateStore } from '../../context/store';
 import useTournament from '../../hooks/useTournament';
@@ -127,6 +128,9 @@ export default function TournamentInfo() {
         const result = await loadEvent(sggUrl.trim());
         if (result) {
             setSggOpen(false);
+            notifications.show({ message: `Tournament loaded: ${result.tournamentName}`, color: 'green' });
+        } else {
+            notifications.show({ message: 'Failed to load tournament', color: 'red' });
         }
     }, [sggUrl, loadEvent]);
 
