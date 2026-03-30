@@ -93,6 +93,14 @@ export default memo(function RotationControls({ scoreboardNumber }) {
     }, []);
     useSocketSubscribe('v1.game_pool.ongoing_update', handleOngoingUpdate);
 
+    // Listen for rotation status updates from the server
+    const handleRotationStatus = useCallback((payload) => {
+        if (payload?.scoreboard === scoreboardNumber) {
+            setRotationStatus(payload);
+        }
+    }, [scoreboardNumber]);
+    useSocketSubscribe('v1.rotation.status', handleRotationStatus);
+
     const fetchOngoing = useCallback(async () => {
         setLoadingOngoing(true);
         try {

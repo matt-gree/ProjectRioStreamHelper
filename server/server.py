@@ -15,6 +15,8 @@ from server.rio.game_pool import OngoingGamePool, CompletedGamePool
 from server.rio.rotation import RotationManager
 from server.rio.provider import RioGameDataProvider
 from server.settings import Settings, Config
+from server.startgg.provider import StartGGProvider
+from server.challonge.provider import ChallongeProvider
 from server.state import State
 from server.utils import json
 
@@ -49,11 +51,15 @@ async def lifespan(app: FastAPI):
     await OngoingGamePool.Start()
     await CompletedGamePool.Start()
     await RotationManager.Start()
+    await StartGGProvider.Start()
+    await ChallongeProvider.Start()
 
     # wait for signal for shutdown
     yield
 
     # on_shutdown
+    await ChallongeProvider.Stop()
+    await StartGGProvider.Stop()
     await RotationManager.Stop()
     await CompletedGamePool.Stop()
     await OngoingGamePool.Stop()

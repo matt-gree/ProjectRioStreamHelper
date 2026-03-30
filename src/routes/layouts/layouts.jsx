@@ -4,8 +4,9 @@ import {
     CopyButton, ActionIcon, Button, Tooltip, Box, Loader, Alert, Tabs, Badge, Switch,
     Collapse, ColorInput, FileButton, Image, TextInput,
 } from '@mantine/core';
-import { useSettingsStore } from '../../context/store';
+import { useSettingsStore, useStateStore } from '../../context/store';
 import { useShallow } from 'zustand/react/shallow';
+import useTournament from '../../hooks/useTournament';
 
 const PREVIEW_HEIGHT = 500;
 
@@ -27,6 +28,9 @@ const LAYOUT_SETTINGS = {
         { key: 'accentColor', type: 'color', label: 'Accent Color', description: 'Primary highlight color' },
     ],
     teamlogo: [],
+    bracket: [
+        { key: 'accentColor', type: 'color', label: 'Accent Color', description: 'Primary highlight color' },
+    ],
 };
 
 function ScaledIframe({ src }) {
@@ -169,7 +173,7 @@ function LayoutItem({ item, selected, onSelect, activeTab }) {
     );
 }
 
-function LayoutList({ layouts, selected, onSelect }) {
+function LayoutList({ layouts, selected, onSelect, activeTab }) {
     const [expandedGroups, setExpandedGroups] = useState({});
 
     if (layouts.length === 0) {
@@ -233,6 +237,7 @@ function LayoutList({ layouts, selected, onSelect }) {
                                         item={item}
                                         selected={selected}
                                         onSelect={onSelect}
+                                        activeTab={activeTab}
                                     />
                                 ))}
                             </Stack>
@@ -248,8 +253,203 @@ function LayoutList({ layouts, selected, onSelect }) {
                     item={item}
                     selected={selected}
                     onSelect={onSelect}
+                    activeTab={activeTab}
                 />
             ))}
+        </Stack>
+    );
+}
+
+// ── Bracket Layout List (dynamic, based on loaded tournament phases) ──
+const BRACKET_VARIANTS = [
+    { key: 'full', label: 'Full Bracket', path: '/layout/bracket/index.html' },
+    { key: 'winners', label: 'Winners Only', path: '/layout/bracket/index.html?winners_only=true' },
+    { key: 'losers', label: 'Losers Only', path: '/layout/bracket/index.html?losers_only=true' },
+];
+
+function BracketLayoutList({ selected, onSelect, baseUrl, onLoadBracket }) {
+    const [expandedGroups, setExpandedGroups] = useState({});
+    const bracketLink = useStateStore(s => s?.tournamentInfo?.bracket_link ?? '');
+    const { loading: sggLoading, setSource, fetchPhases, loadBracket } = useTournament();
+
+    const [phases, setPhases] = useState([]);
+    const [loadedPgId, setLoadedPgId] = useState(null);
+    const [phasesLoaded, setPhasesLoaded] = useState(false);
+
+    // Fetch phases when bracket_link exists
+    useEffect(() => {
+        if (bracketLink && !phasesLoaded) {
+            setSource(bracketLink);
+            fetchPhases().then(result => {
+                if (result) {
+                    setPhases(result);
+                    setPhasesLoaded(true);
+                }
+            });
+        }
+    }, [bracketLink, phasesLoaded, fetchPhases]);
+
+    // Reset if bracket_link changes
+    useEffect(() => {
+        setPhasesLoaded(false);
+        setPhases([]);
+        setLoadedPgId(null);
+    }, [bracketLink]);
+
+    if (!bracketLink) {
+        return (
+            <Text size="xs" c="dimmed" fs="italic">
+                Load a tournament in the Bracket tab to see bracket layouts.
+            </Text>
+        );
+    }
+
+    if (!phasesLoaded) {
+        return <Loader size="xs" />;
+    }
+
+    // Build phase groups from phases
+    const phaseGroups = [];
+    for (const phase of phases) {
+        for (const pg of (phase.phaseGroups || [])) {
+            const label = phases.length > 1 || (phase.phaseGroups?.length > 1)
+                ? `${phase.name}${phase.phaseGroups.length > 1 ? ` - Pool ${pg.displayIdentifier}` : ''}`
+                : phase.name;
+            phaseGroups.push({
+                id: pg.id,
+                label,
+                bracketType: pg.bracketType,
+            });
+        }
+    }
+
+    if (phaseGroups.length === 0) {
+        return <Text size="xs" c="dimmed">No bracket phases found.</Text>;
+    }
+
+    const toggleGroup = (key) => {
+        setExpandedGroups(prev => ({ ...prev, [key]: !prev[key] }));
+    };
+
+    const handleSelect = async (pg, variant) => {
+        // Build the item for the layout preview
+        const url = `${baseUrl}${variant.path}`;
+        const item = {
+            group: 'bracket',
+            name: `${pg.label} — ${variant.label}`,
+            type: 'bracket',
+            url,
+            width: 1600,
+            height: 900,
+            _phaseGroupId: pg.id,
+        };
+
+        // Load bracket data into State if not already loaded for this phase group
+        if (loadedPgId !== pg.id) {
+            const result = await loadBracket(pg.id);
+            if (result) {
+                setLoadedPgId(pg.id);
+            }
+        }
+
+        onSelect(item);
+        if (onLoadBracket) onLoadBracket(pg.id);
+    };
+
+    const isVariantSelected = (pgId, variantKey) => {
+        return selected?._phaseGroupId === pgId && selected?.url?.includes(
+            variantKey === 'full' ? 'index.html' :
+            variantKey === 'winners' ? 'winners_only=true' :
+            'losers_only=true'
+        ) && (variantKey === 'full' ? !selected?.url?.includes('_only=true') : true);
+    };
+
+    const isGroupActive = (pgId) => selected?._phaseGroupId === pgId;
+
+    return (
+        <Stack gap={4}>
+            {phaseGroups.map(pg => {
+                const key = `bracket-${pg.id}`;
+                const open = expandedGroups[key] || isGroupActive(pg.id);
+                const variants = pg.bracketType === 'ROUND_ROBIN'
+                    ? [BRACKET_VARIANTS[0]] // Round robin only has full view
+                    : BRACKET_VARIANTS;
+
+                return (
+                    <div key={key}>
+                        <UnstyledButton
+                            onClick={() => toggleGroup(key)}
+                            p="xs"
+                            style={(theme) => ({
+                                borderRadius: theme.radius.sm,
+                                width: '100%',
+                                backgroundColor: isGroupActive(pg.id)
+                                    ? theme.colors.violet[0]
+                                    : 'transparent',
+                            })}
+                        >
+                            <Group justify="space-between" wrap="nowrap">
+                                <Text size="sm" fw={600}>{pg.label}</Text>
+                                <Group gap={4}>
+                                    {loadedPgId === pg.id && (
+                                        <Badge size="xs" variant="light" color="green">loaded</Badge>
+                                    )}
+                                    <Text size="xs" c="dimmed">
+                                        {open ? '\u25B4' : '\u25BE'}
+                                    </Text>
+                                </Group>
+                            </Group>
+                        </UnstyledButton>
+                        <Collapse in={open}>
+                            <Stack gap={2} pl="sm">
+                                {variants.map(variant => {
+                                    const active = isVariantSelected(pg.id, variant.key);
+                                    return (
+                                        <UnstyledButton
+                                            key={variant.key}
+                                            onClick={() => handleSelect(pg, variant)}
+                                            p="xs"
+                                            style={(theme) => ({
+                                                borderRadius: theme.radius.sm,
+                                                backgroundColor: active
+                                                    ? theme.colors.blue[0]
+                                                    : 'transparent',
+                                                border: active
+                                                    ? `1px solid ${theme.colors.blue[3]}`
+                                                    : '1px solid transparent',
+                                            })}
+                                        >
+                                            <Group justify="space-between" wrap="nowrap" gap={4}>
+                                                <div style={{ minWidth: 0, flex: 1 }}>
+                                                    <Text size="sm">{variant.label}</Text>
+                                                    <Text size="xs" c="dimmed">1600 x 900</Text>
+                                                </div>
+                                                <CopyButton value={`${baseUrl}${variant.path}`}>
+                                                    {({ copied, copy }) => (
+                                                        <Tooltip label={copied ? 'Copied!' : 'Copy URL'}>
+                                                            <ActionIcon
+                                                                variant="subtle"
+                                                                color={copied ? 'teal' : 'gray'}
+                                                                size="sm"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    copy();
+                                                                }}
+                                                            >
+                                                                {copied ? '\u2713' : '\u2398'}
+                                                            </ActionIcon>
+                                                        </Tooltip>
+                                                    )}
+                                                </CopyButton>
+                                            </Group>
+                                        </UnstyledButton>
+                                    );
+                                })}
+                            </Stack>
+                        </Collapse>
+                    </div>
+                );
+            })}
         </Stack>
     );
 }
@@ -403,9 +603,12 @@ export default function LayoutBrowser() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [selected, setSelected] = useState(null);
-    const [activeTab, setActiveTab] = useState(String(active[0] ?? 1));
+    const [activeScoreboardTab, setActiveScoreboardTab] = useState(String(active[0] ?? 1));
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+
+    // Top-level mode: 'scoreboard' or 'bracket'
+    const [mode, setMode] = useState('scoreboard');
 
     const fetchLayouts = useCallback(async () => {
         setLoading(true);
@@ -430,14 +633,17 @@ export default function LayoutBrowser() {
     const filteredLayouts = useMemo(() => {
         const q = searchQuery.toLowerCase().trim();
         return allLayouts.filter(l => {
+            // Bracket layouts are handled by BracketLayoutList
+            if (l.group === 'bracket') return false;
             if (!l.group.startsWith('scoreboard')) return false;
             if (q && !l.name.toLowerCase().includes(q)) return false;
             return true;
         });
     }, [allLayouts, searchQuery]);
 
-    // Auto-select first layout when tab changes
+    // Auto-select first layout when tab changes (scoreboard mode only)
     useEffect(() => {
+        if (mode !== 'scoreboard') return;
         if (filteredLayouts.length > 0) {
             setSelected(prev => {
                 if (prev && filteredLayouts.some(l => l.url === prev.url)) return prev;
@@ -446,12 +652,19 @@ export default function LayoutBrowser() {
         } else {
             setSelected(null);
         }
-    }, [filteredLayouts]);
+    }, [filteredLayouts, mode]);
 
-    // Clear search on tab switch
+    // Clear search and selection on mode switch
     useEffect(() => {
         setSearchQuery('');
-    }, [activeTab]);
+        setSelected(null);
+        setSettingsOpen(false);
+    }, [mode]);
+
+    // Clear search on scoreboard tab switch
+    useEffect(() => {
+        setSearchQuery('');
+    }, [activeScoreboardTab]);
 
     // Close settings panel when layout selection changes
     useEffect(() => {
@@ -461,39 +674,60 @@ export default function LayoutBrowser() {
     const selectedType = selected?.type;
     const hasSettings = selectedType && LAYOUT_SETTINGS[selectedType]?.length > 0;
 
-    // Build the URL with the active scoreboard number injected as a query param
+    // Build the URL — inject scoreboard param only for scoreboard layouts
     const selectedUrl = useMemo(() => {
         if (!selected?.url) return null;
         try {
             const u = new URL(selected.url);
-            u.searchParams.set('scoreboard', activeTab);
+            if (mode === 'scoreboard') {
+                u.searchParams.set('scoreboard', activeScoreboardTab);
+            }
             return u.toString();
         } catch {
             return selected.url;
         }
-    }, [selected?.url, activeTab]);
+    }, [selected?.url, activeScoreboardTab, mode]);
+
+    const baseUrl = useMemo(() => {
+        try {
+            const first = allLayouts.find(l => l.group === 'bracket');
+            if (first) return new URL(first.url).origin;
+        } catch {}
+        return `http://localhost:5260`;
+    }, [allLayouts]);
 
     return (
         <Stack gap="md">
-            <Tabs value={activeTab} onChange={setActiveTab} variant="outline">
+            {/* Top-level mode tabs: Scoreboards vs Bracket */}
+            <Tabs value={mode} onChange={setMode} variant="pills">
                 <Tabs.List>
-                    {active.map(sbId => {
-                        const src = sources[sbId] ?? sources[String(sbId)];
-                        const srcType = src?.type ?? 'manual';
-                        const alias = aliases[sbId] ?? aliases[String(sbId)] ?? '';
-                        const label = alias || `Scoreboard ${sbId}`;
-                        return (
-                            <Tabs.Tab key={sbId} value={String(sbId)} rightSection={
-                                <Badge size="xs" variant="light" color={SOURCE_COLORS[srcType]}>
-                                    {srcType}
-                                </Badge>
-                            }>
-                                {label}
-                            </Tabs.Tab>
-                        );
-                    })}
+                    <Tabs.Tab value="scoreboard">Scoreboards</Tabs.Tab>
+                    <Tabs.Tab value="bracket">Bracket</Tabs.Tab>
                 </Tabs.List>
             </Tabs>
+
+            {/* Scoreboard sub-tabs (only in scoreboard mode) */}
+            {mode === 'scoreboard' && (
+                <Tabs value={activeScoreboardTab} onChange={setActiveScoreboardTab} variant="outline">
+                    <Tabs.List>
+                        {active.map(sbId => {
+                            const src = sources[sbId] ?? sources[String(sbId)];
+                            const srcType = src?.type ?? 'manual';
+                            const alias = aliases[sbId] ?? aliases[String(sbId)] ?? '';
+                            const label = alias || `Scoreboard ${sbId}`;
+                            return (
+                                <Tabs.Tab key={sbId} value={String(sbId)} rightSection={
+                                    <Badge size="xs" variant="light" color={SOURCE_COLORS[srcType]}>
+                                        {srcType}
+                                    </Badge>
+                                }>
+                                    {label}
+                                </Tabs.Tab>
+                            );
+                        })}
+                    </Tabs.List>
+                </Tabs>
+            )}
 
             <Grid gutter="md">
                 {/* Left panel: layout list */}
@@ -503,21 +737,34 @@ export default function LayoutBrowser() {
                             Select a layout to preview. Copy the URL into an OBS Browser Source.
                         </Text>
 
-                        <TextInput
-                            placeholder="Search layouts..."
-                            size="xs"
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.currentTarget.value)}
-                        />
+                        {mode === 'scoreboard' && (
+                            <>
+                                <TextInput
+                                    placeholder="Search layouts..."
+                                    size="xs"
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.currentTarget.value)}
+                                />
 
-                        {loading && <Loader size="sm" />}
-                        {error && <Alert color="red" title="Error">{error}</Alert>}
+                                {loading && <Loader size="sm" />}
+                                {error && <Alert color="red" title="Error">{error}</Alert>}
 
-                        <LayoutList
-                            layouts={filteredLayouts}
-                            selected={selected}
-                            onSelect={setSelected}
-                        />
+                                <LayoutList
+                                    layouts={filteredLayouts}
+                                    selected={selected}
+                                    onSelect={setSelected}
+                                    activeTab={activeScoreboardTab}
+                                />
+                            </>
+                        )}
+
+                        {mode === 'bracket' && (
+                            <BracketLayoutList
+                                selected={selected}
+                                onSelect={setSelected}
+                                baseUrl={baseUrl}
+                            />
+                        )}
                     </Stack>
                 </Grid.Col>
 
@@ -563,7 +810,11 @@ export default function LayoutBrowser() {
                                     justifyContent: 'center',
                                 }}
                             >
-                                <Text c="dimmed">Select a layout to preview</Text>
+                                <Text c="dimmed">
+                                    {mode === 'bracket'
+                                        ? 'Select a bracket phase to preview'
+                                        : 'Select a layout to preview'}
+                                </Text>
                             </Box>
                         )}
                     </Paper>

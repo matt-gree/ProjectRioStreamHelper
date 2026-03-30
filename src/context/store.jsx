@@ -87,6 +87,24 @@ export const useConfigStore = create((set) => ({
     mergeItems: (items) => set(items)
 }));
 
+// Bracket tab UI state — persists across tab switches (not synced to server)
+export const useBracketStore = create((set) => ({
+    tournament: null,
+    phases: [],
+    selectedPhase: null,
+    selectedPool: null,
+    sets: [],
+    setsPage: 1,
+    setsTotalPages: 0,
+    includeFinished: false,
+    loadedSets: {},
+    entrants: [],
+    entrantsPage: 1,
+    entrantsTotalPages: 0,
+    showEntrants: false,
+    update: (partial) => set(partial),
+}));
+
 export const useStoresLoaded = () => {
     const stateLoaded = useStateStore(state => state.loaded);
     const settingsLoaded = useSettingsStore(state => state.loaded);

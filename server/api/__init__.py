@@ -10,6 +10,8 @@ from server.api.v1 import (
     stats,
     layouts,
     branding,
+    startgg,
+    challonge,
 )
 
 router_v1 = APIRouter(
@@ -27,3 +29,5 @@ router_v1.include_router(rotation.router)
 router_v1.include_router(stats.router)
 router_v1.include_router(layouts.router)
 router_v1.include_router(branding.router)
+router_v1.include_router(startgg.router)
+router_v1.include_router(challonge.router)

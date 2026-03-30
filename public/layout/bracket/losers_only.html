@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <script>
+    // Redirect to main bracket with losers_only flag
+    const params = new URLSearchParams(window.location.search);
+    params.set('losers_only', 'true');
+    window.location.replace('index.html?' + params.toString());
+  </script>
+</head>
+<body></body>
+</html>

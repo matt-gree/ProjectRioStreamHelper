@@ -66,6 +66,9 @@ class Settings:
                 "1": {"type": "manual", "api_game_id": None}
             }
         },
+        "challonge": {
+            "api_key": ""
+        },
         "overlays": {
             "scoreboard": {
                 "showCaptains": True,
@@ -79,7 +82,10 @@ class Settings:
             "stats": {
                 "accentColor": "#f59e0b"
             },
-            "teamlogo": {}
+            "teamlogo": {},
+            "bracket": {
+                "accentColor": "#f59e0b"
+            }
         },
         "lang": "en-US"
     }

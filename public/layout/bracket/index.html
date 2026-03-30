@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --accent: #f59e0b;
+      --accent-rgb: 245, 158, 11;
+      --player-height: 28px;
+      --set-gap: 6px;
+      --round-gap: 48px;
+      --name-size: 13px;
+      --score-size: 13px;
+      --round-label-size: 12px;
+      --connector-color: rgba(255, 255, 255, 0.2);
+      --connector-width: 2px;
+      --bg-card: rgba(15, 15, 25, 0.92);
+      --bg-slot: rgba(255, 255, 255, 0.06);
+      --bg-slot-winner: rgba(var(--accent-rgb), 0.15);
+      --bg-slot-active: rgba(59, 130, 246, 0.15);
+      --text-primary: #fff;
+      --text-dimmed: rgba(255, 255, 255, 0.5);
+      --border-color: rgba(255, 255, 255, 0.08);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      overflow: auto;
+      width: 1600px;
+      height: 900px;
+      background: transparent;
+      font-family: 'Inter', sans-serif;
+      color: var(--text-primary);
+    }
+
+    #bracket-container {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      padding: 16px;
+    }
+
+    /* ── Section headers ── */
+    .section-header {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 4px;
+    }
+
+    .phase-name {
+      font-size: 20px;
+      font-weight: 800;
+      margin-bottom: 12px;
+    }
+
+    /* ── Bracket section (winners / losers) ── */
+    .bracket-section {
+      position: relative;
+    }
+
+    .rounds-container {
+      display: flex;
+      gap: var(--round-gap);
+      align-items: stretch;
+      position: relative;
+    }
+
+    /* ── Round column ── */
+    .round {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      min-width: 180px;
+      flex-shrink: 0;
+    }
+
+    .round-label {
+      font-size: var(--round-label-size);
+      font-weight: 600;
+      color: var(--text-dimmed);
+      text-align: center;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .round-sets {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      flex: 1;
+    }
+
+    /* ── Set (match) ── */
+    .set {
+      display: flex;
+      flex-direction: column;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      overflow: hidden;
+      background: var(--bg-card);
+      margin: var(--set-gap) 0;
+    }
+
+    .set.active {
+      border-color: rgba(59, 130, 246, 0.5);
+      box-shadow: 0 0 8px rgba(59, 130, 246, 0.2);
+    }
+
+    /* ── Player slot ── */
+    .slot {
+      display: flex;
+      align-items: center;
+      height: var(--player-height);
+      padding: 0 8px;
+      gap: 6px;
+      background: var(--bg-slot);
+    }
+
+    .slot:first-child {
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .slot.winner {
+      background: var(--bg-slot-winner);
+    }
+
+    .slot.active-player {
+      background: var(--bg-slot-active);
+    }
+
+    .slot-seed {
+      font-size: 10px;
+      color: var(--text-dimmed);
+      min-width: 18px;
+      text-align: right;
+    }
+
+    .slot-name {
+      font-size: var(--name-size);
+      font-weight: 600;
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .slot-name.empty {
+      color: var(--text-dimmed);
+      font-weight: 400;
+      font-style: italic;
+    }
+
+    .slot-prefix {
+      font-size: 10px;
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .slot-score {
+      font-size: var(--score-size);
+      font-weight: 700;
+      min-width: 20px;
+      text-align: center;
+      color: var(--text-dimmed);
+    }
+
+    .slot.winner .slot-score {
+      color: var(--accent);
+    }
+
+    /* ── Grand Finals ── */
+    .grand-finals {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .grand-finals .set {
+      min-width: 220px;
+    }
+
+    .gf-label {
+      font-size: var(--round-label-size);
+      font-weight: 600;
+      color: var(--text-dimmed);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    /* ── SVG connectors ── */
+    .connectors-svg {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      overflow: visible;
+    }
+
+    .connectors-svg path {
+      stroke: var(--connector-color);
+      stroke-width: var(--connector-width);
+      fill: none;
+    }
+
+    .connectors-svg path.animate-line {
+      animation: drawLine var(--line-duration, 0.4s) ease-out forwards;
+      animation-delay: var(--line-delay, 0s);
+      stroke-dasharray: var(--line-length);
+      stroke-dashoffset: var(--line-length);
+    }
+
+    @keyframes drawLine {
+      to { stroke-dashoffset: 0; }
+    }
+
+    /* ── Empty state ── */
+    .empty-state {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 200px;
+      color: var(--text-dimmed);
+      font-size: 16px;
+    }
+
+    /* ── Entrance animations ── */
+    @keyframes roundSlideIn {
+      from {
+        opacity: 0;
+        transform: translateX(-30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+
+
+    @keyframes headerFadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(-10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes gfSlideUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .round {
+      opacity: 0;
+    }
+
+    .round.animate-in {
+      animation: roundSlideIn 0.4s ease-out forwards;
+    }
+
+    .connectors-svg {
+      opacity: 1;
+    }
+
+    .phase-name.animate-in {
+      animation: headerFadeIn 0.3s ease-out forwards;
+    }
+
+    .section-header.animate-in {
+      animation: headerFadeIn 0.3s ease-out forwards;
+    }
+
+    .grand-finals {
+      opacity: 0;
+    }
+
+    .grand-finals.animate-in {
+      animation: gfSlideUp 0.4s ease-out forwards;
+    }
+
+    /* ── Variants ── */
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div id="bracket-container">
+    <div class="empty-state" id="empty-state">
+      Load a bracket from the Bracket tab to display it here.
+    </div>
+  </div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="/layout/lib/overlay-base.js"></script>
+  <script>
+    /* ─── Configuration ─── */
+    const params = new URLSearchParams(window.location.search);
+    const WINNERS_ONLY = params.get('winners_only') === 'true';
+    const LOSERS_ONLY = params.get('losers_only') === 'true';
+    const { deepGet, state, settings, applyAccentColor } = OverlayBase;
+
+    /* ─── Render ─── */
+    function render() {
+      applyAccentColor('bracket');
+
+      const bracket = deepGet(state, 'bracket');
+      const container = document.getElementById('bracket-container');
+      const emptyState = document.getElementById('empty-state');
+
+      if (!bracket || !bracket.players || Object.keys(bracket.players).length === 0) {
+        emptyState.classList.remove('hidden');
+        return;
+      }
+      emptyState.classList.add('hidden');
+
+      const { type, phaseName, winnersRounds, losersRounds, grandFinals, players } = bracket;
+      const isDoubleElim = type === 'DOUBLE_ELIMINATION';
+
+      let html = '';
+
+      // Phase name
+      if (phaseName) {
+        html += `<div class="phase-name">${esc(phaseName)}</div>`;
+      }
+
+      const isRoundRobin = type === 'ROUND_ROBIN';
+
+      // Winners bracket
+      if (!LOSERS_ONLY && winnersRounds && Object.keys(winnersRounds).length > 0) {
+        html += renderSection(
+          isDoubleElim ? 'Winners Bracket' : '',
+          winnersRounds,
+          players,
+          'winners',
+          isRoundRobin
+        );
+      }
+
+      // Grand Finals
+      if (!LOSERS_ONLY && !WINNERS_ONLY && grandFinals && grandFinals.length > 0) {
+        html += renderGrandFinals(grandFinals, players);
+      }
+
+      // Losers bracket
+      if (!WINNERS_ONLY && isDoubleElim && losersRounds && Object.keys(losersRounds).length > 0) {
+        html += renderSection('Losers Bracket', losersRounds, players, 'losers', false);
+      }
+
+      // Only replace inner content (keep empty-state element)
+      // Remove old rendered content
+      const existing = container.querySelectorAll('.phase-name, .bracket-section, .grand-finals');
+      existing.forEach(el => el.remove());
+
+      container.insertAdjacentHTML('beforeend', html);
+
+      // Align rounds into pyramid, then animate in
+      requestAnimationFrame(() => {
+        alignBracketRounds();
+        animateIn();
+        drawConnectors();
+      });
+    }
+
+    /* ─── Align rounds into a centered pyramid ─── */
+    function alignBracketRounds() {
+      const bracket = deepGet(state, 'bracket');
+      const connections = bracket?.connections || {};
+      const hasConnections = Object.keys(connections).length > 0;
+
+      const sections = document.querySelectorAll('.bracket-section');
+
+      for (const section of sections) {
+        if (section.dataset.roundRobin === 'true') continue;
+
+        const roundEls = Array.from(section.querySelectorAll('.round'));
+        if (roundEls.length < 2) continue;
+
+        const setGap = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--set-gap')) * 2;
+
+        // Reset all round-sets to natural flow
+        for (const round of roundEls) {
+          const rs = round.querySelector('.round-sets');
+          if (rs) {
+            rs.style.gap = `${setGap}px`;
+            rs.style.justifyContent = 'center';
+            for (const set of rs.querySelectorAll('.set')) {
+              set.style.marginTop = '';
+              set.style.marginBottom = '';
+            }
+          }
+        }
+
+        // Find the pivot round (most sets) — this gets even spacing,
+        // everything else aligns relative to it
+        let pivotIdx = 0;
+        let maxSets = 0;
+        for (let i = 0; i < roundEls.length; i++) {
+          const count = roundEls[i].querySelectorAll('.round-sets > .set').length;
+          if (count >= maxSets) {
+            maxSets = count;
+            pivotIdx = i;
+          }
+        }
+
+        // Forward from pivot: align each round to its feeders (standard pyramid)
+        for (let i = pivotIdx + 1; i < roundEls.length; i++) {
+          if (hasConnections) {
+            positionRoundWithConnections(roundEls[i - 1], roundEls[i], connections, 'forward', setGap);
+          } else {
+            positionRoundFromReference(roundEls[i - 1], roundEls[i]);
+          }
+        }
+
+        // Backward from pivot: align earlier (bye/play-in) rounds to their targets
+        for (let i = pivotIdx - 1; i >= 0; i--) {
+          if (hasConnections) {
+            positionRoundWithConnections(roundEls[i + 1], roundEls[i], connections, 'backward', setGap);
+          } else {
+            positionRoundFromReference(roundEls[i + 1], roundEls[i]);
+          }
+        }
+      }
+    }
+
+    /**
+     * Position sets using actual bracket connection data.
+     * direction: 'forward' = toAlign is the later round (prereqs in ref)
+     *            'backward' = toAlign is the earlier round (feeds into ref)
+     */
+    function positionRoundWithConnections(refRoundEl, alignRoundEl, connections, direction, setGap) {
+      const refSets = Array.from(refRoundEl.querySelectorAll('.round-sets > .set'));
+      const alignSets = Array.from(alignRoundEl.querySelectorAll('.round-sets > .set'));
+      const alignContainer = alignRoundEl.querySelector('.round-sets');
+
+      if (refSets.length === 0 || alignSets.length === 0 || !alignContainer) return;
+
+      alignContainer.style.justifyContent = 'flex-start';
+      alignContainer.style.gap = '0';
+
+      const containerTop = alignContainer.getBoundingClientRect().top;
+      const refSetMap = {};
+      for (let i = 0; i < refSets.length; i++) refSetMap[refSets[i].dataset.setId] = i;
+
+      const desiredCenters = new Array(alignSets.length);
+      let allResolved = true;
+
+      if (direction === 'forward') {
+        // Each align set centers on the midpoint of its prereqs in the ref round
+        for (let j = 0; j < alignSets.length; j++) {
+          const setId = alignSets[j].dataset.setId;
+          const prereqs = connections[setId] || [];
+          const prereqIdxs = prereqs.map(pid => refSetMap[String(pid)]).filter(idx => idx !== undefined);
+
+          if (prereqIdxs.length > 0) {
+            const centers = prereqIdxs.map(idx => {
+              const r = refSets[idx].getBoundingClientRect();
+              return r.top + r.height / 2;
+            });
+            desiredCenters[j] = centers.reduce((a, b) => a + b, 0) / centers.length;
+          } else {
+            allResolved = false;
+            break;
+          }
+        }
+      } else {
+        // Backward: group align sets by their target in the ref round
+        const reverseMap = {};
+        for (const [matchId, prereqs] of Object.entries(connections)) {
+          for (const pid of prereqs) {
+            if (!reverseMap[pid]) reverseMap[pid] = [];
+            reverseMap[pid].push(matchId);
+          }
+        }
+
+        const groups = new Map(); // refIdx -> [alignIdx]
+        for (let j = 0; j < alignSets.length; j++) {
+          const setId = alignSets[j].dataset.setId;
+          const targets = reverseMap[setId] || [];
+          let refIdx = null;
+          for (const tid of targets) {
+            const idx = refSetMap[String(tid)];
+            if (idx !== undefined) { refIdx = idx; break; }
+          }
+
+          if (refIdx !== null) {
+            if (!groups.has(refIdx)) groups.set(refIdx, []);
+            groups.get(refIdx).push(j);
+          } else {
+            allResolved = false;
+            break;
+          }
+        }
+
+        if (allResolved) {
+          for (const [refIdx, alignIdxs] of groups) {
+            const refRect = refSets[refIdx].getBoundingClientRect();
+            const refMidY = refRect.top + refRect.height / 2;
+
+            if (alignIdxs.length === 1) {
+              desiredCenters[alignIdxs[0]] = refMidY;
+            } else {
+              // Center the group on the ref set (standard bracket pair)
+              const heights = alignIdxs.map(idx => alignSets[idx].getBoundingClientRect().height);
+              const totalHeight = heights.reduce((a, b) => a + b, 0) + (alignIdxs.length - 1) * setGap;
+              let y = refMidY - totalHeight / 2;
+              for (let k = 0; k < alignIdxs.length; k++) {
+                desiredCenters[alignIdxs[k]] = y + heights[k] / 2;
+                y += heights[k] + setGap;
+              }
+            }
+          }
+        }
+      }
+
+      if (!allResolved) {
+        // Fall back to heuristic alignment
+        positionRoundFromReference(refRoundEl, alignRoundEl);
+        return;
+      }
+
+      // Apply margins, preventing overlap
+      let lastBottom = 0;
+      for (let j = 0; j < alignSets.length; j++) {
+        const setHeight = alignSets[j].getBoundingClientRect().height;
+        const desiredTop = desiredCenters[j] - setHeight / 2 - containerTop;
+        const marginTop = Math.max(0, desiredTop - lastBottom);
+        alignSets[j].style.marginTop = `${marginTop}px`;
+        lastBottom = desiredTop + setHeight;
+      }
+    }
+
+    /**
+     * Heuristic fallback: position sets using proportional mapping.
+     * Handles standard pyramids, close counts, and play-in rounds.
+     */
+    function positionRoundFromReference(referenceRoundEl, toAlignRoundEl) {
+      const refSets = Array.from(referenceRoundEl.querySelectorAll('.round-sets > .set'));
+      const alignSets = Array.from(toAlignRoundEl.querySelectorAll('.round-sets > .set'));
+      const alignContainer = toAlignRoundEl.querySelector('.round-sets');
+
+      if (refSets.length === 0 || alignSets.length === 0 || !alignContainer) return;
+
+      alignContainer.style.justifyContent = 'flex-start';
+      alignContainer.style.gap = '0';
+
+      const containerTop = alignContainer.getBoundingClientRect().top;
+      const setGap = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--set-gap')) * 2;
+
+      // Compute desired center Y for each align set
+      const desiredCenters = new Array(alignSets.length);
+
+      if (alignSets.length <= refSets.length) {
+        // Fewer or equal align sets: each centers on a group of ref sets
+        const groupSize = refSets.length / alignSets.length;
+
+        for (let j = 0; j < alignSets.length; j++) {
+          const refStart = Math.floor(j * groupSize);
+          const refEnd = Math.min(Math.floor((j + 1) * groupSize) - 1, refSets.length - 1);
+          const topRect = refSets[refStart].getBoundingClientRect();
+          const bottomRect = refSets[refEnd].getBoundingClientRect();
+          desiredCenters[j] = (topRect.top + topRect.height / 2 + bottomRect.top + bottomRect.height / 2) / 2;
+        }
+      } else {
+        // More align sets than ref sets (e.g. 9 play-in on 8 next round)
+        // Group align sets by their proportional ref target
+        const groups = new Map();
+        for (let j = 0; j < alignSets.length; j++) {
+          const refIdx = Math.min(Math.floor(j * refSets.length / alignSets.length), refSets.length - 1);
+          if (!groups.has(refIdx)) groups.set(refIdx, []);
+          groups.get(refIdx).push(j);
+        }
+
+        for (const [refIdx, alignIdxs] of groups) {
+          const refRect = refSets[refIdx].getBoundingClientRect();
+          const refMidY = refRect.top + refRect.height / 2;
+
+          if (alignIdxs.length === 1) {
+            desiredCenters[alignIdxs[0]] = refMidY;
+          } else {
+            // Center the group on the ref set
+            const heights = alignIdxs.map(idx => alignSets[idx].getBoundingClientRect().height);
+            const totalHeight = heights.reduce((a, b) => a + b, 0) + (alignIdxs.length - 1) * setGap;
+            let y = refMidY - totalHeight / 2;
+            for (let k = 0; k < alignIdxs.length; k++) {
+              desiredCenters[alignIdxs[k]] = y + heights[k] / 2;
+              y += heights[k] + setGap;
+            }
+          }
+        }
+      }
+
+      // Apply margins, preventing overlap
+      let lastBottom = 0;
+      for (let j = 0; j < alignSets.length; j++) {
+        const setHeight = alignSets[j].getBoundingClientRect().height;
+        const desiredTop = desiredCenters[j] - setHeight / 2 - containerTop;
+        const marginTop = Math.max(0, desiredTop - lastBottom);
+        alignSets[j].style.marginTop = `${marginTop}px`;
+        lastBottom = desiredTop + setHeight;
+      }
+    }
+
+    /* ─── Staggered entrance animation ─── */
+    function animateIn() {
+      let delay = 0;
+      const ROUND_STAGGER = 150; // ms between each round
+      const HEADER_DURATION = 200;
+
+      // Animate phase name
+      const phaseName = document.querySelector('.phase-name');
+      if (phaseName) {
+        phaseName.style.animationDelay = `${delay}ms`;
+        phaseName.classList.add('animate-in');
+        delay += HEADER_DURATION;
+      }
+
+      // Animate each section
+      const sections = document.querySelectorAll('.bracket-section');
+      for (const section of sections) {
+        // Section header
+        const header = section.querySelector('.section-header');
+        if (header) {
+          header.style.animationDelay = `${delay}ms`;
+          header.classList.add('animate-in');
+          delay += HEADER_DURATION;
+        }
+
+        // Rounds left-to-right — store delay on element for connector timing
+        const rounds = section.querySelectorAll('.round');
+        for (const round of rounds) {
+          round.dataset.animDelay = delay;
+          round.style.animationDelay = `${delay}ms`;
+          round.classList.add('animate-in');
+          delay += ROUND_STAGGER;
+        }
+      }
+
+      // Grand finals
+      const gf = document.querySelector('.grand-finals');
+      if (gf) {
+        gf.style.animationDelay = `${delay + 100}ms`;
+        gf.classList.add('animate-in');
+      }
+    }
+
+    /* ─── Render a bracket section (winners or losers) ─── */
+    function renderSection(title, rounds, players, sectionClass, isRoundRobin = false) {
+      const roundNums = Object.keys(rounds).map(Number).sort((a, b) => a - b);
+      if (roundNums.length === 0) return '';
+
+      const rrAttr = isRoundRobin ? ' data-round-robin="true"' : '';
+      let html = `<div class="bracket-section ${sectionClass}${isRoundRobin ? ' round-robin' : ''}" data-section="${sectionClass}"${rrAttr}>`;
+      if (title) {
+        html += `<div class="section-header">${esc(title)}</div>`;
+      }
+      html += `<div class="rounds-container"${isRoundRobin ? ' style="align-items: flex-start;"' : ''}>`;
+
+      for (const roundNum of roundNums) {
+        const round = rounds[roundNum];
+        const sets = round.sets || [];
+
+        html += `<div class="round" data-round="${roundNum}" data-section="${sectionClass}">`;
+        html += `<div class="round-label">${esc(round.name || `Round ${roundNum}`)}</div>`;
+        html += `<div class="round-sets">`;
+
+        for (const set of sets) {
+          html += renderSet(set, players);
+        }
+
+        html += `</div></div>`;
+      }
+
+      html += `</div>`;
+      // SVG for connectors (skip for round robin)
+      if (!isRoundRobin) {
+        html += `<svg class="connectors-svg" data-section="${sectionClass}"></svg>`;
+      }
+      html += `</div>`;
+      return html;
+    }
+
+    /* ─── Render Grand Finals ─── */
+    function renderGrandFinals(sets, players) {
+      let html = '<div class="grand-finals">';
+      for (let i = 0; i < sets.length; i++) {
+        const label = sets.length > 1 && i === 1 ? 'Grand Finals Reset' : 'Grand Finals';
+        html += `<div class="gf-label">${label}</div>`;
+        html += renderSet(sets[i], players);
+      }
+      html += '</div>';
+      return html;
+    }
+
+    /* ─── Render a single set ─── */
+    function renderSet(set, players) {
+      const isActive = set.state === 'active' || set.state === 'called';
+      const isCompleted = set.completed;
+      const p1 = set.entrant1Id ? players[set.entrant1Id] : null;
+      const p2 = set.entrant2Id ? players[set.entrant2Id] : null;
+
+      // Determine winner
+      let p1Winner = false, p2Winner = false;
+      if (isCompleted) {
+        if (set.score1 === 'W' || (typeof set.score1 === 'number' && typeof set.score2 === 'number' && set.score1 > set.score2)) {
+          p1Winner = true;
+        } else if (set.score2 === 'W' || (typeof set.score1 === 'number' && typeof set.score2 === 'number' && set.score2 > set.score1)) {
+          p2Winner = true;
+        }
+      }
+
+      let cls = 'set';
+      if (isActive) cls += ' active';
+
+      let html = `<div class="${cls}" data-set-id="${set.id}">`;
+      html += renderSlot(p1, set.score1, p1Winner, isActive);
+      html += renderSlot(p2, set.score2, p2Winner, isActive);
+      html += '</div>';
+      return html;
+    }
+
+    /* ─── Render a player slot ─── */
+    function renderSlot(player, score, isWinner, isActive) {
+      let cls = 'slot';
+      if (isWinner) cls += ' winner';
+      else if (isActive && player) cls += ' active-player';
+
+      let html = `<div class="${cls}">`;
+
+      if (player) {
+        if (player.seed) {
+          html += `<span class="slot-seed">${player.seed}</span>`;
+        }
+        if (player.prefix) {
+          html += `<span class="slot-prefix">${esc(player.prefix)}</span>`;
+        }
+        html += `<span class="slot-name">${esc(player.name)}</span>`;
+      } else {
+        html += `<span class="slot-name empty">TBD</span>`;
+      }
+
+      if (score != null) {
+        html += `<span class="slot-score">${score}</span>`;
+      } else {
+        html += `<span class="slot-score">-</span>`;
+      }
+
+      html += '</div>';
+      return html;
+    }
+
+    /* ─── Draw SVG connector lines between rounds ─── */
+    function drawConnectors() {
+      const bracket = deepGet(state, 'bracket');
+      const connections = bracket?.connections || {};
+      const hasConnections = Object.keys(connections).length > 0;
+
+      const sections = document.querySelectorAll('.bracket-section');
+
+      for (const section of sections) {
+        const svg = section.querySelector('.connectors-svg');
+        if (!svg) continue;
+
+        svg.innerHTML = '';
+
+        const sectionRect = section.getBoundingClientRect();
+        const roundEls = Array.from(section.querySelectorAll('.round'));
+
+        if (hasConnections) {
+          // Connection-based drawing: use actual bracket relationships
+          const allSetEls = {};
+          for (const setEl of section.querySelectorAll('.set')) {
+            allSetEls[setEl.dataset.setId] = setEl;
+          }
+
+          for (const [matchId, prereqs] of Object.entries(connections)) {
+            const toEl = allSetEls[String(matchId)];
+            if (!toEl) continue;
+
+            for (const prereqId of prereqs) {
+              const fromEl = allSetEls[String(prereqId)];
+              if (!fromEl) continue;
+
+              const fromRound = fromEl.closest('.round');
+              const toRound = toEl.closest('.round');
+              const sourceDelay = parseFloat(fromRound?.dataset.animDelay || 0);
+              const destDelay = parseFloat(toRound?.dataset.animDelay || 0);
+              const lineStart = sourceDelay + 200;
+              const lineDuration = Math.max(200, destDelay - lineStart);
+
+              addConnector(svg, sectionRect, fromEl, toEl, lineStart, lineDuration);
+            }
+          }
+        } else {
+          // Heuristic drawing: proportional mapping
+          for (let i = 0; i < roundEls.length - 1; i++) {
+            const leftRound = roundEls[i];
+            const rightRound = roundEls[i + 1];
+
+            const leftSets = Array.from(leftRound.querySelectorAll('.set'));
+            const rightSets = Array.from(rightRound.querySelectorAll('.set'));
+
+            if (leftSets.length === 0 || rightSets.length === 0) continue;
+
+            const sourceDelay = parseFloat(leftRound.dataset.animDelay || 0);
+            const destDelay = parseFloat(rightRound.dataset.animDelay || 0);
+            const lineStart = sourceDelay + 200;
+            const lineDuration = Math.max(200, destDelay - lineStart);
+
+            // Each left set connects to a right set via proportional mapping
+            for (let j = 0; j < leftSets.length; j++) {
+              const rightIdx = Math.min(
+                Math.floor(j * rightSets.length / leftSets.length),
+                rightSets.length - 1
+              );
+              addConnector(svg, sectionRect, leftSets[j], rightSets[rightIdx], lineStart, lineDuration);
+            }
+          }
+        }
+
+        svg.style.width = section.scrollWidth + 'px';
+        svg.style.height = section.scrollHeight + 'px';
+      }
+    }
+
+    function addConnector(svg, sectionRect, fromEl, toEl, lineStart, lineDuration) {
+      const fromRect = fromEl.getBoundingClientRect();
+      const toRect = toEl.getBoundingClientRect();
+
+      const x1 = fromRect.right - sectionRect.left;
+      const y1 = fromRect.top + fromRect.height / 2 - sectionRect.top;
+      const x2 = toRect.left - sectionRect.left;
+      const y2 = toRect.top + toRect.height / 2 - sectionRect.top;
+      const xMid = x1 + (x2 - x1) / 2;
+
+      const d = `M ${x1} ${y1} L ${xMid} ${y1} L ${xMid} ${y2} L ${x2} ${y2}`;
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', d);
+      svg.appendChild(path);
+
+      const len = path.getTotalLength();
+      path.style.setProperty('--line-length', len);
+      path.style.setProperty('--line-delay', `${lineStart}ms`);
+      path.style.setProperty('--line-duration', `${lineDuration}ms`);
+      path.classList.add('animate-line');
+    }
+
+    /* ─── Helpers ─── */
+    function esc(str) {
+      if (!str) return '';
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    /* ─── Init ─── */
+    OverlayBase.init({
+      render,
+      fetchSettings: true,
+      shouldRender: (key) => key === 'bracket' || key.startsWith('bracket.'),
+      shouldRenderSettings: (key) => key.startsWith('overlays.bracket'),
+    });
+
+    // Redraw connectors on resize
+    window.addEventListener('resize', () => requestAnimationFrame(drawConnectors));
+  </script>
+</body>
+</html>

@@ -451,9 +451,22 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, sourc
                     />
                 </Group>
 
-                <Button size="xs" variant="outline" onClick={() => { onSwapTeams(); clearAtBatState(); }} fullWidth>
-                    Swap Teams
-                </Button>
+                <Group gap="xs" grow>
+                    <Button size="xs" variant="outline" onClick={() => { onSwapTeams(); clearAtBatState(); }}>
+                        Swap Teams
+                    </Button>
+                    <Button size="xs" variant="light" onClick={() => {
+                        const t1 = useStateStore.getState()?.score?.[scoreboardNumber]?.team?.[1]?.player?.[1] ?? {};
+                        const t2 = useStateStore.getState()?.score?.[scoreboardNumber]?.team?.[2]?.player?.[1] ?? {};
+                        const fields = ['name', 'team', 'full_name', 'country', 'state', 'pronoun'];
+                        for (const f of fields) {
+                            setItem(`${base}.team.1.player.1.${f}`, t2[f] ?? '');
+                            setItem(`${base}.team.2.player.1.${f}`, t1[f] ?? '');
+                        }
+                    }}>
+                        Swap Tags
+                    </Button>
+                </Group>
 
                 {/* ---- Completed Game Info ---- */}
                 {gameCompleted && (

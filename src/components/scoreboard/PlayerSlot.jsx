@@ -1,7 +1,7 @@
 import { memo, useCallback, useMemo, useState } from 'react';
 import {
     TextInput, Select, Group, Stack, Grid, Paper,
-    Text, Collapse, ActionIcon, UnstyledButton, Tooltip,
+    Text, Collapse, ActionIcon, UnstyledButton, Tooltip, Badge,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { useShallow } from 'zustand/react/shallow';
@@ -111,6 +111,9 @@ export default memo(function PlayerSlot({ scoreboardNumber = 1, teamNumber, play
                         size="xs"
                         value={rioName}
                         onChange={e => set('rioName', e.currentTarget.value)}
+                        leftSection={<img src="/game_assets/rio_logo.png" alt="Rio" width={16} height={16} style={{ objectFit: 'contain' }} />}
+                        leftSectionWidth={28}
+                        leftSectionPointerEvents="none"
                     />
                 </Grid.Col>
                 <Grid.Col span={2}>

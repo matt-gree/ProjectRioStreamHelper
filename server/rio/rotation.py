@@ -84,14 +84,14 @@ class RotationManager:
             poll_interval=poll_interval,
         )
 
-        # Pre-fetch stats for all players across all rotation games
-        await cls._prefetch_rotation_stats(game_ids)
-
         state.task = asyncio.create_task(state.run())
         cls._rotations[sb_id] = state
 
         await Settings.Set(f"scoreboards.rotation.{sb_id}.enabled", True)
         await cls._emit_status(sb_id)
+
+        # Pre-fetch stats in the background — don't block the HTTP response
+        asyncio.create_task(cls._prefetch_rotation_stats(game_ids))
         logger.info("[RotationManager] Started rotation for scoreboard {} "
                      "({}s interval, {} games)", sb_id, interval, len(game_ids))
 

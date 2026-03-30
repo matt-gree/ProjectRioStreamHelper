@@ -12,6 +12,11 @@ export default function SettingsModal({ opened, onClose }) {
     const [keyValue, setKeyValue] = useState('');
     const [configured, setConfigured] = useState(false);
     const [saving, setSaving] = useState(false);
+
+    // Challonge API key state
+    const [challongeKey, setChallongeKey] = useState('');
+    const [challongeConfigured, setChallongeConfigured] = useState(false);
+    const [challongeSaving, setChallongeSaving] = useState(false);
     const [refreshingModes, setRefreshingModes] = useState(false);
     const [modeCount, setModeCount] = useState(null);
 
@@ -49,14 +54,40 @@ export default function SettingsModal({ opened, onClose }) {
         } catch { /* ignore */ }
     }, []);
 
+    const fetchChallongeStatus = useCallback(async () => {
+        try {
+            const resp = await fetch('/api/v1/settings?key=challonge.api_key');
+            const data = await resp.json();
+            setChallongeConfigured(!!data);
+        } catch { /* ignore */ }
+    }, []);
+
+    const handleSaveChallongeKey = useCallback(async () => {
+        if (!challongeKey.trim()) return;
+        setChallongeSaving(true);
+        try {
+            const resp = await fetch(`/api/v1/settings?key=challonge.api_key&value=${encodeURIComponent(challongeKey.trim())}`, {
+                method: 'PUT',
+            });
+            const data = await resp.json();
+            if (data.success) {
+                setChallongeConfigured(true);
+                setChallongeKey('');
+            }
+        } catch { /* ignore */ }
+        setChallongeSaving(false);
+    }, [challongeKey]);
+
     useEffect(() => {
         if (opened) {
             fetchStatus();
             fetchModeCount();
             fetchHudPath();
+            fetchChallongeStatus();
             setKeyValue('');
+            setChallongeKey('');
         }
-    }, [opened, fetchStatus, fetchModeCount, fetchHudPath]);
+    }, [opened, fetchStatus, fetchModeCount, fetchHudPath, fetchChallongeStatus]);
 
     const handleRefreshModes = useCallback(async () => {
         setRefreshingModes(true);
@@ -234,6 +265,36 @@ export default function SettingsModal({ opened, onClose }) {
                     leftSection={refreshingModes ? <Loader size={12} /> : null}
                 >
                     {refreshingModes ? 'Refreshing...' : 'Refresh Game Modes'}
+                </Button>
+
+                <Divider label="Challonge" labelPosition="center" />
+
+                <Group justify="space-between">
+                    <Text size="sm">API Key</Text>
+                    <Badge
+                        size="sm"
+                        color={challongeConfigured ? 'green' : 'red'}
+                        variant="filled"
+                    >
+                        {challongeConfigured ? 'Configured' : 'Not Set'}
+                    </Badge>
+                </Group>
+                <Text size="xs" c="dimmed">
+                    Required to load Challonge tournaments. Get your key from your Challonge account settings.
+                </Text>
+                <PasswordInput
+                    placeholder="Enter your Challonge API key"
+                    size="xs"
+                    value={challongeKey}
+                    onChange={e => setChallongeKey(e.currentTarget.value)}
+                />
+                <Button
+                    size="xs"
+                    onClick={handleSaveChallongeKey}
+                    disabled={!challongeKey.trim() || challongeSaving}
+                    loading={challongeSaving}
+                >
+                    Save Key
                 </Button>
             </Stack>
         </Modal>

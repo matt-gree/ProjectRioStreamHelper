@@ -28,10 +28,18 @@ function ScoreboardTab({ scoreboardNumber }) {
         const newHome = currentHome === 1 ? 2 : 1;
 
         if (sourceType === 'hud') {
-            // Flip home_team client-side immediately (server handles team data swap)
-            setItems([
+            // Swap start.gg profile fields client-side (server only handles Rio game data)
+            const t1 = base?.team?.[1]?.player?.[1] ?? {};
+            const t2 = base?.team?.[2]?.player?.[1] ?? {};
+            const profileFields = ['full_name', 'country', 'state', 'pronoun'];
+            const swapEntries = [
                 { key: `${sb}.home_team`, value: newHome },
-            ]);
+            ];
+            for (const f of profileFields) {
+                swapEntries.push({ key: `${sb}.team.1.player.1.${f}`, value: t2[f] ?? '' });
+                swapEntries.push({ key: `${sb}.team.2.player.1.${f}`, value: t1[f] ?? '' });
+            }
+            setItems(swapEntries);
             try {
                 await fetch(
                     `/api/v1/rio/swap?scoreboard_number=${scoreboardNumber}`,

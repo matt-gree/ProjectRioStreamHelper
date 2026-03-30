@@ -35,18 +35,23 @@ _SIZE_VARIANTS = {
 }
 
 
-def _derive_type(stem: str) -> str:
-    """Derive a layout type from the filename stem.
+def _derive_type(stem: str, group: str = "") -> str:
+    """Derive a layout type from the filename stem and group folder.
 
     Examples:
-        scoreboard  -> "scoreboard"
-        roster1     -> "roster"
-        roster2     -> "roster"
-        stats1      -> "stats"
-        stats2      -> "stats"
-        team1logo   -> "teamlogo"
-        team2logo   -> "teamlogo"
+        scoreboard              -> "scoreboard"
+        roster1                 -> "roster"
+        roster2                 -> "roster"
+        stats1                  -> "stats"
+        stats2                  -> "stats"
+        team1logo               -> "teamlogo"
+        team2logo               -> "teamlogo"
+        index (group=bracket)   -> "bracket"
+        winners_only (bracket)  -> "bracket"
     """
+    # For bracket folder, all files are bracket type
+    if group == "bracket":
+        return "bracket"
     # Strip trailing digits to collapse team-specific variants
     base = stem.rstrip("0123456789")
     return base if base else stem
@@ -63,7 +68,7 @@ async def list_layouts(request: Request):
         for f in sorted(_layout_dir.rglob("*.html")):
             rel = f.relative_to(_layout_dir)
             group = str(rel.parent) if rel.parent != Path(".") else "ungrouped"
-            layout_type = _derive_type(f.stem)
+            layout_type = _derive_type(f.stem, group)
             base_url = f"{base}/layout/{rel}"
 
             # If this layout type has size variants, expand into multiple entries
