@@ -185,6 +185,20 @@ class ControllerOverlay:
             await Settings.Set("controller_overlay.controller", controller)
 
     @classmethod
+    async def SetPath(cls, path: str):
+        """Update the gc-overlay path and re-detect."""
+        await Settings.Set("controller_overlay.path", path)
+        if path:
+            p = Path(path)
+            if (p / "main.py").exists():
+                cls._gc_overlay_path = p
+                return {"success": True, "path": str(p), "available": True}
+            return {"success": False, "error": f"main.py not found at {path}"}
+        # Clear custom path and re-run auto-detection
+        cls._gc_overlay_path = _find_gc_overlay()
+        return {"success": True, "path": str(cls._gc_overlay_path) if cls._gc_overlay_path else None, "available": cls._gc_overlay_path is not None}
+
+    @classmethod
     async def _kill_process(cls):
         """Terminate the subprocess gracefully."""
         cls._running = False

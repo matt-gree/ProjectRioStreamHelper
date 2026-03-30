@@ -23,6 +23,11 @@ export default function SettingsModal({ opened, onClose }) {
     const [savingPath, setSavingPath] = useState(false);
     const [hudPathError, setHudPathError] = useState('');
 
+    // Controller overlay state
+    const [controllerStatus, setControllerStatus] = useState(null);
+    const [controllerPath, setControllerPath] = useState('');
+    const [controllerPathSaving, setControllerPathSaving] = useState(false);
+
     const fetchHudPath = useCallback(async () => {
         try {
             const resp = await fetch('/api/v1/rio/hud-path');
@@ -40,6 +45,37 @@ export default function SettingsModal({ opened, onClose }) {
             setChallongeConfigured(!!data);
         } catch { /* ignore */ }
     }, []);
+
+    const fetchControllerStatus = useCallback(async () => {
+        try {
+            const resp = await fetch('/api/v1/controller/status');
+            const data = await resp.json();
+            setControllerStatus(data);
+            setControllerPath(data.path || '');
+        } catch { /* ignore */ }
+    }, []);
+
+    const handleSaveControllerPath = useCallback(async () => {
+        setControllerPathSaving(true);
+        try {
+            const resp = await fetch(`/api/v1/controller/path?path=${encodeURIComponent(controllerPath.trim())}`, {
+                method: 'PUT',
+            });
+            const data = await resp.json();
+            if (data.success) {
+                notifications.show({
+                    message: data.available ? `gc-overlay found at ${data.path}` : 'Path saved but gc-overlay not found there',
+                    color: data.available ? 'green' : 'yellow',
+                });
+                await fetchControllerStatus();
+            } else {
+                notifications.show({ message: data.error || 'Failed to set path', color: 'red' });
+            }
+        } catch {
+            notifications.show({ message: 'Failed to save controller path', color: 'red' });
+        }
+        setControllerPathSaving(false);
+    }, [controllerPath, fetchControllerStatus]);
 
     const handleSaveChallongeKey = useCallback(async () => {
         if (!challongeKey.trim()) return;
@@ -64,9 +100,10 @@ export default function SettingsModal({ opened, onClose }) {
         if (opened) {
             fetchHudPath();
             fetchChallongeStatus();
+            fetchControllerStatus();
             setChallongeKey('');
         }
-    }, [opened, fetchHudPath, fetchChallongeStatus]);
+    }, [opened, fetchHudPath, fetchChallongeStatus, fetchControllerStatus]);
 
     const handleSetHudPath = useCallback(async (path) => {
         setSavingPath(true);
@@ -202,6 +239,36 @@ export default function SettingsModal({ opened, onClose }) {
                     loading={challongeSaving}
                 >
                     Save Key
+                </Button>
+
+                <Divider label="Controller Overlay" labelPosition="center" />
+
+                <Group justify="space-between">
+                    <Text size="sm">gc-overlay</Text>
+                    <Badge
+                        size="sm"
+                        color={controllerStatus?.available ? 'green' : 'red'}
+                        variant="filled"
+                    >
+                        {controllerStatus?.available ? 'Found' : 'Not Found'}
+                    </Badge>
+                </Group>
+                <Text size="xs" c="dimmed">
+                    Path to the gc-overlay directory. Leave empty to auto-detect (looks for a sibling gc-overlay folder).
+                </Text>
+                <TextInput
+                    size="xs"
+                    placeholder={controllerStatus?.available ? controllerStatus.path : 'Not detected — enter path manually'}
+                    value={controllerPath}
+                    onChange={e => setControllerPath(e.currentTarget.value)}
+                />
+                <Button
+                    size="xs"
+                    variant="outline"
+                    onClick={handleSaveControllerPath}
+                    loading={controllerPathSaving}
+                >
+                    Save Path
                 </Button>
             </Stack>
         </Modal>
