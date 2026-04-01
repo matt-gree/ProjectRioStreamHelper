@@ -1,7 +1,7 @@
-# Build macOS + Windows executables and upload as GitHub Release artifacts.
+# Build macOS (ARM + Intel) + Windows executables and upload as GitHub Release artifacts.
 #
 # Triggers:
-#   - Push a tag like v1.0.0   → creates a GitHub Release with both zips
+#   - Push a tag like v1.0.0   → creates a GitHub Release with all zips
 #   - Manual dispatch           → uploads artifacts (no release created)
 
 name: Build Release
@@ -24,27 +24,13 @@ permissions:
   contents: write   # needed to create releases
 
 jobs:
-  build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: macos-latest
-            artifact: PRSH-macOS
-            zip_contents: dist/PRSH.app
-          - os: windows-latest
-            artifact: PRSH-Windows
-            zip_contents: dist/PRSH
-
-    runs-on: ${{ matrix.os }}
-
+  # ── Build frontend (shared by all platform jobs) ──
+  frontend:
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout (with submodules)
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
-      # ── Node.js (frontend build) ──
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -57,13 +43,72 @@ jobs:
       - name: Build frontend
         run: npm run build
 
-      # ── Python (PyInstaller) ──
-      - name: Setup Python
+      - name: Upload frontend build
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: dist/
+          retention-days: 1
+
+  # ── Build executables ──
+  build:
+    needs: frontend
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            arch: arm64
+            artifact: PRSH-macOS-arm64
+            zip_contents: dist/PRSH.app
+          - os: macos-latest
+            arch: x86_64
+            artifact: PRSH-macOS-x86_64
+            zip_contents: dist/PRSH.app
+          - os: windows-latest
+            arch: native
+            artifact: PRSH-Windows
+            zip_contents: dist/PRSH
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Download frontend build
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: dist/
+
+      # ── Python setup (native arm64 / Windows) ──
+      - name: Setup Python (native)
+        if: matrix.arch != 'x86_64'
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
-      - name: Install Python dependencies
+      # ── Python setup (x86_64 via Rosetta) ──
+      - name: Install x86_64 Python via Rosetta
+        if: matrix.arch == 'x86_64'
+        run: |
+          curl -fsSL https://www.python.org/ftp/python/3.12.7/python-3.12.7-macos11.pkg -o /tmp/python.pkg
+          sudo installer -pkg /tmp/python.pkg -target /
+          # The universal installer places x86_64-capable Python at /usr/local/bin
+          arch -x86_64 /usr/local/bin/python3.12 --version
+
+      - name: Create x86_64 venv
+        if: matrix.arch == 'x86_64'
+        run: |
+          arch -x86_64 /usr/local/bin/python3.12 -m venv venv-x86
+          echo "${{ github.workspace }}/venv-x86/bin" >> $GITHUB_PATH
+
+      # ── Install Python dependencies ──
+      - name: Install Python dependencies (native)
+        if: matrix.arch != 'x86_64'
         shell: bash
         run: |
           pip install --upgrade pip
@@ -90,13 +135,52 @@ jobs:
             "git+https://github.com/matt-gree/pyrio.git" \
             pyinstaller
 
+      - name: Install Python dependencies (x86_64)
+        if: matrix.arch == 'x86_64'
+        shell: bash
+        run: |
+          arch -x86_64 pip install --upgrade pip
+          arch -x86_64 pip install \
+            "fastapi>=0.111.0" \
+            "httpx[http2]>=0.28.1" \
+            "watchfiles>=0.21" \
+            "python-dateutil>=2.9.0" \
+            "loguru>=0.7.2" \
+            "orjson>=3.10.3" \
+            "websockets>=12.0" \
+            "python-socketio>=5.11.2" \
+            "uvicorn>=0.30.1" \
+            "pillow>=10.3.0" \
+            "cryptography>=44.0.1" \
+            "aiopath>=0.7.7" \
+            "aiomisc>=17.6.3" \
+            "pandas>=2.2.0" \
+            "requests>=2.31.0" \
+            "numpy" \
+            "jinja2" \
+            "python-multipart" \
+            "pystray" \
+            "git+https://github.com/matt-gree/pyrio.git" \
+            pyinstaller
+
       - name: Install macOS tray backend
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && matrix.arch != 'x86_64'
         run: pip install "pyobjc-framework-Cocoa"
 
+      - name: Install macOS tray backend (x86_64)
+        if: matrix.arch == 'x86_64'
+        run: arch -x86_64 pip install "pyobjc-framework-Cocoa"
+
       # ── Build executable ──
-      - name: Run PyInstaller
+      - name: Run PyInstaller (native)
+        if: matrix.arch != 'x86_64'
         run: pyinstaller PRSH.spec --noconfirm
+
+      - name: Run PyInstaller (x86_64)
+        if: matrix.arch == 'x86_64'
+        env:
+          PYINSTALLER_TARGET_ARCH: x86_64
+        run: arch -x86_64 pyinstaller PRSH.spec --noconfirm
 
       # ── Package ──
       - name: Create zip (macOS)
@@ -134,5 +218,6 @@ jobs:
           name: ${{ github.ref_name }}
           generate_release_notes: true
           files: |
-            artifacts/PRSH-macOS/PRSH-macOS.zip
+            artifacts/PRSH-macOS-arm64/PRSH-macOS-arm64.zip
+            artifacts/PRSH-macOS-x86_64/PRSH-macOS-x86_64.zip
             artifacts/PRSH-Windows/PRSH-Windows.zip
