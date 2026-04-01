@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "ProjectRioStreamHelper"
 version = "1.0.0"
-description = "Tournament scoreboard helper and overlays for fighting game tournaments"
+description = "Tournament scoreboard helper and overlays for Mario Superstar Baseball via Project Rio"
 authors = ["João Ribeiro Bezerra <joaorb64@gmail.com>", "Isatis <isatis@foxes.gay>", "Mathias Wolfbrok <wolfy76700>", "Eion Dailey <zombiehdgaming>"]
 readme = "README.md"
 packages = [{include = "server"}]
@@ -12,7 +12,6 @@ fastapi = "^0.111.0"
 httpx = {extras = ["http2"], version = "^0.28.1"}
 watchfiles = ">=0.21"
 asyncio = "^3.4.3"
-python-dateutil = "^2.9.0.post0"
 loguru = "^0.7.2"
 orjson = "^3.10.3"
 websockets = "^12.0"
@@ -22,9 +21,6 @@ pillow = "^10.3.0"
 pystray = "^0.19.5"
 cryptography = "^44.0.1"
 aiopath = "^0.7.7"
-aiomisc = "^17.6.3"
-pythonnet = "^3.0.5"
-toga = "^0.4.9"
 pyrio = {git = "https://github.com/matt-gree/pyrio.git"}
 pandas = "^2.2.0"
 requests = "^2.31.0"

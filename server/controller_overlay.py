@@ -114,7 +114,6 @@ class ControllerOverlay:
                 python,
                 str(main_py),
                 "--port", str(cls._port),
-                "--controller", str(cls._controller),
             ]
 
             logger.info("[controller_overlay] launching: {}", " ".join(cmd))
@@ -122,7 +121,7 @@ class ControllerOverlay:
             cls._process = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
                 cwd=str(cls._gc_overlay_path),
             )
 
@@ -135,11 +134,11 @@ class ControllerOverlay:
             await asyncio.sleep(0.5)
 
             if cls._process.returncode is not None:
-                stderr = ""
-                if cls._process.stderr:
-                    stderr = (await cls._process.stderr.read()).decode(errors="replace")
+                output = ""
+                if cls._process.stdout:
+                    output = (await cls._process.stdout.read()).decode(errors="replace")
                 cls._running = False
-                return {"success": False, "error": f"Process exited immediately: {stderr[:200]}"}
+                return {"success": False, "error": f"Process exited immediately: {output[:200]}"}
 
             return {"success": True, "port": cls._port, "pid": cls._process.pid}
 
@@ -227,10 +226,24 @@ class ControllerOverlay:
 
     @classmethod
     async def _monitor(cls):
-        """Monitor the subprocess and log if it exits unexpectedly."""
+        """Monitor the subprocess, drain output, and log if it exits unexpectedly."""
         try:
             if cls._process:
+                # Drain stdout (stderr is redirected there too) to prevent buffer
+                # from filling up and blocking the subprocess.
+                drain_task = None
+                if cls._process.stdout:
+                    drain_task = asyncio.create_task(cls._drain_output())
+
                 returncode = await cls._process.wait()
+
+                if drain_task:
+                    drain_task.cancel()
+                    try:
+                        await drain_task
+                    except asyncio.CancelledError:
+                        pass
+
                 if cls._running:
                     logger.warning(
                         "[controller_overlay] process exited with code {}",
@@ -238,4 +251,20 @@ class ControllerOverlay:
                     )
                     cls._running = False
         except asyncio.CancelledError:
+            pass
+
+    @classmethod
+    async def _drain_output(cls):
+        """Continuously read and log stdout from the subprocess."""
+        try:
+            while cls._process and cls._process.stdout:
+                line = await cls._process.stdout.readline()
+                if not line:
+                    break
+                text = line.decode(errors="replace").rstrip()
+                if text:
+                    logger.debug("[gc-overlay] {}", text)
+        except asyncio.CancelledError:
+            pass
+        except Exception:
             pass

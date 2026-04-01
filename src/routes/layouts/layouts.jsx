@@ -34,7 +34,7 @@ const LAYOUT_SETTINGS = {
     ],
 };
 
-function ScaledIframe({ src }) {
+function ScaledIframe({ src, fallbackWidth, fallbackHeight }) {
     const containerRef = useRef(null);
     const iframeRef = useRef(null);
     const [nativeSize, setNativeSize] = useState(null);
@@ -68,7 +68,13 @@ function ScaledIframe({ src }) {
         const readSize = () => {
             try {
                 const doc = iframeRef.current?.contentDocument;
-                if (!doc) return;
+                if (!doc) {
+                    // cross-origin: contentDocument is null
+                    if (fallbackWidth && fallbackHeight) {
+                        setNativeSize({ w: fallbackWidth, h: fallbackHeight });
+                    }
+                    return;
+                }
                 const style = doc.defaultView.getComputedStyle(doc.body);
                 const cssW = parseFloat(style.width);
                 const cssH = parseFloat(style.height);
@@ -78,11 +84,14 @@ function ScaledIframe({ src }) {
                     setNativeSize({ w, h });
                 }
             } catch (e) {
-                // cross-origin — keep defaults
+                // cross-origin fallback
+                if (fallbackWidth && fallbackHeight) {
+                    setNativeSize({ w: fallbackWidth, h: fallbackHeight });
+                }
             }
         };
         requestAnimationFrame(readSize);
-    }, []);
+    }, [fallbackWidth, fallbackHeight]);
 
     return (
         <Box
@@ -646,14 +655,8 @@ function ControllerOverlayPanel({ selected, onSelect }) {
         setLoading(false);
     }, [fetchStatus]);
 
-    const handleSelectPort = useCallback(async (portNum) => {
-        // Set the controller port on the backend
-        try {
-            await fetch(`/api/v1/controller/player?controller=${portNum}`, { method: 'PUT' });
-            await fetchStatus();
-        } catch { /* ignore */ }
-
-        const overlayUrl = `http://localhost:${status?.port ?? 8069}`;
+    const handleSelectPort = useCallback((portNum) => {
+        const overlayUrl = `http://localhost:${status?.port ?? 8069}/?port=${portNum}&bg=transparent`;
         onSelect({
             group: 'controller',
             name: `Player ${portNum} Controller`,
@@ -663,7 +666,7 @@ function ControllerOverlayPanel({ selected, onSelect }) {
             height: 256,
             _controllerPort: portNum,
         });
-    }, [status?.port, onSelect, fetchStatus]);
+    }, [status?.port, onSelect]);
 
     if (!status) return <Loader size="xs" />;
 
@@ -679,8 +682,6 @@ function ControllerOverlayPanel({ selected, onSelect }) {
             </Stack>
         );
     }
-
-    const overlayUrl = `http://localhost:${status.port}`;
 
     return (
         <Stack gap="sm">
@@ -717,7 +718,7 @@ function ControllerOverlayPanel({ selected, onSelect }) {
             <Stack gap={4}>
                 {[1, 2, 3, 4].map(portNum => {
                     const isActive = selected?._controllerPort === portNum;
-                    const isCurrentPort = status.controller === portNum;
+                    const portUrl = `http://localhost:${status.port}/?port=${portNum}&bg=transparent`;
                     return (
                         <UnstyledButton
                             key={portNum}
@@ -736,12 +737,11 @@ function ControllerOverlayPanel({ selected, onSelect }) {
                             <Group justify="space-between" wrap="nowrap" gap={4}>
                                 <div style={{ minWidth: 0, flex: 1 }}>
                                     <Text size="sm">Player {portNum}</Text>
-                                    <Text size="xs" c="dimmed">Port {portNum} {isCurrentPort && status.running ? '(active)' : ''}</Text>
                                 </div>
                                 {status.running && (
-                                    <CopyButton value={overlayUrl}>
+                                    <CopyButton value={portUrl}>
                                         {({ copied, copy }) => (
-                                            <Tooltip label={copied ? 'Copied!' : 'Copy URL'}>
+                                            <Tooltip label={copied ? 'Copied!' : 'Copy OBS URL'}>
                                                 <ActionIcon
                                                     variant="subtle"
                                                     color={copied ? 'teal' : 'gray'}
@@ -981,7 +981,7 @@ export default function LayoutBrowser() {
                                         </CopyButton>
                                     </Group>
                                 </Group>
-                                <ScaledIframe key={selectedUrl} src={selectedUrl} />
+                                <ScaledIframe key={selectedUrl} src={selectedUrl} fallbackWidth={selected?.width} fallbackHeight={selected?.height} />
                             </>
                         ) : (
                             <Box
