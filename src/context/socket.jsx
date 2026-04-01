@@ -7,9 +7,6 @@ export const SocketContext = createContext({
 });
 
 export const SocketProvider = ({children}) => {
-    const stateStore = useStateStore();
-    const settingsStore = useSettingsStore();
-    const configStore = useConfigStore();
 
     const socket = useMemo(
         () => io(
@@ -57,12 +54,12 @@ export const SocketProvider = ({children}) => {
             if (setPending.length > 0) {
                 const batch = setPending;
                 setPending = [];
-                stateStore.setItems(batch, false);
+                useStateStore.getState().setItems(batch, false);
             }
             if (unsetPending.length > 0) {
                 const batch = unsetPending;
                 unsetPending = [];
-                stateStore.deleteItems(batch, false);
+                useStateStore.getState().deleteItems(batch, false);
             }
         };
 
@@ -101,11 +98,11 @@ export const SocketProvider = ({children}) => {
                     return;
                 }
 
-                stateStore.mergeItems(resp);
+                useStateStore.getState().mergeItems(resp);
                 socket.on('v1.state.set', doSet);
                 socket.on('v1.state.set_batch', doBatchSet);
                 socket.on('v1.state.unset', doUnset);
-                stateStore.setLoaded(true);
+                useStateStore.getState().setLoaded(true);
             });
         } else {
             socket.on('v1.state.set', doSet);
@@ -118,7 +115,7 @@ export const SocketProvider = ({children}) => {
             socket.off('v1.state.set', doSet);
             socket.off('v1.state.set_batch', doBatchSet);
             socket.off('v1.state.unset', doUnset);
-            stateStore.setLoaded(false);
+            useStateStore.getState().setLoaded(false);
         }
     }, [socket]);
 
@@ -133,14 +130,14 @@ export const SocketProvider = ({children}) => {
                 const batch = setPending;
                 setPending = [];
                 for (const { key, value } of batch) {
-                    settingsStore.setItem(key, value, false);
+                    useSettingsStore.getState().setItem(key, value, false);
                 }
             }
             if (unsetPending.length > 0) {
                 const batch = unsetPending;
                 unsetPending = [];
                 for (const key of batch) {
-                    settingsStore.deleteItem(key, false);
+                    useSettingsStore.getState().deleteItem(key, false);
                 }
             }
         };
@@ -170,10 +167,10 @@ export const SocketProvider = ({children}) => {
                     return;
                 }
 
-                settingsStore.mergeItems(resp);
+                useSettingsStore.getState().mergeItems(resp);
                 socket.on('v1.settings.set', doSet);
                 socket.on('v1.settings.unset', doUnset);
-                settingsStore.setLoaded(true);
+                useSettingsStore.getState().setLoaded(true);
             });
         } else {
             socket.on('v1.settings.set', doSet);
@@ -184,7 +181,7 @@ export const SocketProvider = ({children}) => {
             if (rafId !== null) cancelAnimationFrame(rafId);
             socket.off('v1.settings.set', doSet);
             socket.off('v1.settings.unset', doUnset);
-            settingsStore.setLoaded(false);
+            useSettingsStore.getState().setLoaded(false);
         }
     }, [socket]);
 
@@ -197,15 +194,17 @@ export const SocketProvider = ({children}) => {
                 return;
             }
 
-            configStore.mergeItems(resp);
-            configStore.setLoaded(true);
+            useConfigStore.getState().mergeItems(resp);
+            useConfigStore.getState().setLoaded(true);
         });
 
         return () => {}
     }, [socket]);
 
+    const socketValue = useMemo(() => ({ socket }), [socket]);
+
     return (
-        <SocketContext value={{ socket }}>
+        <SocketContext value={socketValue}>
             {children}
         </SocketContext>
     )
@@ -230,5 +229,5 @@ export const useSocketSubscribe = (eventName, eventHandler) => {
         return () => {
             socket.off(eventName, eventHandler);
         }
-    }, [eventHandler]);
+    }, [eventName, eventHandler]);
 }

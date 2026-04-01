@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
     Modal, Stack, PasswordInput, Button, Group, Badge, Text, Divider,
-    TextInput, ActionIcon, Tooltip,
+    TextInput, ActionIcon, Tooltip, SegmentedControl,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 
@@ -22,6 +22,11 @@ export default function SettingsModal({ opened, onClose }) {
     const [browsingInProgress, setBrowsingInProgress] = useState(false);
     const [savingPath, setSavingPath] = useState(false);
     const [hudPathError, setHudPathError] = useState('');
+
+    // Pinned player state
+    const [pinnedPlayer, setPinnedPlayer] = useState('');
+    const [pinnedSide, setPinnedSide] = useState('Team 1');
+    const [pinnedSaving, setPinnedSaving] = useState(false);
 
     // Controller overlay state
     const [controllerStatus, setControllerStatus] = useState(null);
@@ -45,6 +50,36 @@ export default function SettingsModal({ opened, onClose }) {
             setChallongeConfigured(!!data);
         } catch { /* ignore */ }
     }, []);
+
+    const fetchPinnedPlayer = useCallback(async () => {
+        try {
+            const [playerResp, sideResp] = await Promise.all([
+                fetch('/api/v1/settings?key=project_rio.pinned_player'),
+                fetch('/api/v1/settings?key=project_rio.pinned_side'),
+            ]);
+            const player = await playerResp.json();
+            const side = await sideResp.json();
+            setPinnedPlayer(player || '');
+            setPinnedSide(side || 'Team 1');
+        } catch { /* ignore */ }
+    }, []);
+
+    const handleSavePinnedPlayer = useCallback(async () => {
+        setPinnedSaving(true);
+        try {
+            await Promise.all([
+                fetch(`/api/v1/settings?key=project_rio.pinned_player&value=${encodeURIComponent(pinnedPlayer.trim())}`, { method: 'PUT' }),
+                fetch(`/api/v1/settings?key=project_rio.pinned_side&value=${encodeURIComponent(pinnedSide)}`, { method: 'PUT' }),
+            ]);
+            notifications.show({
+                message: pinnedPlayer.trim() ? `Locked "${pinnedPlayer.trim()}" to ${pinnedSide}` : 'Player lock cleared',
+                color: 'green',
+            });
+        } catch {
+            notifications.show({ message: 'Failed to save player lock', color: 'red' });
+        }
+        setPinnedSaving(false);
+    }, [pinnedPlayer, pinnedSide]);
 
     const fetchControllerStatus = useCallback(async () => {
         try {
@@ -99,11 +134,12 @@ export default function SettingsModal({ opened, onClose }) {
     useEffect(() => {
         if (opened) {
             fetchHudPath();
+            fetchPinnedPlayer();
             fetchChallongeStatus();
             fetchControllerStatus();
             setChallongeKey('');
         }
-    }, [opened, fetchHudPath, fetchChallongeStatus, fetchControllerStatus]);
+    }, [opened, fetchHudPath, fetchPinnedPlayer, fetchChallongeStatus, fetchControllerStatus]);
 
     const handleSetHudPath = useCallback(async (path) => {
         setSavingPath(true);
@@ -152,7 +188,7 @@ export default function SettingsModal({ opened, onClose }) {
     }, [handleSetHudPath]);
 
     return (
-        <Modal opened={opened} onClose={onClose} title="Settings" size="md">
+        <Modal opened={opened} onClose={onClose} title="Settings" size="lg">
             <Stack gap="sm">
                 <Divider label="Project Rio" labelPosition="center" />
 
@@ -210,6 +246,32 @@ export default function SettingsModal({ opened, onClose }) {
                 {hudPathError && (
                     <Text size="xs" c="red">{hudPathError}</Text>
                 )}
+
+                {/* Pinned Player */}
+                <Text size="sm" fw={500} mt="xs">Player Lock</Text>
+                <Text size="xs" c="dimmed">
+                    Lock a Rio username to always appear on a specific side when a game is loaded.
+                </Text>
+                <TextInput
+                    size="xs"
+                    placeholder="Rio username"
+                    value={pinnedPlayer}
+                    onChange={e => setPinnedPlayer(e.currentTarget.value)}
+                />
+                <SegmentedControl
+                    size="xs"
+                    value={pinnedSide}
+                    onChange={setPinnedSide}
+                    data={['Team 1', 'Team 2']}
+                />
+                <Button
+                    size="xs"
+                    variant="outline"
+                    onClick={handleSavePinnedPlayer}
+                    loading={pinnedSaving}
+                >
+                    {pinnedPlayer.trim() ? 'Save Lock' : 'Clear Lock'}
+                </Button>
 
                 <Divider label="Challonge" labelPosition="center" />
 

@@ -36,6 +36,25 @@ def _sanitize_row(d: dict) -> dict:
     return out
 
 
+def _pinned_swap_needed(player0: str, player1: str) -> bool | None:
+    """Check if the pinned player setting requires swapping sides.
+
+    Returns True if swap needed, False if no swap needed, None if
+    pinned player is not in this game.
+    """
+    pinned_player = Settings.settings.get("project_rio", {}).get("pinned_player", "").strip()
+    if not pinned_player:
+        return None
+    pinned_side = Settings.settings.get("project_rio", {}).get("pinned_side", "Team 1")
+    pinned_index = 0 if pinned_side == "Team 1" else 1
+
+    if player0 == pinned_player:
+        return pinned_index == 1
+    elif player1 == pinned_player:
+        return pinned_index == 0
+    return None
+
+
 class OngoingGamePool:
     """Shared pool of ongoing Project Rio games fetched from the API.
 
@@ -139,7 +158,22 @@ class OngoingGamePool:
         if not game:
             return False
 
-        await apply_parsed_game_to_state(game, scoreboard_number)
+        # Check if pinned player requires a side swap
+        entrants = game.get("entrants", [[{}], [{}]])
+        player0 = entrants[0][0].get("rioName", "") if entrants[0] else ""
+        player1 = entrants[1][0].get("rioName", "") if entrants[1] else ""
+        swap = _pinned_swap_needed(player0, player1)
+
+        if swap:
+            # Swap entrants and scores for pinned player placement
+            game = dict(game)
+            game["entrants"] = list(reversed(game["entrants"]))
+            game["team1score"], game["team2score"] = game.get("team2score", 0), game.get("team1score", 0)
+            home_team = 1
+        else:
+            home_team = 2
+
+        await apply_parsed_game_to_state(game, scoreboard_number, home_team=home_team)
 
         await Settings.Set(f"scoreboards.sources.{scoreboard_number}",
                            {"type": "ongoing_api", "api_game_id": game_id})
@@ -264,6 +298,19 @@ class CompletedGamePool:
         game = cls.get_game(game_id)
         if not game:
             return False
+
+        # Check if pinned player requires a side swap
+        # Completed games use away_user (Team 1) and home_user (Team 2)
+        away_user = game.get("away_user", "")
+        home_user = game.get("home_user", "")
+        swap = _pinned_swap_needed(away_user, home_user)
+
+        if swap:
+            # Swap away/home fields so the pinned player lands on the correct side
+            game = dict(game)
+            game["away_user"], game["home_user"] = game["home_user"], game["away_user"]
+            game["away_score"], game["home_score"] = game.get("home_score", 0), game.get("away_score", 0)
+            game["away_captain"], game["home_captain"] = game.get("home_captain", ""), game.get("away_captain", "")
 
         await apply_completed_game_to_state(game, scoreboard_number)
 

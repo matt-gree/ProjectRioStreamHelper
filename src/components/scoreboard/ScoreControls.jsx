@@ -298,6 +298,17 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, sourc
         setItem(`${base}.pitcher`, '');
     }, [base, setItem]);
 
+    const clearTournamentData = useCallback(() => {
+        const tagFields = ['name', 'team', 'full_name', 'country', 'state', 'pronoun'];
+        for (const t of [1, 2]) {
+            for (const f of tagFields) {
+                setItem(`${base}.team.${t}.player.1.${f}`, '');
+            }
+        }
+        setItem(`${base}.phase`, '');
+        setItem(`${base}.match`, '');
+    }, [base, setItem]);
+
     const resetBaseballState = useCallback(() => {
         setItem(`${base}.score_left`, 0);
         setItem(`${base}.score_right`, 0);
@@ -679,6 +690,10 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, sourc
                         />
                     </Grid.Col>
                 </Grid>
+
+                <Button size="xs" variant="light" color="red" onClick={clearTournamentData} fullWidth>
+                    Clear Tags
+                </Button>
             </Stack>
         </Paper>
     );
