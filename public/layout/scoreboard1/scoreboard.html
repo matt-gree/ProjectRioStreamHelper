@@ -2,6 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8" />
+  <meta name="overlay-settings" content="accentColor, cardBg, textColor, borderRadius, borderColor, borderWidth, fontFamily, cardShadow, textShadow, showCaptains, showElo, showTeamLogos, showLogo, showBackdropBlur, showShadow, finalBadgeColor" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet" />
@@ -21,8 +22,9 @@
       width: 800px;
       height: 400px;
       background: transparent;
-      font-family: 'Inter', sans-serif;
-      color: #fff;
+      font-family: var(--font-family, 'Inter', sans-serif);
+      color: var(--text-primary, #fff);
+      text-shadow: var(--text-shadow, none);
     }
 
     /* ── Card shell ── */
@@ -35,31 +37,32 @@
     }
 
     #card {
+      position: relative;
       width: 760px;
-      background: rgba(15, 15, 25, 0.88);
+      background: var(--card-bg, rgba(15, 15, 25, 0.88));
       backdrop-filter: blur(14px);
       -webkit-backdrop-filter: blur(14px);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 16px;
+      border: var(--border-width, 1px) solid var(--border-color, rgba(255, 255, 255, 0.08));
+      border-radius: var(--border-radius, 16px);
       padding: 18px 20px;
       overflow: hidden;
-      filter: drop-shadow(0 4px 20px rgba(0, 0, 0, 0.5));
+      filter: var(--card-shadow-filter, none);
       transition: opacity 0.15s ease, transform 0.15s ease;
     }
 
     .hidden { display: none !important; }
 
     /* ── Slide animations ── */
-    @keyframes slideOutLeft {
+    @keyframes slideOut {
       from { transform: translateX(0); opacity: 1; }
-      to   { transform: translateX(-50px); opacity: 0; }
+      to   { transform: translateX(-40px); opacity: 0; }
     }
-    @keyframes slideInRight {
-      from { transform: translateX(50px); opacity: 0; }
+    @keyframes slideIn {
+      from { transform: translateX(40px); opacity: 0; }
       to   { transform: translateX(0); opacity: 1; }
     }
-    .slide-out { animation: slideOutLeft 180ms ease-in forwards; }
-    .slide-in  { animation: slideInRight 180ms ease-out forwards; }
+    .slide-out { animation: slideOut 200ms ease-in forwards; }
+    .slide-in  { animation: slideIn 200ms ease-out forwards; }
 
     /* ── TOP ROW: names, logos, score, inning ── */
     .top-row {
@@ -131,7 +134,7 @@
     }
 
     .final-badge {
-      background: #ef4444;
+      background: var(--final-badge-color, #ef4444);
       color: #fff;
       font-size: 11px;
       font-weight: 800;
@@ -139,6 +142,19 @@
       letter-spacing: 1px;
       padding: 3px 10px;
       border-radius: 4px;
+    }
+
+    /* ── Overlay logo ── */
+    .overlay-logo {
+      position: absolute;
+      bottom: 6px;
+      left: 50%;
+      transform: translateX(-50%);
+      height: 22px;
+      width: auto;
+      object-fit: contain;
+      z-index: 10;
+      pointer-events: none;
     }
 
     .score-dash {
@@ -233,29 +249,13 @@
       background: rgba(255, 255, 255, 0.05);
     }
     .count-dot.ball-active { background: #22c55e; border-color: #22c55e; }
-    .count-dot.strike-active { background: #ef4444; border-color: #ef4444; }
+    .count-dot.strike-active { background: #eab308; border-color: #eab308; }
 
-    .outs-display {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 3px;
-    }
-    .outs-label {
-      font-size: 9px;
-      font-weight: 600;
-      color: rgba(255, 255, 255, 0.4);
-      text-transform: uppercase;
-    }
-    .outs-row {
-      display: flex;
-      gap: 4px;
-    }
     .out-dot {
-      width: 10px;
-      height: 10px;
+      width: 8px;
+      height: 8px;
       border-radius: 50%;
-      border: 1.5px solid rgba(255, 255, 255, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.15);
       background: rgba(255, 255, 255, 0.05);
     }
     .out-dot.active { background: #ef4444; border-color: #ef4444; }
@@ -331,62 +331,7 @@
       border-radius: 6px;
     }
 
-    /* ── COMPLETED MODE ── */
-    .completed-layout {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      min-height: 320px;
-      gap: 20px;
-    }
-
-    .completed-main {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 24px;
-    }
-
-    .completed-team {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-    .completed-team.right { flex-direction: row-reverse; }
-
-    .captain-icon {
-      width: 56px;
-      height: 56px;
-      object-fit: contain;
-      border: 2px solid var(--accent);
-      border-radius: 10px;
-      background: rgba(var(--accent-rgb), 0.08);
-    }
-
-    .completed-name {
-      font-size: 20px;
-      font-weight: 700;
-      max-width: 180px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .completed-score-block {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 6px;
-    }
-
-    .completed-score-nums {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    /* ── ELO ROW ── */
+    /* ── ELO ROW (completed games, replaces game-state-row) ── */
     .elo-row {
       display: grid;
       grid-template-columns: 1fr auto 1fr;
@@ -442,7 +387,7 @@
     const SB = parseInt(params.get('scoreboard')) || 1;
     const SIZE = params.get('size') || 'l';
 
-    const { deepGet, charImg, logoImg, applyAccentColor, BASE_URL, state, settings } = OverlayBase;
+    const { deepGet, charImg, logoImg, applyDesignSettings, brandingLogoUrl, BASE_URL, state, settings } = OverlayBase;
 
     /* ── Size configuration ── */
     const SIZE_CONFIG = {
@@ -454,11 +399,30 @@
     };
     const sizeConf = SIZE_CONFIG[SIZE] || SIZE_CONFIG.l;
 
-    // Apply dynamic dimensions
-    document.body.style.width = sizeConf.w + 'px';
-    document.body.style.height = sizeConf.h + 'px';
-    document.getElementById('overlay').style.width = sizeConf.w + 'px';
-    document.getElementById('overlay').style.height = sizeConf.h + 'px';
+    // Expose reference dimensions for iframe preview detection
+    document.body.dataset.refW = sizeConf.w;
+    document.body.dataset.refH = sizeConf.h;
+
+    // Auto-scale: design at reference size, scale to fill the OBS browser source
+    function autoScale() {
+      const overlay = document.getElementById('overlay');
+      overlay.style.width = sizeConf.w + 'px';
+      overlay.style.height = sizeConf.h + 'px';
+      const needsScale = Math.abs(window.innerWidth - sizeConf.w) > 2 || Math.abs(window.innerHeight - sizeConf.h) > 2;
+      if (needsScale) {
+        const scale = Math.min(window.innerWidth / sizeConf.w, window.innerHeight / sizeConf.h);
+        document.body.style.width = window.innerWidth + 'px';
+        document.body.style.height = window.innerHeight + 'px';
+        overlay.style.transform = `scale(${scale})`;
+        overlay.style.transformOrigin = 'top left';
+      } else {
+        document.body.style.width = sizeConf.w + 'px';
+        document.body.style.height = sizeConf.h + 'px';
+        overlay.style.transform = '';
+      }
+    }
+    window.addEventListener('resize', autoScale);
+    autoScale();
 
     // Scale card width
     const cardPadX = SIZE === 'xs' ? 8 : SIZE === 's' ? 12 : 20;
@@ -486,6 +450,17 @@
     function showTeamLogos() {
       return deepGet(settings, 'overlays.scoreboard.showTeamLogos', true) !== false;
     }
+    function showLogo() {
+      return deepGet(settings, 'overlays.scoreboard.showLogo', true) !== false;
+    }
+    function showBackdropBlur() {
+      return deepGet(settings, 'overlays.scoreboard.showBackdropBlur', true) !== false;
+    }
+    function showShadow() {
+      const perLayout = deepGet(settings, 'overlays.scoreboard.showShadow', null);
+      if (perLayout !== null) return perLayout !== false;
+      return deepGet(settings, 'overlays.global.showShadow', true) !== false;
+    }
 
     /* ── Game change detection + animation ── */
     function getGameKey() {
@@ -499,16 +474,24 @@
       const card = document.getElementById('card');
       card.classList.remove('slide-in');
       card.classList.add('slide-out');
-      setTimeout(() => {
-        callback();
+      card.addEventListener('animationend', function onOut() {
+        card.removeEventListener('animationend', onOut);
         card.classList.remove('slide-out');
+        card.style.opacity = '0';
+        callback();
+        // Force layout so the browser registers the new content before animating
+        void card.offsetHeight;
+        card.style.opacity = '';
         card.classList.add('slide-in');
-        setTimeout(() => card.classList.remove('slide-in'), 200);
-      }, 200);
+        card.addEventListener('animationend', function onIn() {
+          card.removeEventListener('animationend', onIn);
+          card.classList.remove('slide-in');
+        });
+      });
     }
 
-    /* ── Count/outs builders ── */
-    function buildCount(balls, strikes) {
+    /* ── Count/outs builder (B, S, O in one column) ── */
+    function buildCount(balls, strikes, outs) {
       let html = '<div class="count-display">';
       html += '<div class="count-row"><span class="count-label">B</span>';
       for (let i = 0; i < 4; i++)
@@ -518,15 +501,11 @@
       for (let i = 0; i < 3; i++)
         html += `<span class="count-dot${i < strikes ? ' strike-active' : ''}"></span>`;
       html += '</div>';
-      html += '</div>';
-      return html;
-    }
-
-    function buildOuts(outs) {
-      let html = '<div class="outs-display"><span class="outs-label">Outs</span><div class="outs-row">';
+      html += '<div class="count-row"><span class="count-label">O</span>';
       for (let i = 0; i < 3; i++)
         html += `<span class="out-dot${i < outs ? ' active' : ''}"></span>`;
-      html += '</div></div>';
+      html += '</div>';
+      html += '</div>';
       return html;
     }
 
@@ -566,8 +545,66 @@
       return html;
     }
 
-    /* ── Live mode ── */
-    function buildLive() {
+    /* ── ELO row builder (for completed games) ── */
+    function buildEloRow(p1, p2) {
+      const winnerUser = deepGet(state, `score.${SB}.winner_user`, '');
+      const wInElo = deepGet(state, `score.${SB}.winner_incoming_elo`);
+      const wOutElo = deepGet(state, `score.${SB}.winner_result_elo`);
+      const lInElo = deepGet(state, `score.${SB}.loser_incoming_elo`);
+      const lOutElo = deepGet(state, `score.${SB}.loser_result_elo`);
+      const innings = deepGet(state, `score.${SB}.innings_played`, '');
+      const stadium = deepGet(state, `score.${SB}.stadium`, '');
+
+      const p1IsWinner = p1 === winnerUser;
+      const p1InElo = p1IsWinner ? wInElo : lInElo;
+      const p1OutElo = p1IsWinner ? wOutElo : lOutElo;
+      const p2InElo = p1IsWinner ? lInElo : wInElo;
+      const p2OutElo = p1IsWinner ? lOutElo : wOutElo;
+
+      const hasElo = showElo() && p1InElo != null && p1OutElo != null;
+      if (!hasElo && !stadium && !innings) return '';
+
+      let html = '<div class="elo-row">';
+
+      if (hasElo) {
+        const d1 = Math.round(p1OutElo - p1InElo);
+        const cls1 = d1 >= 0 ? 'elo-gain' : 'elo-loss';
+        const sign1 = d1 >= 0 ? '+' : '';
+        html += '<div class="elo-block">';
+        html += `<span class="elo-prev">${Math.round(p1InElo)}</span>`;
+        html += `<span class="elo-arrow">&rarr;</span>`;
+        html += `<span class="elo-new">${Math.round(p1OutElo)}</span>`;
+        html += `<span class="elo-delta ${cls1}">${sign1}${d1}</span>`;
+        html += '</div>';
+      } else {
+        html += '<div></div>';
+      }
+
+      const metaParts = [];
+      if (stadium) metaParts.push(stadium);
+      if (innings) metaParts.push(`${innings} inn`);
+      html += `<div class="meta-center">${metaParts.join(' &middot; ')}</div>`;
+
+      if (hasElo) {
+        const d2 = Math.round(p2OutElo - p2InElo);
+        const cls2 = d2 >= 0 ? 'elo-gain' : 'elo-loss';
+        const sign2 = d2 >= 0 ? '+' : '';
+        html += '<div class="elo-block right">';
+        html += `<span class="elo-prev">${Math.round(p2InElo)}</span>`;
+        html += `<span class="elo-arrow">&rarr;</span>`;
+        html += `<span class="elo-new">${Math.round(p2OutElo)}</span>`;
+        html += `<span class="elo-delta ${cls2}">${sign2}${d2}</span>`;
+        html += '</div>';
+      } else {
+        html += '<div></div>';
+      }
+
+      html += '</div>';
+      return html;
+    }
+
+    /* ── Build scoreboard (handles both live and completed) ── */
+    function buildScoreboard(isCompleted) {
       const p1 = deepGet(state, `score.${SB}.team.1.player.1.rioName`, '');
       const p2 = deepGet(state, `score.${SB}.team.2.player.1.rioName`, '');
       const team1 = deepGet(state, `score.${SB}.team.1.player.1.msb_team`, '');
@@ -582,12 +619,12 @@
       const batter = deepGet(state, `score.${SB}.batter`, '');
       const pitcher = deepGet(state, `score.${SB}.pitcher`, '');
 
-      const isFinal = half === 'Final';
-      const halfShort = half === 'Bottom' ? 'BOT' : half === 'Top' ? 'TOP' : half.toUpperCase();
+      const isFinal = half === 'Final' || isCompleted;
+      const halfShort = half === 'Bottom' ? 'BOT' : half === 'Top' ? 'TOP' : (half || '').toUpperCase();
 
       let html = '';
 
-      // Top row
+      // ── Top row: names, logos, score, inning/final ──
       const showLogos = showTeamLogos() && SIZE !== 'xs';
       html += '<div class="top-row">';
       html += '<div class="team-side">';
@@ -618,37 +655,39 @@
       html += '</div>';
       html += '</div>';
 
-      // Game state row (skip if Final or size too small)
-      if (!isFinal && sizeConf.showGameState) {
-        html += '<div class="game-state-row">';
+      // ── Middle row: game state (live) or ELO (completed) ──
+      if (sizeConf.showGameState) {
+        if (isFinal && isCompleted) {
+          // Completed: show ELO + meta
+          html += buildEloRow(p1, p2);
+        } else if (!isFinal) {
+          // Live: show batter, pitcher, count, diamond, outs
+          html += '<div class="game-state-row">';
 
-        // Batter
-        html += '<div class="active-player">';
-        if (batter) html += charImg(batter, 'active-icon');
-        html += '<div class="active-info">';
-        html += `<span class="active-name">${batter}</span>`;
-        html += '<span class="role-tag batting">AB</span>';
-        html += '</div></div>';
+          html += '<div class="active-player">';
+          if (batter) html += charImg(batter, 'active-icon');
+          html += '<div class="active-info">';
+          html += `<span class="active-name">${batter}</span>`;
+          html += '<span class="role-tag batting">AB</span>';
+          html += '</div></div>';
 
-        // Center situation
-        html += '<div class="situation-center">';
-        if (sizeConf.showCount) html += buildCount(balls, strikes);
-        if (sizeConf.showDiamond) html += buildDiamond();
-        html += buildOuts(outs);
-        html += '</div>';
+          html += '<div class="situation-center">';
+          if (sizeConf.showCount) html += buildCount(balls, strikes, outs);
+          if (sizeConf.showDiamond) html += buildDiamond();
+          html += '</div>';
 
-        // Pitcher
-        html += '<div class="active-player right">';
-        if (pitcher) html += charImg(pitcher, 'active-icon');
-        html += '<div class="active-info">';
-        html += `<span class="active-name">${pitcher}</span>`;
-        html += '<span class="role-tag pitching">P</span>';
-        html += '</div></div>';
+          html += '<div class="active-player right">';
+          if (pitcher) html += charImg(pitcher, 'active-icon');
+          html += '<div class="active-info">';
+          html += `<span class="active-name">${pitcher}</span>`;
+          html += '<span class="role-tag pitching">P</span>';
+          html += '</div></div>';
 
-        html += '</div>';
+          html += '</div>';
+        }
       }
 
-      // Roster row (only for l and xl)
+      // ── Bottom row: roster (l and xl only) ──
       if (sizeConf.showRoster) {
         html += '<div class="roster-row">';
         html += buildRoster(1);
@@ -659,109 +698,9 @@
       return html;
     }
 
-    /* ── Completed mode ── */
-    function buildCompleted() {
-      const p1 = deepGet(state, `score.${SB}.team.1.player.1.rioName`, '');
-      const p2 = deepGet(state, `score.${SB}.team.2.player.1.rioName`, '');
-      const sL = deepGet(state, `score.${SB}.score_left`, 0);
-      const sR = deepGet(state, `score.${SB}.score_right`, 0);
-      const cap1 = deepGet(state, `score.${SB}.team.1.player.1.character.0.name`, '');
-      const cap2 = deepGet(state, `score.${SB}.team.2.player.1.character.0.name`, '');
-      const innings = deepGet(state, `score.${SB}.innings_played`, '');
-      const stadium = deepGet(state, `score.${SB}.stadium`, '');
-
-      // Determine winner/loser for ELO display
-      const winnerUser = deepGet(state, `score.${SB}.winner_user`, '');
-      const loserUser = deepGet(state, `score.${SB}.loser_user`, '');
-      const wInElo = deepGet(state, `score.${SB}.winner_incoming_elo`);
-      const wOutElo = deepGet(state, `score.${SB}.winner_result_elo`);
-      const lInElo = deepGet(state, `score.${SB}.loser_incoming_elo`);
-      const lOutElo = deepGet(state, `score.${SB}.loser_result_elo`);
-
-      // Map p1/p2 to winner/loser
-      const p1IsWinner = p1 === winnerUser;
-      const p1InElo = p1IsWinner ? wInElo : lInElo;
-      const p1OutElo = p1IsWinner ? wOutElo : lOutElo;
-      const p2InElo = p1IsWinner ? lInElo : wInElo;
-      const p2OutElo = p1IsWinner ? lOutElo : wOutElo;
-
-      let html = '<div class="completed-layout">';
-
-      // Main score row
-      html += '<div class="completed-main">';
-
-      html += '<div class="completed-team">';
-      if (showCaptains() && cap1) html += charImg(cap1, 'captain-icon');
-      html += `<span class="completed-name">${p1}</span>`;
-      html += '</div>';
-
-      html += '<div class="completed-score-block">';
-      html += '<div class="completed-score-nums">';
-      html += `<span class="score-num">${sL}</span>`;
-      html += '<span class="score-dash">&mdash;</span>';
-      html += `<span class="score-num">${sR}</span>`;
-      html += '</div>';
-      html += '<span class="final-badge">Final</span>';
-      html += '</div>';
-
-      html += '<div class="completed-team right">';
-      if (showCaptains() && cap2) html += charImg(cap2, 'captain-icon');
-      html += `<span class="completed-name">${p2}</span>`;
-      html += '</div>';
-
-      html += '</div>';
-
-      // ELO + meta row
-      const hasElo = showElo() && p1InElo != null && p1OutElo != null;
-      if (hasElo || stadium || innings) {
-        html += '<div class="elo-row">';
-
-        // P1 ELO
-        if (hasElo) {
-          const d1 = Math.round(p1OutElo - p1InElo);
-          const cls1 = d1 >= 0 ? 'elo-gain' : 'elo-loss';
-          const sign1 = d1 >= 0 ? '+' : '';
-          html += '<div class="elo-block">';
-          html += `<span class="elo-prev">${Math.round(p1InElo)}</span>`;
-          html += `<span class="elo-arrow">&rarr;</span>`;
-          html += `<span class="elo-new">${Math.round(p1OutElo)}</span>`;
-          html += `<span class="elo-delta ${cls1}">${sign1}${d1}</span>`;
-          html += '</div>';
-        } else {
-          html += '<div></div>';
-        }
-
-        // Center meta
-        const metaParts = [];
-        if (stadium) metaParts.push(stadium);
-        if (innings) metaParts.push(`${innings} inn`);
-        html += `<div class="meta-center">${metaParts.join(' &middot; ')}</div>`;
-
-        // P2 ELO
-        if (hasElo) {
-          const d2 = Math.round(p2OutElo - p2InElo);
-          const cls2 = d2 >= 0 ? 'elo-gain' : 'elo-loss';
-          const sign2 = d2 >= 0 ? '+' : '';
-          html += '<div class="elo-block right">';
-          html += `<span class="elo-prev">${Math.round(p2InElo)}</span>`;
-          html += `<span class="elo-arrow">&rarr;</span>`;
-          html += `<span class="elo-new">${Math.round(p2OutElo)}</span>`;
-          html += `<span class="elo-delta ${cls2}">${sign2}${d2}</span>`;
-          html += '</div>';
-        } else {
-          html += '<div></div>';
-        }
-
-        html += '</div>';
-      }
-
-      html += '</div>';
-      return html;
-    }
-
     /* ── Render ── */
     function render() {
-      applyAccentColor('scoreboard');
+      applyDesignSettings('scoreboard');
       const card = document.getElementById('card');
       const p1 = deepGet(state, `score.${SB}.team.1.player.1.rioName`, '');
       const p2 = deepGet(state, `score.${SB}.team.2.player.1.rioName`, '');
@@ -781,8 +720,23 @@
       const gameChanged = prevGameKey !== '' && newKey !== prevGameKey;
       prevGameKey = newKey;
 
+      // Apply backdrop blur setting
+      if (!showBackdropBlur()) {
+        card.style.backdropFilter = 'none';
+        card.style.webkitBackdropFilter = 'none';
+      } else {
+        card.style.backdropFilter = '';
+        card.style.webkitBackdropFilter = '';
+      }
+
+      // Shadow is applied via --card-shadow-filter CSS var (set by applyDesignSettings)
+
       const doRender = () => {
-        card.innerHTML = isCompleted ? buildCompleted() : buildLive();
+        let logoHtml = '';
+        if (showLogo() && (SIZE === 'm' || SIZE === 'l' || SIZE === 'xl')) {
+          logoHtml = `<img class="overlay-logo" src="${brandingLogoUrl()}" onerror="this.style.display='none'" />`;
+        }
+        card.innerHTML = logoHtml + buildScoreboard(isCompleted);
         card.classList.remove('hidden');
       };
 

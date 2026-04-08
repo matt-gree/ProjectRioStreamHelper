@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="overlay-settings" content="accentColor, cardBg, borderRadius, borderColor, borderWidth, fontFamily, cardShadow, textShadow, statValueColor, subtextColor" />
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+
+    body {
+      overflow: visible;
+      margin: 0;
+      width: 325px;
+      height: 120px;
+      background: transparent;
+      font-family: var(--font-family, 'Inter', sans-serif);
+      text-shadow: var(--text-shadow, none);
+    }
+
+    .stats-bar {
+      width: 325px;
+      transform-origin: top left;
+      box-sizing: border-box;
+      background: var(--card-bg, rgba(20, 20, 30, 0.92));
+      border: var(--border-width, 1px) solid var(--border-color, rgba(255, 255, 255, 0.08));
+      border-radius: var(--border-radius, 12px);
+      padding: 4px 6px;  /* ← adjust this to control top/bottom padding everywhere */
+      color: var(--text-primary, #fff);
+      box-shadow: var(--card-box-shadow, none);
+      opacity: 1;
+      transition: opacity 0.3s ease;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .top-row {
+      display: flex;
+      flex-direction: row;
+      align-items: flex-start;
+    }
+    .stats-inner {
+      display: flex;
+      flex-direction: column;
+    }
+    .stats-inner.content-out {
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+    @keyframes contentIn {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+    .stats-inner.content-in {
+      animation: contentIn 0.25s ease forwards;
+    }
+
+    .hidden { display: none !important; }
+
+    /* Character icon — sized to match the stats row height */
+    .char-icon-wrap {
+      flex-shrink: 0;
+      display: flex;
+      align-items: flex-start;
+    }
+    .char-icon-wrap img {
+      height: 40px;
+      width: auto;
+      object-fit: contain;
+      border-radius: 4px;
+    }
+
+    /* Stats row takes remaining width in the top row */
+    .stats-content {
+      flex: 1;
+      min-width: 0;
+      padding-left: 12px;
+      padding-right: 8px;
+    }
+
+    .batting-line {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--stat-subtext-color, rgb(155, 155, 155));
+      white-space: nowrap;
+      overflow: visible;
+      text-align: center;
+      padding-top: 4px;
+      border-top: 2px solid var(--border-color, rgb(255, 255, 255));
+      margin-top: 4px;
+    }
+    .batting-line span {
+      color: var(--stat-subtext-color, rgb(155, 155, 155));
+    }
+
+    /* Stats row */
+    .stats-row {
+      display: flex;
+      justify-content: space-between;
+      width: 100%;
+    }
+    .stat {
+      display: flex;
+      flex-direction: column;
+      align-items: left;
+    }
+    .stat-value {
+      font-size: 20px;
+      font-weight: 700;
+      line-height: 1.2;
+      white-space: nowrap;
+      color: var(--stat-value-color, var(--text-primary, #fff));
+    }
+    .stat-label {
+      font-size: 12px;
+      font-weight: 400;
+      color: var(--stat-subtext-color, rgb(155, 155, 155));
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      line-height: 1.2;
+    }
+  </style>
+</head>
+<body>
+  <div id="scale-wrapper"><div class="stats-bar hidden" id="stats-bar"></div></div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="/layout/lib/overlay-base.js"></script>
+  <script>
+    const REF_W = 325, REF_H = 120;
+    document.body.dataset.refW = REF_W;
+    document.body.dataset.refH = REF_H;
+    function autoScale() {
+      const el = document.getElementById('scale-wrapper');
+      const needsScale = Math.abs(window.innerWidth - REF_W) > 2 || Math.abs(window.innerHeight - REF_H) > 2;
+      if (needsScale) {
+        const scale = Math.min(window.innerWidth / REF_W, window.innerHeight / REF_H);
+        document.body.style.width = window.innerWidth + 'px';
+        document.body.style.height = window.innerHeight + 'px';
+        el.style.transform = `scale(${scale})`;
+        el.style.transformOrigin = 'top left';
+      } else {
+        document.body.style.width = REF_W + 'px';
+        document.body.style.height = REF_H + 'px';
+        el.style.transform = '';
+      }
+    }
+    window.addEventListener('resize', autoScale);
+    autoScale();
+
+    const params = new URLSearchParams(window.location.search);
+    const SCOREBOARD = parseInt(params.get('scoreboard')) || 1;
+    const TEAM_NUM = parseInt(params.get('team')) || 1;
+    const { deepGet, BASE_URL, state, applyDesignSettings } = OverlayBase;
+
+    let prevCharName = '';
+
+    // Compute the text-shadow value directly from settings.
+    // Reads live from OverlayBase.settings so it's always current.
+    function getTextShadow() {
+      const { deepGet: g, settings } = OverlayBase;
+      if (!g(settings, 'overlays.global.textShadowEnabled', false)) return '';
+      const blur  = g(settings, 'overlays.stats.textShadowBlur', null) ?? g(settings, 'overlays.global.textShadowBlur', 4);
+      const color = g(settings, 'overlays.global.textShadowColor', 'rgba(0,0,0,0.8)');
+      return `0px 0px ${blur}px ${color}`;
+    }
+
+    // Apply text-shadow directly on every text element after any DOM update.
+    // Direct DOM manipulation avoids all CSS inheritance / overflow:hidden issues.
+    function applyTextShadow() {
+      const shadow = getTextShadow();
+      document.querySelectorAll('.stat-value, .stat-label, .batting-line').forEach(el => {
+        el.style.textShadow = shadow;
+      });
+    }
+
+    function fmt3(v) { return v.toFixed(3); }
+    function fmt2(v) { return v.toFixed(2); }
+    function fmt1(v) { return v.toFixed(1); }
+
+    function findCharIndex(teamNum, charName) {
+      if (!charName) return -1;
+      for (let i = 0; i < 9; i++) {
+        const name = deepGet(state, `score.${SCOREBOARD}.team.${teamNum}.player.1.character.${i}.name`);
+        if (name === charName) return i;
+      }
+      return -1;
+    }
+
+    function getTeamRole() {
+      const homeTeam = Number(deepGet(state, `score.${SCOREBOARD}.home_team`) ?? 2);
+      const halfInning = deepGet(state, `score.${SCOREBOARD}.half_inning`) ?? 'Top';
+      const awayTeam = homeTeam === 2 ? 1 : 2;
+      const battingTeam = halfInning === 'Top' ? awayTeam : homeTeam;
+      return battingTeam === TEAM_NUM ? 'batting' : 'pitching';
+    }
+
+    function buildContent(charName, role, charIndex, playerName) {
+      const statsObj = deepGet(state, `score.${SCOREBOARD}.stats.team.${TEAM_NUM}.character.${charIndex}`);
+      const b = statsObj?.batting ?? {};
+      const p = statsObj?.pitching ?? {};
+
+      let stats;
+      if (role === 'batting') {
+        stats = [
+          { l: 'AB',  v: b.at_bats ?? 0 },
+          { l: 'AVG', v: fmt3(b.avg    ?? 0) },
+          { l: 'SLG', v: fmt3(b.slg    ?? 0) },
+          { l: 'SO%', v: fmt1(b.so_pct ?? 0) + '%' },
+        ];
+      } else {
+        stats = [
+          { l: 'ERA', v: fmt2(p.era     ?? 0) },
+          { l: 'IP',  v: p.ip           ?? '0.0' },
+          { l: 'K%',  v: fmt1(p.k_pct  ?? 0) + '%' },
+          { l: 'AVG', v: fmt3(p.opp_avg ?? 0) },
+        ];
+      }
+
+      let statsHtml = stats.map(st =>
+        `<span class="stat"><span class="stat-value">${st.v}</span><span class="stat-label">${st.l}</span></span>`
+      ).join('');
+
+      let html = `<div class="stats-inner content-in">`;
+      html += `<div class="top-row">`;
+      html += `<div class="char-icon-wrap"><img src="${BASE_URL}/game_assets/rio_characterIcons/${encodeURIComponent(charName)}.png" onerror="this.style.display='none'" /></div>`;
+      html += `<div class="stats-content"><div class="stats-row">${statsHtml}</div></div>`;
+      html += `</div>`;
+
+      if (role === 'batting') {
+        const battingLine = statsObj?.current_game?.batting_line ?? '';
+        if (battingLine) {
+          html += `<div class="batting-line"><span>Game: </span>${battingLine}</div>`;
+        }
+      } else {
+        const pitchingLine = statsObj?.current_game?.pitching_line ?? '';
+        if (pitchingLine) {
+          html += `<div class="batting-line"><span>Game: </span>${pitchingLine}</div>`;
+        }
+      }
+
+      html += `</div>`;
+      return html;
+    }
+
+    function render() {
+      applyDesignSettings('stats');
+      const bar = document.getElementById('stats-bar');
+      const role = getTeamRole();
+      const playerName = deepGet(state, `score.${SCOREBOARD}.team.${TEAM_NUM}.player.1.rioName`);
+
+      let charName, charIndex;
+      if (role === 'batting') {
+        charName = deepGet(state, `score.${SCOREBOARD}.batter`) || '';
+        charIndex = findCharIndex(TEAM_NUM, charName);
+      } else {
+        charName = deepGet(state, `score.${SCOREBOARD}.pitcher`) || '';
+        charIndex = findCharIndex(TEAM_NUM, charName);
+      }
+
+      if (!charName || charIndex < 0) {
+        bar.classList.add('hidden');
+        prevCharName = '';
+        return;
+      }
+
+      const changed = charName !== prevCharName;
+      prevCharName = charName;
+
+      if (changed && !bar.classList.contains('hidden')) {
+        const inner = bar.querySelector('.stats-inner');
+        if (inner) {
+          inner.classList.remove('content-in');
+          inner.classList.add('content-out');
+          setTimeout(() => {
+            bar.innerHTML = buildContent(charName, role, charIndex, playerName);
+            applyTextShadow();
+          }, 200);
+        } else {
+          bar.innerHTML = buildContent(charName, role, charIndex, playerName);
+          applyTextShadow();
+        }
+      } else {
+        bar.innerHTML = buildContent(charName, role, charIndex, playerName);
+        bar.classList.remove('hidden');
+        applyTextShadow();
+      }
+    }
+
+    OverlayBase.init({
+      render,
+      fetchSettings: true,
+      shouldRenderSettings: (key) => key.startsWith('overlays.'),
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="overlay-settings" content="accentColor, cardBg, textColor, borderRadius, borderColor, borderWidth, fontFamily" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --accent: #f59e0b;
+      --accent-rgb: 245, 158, 11;
+      --card-bg: rgba(15, 15, 25, 0.88);
+      --text-primary: #fff;
+      --text-dimmed: rgba(255, 255, 255, 0.45);
+      --border-color: rgba(255, 255, 255, 0.08);
+      --border-width: 1px;
+      --border-radius: 12px;
+      --font-family: 'Inter', sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      overflow: hidden;
+      width: 440px;
+      height: 600px;
+      background: transparent;
+      font-family: var(--font-family);
+      color: var(--text-primary);
+    }
+
+    #container {
+      width: 440px;
+      height: 600px;
+      transform-origin: top left;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 10px;
+    }
+
+    .schedule-card {
+      width: 100%;
+      background: var(--card-bg);
+      border: var(--border-width, 1px) solid var(--border-color);
+      border-radius: var(--border-radius);
+      overflow: hidden;
+      filter: drop-shadow(0 4px 20px rgba(0, 0, 0, 0.5));
+    }
+
+    .card-header {
+      padding: 12px 16px 10px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .player-name {
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .phase-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      margin-top: 2px;
+    }
+
+    .match-list {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .match-row {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 16px;
+      border-bottom: 1px solid var(--border-color);
+      transition: background 0.15s;
+    }
+
+    .match-row:last-child {
+      border-bottom: none;
+    }
+
+    .match-row.active-set {
+      background: rgba(59, 130, 246, 0.08);
+    }
+
+    .match-main {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      min-width: 0;
+    }
+
+    .match-round-label {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-dimmed);
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+
+    .match-opponent {
+      font-size: 14px;
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .match-opponent .vs {
+      font-size: 11px;
+      font-weight: 400;
+      color: var(--text-dimmed);
+      margin-right: 4px;
+    }
+
+    .match-score {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text-dimmed);
+      white-space: nowrap;
+      text-align: right;
+      min-width: 48px;
+    }
+
+    .match-score .my-score {
+      color: var(--text-primary);
+    }
+
+    .match-score .dash {
+      color: var(--text-dimmed);
+      margin: 0 2px;
+    }
+
+    .status-badge {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 2px 7px;
+      border-radius: 4px;
+      white-space: nowrap;
+    }
+
+    .badge-upcoming {
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text-dimmed);
+    }
+
+    .badge-live {
+      background: rgba(59, 130, 246, 0.18);
+      color: #60a5fa;
+    }
+
+    .badge-won {
+      background: rgba(34, 197, 94, 0.15);
+      color: #4ade80;
+    }
+
+    .badge-lost {
+      background: rgba(239, 68, 68, 0.15);
+      color: #f87171;
+    }
+
+    .empty-state {
+      padding: 24px 16px;
+      text-align: center;
+      color: var(--text-dimmed);
+      font-size: 13px;
+      font-style: italic;
+    }
+
+    .match-row.bracket-hidden {
+      opacity: 0.45;
+      cursor: pointer;
+      user-select: none;
+    }
+    .match-row.bracket-hidden:hover { opacity: 0.7; }
+    .match-row.bracket-shown {
+      cursor: pointer;
+      user-select: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="container"></div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="/layout/lib/overlay-base.js"></script>
+  <script>
+    const REF_W = 440, REF_H = 600;
+    document.body.dataset.refW = REF_W;
+    document.body.dataset.refH = REF_H;
+    function autoScale() {
+      const el = document.getElementById('container');
+      const needsScale = Math.abs(window.innerWidth - REF_W) > 2 || Math.abs(window.innerHeight - REF_H) > 2;
+      if (needsScale) {
+        const scale = Math.min(window.innerWidth / REF_W, window.innerHeight / REF_H);
+        document.body.style.width = window.innerWidth + 'px';
+        document.body.style.height = window.innerHeight + 'px';
+        el.style.transform = `scale(${scale})`;
+        el.style.transformOrigin = 'top left';
+      } else {
+        document.body.style.width = REF_W + 'px';
+        document.body.style.height = REF_H + 'px';
+        el.style.transform = '';
+      }
+    }
+    window.addEventListener('resize', autoScale);
+    autoScale();
+
+    /* ── URL config ── */
+    const params = new URLSearchParams(window.location.search);
+    const PLAYER_PARAM  = params.get('player') || '';
+    const POOL_ONLY     = params.get('pool_only') === 'true';
+    const SHOW_RESULTS  = params.get('show_results') !== 'false'; // default true
+    const REVEAL_MODE   = params.get('reveal') === 'true' || !SHOW_RESULTS; // auto-enable when results hidden
+    const HIDE_BRACKET  = params.get('hide_bracket') === 'true';  // hide bracket rows entirely until revealed
+    const PROGRESSIVE   = params.get('progressive') === 'true';   // sequential reveal for entire schedule
+
+    // Reveal state persists across re-renders
+    const revealedIds      = new Set(); // result revealed for this set ID (REVEAL_MODE)
+    const shownBracketIds  = new Set(); // bracket game row is visible (HIDE_BRACKET)
+    let   revealCount      = 0;         // how many games are fully revealed (PROGRESSIVE)
+
+    const { deepGet, state, settings, applyDesignSettings } = OverlayBase;
+
+    function esc(str) {
+      return String(str ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function fmtScore(v) {
+      if (v === 'W') return 'W';
+      if (v === 'L') return 'L';
+      return v != null ? String(v) : '–';
+    }
+
+    function getTargetPlayer() {
+      return PLAYER_PARAM || deepGet(state, 'bracket.activePlayer', '');
+    }
+
+    /* ── Resolve schedule data: playerSchedule state key (multi-phase) → bracket fallback ── */
+    function getScheduleData() {
+      const ps = deepGet(state, 'playerSchedule');
+      if (ps && ps.sets && ps.sets.length > 0) {
+        let sets = ps.sets;
+        const visiblePgIds = ps.visiblePgIds;
+        if (visiblePgIds && visiblePgIds.length > 0) {
+          const visSet = new Set(visiblePgIds.map(String));
+          sets = sets.filter(s => !s.phaseGroupId || visSet.has(String(s.phaseGroupId)));
+        }
+        return { sets, players: ps.players || {}, phaseName: null };
+      }
+      // Fallback: flatten current bracket state
+      const bracket = deepGet(state, 'bracket');
+      if (!bracket) return null;
+      const sets = [];
+      const addRounds = (rounds) => {
+        for (const roundData of Object.values(rounds || {})) {
+          for (const set of (roundData.sets || [])) {
+            sets.push({ ...set, phaseName: bracket.phaseName });
+          }
+        }
+      };
+      addRounds(bracket.winnersRounds);
+      addRounds(bracket.losersRounds);
+      for (const set of (bracket.grandFinals || [])) {
+        sets.push({ ...set, phaseName: bracket.phaseName });
+      }
+      return { sets, players: bracket.players || {}, phaseName: bracket.phaseName };
+    }
+
+    function render() {
+      applyDesignSettings('bracket');
+
+      const schedData = getScheduleData();
+      const targetName = getTargetPlayer();
+      const container = document.getElementById('container');
+
+      if (!schedData || !targetName) {
+        container.innerHTML = '<div class="schedule-card"><div class="empty-state">Set a player via URL param or<br>bracket.activePlayer state key.</div></div>';
+        return;
+      }
+
+      const { sets: allRawSets, players, phaseName } = schedData;
+
+      /* Find entrant ID matching target name (case-insensitive) */
+      let targetId = null;
+      for (const [id, p] of Object.entries(players)) {
+        if ((p.name || '').toLowerCase() === targetName.toLowerCase()) {
+          targetId = id;
+          break;
+        }
+      }
+
+      if (!targetId) {
+        container.innerHTML = `<div class="schedule-card"><div class="card-header"><div class="player-name">${esc(targetName)}</div></div><div class="empty-state">Player not found in loaded schedule.</div></div>`;
+        return;
+      }
+
+      /* Collect all sets involving this player */
+      const playerSets = allRawSets
+        .filter(s => s.entrant1Id === targetId || s.entrant2Id === targetId)
+        .map(s => ({ ...s, _roundLabel: s.roundName || '' }));
+
+      /* Sort: pools (ROUND_ROBIN) first, then bracket, preserving insertion order within each */
+      playerSets.sort((a, b) => {
+        const aPool = a.bracketType === 'ROUND_ROBIN' ? 0 : 1;
+        const bPool = b.bracketType === 'ROUND_ROBIN' ? 0 : 1;
+        return aPool - bPool;
+      });
+
+      /* Pool-only filter: hide completed sets */
+      const visible = POOL_ONLY ? playerSets.filter(s => !s.completed) : playerSets;
+
+      /* Build HTML */
+      const playerInfo = players[targetId] || {};
+      const displayName = playerInfo.prefix
+        ? `${playerInfo.prefix} | ${playerInfo.name}`
+        : playerInfo.name;
+
+      // Build subtitle: pool phase names first, then bracket phase names
+      const poolPhases   = [...new Set(visible.filter(s => s.bracketType === 'ROUND_ROBIN').map(s => s.phaseName).filter(Boolean))];
+      const bracketPhases = [...new Set(visible.filter(s => s.bracketType !== 'ROUND_ROBIN').map(s => s.phaseName).filter(Boolean))];
+      const orderedPhases = [...poolPhases, ...bracketPhases];
+      const headerPhase = phaseName || orderedPhases.join(' → ');
+
+      let html = '<div class="schedule-card">';
+      html += '<div class="card-header">';
+      html += `<div class="player-name">${esc(displayName)}</div>`;
+      if (headerPhase) {
+        html += `<div class="phase-label">${esc(headerPhase)}</div>`;
+      }
+      html += '</div>';
+
+      if (visible.length === 0) {
+        html += '<div class="empty-state">No matches to display.</div>';
+      } else {
+        html += '<div class="match-list">';
+
+        // In HIDE_BRACKET mode, track whether we've placed the one visible placeholder yet
+        let bracketPlaceholderPlaced = false;
+
+        for (const [i, set] of visible.entries()) {
+          const isBracket = set.bracketType !== 'ROUND_ROBIN';
+
+          /* ── PROGRESSIVE mode: sequential reveal for the entire schedule ── */
+          if (PROGRESSIVE) {
+            if (i > revealCount) continue; // fully hidden — not rendered at all
+
+            const isP1prog = set.entrant1Id === targetId;
+            const oppIdProg = isP1prog ? set.entrant2Id : set.entrant1Id;
+            const oppProg = oppIdProg ? (players[oppIdProg]?.name || 'TBD') : 'TBD';
+            const myScoreProg  = isP1prog ? set.score1 : set.score2;
+            const oppScoreProg = isP1prog ? set.score2 : set.score1;
+
+            const resultRevealed = i < revealCount;
+
+            let statusClassProg = 'upcoming', statusLabelProg = 'Upcoming', isLiveProg = false;
+            if (set.state === 'active' || set.state === 'called') {
+              statusClassProg = 'live'; statusLabelProg = 'Live'; isLiveProg = true;
+            } else if (set.completed && resultRevealed) {
+              const won = myScoreProg === 'W'
+                || (typeof myScoreProg === 'number' && typeof oppScoreProg === 'number' && myScoreProg > oppScoreProg);
+              statusClassProg = won ? 'won' : 'lost';
+              statusLabelProg = won ? 'W' : 'L';
+            }
+
+            const clickAttr = resultRevealed
+              ? ` data-progressive-collapse="${i}" style="cursor:pointer"`
+              : ' data-progressive-reveal style="cursor:pointer"';
+
+            html += `<div class="match-row${isLiveProg ? ' active-set' : ''}"${clickAttr}>`;
+            html += '<div class="match-main">';
+            html += `<span class="match-round-label">${esc(set._roundLabel)}</span>`;
+            html += `<div class="match-opponent"><span class="vs">vs</span>${esc(oppProg)}</div>`;
+            html += '</div>';
+
+            if (set.completed && !isLiveProg && resultRevealed) {
+              html += `<div class="match-score"><span class="my-score">${fmtScore(myScoreProg)}</span><span class="dash">–</span>${fmtScore(oppScoreProg)}</div>`;
+            } else {
+              html += '<div></div>';
+            }
+
+            html += `<div class="status-badge badge-${statusClassProg}">${statusLabelProg}</div>`;
+            html += '</div>';
+            continue;
+          }
+
+          /* HIDE_BRACKET: only show revealed games + one placeholder for the next unrevealed game */
+          if (HIDE_BRACKET && isBracket && !shownBracketIds.has(String(set.id))) {
+            if (bracketPlaceholderPlaced) continue; // subsequent unrevealed games: fully hidden
+            bracketPlaceholderPlaced = true;
+            html += `<div class="match-row bracket-hidden" data-reveal-bracket-id="${set.id}">`;
+            html += '<div class="match-main">';
+            html += `<span class="match-round-label">${esc(set._roundLabel)}</span>`;
+            html += `<div class="match-opponent" style="color:var(--text-dimmed)">Click to reveal</div>`;
+            html += '</div>';
+            html += '<div></div>';
+            html += `<div class="status-badge badge-upcoming">?</div>`;
+            html += '</div>';
+            continue;
+          }
+
+          const isP1 = set.entrant1Id === targetId;
+          const oppId = isP1 ? set.entrant2Id : set.entrant1Id;
+          const opp = oppId ? (players[oppId]?.name || 'TBD') : 'TBD';
+          const myScore  = isP1 ? set.score1 : set.score2;
+          const oppScore = isP1 ? set.score2 : set.score1;
+
+          /* Determine status */
+          let statusClass = 'upcoming';
+          let statusLabel = 'Upcoming';
+          let isLive = false;
+          let isCompleteResult = false;
+
+          if (set.state === 'active' || set.state === 'called') {
+            statusClass = 'live';
+            statusLabel = 'Live';
+            isLive = true;
+          } else if (set.completed) {
+            const won = myScore === 'W'
+              || (typeof myScore === 'number' && typeof oppScore === 'number' && myScore > oppScore);
+            statusClass = won ? 'won' : 'lost';
+            statusLabel = won ? 'W' : 'L';
+            isCompleteResult = true;
+          }
+
+          /* In PROGRESSIVE mode revealed games always show score */
+          const progressiveRevealed = PROGRESSIVE && i < revealCount;
+
+          /* Reveal mode: completed sets show 'Done' badge unless result revealed */
+          const isRevealed = REVEAL_MODE && revealedIds.has(String(set.id));
+          const showScore = set.completed && !isLive && (SHOW_RESULTS || isRevealed || progressiveRevealed);
+          if (isCompleteResult && !SHOW_RESULTS && !isRevealed && !progressiveRevealed) {
+            statusClass = 'upcoming';
+            statusLabel = 'Done';
+          }
+
+          const revealAttr = REVEAL_MODE && isCompleteResult
+            ? ` data-reveal-id="${set.id}" style="cursor:pointer"` : '';
+
+          /* PROGRESSIVE revealed rows collapse back when clicked */
+          const progressiveAttr = progressiveRevealed
+            ? ` data-progressive-collapse="${i}" style="cursor:pointer"` : '';
+
+          html += `<div class="match-row${isLive ? ' active-set' : ''}"${revealAttr}${progressiveAttr}>`;
+          html += '<div class="match-main">';
+          html += `<span class="match-round-label">${esc(set._roundLabel)}</span>`;
+          html += `<div class="match-opponent"><span class="vs">vs</span>${esc(opp)}</div>`;
+          html += '</div>';
+
+          if (showScore) {
+            html += `<div class="match-score"><span class="my-score">${fmtScore(myScore)}</span><span class="dash">–</span>${fmtScore(oppScore)}</div>`;
+          } else {
+            html += '<div></div>';
+          }
+
+          html += `<div class="status-badge badge-${statusClass}">${statusLabel}</div>`;
+          html += '</div>';
+        }
+
+        html += '</div>';
+      }
+
+      html += '</div>';
+      container.innerHTML = html;
+
+      /* Attach click handlers */
+      if (PROGRESSIVE) {
+        const placeholder = container.querySelector('[data-progressive-reveal]');
+        if (placeholder) {
+          placeholder.addEventListener('click', () => { revealCount++; render(); });
+        }
+        container.querySelectorAll('[data-progressive-collapse]').forEach(el => {
+          el.addEventListener('click', () => {
+            revealCount = parseInt(el.dataset.progressiveCollapse);
+            render();
+          });
+        });
+      }
+      if (REVEAL_MODE) {
+        container.querySelectorAll('[data-reveal-id]').forEach(el => {
+          el.addEventListener('click', () => {
+            const id = el.dataset.revealId;
+            if (revealedIds.has(id)) {
+              revealedIds.delete(id);
+            } else {
+              revealedIds.add(id);
+            }
+            render();
+          });
+        });
+      }
+      if (HIDE_BRACKET) {
+        container.querySelectorAll('[data-reveal-bracket-id]').forEach(el => {
+          el.addEventListener('click', () => {
+            shownBracketIds.add(el.dataset.revealBracketId);
+            render();
+          });
+        });
+      }
+    }
+
+    OverlayBase.init({
+      render,
+      shouldRender: (key) => key.startsWith('bracket') || key.startsWith('playerSchedule'),
+      shouldRenderSettings: (key) => key.startsWith('overlays.'),
+      fetchSettings: true,
+    });
+  </script>
+</body>
+</html>

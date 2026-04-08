@@ -11,7 +11,7 @@ import LayoutBrowser from "./layouts/layouts";
 
 const allTabs = [
   { name: "Scoreboard", path: "/" },
-  { name: "Tournament Info", path: "/tournament_info" },
+  { name: "Competition Info", path: "/tournament_info" },
   { name: "Bracket", path: "/bracket" },
   { name: "Commentary", path: "/commentary" },
   { name: "Player List", path: "/player_list" },

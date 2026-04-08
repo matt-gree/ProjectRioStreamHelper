@@ -297,6 +297,8 @@ No automated test suite. Manual testing:
 5. Test OBS overlays: add browser source at `localhost:5260/layout/scoreboard1/scoreboard.html`
 6. Test tournament loading (Start.gg slug or Challonge URL + API key)
 
+**Important:** OBS overlay HTML files and `overlay-base.js` are static files served directly by FastAPI — no build step. After editing them, **hard refresh** the browser (**Cmd+Shift+R** on macOS, **Ctrl+Shift+R** on Windows) to bypass the cache. Safari may also require **Option+Cmd+E** to empty the cache first.
+
 ---
 
 ## Disconnected Features

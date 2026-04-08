@@ -2,6 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8" />
+  <meta name="overlay-settings" content="accentColor, cardBg, borderRadius, borderColor, borderWidth, fontFamily, connectorColor, activeColor" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet" />
@@ -29,12 +30,12 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
-      overflow: auto;
+      overflow: hidden;
       width: 1600px;
       height: 900px;
       background: transparent;
-      font-family: 'Inter', sans-serif;
-      color: var(--text-primary);
+      font-family: var(--font-family, 'Inter', sans-serif);
+      color: var(--text-primary, #fff);
     }
 
     #bracket-container {
@@ -102,7 +103,7 @@
     .set {
       display: flex;
       flex-direction: column;
-      border: 1px solid var(--border-color);
+      border: var(--border-width, 1px) solid var(--border-color);
       border-radius: 6px;
       overflow: hidden;
       background: var(--bg-card);
@@ -311,15 +312,46 @@
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <script src="/layout/lib/overlay-base.js"></script>
   <script>
+    const REF_W = 1600, REF_H = 900;
+    document.body.dataset.refW = REF_W;
+    document.body.dataset.refH = REF_H;
+    function autoScale() {
+      const el = document.getElementById('bracket-container');
+      const needsScale = Math.abs(window.innerWidth - REF_W) > 2 || Math.abs(window.innerHeight - REF_H) > 2;
+      if (needsScale) {
+        const scale = Math.min(window.innerWidth / REF_W, window.innerHeight / REF_H);
+        document.body.style.width = window.innerWidth + 'px';
+        document.body.style.height = window.innerHeight + 'px';
+        el.style.transform = `scale(${scale})`;
+        el.style.transformOrigin = 'top left';
+        el.style.width = REF_W + 'px';
+        el.style.height = REF_H + 'px';
+      } else {
+        document.body.style.width = REF_W + 'px';
+        document.body.style.height = REF_H + 'px';
+        el.style.transform = '';
+      }
+    }
+    window.addEventListener('resize', autoScale);
+    autoScale();
+
     /* ─── Configuration ─── */
     const params = new URLSearchParams(window.location.search);
     const WINNERS_ONLY = params.get('winners_only') === 'true';
     const LOSERS_ONLY = params.get('losers_only') === 'true';
-    const { deepGet, state, settings, applyAccentColor } = OverlayBase;
+    const { deepGet, state, settings, applyDesignSettings } = OverlayBase;
 
     /* ─── Render ─── */
     function render() {
-      applyAccentColor('bracket');
+      applyDesignSettings('bracket');
+
+      // Apply design variables to bracket-specific CSS vars
+      const root = document.documentElement.style;
+      const cardBg = getComputedStyle(document.documentElement).getPropertyValue('--card-bg').trim();
+      const borderColor = getComputedStyle(document.documentElement).getPropertyValue('--border-color').trim();
+      const borderRadius = getComputedStyle(document.documentElement).getPropertyValue('--border-radius').trim();
+      if (cardBg) root.setProperty('--bg-card', cardBg);
+      if (borderColor) root.setProperty('--border-color', borderColor);
 
       const bracket = deepGet(state, 'bracket');
       const container = document.getElementById('bracket-container');

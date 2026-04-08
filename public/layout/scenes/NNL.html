@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="overlay-settings" content="cardBg, textColor, borderRadius, borderColor, borderWidth, fontFamily, cardShadow, textShadow, statValueColor" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Lalezar&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      overflow: hidden;
+      width: 1920px;
+      height: 1080px;
+      background: transparent;
+      font-family: var(--font-family, 'Inter', sans-serif);
+      color: var(--text-primary, #fff);
+    }
+
+    /* ── Phase banner ── */
+    #phase-banner {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 72px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+    }
+    #phase-text {
+      font-family: 'Lalezar', sans-serif;
+      font-size: 48px;
+      font-weight: 700;
+      -webkit-text-stroke: 5px black;
+      text-shadow: 5px 5px 3px rgba(0,0,0,1), var(--text-shadow, none);
+      paint-order: stroke fill;
+      white-space: nowrap;
+      overflow: visible;
+    }
+
+    /* ── Player panels ── */
+    .player-panel {
+      position: absolute;
+      top: 620px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+    #panel-left  { left: 0;    width: 348px; }
+    #panel-right { right: 0;   width: 348px; }
+
+    .player-name {
+      font-family: 'Lalezar', sans-serif;
+      font-size: 48px;
+      font-weight: 700;
+      text-align: center;
+      text-shadow: 5px 5px 3px rgba(0,0,0,1), var(--text-shadow, none);
+      -webkit-text-stroke: 5px black;
+      paint-order: stroke fill;
+      white-space: nowrap;
+      overflow: visible;
+      width: 100%;
+      padding: 0px 0px;
+      line-height: 0.7;
+      letter-spacing: 1px;
+    }
+
+    /* ── Roster grid ── */
+    .roster-wrap {
+      display: flex;
+      justify-content: center;
+    }
+    .roster-grid {
+      display: inline-grid;
+      grid-template-columns: 80px repeat(4, 40px);
+      grid-template-rows: 48px 48px;
+      column-gap: 4px;
+      row-gap: 4px;
+    }
+    .captain-slot {
+      grid-column: 1;
+      grid-row: 1 / 3;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .captain-slot img { width: 80px; height: auto; object-fit: contain; }
+    .char-slot {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .char-slot img { width: 40px; height: auto; object-fit: contain; }
+    .role-container {
+      grid-column: 6;
+      grid-row: 1 / 3;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .role-container img { width: 80px; height: auto; object-fit: contain; }
+
+    /* ── Stats bar ── */
+    .stats-bar {
+      width: 340px;
+      background: var(--card-bg, rgba(15, 15, 25, 0.88));
+      border: var(--border-width, 1px) solid var(--border-color, rgba(255,255,255,0.08));
+      border-radius: var(--border-radius, 12px);
+      padding: 6px 8px;
+      filter: var(--card-shadow-filter, none);
+    }
+    .stats-bar.hidden { display: none !important; }
+
+    .stats-top-row {
+      display: flex;
+      flex-direction: row;
+      align-items: flex-start;
+    }
+    .char-icon-wrap {
+      flex-shrink: 0;
+    }
+    .char-icon-wrap img {
+      height: 40px;
+      width: auto;
+      object-fit: contain;
+      border-radius: 4px;
+    }
+    .stats-content {
+      flex: 1;
+      min-width: 0;
+      padding-left: 10px;
+    }
+    .stats-row {
+      display: flex;
+      justify-content: space-between;
+    }
+    .stat {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+    }
+    .stat-value {
+      font-size: 20px;
+      font-weight: 700;
+      line-height: 1.2;
+      white-space: nowrap;
+      color: var(--stat-value-color, var(--text-primary, #fff));
+      text-shadow: var(--text-shadow, none);
+    }
+    .stat-label {
+      font-size: 12px;
+      font-weight: 400;
+      color: var(--stat-subtext-color, rgb(155,155,155));
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      line-height: 1.2;
+      text-shadow: var(--text-shadow, none);
+    }
+    .game-line {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--stat-subtext-color, rgb(155,155,155));
+      white-space: nowrap;
+      overflow: visible;
+      text-align: center;
+      padding-top: 4px;
+      border-top: 1px solid var(--border-color, rgba(255,255,255,0.08));
+      margin-top: 4px;
+      text-shadow: var(--text-shadow, none);
+    }
+    .game-line span { color: var(--stat-subtext-color, rgb(155,155,155)); }
+
+    /* ── Twitter bar ── */
+    #twitter-bar {
+      position: absolute;
+      bottom: 0px;
+      left: 0;
+      right: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      pointer-events: none;
+    }
+    #twitter-bar.hidden { display: none !important; }
+    #twitter-icon {
+      width: 44px;
+      height: 44px;
+      padding: 4px;
+      background-color: #000000;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+    #twitter-handle {
+      font-family: 'Lalezar', sans-serif;
+      font-size: 42px;
+      font-weight: 700;
+      text-shadow: 5px 5px 3px rgba(0,0,0,1), var(--text-shadow, none);
+      -webkit-text-stroke: 5px black;
+      paint-order: stroke fill;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Phase banner -->
+  <div id="phase-banner">
+    <span id="phase-text"></span>
+  </div>
+
+  <!-- Left player panel (Team 1) -->
+  <div class="player-panel" id="panel-left">
+    <div class="player-name" id="name-left"></div>
+    <div class="roster-wrap"><div class="roster-grid" id="roster-left"></div></div>
+    <div class="stats-bar hidden" id="stats-left"></div>
+  </div>
+
+  <!-- Right player panel (Team 2) -->
+  <div class="player-panel" id="panel-right">
+    <div class="player-name" id="name-right"></div>
+    <div class="roster-wrap"><div class="roster-grid" id="roster-right"></div></div>
+    <div class="stats-bar hidden" id="stats-right"></div>
+  </div>
+
+  <!-- Twitter bar -->
+  <div id="twitter-bar" class="hidden">
+    <!-- X / Twitter logo inline SVG -->
+    <svg id="twitter-icon" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.73-8.835L1.254 2.25H8.08l4.261 5.635 5.903-5.635Zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+    </svg>
+    <span id="twitter-handle"></span>
+  </div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="/layout/lib/overlay-base.js"></script>
+  <script>
+    // Tell ScaledIframe the native canvas size
+    document.body.dataset.refW = 1920;
+    document.body.dataset.refH = 1080;
+
+    const params = new URLSearchParams(window.location.search);
+    const SCOREBOARD = parseInt(params.get('scoreboard')) || 1;
+    const { deepGet, BASE_URL, state, applyDesignSettings } = OverlayBase;
+
+    function fmt3(v) { return v.toFixed(3); }
+    function fmt2(v) { return v.toFixed(2); }
+    function fmt1(v) { return v.toFixed(1); }
+
+    // ── Role helpers ──
+    function getTeamRole(teamNum) {
+      const homeTeam   = Number(deepGet(state, `score.${SCOREBOARD}.home_team`)   ?? 2);
+      const halfInning = deepGet(state, `score.${SCOREBOARD}.half_inning`)        ?? 'Top';
+      const awayTeam   = homeTeam === 2 ? 1 : 2;
+      const battingTeam = halfInning === 'Top' ? awayTeam : homeTeam;
+      return battingTeam === teamNum ? 'batting' : 'pitching';
+    }
+
+    function findCharIndex(teamNum, charName) {
+      if (!charName) return -1;
+      for (let i = 0; i < 9; i++) {
+        const n = deepGet(state, `score.${SCOREBOARD}.team.${teamNum}.player.1.character.${i}.name`);
+        if (n === charName) return i;
+      }
+      return -1;
+    }
+
+    // ── Roster renderer (no role/bat/glove icon) ──
+    function renderRoster(teamNum, containerId) {
+      const container = document.getElementById(containerId);
+      container.innerHTML = '';
+
+      const player = deepGet(state, `score.${SCOREBOARD}.team.${teamNum}.player.1`);
+      if (!player) return;
+
+      const captainIndex = player.rio_captainIndex;
+      const hasCaptain   = captainIndex != null && captainIndex >= 0 && captainIndex <= 8;
+
+      if (hasCaptain) {
+        const name = deepGet(player, `character.${captainIndex}`)?.name || '';
+        const div  = document.createElement('div');
+        div.className = 'captain-slot';
+        const img = document.createElement('img');
+        img.src = name ? `${BASE_URL}/game_assets/rio_characterIcons/${encodeURIComponent(name)}.png` : '';
+        img.onerror = () => img.style.display = 'none';
+        div.appendChild(img);
+        container.appendChild(div);
+      }
+
+      for (let i = 0; i < 9; i++) {
+        if (hasCaptain && i === captainIndex) continue;
+        const name = deepGet(player, `character.${i}`)?.name || '';
+        const div  = document.createElement('div');
+        div.className = (!hasCaptain && i === 0) ? 'captain-slot' : 'char-slot';
+        const img = document.createElement('img');
+        img.src = name ? `${BASE_URL}/game_assets/rio_characterIcons/${encodeURIComponent(name)}.png` : '';
+        img.onerror = () => img.style.display = 'none';
+        div.appendChild(img);
+        container.appendChild(div);
+      }
+
+      const role = getTeamRole();
+      const roleDiv = document.createElement('div');
+      roleDiv.className = 'role-container';
+      const roleImg = document.createElement('img');
+      roleImg.src = role === 'batting'
+        ? `${BASE_URL}/game_assets/rio_bat_glove/bat.png`
+        : `${BASE_URL}/game_assets/rio_bat_glove/glove.png`;
+      roleImg.onerror = () => roleImg.style.display = 'none';
+      roleDiv.appendChild(roleImg);
+      container.appendChild(roleDiv);
+    }
+
+    // ── Stats renderer ──
+    function renderStats(teamNum, barId) {
+      const bar  = document.getElementById(barId);
+      const role = getTeamRole(teamNum);
+
+      let charName, charIndex;
+      if (role === 'batting') {
+        charName  = deepGet(state, `score.${SCOREBOARD}.batter`)  || '';
+        charIndex = findCharIndex(teamNum, charName);
+      } else {
+        charName  = deepGet(state, `score.${SCOREBOARD}.pitcher`) || '';
+        charIndex = findCharIndex(teamNum, charName);
+      }
+
+      if (!charName || charIndex < 0) {
+        bar.classList.add('hidden');
+        return;
+      }
+
+      const statsObj = deepGet(state, `score.${SCOREBOARD}.stats.team.${teamNum}.character.${charIndex}`);
+
+      const b = statsObj?.batting ?? {};
+      const p = statsObj?.pitching ?? {};
+
+      let statsArr;
+      let gameLine = '';
+      if (role === 'batting') {
+        statsArr = [
+          { l: 'AB',  v: b.at_bats ?? 0 },
+          { l: 'AVG', v: fmt3(b.avg    ?? 0) },
+          { l: 'SLG', v: fmt3(b.slg    ?? 0) },
+          { l: 'SO%', v: fmt1(b.so_pct ?? 0) + '%' },
+        ];
+        gameLine = statsObj?.current_game?.batting_line ?? '';
+      } else {
+        statsArr = [
+          { l: 'ERA', v: fmt2(p.era     ?? 0) },
+          { l: 'IP',  v: p.ip           ?? '0.0' },
+          { l: 'K%',  v: fmt1(p.k_pct  ?? 0) + '%' },
+          { l: 'AVG', v: fmt3(p.opp_avg ?? 0) },
+        ];
+        gameLine = statsObj?.current_game?.pitching_line ?? '';
+      }
+
+      const statsHtml = statsArr.map(st =>
+        `<span class="stat"><span class="stat-value">${st.v}</span><span class="stat-label">${st.l}</span></span>`
+      ).join('');
+
+      let html = `<div class="stats-top-row">`;
+      html += `<div class="char-icon-wrap"><img src="${BASE_URL}/game_assets/rio_characterIcons/${encodeURIComponent(charName)}.png" onerror="this.style.display='none'" /></div>`;
+      html += `<div class="stats-content"><div class="stats-row">${statsHtml}</div></div>`;
+      html += `</div>`;
+      if (gameLine) {
+        html += `<div class="game-line"><span>Game: </span>${gameLine}</div>`;
+      }
+
+      bar.innerHTML = html;
+      bar.classList.remove('hidden');
+    }
+
+    // ── Main render ──
+    function render() {
+      applyDesignSettings('stats');
+
+      // Phase banner
+      const phase = deepGet(state, 'tournamentInfo.phase') || '';
+      document.getElementById('phase-text').textContent = phase;
+
+      // Player names
+      const name1 = deepGet(state, `score.${SCOREBOARD}.team.1.player.1.rioName`) || '';
+      const name2 = deepGet(state, `score.${SCOREBOARD}.team.2.player.1.rioName`) || '';
+      document.getElementById('name-left').textContent  = name1;
+      document.getElementById('name-right').textContent = name2;
+
+      // Rosters
+      renderRoster(1, 'roster-left');
+      renderRoster(2, 'roster-right');
+
+      // Stats
+      renderStats(1, 'stats-left');
+      renderStats(2, 'stats-right');
+
+      // Twitter bar
+      const twitter = deepGet(state, 'tournamentInfo.organizer_0_twitter') || '';
+      const twitterBar = document.getElementById('twitter-bar');
+      if (twitter) {
+        document.getElementById('twitter-handle').textContent = twitter;
+        twitterBar.classList.remove('hidden');
+      } else {
+        twitterBar.classList.add('hidden');
+      }
+    }
+
+    OverlayBase.init({
+      render,
+      fetchSettings: true,
+      shouldRender: (key) =>
+        key === 'tournamentInfo.phase'
+        || key === 'tournamentInfo.organizer_0_twitter'
+        || key.startsWith(`score.${SCOREBOARD}.team.`)
+        || key === `score.${SCOREBOARD}.batter`
+        || key === `score.${SCOREBOARD}.pitcher`
+        || key === `score.${SCOREBOARD}.half_inning`
+        || key === `score.${SCOREBOARD}.home_team`
+        || key.startsWith(`score.${SCOREBOARD}.stats.`),
+      shouldRenderSettings: (key) => key.startsWith('overlays.'),
+    });
+  </script>
+</body>
+</html>

@@ -76,21 +76,56 @@ class Settings:
             "auto_start": False
         },
         "overlays": {
+            "global": {
+                "accentColor": "#f59e0b",
+                "cardBg": "rgba(15, 15, 25, 0.88)",
+                "textColor": "#ffffff",
+                "borderRadius": 16,
+                "borderColor": "rgba(255, 255, 255, 0.08)",
+                "fontFamily": "Inter",
+                "showShadow": True,
+                "cardShadowBlur": 16,
+                "cardShadowColor": "rgba(0, 0, 0, 0.5)",
+                "textShadowEnabled": False,
+                "textShadowBlur": 4,
+                "textShadowColor": "rgba(0, 0, 0, 0.8)"
+            },
+            "presets": {},
             "scoreboard": {
                 "showCaptains": True,
                 "showElo": True,
                 "showTeamLogos": True,
-                "accentColor": "#f59e0b"
+                "showLogo": True,
+                "showBackdropBlur": True,
+                "finalBadgeColor": None,
+                "accentColor": None,
+                "textColor": None,
+                "cardBg": None,
+                "borderColor": None,
+                "borderRadius": None,
+                "borderWidth": None,
+                "cardShadowBlur": None,
+                "textShadowBlur": None,
             },
             "roster": {
-                "accentColor": "#f59e0b"
+                "accentColor": None
             },
             "stats": {
-                "accentColor": "#f59e0b"
+                "accentColor": None,
+                "statValueColor": None,
+                "subtextColor": None,
+                "cardBg": None,
+                "borderColor": None,
+                "borderRadius": None,
+                "borderWidth": None,
+                "cardShadowBlur": None,
+                "textShadowBlur": None,
             },
             "teamlogo": {},
             "bracket": {
-                "accentColor": "#f59e0b"
+                "connectorColor": None,
+                "activeColor": None,
+                "accentColor": None
             }
         },
         "lang": "en-US"

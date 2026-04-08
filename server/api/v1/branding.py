@@ -1,4 +1,4 @@
-"""Tournament branding endpoints — logo upload, serve, and delete."""
+"""Branding endpoints — overlay logo upload, serve, and delete."""
 
 import shutil
 from pathlib import Path
@@ -18,7 +18,7 @@ _ALLOWED_TYPES = {"image/png", "image/jpeg", "image/svg+xml", "image/webp"}
 
 @router.post("/logo", response_class=ORJSONResponse)
 async def upload_logo(file: UploadFile = File(...)):
-    """Upload a tournament logo (PNG/JPEG/SVG/WebP, max 2 MB)."""
+    """Upload an overlay logo (PNG/JPEG/SVG/WebP, max 2 MB)."""
     if file.content_type not in _ALLOWED_TYPES:
         raise HTTPException(400, f"Unsupported file type: {file.content_type}")
 
@@ -34,7 +34,7 @@ async def upload_logo(file: UploadFile = File(...)):
 
 @router.get("/logo", response_class=ORJSONResponse)
 async def get_logo():
-    """Check if a tournament logo exists and return its URL."""
+    """Check if an overlay logo exists and return its URL."""
     if _logo_path.is_file():
         return {"exists": True, "url": "/branding/tournament_logo.png"}
     return {"exists": False, "url": None}
@@ -42,7 +42,7 @@ async def get_logo():
 
 @router.delete("/logo", response_class=ORJSONResponse)
 async def delete_logo():
-    """Remove the tournament logo."""
+    """Remove the overlay logo."""
     if _logo_path.is_file():
         _logo_path.unlink()
     return {"exists": False, "url": None}

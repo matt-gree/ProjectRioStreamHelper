@@ -8,6 +8,10 @@ import asyncio
 
 import pandas as pd
 from loguru import logger
+from pyrio.stat_formatters import (
+    derive_batting, derive_pitching,
+    format_batting_line, format_pitching_line,
+)
 from server.rio import stats_api
 from server.state import State
 from server.settings import Settings
@@ -16,13 +20,14 @@ from server.settings import Settings
 # Internal stat keys for batting (same keys used throughout HUD + merged logic).
 _BATTING_KEYS = [
     "at_bats", "hits", "singles", "doubles", "triples", "homeruns",
-    "sac_flys", "strikeouts", "walks_bb", "walks_hbp", "rbi",
+    "sac_flys", "strikeouts", "walks_bb", "walks_hbp", "rbi", "stolen_bases",
 ]
 
 # Internal stat keys for pitching.
 _PITCHING_KEYS = [
     "batters_faced", "runs_allowed", "walks_bb", "walks_hbp",
     "hits_allowed", "total_pitches", "strikeouts_pitched", "outs_pitched",
+    "hrs_allowed",
 ]
 
 # Mapping from HUD file offensive stat keys to our internal keys
@@ -38,6 +43,7 @@ _HUD_BATTING_MAP = {
     "walks_bb": "Walks (4 Balls)",
     "walks_hbp": "Walks (Hit)",
     "rbi": "RBI",
+    "stolen_bases": "Bases Stolen",
 }
 
 # Mapping from HUD file defensive stat keys to our internal keys
@@ -51,6 +57,7 @@ _HUD_PITCHING_MAP = {
     "total_pitches": "Pitches Thrown",
     "strikeouts_pitched": "Strikeouts",
     "outs_pitched": "Outs Pitched",
+    "hrs_allowed": "HRs Allowed",
 }
 
 
@@ -111,23 +118,7 @@ def _merge_batting(api: dict, hud: dict) -> dict:
     merged = {}
     for key in _BATTING_KEYS:
         merged[key] = api.get(key, 0) + hud.get(key, 0)
-
-    ab = merged["at_bats"]
-    hits = merged["hits"]
-    singles = merged["singles"]
-    doubles = merged["doubles"]
-    triples = merged["triples"]
-    hr = merged["homeruns"]
-
-    merged["avg"] = round(hits / ab, 3) if ab else 0.0
-    merged["slg"] = round((singles + 2 * doubles + 3 * triples + 4 * hr) / ab, 3) if ab else 0.0
-    merged["obp"] = round(
-        (hits + merged["walks_bb"] + merged["walks_hbp"])
-        / (ab + merged["walks_bb"] + merged["walks_hbp"] + merged["sac_flys"]), 3
-    ) if (ab + merged["walks_bb"] + merged["walks_hbp"] + merged["sac_flys"]) else 0.0
-    merged["ops"] = round(merged["obp"] + merged["slg"], 3)
-    merged["so_pct"] = round((merged["strikeouts"] / ab) * 100, 1) if ab else 0.0
-
+    merged.update(derive_batting(**merged))
     return merged
 
 
@@ -136,19 +127,9 @@ def _merge_pitching(api: dict, hud: dict) -> dict:
     merged = {}
     for key in _PITCHING_KEYS:
         merged[key] = api.get(key, 0) + hud.get(key, 0)
-
     # ERA uses earned_runs from HUD (not in API response — API has runs_allowed)
-    earned_runs = hud.get("earned_runs", 0) + api.get("runs_allowed", 0)
-    merged["earned_runs"] = earned_runs
-
-    outs = merged["outs_pitched"]
-    bf = merged["batters_faced"]
-
-    merged["era"] = round(27 * (earned_runs / outs), 1) if outs else 0.0
-    merged["k_pct"] = round(100 * merged["strikeouts_pitched"] / bf, 1) if bf else 0.0
-    merged["opp_avg"] = round(merged["hits_allowed"] / bf, 3) if bf else 0.0
-    merged["ip"] = (outs // 3) + (outs % 3) / 10
-
+    merged["earned_runs"] = hud.get("earned_runs", 0) + api.get("runs_allowed", 0)
+    merged.update(derive_pitching(**merged))
     return merged
 
 
@@ -325,6 +306,8 @@ class StatsTracker:
                     (f"{prefix}.current_game", {
                         "batting": hud_batting,
                         "pitching": hud_pitching,
+                        "batting_line": format_batting_line(hud_batting),
+                        "pitching_line": format_pitching_line(hud_pitching),
                     }),
                 ])
 
@@ -415,6 +398,8 @@ class StatsTracker:
                     (f"{stat_prefix}.current_game", {
                         "batting": empty_bat,
                         "pitching": empty_pit,
+                        "batting_line": format_batting_line(empty_bat),
+                        "pitching_line": format_pitching_line(empty_pit),
                     }),
                 ])
 

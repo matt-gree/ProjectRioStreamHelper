@@ -22,7 +22,7 @@
       if (cur == null || typeof cur !== 'object') return def;
       cur = cur[k];
     }
-    return cur !== undefined ? cur : def;
+    return (cur !== undefined && cur !== null) ? cur : def;
   }
 
   function deepSet(obj, path, value) {
@@ -161,22 +161,136 @@
     }
   }
 
-  // ── Accent color helper ──
-  /**
-   * Read accentColor from settings for a given layout type and set CSS custom
-   * properties on the document root. Call this inside render() so it stays
-   * in sync with live settings changes.
-   *
-   * Sets: --accent (hex), --accent-rgb (r, g, b for rgba usage)
-   */
-  function applyAccentColor(layoutType, fallback) {
-    const hex = deepGet(settings, `overlays.${layoutType}.accentColor`, fallback || '#f59e0b');
-    document.documentElement.style.setProperty('--accent', hex);
-    // Parse hex to RGB for rgba() usage
+  // ── Hex → RGB helper ──
+  function hexToRgb(hex) {
     const r = parseInt(hex.slice(1, 3), 16) || 0;
     const g = parseInt(hex.slice(3, 5), 16) || 0;
     const b = parseInt(hex.slice(5, 7), 16) || 0;
-    document.documentElement.style.setProperty('--accent-rgb', `${r}, ${g}, ${b}`);
+    return `${r}, ${g}, ${b}`;
+  }
+
+  // ── Design settings helper ──
+  /**
+   * Read all design settings and set CSS custom properties on the document root.
+   * Call this inside render() so it stays in sync with live settings changes.
+   *
+   * Fallback chain for colors: per-layout → global → hardcoded default.
+   *
+   * Sets: --accent, --accent-rgb, --card-bg, --text-primary, --border-radius,
+   *       --border-color, --font-family, and per-overlay specific vars.
+   */
+  function applyDesignSettings(layoutType) {
+    const root = document.documentElement.style;
+    const g = (key, def) => deepGet(settings, key, def);
+
+    // ── Global defaults ──
+    const globalAccent = g('overlays.global.accentColor', '#f59e0b');
+    const globalCardBg = g('overlays.global.cardBg', 'rgba(15, 15, 25, 0.88)');
+    const globalText = g('overlays.global.textColor', '#ffffff');
+    const globalRadius = g('overlays.global.borderRadius', 16);
+    const globalBorder = g('overlays.global.borderColor', 'rgba(255, 255, 255, 0.08)');
+    const globalFont = g('overlays.global.fontFamily', 'Inter');
+
+    // ── Per-layout accent override ──
+    const perAccent = layoutType ? g(`overlays.${layoutType}.accentColor`, null) : null;
+    const accent = perAccent || globalAccent;
+
+    root.setProperty('--accent', accent);
+    root.setProperty('--accent-rgb', hexToRgb(accent));
+    const globalBorderWidth = g('overlays.global.borderWidth', 1);
+    root.setProperty('--card-bg', globalCardBg);
+    root.setProperty('--text-primary', globalText);
+    root.setProperty('--border-radius', globalRadius + 'px');
+    root.setProperty('--border-width', globalBorderWidth + 'px');
+    root.setProperty('--border-color', globalBorder);
+    root.setProperty('--font-family', `'${globalFont}', sans-serif`);
+
+    // Dynamically load the selected font from Google Fonts (Inter is already in the static @import)
+    if (globalFont && globalFont !== 'Inter') {
+      const href = `https://fonts.googleapis.com/css2?family=${globalFont.replace(/ /g, '+')}:wght@400;700&display=swap`;
+      let link = document.getElementById('dynamic-font-link');
+      if (!link) {
+        link = document.createElement('link');
+        link.id = 'dynamic-font-link';
+        link.rel = 'stylesheet';
+        document.head.appendChild(link);
+      }
+      if (link.href !== href) link.href = href;
+    }
+
+    // ── Shadow CSS vars (computed once, with per-layout blur override) ──
+    const showShadow        = g('overlays.global.showShadow',        true);
+    const cardShadowBlur    = g('overlays.global.cardShadowBlur',    16);
+    const cardShadowColor   = g('overlays.global.cardShadowColor',   'rgba(0, 0, 0, 0.5)');
+    const textShadowEnabled = g('overlays.global.textShadowEnabled', false);
+    const textShadowBlur    = g('overlays.global.textShadowBlur',    4);
+    const textShadowColor   = g('overlays.global.textShadowColor',   'rgba(0, 0, 0, 0.8)');
+
+    const perCardBlur = layoutType ? g(`overlays.${layoutType}.cardShadowBlur`, null) : null;
+    const perTextBlur = layoutType ? g(`overlays.${layoutType}.textShadowBlur`, null) : null;
+    const effCardBlur = perCardBlur != null ? perCardBlur : cardShadowBlur;
+    const effTextBlur = perTextBlur != null ? perTextBlur : textShadowBlur;
+
+    root.setProperty('--card-shadow-filter',
+      showShadow ? `drop-shadow(0 4px ${effCardBlur}px ${cardShadowColor})` : 'none');
+    root.setProperty('--card-box-shadow',
+      showShadow ? `0 4px ${effCardBlur}px ${cardShadowColor}` : 'none');
+    root.setProperty('--text-shadow',
+      textShadowEnabled ? `0px 0px ${effTextBlur}px ${textShadowColor}` : 'none');
+
+    // ── Per-overlay specific vars ──
+    if (layoutType === 'scoreboard') {
+      const cardBg       = g('overlays.scoreboard.cardBg',       null);
+      const borderColor  = g('overlays.scoreboard.borderColor',  null);
+      const borderRadius = g('overlays.scoreboard.borderRadius', null);
+      const borderWidth  = g('overlays.scoreboard.borderWidth',  null);
+      const textColor    = g('overlays.scoreboard.textColor',    null);
+      const badgeColor   = g('overlays.scoreboard.finalBadgeColor', null);
+      if (cardBg)             root.setProperty('--card-bg',        cardBg);
+      if (borderColor)        root.setProperty('--border-color',   borderColor);
+      if (borderRadius != null) root.setProperty('--border-radius', borderRadius + 'px');
+      if (borderWidth  != null) root.setProperty('--border-width',  borderWidth  + 'px');
+      if (textColor)          root.setProperty('--text-primary',   textColor);
+      if (badgeColor) root.setProperty('--final-badge-color', badgeColor);
+      else root.removeProperty('--final-badge-color');
+    }
+    if (layoutType === 'stats') {
+      const cardBg        = g('overlays.stats.cardBg',        null);
+      const borderColor   = g('overlays.stats.borderColor',   null);
+      const borderRadius  = g('overlays.stats.borderRadius',  null);
+      const borderWidth   = g('overlays.stats.borderWidth',   null);
+      const statValueColor = g('overlays.stats.statValueColor', null);
+      const subtextColor   = g('overlays.stats.subtextColor',   null);
+      if (cardBg)             root.setProperty('--card-bg',       cardBg);
+      if (borderColor)        root.setProperty('--border-color',  borderColor);
+      if (borderRadius != null) root.setProperty('--border-radius', borderRadius + 'px');
+      if (borderWidth  != null) root.setProperty('--border-width',  borderWidth  + 'px');
+      if (statValueColor) root.setProperty('--stat-value-color',  statValueColor);
+      else root.removeProperty('--stat-value-color');
+      if (subtextColor)   root.setProperty('--stat-subtext-color', subtextColor);
+      else root.removeProperty('--stat-subtext-color');
+    }
+    if (layoutType === 'bracket') {
+      const connColor = g('overlays.bracket.connectorColor', null);
+      const activeColor = g('overlays.bracket.activeColor', null);
+      if (connColor) root.setProperty('--connector-color', connColor);
+      else root.removeProperty('--connector-color');
+      if (activeColor) root.setProperty('--active-color', activeColor);
+      else root.removeProperty('--active-color');
+    }
+  }
+
+  // ── Backward-compatible alias ──
+  function applyAccentColor(layoutType, fallback) {
+    applyDesignSettings(layoutType);
+  }
+
+  /**
+   * Returns the URL for the uploaded overlay logo.
+   * Overlays can call this in render() to conditionally display the logo.
+   */
+  function brandingLogoUrl() {
+    return `${BASE_URL}/branding/tournament_logo.png`;
   }
 
   // ── Export ──
@@ -190,6 +304,8 @@
     charImg,
     logoImg,
     applyAccentColor,
+    applyDesignSettings,
+    brandingLogoUrl,
     init,
   };
 })();

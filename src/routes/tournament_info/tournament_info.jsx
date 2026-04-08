@@ -13,6 +13,7 @@ export default function TournamentInfo() {
 
     // Subscribe to individual fields to avoid referential equality issues
     const name         = useStateStore(s => s?.tournamentInfo?.name ?? '');
+    const phase        = useStateStore(s => s?.tournamentInfo?.phase ?? '');
     const abbreviation = useStateStore(s => s?.tournamentInfo?.abbreviation ?? '');
     const location     = useStateStore(s => s?.tournamentInfo?.location ?? '');
     const date         = useStateStore(s => s?.tournamentInfo?.date ?? '');
@@ -140,7 +141,7 @@ export default function TournamentInfo() {
             <Grid.Col span={bracket_link ? 4 : 12}>
                 <Stack gap="md">
                     <Group justify="space-between">
-                        <Text size="lg" fw={700}>Tournament Info</Text>
+                        <Text size="lg" fw={700}>Competition Info</Text>
                         <Popover opened={sggOpen} onChange={setSggOpen} width={400} position="bottom-end">
                             <Popover.Target>
                                 <Button variant="outline" size="xs" onClick={() => setSggOpen(o => !o)}>
@@ -182,8 +183,8 @@ export default function TournamentInfo() {
                             <Grid gutter="sm">
                                 <Grid.Col span={8}>
                                     <TextInput
-                                        label="Tournament Name"
-                                        placeholder="Enter tournament name"
+                                        label="Competition Name"
+                                        placeholder="Enter competition name"
                                         size="sm"
                                         value={name}
                                         onChange={e => set('name', e.currentTarget.value)}
@@ -199,6 +200,14 @@ export default function TournamentInfo() {
                                     />
                                 </Grid.Col>
                             </Grid>
+
+                            <TextInput
+                                label="Competition Phase"
+                                placeholder="e.g. Season 9 Week 2, Top 8"
+                                size="sm"
+                                value={phase}
+                                onChange={e => set('phase', e.currentTarget.value)}
+                            />
 
                             <Grid gutter="sm">
                                 <Grid.Col span={8}>
