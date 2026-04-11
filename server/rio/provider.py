@@ -52,6 +52,7 @@ async def apply_parsed_game_to_state(parsed: dict, scoreboard_number: int, home_
 
     entries = [
         (f"{sb}.home_team", home_team),
+        (f"{sb}.game_id", parsed.get("game_id")),
         (f"{sb}.score_left", parsed.get("team1score", 0)),
         (f"{sb}.score_right", parsed.get("team2score", 0)),
         (f"{sb}.inning", parsed.get("inning", 1)),
@@ -112,7 +113,7 @@ async def apply_completed_game_to_state(game: dict, scoreboard_number: int):
         (f"{sb}.score_right", game.get("home_score", 0)),
 
         # Game metadata
-        (f"{sb}.source_type", "completed_api"),
+        (f"{sb}.source_type", "rotator"),
         (f"{sb}.game_id", game.get("game_id")),
         (f"{sb}.game_completed", True),
         (f"{sb}.date_time_start", _ts(game.get("date_time_start"))),
@@ -121,6 +122,11 @@ async def apply_completed_game_to_state(game: dict, scoreboard_number: int):
         (f"{sb}.innings_selected", game.get("innings_selected", 0)),
         (f"{sb}.stadium", game.get("stadium", "")),
         (f"{sb}.game_mode", game.get("game_mode", "")),
+
+        # Linescore (per-inning runs, returned by API with include_linescore=1)
+        # API returns {"0": [away innings...], "1": [home innings...]}
+        (f"{sb}.away_linescore", (game.get("linescore") or {}).get("0", [])),
+        (f"{sb}.home_linescore", (game.get("linescore") or {}).get("1", [])),
 
         # ELO
         (f"{sb}.winner_incoming_elo", game.get("winner_incoming_elo")),
@@ -271,6 +277,20 @@ class RioGameDataProvider:
         return None
 
     @classmethod
+    def _resolve_char(cls, c) -> str:
+        """Convert a character value to a name string.
+
+        Handles both integer IDs (from the Project Rio API / HUD file) and
+        string names (already resolved). Returns '' for None.
+        """
+        from server.rio.pyrio.lookup import LookupDicts
+        if c is None:
+            return ''
+        if isinstance(c, int):
+            return LookupDicts.CHAR_NAME.get(c, str(c))
+        return str(c)
+
+    @classmethod
     def parse_game_data(cls, game_json: dict) -> dict:
         """Convert a Project Rio game JSON into a TSH-compatible data format.
 
@@ -284,8 +304,10 @@ class RioGameDataProvider:
 
             for i in range(2):
                 team = "home" if i == 1 else "away"
+                # Resolve character IDs to name strings; handles both int IDs
+                # (from the API / HUD file) and already-resolved string names.
                 roster = [
-                    game_json[f"{team}_roster_{j}_char"]
+                    cls._resolve_char(game_json[f"{team}_roster_{j}_char"])
                     for j in range(9)
                 ]
                 data["entrants"][i][0]["roster"] = roster

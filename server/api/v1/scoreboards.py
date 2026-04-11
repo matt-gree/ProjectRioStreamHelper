@@ -110,9 +110,15 @@ async def set_scoreboard_source(
     if sb_id not in active:
         return ORJSONResponse({"success": False, "error": "Scoreboard not found"})
 
-    valid_types = ("manual", "hud", "ongoing_api", "completed_api")
+    valid_types = ("manual", "hud", "live_game", "rotator")
     if source_type not in valid_types:
         return ORJSONResponse({"success": False, "error": f"Invalid source type. Must be one of: {valid_types}"})
+
+    # Clear scoreboard state on source change, except HUD → Manual (preserve displayed data)
+    old_source = await Settings.Get(f"scoreboards.sources.{sb_id}.type", "manual")
+    if old_source != source_type and not (old_source == "hud" and source_type == "manual"):
+        await State.Set(f"score.{sb_id}", {})
+        await State.Save()
 
     if source_type == "hud":
         # Unlink previous HUD target

@@ -226,6 +226,7 @@ async def fetch_completed_games(
         params["exclude_tag"] = exclude_tag
     if include_teams is not None:
         params["include_teams"] = include_teams
+    params["include_linescore"] = 1
 
     # Build the diagnostic URL matching what pyrio will send to the Rio API
     qs_parts = []

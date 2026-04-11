@@ -124,21 +124,61 @@ class OngoingGamePool:
     @classmethod
     async def _fetch_games(cls):
         """Fetch ongoing games from Project Rio API."""
+        from server.rio.pyrio.lookup import LookupDicts
+
+        # Ensure game mode names are cached for tag_set resolution
+        if not stats_api._game_modes:
+            try:
+                await stats_api.fetch_game_modes()
+            except Exception:
+                pass  # best-effort; will show raw IDs if unavailable
+
         raw = await stats_api.fetch_ongoing_games()
         if not raw:
             return
 
         new_games = {}
-        games_list = raw if isinstance(raw, list) else raw.get("games", [raw])
+        games_list = (
+            raw.get("ongoing_games")
+            or raw.get("games")
+            or (raw if isinstance(raw, list) else [])
+        )
+
+        # Build reverse mapping: tag_set_id -> game_mode_name from cache
+        tag_set_id_to_name = {v: k for k, v in stats_api._game_modes.items()} if stats_api._game_modes else {}
+
         for g in games_list:
-            game_id = g.get("game_id")
-            if game_id is None:
-                continue
-            parsed = RioGameDataProvider.parse_game_data(g)
-            parsed["game_id"] = game_id
-            parsed["source_type"] = "ongoing_api"
-            parsed["game_completed"] = False
-            new_games[game_id] = parsed
+            away_player = g.get("away_player", "")
+            home_player = g.get("home_player", "")
+            start_time = g.get("start_time", 0)
+
+            # Generate a stable synthetic game_id (the API does not provide one)
+            game_id = abs(hash((away_player, home_player, start_time))) % (2 ** 31)
+
+            # Resolve integer captain indices to character names for display
+            away_cap_idx = g.get("away_captain", 0)
+            home_cap_idx = g.get("home_captain", 0)
+
+            # Resolve tag_set integer to a human-readable game mode name
+            tag_set_id = g.get("tag_set")
+            game_mode_name = tag_set_id_to_name.get(
+                tag_set_id, f"ID:{tag_set_id}" if tag_set_id is not None else ""
+            )
+
+            # Build enriched game dict — all raw fields are preserved so that
+            # parse_game_data() can consume them unchanged when applying to a scoreboard.
+            game = dict(g)
+            game["game_id"] = game_id
+            game["source_type"] = "live_game"
+            game["game_completed"] = False
+            # Display-friendly aliases used by the frontend table
+            game["away_user"] = away_player
+            game["home_user"] = home_player
+            game["away_captain_name"] = LookupDicts.CHAR_NAME.get(away_cap_idx, str(away_cap_idx))
+            game["home_captain_name"] = LookupDicts.CHAR_NAME.get(home_cap_idx, str(home_cap_idx))
+            game["game_mode_name"] = game_mode_name
+
+            new_games[game_id] = game
 
         cls.games = new_games
         await socketio.emit("v1.game_pool.ongoing_update", cls.list_games())
@@ -158,25 +198,33 @@ class OngoingGamePool:
         if not game:
             return False
 
+        # Parse raw game data (all original API fields are preserved in the stored dict)
+        parsed = RioGameDataProvider.parse_game_data(game)
+        parsed["game_id"] = game_id
+
         # Check if pinned player requires a side swap
-        entrants = game.get("entrants", [[{}], [{}]])
+        entrants = parsed.get("entrants", [[{}], [{}]])
         player0 = entrants[0][0].get("rioName", "") if entrants[0] else ""
         player1 = entrants[1][0].get("rioName", "") if entrants[1] else ""
         swap = _pinned_swap_needed(player0, player1)
 
         if swap:
-            # Swap entrants and scores for pinned player placement
-            game = dict(game)
-            game["entrants"] = list(reversed(game["entrants"]))
-            game["team1score"], game["team2score"] = game.get("team2score", 0), game.get("team1score", 0)
+            parsed["entrants"] = list(reversed(parsed["entrants"]))
+            parsed["team1score"], parsed["team2score"] = parsed.get("team2score", 0), parsed.get("team1score", 0)
             home_team = 1
         else:
             home_team = 2
 
-        await apply_parsed_game_to_state(game, scoreboard_number, home_team=home_team)
+        await apply_parsed_game_to_state(parsed, scoreboard_number, home_team=home_team)
 
         await Settings.Set(f"scoreboards.sources.{scoreboard_number}",
-                           {"type": "ongoing_api", "api_game_id": game_id})
+                           {"type": "live_game", "api_game_id": game_id})
+
+        # Load the game's mode into the stats tag selector (if resolved)
+        game_mode_name = game.get("game_mode_name", "")
+        if game_mode_name and not game_mode_name.startswith("ID:"):
+            await Settings.Set("project_rio.stats_tag", game_mode_name)
+
         return True
 
 
@@ -256,7 +304,7 @@ class CompletedGamePool:
             if game_id is None:
                 continue
             # Mark as completed
-            game["source_type"] = "completed_api"
+            game["source_type"] = "rotator"
             game["game_completed"] = True
             new_games[game_id] = game
 
@@ -315,7 +363,7 @@ class CompletedGamePool:
         await apply_completed_game_to_state(game, scoreboard_number)
 
         await Settings.Set(f"scoreboards.sources.{scoreboard_number}",
-                           {"type": "completed_api", "api_game_id": game_id})
+                           {"type": "rotator", "api_game_id": game_id})
         return True
 
 

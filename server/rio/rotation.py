@@ -1,4 +1,5 @@
 import asyncio
+import time
 
 from loguru import logger
 from server import socketio
@@ -132,6 +133,10 @@ class RotationManager:
         state = cls._rotations.get(sb_id)
         if not state:
             return {"active": False, "scoreboard": sb_id}
+        # If the task crashed or finished, the rotation isn't actually running
+        # even though it's still tracked in the dict. Report inactive.
+        if state.task is None or state.task.done():
+            return {"active": False, "scoreboard": sb_id}
         return {
             "active": True,
             "scoreboard": sb_id,
@@ -139,6 +144,7 @@ class RotationManager:
             "current_game_id": state.game_ids[state.current_index] if state.game_ids else None,
             "total_games": len(state.game_ids),
             "interval": state.interval,
+            "next_advance_at": state.next_advance_at,
         }
 
     @classmethod
@@ -186,19 +192,42 @@ class RotationState:
         self.poll_interval = poll_interval
         self.task: asyncio.Task | None = None
         self._poll_task: asyncio.Task | None = None
+        # Unix timestamp (seconds) when the next automatic advance is scheduled.
+        # Updated after each successful apply so the UI can render a countdown.
+        self.next_advance_at: float | None = None
 
     async def run(self):
-        """Main rotation loop."""
+        """Main rotation loop.
+
+        Exceptions inside _apply_current / advance are logged and the loop
+        continues to the next interval — a single bad game should never
+        kill the whole rotation.
+        """
         # Start poll task if configured
         if self.poll_interval > 0:
             self._poll_task = asyncio.create_task(self._poll_loop())
 
         try:
             # Apply the current game immediately
-            await self._apply_current()
+            try:
+                await self._apply_current()
+            except Exception:
+                logger.exception(
+                    "[RotationState] Initial apply failed for sb {} (game {})",
+                    self.sb_id,
+                    self.game_ids[self.current_index] if self.game_ids else None,
+                )
             while True:
                 await asyncio.sleep(self.interval)
-                await self.advance(1)
+                try:
+                    await self.advance(1)
+                except Exception:
+                    logger.exception(
+                        "[RotationState] advance failed for sb {} (index {} game {})",
+                        self.sb_id,
+                        self.current_index,
+                        self.game_ids[self.current_index] if self.game_ids else None,
+                    )
         except asyncio.CancelledError:
             if self._poll_task and not self._poll_task.done():
                 self._poll_task.cancel()
@@ -264,4 +293,6 @@ class RotationState:
         # Push pre-fetched API stats for this scoreboard's players
         await StatsTracker.push_api_stats_for_scoreboard(self.sb_id)
 
+        # Schedule the next advance so the UI can show an accurate countdown.
+        self.next_advance_at = time.time() + self.interval
         await RotationManager._emit_status(self.sb_id)

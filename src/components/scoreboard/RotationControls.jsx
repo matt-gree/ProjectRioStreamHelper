@@ -1,37 +1,294 @@
-import { useState, useCallback, useEffect, memo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef, memo } from 'react';
 import {
-    Paper, Tabs, Stack, Group, Text, Button, ActionIcon, Badge,
-    NumberInput, Switch, Table, Checkbox, TextInput, Select,
-    MultiSelect, Tooltip, Collapse, Popover, Divider, Loader,
+    Paper, Tabs, Stack, Group, Text, Button, ActionIcon, Badge, Loader,
+    NumberInput, Switch, Table, TextInput, Select,
+    MultiSelect, Tooltip, Modal, ScrollArea, CloseButton, Grid,
 } from '@mantine/core';
 import { useSocketSubscribe } from '../../context/socket';
 
-/**
- * Game Pool Browser + Rotation Controls for a scoreboard.
- */
+let searchSetIdCounter = 0;
+
+/** Extract game mode string from a game object. */
+const gameMode = (game) =>
+    Array.isArray(game.tags) ? game.tags.join(', ') : (game.tags ?? game.game_mode ?? '');
+
+const formatTimestamp = (ts) => {
+    if (!ts) return '';
+    try {
+        const d = new Date(ts);
+        return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    } catch { return String(ts); }
+};
+
+// ─── PoolPanel ────────────────────────────────────────────────────────────────
+// One half of the dual-panel modal: either "Available" or "In Rotation".
+// Has per-column filtering and sortable headers.
+
+const PAGE_SIZE = 50;
+
+const COLS = [
+    { key: 'away',    label: 'Away',    sortable: true },
+    { key: 'score',   label: 'Score',   sortable: true, w: 68 },
+    { key: 'home',    label: 'Home',    sortable: true },
+    { key: 'time',    label: 'Time',    sortable: true, w: 110 },
+    { key: 'stadium', label: 'Stadium', sortable: true },
+    { key: 'mode',    label: 'Mode',    sortable: true },
+];
+
+const PoolPanel = memo(function PoolPanel({ title, color, games, actionLabel, onAction, onActionAll, onAssign }) {
+    const [username, setUsername] = useState('');
+    const [stadiumFilter, setStadiumFilter] = useState(null);
+    const [modeFilter, setModeFilter] = useState(null);
+    const [dateFrom, setDateFrom] = useState('');
+    const [dateTo, setDateTo] = useState('');
+    const [sort, setSort] = useState({ col: null, dir: 'asc' });
+    const [page, setPage] = useState(1);
+
+    const toggleSort = useCallback((col) => {
+        setSort(s => s.col === col ? { col, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' });
+        setPage(1);
+    }, []);
+
+    const stadiumOptions = useMemo(() => {
+        const seen = new Set();
+        const opts = [];
+        for (const g of games) {
+            const s = g.stadium ?? '';
+            if (s && !seen.has(s)) { seen.add(s); opts.push({ value: s, label: s }); }
+        }
+        return opts.sort((a, b) => a.label.localeCompare(b.label));
+    }, [games]);
+
+    const modeOptions = useMemo(() => {
+        const seen = new Set();
+        const opts = [];
+        for (const g of games) {
+            const m = gameMode(g);
+            if (m && !seen.has(m)) { seen.add(m); opts.push({ value: m, label: m }); }
+        }
+        return opts.sort((a, b) => a.label.localeCompare(b.label));
+    }, [games]);
+
+    const processed = useMemo(() => {
+        let result = games;
+
+        if (username.trim()) {
+            const q = username.trim().toLowerCase();
+            result = result.filter(g =>
+                (g.away_user ?? '').toLowerCase().includes(q) ||
+                (g.away_captain ?? '').toLowerCase().includes(q) ||
+                (g.home_user ?? '').toLowerCase().includes(q) ||
+                (g.home_captain ?? '').toLowerCase().includes(q)
+            );
+        }
+        if (stadiumFilter) result = result.filter(g => (g.stadium ?? '') === stadiumFilter);
+        if (modeFilter) result = result.filter(g => gameMode(g) === modeFilter);
+        if (dateFrom) {
+            const from = new Date(dateFrom);
+            result = result.filter(g => g.date_time_end && new Date(g.date_time_end) >= from);
+        }
+        if (dateTo) {
+            const to = new Date(dateTo);
+            to.setDate(to.getDate() + 1); // include the full "to" day
+            result = result.filter(g => g.date_time_end && new Date(g.date_time_end) < to);
+        }
+
+        if (sort.col) {
+            const dir = sort.dir === 'asc' ? 1 : -1;
+            result = [...result].sort((a, b) => {
+                let av, bv;
+                switch (sort.col) {
+                    case 'away':    av = (a.away_user ?? '').toLowerCase();   bv = (b.away_user ?? '').toLowerCase();   break;
+                    case 'home':    av = (a.home_user ?? '').toLowerCase();   bv = (b.home_user ?? '').toLowerCase();   break;
+                    case 'score':   av = (a.away_score ?? 0);                 bv = (b.away_score ?? 0);                 break;
+                    case 'time':    av = a.date_time_end ?? '';               bv = b.date_time_end ?? '';               break;
+                    case 'stadium': av = (a.stadium ?? '').toLowerCase();     bv = (b.stadium ?? '').toLowerCase();     break;
+                    case 'mode':    av = gameMode(a).toLowerCase();           bv = gameMode(b).toLowerCase();           break;
+                    default: return 0;
+                }
+                if (av < bv) return -dir;
+                if (av > bv) return dir;
+                return 0;
+            });
+        }
+
+        return result;
+    }, [games, username, stadiumFilter, modeFilter, dateFrom, dateTo, sort]);
+
+    const totalPages = Math.max(1, Math.ceil(processed.length / PAGE_SIZE));
+    const safePage = Math.min(page, totalPages);
+    const pageStart = (safePage - 1) * PAGE_SIZE;
+    const pageRows = processed.slice(pageStart, pageStart + PAGE_SIZE);
+
+    return (
+        <Stack gap="xs" h="100%">
+            <Group gap="xs" justify="space-between">
+                <Group gap="xs">
+                    <Text size="sm" fw={600}>{title}</Text>
+                    <Badge size="xs" color={color} variant="filled">{processed.length}</Badge>
+                </Group>
+                <Button
+                    size="compact-xs"
+                    variant="light"
+                    color={color}
+                    disabled={processed.length === 0}
+                    onClick={() => onActionAll(processed.map(g => g.game_id))}
+                >
+                    {actionLabel} All{processed.length !== games.length ? ' (filtered)' : ''}
+                </Button>
+            </Group>
+
+            {/* Filter bar */}
+            <Stack gap={4}>
+                <Group gap="xs" grow>
+                    <TextInput
+                        size="xs"
+                        placeholder="Username"
+                        value={username}
+                        onChange={e => { setUsername(e.currentTarget.value); setPage(1); }}
+                    />
+                    <Select
+                        size="xs"
+                        placeholder="Stadium"
+                        data={stadiumOptions}
+                        value={stadiumFilter}
+                        onChange={val => { setStadiumFilter(val); setPage(1); }}
+                        clearable
+                        searchable
+                    />
+                    <Select
+                        size="xs"
+                        placeholder="Game Mode"
+                        data={modeOptions}
+                        value={modeFilter}
+                        onChange={val => { setModeFilter(val); setPage(1); }}
+                        clearable
+                        searchable
+                    />
+                </Group>
+                <Group gap="xs">
+                    <Text size="xs" c="dimmed" style={{ whiteSpace: 'nowrap', alignSelf: 'center' }}>Date:</Text>
+                    <TextInput
+                        type="date"
+                        size="xs"
+                        style={{ flex: 1 }}
+                        value={dateFrom}
+                        onChange={e => { setDateFrom(e.currentTarget.value); setPage(1); }}
+                    />
+                    <Text size="xs" c="dimmed" style={{ alignSelf: 'center' }}>–</Text>
+                    <TextInput
+                        type="date"
+                        size="xs"
+                        style={{ flex: 1 }}
+                        value={dateTo}
+                        onChange={e => { setDateTo(e.currentTarget.value); setPage(1); }}
+                    />
+                </Group>
+            </Stack>
+
+            <ScrollArea h={560} style={{ flex: 1 }}>
+                <Table striped highlightOnHover withTableBorder withColumnBorders fontSize="xs" style={{ minWidth: 520 }}>
+                    <Table.Thead style={{ position: 'sticky', top: 0, zIndex: 1, background: 'var(--mantine-color-body)' }}>
+                        <Table.Tr>
+                            {COLS.map(({ key, label, sortable, w }) => (
+                                <Table.Th key={key} w={w}>
+                                    <Group
+                                        gap={4}
+                                        style={{ cursor: sortable ? 'pointer' : 'default', userSelect: 'none' }}
+                                        onClick={() => sortable && toggleSort(key)}
+                                    >
+                                        <Text size="xs" fw={600}>{label}</Text>
+                                        {sort.col === key && (
+                                            <Text size="xs" c="dimmed">{sort.dir === 'asc' ? '↑' : '↓'}</Text>
+                                        )}
+                                    </Group>
+                                </Table.Th>
+                            ))}
+                            <Table.Th w={80} />
+                        </Table.Tr>
+                    </Table.Thead>
+                    <Table.Tbody>
+                        {pageRows.length === 0 ? (
+                            <Table.Tr>
+                                <Table.Td colSpan={7}>
+                                    <Text size="xs" c="dimmed" ta="center" py="sm">No games</Text>
+                                </Table.Td>
+                            </Table.Tr>
+                        ) : pageRows.map((game) => {
+                            const gid = game.game_id;
+                            const awayUser = game.away_user ?? game.entrants?.[0]?.[0]?.rioName ?? '';
+                            const homeUser = game.home_user ?? game.entrants?.[1]?.[0]?.rioName ?? '';
+                            const awayScore = game.away_score ?? game.team1score ?? 0;
+                            const homeScore = game.home_score ?? game.team2score ?? 0;
+                            const awayCaptain = game.away_captain ?? '';
+                            const homeCaptain = game.home_captain ?? '';
+                            const mode = gameMode(game);
+
+                            return (
+                                <Table.Tr key={gid}>
+                                    <Table.Td>
+                                        <Text size="xs" fw={500}>{awayUser}</Text>
+                                        {awayCaptain && <Text size="xs" c="dimmed">{awayCaptain}</Text>}
+                                    </Table.Td>
+                                    <Table.Td ta="center">
+                                        <Text size="xs" fw={600}>{awayScore}–{homeScore}</Text>
+                                    </Table.Td>
+                                    <Table.Td>
+                                        <Text size="xs" fw={500}>{homeUser}</Text>
+                                        {homeCaptain && <Text size="xs" c="dimmed">{homeCaptain}</Text>}
+                                    </Table.Td>
+                                    <Table.Td>
+                                        <Text size="xs">{formatTimestamp(game.date_time_end)}</Text>
+                                    </Table.Td>
+                                    <Table.Td>
+                                        <Text size="xs">{game.stadium ?? ''}</Text>
+                                    </Table.Td>
+                                    <Table.Td>
+                                        <Text size="xs">{mode}</Text>
+                                    </Table.Td>
+                                    <Table.Td>
+                                        <Group gap={4} wrap="nowrap">
+                                            <Tooltip label="Load to scoreboard">
+                                                <Button size="compact-xs" variant="subtle" onClick={() => onAssign(gid)}>
+                                                    Load
+                                                </Button>
+                                            </Tooltip>
+                                            <Tooltip label={actionLabel}>
+                                                <ActionIcon
+                                                    size="sm"
+                                                    variant="light"
+                                                    color={color}
+                                                    onClick={() => onAction(gid)}
+                                                >
+                                                    <Text size="xs" lh={1}>{actionLabel === 'Add' ? '+' : '−'}</Text>
+                                                </ActionIcon>
+                                            </Tooltip>
+                                        </Group>
+                                    </Table.Td>
+                                </Table.Tr>
+                            );
+                        })}
+                    </Table.Tbody>
+                </Table>
+            </ScrollArea>
+            {totalPages > 1 && (
+                <Group gap="xs" justify="center">
+                    <ActionIcon size="sm" variant="subtle" disabled={safePage === 1} onClick={() => setPage(p => p - 1)}>
+                        <Text size="xs" lh={1}>‹</Text>
+                    </ActionIcon>
+                    <Text size="xs" c="dimmed">{safePage} / {totalPages}</Text>
+                    <ActionIcon size="sm" variant="subtle" disabled={safePage === totalPages} onClick={() => setPage(p => p + 1)}>
+                        <Text size="xs" lh={1}>›</Text>
+                    </ActionIcon>
+                </Group>
+            )}
+        </Stack>
+    );
+});
+
+// ─── RotationControls ─────────────────────────────────────────────────────────
+
 export default memo(function RotationControls({ scoreboardNumber }) {
-    const [expanded, setExpanded] = useState(false);
-    const [activePoolTab, setActivePoolTab] = useState('completed');
-
-    // Game pools
-    const [ongoingGames, setOngoingGames] = useState([]);
-    const [completedGames, setCompletedGames] = useState([]);
-    const [loadingOngoing, setLoadingOngoing] = useState(false);
-    const [loadingCompleted, setLoadingCompleted] = useState(false);
-
-    // Completed game filters
-    const [filterUsername, setFilterUsername] = useState('');
-    const [filterVsUsername, setFilterVsUsername] = useState('');
-    const [filterTags, setFilterTags] = useState([]);
-    const [filterLimit, setFilterLimit] = useState(20);
-
-    // Game mode options (reused from /api/v1/rio/game-modes)
-    const [gameModeOptions, setGameModeOptions] = useState([]);
-
-    // Fetch diagnostics
-    const [lastFetchInfo, setLastFetchInfo] = useState(null);
-    const [diagOpen, setDiagOpen] = useState(false);
-
     // Rotation state
     const [rotationConfig, setRotationConfig] = useState({
         enabled: false,
@@ -42,12 +299,108 @@ export default memo(function RotationControls({ scoreboardNumber }) {
     });
     const [rotationStatus, setRotationStatus] = useState({ active: false });
     const [selectedGameIds, setSelectedGameIds] = useState(new Set());
+    const [secondsRemaining, setSecondsRemaining] = useState(null);
 
-    // Auto-poll settings for completed games
+    // Multi-search manager state
+    const [searchSets, setSearchSets] = useState([]);
+    const [ongoingGames, setOngoingGames] = useState([]);
+    const autoPollSetIdRef = useRef(null);
+    const autoPollingRef = useRef(false);
+    // Tracks live game IDs the user explicitly deselected, so autopoll doesn't re-add them
+    const deselectedLiveIdsRef = useRef(new Set());
+    // Ref-mirror of source_pool for use inside socket callbacks (avoids stale closure)
+    const sourcePoolRef = useRef('both');
+
+    // Modal
+    const [modalOpen, setModalOpen] = useState(false);
+    const [activeTab, setActiveTab] = useState('completed');
+
+    // Inline search filters
+    const [draftUsername, setDraftUsername] = useState('');
+    const [draftVsUsername, setDraftVsUsername] = useState('');
+    const [draftTags, setDraftTags] = useState([]);
+    const [draftLimit, setDraftLimit] = useState(null);
+    const [draftTagSearch, setDraftTagSearch] = useState('');
+    const [loadingSearch, setLoadingSearch] = useState(false);
+    const [loadingOngoing, setLoadingOngoing] = useState(false);
+    const searchAbortRef = useRef(null);
+    const ongoingAbortRef = useRef(null);
+
+    useEffect(() => { sourcePoolRef.current = rotationConfig.source_pool; }, [rotationConfig.source_pool]);
+
+    const [gameModeOptions, setGameModeOptions] = useState([]);
     const [autoPolling, setAutoPolling] = useState(false);
+    useEffect(() => { autoPollingRef.current = autoPolling; }, [autoPolling]);
     const [autoPollInterval, setAutoPollInterval] = useState(60);
 
-    // Fetch rotation config on mount
+    const tagOptions = useMemo(() => {
+        const trimmed = draftTagSearch.trim();
+        if (trimmed && !gameModeOptions.some(o => o.value === trimmed)) {
+            return [...gameModeOptions, { value: trimmed, label: trimmed }];
+        }
+        return gameModeOptions;
+    }, [gameModeOptions, draftTagSearch]);
+
+    // Derived game lists for the dual panels
+    const allPoolGames = useMemo(() => {
+        const seen = new Set();
+        const result = [];
+        for (const set of searchSets) {
+            for (const g of set.games) {
+                if (!seen.has(g.game_id)) { seen.add(g.game_id); result.push(g); }
+            }
+        }
+        return result;
+    }, [searchSets]);
+
+    const [completedAvailable, completedInRotation] = useMemo(() => [
+        allPoolGames.filter(g => !selectedGameIds.has(g.game_id)),
+        allPoolGames.filter(g =>  selectedGameIds.has(g.game_id)),
+    ], [allPoolGames, selectedGameIds]);
+
+    const [ongoingAvailable, ongoingInRotation] = useMemo(() => [
+        ongoingGames.filter(g => !selectedGameIds.has(g.game_id)),
+        ongoingGames.filter(g =>  selectedGameIds.has(g.game_id)),
+    ], [ongoingGames, selectedGameIds]);
+
+    const addToRotation = useCallback((gameId) => {
+        setSelectedGameIds(prev => new Set([...prev, gameId]));
+    }, []);
+
+    const removeFromRotation = useCallback((gameId) => {
+        setSelectedGameIds(prev => { const n = new Set(prev); n.delete(gameId); return n; });
+    }, []);
+
+    const addAllToRotation = useCallback((gameIds) => {
+        setSelectedGameIds(prev => new Set([...prev, ...gameIds]));
+    }, []);
+
+    const removeAllFromRotation = useCallback((gameIds) => {
+        setSelectedGameIds(prev => { const n = new Set(prev); gameIds.forEach(id => n.delete(id)); return n; });
+    }, []);
+
+    // Live-game-specific callbacks — also maintain deselectedLiveIdsRef
+    const addLiveToRotation = useCallback((gameId) => {
+        deselectedLiveIdsRef.current.delete(gameId);
+        setSelectedGameIds(prev => new Set([...prev, gameId]));
+    }, []);
+
+    const removeLiveFromRotation = useCallback((gameId) => {
+        deselectedLiveIdsRef.current.add(gameId);
+        setSelectedGameIds(prev => { const n = new Set(prev); n.delete(gameId); return n; });
+    }, []);
+
+    const addAllLiveToRotation = useCallback((gameIds) => {
+        gameIds.forEach(id => deselectedLiveIdsRef.current.delete(id));
+        setSelectedGameIds(prev => new Set([...prev, ...gameIds]));
+    }, []);
+
+    const removeAllLiveFromRotation = useCallback((gameIds) => {
+        gameIds.forEach(id => deselectedLiveIdsRef.current.add(id));
+        setSelectedGameIds(prev => { const n = new Set(prev); gameIds.forEach(id => n.delete(id)); return n; });
+    }, []);
+
+    // Fetch on mount
     useEffect(() => {
         fetch(`/api/v1/rotation/${scoreboardNumber}`)
             .then(r => r.json())
@@ -58,145 +411,170 @@ export default memo(function RotationControls({ scoreboardNumber }) {
             .catch(() => {});
     }, [scoreboardNumber]);
 
-    // Fetch game modes when expanded
     useEffect(() => {
-        if (!expanded) return;
         fetch('/api/v1/rio/game-modes')
             .then(r => r.json())
-            .then(data => {
-                const opts = Object.keys(data).map(name => ({ value: name, label: name }));
-                setGameModeOptions(opts);
-            })
+            .then(data => setGameModeOptions(Object.keys(data).map(n => ({ value: n, label: n }))))
             .catch(() => {});
-    }, [expanded]);
+    }, []);
 
-    // Listen for server-side updates (auto-poll, etc.)
+    // Socket subscriptions
     const handleCompletedUpdate = useCallback((payload) => {
+        if (!autoPollingRef.current) return;
         const games = Array.isArray(payload) ? payload : (payload?.games ?? []);
-        const diag = payload?.diagnostics;
-        setCompletedGames(games);
-        if (diag) {
-            setLastFetchInfo(prev => ({
-                ...prev,
-                url: diag.url || prev?.url,
-                count: games.length,
-                fetchedAt: diag.fetched_at || new Date().toISOString(),
-                error: diag.error || null,
-            }));
-        }
+        setSearchSets(prev => {
+            const existingIdx = autoPollSetIdRef.current != null
+                ? prev.findIndex(s => s.id === autoPollSetIdRef.current) : -1;
+            if (existingIdx >= 0) {
+                const next = [...prev];
+                next[existingIdx] = { ...prev[existingIdx], games };
+                return next;
+            }
+            const newId = ++searchSetIdCounter;
+            autoPollSetIdRef.current = newId;
+            return [...prev, { id: newId, label: 'Auto-poll', filters: { username: '', vs_username: '', tags: [], limit: 0 }, games, isAutoPoll: true }];
+        });
+        setSelectedGameIds(prev => {
+            const next = new Set(prev);
+            games.forEach(g => next.add(g.game_id));
+            return next;
+        });
     }, []);
     useSocketSubscribe('v1.game_pool.completed_update', handleCompletedUpdate);
 
     const handleOngoingUpdate = useCallback((payload) => {
-        const games = Array.isArray(payload) ? payload : (payload?.games ?? []);
-        setOngoingGames(games);
+        const updated = Array.isArray(payload) ? payload : (payload?.games ?? []);
+        setOngoingGames(updated);
+        const pool = sourcePoolRef.current;
+        if (pool === 'both' || pool === 'ongoing') {
+            setSelectedGameIds(prev => {
+                const n = new Set(prev);
+                updated.forEach(g => {
+                    if (!deselectedLiveIdsRef.current.has(g.game_id)) n.add(g.game_id);
+                });
+                return n;
+            });
+        }
     }, []);
     useSocketSubscribe('v1.game_pool.ongoing_update', handleOngoingUpdate);
 
-    // Listen for rotation status updates from the server
     const handleRotationStatus = useCallback((payload) => {
-        if (payload?.scoreboard === scoreboardNumber) {
-            setRotationStatus(payload);
-        }
+        if (payload?.scoreboard === scoreboardNumber) setRotationStatus(payload);
     }, [scoreboardNumber]);
     useSocketSubscribe('v1.rotation.status', handleRotationStatus);
 
-    const fetchOngoing = useCallback(async () => {
-        setLoadingOngoing(true);
-        try {
-            const resp = await fetch('/api/v1/game-pool/ongoing');
-            const data = await resp.json();
-            setOngoingGames(Array.isArray(data) ? data : []);
-        } catch { setOngoingGames([]); }
+    // Countdown ticker
+    useEffect(() => {
+        const target = rotationStatus?.next_advance_at;
+        if (!rotationStatus?.active || !target) { setSecondsRemaining(null); return; }
+        const tick = () => setSecondsRemaining(Math.max(0, Math.round(target - Date.now() / 1000)));
+        tick();
+        const id = setInterval(tick, 250);
+        return () => clearInterval(id);
+    }, [rotationStatus?.active, rotationStatus?.next_advance_at]);
+
+    // Fetch live games and auto-select all
+    const handleCancelOngoing = useCallback(() => {
+        ongoingAbortRef.current?.abort();
         setLoadingOngoing(false);
     }, []);
 
-    const fetchCompleted = useCallback(async () => {
-        setLoadingCompleted(true);
-        const params = new URLSearchParams();
-        if (filterUsername.trim()) params.append('username', filterUsername.trim());
-        if (filterVsUsername.trim()) params.append('vs_username', filterVsUsername.trim());
-        for (const tag of filterTags) {
-            params.append('tag', tag);
+    const fetchOngoing = useCallback(async () => {
+        ongoingAbortRef.current?.abort();
+        const ctrl = new AbortController();
+        ongoingAbortRef.current = ctrl;
+        setLoadingOngoing(true);
+        try {
+            const data = await fetch('/api/v1/game-pool/ongoing', { signal: ctrl.signal }).then(r => r.json());
+            const games = Array.isArray(data) ? data : [];
+            setOngoingGames(games);
+            const pool = sourcePoolRef.current;
+            if (pool === 'both' || pool === 'ongoing') {
+                setSelectedGameIds(prev => {
+                    const n = new Set(prev);
+                    games.forEach(g => {
+                        if (!deselectedLiveIdsRef.current.has(g.game_id)) n.add(g.game_id);
+                    });
+                    return n;
+                });
+            }
+        } catch (e) {
+            if (e.name !== 'AbortError') setOngoingGames([]);
+        } finally {
+            setLoadingOngoing(false);
         }
-        if (filterLimit) params.append('limit_games', String(filterLimit));
+    }, []);
 
-        const url = `/api/v1/game-pool/completed/refresh?${params}`;
+    const handleCancelSearch = useCallback(() => {
+        searchAbortRef.current?.abort();
+        setLoadingSearch(false);
+    }, []);
+
+    // Search completed games and create a new search set
+    const handleSearch = useCallback(async () => {
+        searchAbortRef.current?.abort();
+        const ctrl = new AbortController();
+        searchAbortRef.current = ctrl;
+        setLoadingSearch(true);
+        const params = new URLSearchParams();
+        if (draftUsername.trim()) params.append('username', draftUsername.trim());
+        if (draftVsUsername.trim()) params.append('vs_username', draftVsUsername.trim());
+        for (const tag of draftTags) params.append('tag', tag);
+        params.append('limit_games', String(draftLimit ?? 500));
 
         try {
-            const resp = await fetch(url, { method: 'POST' });
-            const refreshData = await resp.json();
-            // Now fetch the list
-            const listResp = await fetch('/api/v1/game-pool/completed');
-            const data = await listResp.json();
+            await fetch(`/api/v1/game-pool/completed/refresh?${params}`, { method: 'POST', signal: ctrl.signal });
+            const data = await fetch('/api/v1/game-pool/completed', { signal: ctrl.signal }).then(r => r.json());
             const games = Array.isArray(data) ? data : [];
-            setCompletedGames(games);
-            // Use the Rio API URL from backend diagnostics
-            const diag = refreshData.diagnostics || {};
-            setLastFetchInfo({
-                url: diag.url || url,
-                count: games.length,
-                filters: {
-                    username: filterUsername.trim() || null,
-                    vs_username: filterVsUsername.trim() || null,
-                    tags: filterTags.length > 0 ? filterTags : null,
-                    limit: filterLimit,
-                },
-                fetchedAt: diag.fetched_at || new Date().toISOString(),
-                error: diag.error || null,
-            });
+
+            const parts = [];
+            if (draftUsername.trim()) parts.push(draftUsername.trim());
+            if (draftVsUsername.trim()) parts.push(`vs ${draftVsUsername.trim()}`);
+            if (draftTags.length) parts.push(draftTags.join(', '));
+            const label = parts.length ? parts.join(' · ') : 'All games';
+
+            setSearchSets(prev => [...prev, {
+                id: ++searchSetIdCounter,
+                label,
+                filters: { username: draftUsername.trim(), vs_username: draftVsUsername.trim(), tags: [...draftTags], limit: draftLimit },
+                games,
+                isAutoPoll: false,
+            }]);
+            setSelectedGameIds(prev => { const n = new Set(prev); games.forEach(g => n.add(g.game_id)); return n; });
         } catch (e) {
-            setCompletedGames([]);
-            setLastFetchInfo({
-                url,
-                count: 0,
-                filters: null,
-                fetchedAt: new Date().toISOString(),
-                error: String(e),
-            });
+            if (e.name !== 'AbortError') { /* noop */ }
+        } finally {
+            setLoadingSearch(false);
         }
-        setLoadingCompleted(false);
-    }, [filterUsername, filterVsUsername, filterTags, filterLimit]);
+    }, [draftUsername, draftVsUsername, draftTags, draftLimit]);
+
+    const handleRemoveSearchSet = useCallback((setId) => {
+        setSearchSets(prev => {
+            const toRemove = prev.find(s => s.id === setId);
+            if (toRemove) {
+                if (autoPollSetIdRef.current === setId) autoPollSetIdRef.current = null;
+                const idsInOtherSets = new Set(
+                    prev.filter(s => s.id !== setId).flatMap(s => s.games.map(g => g.game_id))
+                );
+                setSelectedGameIds(sel => {
+                    const next = new Set(sel);
+                    toRemove.games.forEach(g => { if (!idsInOtherSets.has(g.game_id)) next.delete(g.game_id); });
+                    return next;
+                });
+            }
+            return prev.filter(s => s.id !== setId);
+        });
+    }, []);
 
     const handleAssignGame = useCallback(async (gameId) => {
-        await fetch(`/api/v1/game-pool/assign?game_id=${gameId}&scoreboard_number=${scoreboardNumber}`, {
-            method: 'POST',
-        });
+        await fetch(`/api/v1/game-pool/assign?game_id=${gameId}&scoreboard_number=${scoreboardNumber}`, { method: 'POST' });
     }, [scoreboardNumber]);
-
-    const toggleGameSelection = useCallback((gameId) => {
-        setSelectedGameIds(prev => {
-            const next = new Set(prev);
-            if (next.has(gameId)) next.delete(gameId);
-            else next.add(gameId);
-            return next;
-        });
-    }, []);
-
-    const handleSelectAll = useCallback((gameIds) => {
-        setSelectedGameIds(prev => {
-            const allSelected = gameIds.every(id => prev.has(id));
-            const next = new Set(prev);
-            if (allSelected) {
-                gameIds.forEach(id => next.delete(id));
-            } else {
-                gameIds.forEach(id => next.add(id));
-            }
-            return next;
-        });
-    }, []);
 
     const handleStartRotation = useCallback(async () => {
         const gameIds = Array.from(selectedGameIds);
         if (gameIds.length === 0) return;
-
-        // First set the config with game IDs
-        await fetch(`/api/v1/rotation/${scoreboardNumber}?game_ids=${gameIds.join(',')}&interval=${rotationConfig.interval}&source_pool=${rotationConfig.source_pool}&poll_interval=${rotationConfig.poll_interval}`, {
-            method: 'PUT',
-        });
-        // Then start
-        const resp = await fetch(`/api/v1/rotation/${scoreboardNumber}/start`, { method: 'POST' });
-        const data = await resp.json();
+        await fetch(`/api/v1/rotation/${scoreboardNumber}?game_ids=${gameIds.join(',')}&interval=${rotationConfig.interval}&source_pool=${rotationConfig.source_pool}&poll_interval=${rotationConfig.poll_interval}`, { method: 'PUT' });
+        const data = await fetch(`/api/v1/rotation/${scoreboardNumber}/start`, { method: 'POST' }).then(r => r.json());
         setRotationStatus(data);
     }, [scoreboardNumber, selectedGameIds, rotationConfig]);
 
@@ -206,15 +584,11 @@ export default memo(function RotationControls({ scoreboardNumber }) {
     }, [scoreboardNumber]);
 
     const handleNextGame = useCallback(async () => {
-        const resp = await fetch(`/api/v1/rotation/${scoreboardNumber}/next`, { method: 'POST' });
-        const data = await resp.json();
-        setRotationStatus(data);
+        setRotationStatus(await fetch(`/api/v1/rotation/${scoreboardNumber}/next`, { method: 'POST' }).then(r => r.json()));
     }, [scoreboardNumber]);
 
     const handlePrevGame = useCallback(async () => {
-        const resp = await fetch(`/api/v1/rotation/${scoreboardNumber}/prev`, { method: 'POST' });
-        const data = await resp.json();
-        setRotationStatus(data);
+        setRotationStatus(await fetch(`/api/v1/rotation/${scoreboardNumber}/prev`, { method: 'POST' }).then(r => r.json()));
     }, [scoreboardNumber]);
 
     const handleSetAutoPoll = useCallback(async (enabled, interval) => {
@@ -222,378 +596,309 @@ export default memo(function RotationControls({ scoreboardNumber }) {
         setAutoPolling(enabled);
         if (interval != null) setAutoPollInterval(effectiveInterval);
         if (enabled) {
-            // Save current filters before enabling auto-poll so it uses them
             const params = new URLSearchParams();
-            if (filterUsername.trim()) params.append('username', filterUsername.trim());
-            if (filterVsUsername.trim()) params.append('vs_username', filterVsUsername.trim());
-            for (const tag of filterTags) params.append('tag', tag);
-            if (filterLimit) params.append('limit_games', String(filterLimit));
-            // Trigger a refresh with current filters so they're saved server-side
+            if (draftUsername.trim()) params.append('username', draftUsername.trim());
+            if (draftVsUsername.trim()) params.append('vs_username', draftVsUsername.trim());
+            for (const tag of draftTags) params.append('tag', tag);
+            params.append('limit_games', String(draftLimit ?? 500));
             await fetch(`/api/v1/game-pool/completed/refresh?${params}`, { method: 'POST' });
         }
-        await fetch(`/api/v1/game-pool/completed/auto-poll?enabled=${enabled}&interval=${effectiveInterval}`, {
-            method: 'POST',
-        });
-    }, [autoPollInterval, filterUsername, filterVsUsername, filterTags, filterLimit]);
+        await fetch(`/api/v1/game-pool/completed/auto-poll?enabled=${enabled}&interval=${effectiveInterval}`, { method: 'POST' });
+    }, [autoPollInterval, draftUsername, draftVsUsername, draftTags, draftLimit]);
 
-    const formatTimestamp = (ts) => {
-        if (!ts) return '';
-        try {
-            const d = new Date(ts);
-            return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-        } catch { return String(ts); }
-    };
+    const searchCount = searchSets.length;
 
     return (
-        <Paper shadow="xs" p="sm" withBorder>
-            <Group justify="space-between" mb={expanded ? 'sm' : 0}>
-                <Group gap="xs">
-                    <Text fw={600} size="sm">Game Pool & Rotation</Text>
-                    {rotationStatus.active && (
-                        <Badge size="xs" color="teal" variant="filled">
-                            Rotating ({rotationStatus.current_index + 1}/{rotationStatus.total_games})
-                        </Badge>
-                    )}
-                </Group>
-                <Button
-                    size="xs"
-                    variant="subtle"
-                    onClick={() => setExpanded(v => !v)}
-                >
-                    {expanded ? 'Collapse' : 'Expand'}
-                </Button>
-            </Group>
+        <>
+            {/* ── Inline panel ── */}
+            <Paper shadow="xs" p="sm" withBorder>
+                <Stack gap="xs">
+                    <Group gap="xs">
+                        <Text fw={600} size="sm">Game Pool & Rotation</Text>
+                        {rotationStatus.active && (
+                            <Badge size="xs" color="teal" variant="filled">
+                                {rotationStatus.current_index + 1}/{rotationStatus.total_games}
+                                {secondsRemaining != null && ` · ${secondsRemaining}s`}
+                            </Badge>
+                        )}
+                    </Group>
 
-            <Collapse in={expanded}>
-                <Stack gap="sm">
-                    {/* Rotation Controls */}
-                    <Paper p="xs" withBorder>
-                        <Stack gap="xs">
-                            <Text size="sm" fw={500}>Rotation Controls</Text>
-                            <Group gap="sm">
+                    {/* Search filters */}
+                    <Stack gap={4}>
+                        <Group gap="xs">
+                            <TextInput
+                                size="xs"
+                                placeholder="Username"
+                                value={draftUsername}
+                                onChange={(e) => setDraftUsername(e.currentTarget.value)}
+                                onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }}
+                                style={{ flex: 1 }}
+                            />
+                            <TextInput
+                                size="xs"
+                                placeholder="Vs Username"
+                                value={draftVsUsername}
+                                onChange={(e) => setDraftVsUsername(e.currentTarget.value)}
+                                onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }}
+                                style={{ flex: 1 }}
+                            />
+                        </Group>
+                        <Group gap="xs" align="flex-end">
+                            <MultiSelect
+                                size="xs"
+                                placeholder="Tags / game modes"
+                                data={tagOptions}
+                                value={draftTags}
+                                onChange={(val) => { setDraftTags(val); setDraftTagSearch(''); }}
+                                searchValue={draftTagSearch}
+                                onSearchChange={setDraftTagSearch}
+                                searchable
+                                clearable
+                                style={{ flex: 1 }}
+                                maxDropdownHeight={200}
+                            />
+                            <NumberInput
+                                size="xs"
+                                placeholder="Limit"
+                                min={1}
+                                max={500}
+                                value={draftLimit}
+                                onChange={setDraftLimit}
+                                w={72}
+                            />
+                            {loadingSearch ? (
+                                <Button size="xs" onClick={handleCancelSearch} color="red" variant="light"
+                                    leftSection={<Loader size={10} color="red" />}>
+                                    Cancel
+                                </Button>
+                            ) : (
+                                <Button size="xs" onClick={handleSearch}>
+                                    Search
+                                </Button>
+                            )}
+                        </Group>
+                    </Stack>
+
+                    {/* Rotation settings + auto-poll */}
+                    <Group gap="sm" align="flex-end">
+                        <NumberInput
+                            label="Interval (sec)"
+                            size="xs"
+                            w={95}
+                            min={5}
+                            max={600}
+                            value={rotationConfig.interval}
+                            onChange={(val) => setRotationConfig(c => ({ ...c, interval: val || 30 }))}
+                        />
+                        <Select
+                            label="Pool"
+                            size="xs"
+                            w={110}
+                            data={[
+                                { value: 'both', label: 'Both' },
+                                { value: 'ongoing', label: 'Live Only' },
+                                { value: 'completed', label: 'Completed' },
+                            ]}
+                            value={rotationConfig.source_pool}
+                            onChange={(val) => setRotationConfig(c => ({ ...c, source_pool: val }))}
+                        />
+                        <Group gap="xs" align="flex-end" style={{ alignSelf: 'flex-end' }}>
+                            <Switch
+                                size="xs"
+                                label="Auto-poll"
+                                checked={autoPolling}
+                                onChange={(e) => handleSetAutoPoll(e.currentTarget.checked)}
+                                style={{ paddingBottom: 4 }}
+                            />
+                            {autoPolling && (
                                 <NumberInput
-                                    label="Interval (sec)"
                                     size="xs"
-                                    w={100}
-                                    min={5}
-                                    max={600}
-                                    value={rotationConfig.interval}
-                                    onChange={(val) => setRotationConfig(c => ({ ...c, interval: val || 30 }))}
+                                    w={72}
+                                    min={10}
+                                    max={300}
+                                    value={autoPollInterval}
+                                    onChange={(val) => handleSetAutoPoll(true, val || 60)}
+                                    suffix="s"
                                 />
-                                <Select
-                                    label="Source Pool"
-                                    size="xs"
-                                    w={120}
-                                    data={[
-                                        { value: 'both', label: 'Both' },
-                                        { value: 'ongoing', label: 'Live Only' },
-                                        { value: 'completed', label: 'Completed Only' },
-                                    ]}
-                                    value={rotationConfig.source_pool}
-                                    onChange={(val) => setRotationConfig(c => ({ ...c, source_pool: val }))}
-                                />
-                            </Group>
-                            <Group gap="xs">
-                                {!rotationStatus.active ? (
-                                    <Button size="xs" color="teal" onClick={handleStartRotation}
-                                        disabled={selectedGameIds.size === 0}>
-                                        Start Rotation ({selectedGameIds.size} games)
-                                    </Button>
-                                ) : (
-                                    <Button size="xs" color="red" variant="light" onClick={handleStopRotation}>
-                                        Stop Rotation
-                                    </Button>
+                            )}
+                        </Group>
+                    </Group>
+
+                    <Group gap="xs">
+                        {!rotationStatus.active ? (
+                            <Button size="xs" color="teal" onClick={handleStartRotation}
+                                disabled={selectedGameIds.size === 0}>
+                                Start ({selectedGameIds.size})
+                            </Button>
+                        ) : (
+                            <Button size="xs" color="red" variant="light" onClick={handleStopRotation}>
+                                Stop
+                            </Button>
+                        )}
+                        {rotationStatus.active && (
+                            <>
+                                <ActionIcon size="sm" variant="light" onClick={handlePrevGame}>
+                                    <Text size="xs" lh={1}>&lt;</Text>
+                                </ActionIcon>
+                                <Text size="xs">
+                                    {rotationStatus.current_index + 1}/{rotationStatus.total_games}
+                                </Text>
+                                <ActionIcon size="sm" variant="light" onClick={handleNextGame}>
+                                    <Text size="xs" lh={1}>&gt;</Text>
+                                </ActionIcon>
+                                {secondsRemaining != null && (
+                                    <Text size="xs" c="dimmed">{secondsRemaining}s</Text>
                                 )}
-                                {rotationStatus.active && (
-                                    <>
-                                        <ActionIcon size="sm" variant="light" onClick={handlePrevGame}>
-                                            <Text size="xs" lh={1}>&lt;</Text>
-                                        </ActionIcon>
-                                        <Text size="xs">
-                                            {rotationStatus.current_index + 1} / {rotationStatus.total_games}
-                                        </Text>
-                                        <ActionIcon size="sm" variant="light" onClick={handleNextGame}>
-                                            <Text size="xs" lh={1}>&gt;</Text>
-                                        </ActionIcon>
-                                    </>
-                                )}
-                            </Group>
+                            </>
+                        )}
+                    </Group>
+
+                    {searchCount > 0 && (
+                        <Group gap="xs" justify="space-between" align="center">
+                            <Text size="xs" c="dimmed">
+                                {selectedGameIds.size} in rotation · {searchCount} search{searchCount !== 1 ? 'es' : ''}
+                            </Text>
+                            <Button size="xs" variant="subtle" onClick={() => setModalOpen(true)}>
+                                Manage
+                            </Button>
+                        </Group>
+                    )}
+                </Stack>
+            </Paper>
+
+            {/* ── Game Pool Manager Modal ── */}
+            <Modal
+                opened={modalOpen}
+                onClose={() => setModalOpen(false)}
+                title={
+                    <Group gap="xs">
+                        <Text fw={600}>Game Pool Manager</Text>
+                        <Badge size="sm" color="teal" variant="light">
+                            {selectedGameIds.size} in rotation
+                        </Badge>
+                    </Group>
+                }
+                size="100%"
+                scrollAreaComponent={ScrollArea.Autosize}
+            >
+                <Tabs value={activeTab} onChange={setActiveTab} variant="pills" size="xs">
+                    <Tabs.List mb="md">
+                        <Tabs.Tab value="completed">
+                            Completed Games ({allPoolGames.length})
+                        </Tabs.Tab>
+                        <Tabs.Tab value="ongoing">
+                            Live Games ({ongoingGames.length})
+                        </Tabs.Tab>
+                    </Tabs.List>
+
+                    {/* ── Completed tab ── */}
+                    <Tabs.Panel value="completed">
+                        <Stack gap="sm">
+                            {/* Search set summary */}
+                            {searchSets.length > 0 && (
+                                <Group gap="xs" wrap="wrap">
+                                    <Text size="xs" c="dimmed" style={{ alignSelf: 'center' }}>Searches:</Text>
+                                    {searchSets.map(set => {
+                                        const inRotation = set.games.filter(g => selectedGameIds.has(g.game_id)).length;
+                                        return (
+                                            <Badge
+                                                key={set.id}
+                                                size="sm"
+                                                variant="light"
+                                                color={set.isAutoPoll ? 'blue' : 'gray'}
+                                                rightSection={
+                                                    <CloseButton
+                                                        size="xs"
+                                                        onClick={() => handleRemoveSearchSet(set.id)}
+                                                        style={{ marginLeft: 2 }}
+                                                    />
+                                                }
+                                            >
+                                                {set.label} · {inRotation}/{set.games.length}
+                                            </Badge>
+                                        );
+                                    })}
+                                </Group>
+                            )}
+
+                            {allPoolGames.length === 0 ? (
+                                <Text size="sm" c="dimmed" ta="center" py="xl">
+                                    No searches yet. Use the search form to find games.
+                                </Text>
+                            ) : (
+                                <Grid gutter="md">
+                                    <Grid.Col span={6}>
+                                        <PoolPanel
+                                            title="Available"
+                                            color="gray"
+                                            games={completedAvailable}
+                                            actionLabel="Add"
+                                            onAction={addToRotation}
+                                            onActionAll={addAllToRotation}
+                                            onAssign={handleAssignGame}
+                                        />
+                                    </Grid.Col>
+                                    <Grid.Col span={6}>
+                                        <PoolPanel
+                                            title="In Rotation"
+                                            color="teal"
+                                            games={completedInRotation}
+                                            actionLabel="Remove"
+                                            onAction={removeFromRotation}
+                                            onActionAll={removeAllFromRotation}
+                                            onAssign={handleAssignGame}
+                                        />
+                                    </Grid.Col>
+                                </Grid>
+                            )}
                         </Stack>
-                    </Paper>
+                    </Tabs.Panel>
 
-                    {/* Game Pool Browser */}
-                    <Tabs value={activePoolTab} onChange={setActivePoolTab} variant="pills" size="xs">
-                        <Tabs.List>
-                            <Tabs.Tab value="ongoing">
-                                Live Games ({ongoingGames.length})
-                            </Tabs.Tab>
-                            <Tabs.Tab value="completed">
-                                Completed Games ({completedGames.length})
-                            </Tabs.Tab>
-                        </Tabs.List>
-
-                        <Tabs.Panel value="ongoing" pt="xs">
-                            <Stack gap="xs">
-                                <Button size="xs" variant="light" onClick={fetchOngoing} loading={loadingOngoing}>
+                    {/* ── Live games tab ── */}
+                    <Tabs.Panel value="ongoing">
+                        <Stack gap="sm">
+                            {loadingOngoing ? (
+                                <Button size="xs" color="red" variant="light" onClick={handleCancelOngoing}
+                                    w="fit-content" leftSection={<Loader size={10} color="red" />}>
+                                    Cancel
+                                </Button>
+                            ) : (
+                                <Button size="xs" variant="light" onClick={fetchOngoing} w="fit-content">
                                     Refresh Live Games
                                 </Button>
-                                {ongoingGames.length > 0 ? (
-                                    <GameTable
-                                        games={ongoingGames}
-                                        completed={false}
-                                        selectedIds={selectedGameIds}
-                                        onToggle={toggleGameSelection}
-                                        onSelectAll={handleSelectAll}
-                                        onAssign={handleAssignGame}
-                                        formatTimestamp={formatTimestamp}
-                                    />
-                                ) : (
-                                    <Text size="xs" c="dimmed">No live games found. Click refresh to check.</Text>
-                                )}
-                            </Stack>
-                        </Tabs.Panel>
-
-                        <Tabs.Panel value="completed" pt="xs">
-                            <Stack gap="xs">
-                                {/* Filters */}
-                                <Group gap="xs" align="flex-end">
-                                    <TextInput
-                                        size="xs"
-                                        label="Username"
-                                        placeholder="Filter by player"
-                                        value={filterUsername}
-                                        onChange={(e) => setFilterUsername(e.currentTarget.value)}
-                                        w={140}
-                                    />
-                                    <TextInput
-                                        size="xs"
-                                        label="Vs Username"
-                                        placeholder="Opponent"
-                                        value={filterVsUsername}
-                                        onChange={(e) => setFilterVsUsername(e.currentTarget.value)}
-                                        w={140}
-                                    />
-                                    <MultiSelect
-                                        size="xs"
-                                        label="Tags"
-                                        placeholder="Game modes"
-                                        data={gameModeOptions}
-                                        value={filterTags}
-                                        onChange={setFilterTags}
-                                        searchable
-                                        clearable
-                                        w={200}
-                                        maxDropdownHeight={200}
-                                    />
-                                    <NumberInput
-                                        size="xs"
-                                        label="Limit"
-                                        min={1}
-                                        max={100}
-                                        value={filterLimit}
-                                        onChange={setFilterLimit}
-                                        w={80}
-                                    />
-                                    <Button size="xs" onClick={fetchCompleted} loading={loadingCompleted}>
-                                        Search
-                                    </Button>
-                                    <Popover opened={diagOpen} onChange={setDiagOpen} position="bottom-end" withArrow width={360}>
-                                        <Popover.Target>
-                                            <ActionIcon
-                                                variant="subtle"
-                                                size="sm"
-                                                onClick={() => setDiagOpen(o => !o)}
-                                                title="Fetch diagnostics"
-                                            >
-                                                {loadingCompleted ? <Loader size={12} /> : <Text size="xs" lh={1}>&#8505;</Text>}
-                                            </ActionIcon>
-                                        </Popover.Target>
-                                        <Popover.Dropdown>
-                                            <Stack gap="xs">
-                                                <Text size="xs" fw={600}>Completed Games Fetch</Text>
-                                                {lastFetchInfo ? (
-                                                    <>
-                                                        <Group gap={4}>
-                                                            <Text size="xs" c="dimmed">Games found:</Text>
-                                                            <Badge
-                                                                size="xs"
-                                                                color={lastFetchInfo.count > 0 ? 'green' : 'yellow'}
-                                                                variant="filled"
-                                                            >
-                                                                {lastFetchInfo.count}
-                                                            </Badge>
-                                                        </Group>
-                                                        {lastFetchInfo.url && (
-                                                            <div>
-                                                                <Text size="xs" c="dimmed">URL</Text>
-                                                                <Text size="xs" style={{ wordBreak: 'break-all' }}>{lastFetchInfo.url}</Text>
-                                                            </div>
-                                                        )}
-                                                        {lastFetchInfo.error && (
-                                                            <Text size="xs" c="red">{lastFetchInfo.error}</Text>
-                                                        )}
-                                                        {lastFetchInfo.filters && (
-                                                            <>
-                                                                <Divider />
-                                                                {lastFetchInfo.filters.username && (
-                                                                    <Group gap={4}>
-                                                                        <Text size="xs" c="dimmed">Username:</Text>
-                                                                        <Text size="xs">{lastFetchInfo.filters.username}</Text>
-                                                                    </Group>
-                                                                )}
-                                                                {lastFetchInfo.filters.vs_username && (
-                                                                    <Group gap={4}>
-                                                                        <Text size="xs" c="dimmed">Vs:</Text>
-                                                                        <Text size="xs">{lastFetchInfo.filters.vs_username}</Text>
-                                                                    </Group>
-                                                                )}
-                                                                {lastFetchInfo.filters.tags && (
-                                                                    <Group gap={4}>
-                                                                        <Text size="xs" c="dimmed">Tags:</Text>
-                                                                        {lastFetchInfo.filters.tags.map(t => (
-                                                                            <Badge key={t} size="xs" variant="light">{t}</Badge>
-                                                                        ))}
-                                                                    </Group>
-                                                                )}
-                                                                <Group gap={4}>
-                                                                    <Text size="xs" c="dimmed">Limit:</Text>
-                                                                    <Text size="xs">{lastFetchInfo.filters.limit}</Text>
-                                                                </Group>
-                                                            </>
-                                                        )}
-                                                        <Text size="xs" c="dimmed" ta="right">
-                                                            {new Date(lastFetchInfo.fetchedAt).toLocaleTimeString()}
-                                                        </Text>
-                                                    </>
-                                                ) : (
-                                                    <Text size="xs" c="dimmed">No fetch performed yet. Click Search to query the API.</Text>
-                                                )}
-                                            </Stack>
-                                        </Popover.Dropdown>
-                                    </Popover>
-                                </Group>
-
-                                {/* Auto-poll toggle */}
-                                <Group gap="xs">
-                                    <Switch
-                                        size="xs"
-                                        label="Auto-poll"
-                                        checked={autoPolling}
-                                        onChange={(e) => handleSetAutoPoll(e.currentTarget.checked)}
-                                    />
-                                    {autoPolling && (
-                                        <NumberInput
-                                            size="xs"
-                                            w={80}
-                                            min={10}
-                                            max={300}
-                                            value={autoPollInterval}
-                                            onChange={(val) => handleSetAutoPoll(true, val || 60)}
-                                            suffix="s"
+                            )}
+                            {ongoingGames.length === 0 ? (
+                                <Text size="xs" c="dimmed">No live games found. Click refresh to check.</Text>
+                            ) : (
+                                <Grid gutter="md">
+                                    <Grid.Col span={6}>
+                                        <PoolPanel
+                                            title="Available"
+                                            color="gray"
+                                            games={ongoingAvailable}
+                                            actionLabel="Add"
+                                            onAction={addLiveToRotation}
+                                            onActionAll={addAllLiveToRotation}
+                                            onAssign={handleAssignGame}
                                         />
-                                    )}
-                                </Group>
-
-                                {completedGames.length > 0 ? (
-                                    <GameTable
-                                        games={completedGames}
-                                        completed={true}
-                                        selectedIds={selectedGameIds}
-                                        onToggle={toggleGameSelection}
-                                        onSelectAll={handleSelectAll}
-                                        onAssign={handleAssignGame}
-                                        formatTimestamp={formatTimestamp}
-                                    />
-                                ) : (
-                                    <Text size="xs" c="dimmed">No completed games. Use the filters above and click Search.</Text>
-                                )}
-                            </Stack>
-                        </Tabs.Panel>
-                    </Tabs>
-                </Stack>
-            </Collapse>
-        </Paper>
+                                    </Grid.Col>
+                                    <Grid.Col span={6}>
+                                        <PoolPanel
+                                            title="In Rotation"
+                                            color="teal"
+                                            games={ongoingInRotation}
+                                            actionLabel="Remove"
+                                            onAction={removeLiveFromRotation}
+                                            onActionAll={removeAllLiveFromRotation}
+                                            onAssign={handleAssignGame}
+                                        />
+                                    </Grid.Col>
+                                </Grid>
+                            )}
+                        </Stack>
+                    </Tabs.Panel>
+                </Tabs>
+            </Modal>
+        </>
     );
 });
-
-
-/**
- * Shared game table for both ongoing and completed games.
- */
-function GameTable({ games, completed, selectedIds, onToggle, onSelectAll, onAssign, formatTimestamp }) {
-    const allSelected = games.length > 0 && games.every(g => selectedIds.has(g.game_id));
-    const someSelected = games.some(g => selectedIds.has(g.game_id));
-    return (
-        <Table striped highlightOnHover withTableBorder withColumnBorders fontSize="xs">
-            <Table.Thead>
-                <Table.Tr>
-                    <Table.Th w={30}>
-                        <Checkbox
-                            size="xs"
-                            checked={allSelected}
-                            indeterminate={someSelected && !allSelected}
-                            onChange={() => onSelectAll(games.map(g => g.game_id))}
-                        />
-                    </Table.Th>
-                    <Table.Th>Away</Table.Th>
-                    <Table.Th w={40}>Score</Table.Th>
-                    <Table.Th>Home</Table.Th>
-                    {completed && <Table.Th>Time</Table.Th>}
-                    {completed && <Table.Th>Stadium</Table.Th>}
-                    <Table.Th w={60}></Table.Th>
-                </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-                {games.map((game) => {
-                    const gid = game.game_id;
-                    const awayUser = game.away_user ?? game.entrants?.[0]?.[0]?.rioName ?? '';
-                    const homeUser = game.home_user ?? game.entrants?.[1]?.[0]?.rioName ?? '';
-                    const awayScore = game.away_score ?? game.team1score ?? 0;
-                    const homeScore = game.home_score ?? game.team2score ?? 0;
-                    const awayCaptain = game.away_captain ?? '';
-                    const homeCaptain = game.home_captain ?? '';
-
-                    return (
-                        <Table.Tr key={gid}>
-                            <Table.Td>
-                                <Checkbox
-                                    size="xs"
-                                    checked={selectedIds.has(gid)}
-                                    onChange={() => onToggle(gid)}
-                                />
-                            </Table.Td>
-                            <Table.Td>
-                                <Text size="xs" fw={500}>{awayUser}</Text>
-                                {awayCaptain && <Text size="xs" c="dimmed">{awayCaptain}</Text>}
-                            </Table.Td>
-                            <Table.Td ta="center">
-                                <Text size="xs" fw={600}>{awayScore}-{homeScore}</Text>
-                            </Table.Td>
-                            <Table.Td>
-                                <Text size="xs" fw={500}>{homeUser}</Text>
-                                {homeCaptain && <Text size="xs" c="dimmed">{homeCaptain}</Text>}
-                            </Table.Td>
-                            {completed && (
-                                <Table.Td>
-                                    <Text size="xs">{formatTimestamp(game.date_time_end)}</Text>
-                                </Table.Td>
-                            )}
-                            {completed && (
-                                <Table.Td>
-                                    <Text size="xs">{game.stadium ?? ''}</Text>
-                                </Table.Td>
-                            )}
-                            <Table.Td>
-                                <Tooltip label="Load this game">
-                                    <Button size="compact-xs" variant="light" onClick={() => onAssign(gid)}>
-                                        Load
-                                    </Button>
-                                </Tooltip>
-                            </Table.Td>
-                        </Table.Tr>
-                    );
-                })}
-            </Table.Tbody>
-        </Table>
-    );
-}

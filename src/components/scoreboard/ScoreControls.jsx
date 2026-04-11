@@ -25,10 +25,10 @@ const num = (v, fallback = 0) => {
 };
 
 const sourceOptions = [
-    { value: 'manual', label: 'Manual' },
-    { value: 'hud', label: 'HUD File' },
-    { value: 'ongoing_api', label: 'Live API Game' },
-    { value: 'completed_api', label: 'Completed API Game' },
+    { value: 'manual',    label: 'Manual' },
+    { value: 'hud',       label: 'HUD' },
+    { value: 'live_game', label: 'Live API Game' },
+    { value: 'rotator',   label: 'Rotator' },
 ];
 
 /**
@@ -479,8 +479,8 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, sourc
                     </Button>
                 </Group>
 
-                {/* ---- Completed Game Info ---- */}
-                {gameCompleted && (
+                {/* ---- Completed Game Info (Rotator only) ---- */}
+                {sourceType === 'rotator' && gameCompleted && (
                     <>
                         <Divider />
                         <Paper p="xs" withBorder style={{ backgroundColor: 'var(--mantine-color-violet-0)' }}>

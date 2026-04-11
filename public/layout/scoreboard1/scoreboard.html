@@ -20,7 +20,7 @@
     body {
       overflow: hidden;
       width: 800px;
-      height: 400px;
+      height: 460px;
       background: transparent;
       font-family: var(--font-family, 'Inter', sans-serif);
       color: var(--text-primary, #fff);
@@ -30,7 +30,7 @@
     /* ── Card shell ── */
     #overlay {
       width: 800px;
-      height: 400px;
+      height: 460px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -372,6 +372,49 @@
       text-align: center;
       white-space: nowrap;
     }
+
+    /* ── LINESCORE TABLE ── */
+    .linescore-wrap {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 12px;
+    }
+    .linescore-table {
+      border-collapse: collapse;
+    }
+    .linescore-table td, .linescore-table th {
+      text-align: center;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 3px 7px;
+      min-width: 24px;
+      line-height: 1.4;
+    }
+    .linescore-table th {
+      font-size: 10px;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.4);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .linescore-name-cell {
+      text-align: left !important;
+      font-size: 11px !important;
+      color: rgba(255, 255, 255, 0.5);
+      padding-right: 12px !important;
+      white-space: nowrap;
+    }
+    .linescore-total-cell {
+      border-left: 1px solid rgba(255, 255, 255, 0.12);
+      color: var(--accent);
+      font-weight: 800 !important;
+    }
+    .linescore-score-cell {
+      color: rgba(255, 255, 255, 0.85);
+    }
+    .linescore-score-cell.did-not-bat {
+      color: rgba(255, 255, 255, 0.35);
+    }
   </style>
 </head>
 <body>
@@ -394,8 +437,8 @@
       xs: { w: 400,  h: 50,  showGameState: false, showRoster: false, showCount: false, showDiamond: false },
       s:  { w: 500,  h: 80,  showGameState: false, showRoster: false, showCount: false, showDiamond: false },
       m:  { w: 600,  h: 200, showGameState: true,  showRoster: false, showCount: true,  showDiamond: true  },
-      l:  { w: 800,  h: 400, showGameState: true,  showRoster: true,  showCount: true,  showDiamond: true  },
-      xl: { w: 1000, h: 500, showGameState: true,  showRoster: true,  showCount: true,  showDiamond: true  },
+      l:  { w: 800,  h: 460, showGameState: true,  showRoster: true,  showCount: true,  showDiamond: true  },
+      xl: { w: 1000, h: 560, showGameState: true,  showRoster: true,  showCount: true,  showDiamond: true  },
     };
     const sizeConf = SIZE_CONFIG[SIZE] || SIZE_CONFIG.l;
 
@@ -474,16 +517,20 @@
       const card = document.getElementById('card');
       card.classList.remove('slide-in');
       card.classList.add('slide-out');
-      card.addEventListener('animationend', function onOut() {
+      card.addEventListener('animationend', function onOut(e) {
+        if (e.target !== card) return; // ignore bubbled events from children
         card.removeEventListener('animationend', onOut);
+        // Remove the old animation class and update content while still in the
+        // same synchronous JS task — the browser won't paint until this task
+        // finishes, so there is no visible snap-back to centre.
         card.classList.remove('slide-out');
-        card.style.opacity = '0';
         callback();
-        // Force layout so the browser registers the new content before animating
+        // Force a layout reflow so the browser registers the class removal
+        // before we add slide-in (required to restart the animation).
         void card.offsetHeight;
-        card.style.opacity = '';
         card.classList.add('slide-in');
-        card.addEventListener('animationend', function onIn() {
+        card.addEventListener('animationend', function onIn(e) {
+          if (e.target !== card) return;
           card.removeEventListener('animationend', onIn);
           card.classList.remove('slide-in');
         });
@@ -554,6 +601,14 @@
       const lOutElo = deepGet(state, `score.${SB}.loser_result_elo`);
       const innings = deepGet(state, `score.${SB}.innings_played`, '');
       const stadium = deepGet(state, `score.${SB}.stadium`, '');
+      const dateTimeEnd = deepGet(state, `score.${SB}.date_time_end`, '');
+
+      let dateStr = '';
+      if (dateTimeEnd) {
+        try {
+          dateStr = new Date(dateTimeEnd).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+        } catch (e) {}
+      }
 
       const p1IsWinner = p1 === winnerUser;
       const p1InElo = p1IsWinner ? wInElo : lInElo;
@@ -562,7 +617,7 @@
       const p2OutElo = p1IsWinner ? lOutElo : wOutElo;
 
       const hasElo = showElo() && p1InElo != null && p1OutElo != null;
-      if (!hasElo && !stadium && !innings) return '';
+      if (!hasElo && !stadium && !innings && !dateStr) return '';
 
       let html = '<div class="elo-row">';
 
@@ -583,7 +638,13 @@
       const metaParts = [];
       if (stadium) metaParts.push(stadium);
       if (innings) metaParts.push(`${innings} inn`);
-      html += `<div class="meta-center">${metaParts.join(' &middot; ')}</div>`;
+      html += '<div class="meta-center">';
+      if (metaParts.length) html += metaParts.join(' &middot; ');
+      if (dateStr) {
+        if (metaParts.length) html += '<br>';
+        html += `<span style="font-size:10px;opacity:0.65;">${dateStr}</span>`;
+      }
+      html += '</div>';
 
       if (hasElo) {
         const d2 = Math.round(p2OutElo - p2InElo);
@@ -600,6 +661,51 @@
       }
 
       html += '</div>';
+      return html;
+    }
+
+    /* ── Linescore table builder (completed games, l and xl only) ── */
+    function buildLinescore(p1, p2) {
+      const awayLine = deepGet(state, `score.${SB}.away_linescore`, []);
+      const homeLine = deepGet(state, `score.${SB}.home_linescore`, []);
+      if (!awayLine || !awayLine.length) return '';
+
+      const awayTotal = deepGet(state, `score.${SB}.score_left`, 0);
+      const homeTotal = deepGet(state, `score.${SB}.score_right`, 0);
+      const totalInnings = Math.max(awayLine.length, homeLine.length);
+
+      let html = '<div class="linescore-wrap"><table class="linescore-table">';
+
+      // Header: inning numbers + R
+      html += '<thead><tr>';
+      html += '<th class="linescore-name-cell"></th>';
+      for (let i = 1; i <= totalInnings; i++) {
+        html += `<th>${i}</th>`;
+      }
+      html += '<th class="linescore-total-cell">R</th>';
+      html += '</tr></thead>';
+
+      // Away row
+      html += '<tbody><tr>';
+      html += `<td class="linescore-name-cell">${p1 || 'Away'}</td>`;
+      for (let i = 0; i < totalInnings; i++) {
+        const v = awayLine[i];
+        html += `<td class="linescore-score-cell">${v != null ? v : '-'}</td>`;
+      }
+      html += `<td class="linescore-total-cell">${awayTotal}</td>`;
+      html += '</tr>';
+
+      // Home row — "X" comes directly from the API when home team didn't bat
+      html += '<tr>';
+      html += `<td class="linescore-name-cell">${p2 || 'Home'}</td>`;
+      for (let i = 0; i < totalInnings; i++) {
+        const v = homeLine[i];
+        const isX = v === 'X' || v === 'x';
+        html += `<td class="linescore-score-cell${isX ? ' did-not-bat' : ''}">${v != null ? v : '-'}</td>`;
+      }
+      html += `<td class="linescore-total-cell">${homeTotal}</td>`;
+      html += '</tr></tbody></table></div>';
+
       return html;
     }
 
@@ -693,6 +799,11 @@
         html += buildRoster(1);
         html += buildRoster(2);
         html += '</div>';
+      }
+
+      // ── Linescore box score (l and xl completed games only, pinned to bottom) ──
+      if (sizeConf.showRoster && isCompleted) {
+        html += buildLinescore(p1, p2);
       }
 
       return html;

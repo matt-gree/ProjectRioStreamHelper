@@ -162,6 +162,13 @@ Every change flows through `State.Set(key, value)` or `State.SetBatch(entries)`.
 - `pyrio.lookup.Lookup` / `LookupDicts.CHAR_NAME` — character ID ↔ name mapping (cached singleton)
 - `pyrio.team_name_algo.team_name(roster, captain)` — generates team name from roster composition
 
+### Clearing Cached State
+
+If the app fails to launch due to corrupt or stale data in `user_data/state.json`, clear it:
+```bash
+echo '{}' > user_data/state.json
+```
+
 ### MSB State Keys
 ```
 score.{N}.inning, score.{N}.half_inning

@@ -8,6 +8,7 @@ import TeamPanel from '../../components/scoreboard/TeamPanel';
 import ScoreControls from '../../components/scoreboard/ScoreControls';
 import ActiveMatchupStats from '../../components/scoreboard/ActiveMatchupStats';
 import RotationControls from '../../components/scoreboard/RotationControls';
+import LiveGameSelector from '../../components/scoreboard/LiveGameSelector';
 
 /**
  * A single scoreboard instance (team panels + score controls).
@@ -89,22 +90,32 @@ function ScoreboardTab({ scoreboardNumber }) {
             </Grid.Col>
 
             <Grid.Col span={{ base: 10, md: 4 }}>
-                <TeamPanel
-                    scoreboardNumber={scoreboardNumber}
-                    teamNumber={2}
-                    playerCount={1}
-                    sourceType={sourceType}
-                />
+                <Stack gap="md">
+                    <TeamPanel
+                        scoreboardNumber={scoreboardNumber}
+                        teamNumber={2}
+                        playerCount={1}
+                        sourceType={sourceType}
+                    />
+                    {sourceType === 'live_game' && (
+                        <LiveGameSelector scoreboardNumber={scoreboardNumber} />
+                    )}
+                    {sourceType === 'rotator' && (
+                        <RotationControls scoreboardNumber={scoreboardNumber} />
+                    )}
+                </Stack>
             </Grid.Col>
         </Grid>
     );
 }
 
 const SOURCE_BADGE = {
-    hud: { color: 'green', label: 'HUD' },
-    ongoing_api: { color: 'blue', label: 'Live API' },
-    completed_api: { color: 'violet', label: 'Completed' },
-    api: { color: 'blue', label: 'API' },  // backward compat
+    hud:       { color: 'green',  label: 'HUD' },
+    live_game: { color: 'blue',   label: 'API' },
+    rotator:   { color: 'violet', label: 'Rotator' },
+    // backward compat
+    ongoing_api:   { color: 'blue',   label: 'API' },
+    completed_api: { color: 'violet', label: 'Rotator' },
 };
 
 /**
@@ -241,10 +252,7 @@ export default function ScoreboardManager() {
 
             {active.map(sbId => (
                 <Tabs.Panel key={sbId} value={String(sbId)}>
-                    <Stack gap="md">
-                        <ScoreboardTab scoreboardNumber={sbId} />
-                        <RotationControls scoreboardNumber={sbId} />
-                    </Stack>
+                    <ScoreboardTab scoreboardNumber={sbId} />
                 </Tabs.Panel>
             ))}
         </Tabs>

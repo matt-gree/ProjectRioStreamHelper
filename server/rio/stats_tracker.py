@@ -306,8 +306,8 @@ class StatsTracker:
                     (f"{prefix}.current_game", {
                         "batting": hud_batting,
                         "pitching": hud_pitching,
-                        "batting_line": format_batting_line(hud_batting),
-                        "pitching_line": format_pitching_line(hud_pitching),
+                        "batting_line": format_batting_line(**hud_batting),
+                        "pitching_line": format_pitching_line(**hud_pitching),
                     }),
                 ])
 
@@ -398,8 +398,8 @@ class StatsTracker:
                     (f"{stat_prefix}.current_game", {
                         "batting": empty_bat,
                         "pitching": empty_pit,
-                        "batting_line": format_batting_line(empty_bat),
-                        "pitching_line": format_pitching_line(empty_pit),
+                        "batting_line": format_batting_line(**empty_bat),
+                        "pitching_line": format_pitching_line(**empty_pit),
                     }),
                 ])
 
