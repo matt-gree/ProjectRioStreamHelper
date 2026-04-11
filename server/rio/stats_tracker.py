@@ -8,7 +8,7 @@ import asyncio
 
 import pandas as pd
 from loguru import logger
-from pyrio.stat_formatters import (
+from server.rio.pyrio.stat_formatters import (
     derive_batting, derive_pitching,
     format_batting_line, format_pitching_line,
 )
@@ -163,6 +163,11 @@ class StatsTracker:
     # Background fetch task
     _fetch_task: asyncio.Task | None = None
 
+    # Mirrored from RioGameDataProvider after each _preserve_player_sides call.
+    # Allows the background _fetch_api_stats task to push with the correct swap
+    # state without importing provider (which already imports us at the top).
+    _sides_swapped: bool = False
+
     @classmethod
     def reset(cls):
         """Reset all stats state."""
@@ -172,6 +177,7 @@ class StatsTracker:
         cls._players = ["", ""]
         cls._rosters = {}
         cls._api_ready = False
+        cls._sides_swapped = False
         if cls._fetch_task and not cls._fetch_task.done():
             cls._fetch_task.cancel()
         cls._fetch_task = None
@@ -240,9 +246,7 @@ class StatsTracker:
                 logger.info("[StatsTracker] API stats returned empty DataFrame")
             if push:
                 sb_num = await Settings.Get("scoreboards.hud_target", 1)
-                # Import here to avoid circular import
-                from server.rio.provider import RioGameDataProvider
-                await cls.push_stats_to_state(sb_num, RioGameDataProvider._sides_swapped)
+                await cls.push_stats_to_state(sb_num, cls._sides_swapped)
         except Exception as e:
             logger.error(f"[StatsTracker] Failed to fetch API stats: {e}")
             cls._api_ready = True  # Mark as done even on failure so we don't block

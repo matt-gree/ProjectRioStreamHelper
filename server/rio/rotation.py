@@ -3,6 +3,8 @@ import time
 
 from loguru import logger
 from server import socketio
+from server.rio.game_pool import OngoingGamePool, CompletedGamePool
+from server.rio.stats_tracker import StatsTracker
 from server.settings import Settings
 
 
@@ -150,9 +152,6 @@ class RotationManager:
     @classmethod
     async def _prefetch_rotation_stats(cls, game_ids: list):
         """Collect all unique player names from rotation games and pre-fetch stats."""
-        from server.rio.game_pool import OngoingGamePool, CompletedGamePool
-        from server.rio.stats_tracker import StatsTracker
-
         usernames = set()
         for game_id in game_ids:
             game = OngoingGamePool.get_game(game_id) or CompletedGamePool.get_game(game_id)
@@ -246,8 +245,6 @@ class RotationState:
 
     async def _refresh_game_list(self):
         """Refresh game list from the pools based on source_pool setting."""
-        from server.rio.game_pool import OngoingGamePool, CompletedGamePool
-
         new_ids = []
         if self.source_pool in ("ongoing", "both"):
             new_ids.extend(g.get("game_id") for g in OngoingGamePool.list_games()
@@ -274,9 +271,6 @@ class RotationState:
         """Apply the current game to the scoreboard and push stats."""
         if not self.game_ids:
             return
-
-        from server.rio.game_pool import OngoingGamePool, CompletedGamePool
-        from server.rio.stats_tracker import StatsTracker
 
         game_id = self.game_ids[self.current_index]
 

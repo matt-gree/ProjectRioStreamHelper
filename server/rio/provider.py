@@ -2,6 +2,7 @@ import platform
 from pathlib import Path
 
 from loguru import logger
+from server.rio.pyrio.lookup import LookupDicts
 from server.rio.pyrio.team_name_algo import team_name
 
 from server.rio.hud_watcher import HudWatcher
@@ -283,7 +284,6 @@ class RioGameDataProvider:
         Handles both integer IDs (from the Project Rio API / HUD file) and
         string names (already resolved). Returns '' for None.
         """
-        from server.rio.pyrio.lookup import LookupDicts
         if c is None:
             return ''
         if isinstance(c, int):
@@ -381,6 +381,9 @@ class RioGameDataProvider:
         parsed = cls.parse_game_data(game_json)
         parsed = cls._preserve_player_sides(parsed)
         cls.current_game = parsed
+        # Keep StatsTracker's cached value in sync so its background fetch task
+        # can read it without importing back into provider (breaks the cycle).
+        StatsTracker._sides_swapped = cls._sides_swapped
         await cls._apply_game_to_state(parsed)
 
         # Push merged stats to state after game data

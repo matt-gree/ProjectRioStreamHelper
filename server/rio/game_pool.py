@@ -12,6 +12,7 @@ from server.rio.provider import (
 )
 from server.rio import stats_api
 from server.rio.stats_api import get_last_completed_fetch_info
+from server.rio.pyrio.lookup import LookupDicts
 from server.settings import Settings
 
 
@@ -124,8 +125,6 @@ class OngoingGamePool:
     @classmethod
     async def _fetch_games(cls):
         """Fetch ongoing games from Project Rio API."""
-        from server.rio.pyrio.lookup import LookupDicts
-
         # Ensure game mode names are cached for tag_set resolution
         if not stats_api._game_modes:
             try:
