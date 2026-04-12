@@ -17,7 +17,7 @@ export default function TeamPanel({ scoreboardNumber = 1, teamNumber, playerCoun
         s => Number(s?.score?.[scoreboardNumber]?.home_team ?? 2)
     );
     const losers = useStateStore(
-        s => s?.score?.[scoreboardNumber]?.team?.[teamNumber]?.losers ?? false
+        s => s?.score?.[scoreboardNumber]?.player?.[teamNumber]?.losers ?? false
     );
 
     const isHome = homeTeam === teamNumber;
@@ -30,11 +30,11 @@ export default function TeamPanel({ scoreboardNumber = 1, teamNumber, playerCoun
     const toggleLosers = useCallback(() => {
         if (losers) {
             // Already on for this team — toggle off
-            setItem(`score.${scoreboardNumber}.team.${teamNumber}.losers`, false);
+            setItem(`score.${scoreboardNumber}.player.${teamNumber}.losers`, false);
         } else {
             // Turn on for this team, turn off for the other
-            setItem(`score.${scoreboardNumber}.team.${teamNumber}.losers`, true);
-            setItem(`score.${scoreboardNumber}.team.${otherTeam}.losers`, false);
+            setItem(`score.${scoreboardNumber}.player.${teamNumber}.losers`, true);
+            setItem(`score.${scoreboardNumber}.player.${otherTeam}.losers`, false);
         }
     }, [scoreboardNumber, teamNumber, otherTeam, losers, setItem]);
 

@@ -97,6 +97,8 @@
       min-width: 0;
       flex: 1;
     }
+    .team-side .player-name { text-align: left; padding-left: 8px; }
+    .team-side.right .player-name { text-align: right; padding-right: 8px; }
 
     .score-center {
       display: flex;
@@ -508,8 +510,8 @@
     /* ── Game change detection + animation ── */
     function getGameKey() {
       const id = deepGet(state, `score.${SB}.game_id`);
-      const p1 = deepGet(state, `score.${SB}.team.1.player.1.rioName`, '');
-      const p2 = deepGet(state, `score.${SB}.team.2.player.1.rioName`, '');
+      const p1 = deepGet(state, `score.${SB}.player.1.rioName`, '');
+      const p2 = deepGet(state, `score.${SB}.player.2.rioName`, '');
       return `${id}|${p1}|${p2}`;
     }
 
@@ -574,7 +576,7 @@
 
     /* ── Roster builder ── */
     function buildRoster(teamNum) {
-      const player = deepGet(state, `score.${SB}.team.${teamNum}.player.1`);
+      const player = deepGet(state, `score.${SB}.player.${teamNum}`);
       if (!player) return '';
       const captainIdx = player.rio_captainIndex;
       const hasCaptain = captainIdx != null && captainIdx >= 0 && captainIdx <= 8;
@@ -711,10 +713,10 @@
 
     /* ── Build scoreboard (handles both live and completed) ── */
     function buildScoreboard(isCompleted) {
-      const p1 = deepGet(state, `score.${SB}.team.1.player.1.rioName`, '');
-      const p2 = deepGet(state, `score.${SB}.team.2.player.1.rioName`, '');
-      const team1 = deepGet(state, `score.${SB}.team.1.player.1.msb_team`, '');
-      const team2 = deepGet(state, `score.${SB}.team.2.player.1.msb_team`, '');
+      const p1 = deepGet(state, `score.${SB}.player.1.rioName`, '');
+      const p2 = deepGet(state, `score.${SB}.player.2.rioName`, '');
+      const team1 = deepGet(state, `score.${SB}.player.1.msb_team`, '');
+      const team2 = deepGet(state, `score.${SB}.player.2.msb_team`, '');
       const sL = deepGet(state, `score.${SB}.score_left`, 0);
       const sR = deepGet(state, `score.${SB}.score_right`, 0);
       const inn = deepGet(state, `score.${SB}.inning`, '');
@@ -813,8 +815,8 @@
     function render() {
       applyDesignSettings('scoreboard');
       const card = document.getElementById('card');
-      const p1 = deepGet(state, `score.${SB}.team.1.player.1.rioName`, '');
-      const p2 = deepGet(state, `score.${SB}.team.2.player.1.rioName`, '');
+      const p1 = deepGet(state, `score.${SB}.player.1.rioName`, '');
+      const p2 = deepGet(state, `score.${SB}.player.2.rioName`, '');
 
       if (!p1 && !p2) {
         card.classList.add('hidden');

@@ -39,7 +39,7 @@ export default function CharacterStatEditor({
     characterOptions, onCharacterChange, isCaptain, onSetCaptain,
     sourceType = 'manual',
 }) {
-    const prefix = `score.${scoreboardNumber}.stats.team.${teamNumber}.character.${charIndex}`;
+    const prefix = `score.${scoreboardNumber}.stats.${teamNumber}.character.${charIndex}`;
     const setItem = useStateStore(s => s.setItem);
     const [scope, setScope] = useState('web');
 
@@ -48,7 +48,7 @@ export default function CharacterStatEditor({
     const isReadOnly = scope === 'local' && sourceType !== 'manual';
 
     const charStats = useStateStore(
-        s => s?.score?.[scoreboardNumber]?.stats?.team?.[teamNumber]?.character?.[charIndex]
+        s => s?.score?.[scoreboardNumber]?.stats?.[teamNumber]?.character?.[charIndex]
     );
 
     const batting = (scope === 'web' ? charStats?.api?.batting : charStats?.current_game?.batting) ?? {};

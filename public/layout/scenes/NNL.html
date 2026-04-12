@@ -262,7 +262,7 @@
     function findCharIndex(teamNum, charName) {
       if (!charName) return -1;
       for (let i = 0; i < 9; i++) {
-        const n = deepGet(state, `score.${SCOREBOARD}.team.${teamNum}.player.1.character.${i}.name`);
+        const n = deepGet(state, `score.${SCOREBOARD}.player.${teamNum}.character.${i}.name`);
         if (n === charName) return i;
       }
       return -1;
@@ -273,7 +273,7 @@
       const container = document.getElementById(containerId);
       container.innerHTML = '';
 
-      const player = deepGet(state, `score.${SCOREBOARD}.team.${teamNum}.player.1`);
+      const player = deepGet(state, `score.${SCOREBOARD}.player.${teamNum}`);
       if (!player) return;
 
       const captainIndex = player.rio_captainIndex;
@@ -333,7 +333,7 @@
         return;
       }
 
-      const statsObj = deepGet(state, `score.${SCOREBOARD}.stats.team.${teamNum}.character.${charIndex}`);
+      const statsObj = deepGet(state, `score.${SCOREBOARD}.stats.${teamNum}.character.${charIndex}`);
 
       const b = statsObj?.batting ?? {};
       const p = statsObj?.pitching ?? {};
@@ -383,8 +383,8 @@
       document.getElementById('phase-text').textContent = phase;
 
       // Player names
-      const name1 = deepGet(state, `score.${SCOREBOARD}.team.1.player.1.rioName`) || '';
-      const name2 = deepGet(state, `score.${SCOREBOARD}.team.2.player.1.rioName`) || '';
+      const name1 = deepGet(state, `score.${SCOREBOARD}.player.1.rioName`) || '';
+      const name2 = deepGet(state, `score.${SCOREBOARD}.player.2.rioName`) || '';
       document.getElementById('name-left').textContent  = name1;
       document.getElementById('name-right').textContent = name2;
 
@@ -413,7 +413,7 @@
       shouldRender: (key) =>
         key === 'tournamentInfo.phase'
         || key === 'tournamentInfo.organizer_0_twitter'
-        || key.startsWith(`score.${SCOREBOARD}.team.`)
+        || key.startsWith(`score.${SCOREBOARD}.player.`)
         || key === `score.${SCOREBOARD}.batter`
         || key === `score.${SCOREBOARD}.pitcher`
         || key === `score.${SCOREBOARD}.half_inning`

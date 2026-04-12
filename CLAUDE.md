@@ -142,7 +142,7 @@ Every change flows through `State.Set(key, value)` or `State.SetBatch(entries)`.
 5. Broadcasts to web clients via SocketIO (`v1.state.set` or `v1.state.set_batch`)
 
 **Key patterns:**
-- `State.Set("score.1.team.1.teamName", "Player1")` — single key, emits individual SocketIO event
+- `State.Set("score.1.player.1.rioName", "Player1")` — single key, emits individual SocketIO event
 - `State.SetBatch([(key1, val1), (key2, val2), ...])` — multiple keys, emits single `v1.state.set_batch` event
 - `State.Save()` — computes diff from tracked keys only (no full-state diff library)
 - `last_state` updated selectively via `copy.deepcopy` of changed paths only
@@ -175,10 +175,10 @@ score.{N}.inning, score.{N}.half_inning
 score.{N}.outs, score.{N}.strikes, score.{N}.balls
 score.{N}.batter, score.{N}.pitcher
 score.{N}.cbRioRunnerOn1/2/3 (booleans)
-score.{N}.team.{T}.player.{P}.rioName
-score.{N}.team.{T}.player.{P}.rio_captainIndex
-score.{N}.team.{T}.player.{P}.msb_team
-score.{N}.team.{T}.player.{P}.character.{C} (roster of 9)
+score.{N}.player.{T}.rioName
+score.{N}.player.{T}.rio_captainIndex
+score.{N}.player.{T}.msb_team
+score.{N}.player.{T}.character.{C} (roster of 9)
 ```
 
 ---

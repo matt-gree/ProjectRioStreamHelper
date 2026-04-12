@@ -30,15 +30,15 @@ function ScoreboardTab({ scoreboardNumber }) {
 
         if (sourceType === 'hud') {
             // Swap start.gg profile fields client-side (server only handles Rio game data)
-            const t1 = base?.team?.[1]?.player?.[1] ?? {};
-            const t2 = base?.team?.[2]?.player?.[1] ?? {};
+            const t1 = base?.player?.[1] ?? {};
+            const t2 = base?.player?.[2] ?? {};
             const profileFields = ['full_name', 'country', 'state', 'pronoun'];
             const swapEntries = [
                 { key: `${sb}.home_team`, value: newHome },
             ];
             for (const f of profileFields) {
-                swapEntries.push({ key: `${sb}.team.1.player.1.${f}`, value: t2[f] ?? '' });
-                swapEntries.push({ key: `${sb}.team.2.player.1.${f}`, value: t1[f] ?? '' });
+                swapEntries.push({ key: `${sb}.player.1.${f}`, value: t2[f] ?? '' });
+                swapEntries.push({ key: `${sb}.player.2.${f}`, value: t1[f] ?? '' });
             }
             setItems(swapEntries);
             try {
@@ -51,8 +51,8 @@ function ScoreboardTab({ scoreboardNumber }) {
         }
 
         setItems([
-            { key: `${sb}.team.1`, value: base?.team?.[2] ?? {} },
-            { key: `${sb}.team.2`, value: base?.team?.[1] ?? {} },
+            { key: `${sb}.player.1`, value: base?.player?.[2] ?? {} },
+            { key: `${sb}.player.2`, value: base?.player?.[1] ?? {} },
             { key: `${sb}.score_left`, value: base?.score_right ?? 0 },
             { key: `${sb}.score_right`, value: base?.score_left ?? 0 },
             { key: `${sb}.home_team`, value: newHome },

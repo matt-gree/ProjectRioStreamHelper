@@ -87,7 +87,7 @@
       const container = document.getElementById('roster-container');
       container.innerHTML = '';
 
-      const player = deepGet(state, `score.${SCOREBOARD}.team.${TEAM_NUM}.player.1`);
+      const player = deepGet(state, `score.${SCOREBOARD}.player.${TEAM_NUM}`);
       if (!player) return;
 
       const captainIndex = player.rio_captainIndex;
@@ -131,7 +131,7 @@
     OverlayBase.init({
       render,
       shouldRender: (key) =>
-        key.startsWith(`score.${SCOREBOARD}.team.${TEAM_NUM}.`)
+        key.startsWith(`score.${SCOREBOARD}.player.${TEAM_NUM}.`)
         || key === `score.${SCOREBOARD}.half_inning`
         || key === `score.${SCOREBOARD}.home_team`
         || key === `score.${SCOREBOARD}.source_type`

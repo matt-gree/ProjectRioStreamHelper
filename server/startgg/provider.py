@@ -392,7 +392,7 @@ class StartGGProvider:
                         if cached.get(key):
                             p[key] = cached[key]
 
-                base = f"score.{sb}.team.{team_num}.player.1"
+                base = f"score.{sb}.player.{team_num}"
                 entries.append((f"{base}.name", p.get("gamerTag", "")))
                 entries.append((f"{base}.team", p.get("prefix", "") or ""))
                 entries.append((f"{base}.full_name", p.get("full_name", "")))

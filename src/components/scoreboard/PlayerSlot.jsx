@@ -38,7 +38,7 @@ const renderTeamOption = ({ option }) => (
  *   playerNumber: 1-based player index
  */
 export default memo(function PlayerSlot({ scoreboardNumber = 1, teamNumber, playerNumber, sourceType = 'manual' }) {
-    const basePath = `score.${scoreboardNumber}.team.${teamNumber}.player.${playerNumber}`;
+    const basePath = `score.${scoreboardNumber}.player.${teamNumber}`;
     const [detailsOpen, { toggle: toggleDetails }] = useDisclosure(false);
     const [activeCharDetail, setActiveCharDetail] = useState(null);
 
@@ -46,7 +46,7 @@ export default memo(function PlayerSlot({ scoreboardNumber = 1, teamNumber, play
     // does a shallow equality check so we only re-render when the player sub-tree
     // actually changes, not on every unrelated state update.
     const player = useStateStore(useShallow(
-        s => s?.score?.[scoreboardNumber]?.team?.[teamNumber]?.player?.[playerNumber]
+        s => s?.score?.[scoreboardNumber]?.player?.[teamNumber]
     ));
     const name       = player?.name ?? '';
     const teamPrefix = player?.team ?? '';

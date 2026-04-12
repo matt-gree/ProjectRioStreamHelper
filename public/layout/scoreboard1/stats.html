@@ -179,7 +179,7 @@
     function findCharIndex(teamNum, charName) {
       if (!charName) return -1;
       for (let i = 0; i < 9; i++) {
-        const name = deepGet(state, `score.${SCOREBOARD}.team.${teamNum}.player.1.character.${i}.name`);
+        const name = deepGet(state, `score.${SCOREBOARD}.player.${teamNum}.character.${i}.name`);
         if (name === charName) return i;
       }
       return -1;
@@ -194,7 +194,7 @@
     }
 
     function buildContent(charName, role, charIndex, playerName) {
-      const statsObj = deepGet(state, `score.${SCOREBOARD}.stats.team.${TEAM_NUM}.character.${charIndex}`);
+      const statsObj = deepGet(state, `score.${SCOREBOARD}.stats.${TEAM_NUM}.character.${charIndex}`);
       const b = statsObj?.batting ?? {};
       const p = statsObj?.pitching ?? {};
 
@@ -245,7 +245,7 @@
       applyDesignSettings('stats');
       const bar = document.getElementById('stats-bar');
       const role = getTeamRole();
-      const playerName = deepGet(state, `score.${SCOREBOARD}.team.${TEAM_NUM}.player.1.rioName`);
+      const playerName = deepGet(state, `score.${SCOREBOARD}.player.${TEAM_NUM}.rioName`);
 
       let charName, charIndex;
       if (role === 'batting') {

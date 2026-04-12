@@ -449,7 +449,7 @@ class ChallongeProvider:
             players = entrants[team_idx] if team_idx < len(entrants) else []
             if players:
                 p = players[0]
-                base = f"score.{sb}.team.{team_num}.player.1"
+                base = f"score.{sb}.player.{team_num}"
                 entries.append((f"{base}.name", p.get("gamerTag", "")))
                 entries.append((f"{base}.team", ""))
                 entries.append((f"{base}.full_name", ""))

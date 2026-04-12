@@ -285,7 +285,7 @@ class StatsTracker:
                 if not char_name:
                     continue
 
-                prefix = f"{sb}.stats.team.{team_num}.character.{char_idx}"
+                prefix = f"{sb}.stats.{team_num}.character.{char_idx}"
 
                 # Get API stats for this character via indexed lookup (O(1))
                 api_row = cls._get_api_row(username, char_name)
@@ -335,7 +335,7 @@ class StatsTracker:
             scoreboards = await Settings.Get("scoreboards.active", [1])
         for sb in scoreboards:
             for t in (1, 2):
-                name = await State.Get(f"score.{sb}.team.{t}.player.1.rioName")
+                name = await State.Get(f"score.{sb}.player.{t}.rioName")
                 if name and str(name).strip():
                     names.add(str(name).strip())
         if names:
@@ -371,7 +371,7 @@ class StatsTracker:
         entries = []
 
         for team_num in (1, 2):
-            prefix = f"{sb}.team.{team_num}.player.1"
+            prefix = f"{sb}.player.{team_num}"
             username = await State.Get(f"{prefix}.rioName", "")
             if not username:
                 continue
@@ -381,7 +381,7 @@ class StatsTracker:
                 if not char_name:
                     continue
 
-                stat_prefix = f"{sb}.stats.team.{team_num}.character.{char_idx}"
+                stat_prefix = f"{sb}.stats.{team_num}.character.{char_idx}"
 
                 api_row = cls._get_api_row(str(username), str(char_name))
                 api_batting = _extract_api_batting(api_row) if api_row is not None else _empty_batting()

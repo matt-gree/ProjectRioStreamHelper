@@ -13,9 +13,9 @@ import {
  * Returns { teamNum, charIdx, stats } or null.
  */
 function findCharStats(scoreState, charName) {
-    if (!charName || !scoreState?.stats?.team) return null;
+    if (!charName || !scoreState?.stats) return null;
     for (const teamNum of [1, 2]) {
-        const chars = scoreState.stats.team[teamNum]?.character;
+        const chars = scoreState.stats[teamNum]?.character;
         if (!chars) continue;
         for (let i = 0; i < 9; i++) {
             if (chars[i]?.name === charName) {
@@ -86,7 +86,7 @@ export default function ActiveMatchupStats({ scoreboardNumber = 1 }) {
     }, [scoreboardNumber]);
 
     const teamName = (num) =>
-        scoreState?.team?.[num]?.teamName || `Team ${num}`;
+        scoreState?.player?.[num]?.teamName || `Team ${num}`;
 
     const hasBatter = batter && batterInfo?.stats;
     const hasPitcher = pitcher && pitcherInfo?.stats;

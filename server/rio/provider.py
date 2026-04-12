@@ -75,7 +75,7 @@ async def apply_parsed_game_to_state(parsed: dict, scoreboard_number: int, home_
     for team_idx in range(2):
         team_num = team_idx + 1
         player = entrants[team_idx][0] if entrants[team_idx] else {}
-        prefix = f"{sb}.team.{team_num}.player.1"
+        prefix = f"{sb}.player.{team_num}"
 
         entries.append((f"{prefix}.rioName", player.get("rioName", "")))
         entries.append((f"{prefix}.msb_team", player.get("msb_team", "")))
@@ -167,7 +167,7 @@ async def apply_completed_game_to_state(game: dict, scoreboard_number: int):
 
     for team_idx, (username, captain) in enumerate(team_data):
         team_num = team_idx + 1
-        prefix = f"{sb}.team.{team_num}.player.1"
+        prefix = f"{sb}.player.{team_num}"
 
         entries.append((f"{prefix}.rioName", username))
         entries.append((f"{prefix}.msb_team", ""))

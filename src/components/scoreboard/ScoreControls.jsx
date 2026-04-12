@@ -36,7 +36,7 @@ const sourceOptions = [
  */
 function useRosterOptions(scoreboardNumber, teamNumber) {
     const roster = useStateStore(
-        s => s?.score?.[scoreboardNumber]?.team?.[teamNumber]?.player?.[1]?.character
+        s => s?.score?.[scoreboardNumber]?.player?.[teamNumber]?.character
     );
     return useMemo(() => {
         const seen = new Set();
@@ -302,7 +302,7 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, sourc
         const tagFields = ['name', 'team', 'full_name', 'country', 'state', 'pronoun'];
         for (const t of [1, 2]) {
             for (const f of tagFields) {
-                setItem(`${base}.team.${t}.player.1.${f}`, '');
+                setItem(`${base}.player.${t}.${f}`, '');
             }
         }
         setItem(`${base}.phase`, '');
@@ -467,12 +467,12 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, sourc
                         Swap Teams
                     </Button>
                     <Button size="xs" variant="light" onClick={() => {
-                        const t1 = useStateStore.getState()?.score?.[scoreboardNumber]?.team?.[1]?.player?.[1] ?? {};
-                        const t2 = useStateStore.getState()?.score?.[scoreboardNumber]?.team?.[2]?.player?.[1] ?? {};
+                        const t1 = useStateStore.getState()?.score?.[scoreboardNumber]?.player?.[1] ?? {};
+                        const t2 = useStateStore.getState()?.score?.[scoreboardNumber]?.player?.[2] ?? {};
                         const fields = ['name', 'team', 'full_name', 'country', 'state', 'pronoun'];
                         for (const f of fields) {
-                            setItem(`${base}.team.1.player.1.${f}`, t2[f] ?? '');
-                            setItem(`${base}.team.2.player.1.${f}`, t1[f] ?? '');
+                            setItem(`${base}.player.1.${f}`, t2[f] ?? '');
+                            setItem(`${base}.player.2.${f}`, t1[f] ?? '');
                         }
                     }}>
                         Swap Tags
