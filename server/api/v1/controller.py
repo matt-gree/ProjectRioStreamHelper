@@ -59,7 +59,7 @@ async def controller_set_port(port: int = 8069, session_id: str | None = None) -
 async def controller_set_player(controller: int = 1, session_id: str | None = None) -> ORJSONResponse:
     """Set which controller port to display (1-4, requires restart)."""
     if not 1 <= controller <= 4:
-        return ORJSONResponse({"success": False, "error": "Controller must be 1-4"})
+        return ORJSONResponse({"success": False, "error": "Controller must be 1-4"}, status_code=400)
     await ControllerOverlay.SetController(controller)
     return ORJSONResponse({"success": True, "controller": controller})
 

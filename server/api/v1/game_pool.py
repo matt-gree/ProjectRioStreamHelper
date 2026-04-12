@@ -115,7 +115,7 @@ async def refresh_completed_games(
             "success": False,
             "count": 0,
             "diagnostics": diag,
-        })
+        }, status_code=500)
 
     diag = get_last_completed_fetch_info()
     return ORJSONResponse({
@@ -163,7 +163,7 @@ async def assign_game(
     elif CompletedGamePool.get_game(game_id):
         success = await CompletedGamePool.apply_game_to_scoreboard(game_id, scoreboard_number)
     else:
-        return ORJSONResponse({"success": False, "error": "Game not found in any pool"})
+        return ORJSONResponse({"success": False, "error": "Game not found in any pool"}, status_code=404)
 
     return ORJSONResponse({"success": success})
 

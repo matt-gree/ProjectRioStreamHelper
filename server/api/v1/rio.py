@@ -31,7 +31,7 @@ async def rio_refresh(session_id: str | None = None) -> ORJSONResponse:
     game = await RioGameDataProvider.FetchHUDGame()
     if game:
         return ORJSONResponse({"success": True, "game": game})
-    return ORJSONResponse({"success": False, "error": "No HUD data available"})
+    return ORJSONResponse({"success": False, "error": "No HUD data available"}, status_code=404)
 
 
 @method(
@@ -49,7 +49,7 @@ async def rio_swap(
         return ORJSONResponse({
             "success": False,
             "error": f"Scoreboard {scoreboard_number} is not HUD-linked",
-        })
+        }, status_code=400)
 
     await RioGameDataProvider.toggle_sides_swapped()
 
@@ -213,11 +213,11 @@ async def rio_browse_hud(session_id: str | None = None) -> ORJSONResponse:
     import platform
     system = platform.system()
     if system not in ("Darwin", "Windows"):
-        return ORJSONResponse({"success": False, "path": None, "error": f"Unsupported platform: {system}"})
+        return ORJSONResponse({"success": False, "path": None, "error": f"Unsupported platform: {system}"}, status_code=400)
     try:
         selected = await asyncio.to_thread(_open_file_dialog)
     except Exception as e:
-        return ORJSONResponse({"success": False, "path": None, "error": str(e)})
+        return ORJSONResponse({"success": False, "path": None, "error": str(e)}, status_code=500)
     if selected:
         return ORJSONResponse({"success": True, "path": selected})
     return ORJSONResponse({"success": False, "path": None})

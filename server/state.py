@@ -54,12 +54,14 @@ class State:
         try:
             while True:
                 item = await cls.queue.get()
-                await item()
-                cls.queue.task_done()
-        except asyncio.exceptions.CancelledError:
+                try:
+                    await item()
+                except Exception:
+                    logger.exception("state queue errored on task")
+                finally:
+                    cls.queue.task_done()
+        except asyncio.CancelledError:
             return
-        except:
-            logger.exception("state queue errored on task")
 
     @classmethod
     async def Save(cls):
@@ -72,9 +74,9 @@ class State:
             for change in changes:
                 key = change["key"]
                 if change["action"] == "unset":
-                    _sync_deep_unset(cls.last_state, key)
+                    deep_unset(cls.last_state, key)
                 else:
-                    _sync_deep_set(cls.last_state, key, copy.deepcopy(change["new"]))
+                    deep_set(cls.last_state, key, copy.deepcopy(change["new"]))
 
             await cls.queue.put(partial(cls.Export, changes=changes))
 
@@ -88,8 +90,8 @@ class State:
                 continue
             seen.add(key)
 
-            old_val = _sync_deep_get(cls.last_state, key)
-            new_val = _sync_deep_get(cls.state, key)
+            old_val = deep_get(cls.last_state, key)
+            new_val = deep_get(cls.state, key)
 
             if old_val != new_val:
                 changes.append({
@@ -117,7 +119,7 @@ class State:
 
     @classmethod
     async def Set(cls, key: str, value, session_id: str | None = None):
-        await deep_set(cls.state, key, value)
+        deep_set(cls.state, key, value)
         cls.changed_keys.append(key)
         await socketio.emit('v1.state.set', {
             "key": key,
@@ -135,7 +137,7 @@ class State:
         """
         items = []
         for key, value in entries:
-            await deep_set(cls.state, key, value)
+            deep_set(cls.state, key, value)
             cls.changed_keys.append(key)
             items.append({"key": key, "value": value})
 
@@ -146,7 +148,7 @@ class State:
 
     @classmethod
     async def Unset(cls, key: str, session_id: str | None = None):
-        await deep_unset(cls.state, key)
+        deep_unset(cls.state, key)
         cls.changed_keys.append(key)
         await socketio.emit('v1.state.unset', {
             "key": key,
@@ -155,7 +157,7 @@ class State:
 
     @classmethod
     async def Get(cls, key: str, default=None):
-        return await deep_get(cls.state, key, default)
+        return deep_get(cls.state, key, default)
 
     @classmethod
     async def _download_image(cls, url: str, dlpath: str):
@@ -240,33 +242,3 @@ class State:
                 await asyncio.to_thread(rmtree, str(_p))
         except:
             logger.exception("unable to remove directory")
-
-
-# --- Synchronous helpers for internal use (no thread hops) ---
-
-def _sync_deep_get(dictionary: dict, keys: str, default=None):
-    d = dictionary
-    for key in keys.split("."):
-        if isinstance(d, dict):
-            d = d.get(key, default)
-        else:
-            return default
-    return d
-
-def _sync_deep_set(dictionary: dict, keys: str, value):
-    d = dictionary
-    parts = keys.split(".")
-    for key in parts[:-1]:
-        if key not in d:
-            d[key] = {}
-        d = d[key]
-    d[parts[-1]] = value
-
-def _sync_deep_unset(dictionary: dict, keys: str):
-    d = dictionary
-    parts = keys.split(".")
-    for key in parts[:-1]:
-        if key not in d:
-            return
-        d = d[key]
-    d.pop(parts[-1], None)

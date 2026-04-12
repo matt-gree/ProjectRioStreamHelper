@@ -18,6 +18,7 @@ class RotationManager:
 
     # {scoreboard_number: RotationState}
     _rotations: dict[int, "RotationState"] = {}
+    _prefetch_task: asyncio.Task | None = None
 
     @classmethod
     async def Start(cls):
@@ -94,7 +95,7 @@ class RotationManager:
         await cls._emit_status(sb_id)
 
         # Pre-fetch stats in the background — don't block the HTTP response
-        asyncio.create_task(cls._prefetch_rotation_stats(game_ids))
+        cls._prefetch_task = asyncio.create_task(cls._prefetch_rotation_stats(game_ids))
         logger.info("[RotationManager] Started rotation for scoreboard {} "
                      "({}s interval, {} games)", sb_id, interval, len(game_ids))
 
@@ -152,25 +153,28 @@ class RotationManager:
     @classmethod
     async def _prefetch_rotation_stats(cls, game_ids: list):
         """Collect all unique player names from rotation games and pre-fetch stats."""
-        usernames = set()
-        for game_id in game_ids:
-            game = OngoingGamePool.get_game(game_id) or CompletedGamePool.get_game(game_id)
-            if not game:
-                continue
-            entrants = game.get("entrants", [])
-            for team in entrants:
-                if team and team[0]:
-                    name = team[0].get("rioName", "")
+        try:
+            usernames = set()
+            for game_id in game_ids:
+                game = OngoingGamePool.get_game(game_id) or CompletedGamePool.get_game(game_id)
+                if not game:
+                    continue
+                entrants = game.get("entrants", [])
+                for team in entrants:
+                    if team and team[0]:
+                        name = team[0].get("rioName", "")
+                        if name:
+                            usernames.add(name)
+                # Completed games store names differently
+                for key in ("away_user", "home_user"):
+                    name = game.get(key, "")
                     if name:
                         usernames.add(name)
-            # Completed games store names differently
-            for key in ("away_user", "home_user"):
-                name = game.get(key, "")
-                if name:
-                    usernames.add(name)
 
-        if usernames:
-            await StatsTracker.prefetch_for_players(list(usernames))
+            if usernames:
+                await StatsTracker.prefetch_for_players(list(usernames))
+        except Exception:
+            logger.exception("[RotationManager] _prefetch_rotation_stats failed")
 
     @classmethod
     async def _emit_status(cls, sb_id: int):

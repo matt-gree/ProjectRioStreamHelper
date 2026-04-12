@@ -1,33 +1,28 @@
-from functools import reduce
-
-
-async def deep_get(dictionary: dict, keys: str, default=None):
-    nested_keys = keys.split(".")
-    return reduce(
-        lambda d, key: d.get(key, default) if isinstance(d, dict) else default,
-        nested_keys,
-        dictionary
-    )
-
-async def deep_set(dictionary: dict, keys: str, value):
+def deep_get(dictionary: dict, keys: str, default=None):
     d = dictionary
-    nested_keys = keys.split(".")
+    for key in keys.split("."):
+        if isinstance(d, dict):
+            d = d.get(key, default)
+        else:
+            return default
+    return d
 
-    for key in nested_keys[:-1]:
+
+def deep_set(dictionary: dict, keys: str, value):
+    d = dictionary
+    parts = keys.split(".")
+    for key in parts[:-1]:
         if key not in d:
             d[key] = {}
         d = d[key]
+    d[parts[-1]] = value
 
-    d[nested_keys[-1]] = value
 
-async def deep_unset(dictionary: dict, keys: str):
+def deep_unset(dictionary: dict, keys: str):
     d = dictionary
-    nested_keys = keys.split(".")
-
-    for key in nested_keys[:-1]:
+    parts = keys.split(".")
+    for key in parts[:-1]:
         if key not in d:
-            d[key] = {}
+            return
         d = d[key]
-
-    if nested_keys[-1] in d:
-        del d[nested_keys[-1]]
+    d.pop(parts[-1], None)

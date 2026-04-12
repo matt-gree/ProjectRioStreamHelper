@@ -131,12 +131,14 @@ class Settings:
         "lang": "en-US"
     }
     _settings_out = AsyncPath(str(user_data_dir() / 'settings.json'))
+    _save_lock: asyncio.Lock = asyncio.Lock()
 
     @classmethod
     async def Save(cls):
-        async with cls._settings_out.open(mode='wb') as f:
-            content = await json.dumps(cls.settings)
-            await f.write(content)
+        async with cls._save_lock:
+            async with cls._settings_out.open(mode='wb') as f:
+                content = await json.dumps(cls.settings)
+                await f.write(content)
 
     @classmethod
     async def Load(cls) -> dict:
@@ -152,7 +154,7 @@ class Settings:
 
     @classmethod
     async def Set(cls, key: str, value, session_id: str | None = None):
-        await deep_set(cls.settings, key, value)
+        deep_set(cls.settings, key, value)
         await asyncio.gather(
             socketio.emit('v1.settings.set', {
                 "key": key,
@@ -164,7 +166,7 @@ class Settings:
 
     @classmethod
     async def Unset(cls, key: str, session_id: str | None = None):
-        await deep_unset(cls.settings, key)
+        deep_unset(cls.settings, key)
         await asyncio.gather(
             socketio.emit('v1.settings.unset', {
                 "key": key,
@@ -175,7 +177,7 @@ class Settings:
 
     @classmethod
     async def Get(cls, key: str, default=None):
-        return await deep_get(cls.settings, key, default)
+        return deep_get(cls.settings, key, default)
 
 class Config:
     config = {
