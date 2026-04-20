@@ -282,8 +282,5 @@ public/layout/fonts/*.ttf
 public/layout/fonts/*.woff
 public/layout/fonts/*.woff2
 
-user_data/settings.json
-user_data/state.json
-user_data/stream_labels/
-user_data/completed_games_cache.json
+user_data/
 .DS_Store
