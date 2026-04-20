@@ -35,6 +35,7 @@ const LAYOUT_SETTINGS = {
         { key: 'textShadowBlur', type: 'number-override', label: 'Text Shadow Blur', description: 'Override the text shadow blur for this overlay (px)', globalKey: 'textShadowBlur', globalFallback: 4, min: 0, max: 20, step: 1, suffix: 'px' },
     ],
     roster: [
+        { key: 'showSuperstars', type: 'switch', label: 'Show Superstar Icons', description: 'Display superstar badge on starred characters' },
         { key: 'accentColor', type: 'color-override', label: 'Accent Color Override', description: 'Override the global accent color for this overlay' },
     ],
     stats: [
@@ -49,7 +50,10 @@ const LAYOUT_SETTINGS = {
         { key: 'textShadowBlur', type: 'number-override', label: 'Text Glow Blur', description: 'Override text glow blur for this overlay (px)', globalKey: 'textShadowBlur', globalFallback: 4, min: 0, max: 40, step: 1, suffix: 'px' },
     ],
     teamlogo: [],
-    scene: [],
+    scene: [
+        { key: 'team1ShowYouTube', type: 'switch', label: 'Player 1: Show YouTube', description: 'When on, shows the YouTube handle. When off, shows the Twitter/X handle.' },
+        { key: 'team2ShowYouTube', type: 'switch', label: 'Player 2: Show YouTube', description: 'When on, shows the YouTube handle. When off, shows the Twitter/X handle.' },
+    ],
     bracket: [
         { key: 'accentColor', type: 'color-override', label: 'Accent Color Override', description: 'Override the global accent color for this overlay' },
         { key: 'connectorColor', type: 'color-override', label: 'Connector Line Color', description: 'Override the color of bracket connector lines' },

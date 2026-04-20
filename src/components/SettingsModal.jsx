@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
     Modal, Stack, PasswordInput, Button, Group, Badge, Text, Divider,
-    TextInput, ActionIcon, Tooltip, SegmentedControl,
+    TextInput, ActionIcon, Tooltip, SegmentedControl, Switch,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 
@@ -32,6 +32,10 @@ export default function SettingsModal({ opened, onClose }) {
     const [controllerStatus, setControllerStatus] = useState(null);
     const [controllerPath, setControllerPath] = useState('');
     const [controllerPathSaving, setControllerPathSaving] = useState(false);
+
+    // Stream labels (txt export) state
+    const [streamLabelsEnabled, setStreamLabelsEnabled] = useState(false);
+    const [streamLabelsSaving, setStreamLabelsSaving] = useState(false);
 
     const fetchHudPath = useCallback(async () => {
         try {
@@ -80,6 +84,41 @@ export default function SettingsModal({ opened, onClose }) {
         }
         setPinnedSaving(false);
     }, [pinnedPlayer, pinnedSide]);
+
+    const fetchStreamLabels = useCallback(async () => {
+        try {
+            const resp = await fetch('/api/v1/settings?key=general.disable_export');
+            const data = await resp.json();
+            // Treat empty string, "0", "false", null, false as enabled (falsy export-disabled)
+            const disabled = data === true
+                || (typeof data === 'string' && !['', '0', 'false', 'no', 'off'].includes(data.toLowerCase()));
+            setStreamLabelsEnabled(!disabled);
+        } catch { /* ignore */ }
+    }, []);
+
+    const handleToggleStreamLabels = useCallback(async (enabled) => {
+        setStreamLabelsEnabled(enabled);
+        setStreamLabelsSaving(true);
+        try {
+            // disable_export is inverted: empty string = enabled (falsy), "1" = disabled (truthy).
+            // Must always PUT — DELETE lets the default (True) re-apply on next load.
+            const value = enabled ? '' : '1';
+            await fetch(`/api/v1/settings?key=general.disable_export&value=${value}`, { method: 'PUT' });
+            // On enable, do a one-shot full export so every key has a file.
+            // Subsequent writes are diff-only (efficient).
+            if (enabled) {
+                await fetch('/api/v1/state/export-all', { method: 'POST' });
+            }
+            notifications.show({
+                message: enabled ? 'Stream labels enabled — writing to user_data/stream_labels/' : 'Stream labels disabled',
+                color: 'green',
+            });
+        } catch {
+            notifications.show({ message: 'Failed to update stream labels setting', color: 'red' });
+            setStreamLabelsEnabled(!enabled);
+        }
+        setStreamLabelsSaving(false);
+    }, []);
 
     const fetchControllerStatus = useCallback(async () => {
         try {
@@ -137,9 +176,10 @@ export default function SettingsModal({ opened, onClose }) {
             fetchPinnedPlayer();
             fetchChallongeStatus();
             fetchControllerStatus();
+            fetchStreamLabels();
             setChallongeKey('');
         }
-    }, [opened, fetchHudPath, fetchPinnedPlayer, fetchChallongeStatus, fetchControllerStatus]);
+    }, [opened, fetchHudPath, fetchPinnedPlayer, fetchChallongeStatus, fetchControllerStatus, fetchStreamLabels]);
 
     const handleSetHudPath = useCallback(async (path) => {
         setSavingPath(true);
@@ -332,6 +372,19 @@ export default function SettingsModal({ opened, onClose }) {
                 >
                     Save Path
                 </Button>
+
+                <Divider label="Stream Labels" labelPosition="center" />
+
+                <Text size="xs" c="dimmed">
+                    Export every state key as an individual .txt file to user_data/stream_labels/. Use these as Text (GDI+) sources in OBS without needing the HTML overlays. Off by default.
+                </Text>
+                <Switch
+                    size="sm"
+                    label="Enable txt export"
+                    checked={streamLabelsEnabled}
+                    onChange={e => handleToggleStreamLabels(e.currentTarget.checked)}
+                    disabled={streamLabelsSaving}
+                />
             </Stack>
         </Modal>
     );

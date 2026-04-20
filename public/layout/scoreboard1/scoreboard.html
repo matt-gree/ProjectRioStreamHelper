@@ -484,6 +484,8 @@
     }
 
     let prevGameKey = '';
+    let isAnimating = false;
+    let pendingRender = null;
 
     /* ── Settings getters ── */
     function showCaptains() {
@@ -517,6 +519,7 @@
 
     function animateTransition(callback) {
       const card = document.getElementById('card');
+      isAnimating = true;
       card.classList.remove('slide-in');
       card.classList.add('slide-out');
       card.addEventListener('animationend', function onOut(e) {
@@ -535,6 +538,12 @@
           if (e.target !== card) return;
           card.removeEventListener('animationend', onIn);
           card.classList.remove('slide-in');
+          isAnimating = false;
+          if (pendingRender) {
+            const fn = pendingRender;
+            pendingRender = null;
+            fn();
+          }
         });
       });
     }
@@ -726,6 +735,7 @@
       const strikes = parseInt(deepGet(state, `score.${SB}.strikes`, 0)) || 0;
       const batter = deepGet(state, `score.${SB}.batter`, '');
       const pitcher = deepGet(state, `score.${SB}.pitcher`, '');
+      const batterHand = deepGet(state, `score.${SB}.batter_hand`, 0);
 
       const isFinal = half === 'Final' || isCompleted;
       const halfShort = half === 'Bottom' ? 'BOT' : half === 'Top' ? 'TOP' : (half || '').toUpperCase();
@@ -772,7 +782,8 @@
           // Live: show batter, pitcher, count, diamond, outs
           html += '<div class="game-state-row">';
 
-          html += '<div class="active-player">';
+          // batterHand: 0 = right-handed (left side of plate), 1 = left-handed (right side of plate)
+          html += `<div class="active-player${Number(batterHand) === 1 ? ' right' : ''}">`;
           if (batter) html += charImg(batter, 'active-icon');
           html += '<div class="active-info">';
           html += `<span class="active-name">${batter}</span>`;
@@ -855,6 +866,10 @@
 
       if (gameChanged) {
         animateTransition(doRender);
+      } else if (isAnimating) {
+        // A render arrived while the transition is in flight — queue it so the
+        // new content is applied after slide-in completes, not mid-slide-out.
+        pendingRender = doRender;
       } else {
         doRender();
       }

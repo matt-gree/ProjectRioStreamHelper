@@ -15,6 +15,23 @@ const teamOptions = MSB_TEAMS.map(t => ({ value: t, label: t }));
 const charIconUrl = (name) => `/game_assets/rio_characterIcons/${encodeURIComponent(name)}.png`;
 const teamIconUrl = (name) => `/game_assets/rio_teamLogos/${encodeURIComponent(name)}.png`;
 
+function StarIcon({ active }) {
+    if (active) {
+        return <img src="/game_assets/superstar.png" alt="Superstar" width={14} height={14} style={{ objectFit: 'contain', display: 'block', filter: 'drop-shadow(0 0 3px rgba(245,159,0,0.8))' }} />;
+    }
+    return (
+        <svg viewBox="0 0 20 20" width="12" height="12" xmlns="http://www.w3.org/2000/svg">
+            <polygon
+                points="10,1 12.9,7 19.5,7.6 14.5,12 16.2,18.5 10,15 3.8,18.5 5.5,12 0.5,7.6 7.1,7"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.2}
+                strokeLinejoin="round"
+            />
+        </svg>
+    );
+}
+
 const renderCharOption = ({ option }) => (
     <Group gap="xs" wrap="nowrap">
         <img src={charIconUrl(option.value)} alt="" width={20} height={20} style={{ objectFit: 'contain' }} />
@@ -37,7 +54,7 @@ const renderTeamOption = ({ option }) => (
  *   teamNumber: 1 | 2
  *   playerNumber: 1-based player index
  */
-export default memo(function PlayerSlot({ scoreboardNumber = 1, teamNumber, playerNumber, sourceType = 'manual' }) {
+export default memo(function PlayerSlot({ scoreboardNumber = 1, teamNumber, playerNumber, sourceType = 'manual', losers, isHome, onToggleLosers, onToggleHome }) {
     const basePath = `score.${scoreboardNumber}.player.${teamNumber}`;
     const [detailsOpen, { toggle: toggleDetails }] = useDisclosure(false);
     const [activeCharDetail, setActiveCharDetail] = useState(null);
@@ -57,6 +74,8 @@ export default memo(function PlayerSlot({ scoreboardNumber = 1, teamNumber, play
     const country    = player?.country ?? '';
     const state      = player?.state ?? '';
     const pronoun    = player?.pronoun ?? '';
+    const youtube    = player?.youtube ?? '';
+    const twitter    = player?.twitter ?? '';
 
     const setItem = useStateStore(s => s.setItem);
 
@@ -74,6 +93,14 @@ export default memo(function PlayerSlot({ scoreboardNumber = 1, teamNumber, play
         return r;
     }, [rosterState]);
 
+    const rosterStarred = useMemo(() => {
+        const s = [];
+        for (let i = 0; i < ROSTER_SIZE; i++) {
+            s.push(rosterState?.[i]?.is_starred ?? false);
+        }
+        return s;
+    }, [rosterState]);
+
     const setCharacter = useCallback((index, charName) => {
         setItem(`${basePath}.character.${index}.name`, charName);
     }, [basePath, setItem]);
@@ -82,10 +109,14 @@ export default memo(function PlayerSlot({ scoreboardNumber = 1, teamNumber, play
         set('rio_captainIndex', index);
     }, [set]);
 
+    const toggleSuperstar = useCallback((index) => {
+        setItem(`${basePath}.character.${index}.is_starred`, !rosterStarred[index]);
+    }, [basePath, setItem, rosterStarred]);
+
     return (
         <Stack gap="xs">
             {/* Main row: tag + prefix + Rio name */}
-            <Grid gutter="xs" align="flex-end">
+            <Grid gutter="xs" align="stretch">
                 <Grid.Col span={4}>
                     <TextInput
                         label={`Player ${playerNumber}`}
@@ -117,20 +148,32 @@ export default memo(function PlayerSlot({ scoreboardNumber = 1, teamNumber, play
                     />
                 </Grid.Col>
                 <Grid.Col span={2}>
-                    <ActionIcon
-                        variant="subtle"
-                        size="sm"
-                        onClick={toggleDetails}
-                        title={detailsOpen ? 'Hide details' : 'Show details'}
-                    >
-                        <Text size="xs">{detailsOpen ? '▲' : '▼'}</Text>
-                    </ActionIcon>
+                    <Stack gap={3} align="flex-end" justify="space-between" style={{ height: '100%' }}>
+                        <Group gap={3} wrap="nowrap">
+                            <UnstyledButton onClick={onToggleLosers}>
+                                <Badge size="xs" color={losers ? 'red' : 'gray'} variant={losers ? 'filled' : 'light'}>L</Badge>
+                            </UnstyledButton>
+                            <UnstyledButton onClick={onToggleHome}>
+                                 <Badge size="xs" color={isHome ? 'blue' : 'gray'} variant={isHome ? 'filled' : 'light'} style={{ minWidth: 44 }}>
+                                    {isHome ? 'Home' : 'Away'}
+                                </Badge>
+                            </UnstyledButton>
+                        </Group>
+                        <ActionIcon
+                            variant="subtle"
+                            size="sm"
+                            onClick={toggleDetails}
+                            title={detailsOpen ? 'Hide details' : 'Show details'}
+                        >
+                            <Text size="xs">{detailsOpen ? '▲' : '▼'}</Text>
+                        </ActionIcon>
+                    </Stack>
                 </Grid.Col>
             </Grid>
 
             {/* Collapsible detail fields */}
             <Collapse in={detailsOpen}>
-                <Grid gutter="xs" mt="xs">
+                <Grid gutter="xs" mt={0}>
                     <Grid.Col span={4}>
                         <TextInput
                             label="Full Name"
@@ -167,6 +210,24 @@ export default memo(function PlayerSlot({ scoreboardNumber = 1, teamNumber, play
                             onChange={e => set('pronoun', e.currentTarget.value)}
                         />
                     </Grid.Col>
+                    <Grid.Col span={6}>
+                        <TextInput
+                            label="YouTube"
+                            placeholder="@handle"
+                            size="xs"
+                            value={youtube}
+                            onChange={e => set('youtube', e.currentTarget.value)}
+                        />
+                    </Grid.Col>
+                    <Grid.Col span={6}>
+                        <TextInput
+                            label="Twitter"
+                            placeholder="@handle"
+                            size="xs"
+                            value={twitter}
+                            onChange={e => set('twitter', e.currentTarget.value)}
+                        />
+                    </Grid.Col>
                 </Grid>
             </Collapse>
 
@@ -182,6 +243,8 @@ export default memo(function PlayerSlot({ scoreboardNumber = 1, teamNumber, play
                     onCharacterChange={(val) => setCharacter(activeCharDetail, val ?? '')}
                     isCaptain={captain === activeCharDetail}
                     onSetCaptain={() => setCaptain(activeCharDetail)}
+                    isSuperstar={rosterStarred[activeCharDetail]}
+                    onToggleSuperstar={() => toggleSuperstar(activeCharDetail)}
                     sourceType={sourceType}
                 />
             ) : (
@@ -201,6 +264,7 @@ export default memo(function PlayerSlot({ scoreboardNumber = 1, teamNumber, play
                     <Grid gutter={4}>
                         {roster.map((charName, i) => {
                             const isCaptain = captain === i;
+                            const isSuperstar = rosterStarred[i];
                             return (
                                 <Grid.Col span={4} key={i}>
                                     <Paper
@@ -224,6 +288,23 @@ export default memo(function PlayerSlot({ scoreboardNumber = 1, teamNumber, play
                                                 </Text>
                                             </Group>
                                         </UnstyledButton>
+                                        <Tooltip label={isSuperstar ? 'Superstar' : 'Set superstar'} position="top" withArrow>
+                                            <UnstyledButton
+                                                onClick={() => toggleSuperstar(i)}
+                                                style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    width: 22,
+                                                    flexShrink: 0,
+                                                    borderLeft: '1px solid var(--mantine-color-default-border)',
+                                                    color: isSuperstar ? '#f59f00' : 'var(--mantine-color-dimmed)',
+                                                    transition: 'color 150ms',
+                                                }}
+                                            >
+                                                <StarIcon active={isSuperstar} />
+                                            </UnstyledButton>
+                                        </Tooltip>
                                         <Tooltip label="Set captain" position="top" withArrow>
                                             <UnstyledButton
                                                 onClick={() => setCaptain(i)}

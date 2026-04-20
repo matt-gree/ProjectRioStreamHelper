@@ -22,6 +22,27 @@ class State:
     _program_state_out = AsyncPath(str(user_data_dir() / "state.json"))
 
     @classmethod
+    async def _is_export_enabled(cls) -> bool:
+        disable_export = await Settings.Get("general.disable_export", True)
+        if isinstance(disable_export, str):
+            disable_export = disable_export.strip().lower() not in ("", "0", "false", "no", "off")
+        return not disable_export
+
+    @classmethod
+    async def ExportAll(cls):
+        """Write every leaf of current state as txt files.
+
+        Used on first enablement (or after the stream_labels dir is deleted) to
+        populate all files — regular Save() only writes diffs, which leaves
+        unchanged keys as missing files.
+        """
+        if not await cls._is_export_enabled():
+            return
+        for key, value in cls.state.items():
+            await cls._create_files_dict(key, value)
+        logger.info("[State] Full stream-labels export complete")
+
+    @classmethod
     async def Export(cls, changes: list[dict]):
         """Export changed keys to stream label files and save state JSON.
 
@@ -30,7 +51,10 @@ class State:
         """
         await cls.SaveImmediately()
 
-        disable_export = await Settings.Get("general.disable_export", False)
+        disable_export = await Settings.Get("general.disable_export", True)
+        # Setting may come in as a string ("1"/"") from query-param PUTs; coerce to bool.
+        if isinstance(disable_export, str):
+            disable_export = disable_export.strip().lower() not in ("", "0", "false", "no", "off")
         if not disable_export:
             for change in changes:
                 key = change["key"]
@@ -187,6 +211,11 @@ class State:
         _p = AsyncPath(f"{cls._stream_labels_out}/{pathdirs}")
         if await _p.is_dir() == False:
             await _p.mkdir(parents=True, exist_ok=True)
+
+        if di is None:
+            # Write empty file so OBS Text (GDI+) sources never point at a missing path
+            await AsyncPath(f"{cls._stream_labels_out}/{path}.txt").write_text("")
+            return
 
         if isinstance(di, dict):
             for k, i in di.items():

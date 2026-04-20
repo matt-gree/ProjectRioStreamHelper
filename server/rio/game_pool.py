@@ -253,8 +253,7 @@ class CompletedGamePool:
     async def Stop(cls):
         cls._stop_polling()
         cls.games = {}
-        cls._filters = {}
-        logger.info("[CompletedGamePool] Stopped and cleared cache")
+        logger.info("[CompletedGamePool] Stopped")
 
     @classmethod
     def _start_polling(cls):

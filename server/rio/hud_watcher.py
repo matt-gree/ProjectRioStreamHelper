@@ -8,6 +8,16 @@ from server.rio.pyrio.stat_file_parser import HudObj
 from server.utils import json
 
 
+def _norm_hand(val) -> int:
+    """Normalize a hand value to 0 (right) or 1 (left).
+
+    The HUD file may encode handedness as an int (0/1) or a string ("right"/"left").
+    """
+    if isinstance(val, str):
+        return 1 if val.lower() == "left" else 0
+    return 1 if val else 0
+
+
 class HudWatcher:
     """Async file watcher for Project Rio's decoded.hud.json.
 
@@ -134,16 +144,16 @@ class HudWatcher:
             "event_num": hud_data.event_number,
         }
 
-        # Roster data using pyrio's HudObj methods
+        # Roster data using pyrio's RosterObj
         for team_idx in range(2):
             team_name = "away" if team_idx == 0 else "home"
-            roster = hud_data.roster(team_idx)
-            for index, data in roster.items():
-                game[f"{team_name}_roster_{index}_char"] = data["char_id"]
-
-            # Per-character stats from HUD file via pyrio methods
+            ro = hud_data.roster_obj(team_idx)
             for i in range(9):
-                game[f"{team_name}_roster_{i}_offensive"] = hud_data.character_offensive_stats(team_idx, i)
-                game[f"{team_name}_roster_{i}_defensive"] = hud_data.character_defensive_stats(team_idx, i)
+                game[f"{team_name}_roster_{i}_char"] = ro.char_id(i)
+                game[f"{team_name}_roster_{i}_batting_hand"] = _norm_hand(ro.batting_hand(i))
+                game[f"{team_name}_roster_{i}_fielding_hand"] = _norm_hand(ro.fielding_hand(i))
+                game[f"{team_name}_roster_{i}_is_starred"] = ro.is_starred(i)
+                game[f"{team_name}_roster_{i}_offensive"] = ro.offensive_stats(i)
+                game[f"{team_name}_roster_{i}_defensive"] = ro.defensive_stats(i)
 
         return game

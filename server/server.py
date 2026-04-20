@@ -56,6 +56,13 @@ async def lifespan(app: FastAPI):
     await ChallongeProvider.Start()
     await ControllerOverlay.Start()
 
+    # If stream labels are enabled but the output dir is missing, do a full
+    # export so OBS Text (GDI+) sources don't point at missing files.
+    if await State._is_export_enabled():
+        import os
+        if not os.path.isdir(str(State._stream_labels_out)):
+            await State.ExportAll()
+
     # wait for signal for shutdown
     yield
 

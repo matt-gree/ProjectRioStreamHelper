@@ -124,6 +124,7 @@
 
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <script src="/layout/lib/overlay-base.js"></script>
+  <script src="/layout/lib/rio-data.js"></script>
   <script>
     const REF_W = 325, REF_H = 120;
     document.body.dataset.refW = REF_W;
@@ -149,7 +150,7 @@
     const params = new URLSearchParams(window.location.search);
     const SCOREBOARD = parseInt(params.get('scoreboard')) || 1;
     const TEAM_NUM = parseInt(params.get('team')) || 1;
-    const { deepGet, BASE_URL, state, applyDesignSettings } = OverlayBase;
+    const { deepGet, state, applyDesignSettings } = OverlayBase;
 
     let prevCharName = '';
 
@@ -172,71 +173,19 @@
       });
     }
 
-    function fmt3(v) { return v.toFixed(3); }
-    function fmt2(v) { return v.toFixed(2); }
-    function fmt1(v) { return v.toFixed(1); }
-
-    function findCharIndex(teamNum, charName) {
-      if (!charName) return -1;
-      for (let i = 0; i < 9; i++) {
-        const name = deepGet(state, `score.${SCOREBOARD}.player.${teamNum}.character.${i}.name`);
-        if (name === charName) return i;
-      }
-      return -1;
-    }
-
-    function getTeamRole() {
-      const homeTeam = Number(deepGet(state, `score.${SCOREBOARD}.home_team`) ?? 2);
-      const halfInning = deepGet(state, `score.${SCOREBOARD}.half_inning`) ?? 'Top';
-      const awayTeam = homeTeam === 2 ? 1 : 2;
-      const battingTeam = halfInning === 'Top' ? awayTeam : homeTeam;
-      return battingTeam === TEAM_NUM ? 'batting' : 'pitching';
-    }
-
-    function buildContent(charName, role, charIndex, playerName) {
-      const statsObj = deepGet(state, `score.${SCOREBOARD}.stats.${TEAM_NUM}.character.${charIndex}`);
-      const b = statsObj?.batting ?? {};
-      const p = statsObj?.pitching ?? {};
-
-      let stats;
-      if (role === 'batting') {
-        stats = [
-          { l: 'AB',  v: b.at_bats ?? 0 },
-          { l: 'AVG', v: fmt3(b.avg    ?? 0) },
-          { l: 'SLG', v: fmt3(b.slg    ?? 0) },
-          { l: 'SO%', v: fmt1(b.so_pct ?? 0) + '%' },
-        ];
-      } else {
-        stats = [
-          { l: 'ERA', v: fmt2(p.era     ?? 0) },
-          { l: 'IP',  v: p.ip           ?? '0.0' },
-          { l: 'K%',  v: fmt1(p.k_pct  ?? 0) + '%' },
-          { l: 'AVG', v: fmt3(p.opp_avg ?? 0) },
-        ];
-      }
-
-      let statsHtml = stats.map(st =>
-        `<span class="stat"><span class="stat-value">${st.v}</span><span class="stat-label">${st.l}</span></span>`
+    function buildContent(info) {
+      const statsHtml = info.stats.map(st =>
+        `<span class="stat"><span class="stat-value">${st.value}</span><span class="stat-label">${st.label}</span></span>`
       ).join('');
 
       let html = `<div class="stats-inner content-in">`;
       html += `<div class="top-row">`;
-      html += `<div class="char-icon-wrap"><img src="${BASE_URL}/game_assets/rio_characterIcons/${encodeURIComponent(charName)}.png" onerror="this.style.display='none'" /></div>`;
+      html += `<div class="char-icon-wrap"><img src="${info.charIconUrl}" onerror="this.style.display='none'" /></div>`;
       html += `<div class="stats-content"><div class="stats-row">${statsHtml}</div></div>`;
       html += `</div>`;
-
-      if (role === 'batting') {
-        const battingLine = statsObj?.current_game?.batting_line ?? '';
-        if (battingLine) {
-          html += `<div class="batting-line"><span>Game: </span>${battingLine}</div>`;
-        }
-      } else {
-        const pitchingLine = statsObj?.current_game?.pitching_line ?? '';
-        if (pitchingLine) {
-          html += `<div class="batting-line"><span>Game: </span>${pitchingLine}</div>`;
-        }
+      if (info.gameLine) {
+        html += `<div class="batting-line"><span>Game: </span>${info.gameLine}</div>`;
       }
-
       html += `</div>`;
       return html;
     }
@@ -244,26 +193,16 @@
     function render() {
       applyDesignSettings('stats');
       const bar = document.getElementById('stats-bar');
-      const role = getTeamRole();
-      const playerName = deepGet(state, `score.${SCOREBOARD}.player.${TEAM_NUM}.rioName`);
 
-      let charName, charIndex;
-      if (role === 'batting') {
-        charName = deepGet(state, `score.${SCOREBOARD}.batter`) || '';
-        charIndex = findCharIndex(TEAM_NUM, charName);
-      } else {
-        charName = deepGet(state, `score.${SCOREBOARD}.pitcher`) || '';
-        charIndex = findCharIndex(TEAM_NUM, charName);
-      }
-
-      if (!charName || charIndex < 0) {
+      const info = RioData.getStatsLine(state, SCOREBOARD, TEAM_NUM);
+      if (!info) {
         bar.classList.add('hidden');
         prevCharName = '';
         return;
       }
 
-      const changed = charName !== prevCharName;
-      prevCharName = charName;
+      const changed = info.charName !== prevCharName;
+      prevCharName = info.charName;
 
       if (changed && !bar.classList.contains('hidden')) {
         const inner = bar.querySelector('.stats-inner');
@@ -271,15 +210,15 @@
           inner.classList.remove('content-in');
           inner.classList.add('content-out');
           setTimeout(() => {
-            bar.innerHTML = buildContent(charName, role, charIndex, playerName);
+            bar.innerHTML = buildContent(info);
             applyTextShadow();
           }, 200);
         } else {
-          bar.innerHTML = buildContent(charName, role, charIndex, playerName);
+          bar.innerHTML = buildContent(info);
           applyTextShadow();
         }
       } else {
-        bar.innerHTML = buildContent(charName, role, charIndex, playerName);
+        bar.innerHTML = buildContent(info);
         bar.classList.remove('hidden');
         applyTextShadow();
       }

@@ -5,6 +5,7 @@ import {
     MultiSelect, Tooltip, Modal, ScrollArea, CloseButton, Grid,
 } from '@mantine/core';
 import { useSocketSubscribe } from '../../context/socket';
+import { useSettingsStore } from '../../context/store';
 
 let searchSetIdCounter = 0;
 
@@ -289,6 +290,9 @@ const PoolPanel = memo(function PoolPanel({ title, color, games, actionLabel, on
 // ─── RotationControls ─────────────────────────────────────────────────────────
 
 export default memo(function RotationControls({ scoreboardNumber }) {
+    const settingsSetItem = useSettingsStore(s => s.setItem);
+    const savedFilters = useSettingsStore(s => s?.rotation_search);
+
     // Rotation state
     const [rotationConfig, setRotationConfig] = useState({
         enabled: false,
@@ -400,16 +404,59 @@ export default memo(function RotationControls({ scoreboardNumber }) {
         setSelectedGameIds(prev => { const n = new Set(prev); gameIds.forEach(id => n.delete(id)); return n; });
     }, []);
 
-    // Fetch on mount
+    // Fetch on mount — restore rotation config, filters, and re-query if needed
     useEffect(() => {
-        fetch(`/api/v1/rotation/${scoreboardNumber}`)
-            .then(r => r.json())
-            .then(data => {
+        (async () => {
+            try {
+                const data = await fetch(`/api/v1/rotation/${scoreboardNumber}`).then(r => r.json());
                 setRotationConfig(prev => ({ ...prev, ...data }));
                 setRotationStatus({ active: data.active ?? false, ...data });
-            })
-            .catch(() => {});
-    }, [scoreboardNumber]);
+
+                const gameIds = data.game_ids ?? [];
+                if (gameIds.length === 0) return;
+
+                // Restore persisted filter inputs
+                const filters = savedFilters ?? {};
+                const username = filters.username ?? '';
+                const vsUsername = filters.vs_username ?? '';
+                const tags = filters.tags ?? [];
+                const limit = filters.limit ?? null;
+
+                setDraftUsername(username);
+                setDraftVsUsername(vsUsername);
+                setDraftTags(tags);
+                setDraftLimit(limit);
+
+                // Re-run the search to repopulate the game pool from the API
+                const params = new URLSearchParams();
+                if (username) params.append('username', username);
+                if (vsUsername) params.append('vs_username', vsUsername);
+                for (const tag of tags) params.append('tag', tag);
+                params.append('limit_games', String(limit ?? 500));
+
+                await fetch(`/api/v1/game-pool/completed/refresh?${params}`, { method: 'POST' });
+                const poolData = await fetch('/api/v1/game-pool/completed').then(r => r.json());
+                const games = Array.isArray(poolData) ? poolData : [];
+
+                if (games.length > 0) {
+                    const parts = [];
+                    if (username) parts.push(username);
+                    if (vsUsername) parts.push(`vs ${vsUsername}`);
+                    if (tags.length) parts.push(tags.join(', '));
+                    const label = parts.length ? parts.join(' · ') : 'All games';
+
+                    setSearchSets([{
+                        id: ++searchSetIdCounter,
+                        label,
+                        filters: { username, vs_username: vsUsername, tags: [...tags], limit },
+                        games,
+                        isAutoPoll: false,
+                    }]);
+                    setSelectedGameIds(new Set(gameIds));
+                }
+            } catch { /* noop */ }
+        })();
+    }, [scoreboardNumber]); // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
         fetch('/api/v1/rio/game-modes')
@@ -522,6 +569,12 @@ export default memo(function RotationControls({ scoreboardNumber }) {
         for (const tag of draftTags) params.append('tag', tag);
         params.append('limit_games', String(draftLimit ?? 500));
 
+        // Persist filter inputs so they survive page reload
+        settingsSetItem('rotation_search.username', draftUsername.trim());
+        settingsSetItem('rotation_search.vs_username', draftVsUsername.trim());
+        settingsSetItem('rotation_search.tags', [...draftTags]);
+        settingsSetItem('rotation_search.limit', draftLimit);
+
         try {
             await fetch(`/api/v1/game-pool/completed/refresh?${params}`, { method: 'POST', signal: ctrl.signal });
             const data = await fetch('/api/v1/game-pool/completed', { signal: ctrl.signal }).then(r => r.json());
@@ -546,7 +599,7 @@ export default memo(function RotationControls({ scoreboardNumber }) {
         } finally {
             setLoadingSearch(false);
         }
-    }, [draftUsername, draftVsUsername, draftTags, draftLimit]);
+    }, [draftUsername, draftVsUsername, draftTags, draftLimit, settingsSetItem]);
 
     const handleRemoveSearchSet = useCallback((setId) => {
         setSearchSets(prev => {

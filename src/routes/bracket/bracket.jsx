@@ -135,7 +135,7 @@ export default function Bracket() {
         : [];
 
     return (
-        <Stack gap="md" maw={900}>
+        <Stack gap="md">
             <Text size="lg" fw={700}>Bracket</Text>
 
             {/* URL Input */}

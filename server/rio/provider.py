@@ -63,6 +63,9 @@ async def apply_parsed_game_to_state(parsed: dict, scoreboard_number: int, home_
         (f"{sb}.balls", parsed.get("balls", 0)),
         (f"{sb}.batter", parsed.get("batter", "")),
         (f"{sb}.pitcher", parsed.get("pitcher", "")),
+        (f"{sb}.batter_hand", parsed.get("batter_hand", 0)),
+        (f"{sb}.pitcher_hand", parsed.get("pitcher_hand", 0)),
+        (f"{sb}.batterSide", "left" if parsed.get("batter_hand") == 1 else "right"),
         (f"{sb}.cbRioRunnerOn1", parsed.get("runnerOn1", False)),
         (f"{sb}.cbRioRunnerOn2", parsed.get("runnerOn2", False)),
         (f"{sb}.cbRioRunnerOn3", parsed.get("runnerOn3", False)),
@@ -82,8 +85,17 @@ async def apply_parsed_game_to_state(parsed: dict, scoreboard_number: int, home_
         entries.append((f"{prefix}.rio_captainIndex", player.get("captainIndex", 0)))
 
         roster = player.get("roster", [])
+        batting_hands = player.get("batting_hands", [])
+        fielding_hands = player.get("fielding_hands", [])
+        is_starred = player.get("is_starred", [])
         for char_idx, char_name in enumerate(roster):
             entries.append((f"{prefix}.character.{char_idx}.name", char_name))
+            if char_idx < len(batting_hands):
+                entries.append((f"{prefix}.character.{char_idx}.batting_hand", batting_hands[char_idx]))
+            if char_idx < len(fielding_hands):
+                entries.append((f"{prefix}.character.{char_idx}.fielding_hand", fielding_hands[char_idx]))
+            if char_idx < len(is_starred):
+                entries.append((f"{prefix}.character.{char_idx}.is_starred", is_starred[char_idx]))
 
     await State.SetBatch(entries)
     await State.Save()
@@ -105,6 +117,20 @@ async def apply_completed_game_to_state(game: dict, scoreboard_number: int):
             return val.isoformat()
         return val
 
+    # Map pyrio's human-readable stadium names to the slug values used by the
+    # frontend's STADIUM_OPTIONS / stadium renderer.
+    _STADIUM_SLUGS = {
+        "Mario Stadium":  "mario_stadium",
+        "Bowser Castle":  "bowser_castle",
+        "Wario Palace":   "wario_palace",
+        "Yoshi Park":     "yoshi_park",
+        "Peach Garden":   "peach_garden",
+        "DK Jungle":      "dk_jungle",
+        "Toy Field":      "toy_field",
+    }
+    raw_stadium = game.get("stadium", "")
+    stadium_slug = _STADIUM_SLUGS.get(raw_stadium, raw_stadium)
+
     entries = [
         # Home team designation (completed games always away=1, home=2)
         (f"{sb}.home_team", 2),
@@ -121,7 +147,7 @@ async def apply_completed_game_to_state(game: dict, scoreboard_number: int):
         (f"{sb}.date_time_end", _ts(game.get("date_time_end"))),
         (f"{sb}.innings_played", game.get("innings_played", 0)),
         (f"{sb}.innings_selected", game.get("innings_selected", 0)),
-        (f"{sb}.stadium", game.get("stadium", "")),
+        (f"{sb}.stadium", stadium_slug),
         (f"{sb}.game_mode", game.get("game_mode", "")),
 
         # Linescore (per-inning runs, returned by API with include_linescore=1)
@@ -311,6 +337,15 @@ class RioGameDataProvider:
                     for j in range(9)
                 ]
                 data["entrants"][i][0]["roster"] = roster
+                data["entrants"][i][0]["batting_hands"] = [
+                    game_json.get(f"{team}_roster_{j}_batting_hand", 0) for j in range(9)
+                ]
+                data["entrants"][i][0]["fielding_hands"] = [
+                    game_json.get(f"{team}_roster_{j}_fielding_hand", 0) for j in range(9)
+                ]
+                data["entrants"][i][0]["is_starred"] = [
+                    game_json.get(f"{team}_roster_{j}_is_starred", False) for j in range(9)
+                ]
                 data["entrants"][i][0]["captainIndex"] = game_json[f"{team}_captain"]
                 data["entrants"][i][0]["rioName"] = game_json[f"{team}_player"]
                 data["entrants"][i][0]["msb_team"] = cls._get_msb_team_name(
@@ -324,10 +359,14 @@ class RioGameDataProvider:
                 data["half_inning"] = "Top"
                 data["batter"] = data["entrants"][0][0]["roster"][batter_index]
                 data["pitcher"] = data["entrants"][1][0]["roster"][pitcher_index]
+                data["batter_hand"] = data["entrants"][0][0]["batting_hands"][batter_index]
+                data["pitcher_hand"] = data["entrants"][1][0]["fielding_hands"][pitcher_index]
             else:
                 data["half_inning"] = "Bottom"
                 data["batter"] = data["entrants"][1][0]["roster"][batter_index]
                 data["pitcher"] = data["entrants"][0][0]["roster"][pitcher_index]
+                data["batter_hand"] = data["entrants"][1][0]["batting_hands"][batter_index]
+                data["pitcher_hand"] = data["entrants"][0][0]["fielding_hands"][pitcher_index]
 
             data["inning"] = game_json["inning"]
             data["outs"] = game_json["outs"]

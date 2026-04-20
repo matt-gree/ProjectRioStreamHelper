@@ -1,22 +1,14 @@
-import { useCallback, useEffect, useState, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import {
     NumberInput, Select, Button, Group, Stack,
-    Paper, Text, TextInput, Grid, Divider, ActionIcon,
-    Popover, Badge, Loader, Tooltip, UnstyledButton,
+    Paper, Text, TextInput, Divider, ActionIcon,
+    Popover, Badge, Loader, Tooltip, UnstyledButton, Collapse,
 } from '@mantine/core';
 import { useStateStore, useSettingsStore } from '../../context/store';
-import { HALF_INNINGS, ROSTER_SIZE } from '../../data/msb';
+import { HALF_INNINGS } from '../../data/msb';
+import { STADIUM_OPTIONS } from '../../data/stadiums';
 
 const halfInningOptions = HALF_INNINGS.map(h => ({ value: h, label: h }));
-
-const charIconUrl = (name) => `/game_assets/rio_characterIcons/${encodeURIComponent(name)}.png`;
-
-const renderCharOption = ({ option }) => (
-    <Group gap="xs" wrap="nowrap">
-        <img src={charIconUrl(option.value)} alt="" width={20} height={20} style={{ objectFit: 'contain' }} />
-        <span>{option.label}</span>
-    </Group>
-);
 
 // Safely coerce a value to number (state may hold strings after socket round-trip)
 const num = (v, fallback = 0) => {
@@ -31,114 +23,29 @@ const sourceOptions = [
     { value: 'rotator',   label: 'Rotator' },
 ];
 
-/**
- * Build character name options from a team's roster in state.
- */
-function useRosterOptions(scoreboardNumber, teamNumber) {
-    const roster = useStateStore(
-        s => s?.score?.[scoreboardNumber]?.player?.[teamNumber]?.character
-    );
-    return useMemo(() => {
-        const seen = new Set();
-        const opts = [];
-        for (let i = 0; i < ROSTER_SIZE; i++) {
-            const name = roster?.[i]?.name;
-            if (name && !seen.has(name)) {
-                seen.add(name);
-                opts.push({ value: name, label: name });
-            }
-        }
-        return opts;
-    }, [roster]);
-}
-
-/**
- * A single base-runner tile: shows character icon when occupied, opens a
- * popover grid of roster icons to pick/clear the runner.
- */
-function RunnerTile({ label, charName, rosterOptions, onSelect, onClear }) {
-    const [opened, setOpened] = useState(false);
-    const occupied = !!charName;
-
+function CountDots({ count, max, color, onChange }) {
     return (
-        <Popover opened={opened} onChange={setOpened} position="bottom" withArrow width={170} trapFocus>
-            <Popover.Target>
-                <UnstyledButton
-                    onClick={() => setOpened(o => !o)}
-                    style={{
-                        display: 'inline-flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        gap: 1,
-                        padding: '3px 6px',
-                        borderRadius: 4,
-                        border: `1px solid ${occupied ? 'var(--mantine-color-yellow-5)' : 'var(--mantine-color-default-border)'}`,
-                        backgroundColor: occupied ? 'var(--mantine-color-yellow-1)' : undefined,
-                        transition: 'all 150ms',
-                        lineHeight: 1,
-                    }}
-                >
-                    {occupied ? (
-                        <img src={charIconUrl(charName)} alt={charName} width={20} height={20} style={{ objectFit: 'contain', display: 'block' }} />
-                    ) : (
-                        <div style={{
-                            width: 20,
-                            height: 20,
+        <Group gap={5} align="center">
+            {Array.from({ length: max }, (_, i) => {
+                const filled = i < count;
+                return (
+                    <UnstyledButton
+                        key={i}
+                        onClick={() => onChange(filled && i === count - 1 ? count - 1 : i + 1)}
+                        style={{
+                            width: 12,
+                            height: 12,
                             borderRadius: '50%',
-                            backgroundColor: 'var(--mantine-color-dark-4)',
-                            opacity: 0.3,
-                        }} />
-                    )}
-                    <Text size={10} c="dimmed" fw={600} lh={1}>{label}</Text>
-                </UnstyledButton>
-            </Popover.Target>
-            <Popover.Dropdown p={6}>
-                <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(5, 1fr)',
-                    gap: 3,
-                    justifyItems: 'center',
-                }}>
-                    {rosterOptions.map(opt => (
-                        <Tooltip key={opt.value} label={opt.label} withArrow position="top">
-                            <UnstyledButton
-                                onClick={() => { onSelect(opt.value); setOpened(false); }}
-                                style={{
-                                    padding: 2,
-                                    borderRadius: 4,
-                                    border: charName === opt.value
-                                        ? '2px solid var(--mantine-color-yellow-5)'
-                                        : '2px solid transparent',
-                                }}
-                            >
-                                <img src={charIconUrl(opt.value)} alt={opt.label} width={22} height={22} style={{ objectFit: 'contain', display: 'block' }} />
-                            </UnstyledButton>
-                        </Tooltip>
-                    ))}
-                    {occupied && (
-                        <UnstyledButton
-                            onClick={() => { onClear(); setOpened(false); }}
-                            style={{
-                                padding: 2,
-                                borderRadius: 4,
-                                border: '2px solid transparent',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                width: 26,
-                                height: 26,
-                                color: 'var(--mantine-color-red-6)',
-                                fontSize: 14,
-                                fontWeight: 700,
-                            }}
-                            title="Clear base"
-                        >
-                            ✕
-                        </UnstyledButton>
-                    )}
-                </div>
-            </Popover.Dropdown>
-        </Popover>
+                            backgroundColor: filled ? `var(--mantine-color-${color}-5)` : 'transparent',
+                            border: `2px solid var(--mantine-color-${color}-${filled ? '5' : '4'})`,
+                            opacity: filled ? 1 : 0.3,
+                            transition: 'all 100ms',
+                            flexShrink: 0,
+                        }}
+                    />
+                );
+            })}
+        </Group>
     );
 }
 
@@ -154,52 +61,25 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, sourc
     const scoreLeft  = useStateStore(s => num(s?.score?.[scoreboardNumber]?.score_left, 0));
     const scoreRight = useStateStore(s => num(s?.score?.[scoreboardNumber]?.score_right, 0));
 
-    // Home team designation (1 or 2, default 2)
-    const homeTeam = useStateStore(s => num(s?.score?.[scoreboardNumber]?.home_team, 2));
-
     // Baseball state
     const inning      = useStateStore(s => num(s?.score?.[scoreboardNumber]?.inning, 1));
     const halfInning  = useStateStore(s => s?.score?.[scoreboardNumber]?.half_inning ?? 'Top');
-    const outs         = useStateStore(s => num(s?.score?.[scoreboardNumber]?.outs, 0));
-    const strikes      = useStateStore(s => num(s?.score?.[scoreboardNumber]?.strikes, 0));
-    const balls        = useStateStore(s => num(s?.score?.[scoreboardNumber]?.balls, 0));
-    const runnerOn1    = useStateStore(s => !!s?.score?.[scoreboardNumber]?.cbRioRunnerOn1);
-    const runnerOn2    = useStateStore(s => !!s?.score?.[scoreboardNumber]?.cbRioRunnerOn2);
-    const runnerOn3    = useStateStore(s => !!s?.score?.[scoreboardNumber]?.cbRioRunnerOn3);
-    const runner1Name  = useStateStore(s => s?.score?.[scoreboardNumber]?.runner1Name ?? '');
-    const runner2Name  = useStateStore(s => s?.score?.[scoreboardNumber]?.runner2Name ?? '');
-    const runner3Name  = useStateStore(s => s?.score?.[scoreboardNumber]?.runner3Name ?? '');
-
-    // Batter / Pitcher
-    const batter   = useStateStore(s => s?.score?.[scoreboardNumber]?.batter ?? '');
-    const pitcher  = useStateStore(s => s?.score?.[scoreboardNumber]?.pitcher ?? '');
+    const outs        = useStateStore(s => num(s?.score?.[scoreboardNumber]?.outs, 0));
+    const strikes     = useStateStore(s => num(s?.score?.[scoreboardNumber]?.strikes, 0));
+    const balls       = useStateStore(s => num(s?.score?.[scoreboardNumber]?.balls, 0));
 
     // Match info
     const bestOf   = useStateStore(s => num(s?.score?.[scoreboardNumber]?.best_of, 3));
     const phase    = useStateStore(s => s?.score?.[scoreboardNumber]?.phase ?? '');
     const match    = useStateStore(s => s?.score?.[scoreboardNumber]?.match ?? '');
-
-    // Completed game metadata
-    const gameCompleted     = useStateStore(s => s?.score?.[scoreboardNumber]?.game_completed ?? false);
-    const gameId            = useStateStore(s => s?.score?.[scoreboardNumber]?.game_id);
-    const stadium           = useStateStore(s => s?.score?.[scoreboardNumber]?.stadium ?? '');
-    const gameMode          = useStateStore(s => s?.score?.[scoreboardNumber]?.game_mode ?? '');
-    const inningsPlayed     = useStateStore(s => s?.score?.[scoreboardNumber]?.innings_played);
-    const inningsSelected   = useStateStore(s => s?.score?.[scoreboardNumber]?.innings_selected);
-    const dateTimeStart     = useStateStore(s => s?.score?.[scoreboardNumber]?.date_time_start);
-    const dateTimeEnd       = useStateStore(s => s?.score?.[scoreboardNumber]?.date_time_end);
-    const winnerIncomingElo = useStateStore(s => s?.score?.[scoreboardNumber]?.winner_incoming_elo);
-    const winnerResultElo   = useStateStore(s => s?.score?.[scoreboardNumber]?.winner_result_elo);
-    const loserIncomingElo  = useStateStore(s => s?.score?.[scoreboardNumber]?.loser_incoming_elo);
-    const loserResultElo    = useStateStore(s => s?.score?.[scoreboardNumber]?.loser_result_elo);
-    const winnerUser        = useStateStore(s => s?.score?.[scoreboardNumber]?.winner_user ?? '');
-    const loserUser         = useStateStore(s => s?.score?.[scoreboardNumber]?.loser_user ?? '');
+    const stadium  = useStateStore(s => s?.score?.[scoreboardNumber]?.stadium ?? '');
 
     // Game mode
     const statsTag = useSettingsStore(s => s?.project_rio?.stats_tag ?? '');
     const [gameModes, setGameModes] = useState([]);
     const [diagOpen, setDiagOpen] = useState(false);
     const [diagnostics, setDiagnostics] = useState(null);
+    const [matchOpen, setMatchOpen] = useState(false);
     const [fetchingStats, setFetchingStats] = useState(false);
     const prevTagRef = useRef(statsTag);
 
@@ -274,15 +154,6 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, sourc
         setTimeout(pollDiagnostics, 200);
     }, [scoreboardNumber, pollDiagnostics]);
 
-    // Determine batting/fielding teams based on half inning + home designation
-    // Top = away bats, Bottom = home bats
-    const awayTeam = homeTeam === 2 ? 1 : 2;
-    const battingTeam = halfInning === 'Top' ? awayTeam : homeTeam;
-    const fieldingTeam = halfInning === 'Top' ? homeTeam : awayTeam;
-
-    const batterOptions = useRosterOptions(scoreboardNumber, battingTeam);
-    const pitcherOptions = useRosterOptions(scoreboardNumber, fieldingTeam);
-
     const set = useCallback((field, value) => {
         setItem(`${base}.${field}`, value);
     }, [base, setItem]);
@@ -296,6 +167,9 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, sourc
         setItem(`${base}.runner3Name`, '');
         setItem(`${base}.batter`, '');
         setItem(`${base}.pitcher`, '');
+        for (const pos of ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF']) {
+            setItem(`${base}.field.${pos}`, '');
+        }
     }, [base, setItem]);
 
     const clearTournamentData = useCallback(() => {
@@ -325,6 +199,13 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, sourc
         setItem(`${base}.runner3Name`, '');
         setItem(`${base}.batter`, '');
         setItem(`${base}.pitcher`, '');
+        for (const t of [1, 2]) {
+            setItem(`${base}.player.${t}.msb_team`, '');
+            setItem(`${base}.player.${t}.rio_captainIndex`, -1);
+            for (let i = 0; i < 9; i++) {
+                setItem(`${base}.player.${t}.character.${i}.name`, '');
+            }
+        }
     }, [base, setItem]);
 
     // Guard NumberInput onChange — it can return '' (empty string)
@@ -333,8 +214,8 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, sourc
     }, [set]);
 
     return (
-        <Paper withBorder p="sm">
-            <Stack gap="sm">
+        <Paper withBorder p="xs">
+            <Stack gap={6}>
                 {/* ---- Data Source ---- */}
                 {onSetSource && (
                     <Select
@@ -437,30 +318,84 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, sourc
                     </Popover>
                 </Group>
 
-                <Divider />
+                {/* ---- Stadium Selector ---- */}
+                <Select
+                    label="Stadium"
+                    placeholder="Select stadium"
+                    data={STADIUM_OPTIONS}
+                    value={stadium || null}
+                    onChange={val => set('stadium', val ?? '')}
+                    size="xs"
+                    clearable
+                />
 
-                {/* ---- Scores ---- */}
-                <Group justify="center" gap="md">
-                    <NumberInput
-                        value={scoreLeft}
-                        onChange={val => setNum('score_left', val)}
-                        min={0}
-                        size="xs"
-                        w={60}
-                        styles={{ input: { textAlign: 'center', fontWeight: 700, fontSize: 18 } }}
-                    />
+                {/* ---- Scores + Inning + Count Dots ---- */}
+                <Group gap="xs" align="stretch" wrap="nowrap">
+                    {/* Left: scores + inning stacked */}
+                    <Stack gap={6} style={{ flex: 1 }}>
+                        <Group justify="center" gap="xs" align="center" wrap="nowrap">
+                            <NumberInput
+                                value={scoreLeft}
+                                onChange={val => setNum('score_left', val)}
+                                min={0}
+                                size="xs"
+                                style={{ flex: 1 }}
+                                leftSection={<Text size={9} fw={700} c="dimmed" lh={1}>P1</Text>}
+                                leftSectionPointerEvents="none"
+                                styles={{ input: { textAlign: 'center', fontWeight: 700, fontSize: 18 } }}
+                            />
+                            <NumberInput
+                                value={scoreRight}
+                                onChange={val => setNum('score_right', val)}
+                                min={0}
+                                size="xs"
+                                style={{ flex: 1 }}
+                                leftSection={<Text size={9} fw={700} c="dimmed" lh={1}>P2</Text>}
+                                leftSectionPointerEvents="none"
+                                styles={{ input: { textAlign: 'center', fontWeight: 700, fontSize: 18 } }}
+                            />
+                        </Group>
+                        <Group gap="xs" align="center" wrap="nowrap">
+                            <Select
+                                data={halfInningOptions}
+                                value={halfInning}
+                                onChange={val => { set('half_inning', val ?? 'Top'); clearAtBatState(); }}
+                                size="xs"
+                                style={{ flex: 4 }}
+                                styles={{ input: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }}
+                                comboboxProps={{ width: 'max-content' }}
+                            />
+                            <NumberInput
+                                value={inning}
+                                onChange={val => setNum('inning', val, 1)}
+                                min={1} max={99}
+                                size="xs"
+                                style={{ flex: 2 }}
+                            />
+                        </Group>
+                    </Stack>
 
-                    <Text fw={700} size="lg">vs</Text>
-
-                    <NumberInput
-                        value={scoreRight}
-                        onChange={val => setNum('score_right', val)}
-                        min={0}
-                        size="xs"
-                        w={60}
-                        styles={{ input: { textAlign: 'center', fontWeight: 700, fontSize: 18 } }}
-                    />
+                    {/* Right: B/S/O labeled dots spanning both rows */}
+                    <Stack gap={6} justify="center">
+                        {[
+                            { label: 'B', count: balls,   max: 4, color: 'green',  field: 'balls' },
+                            { label: 'S', count: strikes, max: 3, color: 'yellow', field: 'strikes' },
+                            { label: 'O', count: outs,    max: 3, color: 'red',    field: 'outs' },
+                        ].map(({ label, count, max, color, field }) => (
+                            <Group key={field} gap={4} align="center" wrap="nowrap">
+                                <Text size={12} fw={700} c="dimmed" style={{ width: 12, textAlign: 'center', lineHeight: 1 }}>{label}</Text>
+                                <CountDots
+                                    count={count}
+                                    max={max}
+                                    color={color}
+                                    onChange={val => setNum(field, val)}
+                                />
+                            </Group>
+                        ))}
+                    </Stack>
                 </Group>
+
+
 
                 <Group gap="xs" grow>
                     <Button size="xs" variant="outline" onClick={() => { onSwapTeams(); clearAtBatState(); }}>
@@ -478,183 +413,6 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, sourc
                         Swap Tags
                     </Button>
                 </Group>
-
-                {/* ---- Completed Game Info (Rotator only) ---- */}
-                {sourceType === 'rotator' && gameCompleted && (
-                    <>
-                        <Divider />
-                        <Paper p="xs" withBorder style={{ backgroundColor: 'var(--mantine-color-violet-0)' }}>
-                            <Stack gap={4}>
-                                <Group justify="space-between">
-                                    <Text size="xs" fw={600} c="violet">Completed Game</Text>
-                                    {gameId && <Badge size="xs" variant="light" color="violet">#{gameId}</Badge>}
-                                </Group>
-                                {(winnerUser || loserUser) && (
-                                    <Group gap="xs">
-                                        <Text size="xs" fw={600} c="teal">{winnerUser}</Text>
-                                        <Text size="xs" c="dimmed">def.</Text>
-                                        <Text size="xs" fw={600} c="red">{loserUser}</Text>
-                                    </Group>
-                                )}
-                                <Grid gutter={4}>
-                                    {stadium && (
-                                        <Grid.Col span={6}>
-                                            <Text size="xs" c="dimmed">Stadium</Text>
-                                            <Text size="xs">{stadium}</Text>
-                                        </Grid.Col>
-                                    )}
-                                    {gameMode && (
-                                        <Grid.Col span={6}>
-                                            <Text size="xs" c="dimmed">Mode</Text>
-                                            <Text size="xs">{gameMode}</Text>
-                                        </Grid.Col>
-                                    )}
-                                    {inningsPlayed != null && (
-                                        <Grid.Col span={6}>
-                                            <Text size="xs" c="dimmed">Innings</Text>
-                                            <Text size="xs">{inningsPlayed}/{inningsSelected ?? '?'}</Text>
-                                        </Grid.Col>
-                                    )}
-                                    {dateTimeEnd && (
-                                        <Grid.Col span={6}>
-                                            <Text size="xs" c="dimmed">Played</Text>
-                                            <Text size="xs">
-                                                {(() => {
-                                                    try { return new Date(dateTimeEnd).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); }
-                                                    catch { return ''; }
-                                                })()}
-                                            </Text>
-                                        </Grid.Col>
-                                    )}
-                                </Grid>
-                                {(winnerIncomingElo != null || loserIncomingElo != null) && (
-                                    <Group gap="md">
-                                        {winnerIncomingElo != null && (
-                                            <Text size="xs">
-                                                <Text span c="dimmed">W ELO: </Text>
-                                                {winnerIncomingElo} → {winnerResultElo}
-                                                {winnerResultElo > winnerIncomingElo && (
-                                                    <Text span c="teal" fw={600}> (+{winnerResultElo - winnerIncomingElo})</Text>
-                                                )}
-                                            </Text>
-                                        )}
-                                        {loserIncomingElo != null && (
-                                            <Text size="xs">
-                                                <Text span c="dimmed">L ELO: </Text>
-                                                {loserIncomingElo} → {loserResultElo}
-                                                {loserResultElo < loserIncomingElo && (
-                                                    <Text span c="red" fw={600}> ({loserResultElo - loserIncomingElo})</Text>
-                                                )}
-                                            </Text>
-                                        )}
-                                    </Group>
-                                )}
-                            </Stack>
-                        </Paper>
-                    </>
-                )}
-
-                <Divider />
-
-                {/* ---- Baseball State ---- */}
-                <Grid gutter="xs">
-                    <Grid.Col span={6}>
-                        <NumberInput
-                            label="Inning"
-                            value={inning}
-                            onChange={val => setNum('inning', val, 1)}
-                            min={1} max={99}
-                            size="xs"
-                        />
-                    </Grid.Col>
-                    <Grid.Col span={6}>
-                        <Select
-                            label="Half"
-                            data={halfInningOptions}
-                            value={halfInning}
-                            onChange={val => { set('half_inning', val ?? 'Top'); clearAtBatState(); }}
-                            size="xs"
-                        />
-                    </Grid.Col>
-                </Grid>
-
-                <Grid gutter="xs">
-                    <Grid.Col span={4}>
-                        <NumberInput
-                            label="Outs"
-                            value={outs}
-                            onChange={val => setNum('outs', val)}
-                            min={0} max={3}
-                            size="xs"
-                        />
-                    </Grid.Col>
-                    <Grid.Col span={4}>
-                        <NumberInput
-                            label="Strikes"
-                            value={strikes}
-                            onChange={val => setNum('strikes', val)}
-                            min={0} max={3}
-                            size="xs"
-                        />
-                    </Grid.Col>
-                    <Grid.Col span={4}>
-                        <NumberInput
-                            label="Balls"
-                            value={balls}
-                            onChange={val => setNum('balls', val)}
-                            min={0} max={4}
-                            size="xs"
-                        />
-                    </Grid.Col>
-                </Grid>
-
-                {/* Runners on base */}
-                <Text size="xs" fw={600}>Runners</Text>
-                <Group gap="xs" justify="center">
-                    {[
-                        { label: '1st', name: runner1Name, boolKey: 'cbRioRunnerOn1', nameKey: 'runner1Name' },
-                        { label: '2nd', name: runner2Name, boolKey: 'cbRioRunnerOn2', nameKey: 'runner2Name' },
-                        { label: '3rd', name: runner3Name, boolKey: 'cbRioRunnerOn3', nameKey: 'runner3Name' },
-                    ].map(({ label, name, boolKey, nameKey }) => (
-                        <RunnerTile
-                            key={label}
-                            label={label}
-                            charName={name}
-                            rosterOptions={batterOptions}
-                            onSelect={val => { set(nameKey, val); set(boolKey, true); }}
-                            onClear={() => { set(nameKey, ''); set(boolKey, false); }}
-                        />
-                    ))}
-                </Group>
-
-                {/* Batter / Pitcher */}
-                <Select
-                    label="Batter"
-                    placeholder="Select batter"
-                    data={batterOptions}
-                    value={batter || null}
-                    onChange={val => set('batter', val ?? '')}
-                    size="xs"
-                    searchable
-                    clearable
-                    renderOption={renderCharOption}
-                    leftSection={batter ? <img src={charIconUrl(batter)} alt="" width={16} height={16} style={{ objectFit: 'contain' }} /> : undefined}
-                    leftSectionPointerEvents="none"
-                />
-                <Select
-                    label="Pitcher"
-                    placeholder="Select pitcher"
-                    data={pitcherOptions}
-                    value={pitcher || null}
-                    onChange={val => set('pitcher', val ?? '')}
-                    size="xs"
-                    searchable
-                    clearable
-                    renderOption={renderCharOption}
-                    leftSection={pitcher ? <img src={charIconUrl(pitcher)} alt="" width={16} height={16} style={{ objectFit: 'contain' }} /> : undefined}
-                    leftSectionPointerEvents="none"
-                />
-
                 <Button size="xs" variant="light" color="red" onClick={resetBaseballState} fullWidth>
                     Reset Game State
                 </Button>
@@ -662,9 +420,14 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, sourc
                 <Divider />
 
                 {/* ---- Match Info ---- */}
-                <Text size="sm" fw={700} ta="center">Match</Text>
-                <Grid gutter="xs">
-                    <Grid.Col span={4}>
+                <UnstyledButton onClick={() => setMatchOpen(o => !o)}>
+                    <Group justify="space-between" align="center">
+                        <Text size="sm" fw={700}>Bracket Match Info</Text>
+                        <Text size="xs" c="dimmed" lh={1}>{matchOpen ? '▲' : '▼'}</Text>
+                    </Group>
+                </UnstyledButton>
+                <Collapse in={matchOpen}>
+                    <Stack gap="xs">
                         <NumberInput
                             label="Best Of"
                             value={bestOf}
@@ -672,28 +435,23 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, sourc
                             min={1} max={99} step={2}
                             size="xs"
                         />
-                    </Grid.Col>
-                    <Grid.Col span={4}>
                         <TextInput
                             label="Phase"
                             value={phase}
                             onChange={e => set('phase', e.currentTarget.value)}
                             size="xs"
                         />
-                    </Grid.Col>
-                    <Grid.Col span={4}>
                         <TextInput
                             label="Match"
                             value={match}
                             onChange={e => set('match', e.currentTarget.value)}
                             size="xs"
                         />
-                    </Grid.Col>
-                </Grid>
-
-                <Button size="xs" variant="light" color="red" onClick={clearTournamentData} fullWidth>
-                    Clear Tags
-                </Button>
+                        <Button size="xs" variant="light" color="red" onClick={clearTournamentData} fullWidth>
+                            Clear Tags
+                        </Button>
+                    </Stack>
+                </Collapse>
             </Stack>
         </Paper>
     );

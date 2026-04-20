@@ -2,10 +2,19 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <meta name="overlay-settings" content="cardBg, textColor, borderRadius, borderColor, borderWidth, fontFamily, cardShadow, textShadow, statValueColor" />
+  <meta name="overlay-settings" content="cardBg, textColor, borderRadius, borderColor, borderWidth, fontFamily, cardShadow, textShadow, statValueColor, team1ShowYouTube, team2ShowYouTube" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Lalezar&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    @font-face {
+      font-family: 'Bebas Neue Bold';
+      src: url('/layout/fonts/BebasNeue%20Bold.otf') format('opentype');
+      font-weight: 700;
+      font-style: normal;
+      font-display: swap;
+    }
+  </style>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -14,7 +23,8 @@
       width: 1920px;
       height: 1080px;
       background: transparent;
-      font-family: var(--font-family, 'Inter', sans-serif);
+      font-family: var(--font-family, 'Bebas Neue Bold', 'Inter', sans-serif);
+      font-weight: 700;
       color: var(--text-primary, #fff);
     }
 
@@ -31,9 +41,10 @@
       pointer-events: none;
     }
     #phase-text {
-      font-family: 'Lalezar', sans-serif;
+      font-family: 'Bebas Neue Bold', sans-serif;
       font-size: 48px;
       font-weight: 700;
+      text-transform: uppercase;
       -webkit-text-stroke: 5px black;
       text-shadow: 5px 5px 3px rgba(0,0,0,1), var(--text-shadow, none);
       paint-order: stroke fill;
@@ -44,19 +55,21 @@
     /* ── Player panels ── */
     .player-panel {
       position: absolute;
-      top: 620px;
+      top: 10px;
+      width: 348px;
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
     }
-    #panel-left  { left: 0;    width: 348px; }
-    #panel-right { right: 0;   width: 348px; }
+    #panel-left  { left: 0; }
+    #panel-right { right: 0; }
 
     .player-name {
-      font-family: 'Lalezar', sans-serif;
-      font-size: 48px;
+      font-family: 'Bebas Neue Bold', sans-serif;
+      font-size: 44px;
       font-weight: 700;
+      text-transform: uppercase;
       text-align: center;
       text-shadow: 5px 5px 3px rgba(0,0,0,1), var(--text-shadow, none);
       -webkit-text-stroke: 5px black;
@@ -64,9 +77,55 @@
       white-space: nowrap;
       overflow: visible;
       width: 100%;
-      padding: 0px 0px;
-      line-height: 0.7;
+      line-height: 0.9;
       letter-spacing: 1px;
+      height: 50px;
+    }
+
+    /* ── Facecam reservation (blank — facecam placed manually in OBS) ── */
+    .facecam-slot {
+      width: 280px;
+      height: 300px;
+    }
+
+    /* ── Handle bar (YouTube / Twitter) ── */
+    .handle-bar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      height: 50px;
+      pointer-events: none;
+    }
+    .handle-bar.hidden { display: none !important; }
+    .handle-icon {
+      width: 40px;
+      height: 40px;
+      padding: 4px;
+      border-radius: 4px;
+      flex-shrink: 0;
+      background-color: #000000;
+      transform: translateY(0);
+    }
+    .handle-icon.youtube {
+      background-color: transparent;
+      padding: 0;
+    }
+    .handle-text {
+      font-family: 'Bebas Neue Bold', sans-serif;
+      font-size: 24px;
+      font-weight: 700;
+      text-transform: uppercase;
+      text-shadow: 5px 5px 3px rgba(0,0,0,1), var(--text-shadow, none);
+      -webkit-text-stroke: 5px black;
+      paint-order: stroke fill;
+      white-space: nowrap;
+    }
+
+    /* ── Controller gap (manually placed in OBS) ── */
+    .controller-gap {
+      width: 100%;
+      height: 125px;
     }
 
     /* ── Roster grid ── */
@@ -112,6 +171,7 @@
       border-radius: var(--border-radius, 12px);
       padding: 6px 8px;
       filter: var(--card-shadow-filter, none);
+      margin-top: 4px;
     }
     .stats-bar.hidden { display: none !important; }
 
@@ -120,9 +180,7 @@
       flex-direction: row;
       align-items: flex-start;
     }
-    .char-icon-wrap {
-      flex-shrink: 0;
-    }
+    .char-icon-wrap { flex-shrink: 0; }
     .char-icon-wrap img {
       height: 40px;
       width: auto;
@@ -173,36 +231,6 @@
       text-shadow: var(--text-shadow, none);
     }
     .game-line span { color: var(--stat-subtext-color, rgb(155,155,155)); }
-
-    /* ── Twitter bar ── */
-    #twitter-bar {
-      position: absolute;
-      bottom: 0px;
-      left: 0;
-      right: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      pointer-events: none;
-    }
-    #twitter-bar.hidden { display: none !important; }
-    #twitter-icon {
-      width: 44px;
-      height: 44px;
-      padding: 4px;
-      background-color: #000000;
-      border-radius: 4px;
-      flex-shrink: 0;
-    }
-    #twitter-handle {
-      font-family: 'Lalezar', sans-serif;
-      font-size: 42px;
-      font-weight: 700;
-      text-shadow: 5px 5px 3px rgba(0,0,0,1), var(--text-shadow, none);
-      -webkit-text-stroke: 5px black;
-      paint-order: stroke fill;
-    }
   </style>
 </head>
 <body>
@@ -215,6 +243,12 @@
   <!-- Left player panel (Team 1) -->
   <div class="player-panel" id="panel-left">
     <div class="player-name" id="name-left"></div>
+    <div class="facecam-slot"></div>
+    <div class="handle-bar hidden" id="handle-left">
+      <span class="handle-icon-wrap" id="handle-icon-left"></span>
+      <span class="handle-text" id="handle-text-left"></span>
+    </div>
+    <div class="controller-gap"></div>
     <div class="roster-wrap"><div class="roster-grid" id="roster-left"></div></div>
     <div class="stats-bar hidden" id="stats-left"></div>
   </div>
@@ -222,24 +256,33 @@
   <!-- Right player panel (Team 2) -->
   <div class="player-panel" id="panel-right">
     <div class="player-name" id="name-right"></div>
+    <div class="facecam-slot"></div>
+    <div class="handle-bar hidden" id="handle-right">
+      <span class="handle-icon-wrap" id="handle-icon-right"></span>
+      <span class="handle-text" id="handle-text-right"></span>
+    </div>
+    <div class="controller-gap"></div>
     <div class="roster-wrap"><div class="roster-grid" id="roster-right"></div></div>
     <div class="stats-bar hidden" id="stats-right"></div>
   </div>
 
-  <!-- Twitter bar -->
-  <div id="twitter-bar" class="hidden">
-    <!-- X / Twitter logo inline SVG -->
-    <svg id="twitter-icon" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+  <!-- Icon templates -->
+  <template id="tpl-youtube">
+    <svg class="handle-icon youtube" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path fill="#FF0000" d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814Z"/>
+      <path fill="#ffffff" d="M9.546 15.568V8.432L15.818 12l-6.272 3.568Z"/>
+    </svg>
+  </template>
+  <template id="tpl-twitter">
+    <svg class="handle-icon" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
       <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.73-8.835L1.254 2.25H8.08l4.261 5.635 5.903-5.635Zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
     </svg>
-    <span id="twitter-handle"></span>
-  </div>
+  </template>
 
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <script src="/layout/lib/overlay-base.js"></script>
   <script src="/layout/lib/rio-data.js"></script>
   <script>
-    // Tell ScaledIframe the native canvas size
     document.body.dataset.refW = 1920;
     document.body.dataset.refH = 1080;
 
@@ -254,7 +297,6 @@
       role: 'role-container',
     };
 
-    // ── Roster renderer ──
     function renderRoster(teamNum, containerId) {
       const container = document.getElementById(containerId);
       container.innerHTML = '';
@@ -271,7 +313,6 @@
       }
     }
 
-    // ── Stats renderer ──
     function renderStats(teamNum, barId) {
       const bar = document.getElementById(barId);
       const info = RioData.getStatsLine(state, SCOREBOARD, teamNum);
@@ -296,37 +337,49 @@
       bar.classList.remove('hidden');
     }
 
-    // ── Main render ──
+    function renderHandle(teamNum, barId, iconId, textId) {
+      const bar      = document.getElementById(barId);
+      const iconWrap = document.getElementById(iconId);
+      const textEl   = document.getElementById(textId);
+
+      const player   = deepGet(state, `score.${SCOREBOARD}.player.${teamNum}`) || {};
+      // Per-player handle-type toggle lives in the Rivalry layout settings
+      // (overlays.scene.team{N}ShowYouTube). Default ON = YouTube, OFF = Twitter.
+      const showYt   = deepGet(state, `overlays.scene.team${teamNum}ShowYouTube`) !== false;
+      const type     = showYt ? 'youtube' : 'twitter';
+      const value    = type === 'twitter' ? (player.twitter || '') : (player.youtube || '');
+
+      if (!value) {
+        bar.classList.add('hidden');
+        return;
+      }
+
+      const tpl = document.getElementById(type === 'twitter' ? 'tpl-twitter' : 'tpl-youtube');
+      iconWrap.innerHTML = '';
+      iconWrap.appendChild(tpl.content.cloneNode(true));
+      textEl.textContent = value;
+      bar.classList.remove('hidden');
+    }
+
     function render() {
       applyDesignSettings('stats');
 
-      // Phase banner
       const phase = deepGet(state, 'tournamentInfo.phase') || '';
       document.getElementById('phase-text').textContent = phase;
 
-      // Player names
       const name1 = deepGet(state, `score.${SCOREBOARD}.player.1.rioName`) || '';
       const name2 = deepGet(state, `score.${SCOREBOARD}.player.2.rioName`) || '';
       document.getElementById('name-left').textContent  = name1;
       document.getElementById('name-right').textContent = name2;
 
-      // Rosters
+      renderHandle(1, 'handle-left',  'handle-icon-left',  'handle-text-left');
+      renderHandle(2, 'handle-right', 'handle-icon-right', 'handle-text-right');
+
       renderRoster(1, 'roster-left');
       renderRoster(2, 'roster-right');
 
-      // Stats
       renderStats(1, 'stats-left');
       renderStats(2, 'stats-right');
-
-      // Twitter bar
-      const twitter = deepGet(state, 'tournamentInfo.organizer_0_twitter') || '';
-      const twitterBar = document.getElementById('twitter-bar');
-      if (twitter) {
-        document.getElementById('twitter-handle').textContent = twitter;
-        twitterBar.classList.remove('hidden');
-      } else {
-        twitterBar.classList.add('hidden');
-      }
     }
 
     OverlayBase.init({
@@ -334,7 +387,6 @@
       fetchSettings: true,
       shouldRender: (key) =>
         key === 'tournamentInfo.phase'
-        || key === 'tournamentInfo.organizer_0_twitter'
         || key.startsWith(`score.${SCOREBOARD}.player.`)
         || key === `score.${SCOREBOARD}.batter`
         || key === `score.${SCOREBOARD}.pitcher`

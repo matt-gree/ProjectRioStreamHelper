@@ -19,24 +19,87 @@ class RotationManager:
     # {scoreboard_number: RotationState}
     _rotations: dict[int, "RotationState"] = {}
     _prefetch_task: asyncio.Task | None = None
+    _resume_task: asyncio.Task | None = None
 
     @classmethod
     async def Start(cls):
-        """Initialize rotation manager. Rotations do not auto-resume across restarts."""
-        # Clear any stale enabled flags from previous session
+        """Initialize rotation manager. Auto-resumes rotations that were active in the previous session."""
         rotation_settings = await Settings.Get("scoreboards.rotation", {})
-        for sb_id_str, config in rotation_settings.items():
-            if config.get("enabled", False):
+        to_resume = {int(sb_id_str): config for sb_id_str, config in rotation_settings.items()
+                     if config.get("enabled", False) and config.get("game_ids")}
+
+        if not to_resume:
+            logger.info("[RotationManager] Initialized (no rotations to resume)")
+            return
+
+        # Resume in the background so startup isn't blocked by the API call
+        cls._resume_task = asyncio.create_task(cls._resume_rotations(to_resume))
+        logger.info("[RotationManager] Initialized (resuming {} rotation(s) in background)", len(to_resume))
+
+    @classmethod
+    async def _resume_rotations(cls, to_resume: dict):
+        """Re-fetch games from the API and restart previously active rotations."""
+        try:
+            await CompletedGamePool.refresh()
+            logger.info("[RotationManager] Re-fetched {} completed games for rotation resume",
+                        len(CompletedGamePool.games))
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("[RotationManager] Failed to re-fetch completed games")
+
+        resumed = []
+        for sb_id, config in to_resume.items():
+            try:
+                # Rebuild game_ids from the current pool so newly-added games are included
+                source_pool = config.get("source_pool", "both")
+                new_ids = []
+                if source_pool in ("ongoing", "both"):
+                    new_ids.extend(g.get("game_id") for g in OngoingGamePool.list_games()
+                                   if g.get("game_id"))
+                if source_pool in ("completed", "both"):
+                    new_ids.extend(g.get("game_id") for g in CompletedGamePool.list_games()
+                                   if g.get("game_id"))
+                if new_ids:
+                    config["game_ids"] = new_ids
+                    config["current_index"] = 0
+                    await Settings.Set(f"scoreboards.rotation.{sb_id}", config)
+
+                await cls.start_rotation(sb_id)
+                resumed.append(sb_id)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("[RotationManager] Failed to resume rotation for scoreboard {}", sb_id)
                 config["enabled"] = False
-                await Settings.Set(f"scoreboards.rotation.{sb_id_str}", config)
-        logger.info("[RotationManager] Initialized (rotations cleared from previous session)")
+                await Settings.Set(f"scoreboards.rotation.{sb_id}", config)
+
+        if resumed:
+            logger.info("[RotationManager] Resumed rotations for scoreboards: {}", resumed)
+        else:
+            logger.info("[RotationManager] All resume attempts failed")
 
     @classmethod
     async def Stop(cls):
-        """Stop all active rotations."""
+        """Stop all active rotations, preserving enabled state for next session."""
+        # Cancel the background resume task if it's still running
+        if cls._resume_task and not cls._resume_task.done():
+            cls._resume_task.cancel()
+            try:
+                await cls._resume_task
+            except asyncio.CancelledError:
+                pass
+            cls._resume_task = None
+
+        # Record which rotations were active so they can resume on next start
+        active_ids = [sb_id for sb_id, state in cls._rotations.items()
+                      if state.task and not state.task.done()]
         for sb_id in list(cls._rotations.keys()):
             await cls.stop_rotation(sb_id)
-        logger.info("[RotationManager] Stopped")
+        # Restore enabled flag for rotations that were running at shutdown
+        for sb_id in active_ids:
+            await Settings.Set(f"scoreboards.rotation.{sb_id}.enabled", True)
+        logger.info("[RotationManager] Stopped ({} rotations marked for resume)", len(active_ids))
 
     @classmethod
     async def get_config(cls, sb_id: int) -> dict:

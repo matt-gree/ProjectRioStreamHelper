@@ -39,7 +39,6 @@ class Settings:
         "general": {
             "disable_export": True,
             "profanity_filter": True,
-            "control_score_from_stage_strike": True,
             "disable_autoupdate": False,
             "disable_overwrite": False
         },

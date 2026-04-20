@@ -34,9 +34,27 @@ import {
  *   onSetCaptain — callback to set this character as captain
  *   sourceType — 'manual' | 'hud' | 'api_game'
  */
+function StarIcon({ active }) {
+    if (active) {
+        return <img src="/game_assets/superstar.png" alt="Superstar" width={14} height={14} style={{ objectFit: 'contain', display: 'block', filter: 'drop-shadow(0 0 3px rgba(245,159,0,0.8))' }} />;
+    }
+    return (
+        <svg viewBox="0 0 20 20" width="12" height="12" xmlns="http://www.w3.org/2000/svg">
+            <polygon
+                points="10,1 12.9,7 19.5,7.6 14.5,12 16.2,18.5 10,15 3.8,18.5 5.5,12 0.5,7.6 7.1,7"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.2}
+                strokeLinejoin="round"
+            />
+        </svg>
+    );
+}
+
 export default function CharacterStatEditor({
     scoreboardNumber = 1, teamNumber, charIndex, charName, onBack,
     characterOptions, onCharacterChange, isCaptain, onSetCaptain,
+    isSuperstar, onToggleSuperstar,
     sourceType = 'manual',
 }) {
     const prefix = `score.${scoreboardNumber}.stats.${teamNumber}.character.${charIndex}`;
@@ -89,6 +107,26 @@ export default function CharacterStatEditor({
                     />
                 ) : (
                     <Text size="sm" fw={700}>{charName || `Slot ${charIndex + 1}`}</Text>
+                )}
+                {onToggleSuperstar && (
+                    <Tooltip label={isSuperstar ? 'Superstar' : 'Set superstar'} position="right" withArrow>
+                        <UnstyledButton
+                            onClick={onToggleSuperstar}
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                width: 22,
+                                height: 22,
+                                borderRadius: 4,
+                                border: '1px solid var(--mantine-color-default-border)',
+                                color: isSuperstar ? '#f59f00' : 'var(--mantine-color-dimmed)',
+                                transition: 'color 150ms',
+                            }}
+                        >
+                            <StarIcon active={isSuperstar} />
+                        </UnstyledButton>
+                    </Tooltip>
                 )}
                 {onSetCaptain && (
                     <Tooltip label={isCaptain ? 'Captain' : 'Set captain'} position="right" withArrow>

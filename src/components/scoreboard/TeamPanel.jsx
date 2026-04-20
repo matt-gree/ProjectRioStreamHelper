@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { Stack, Paper, Text, Group, Badge, UnstyledButton } from '@mantine/core';
+import { Paper, Stack } from '@mantine/core';
 import { useStateStore } from '../../context/store';
 import PlayerSlot from './PlayerSlot';
 
@@ -47,28 +47,17 @@ export default function TeamPanel({ scoreboardNumber = 1, teamNumber, playerCoun
                 teamNumber={teamNumber}
                 playerNumber={p}
                 sourceType={sourceType}
+                losers={losers}
+                isHome={isHome}
+                onToggleLosers={toggleLosers}
+                onToggleHome={toggleHome}
             />
         );
     }
 
     return (
-        <Paper withBorder p="sm" style={{ flex: 1 }}>
+        <Paper withBorder px="sm" pt={4} pb="sm" style={{ flex: 1 }}>
             <Stack gap="xs">
-                <Group justify="space-between">
-                    <Text size="sm" fw={700}>Team {teamNumber}</Text>
-                    <Group gap={4}>
-                        <UnstyledButton onClick={toggleLosers}>
-                            <Badge size="sm" color={losers ? 'red' : 'gray'} variant={losers ? 'filled' : 'light'}>L</Badge>
-                        </UnstyledButton>
-                        <UnstyledButton onClick={toggleHome}>
-                            {isHome ? (
-                                <Badge size="sm" color="blue" variant="filled">Home</Badge>
-                            ) : (
-                                <Badge size="sm" color="gray" variant="light">Away</Badge>
-                            )}
-                        </UnstyledButton>
-                    </Group>
-                </Group>
                 {playerSlots}
             </Stack>
         </Paper>

@@ -7,8 +7,10 @@ import { useSettingsStore, useStateStore } from '../../context/store';
 import TeamPanel from '../../components/scoreboard/TeamPanel';
 import ScoreControls from '../../components/scoreboard/ScoreControls';
 import ActiveMatchupStats from '../../components/scoreboard/ActiveMatchupStats';
+import DiamondPanel from '../../components/scoreboard/DiamondPanel';
 import RotationControls from '../../components/scoreboard/RotationControls';
 import LiveGameSelector from '../../components/scoreboard/LiveGameSelector';
+import CompletedGameInfo from '../../components/scoreboard/CompletedGameInfo';
 
 /**
  * A single scoreboard instance (team panels + score controls).
@@ -76,17 +78,23 @@ function ScoreboardTab({ scoreboardNumber }) {
                         playerCount={1}
                         sourceType={sourceType}
                     />
+                    {sourceType === 'rotator' && (
+                        <CompletedGameInfo scoreboardNumber={scoreboardNumber} />
+                    )}
                     <ActiveMatchupStats scoreboardNumber={scoreboardNumber} />
                 </Stack>
             </Grid.Col>
 
             <Grid.Col span={{ base: 10, md: 2 }}>
-                <ScoreControls
-                    scoreboardNumber={scoreboardNumber}
-                    onSwapTeams={handleSwapTeams}
-                    sourceType={sourceType}
-                    onSetSource={handleSetSource}
-                />
+                <Stack gap="md">
+                    <ScoreControls
+                        scoreboardNumber={scoreboardNumber}
+                        onSwapTeams={handleSwapTeams}
+                        sourceType={sourceType}
+                        onSetSource={handleSetSource}
+                    />
+                    <DiamondPanel scoreboardNumber={scoreboardNumber} />
+                </Stack>
             </Grid.Col>
 
             <Grid.Col span={{ base: 10, md: 4 }}>
