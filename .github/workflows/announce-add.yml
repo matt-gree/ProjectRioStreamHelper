@@ -1,0 +1,162 @@
+# Publish a new in-app announcement.
+#
+# Dispatch from: Actions → "Announce - Add" → Run workflow.
+# Fill in the form, click Run. The announcement appears in running PRSH
+# instances within ~6 hours (or instantly for anyone who opens the app after).
+#
+# Creates the `announcements` branch on first run if it doesn't exist.
+
+name: Announce - Add
+
+on:
+  workflow_dispatch:
+    inputs:
+      title:
+        description: "Short heading (required)"
+        required: true
+        type: string
+      body:
+        description: "Longer text shown in the toast (optional)"
+        required: false
+        type: string
+      severity:
+        description: "Visual color"
+        required: false
+        default: "info"
+        type: choice
+        options:
+          - info
+          - success
+          - warn
+          - error
+      link_url:
+        description: "URL for the link button (optional)"
+        required: false
+        type: string
+      link_text:
+        description: "Label for the link button"
+        required: false
+        default: "Learn more"
+        type: string
+      expires_at:
+        description: "Auto-hide after this date. ISO-8601, e.g. 2026-12-31T23:59:00Z"
+        required: false
+        type: string
+      min_version:
+        description: "Only show to app versions >= this (optional)"
+        required: false
+        type: string
+      max_version:
+        description: "Only show to app versions <= this (optional)"
+        required: false
+        type: string
+      id_override:
+        description: "Advanced: use this ID instead of auto-generated. Must be unique."
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: announcements-write
+  cancel-in-progress: false
+
+jobs:
+  add:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch or bootstrap announcements branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" repo
+          cd repo
+          if git ls-remote --exit-code --heads origin announcements >/dev/null 2>&1; then
+            git checkout announcements
+          else
+            echo "Bootstrapping announcements branch"
+            git checkout --orphan announcements
+            git rm -rf . >/dev/null 2>&1 || true
+          fi
+          test -f announcements.json || echo '[]' > announcements.json
+
+      - name: Build and insert entry
+        working-directory: repo
+        env:
+          IN_TITLE: ${{ inputs.title }}
+          IN_BODY: ${{ inputs.body }}
+          IN_SEVERITY: ${{ inputs.severity }}
+          IN_LINK_URL: ${{ inputs.link_url }}
+          IN_LINK_TEXT: ${{ inputs.link_text }}
+          IN_EXPIRES_AT: ${{ inputs.expires_at }}
+          IN_MIN_VERSION: ${{ inputs.min_version }}
+          IN_MAX_VERSION: ${{ inputs.max_version }}
+          IN_ID_OVERRIDE: ${{ inputs.id_override }}
+        run: |
+          set -euo pipefail
+
+          # Generate ID: slugified title + YYYYMMDD, or use override.
+          if [ -n "${IN_ID_OVERRIDE}" ]; then
+            ID="${IN_ID_OVERRIDE}"
+          else
+            SLUG=$(echo "${IN_TITLE}" \
+              | tr '[:upper:]' '[:lower:]' \
+              | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g' \
+              | cut -c1-40)
+            if [ -z "${SLUG}" ]; then SLUG="announcement"; fi
+            DATE=$(date -u +%Y%m%d)
+            ID="${SLUG}-${DATE}"
+          fi
+          echo "Using ID: ${ID}"
+
+          # Reject duplicate ID so we don't silently overwrite.
+          if jq -e --arg id "${ID}" 'map(select(.id == $id)) | length > 0' announcements.json >/dev/null; then
+            echo "::error::An announcement with id '${ID}' already exists. Remove it first, or set id_override."
+            exit 1
+          fi
+
+          # Build the entry, omitting fields that weren't provided.
+          ENTRY=$(jq -n \
+            --arg id "${ID}" \
+            --arg title "${IN_TITLE}" \
+            --arg body "${IN_BODY}" \
+            --arg severity "${IN_SEVERITY}" \
+            --arg link_url "${IN_LINK_URL}" \
+            --arg link_text "${IN_LINK_TEXT}" \
+            --arg expires_at "${IN_EXPIRES_AT}" \
+            --arg min_version "${IN_MIN_VERSION}" \
+            --arg max_version "${IN_MAX_VERSION}" \
+            '{id: $id, title: $title, severity: $severity}
+             | if $body != "" then . + {body: $body} else . end
+             | if $link_url != "" then . + {link_url: $link_url, link_text: (if $link_text != "" then $link_text else "Learn more" end)} else . end
+             | if $expires_at != "" then . + {expires_at: $expires_at} else . end
+             | if $min_version != "" then . + {min_version: $min_version} else . end
+             | if $max_version != "" then . + {max_version: $max_version} else . end')
+
+          echo "### New announcement" >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          echo "${ENTRY}" | jq . >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+          # Prepend so newest is first.
+          jq --argjson entry "${ENTRY}" '[$entry] + .' announcements.json > announcements.json.tmp
+          mv announcements.json.tmp announcements.json
+
+      - name: Commit and push
+        working-directory: repo
+        env:
+          IN_TITLE: ${{ inputs.title }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add announcements.json
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "Add announcement: ${IN_TITLE}"
+          git push -u origin announcements

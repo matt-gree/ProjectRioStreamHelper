@@ -166,7 +166,7 @@ if __name__ == '__main__':
         sys.stdout = open(os.path.join(log_dir, 'tsh_info.txt'), 'w', encoding='utf-8')
 
     if frozen and sys.platform in ("darwin", "win32"):
-        # pystray must run on the main thread on both macOS and Windows.
+        # Both pystray (macOS) and tkinter (Windows) must run on the main thread.
         # Run the asyncio server in a background thread instead.
         t = threading.Thread(target=_run_asyncio, daemon=True)
         t.start()
@@ -179,13 +179,24 @@ if __name__ == '__main__':
             logger.error("Server failed to start — exiting. Check logs for details (port may be in use).")
             sys.exit(1)
 
-        try:
-            from server.tray import Tray
-            tray = Tray.create_tray()
-            tray.run()  # blocks main thread; user quits via "Exit" in the tray menu
-        except Exception:
-            logger.exception("Tray failed to start; server will keep running until process is killed")
-            t.join()  # keep main thread alive so the daemon server thread stays up
+        if sys.platform == "darwin":
+            try:
+                from server.tray import Tray
+                tray = Tray.create_tray()
+                tray.run()  # blocks main thread; user quits via "Exit" in the tray menu
+            except Exception:
+                logger.exception("Tray failed to start; server will keep running until process is killed")
+                t.join()  # keep main thread alive so the daemon server thread stays up
+        else:
+            # Windows: show a persistent taskbar window instead of a tray icon.
+            # A visible window always appears in the taskbar, solving the tray overflow issue.
+            from server.win_window import WinWindow
+            cfg = TSHConfig.config
+            WinWindow.create_and_run(
+                server_url=cfg.get("server_url", "http://localhost:5260/"),
+                version=cfg.get("version", ""),
+                name=cfg.get("name", "PRSH"),
+            )
     else:
         ret = 0
         try:

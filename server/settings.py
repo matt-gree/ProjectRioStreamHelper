@@ -68,6 +68,10 @@ class Settings:
         "challonge": {
             "api_key": ""
         },
+        "announcements": {
+            "dismissed_ids": [],
+            "check_for_updates": True,
+        },
         "controller_overlay": {
             "path": "",
             "port": 8069,

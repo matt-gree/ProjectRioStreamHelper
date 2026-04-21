@@ -106,6 +106,9 @@ a = Analysis(
         'server.utils',
         'server.utils.json',
         'server.utils.deep_dict',
+        'server.win_window',
+        'server.announcements',
+        'server.api.v1.announcements',
 
         # Jinja2 (used by FastAPI templates)
         'jinja2',
@@ -119,7 +122,6 @@ a = Analysis(
     runtime_hooks=['hooks/runtime_hook_chdir.py'],
     excludes=[
         # Exclude dev-only packages to reduce size
-        'tkinter',
         'matplotlib',
         'scipy',
         'pytest',

@@ -1,0 +1,67 @@
+# Retract an in-app announcement before its natural expiry.
+#
+# Dispatch from: Actions → "Announce - Remove" → Run workflow.
+# Run "Announce - List" first if you need to look up the ID.
+
+name: Announce - Remove
+
+on:
+  workflow_dispatch:
+    inputs:
+      id:
+        description: "ID of the announcement to remove"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: announcements-write
+  cancel-in-progress: false
+
+jobs:
+  remove:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: announcements
+
+      - name: Remove entry
+        env:
+          IN_ID: ${{ inputs.id }}
+        run: |
+          set -euo pipefail
+          if [ ! -f announcements.json ]; then
+            echo "::error::announcements.json not found on this branch"
+            exit 1
+          fi
+
+          if ! jq -e --arg id "${IN_ID}" 'map(select(.id == $id)) | length > 0' announcements.json >/dev/null; then
+            echo "::error::No announcement with id '${IN_ID}' found. Run 'Announce - List' to see current IDs."
+            exit 1
+          fi
+
+          jq --arg id "${IN_ID}" 'map(select(.id != $id))' announcements.json > announcements.json.tmp
+          mv announcements.json.tmp announcements.json
+
+          echo "### Removed \`${IN_ID}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          jq . announcements.json >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Commit and push
+        env:
+          IN_ID: ${{ inputs.id }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add announcements.json
+          if git diff --staged --quiet; then
+            echo "Nothing changed"
+            exit 0
+          fi
+          git commit -m "Remove announcement: ${IN_ID}"
+          git push

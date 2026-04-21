@@ -1,0 +1,48 @@
+# Dump the current announcements.json to the workflow summary.
+# Read-only — safe to run anytime.
+
+name: Announce - List
+
+on:
+  workflow_dispatch:
+
+jobs:
+  list:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: announcements
+          path: repo
+        continue-on-error: true
+        id: co
+
+      - name: Show announcements
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.co.outcome }}" != "success" ] || [ ! -f repo/announcements.json ]; then
+            {
+              echo "## No announcements"
+              echo ""
+              echo "The \`announcements\` branch or \`announcements.json\` does not exist yet."
+              echo "Run **Announce - Add** to create the first one."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          COUNT=$(jq 'length' repo/announcements.json)
+          {
+            echo "## Active announcements ($COUNT)"
+            echo ""
+            if [ "$COUNT" -gt 0 ]; then
+              echo "### IDs"
+              jq -r '.[] | "- `\(.id)` — \(.title)"' repo/announcements.json
+              echo ""
+              echo "### Full JSON"
+              echo '```json'
+              jq . repo/announcements.json
+              echo '```'
+            else
+              echo "_The file is empty._"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

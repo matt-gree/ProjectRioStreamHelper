@@ -1,6 +1,7 @@
 import { IntlProvider } from 'react-intl';
 import { locales } from '../lang/locales';
 import { SocketProvider } from '../context/socket';
+import AnnouncementsListener from '../context/announcements';
 import { useSettingsStore } from '../context/store';
 
 export default function Providers({ children }) {
@@ -9,7 +10,8 @@ export default function Providers({ children }) {
 
     return (
         <SocketProvider>
-            <IntlProvider 
+            <AnnouncementsListener />
+            <IntlProvider
                 locale={usersLocale}
                 messages={locales[usersLocale].messages}
             >

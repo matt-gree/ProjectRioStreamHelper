@@ -18,6 +18,7 @@ from server.settings import Settings, Config
 from server.startgg.provider import StartGGProvider
 from server.challonge.provider import ChallongeProvider
 from server.controller_overlay import ControllerOverlay
+from server.announcements import Announcements
 from server.state import State
 from server.utils import json
 
@@ -55,6 +56,7 @@ async def lifespan(app: FastAPI):
     await StartGGProvider.Start()
     await ChallongeProvider.Start()
     await ControllerOverlay.Start()
+    await Announcements.Start()
 
     # If stream labels are enabled but the output dir is missing, do a full
     # export so OBS Text (GDI+) sources don't point at missing files.
@@ -67,6 +69,7 @@ async def lifespan(app: FastAPI):
     yield
 
     # on_shutdown
+    await Announcements.Stop()
     await ControllerOverlay.Stop()
     await ChallongeProvider.Stop()
     await StartGGProvider.Stop()
