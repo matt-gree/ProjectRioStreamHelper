@@ -4,6 +4,7 @@ import {
     TextInput, ActionIcon, Tooltip, SegmentedControl, Switch,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
+import LogsViewer from './LogsViewer';
 
 
 /**
@@ -40,6 +41,9 @@ export default function SettingsModal({ opened, onClose }) {
     // Announcements state
     const [announcementCount, setAnnouncementCount] = useState(0);
     const [announcementsClearing, setAnnouncementsClearing] = useState(false);
+
+    // Logs viewer
+    const [logsOpen, setLogsOpen] = useState(false);
 
     const fetchHudPath = useCallback(async () => {
         try {
@@ -262,6 +266,7 @@ export default function SettingsModal({ opened, onClose }) {
     }, [handleSetHudPath]);
 
     return (
+        <>
         <Modal opened={opened} onClose={onClose} title="Settings" size="lg">
             <Stack gap="sm">
                 <Divider label="Project Rio" labelPosition="center" />
@@ -444,7 +449,20 @@ export default function SettingsModal({ opened, onClose }) {
                         Clear
                     </Button>
                 </Group>
+
+                <Divider label="Logs" labelPosition="center" />
+
+                <Text size="xs" c="dimmed">
+                    View recent application logs. Useful when reporting a bug — you can copy the tail, or open the folder to grab the full rotated file.
+                </Text>
+                <Group justify="flex-end">
+                    <Button size="xs" variant="outline" onClick={() => setLogsOpen(true)}>
+                        View logs
+                    </Button>
+                </Group>
             </Stack>
         </Modal>
+        <LogsViewer opened={logsOpen} onClose={() => setLogsOpen(false)} />
+        </>
     );
 }
