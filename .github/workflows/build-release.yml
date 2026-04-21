@@ -183,23 +183,35 @@ jobs:
           PYINSTALLER_TARGET_ARCH: x86_64
         run: arch -x86_64 pyinstaller PRSH.spec --noconfirm
 
-      # ── Package ──
+      # ── Package (macOS: pre-zip to preserve .app symlinks) ──
       - name: Create zip (macOS)
         if: runner.os == 'macOS'
         run: |
           cd dist
           zip -r -q ../${{ matrix.artifact }}.zip PRSH.app
 
-      - name: Create zip (Windows)
+      # ── Stage Windows output so Actions wraps a clean PRSH/ folder ──
+      - name: Stage Windows output
         if: runner.os == 'Windows'
-        run: Compress-Archive -Path dist\PRSH -DestinationPath ${{ matrix.artifact }}.zip
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release_root | Out-Null
+          Move-Item dist\PRSH release_root\PRSH
 
-      # ── Upload artifact (available on every run) ──
-      - name: Upload build artifact
+      # ── Upload artifact ──
+      - name: Upload build artifact (macOS)
+        if: runner.os == 'macOS'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.artifact }}.zip
+
+      - name: Upload build artifact (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: release_root
 
   # ── Create GitHub Release (only on tag push) ──
   release:
@@ -213,6 +225,14 @@ jobs:
         with:
           path: artifacts
 
+      # Windows artifact is now uploaded as a raw folder (no pre-zip) so that
+      # downloads from the Actions UI aren't double-zipped. For the release,
+      # re-zip it here into a single clean PRSH-Windows.zip.
+      - name: Zip Windows artifact for release
+        run: |
+          cd artifacts/PRSH-Windows
+          zip -r -q ../../PRSH-Windows.zip PRSH
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -221,4 +241,4 @@ jobs:
           files: |
             artifacts/PRSH-macOS-arm64/PRSH-macOS-arm64.zip
             artifacts/PRSH-macOS-x86_64/PRSH-macOS-x86_64.zip
-            artifacts/PRSH-Windows/PRSH-Windows.zip
+            PRSH-Windows.zip
