@@ -1497,6 +1497,37 @@ function ControllerOverlayPanel({ selected, onSelect }) {
             if (data.success) {
                 notifications.show({ message: 'Controller overlay started', color: 'green' });
                 await fetchStatus();
+            } else if (data.reason === 'port_in_use') {
+                const suggested = data.suggested_port;
+                const notifId = `ctrl-port-${data.port}`;
+                notifications.show({
+                    id: notifId,
+                    title: `Port ${data.port} is in use`,
+                    color: 'orange',
+                    autoClose: false,
+                    message: suggested ? (
+                        <Stack gap="xs">
+                            <Text size="sm">
+                                Another process is using port {data.port}. Switch to port {suggested}?
+                            </Text>
+                            <Group gap="xs">
+                                <Button size="xs" onClick={async () => {
+                                    notifications.hide(notifId);
+                                    await fetch(`/api/v1/controller/port?port=${suggested}`, { method: 'PUT' });
+                                    // Re-invoke start
+                                    const r2 = await fetch('/api/v1/controller/start', { method: 'POST' });
+                                    const d2 = await r2.json();
+                                    if (d2.success) {
+                                        notifications.show({ message: `Started on port ${suggested}`, color: 'green' });
+                                        await fetchStatus();
+                                    } else {
+                                        notifications.show({ message: d2.error || 'Failed to start', color: 'red' });
+                                    }
+                                }}>Use port {suggested}</Button>
+                            </Group>
+                        </Stack>
+                    ) : 'No nearby free port found. Change the port manually in settings.',
+                });
             } else {
                 notifications.show({ message: data.error || 'Failed to start', color: 'red' });
             }
@@ -1771,7 +1802,8 @@ export default function LayoutBrowser() {
                     <Tabs.Tab value="scoreboard">Scoreboards</Tabs.Tab>
                     <Tabs.Tab value="scenes">Scenes</Tabs.Tab>
                     <Tabs.Tab value="bracket">Bracket</Tabs.Tab>
-                    <Tabs.Tab value="controller">Controller</Tabs.Tab>
+                    {/* Controller overlay hidden until Project Rio adds needed support. Code preserved. */}
+                    {/* <Tabs.Tab value="controller">Controller</Tabs.Tab> */}
                 </Tabs.List>
             </Tabs>
 

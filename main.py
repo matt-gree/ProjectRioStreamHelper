@@ -4,6 +4,7 @@ import subprocess
 import threading
 import multiprocessing
 import asyncio
+from pathlib import Path
 
 from uvicorn import Config, Server
 from socketio import ASGIApp
@@ -166,6 +167,14 @@ if __name__ == '__main__':
         sys.stdout = open(os.path.join(log_dir, 'tsh_info.txt'), 'w', encoding='utf-8')
 
     if frozen and sys.platform in ("darwin", "win32"):
+        # Pre-flight port check on the main thread. If the configured port is
+        # in use, show a dialog (auto-retry / open settings / quit) before
+        # starting the server. Tk requires the main thread, so this must
+        # happen before the server background thread is spawned.
+        from server.port_conflict import preflight_port_check
+        if preflight_port_check() is None:
+            sys.exit(0)
+
         # Both pystray (macOS) and tkinter (Windows) must run on the main thread.
         # Run the asyncio server in a background thread instead.
         t = threading.Thread(target=_run_asyncio, daemon=True)
@@ -176,7 +185,15 @@ if __name__ == '__main__':
             _server_ready.wait(timeout=0.5)
 
         if _server_failed.is_set():
-            logger.error("Server failed to start — exiting. Check logs for details (port may be in use).")
+            logger.error("Server failed to start — exiting. Check logs for details.")
+            # Pre-flight should have caught port-in-use, so this is likely a
+            # harder failure (permissions, missing deps, crash during import).
+            # Reveal the log directory so the user can grab the file.
+            try:
+                from server.port_conflict import reveal_in_file_manager
+                reveal_in_file_manager(Path(log_dir) / "tsh_error.txt")
+            except Exception:
+                pass
             sys.exit(1)
 
         if sys.platform == "darwin":

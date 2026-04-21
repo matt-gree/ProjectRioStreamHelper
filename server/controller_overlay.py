@@ -8,12 +8,32 @@ WebSocket + HTML overlay that OBS can capture as a browser source.
 import asyncio
 import os
 import signal
+import socket
 import sys
 from pathlib import Path
 
 from loguru import logger
 
 from server.settings import Settings
+
+
+def _port_free(port: int) -> bool:
+    """Return True if TCP port is bindable on localhost right now."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        s.bind(("127.0.0.1", port))
+        s.close()
+        return True
+    except OSError:
+        return False
+
+
+def _find_free_port_near(start: int, count: int = 10) -> int | None:
+    for p in range(start, start + count):
+        if _port_free(p):
+            return p
+    return None
 
 
 def _find_gc_overlay() -> Path | None:
@@ -90,14 +110,36 @@ class ControllerOverlay:
             return {"success": True, "already_running": True, "port": cls._port}
 
         if not cls._gc_overlay_path:
-            return {"success": False, "error": "gc-overlay not found"}
+            return {"success": False, "error": "gc-overlay not found", "reason": "not_installed"}
 
         main_py = cls._gc_overlay_path / "main.py"
         if not main_py.exists():
-            return {"success": False, "error": f"main.py not found at {cls._gc_overlay_path}"}
+            return {
+                "success": False,
+                "error": f"main.py not found at {cls._gc_overlay_path}",
+                "reason": "missing_entrypoint",
+            }
 
         # Kill any existing process
         await cls._kill_process()
+
+        # Pre-flight port check: if the configured port is in use, return a
+        # structured error with a suggested free port. The UI shows a one-click
+        # "Use port X" affordance.
+        if not _port_free(cls._port):
+            suggestion = _find_free_port_near(cls._port + 1)
+            logger.warning(
+                "[controller_overlay] port {} in use (suggested free: {})",
+                cls._port,
+                suggestion,
+            )
+            return {
+                "success": False,
+                "reason": "port_in_use",
+                "error": f"Port {cls._port} is already in use.",
+                "port": cls._port,
+                "suggested_port": suggestion,
+            }
 
         try:
             # Use the same Python interpreter

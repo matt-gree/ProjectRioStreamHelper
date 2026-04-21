@@ -109,6 +109,7 @@ a = Analysis(
         'server.win_window',
         'server.announcements',
         'server.api.v1.announcements',
+        'server.port_conflict',
 
         # Jinja2 (used by FastAPI templates)
         'jinja2',
