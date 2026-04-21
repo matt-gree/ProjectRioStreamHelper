@@ -32,6 +32,16 @@ async def announcements_dismiss(
 
 
 @method(
+    router.post, "/announcements/dismiss-all",
+    version="1", id="announcements.dismiss_all",
+    response_class=ORJSONResponse,
+)
+async def announcements_dismiss_all(session_id: str | None = None) -> ORJSONResponse:
+    count = await Announcements.DismissAll()
+    return ORJSONResponse({"success": True, "dismissed": count})
+
+
+@method(
     router.post, "/announcements/refresh",
     version="1", id="announcements.refresh",
     response_class=ORJSONResponse,

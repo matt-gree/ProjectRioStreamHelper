@@ -46,17 +46,25 @@ export default function AnnouncementsListener() {
                 color: SEVERITY_COLORS[item.severity] || 'blue',
                 autoClose: false,
                 withCloseButton: true,
-                onClose: () => {
-                    socket.emit('v1.announcements.dismiss', {
-                        announcement_id: item.id,
-                    });
-                },
+                // Closing the toast only hides it for this session. Announcements
+                // reappear on next app launch until the user clicks
+                // "Clear announcements" in Settings or they expire.
             });
         }
     };
 
     useSocketSubscribe('v1.announcements.set', (payload) => {
-        if (payload?.items) show(payload.items);
+        const items = payload?.items || [];
+        // Hide any on-screen toasts no longer in the active list
+        // (e.g. user clicked "Clear announcements" in Settings).
+        const activeIds = new Set(items.map(i => i.id));
+        for (const id of Array.from(shownRef.current)) {
+            if (!activeIds.has(id)) {
+                notifications.hide(`announcement-${id}`);
+                shownRef.current.delete(id);
+            }
+        }
+        show(items);
     });
 
     useEffect(() => {

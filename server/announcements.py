@@ -187,5 +187,22 @@ class Announcements:
         await socketio.emit("v1.announcements.set", {"items": cls._active})
 
     @classmethod
+    async def DismissAll(cls):
+        """Permanently dismiss every currently-active announcement."""
+        ann = Settings.settings.get("announcements", {}) or {}
+        dismissed = list(ann.get("dismissed_ids", []))
+        active_ids = [it.get("id") for it in cls._active if it.get("id")]
+        added = False
+        for aid in active_ids:
+            if aid not in dismissed:
+                dismissed.append(aid)
+                added = True
+        if added:
+            await Settings.Set("announcements.dismissed_ids", dismissed)
+        cls._active = []
+        await socketio.emit("v1.announcements.set", {"items": []})
+        return len(active_ids)
+
+    @classmethod
     def GetActive(cls) -> list:
         return list(cls._active)

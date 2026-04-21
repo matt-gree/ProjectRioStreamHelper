@@ -37,6 +37,10 @@ export default function SettingsModal({ opened, onClose }) {
     const [streamLabelsEnabled, setStreamLabelsEnabled] = useState(false);
     const [streamLabelsSaving, setStreamLabelsSaving] = useState(false);
 
+    // Announcements state
+    const [announcementCount, setAnnouncementCount] = useState(0);
+    const [announcementsClearing, setAnnouncementsClearing] = useState(false);
+
     const fetchHudPath = useCallback(async () => {
         try {
             const resp = await fetch('/api/v1/rio/hud-path');
@@ -120,6 +124,35 @@ export default function SettingsModal({ opened, onClose }) {
         setStreamLabelsSaving(false);
     }, []);
 
+    const fetchAnnouncements = useCallback(async () => {
+        try {
+            const resp = await fetch('/api/v1/announcements');
+            const data = await resp.json();
+            setAnnouncementCount(data?.items?.length || 0);
+        } catch { /* ignore */ }
+    }, []);
+
+    const handleClearAnnouncements = useCallback(async () => {
+        setAnnouncementsClearing(true);
+        try {
+            const resp = await fetch('/api/v1/announcements/dismiss-all', { method: 'POST' });
+            const data = await resp.json();
+            if (data.success) {
+                const n = data.dismissed || 0;
+                setAnnouncementCount(0);
+                notifications.show({
+                    message: n === 0 ? 'No announcements to clear' : `Cleared ${n} announcement${n === 1 ? '' : 's'}`,
+                    color: 'green',
+                });
+            } else {
+                notifications.show({ message: 'Failed to clear announcements', color: 'red' });
+            }
+        } catch {
+            notifications.show({ message: 'Failed to clear announcements', color: 'red' });
+        }
+        setAnnouncementsClearing(false);
+    }, []);
+
     const fetchControllerStatus = useCallback(async () => {
         try {
             const resp = await fetch('/api/v1/controller/status');
@@ -177,9 +210,10 @@ export default function SettingsModal({ opened, onClose }) {
             fetchChallongeStatus();
             fetchControllerStatus();
             fetchStreamLabels();
+            fetchAnnouncements();
             setChallongeKey('');
         }
-    }, [opened, fetchHudPath, fetchPinnedPlayer, fetchChallongeStatus, fetchControllerStatus, fetchStreamLabels]);
+    }, [opened, fetchHudPath, fetchPinnedPlayer, fetchChallongeStatus, fetchControllerStatus, fetchStreamLabels, fetchAnnouncements]);
 
     const handleSetHudPath = useCallback(async (path) => {
         setSavingPath(true);
@@ -385,6 +419,29 @@ export default function SettingsModal({ opened, onClose }) {
                     onChange={e => handleToggleStreamLabels(e.currentTarget.checked)}
                     disabled={streamLabelsSaving}
                 />
+
+                <Divider label="Announcements" labelPosition="center" />
+
+                <Text size="xs" c="dimmed">
+                    Announcements reappear each time the app launches until you clear them here or they expire. Closing a toast just hides it for the current session.
+                </Text>
+                <Group justify="space-between">
+                    <Text size="sm">
+                        {announcementCount === 0
+                            ? 'No active announcements'
+                            : `${announcementCount} active announcement${announcementCount === 1 ? '' : 's'}`}
+                    </Text>
+                    <Button
+                        size="xs"
+                        variant="outline"
+                        color="red"
+                        onClick={handleClearAnnouncements}
+                        loading={announcementsClearing}
+                        disabled={announcementCount === 0}
+                    >
+                        Clear
+                    </Button>
+                </Group>
             </Stack>
         </Modal>
     );
