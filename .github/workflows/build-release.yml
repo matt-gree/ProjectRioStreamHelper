@@ -190,6 +190,21 @@ jobs:
           cd dist
           zip -r -q ../${{ matrix.artifact }}.zip PRSH.app
 
+      # ── Build Windows installer (Inno Setup is preinstalled on windows-latest) ──
+      - name: Build Windows installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $match = Select-String -Path pyproject.toml -Pattern '^version\s*=\s*"([^"]+)"' | Select-Object -First 1
+          $version = $match.Matches[0].Groups[1].Value
+          Write-Host "Building installer for version $version"
+          New-Item -ItemType Directory -Force -Path installer\out | Out-Null
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" `
+            /DAppVersion=$version `
+            /O"installer\out" `
+            installer\PRSH.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup compilation failed" }
+
       # ── Stage Windows output so Actions wraps a clean PRSH/ folder ──
       - name: Stage Windows output
         if: runner.os == 'Windows'
@@ -206,12 +221,19 @@ jobs:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.artifact }}.zip
 
-      - name: Upload build artifact (Windows)
+      - name: Upload build artifact (Windows portable)
         if: runner.os == 'Windows'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
           path: release_root
+
+      - name: Upload build artifact (Windows installer)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: PRSH-Windows-Installer
+          path: installer/out/PRSH-Setup.exe
 
   # ── Create GitHub Release (only on tag push) ──
   release:
@@ -242,3 +264,4 @@ jobs:
             artifacts/PRSH-macOS-arm64/PRSH-macOS-arm64.zip
             artifacts/PRSH-macOS-x86_64/PRSH-macOS-x86_64.zip
             PRSH-Windows.zip
+            artifacts/PRSH-Windows-Installer/PRSH-Setup.exe
