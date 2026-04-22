@@ -134,7 +134,7 @@ jobs:
             "python-multipart" \
             "pystray" \
             "git+https://github.com/matt-gree/pyrio.git" \
-            pyinstaller
+            "pyinstaller==6.11.1"
 
       - name: Install Python dependencies (x86_64)
         if: matrix.arch == 'x86_64'
@@ -162,7 +162,7 @@ jobs:
             "python-multipart" \
             "pystray" \
             "git+https://github.com/matt-gree/pyrio.git" \
-            pyinstaller
+            "pyinstaller==6.11.1"
 
       - name: Install macOS tray backend
         if: runner.os == 'macOS' && matrix.arch != 'x86_64'
