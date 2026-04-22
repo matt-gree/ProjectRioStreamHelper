@@ -5,6 +5,7 @@ import {
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import LogsViewer from './LogsViewer';
+import { useSettingsStore } from '../context/store';
 
 
 /**
@@ -44,6 +45,13 @@ export default function SettingsModal({ opened, onClose }) {
 
     // Logs viewer
     const [logsOpen, setLogsOpen] = useState(false);
+
+    // Appearance — color scheme stored as a regular setting for portability.
+    const colorScheme = useSettingsStore(state => state?.ui?.color_scheme) || 'auto';
+    const setSetting = useSettingsStore(state => state.setItem);
+    const handleColorScheme = useCallback((value) => {
+        setSetting('ui.color_scheme', value);
+    }, [setSetting]);
 
     const fetchHudPath = useCallback(async () => {
         try {
@@ -269,6 +277,22 @@ export default function SettingsModal({ opened, onClose }) {
         <>
         <Modal opened={opened} onClose={onClose} title="Settings" size="lg">
             <Stack gap="sm">
+                <Divider label="Appearance" labelPosition="center" />
+
+                <Group justify="space-between" align="center">
+                    <Text size="sm">Theme</Text>
+                    <SegmentedControl
+                        size="xs"
+                        value={colorScheme}
+                        onChange={handleColorScheme}
+                        data={[
+                            { label: 'Light', value: 'light' },
+                            { label: 'Dark', value: 'dark' },
+                            { label: 'Auto', value: 'auto' },
+                        ]}
+                    />
+                </Group>
+
                 <Divider label="Project Rio" labelPosition="center" />
 
                 {/* HUD File Path */}

@@ -8,6 +8,7 @@ import { HashRouter } from 'react-router-dom';
 import Root from '../routes/root';
 import { MantineProvider, Center, Loader, Stack, Text, Button } from '@mantine/core';
 import { Notifications } from '@mantine/notifications';
+import { useSettingsStore } from '../context/store';
 
 class ErrorBoundary extends Component {
     state = { error: null };
@@ -54,11 +55,15 @@ function LoadingScreen() {
     );
 }
 
-export default function App() {
+function AppInner() {
     const loaded = useStoresLoaded();
+    // ui.color_scheme is one of "light" | "dark" | "auto". We only override
+    // Mantine's "auto" (system) when the user picked a specific scheme.
+    const scheme = useSettingsStore(state => state?.ui?.color_scheme) || 'auto';
+    const forceColorScheme = scheme === 'auto' ? undefined : scheme;
 
     return (
-        <MantineProvider>
+        <MantineProvider defaultColorScheme="auto" forceColorScheme={forceColorScheme}>
             <Notifications position="top-right" autoClose={3000} />
             <ErrorBoundary>
                 <HashRouter>
@@ -69,4 +74,8 @@ export default function App() {
             </ErrorBoundary>
         </MantineProvider>
     );
+}
+
+export default function App() {
+    return <AppInner />;
 }

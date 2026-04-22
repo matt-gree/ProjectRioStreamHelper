@@ -1,6 +1,7 @@
 import { Routes, Route, Link, useLocation } from "react-router-dom";
 import { Tabs, Box } from "@mantine/core";
 import TSHFields from '../components/fields';
+import WelcomeCard from '../components/WelcomeCard';
 
 import Bracket from './bracket/bracket';
 import Commentary from './commentary/commentary';
@@ -24,6 +25,7 @@ export default function Root() {
   return (
     <Box style={{ minHeight: '100vh' }}>
       <TSHFields />
+      <WelcomeCard />
       <Tabs value={location.pathname} variant="outline" mx="md">
         <Tabs.List>
           {allTabs.map(tab => (

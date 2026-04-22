@@ -2,9 +2,10 @@ from pystray import Icon, Menu, MenuItem
 from PIL import Image
 from server.settings import Config
 from loguru import logger
-from os import kill, getpid
+from os import kill, getpid, path as _os_path
 from signal import SIGINT
 from pathlib import Path
+import os
 import subprocess
 import sys
 
@@ -39,16 +40,57 @@ class Tray:
         kill(getpid(), SIGINT)
 
     @classmethod
+    def on_open_settings(cls, _icon=None, _item=None):
+        """Open the browser to the settings route."""
+        url = Config.config.get("server_url", "")
+        if not url:
+            return
+        # HashRouter: settings lives inside SettingsModal, which is toggled from
+        # the header. Opening the app root is the simplest reliable entry.
+        if sys.platform == "darwin":
+            subprocess.Popen(["open", url])
+        else:
+            import webbrowser
+            webbrowser.open_new_tab(url)
+
+    @classmethod
+    def on_open_logs(cls, _icon=None, _item=None):
+        """Reveal the logs folder in Finder / Explorer."""
+        if getattr(sys, "frozen", False) and sys.platform == "darwin":
+            log_dir = Path.home() / "Library" / "Application Support" / "PRSH" / "logs"
+        else:
+            log_dir = Path(".").resolve() / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            if sys.platform == "darwin":
+                subprocess.Popen(["open", str(log_dir)])
+            elif sys.platform == "win32":
+                os.startfile(str(log_dir))  # type: ignore[attr-defined]
+            else:
+                subprocess.Popen(["xdg-open", str(log_dir)])
+        except Exception:
+            logger.exception("[Tray] failed to open logs folder")
+
+    @classmethod
     def show_notification(cls, *args, **kwargs):
         if Icon.HAS_NOTIFICATION:
             cls.icon.notify(*args, **kwargs)
 
     @classmethod
     def create_tray(cls):
+        name = Config.config.get("name", "PRSH")
+        version = Config.config.get("version", "")
+        # Non-clickable "About" line — pystray makes a MenuItem with no action
+        # non-interactive by default.
+        about_label = f"{name} v{version}" if version else name
+
         menu_items = [
-            MenuItem(text="Open...", action=cls.on_open, default=True),
+            MenuItem(text=about_label, action=lambda *a: None, enabled=False),
             Menu.SEPARATOR,
-            MenuItem(text="Exit", action=cls.on_exit, default=False)
+            MenuItem(text="Open...", action=cls.on_open, default=True),
+            MenuItem(text="Open logs folder", action=cls.on_open_logs),
+            Menu.SEPARATOR,
+            MenuItem(text="Exit", action=cls.on_exit, default=False),
         ]
 
         # PIL image for pystray (required for initialization + Windows)

@@ -87,9 +87,7 @@ src/                         # React frontend (Vite + React 19 + Mantine 7)
 │   ├── bracket/             # Start.gg bracket display
 │   ├── tournament_info/     # Tournament metadata
 │   ├── commentary/          # Commentary panel
-│   ├── player_list/         # Roster browser
-│   ├── ruleset/             # Stage strike (disconnected)
-│   └── thumbnail_settings/  # Thumbnail gen (disconnected)
+│   └── player_list/         # Roster browser
 ├── hooks/                   # Custom hooks (useStartGG, useTournament)
 ├── data/                    # Static data (msb.js — character/team info)
 └── lang/                    # Localization strings
@@ -315,7 +313,7 @@ Upstream TSH features preserved in code but disconnected from the running app:
 - **Thumbnail System** — font loading + image compositing added startup overhead; not used for MSB
 - **Stage Strike / Ruleset System** — MSB doesn't have start.gg rulesets; old code had network retry loops on startup
 
-UI route stubs remain (`/ruleset`, `/thumbnail_settings`) but are non-functional.
+Their UI routes (`/ruleset`, `/thumbnail_settings`) have been removed from the navigation; backend code is retained for future reference.
 
 ---
 
