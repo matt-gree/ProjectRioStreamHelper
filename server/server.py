@@ -30,7 +30,7 @@ async def load_manifest() -> dict:
     if await manifest_json.exists() == True:
         manifest = {}
         if await Settings.Get("server.dev") == False:
-            async with manifest_json.open(mode="rb", encoding="utf-8") as file:
+            async with manifest_json.open(mode="rb") as file:
                 manifest = await json.loads(await file.read())
 
         for name in manifest:
