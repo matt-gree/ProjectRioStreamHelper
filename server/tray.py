@@ -2,8 +2,7 @@ from pystray import Icon, Menu, MenuItem
 from PIL import Image
 from server.settings import Config
 from loguru import logger
-from os import kill, getpid, path as _os_path
-from signal import SIGINT
+from os import path as _os_path
 from pathlib import Path
 import os
 import subprocess
@@ -35,9 +34,18 @@ class Tray:
     @classmethod
     def on_exit(cls, _icon=None, _item=None):
         logger.debug("[Tray] User requests exit")
+        # Ask uvicorn to shut down gracefully from the main thread (just a
+        # flag assignment — thread-safe). The asyncio thread will run the
+        # lifespan shutdown (Settings.Save, gc-overlay stop, etc.) and
+        # finish; main.py joins on it after tray.run() returns.
+        try:
+            import main as _main
+            if _main._uvicorn_server is not None:
+                _main._uvicorn_server.should_exit = True
+        except Exception:
+            logger.exception("[Tray] failed to signal uvicorn shutdown")
         if cls.icon:
             cls.icon.stop()
-        kill(getpid(), SIGINT)
 
     @classmethod
     def on_open_settings(cls, _icon=None, _item=None):

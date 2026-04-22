@@ -19,6 +19,9 @@ from server.utils.uvilogger import setup_logger
 _server_ready = threading.Event()
 # Set when the server fails to start (e.g. port in use) so the tray can react.
 _server_failed = threading.Event()
+# Reference to the running uvicorn Server so the tray can request a graceful
+# shutdown from the main thread without raising signals into Cocoa handlers.
+_uvicorn_server = None
 
 
 def _open_browser(url: str):
@@ -77,6 +80,8 @@ async def main() -> int:
         reload=await Settings.Get("dev", False),
         loop=asyncio.get_event_loop()
     ))
+    global _uvicorn_server
+    _uvicorn_server = uvi
 
     setup_logger()
 
@@ -204,6 +209,12 @@ if __name__ == '__main__':
             except Exception:
                 logger.exception("Tray failed to start; server will keep running until process is killed")
                 t.join()  # keep main thread alive so the daemon server thread stays up
+            # Tray has exited — wait briefly for the server thread to finish
+            # its lifespan shutdown (settings save, gc-overlay stop, etc.)
+            # before forcing exit. Without this, macOS shows "Not Responding"
+            # while the daemon thread is forcibly torn down.
+            t.join(timeout=5.0)
+            os._exit(0)
         else:
             # Windows: show a persistent taskbar window instead of a tray icon.
             # A visible window always appears in the taskbar, solving the tray overflow issue.
