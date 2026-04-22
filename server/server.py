@@ -28,9 +28,17 @@ async def load_manifest() -> dict:
     if await Settings.Get("server.dev") is True:
         return {"css": css, "js": js}
 
-    manifest_json = Path("./dist/.vite/manifest.json")
-    if not manifest_json.is_file():
-        logger.warning("[manifest] not found at {} (cwd={})", manifest_json.resolve(), Path.cwd())
+    # PyInstaller on Windows drops files inside hidden (dot-prefixed) dirs,
+    # so the spec also stages a copy at dist/vite_manifest.json. Prefer the
+    # Vite-native path in dev, fall back to the staged copy in frozen builds.
+    candidates = [Path("./dist/.vite/manifest.json"), Path("./dist/vite_manifest.json")]
+    manifest_json = next((p for p in candidates if p.is_file()), None)
+    if manifest_json is None:
+        logger.warning(
+            "[manifest] not found; tried {} (cwd={})",
+            [str(p) for p in candidates],
+            Path.cwd(),
+        )
         return {"css": css, "js": js}
 
     try:

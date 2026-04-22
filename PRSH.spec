@@ -12,8 +12,19 @@ Prerequisites:
 """
 import os
 import platform
+import shutil
+from pathlib import Path
 
 block_cipher = None
+
+# PyInstaller on Windows silently drops files inside hidden (dot-prefixed)
+# directories, which strips dist/.vite/manifest.json from the bundle and
+# leaves the frontend with no <script> tags. Stage a copy at a non-hidden
+# path and bundle that instead.
+_vite_src = Path('dist/.vite/manifest.json')
+_vite_staged = Path('dist/vite_manifest.json')
+if _vite_src.is_file():
+    shutil.copy2(_vite_src, _vite_staged)
 
 # Platform-specific separator for --add-data paths
 SEP = ';' if platform.system() == 'Windows' else ':'
@@ -29,6 +40,7 @@ a = Analysis(
         ('dist/layout', 'dist/layout'),
         ('dist/favicon.png', 'dist'),
         ('dist/.vite/manifest.json', 'dist/.vite'),
+        *([('dist/vite_manifest.json', 'dist')] if _vite_staged.is_file() else []),
         ('dist/index.html', 'dist'),
 
         # Public directory (game assets, layouts, favicon, tray logo)
