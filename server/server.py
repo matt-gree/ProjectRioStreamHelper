@@ -1,7 +1,6 @@
 import asyncio
 from pathlib import Path
 
-from aiopath import AsyncPath
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, HTMLResponse
@@ -23,24 +22,33 @@ from server.state import State
 from server.utils import json
 
 async def load_manifest() -> dict:
-    css = []
-    js = []
+    css: list[str] = []
+    js: list[str] = []
 
-    manifest_json = AsyncPath("./dist/.vite/manifest.json")
-    if await manifest_json.exists() == True:
-        manifest = {}
-        if await Settings.Get("server.dev") == False:
-            async with manifest_json.open(mode="rb") as file:
-                manifest = await json.loads(await file.read())
+    if await Settings.Get("server.dev") is True:
+        return {"css": css, "js": js}
 
-        for name in manifest:
-            logger.debug("[manifest] adding js: {}", manifest[name]["file"])
-            js.append(manifest[name]["file"])
-            if "css" in manifest[name]:
-                for css_file in manifest[name]["css"]:
-                    logger.debug("[manifest] adding css: {}", css_file)
-                    css.append(css_file)
+    manifest_json = Path("./dist/.vite/manifest.json")
+    if not manifest_json.is_file():
+        logger.warning("[manifest] not found at {} (cwd={})", manifest_json.resolve(), Path.cwd())
+        return {"css": css, "js": js}
 
+    try:
+        data = manifest_json.read_bytes()
+        manifest = await json.loads(data)
+    except Exception as exc:
+        logger.exception("[manifest] failed to parse {}: {}", manifest_json, exc)
+        return {"css": css, "js": js}
+
+    for name, entry in manifest.items():
+        if "file" in entry:
+            logger.debug("[manifest] adding js: {}", entry["file"])
+            js.append(entry["file"])
+        for css_file in entry.get("css", []):
+            logger.debug("[manifest] adding css: {}", css_file)
+            css.append(css_file)
+
+    logger.info("[manifest] loaded {} js / {} css entries", len(js), len(css))
     return {"css": css, "js": js}
 
 @asynccontextmanager

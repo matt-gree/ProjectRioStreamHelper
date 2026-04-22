@@ -39,9 +39,6 @@ a = Analysis(
         ('public/logo_tray.png', 'public'),
         ('public/logo_tray.icns', 'public'),
 
-        # Server data files
-        ('server/data', 'server/data'),
-
         # pyrio submodule data
         ('server/rio/pyrio/CharNames.csv', 'server/rio/pyrio'),
 
