@@ -209,8 +209,8 @@ export default function LogsViewer({ opened, onClose }) {
                     <Code
                         block
                         style={{
-                            fontSize: 12,
-                            lineHeight: 1.4,
+                            fontSize: 10,
+                            lineHeight: 1.35,
                             whiteSpace: wrap ? 'pre-wrap' : 'pre',
                             wordBreak: wrap ? 'break-word' : 'normal',
                             backgroundColor: 'transparent',

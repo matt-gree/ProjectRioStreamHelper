@@ -40,6 +40,11 @@ def setup_logger():
         uvicorn_logger.handlers = []
     logging.getLogger("uvicorn").handlers = [intercept_handler]
     logging.getLogger("uvicorn.access").handlers = [intercept_handler]
-    logger.configure(
-        handlers=[{"sink": sys.stdout, "level": logging.DEBUG, "format": format_record}]
-    )
+    # Replace the default stderr handler (id=0) with a formatted stdout
+    # handler, but keep any file sinks that main.py already registered.
+    # Using logger.configure() here would clobber those file sinks.
+    try:
+        logger.remove(0)
+    except ValueError:
+        pass  # default handler already removed
+    logger.add(sys.stdout, level=logging.DEBUG, format=format_record)
