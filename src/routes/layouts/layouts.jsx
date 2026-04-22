@@ -108,6 +108,26 @@ function ScaledIframe({ src, fallbackWidth, fallbackHeight }) {
                     }
                     return;
                 }
+                // Overlay HTML files don't set an html-element background,
+                // so Chromium paints the iframe's default white canvas. In
+                // the preview we want the container's scheme-aware grey to
+                // show through instead of a stark white rectangle. Inject a
+                // stylesheet + inline styles with !important so nothing the
+                // overlay does can override it. color-scheme: normal keeps
+                // the UA canvas neutral.
+                try {
+                    doc.documentElement.style.background = 'transparent';
+                    doc.documentElement.style.colorScheme = 'normal';
+                    doc.body.style.background = 'transparent';
+                    let injected = doc.getElementById('__prsh_preview_bg');
+                    if (!injected) {
+                        injected = doc.createElement('style');
+                        injected.id = '__prsh_preview_bg';
+                        injected.textContent =
+                            'html,body{background:transparent !important;color-scheme:normal !important;}';
+                        doc.head.appendChild(injected);
+                    }
+                } catch { /* ignore */ }
                 // Prefer data-ref-w/h attributes (set by overlay auto-scale JS)
                 const refW = parseFloat(doc.body.dataset.refW);
                 const refH = parseFloat(doc.body.dataset.refH);
@@ -139,7 +159,11 @@ function ScaledIframe({ src, fallbackWidth, fallbackHeight }) {
             style={{
                 position: 'relative',
                 height: PREVIEW_HEIGHT,
-                background: '#1a1a1a',
+                // Neutral dark grey in dark mode, neutral light grey in
+                // light mode, so the preview frame reads as a calm stage
+                // rather than pure black. Mantine's default-hover var is
+                // scheme-aware (gray-0 in light, dark-5 in dark).
+                background: 'var(--mantine-color-default-hover)',
                 overflow: 'hidden',
             }}
         >
@@ -154,6 +178,11 @@ function ScaledIframe({ src, fallbackWidth, fallbackHeight }) {
                     width: nativeSize ? `${nativeSize.w}px` : '1px',
                     height: nativeSize ? `${nativeSize.h}px` : '1px',
                     border: 'none',
+                    // Iframes default to white in Chromium; the explicit
+                    // color-scheme keeps the UA canvas neutral and lets the
+                    // container's scheme-aware grey show through.
+                    backgroundColor: 'transparent',
+                    colorScheme: 'normal',
                     opacity: nativeSize ? 1 : 0,
                     transform: nativeSize
                         ? `translate(${layout.offsetX}px, ${layout.offsetY}px) scale(${layout.scale})`
@@ -184,10 +213,10 @@ function LayoutItem({ item, selected, onSelect, activeTab }) {
             style={(theme) => ({
                 borderRadius: theme.radius.sm,
                 backgroundColor: selected?.url === item.url
-                    ? theme.colors.blue[0]
+                    ? 'var(--mantine-color-blue-light)'
                     : 'transparent',
                 border: selected?.url === item.url
-                    ? `1px solid ${theme.colors.blue[3]}`
+                    ? `1px solid var(--mantine-color-blue-filled)`
                     : '1px solid transparent',
             })}
         >
@@ -273,7 +302,7 @@ function LayoutList({ layouts, selected, onSelect, activeTab }) {
                                 borderRadius: theme.radius.sm,
                                 width: '100%',
                                 backgroundColor: isGroupActive(items)
-                                    ? theme.colors.blue[0]
+                                    ? 'var(--mantine-color-blue-light)'
                                     : 'transparent',
                             })}
                         >
@@ -524,8 +553,8 @@ function PlayerSchedulePanel({ selected, onSelect, baseUrl, phases, phasesLoaded
                                 <UnstyledButton key={pg.id} onClick={() => togglePg(pg.id)} p="xs"
                                     style={(theme) => ({
                                         borderRadius: theme.radius.sm,
-                                        backgroundColor: sel ? theme.colors.blue[0] : 'transparent',
-                                        border: `1px solid ${sel ? theme.colors.blue[3] : theme.colors.gray[3]}`,
+                                        backgroundColor: sel ? 'var(--mantine-color-blue-light)' : 'transparent',
+                                        border: `1px solid ${sel ? 'var(--mantine-color-blue-filled)' : 'var(--mantine-color-default-border)'}`,
                                     })}
                                 >
                                     <Group gap={6} wrap="nowrap">
@@ -553,8 +582,8 @@ function PlayerSchedulePanel({ selected, onSelect, baseUrl, phases, phasesLoaded
                                 p="xs"
                                 style={(theme) => ({
                                     borderRadius: theme.radius.sm,
-                                    backgroundColor: isActive ? theme.colors.blue[0] : 'transparent',
-                                    border: isActive ? `1px solid ${theme.colors.blue[3]}` : '1px solid transparent',
+                                    backgroundColor: isActive ? 'var(--mantine-color-blue-light)' : 'transparent',
+                                    border: isActive ? `1px solid var(--mantine-color-blue-filled)` : '1px solid transparent',
                                 })}
                             >
                                 <Group justify="space-between" wrap="nowrap" gap={4}>
@@ -727,10 +756,10 @@ function BracketLayoutList({ selected, onSelect, baseUrl, onLoadBracket }) {
                                             style={(theme) => ({
                                                 borderRadius: theme.radius.sm,
                                                 backgroundColor: active
-                                                    ? theme.colors.blue[0]
+                                                    ? 'var(--mantine-color-blue-light)'
                                                     : 'transparent',
                                                 border: active
-                                                    ? `1px solid ${theme.colors.blue[3]}`
+                                                    ? `1px solid var(--mantine-color-blue-filled)`
                                                     : '1px solid transparent',
                                             })}
                                         >
@@ -1621,9 +1650,9 @@ function ControllerOverlayPanel({ selected, onSelect }) {
                             p="xs"
                             style={(theme) => ({
                                 borderRadius: theme.radius.sm,
-                                backgroundColor: isActive ? theme.colors.blue[0] : 'transparent',
+                                backgroundColor: isActive ? 'var(--mantine-color-blue-light)' : 'transparent',
                                 border: isActive
-                                    ? `1px solid ${theme.colors.blue[3]}`
+                                    ? `1px solid var(--mantine-color-blue-filled)`
                                     : '1px solid transparent',
                                 opacity: status.running ? 1 : 0.5,
                             })}
