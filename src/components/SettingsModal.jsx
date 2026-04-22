@@ -293,6 +293,20 @@ export default function SettingsModal({ opened, onClose }) {
                     />
                 </Group>
 
+                <Group justify="space-between" align="center">
+                    <Text size="sm">Welcome screen</Text>
+                    <Button
+                        size="xs"
+                        variant="outline"
+                        onClick={() => {
+                            setSetting('ui.welcome_dismissed', false);
+                            onClose();
+                        }}
+                    >
+                        Show again
+                    </Button>
+                </Group>
+
                 <Divider label="Project Rio" labelPosition="center" />
 
                 {/* HUD File Path */}
