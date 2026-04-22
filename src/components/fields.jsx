@@ -3,6 +3,7 @@ import { Group, Title, Box, ActionIcon, Text, Tooltip } from '@mantine/core';
 import { useConfigStore } from '../context/store';
 import { useSocket } from '../context/socket';
 import SettingsModal from './SettingsModal';
+import { PatreonIcon, YouTubeIcon } from './SupportLinks';
 
 export default function TSHFields() {
     const app_name = useConfigStore(state => state.name);
@@ -45,6 +46,32 @@ export default function TSHFields() {
                                 backgroundColor: connected ? '#22c55e' : '#ef4444',
                             }}
                         />
+                    </Tooltip>
+                    <Tooltip label="Support Project Rio on Patreon">
+                        <ActionIcon
+                            component="a"
+                            href="https://www.patreon.com/projectrio"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            variant="subtle"
+                            size="md"
+                            color="orange"
+                        >
+                            <PatreonIcon size={15} />
+                        </ActionIcon>
+                    </Tooltip>
+                    <Tooltip label="MattGree on YouTube">
+                        <ActionIcon
+                            component="a"
+                            href="https://www.youtube.com/@MattGree"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            variant="subtle"
+                            size="md"
+                            color="red"
+                        >
+                            <YouTubeIcon size={15} />
+                        </ActionIcon>
                     </Tooltip>
                     <ActionIcon
                         variant="subtle"

@@ -6,6 +6,7 @@ import {
 import { notifications } from '@mantine/notifications';
 import LogsViewer from './LogsViewer';
 import { useSettingsStore } from '../context/store';
+import { SupportLinks } from './SupportLinks';
 
 
 /**
@@ -403,7 +404,7 @@ export default function SettingsModal({ opened, onClose }) {
                     </Badge>
                 </Group>
                 <Text size="xs" c="dimmed">
-                    Required to load Challonge tournaments. Get your key from your Challonge account settings.
+                    Required to load Challonge tournaments. Get your key from your Challonge account settings. You must be an admin in the Mario Superstar Baseball Netplay Events Challonge Community. Note: Challonge support will be deprecated in the future as its API support is limited.
                 </Text>
                 <PasswordInput
                     placeholder="Enter your Challonge API key"
@@ -457,21 +458,23 @@ export default function SettingsModal({ opened, onClose }) {
                 <Text size="xs" c="dimmed">
                     Export every state key as an individual .txt file to user_data/stream_labels/. Use these as Text (GDI+) sources in OBS without needing the HTML overlays. Off by default.
                 </Text>
-                <Switch
-                    size="sm"
-                    label="Enable txt export"
-                    checked={streamLabelsEnabled}
-                    onChange={e => handleToggleStreamLabels(e.currentTarget.checked)}
-                    disabled={streamLabelsSaving}
-                />
+                <Group justify="center">
+                    <Switch
+                        size="sm"
+                        label="Enable txt export"
+                        checked={streamLabelsEnabled}
+                        onChange={e => handleToggleStreamLabels(e.currentTarget.checked)}
+                        disabled={streamLabelsSaving}
+                    />
+                </Group>
 
                 <Divider label="Announcements" labelPosition="center" />
 
                 <Text size="xs" c="dimmed">
                     Announcements reappear each time the app launches until you clear them here or they expire. Closing a toast just hides it for the current session.
                 </Text>
-                <Group justify="space-between">
-                    <Text size="sm">
+                <Group wrap="nowrap" align="center" gap="xs">
+                    <Text size="sm" style={{ whiteSpace: 'nowrap' }}>
                         {announcementCount === 0
                             ? 'No active announcements'
                             : `${announcementCount} active announcement${announcementCount === 1 ? '' : 's'}`}
@@ -483,6 +486,7 @@ export default function SettingsModal({ opened, onClose }) {
                         onClick={handleClearAnnouncements}
                         loading={announcementsClearing}
                         disabled={announcementCount === 0}
+                        style={{ flex: 1 }}
                     >
                         Clear
                     </Button>
@@ -493,11 +497,15 @@ export default function SettingsModal({ opened, onClose }) {
                 <Text size="xs" c="dimmed">
                     View recent application logs. Useful when reporting a bug — you can copy the tail, or open the folder to grab the full rotated file.
                 </Text>
-                <Group justify="flex-end">
-                    <Button size="xs" variant="outline" onClick={() => setLogsOpen(true)}>
-                        View logs
-                    </Button>
-                </Group>
+                <Button size="xs" variant="outline" onClick={() => setLogsOpen(true)} fullWidth>
+                    View logs
+                </Button>
+
+                <Text size="xs" c="dimmed" ta="center">
+                    Enjoy PRSH? Consider supporting those who make it all possible.
+                </Text>
+                <SupportLinks size="sm" gap="md" justify="center" />
+
             </Stack>
         </Modal>
         <LogsViewer opened={logsOpen} onClose={() => setLogsOpen(false)} />

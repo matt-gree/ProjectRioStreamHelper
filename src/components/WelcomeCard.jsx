@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-    Modal, Stack, Group, Text, Title, Button, ThemeIcon, Box, Anchor,
+    Modal, Stack, Group, Text, Title, Button, ThemeIcon, Box, Anchor, Divider,
 } from '@mantine/core';
 import { useSettingsStore, useConfigStore } from '../context/store';
+import { SupportLinks } from './SupportLinks';
 
 // Tiny inline icons so we don't pull in a new dep.
 function CheckIcon({ size = 14 }) {
@@ -373,6 +374,15 @@ export default function WelcomeCard() {
                             Load a bracket from Start.gg (public) or Challonge (API key in Settings).
                         </ChecklistRow>
                     </Stack>
+
+                    <Divider color="rgba(255,255,255,0.18)" />
+
+                    <SupportLinks
+                        size="xs"
+                        gap="lg"
+                        justify="center"
+                        style={{ color: 'rgba(255,255,255,0.82)' }}
+                    />
 
                 </Stack>
 
