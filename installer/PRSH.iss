@@ -59,3 +59,29 @@ Name: "{app}\Uninstall {#AppShortName}"; Filename: "{uninstallexe}"
 
 [Run]
 Filename: "{app}\{#AppExeName}"; Description: "Launch {#AppShortName}"; Flags: nowait postinstall skipifsilent
+
+[Code]
+var
+  DeleteUserData: Boolean;
+
+procedure InitializeUninstallProgressForm;
+begin
+  DeleteUserData := MsgBox(
+    'Also delete your PRSH settings, layouts, and tournament data?' #13#10 #13#10 +
+    'Yes - removes %LOCALAPPDATA%\PRSH\ (settings, stream labels, branding, logs).' #13#10 +
+    'No  - keeps them so a future reinstall picks up where you left off.',
+    mbConfirmation, MB_YESNO or MB_DEFBUTTON2
+  ) = IDYES;
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  AppData: String;
+begin
+  if (CurUninstallStep = usPostUninstall) and DeleteUserData then
+  begin
+    AppData := ExpandConstant('{localappdata}\PRSH');
+    if DirExists(AppData) then
+      DelTree(AppData, True, True, True);
+  end;
+end;
