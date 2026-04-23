@@ -48,6 +48,8 @@ a = Analysis(
         ('public/layout', 'public/layout'),
         ('public/favicon.png', 'public'),
         ('public/logo.png', 'public'),
+        ('public/logo.ico', 'public'),
+        ('public/logo.icns', 'public'),
         ('public/logo_tray.png', 'public'),
         ('public/logo_tray.icns', 'public'),
 
@@ -146,6 +148,8 @@ a = Analysis(
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
+_exe_icon = 'public/logo.ico' if platform.system() == 'Windows' else 'public/logo.icns'
+
 exe = EXE(
     pyz,
     a.scripts,
@@ -162,6 +166,7 @@ exe = EXE(
     target_arch=os.environ.get('PYINSTALLER_TARGET_ARCH', None),
     codesign_identity=None,
     entitlements_file=None,
+    icon=_exe_icon,
 )
 
 coll = COLLECT(
@@ -182,7 +187,7 @@ if platform.system() == 'Darwin':
     app = BUNDLE(
         coll,
         name='PRSH.app',
-        icon=None,
+        icon='public/logo.icns',
         bundle_identifier='com.projectrio.streamhelper',
         info_plist={
             'CFBundleShortVersionString': '1.0.0',
