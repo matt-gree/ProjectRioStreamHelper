@@ -4,7 +4,7 @@ import {
     Divider, Tooltip, SegmentedControl, UnstyledButton,
 } from '@mantine/core';
 import { useStateStore } from '../../context/store';
-const charIconUrl = (name) => `/game_assets/rio_characterIcons/${encodeURIComponent(name)}.png`;
+const charIconUrl = (name) => `/game_assets/msb/characterIcons/${encodeURIComponent(name)}.png`;
 
 const renderCharOption = ({ option }) => (
     <Group gap="xs" wrap="nowrap">
@@ -36,7 +36,7 @@ import {
  */
 function StarIcon({ active }) {
     if (active) {
-        return <img src="/game_assets/superstar.png" alt="Superstar" width={14} height={14} style={{ objectFit: 'contain', display: 'block', filter: 'drop-shadow(0 0 3px rgba(245,159,0,0.8))' }} />;
+        return <img src="/game_assets/msb/superstar.png" alt="Superstar" width={14} height={14} style={{ objectFit: 'contain', display: 'block', filter: 'drop-shadow(0 0 3px rgba(245,159,0,0.8))' }} />;
     }
     return (
         <svg viewBox="0 0 20 20" width="12" height="12" xmlns="http://www.w3.org/2000/svg">

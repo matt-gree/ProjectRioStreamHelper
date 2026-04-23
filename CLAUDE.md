@@ -97,7 +97,7 @@ public/
 │   ├── scoreboard1/         # Scoreboard, team logos, rosters, stats overlays
 │   ├── bracket/             # Tournament bracket overlay
 │   └── lib/overlay-base.js  # Shared SocketIO client for all overlays
-├── game_assets/             # Character icons (rio_characterIcons/), team logos (rio_teamLogos/)
+├── game_assets/             # Character icons (msb/characterIcons/), team logos (msb/teamLogos/)
 └── favicon.png, logo*.png   # Branding assets
 
 user_data/
@@ -328,7 +328,7 @@ Their UI routes (`/ruleset`, `/thumbnail_settings`) have been removed from the n
 | Add frontend UI components | `src/components/`, `src/routes/` |
 | Add/modify OBS overlays | `public/layout/` |
 | Update character data | `user_data/games/msb/base_files/config.json` |
-| Add/modify team logos | `public/game_assets/rio_teamLogos/` |
+| Add/modify team logos | `public/game_assets/msb/teamLogos/` |
 | Tournament integrations | `server/startgg/`, `server/challonge/` |
 | Controller overlay | `server/controller_overlay.py`, `server/api/v1/controller.py` |
 

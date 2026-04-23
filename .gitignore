@@ -284,3 +284,6 @@ public/layout/fonts/*.woff2
 
 user_data/
 .DS_Store
+
+# MSB game assets (Nintendo IP — distributed separately, not committed)
+public/game_assets/msb/

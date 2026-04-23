@@ -50,12 +50,12 @@
   function charImg(name, cls, size) {
     if (!name) return '';
     const s = size ? `width:${size}px;height:${size}px;` : '';
-    return `<img class="${cls}" src="${BASE_URL}/game_assets/rio_characterIcons/${encodeURIComponent(name)}.png" style="${s}" onerror="this.style.display='none'" />`;
+    return `<img class="${cls}" src="${BASE_URL}/game_assets/msb/characterIcons/${encodeURIComponent(name)}.png" style="${s}" onerror="this.style.display='none'" />`;
   }
 
   function logoImg(teamName, cls) {
     if (!teamName) return '';
-    return `<img class="${cls}" src="${BASE_URL}/game_assets/rio_teamLogos/${encodeURIComponent(teamName)}.png" onerror="this.style.display='none'" />`;
+    return `<img class="${cls}" src="${BASE_URL}/game_assets/msb/teamLogos/${encodeURIComponent(teamName)}.png" onerror="this.style.display='none'" />`;
   }
 
   // ── State & settings stores ──

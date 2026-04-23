@@ -8,7 +8,7 @@ import {
     BASE_HALF,
 } from '../../data/stadiums';
 
-const charIconUrl = (name) => `/game_assets/rio_characterIcons/${encodeURIComponent(name)}.png`;
+const charIconUrl = (name) => `/game_assets/msb/characterIcons/${encodeURIComponent(name)}.png`;
 
 /* ------------------------------------------------------------------ */
 /*  SVG coordinate helpers                                            */

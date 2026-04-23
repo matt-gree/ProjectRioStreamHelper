@@ -21,12 +21,12 @@
   // ── URL helpers ──────────────────────────────────────────────────────────
   function charIconUrl(name) {
     if (!name) return '';
-    return `${OverlayBase.BASE_URL}/game_assets/rio_characterIcons/${encodeURIComponent(name)}.png`;
+    return `${OverlayBase.BASE_URL}/game_assets/msb/characterIcons/${encodeURIComponent(name)}.png`;
   }
 
   function roleIconUrl(role) {
     const file = role === 'batting' ? 'bat.png' : 'glove.png';
-    return `${OverlayBase.BASE_URL}/game_assets/rio_bat_glove/${file}`;
+    return `${OverlayBase.BASE_URL}/game_assets/msb/bat_glove/${file}`;
   }
 
   // ── Number formatting ────────────────────────────────────────────────────

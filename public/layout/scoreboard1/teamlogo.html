@@ -65,7 +65,7 @@
       const teamName = deepGet(state, STATE_KEY);
       if (teamName) {
         const img = document.createElement('img');
-        img.src = `${BASE_URL}/game_assets/rio_teamLogos/${encodeURIComponent(teamName)}.png`;
+        img.src = `${BASE_URL}/game_assets/msb/teamLogos/${encodeURIComponent(teamName)}.png`;
         img.className = 'team-logo';
         img.onerror = () => img.style.display = 'none';
         container.appendChild(img);
