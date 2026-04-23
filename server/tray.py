@@ -64,10 +64,9 @@ class Tray:
     @classmethod
     def on_open_logs(cls, _icon=None, _item=None):
         """Reveal the logs folder in Finder / Explorer."""
-        if getattr(sys, "frozen", False) and sys.platform == "darwin":
-            log_dir = Path.home() / "Library" / "Application Support" / "PRSH" / "logs"
-        else:
-            log_dir = Path(".").resolve() / "logs"
+        from server.paths import _frozen_writable_root
+        root = _frozen_writable_root() or Path(".").resolve()
+        log_dir = root / "logs"
         log_dir.mkdir(parents=True, exist_ok=True)
         try:
             if sys.platform == "darwin":

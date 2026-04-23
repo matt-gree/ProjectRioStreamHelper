@@ -52,6 +52,10 @@ Source: "..\dist\PRSH\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs 
 Name: "{group}\{#AppShortName}"; Filename: "{app}\{#AppExeName}"
 Name: "{group}\Uninstall {#AppShortName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#AppShortName}"; Filename: "{app}\{#AppExeName}"; Tasks: desktopicon
+; Friendly-named uninstaller shortcut placed next to the app, so users who
+; open the install folder can launch the uninstaller without hunting down
+; the default unins000.exe.
+Name: "{app}\Uninstall {#AppShortName}"; Filename: "{uninstallexe}"
 
 [Run]
 Filename: "{app}\{#AppExeName}"; Description: "Launch {#AppShortName}"; Flags: nowait postinstall skipifsilent

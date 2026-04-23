@@ -18,10 +18,11 @@ from loguru import logger
 def _settings_path() -> Path:
     """Resolve the settings.json path without pulling in the async Settings class."""
     # Matches server.paths.user_data_dir() for frozen + dev layouts.
-    if getattr(sys, "frozen", False) and sys.platform == "darwin":
-        app_support = Path(os.path.expanduser("~")) / "Library" / "Application Support" / "PRSH"
-        app_support.mkdir(parents=True, exist_ok=True)
-        return app_support / "user_data" / "settings.json"
+    from server.paths import _frozen_writable_root
+    root = _frozen_writable_root()
+    if root is not None:
+        root.mkdir(parents=True, exist_ok=True)
+        return root / "user_data" / "settings.json"
     return Path("./user_data/settings.json").resolve()
 
 

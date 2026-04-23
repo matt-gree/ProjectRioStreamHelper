@@ -1,7 +1,6 @@
 """Log viewer endpoints: list, tail, and reveal the logs directory.
 
-Logs live alongside user_data: on macOS frozen builds under
-~/Library/Application Support/PRSH/logs, otherwise ./logs relative to CWD.
+Logs live alongside user_data in the per-user writable root (see paths.py).
 """
 
 import os
@@ -13,6 +12,7 @@ from fastapi import APIRouter
 from fastapi.responses import ORJSONResponse
 from loguru import logger
 
+from server.paths import _frozen_writable_root
 from server.utils.router import method
 
 router = APIRouter()
@@ -20,10 +20,7 @@ router = APIRouter()
 
 def _logs_dir() -> Path:
     """Resolve the logs directory used by main.py."""
-    if getattr(sys, "frozen", False) and sys.platform == "darwin":
-        root = Path.home() / "Library" / "Application Support" / "PRSH"
-    else:
-        root = Path(".").resolve()
+    root = _frozen_writable_root() or Path(".").resolve()
     p = root / "logs"
     p.mkdir(parents=True, exist_ok=True)
     return p

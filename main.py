@@ -146,15 +146,20 @@ def _run_asyncio():
 def _writable_root() -> str:
     """Return a writable root directory for logs and user data.
 
-    On macOS frozen builds, the .app bundle may be on a read-only volume,
-    so we use ~/Library/Application Support/PRSH/ instead.
-    On Windows or dev mode, use the current working directory.
+    Frozen installs land in read-only locations (macOS .app bundles,
+    Windows Program Files under UAC), so redirect to per-user app data.
+    In dev mode everything stays relative to CWD.
     """
-    if getattr(sys, 'frozen', False) and sys.platform == 'darwin':
-        app_support = os.path.join(os.path.expanduser('~'), 'Library', 'Application Support', 'PRSH')
-        os.makedirs(app_support, exist_ok=True)
-        return app_support
-    return '.'
+    frozen = getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS')
+    if frozen and sys.platform == 'darwin':
+        root = os.path.join(os.path.expanduser('~'), 'Library', 'Application Support', 'PRSH')
+    elif frozen and sys.platform == 'win32':
+        base = os.environ.get('LOCALAPPDATA') or os.path.join(os.path.expanduser('~'), 'AppData', 'Local')
+        root = os.path.join(base, 'PRSH')
+    else:
+        return '.'
+    os.makedirs(root, exist_ok=True)
+    return root
 
 
 if __name__ == '__main__':

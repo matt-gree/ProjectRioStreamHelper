@@ -1,11 +1,14 @@
 """Writable path resolution for frozen builds.
 
-On macOS .app bundles, the bundle contents may be on a read-only volume.
-All writable paths (user_data, logs) are redirected to
-~/Library/Application Support/PRSH/ while read-only assets (dist/, public/)
-remain in the bundle.
+Frozen builds install into read-only locations (macOS .app bundles on
+read-only volumes, Windows Program Files under UAC), so all writable
+paths (user_data, logs) are redirected to per-user app data:
 
-On Windows frozen builds and dev mode, everything stays relative to CWD.
+    macOS:   ~/Library/Application Support/PRSH/
+    Windows: %LOCALAPPDATA%\\PRSH\\  (falls back to ~/AppData/Local/PRSH)
+
+Read-only assets (dist/, public/) remain in the bundle and are reached
+via sys._MEIPASS. In dev mode everything stays relative to CWD.
 """
 import os
 import sys
@@ -15,24 +18,28 @@ from pathlib import Path
 from loguru import logger
 
 
-def _is_frozen_mac() -> bool:
-    return (
-        getattr(sys, 'frozen', False)
-        and hasattr(sys, '_MEIPASS')
-        and sys.platform == 'darwin'
-    )
+def _is_frozen() -> bool:
+    return getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS')
+
+
+def _frozen_writable_root() -> Path | None:
+    """Per-user writable root for frozen builds, or None in dev mode."""
+    if not _is_frozen():
+        return None
+    if sys.platform == 'darwin':
+        return Path.home() / "Library" / "Application Support" / "PRSH"
+    if sys.platform == 'win32':
+        base = os.environ.get('LOCALAPPDATA') or str(Path.home() / "AppData" / "Local")
+        return Path(base) / "PRSH"
+    # Linux/other: fall back to XDG_DATA_HOME
+    xdg = os.environ.get('XDG_DATA_HOME') or str(Path.home() / ".local" / "share")
+    return Path(xdg) / "PRSH"
 
 
 def user_data_dir() -> Path:
-    """Return the writable user_data directory.
-
-    On macOS frozen: ~/Library/Application Support/PRSH/user_data
-    Otherwise: ./user_data (relative to CWD, which is sys._MEIPASS for frozen)
-    """
-    if _is_frozen_mac():
-        p = Path.home() / "Library" / "Application Support" / "PRSH" / "user_data"
-    else:
-        p = Path("./user_data")
+    """Return the writable user_data directory."""
+    root = _frozen_writable_root()
+    p = (root / "user_data") if root is not None else Path("./user_data")
     p.mkdir(parents=True, exist_ok=True)
     return p
 
@@ -40,9 +47,9 @@ def user_data_dir() -> Path:
 def ensure_game_data():
     """Copy bundled game config files to the writable user_data on first run.
 
-    Only relevant for macOS frozen builds where user_data is outside the bundle.
+    Only relevant for frozen builds where user_data is outside the bundle.
     """
-    if not _is_frozen_mac():
+    if not _is_frozen():
         return
 
     bundled = Path(sys._MEIPASS) / "user_data" / "games"
