@@ -122,6 +122,10 @@ class Tray:
 
                 ns_image = AppKit.NSImage.alloc().initWithContentsOfFile_(str(icns_file))
                 if ns_image:
+                    # Template image: macOS uses alpha only and tints to match
+                    # the menu bar (black on light bars, white on dark bars).
+                    ns_image.setTemplate_(True)
+
                     def _patched_assert(self_icon=cls.icon, native=ns_image):
                         thickness = self_icon._status_bar.thickness()
                         size = AppKit.NSMakeSize(thickness, thickness)
