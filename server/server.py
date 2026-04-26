@@ -9,6 +9,7 @@ from fastapi.templating import Jinja2Templates
 from loguru import logger
 
 from server.api import router_v1
+from server.api.v1.assets import get_msb_assets_path
 from server.paths import user_data_dir, ensure_game_data
 from server.rio.game_pool import OngoingGamePool, CompletedGamePool
 from server.rio.rotation import RotationManager
@@ -117,7 +118,24 @@ templates = Jinja2Templates(directory=_template_dir)
 if Path("./dist/assets").is_dir():
     app.mount("/assets", StaticFiles(directory="./dist/assets"), name="assets")
 
-# game assets (character icons, team logos) — served from public/game_assets/
+# MSB assets — user-supplied (Nintendo IP, not bundled). Served from a
+# user-configurable path (Settings → Project Rio → MSB Image Assets) with
+# a writable default under user_data/. Registered as a route handler
+# (not a static mount) so the path resolves per-request from settings,
+# and registered BEFORE the broader /game_assets mount so it wins.
+@app.get("/game_assets/msb/{file_path:path}")
+async def msb_asset(file_path: str):
+    base = await get_msb_assets_path()
+    requested = (base / file_path).resolve()
+    try:
+        requested.relative_to(base.resolve())  # path-traversal guard
+    except ValueError:
+        return HTMLResponse("Forbidden", status_code=403)
+    if not requested.is_file():
+        return HTMLResponse("Not Found", status_code=404)
+    return FileResponse(str(requested))
+
+# game assets (non-MSB) — served from public/game_assets/
 if Path("./public/game_assets").is_dir():
     app.mount("/game_assets", StaticFiles(directory="./public/game_assets"), name="game_assets")
 

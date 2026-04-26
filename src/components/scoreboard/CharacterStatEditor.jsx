@@ -4,9 +4,9 @@ import {
     Divider, Tooltip, SegmentedControl, UnstyledButton,
 } from '@mantine/core';
 import { useStateStore } from '../../context/store';
-const charIconUrl = (name) => `/game_assets/msb/characterIcons/${encodeURIComponent(name)}.png`;
+import { useAssetUrls } from '../../lib/assets';
 
-const renderCharOption = ({ option }) => (
+const makeRenderCharOption = (charIconUrl) => ({ option }) => (
     <Group gap="xs" wrap="nowrap">
         <img src={charIconUrl(option.value)} alt="" width={20} height={20} style={{ objectFit: 'contain' }} />
         <span>{option.label}</span>
@@ -34,9 +34,9 @@ import {
  *   onSetCaptain — callback to set this character as captain
  *   sourceType — 'manual' | 'hud' | 'api_game'
  */
-function StarIcon({ active }) {
+function StarIcon({ active, superstarUrl }) {
     if (active) {
-        return <img src="/game_assets/msb/superstar.png" alt="Superstar" width={14} height={14} style={{ objectFit: 'contain', display: 'block', filter: 'drop-shadow(0 0 3px rgba(245,159,0,0.8))' }} />;
+        return <img src={superstarUrl} alt="Superstar" width={14} height={14} style={{ objectFit: 'contain', display: 'block', filter: 'drop-shadow(0 0 3px rgba(245,159,0,0.8))' }} />;
     }
     return (
         <svg viewBox="0 0 20 20" width="12" height="12" xmlns="http://www.w3.org/2000/svg">
@@ -60,6 +60,11 @@ export default function CharacterStatEditor({
     const prefix = `score.${scoreboardNumber}.stats.${teamNumber}.character.${charIndex}`;
     const setItem = useStateStore(s => s.setItem);
     const [scope, setScope] = useState('web');
+
+    const urls = useAssetUrls();
+    const charIconUrl = urls.charIcon;
+    const superstarUrl = urls.gameIcon('superstar.png');
+    const renderCharOption = useMemo(() => makeRenderCharOption(charIconUrl), [charIconUrl]);
 
     // State path depends on which scope is active
     const statPath = scope === 'web' ? 'api' : 'current_game';
@@ -124,7 +129,7 @@ export default function CharacterStatEditor({
                                 transition: 'color 150ms',
                             }}
                         >
-                            <StarIcon active={isSuperstar} />
+                            <StarIcon active={isSuperstar} superstarUrl={superstarUrl} />
                         </UnstyledButton>
                     </Tooltip>
                 )}

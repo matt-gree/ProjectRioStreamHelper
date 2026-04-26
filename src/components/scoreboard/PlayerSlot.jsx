@@ -6,18 +6,16 @@ import {
 import { useDisclosure } from '@mantine/hooks';
 import { useShallow } from 'zustand/react/shallow';
 import { useStateStore } from '../../context/store';
+import { useAssetUrls } from '../../lib/assets';
 import { MSB_CHARACTERS, MSB_TEAMS, ROSTER_SIZE } from '../../data/msb';
 import CharacterStatEditor from './CharacterStatEditor';
 
 const characterOptions = MSB_CHARACTERS.map(c => ({ value: c, label: c }));
 const teamOptions = MSB_TEAMS.map(t => ({ value: t, label: t }));
 
-const charIconUrl = (name) => `/game_assets/msb/characterIcons/${encodeURIComponent(name)}.png`;
-const teamIconUrl = (name) => `/game_assets/msb/teamLogos/${encodeURIComponent(name)}.png`;
-
-function StarIcon({ active }) {
+function StarIcon({ active, superstarUrl }) {
     if (active) {
-        return <img src="/game_assets/msb/superstar.png" alt="Superstar" width={14} height={14} style={{ objectFit: 'contain', display: 'block', filter: 'drop-shadow(0 0 3px rgba(245,159,0,0.8))' }} />;
+        return <img src={superstarUrl} alt="Superstar" width={14} height={14} style={{ objectFit: 'contain', display: 'block', filter: 'drop-shadow(0 0 3px rgba(245,159,0,0.8))' }} />;
     }
     return (
         <svg viewBox="0 0 20 20" width="12" height="12" xmlns="http://www.w3.org/2000/svg">
@@ -32,14 +30,14 @@ function StarIcon({ active }) {
     );
 }
 
-const renderCharOption = ({ option }) => (
+const makeRenderCharOption = (charIconUrl) => ({ option }) => (
     <Group gap="xs" wrap="nowrap">
         <img src={charIconUrl(option.value)} alt="" width={20} height={20} style={{ objectFit: 'contain' }} />
         <span>{option.label}</span>
     </Group>
 );
 
-const renderTeamOption = ({ option }) => (
+const makeRenderTeamOption = (teamIconUrl) => ({ option }) => (
     <Group gap="xs" wrap="nowrap">
         <img src={teamIconUrl(option.value)} alt="" width={20} height={20} style={{ objectFit: 'contain' }} />
         <span>{option.label}</span>
@@ -58,6 +56,13 @@ export default memo(function PlayerSlot({ scoreboardNumber = 1, teamNumber, play
     const basePath = `score.${scoreboardNumber}.player.${teamNumber}`;
     const [detailsOpen, { toggle: toggleDetails }] = useDisclosure(false);
     const [activeCharDetail, setActiveCharDetail] = useState(null);
+
+    const urls = useAssetUrls();
+    const charIconUrl = urls.charIcon;
+    const teamIconUrl = urls.teamIcon;
+    const superstarUrl = urls.gameIcon('superstar.png');
+    const renderCharOption = useMemo(() => makeRenderCharOption(charIconUrl), [charIconUrl]);
+    const renderTeamOption = useMemo(() => makeRenderTeamOption(teamIconUrl), [teamIconUrl]);
 
     // Single shallow selector for the whole player object — Zustand's useShallow
     // does a shallow equality check so we only re-render when the player sub-tree
@@ -302,7 +307,7 @@ export default memo(function PlayerSlot({ scoreboardNumber = 1, teamNumber, play
                                                     transition: 'color 150ms',
                                                 }}
                                             >
-                                                <StarIcon active={isSuperstar} />
+                                                <StarIcon active={isSuperstar} superstarUrl={superstarUrl} />
                                             </UnstyledButton>
                                         </Tooltip>
                                         <Tooltip label="Set captain" position="top" withArrow>

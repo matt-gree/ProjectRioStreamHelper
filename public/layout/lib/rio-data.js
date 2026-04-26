@@ -26,7 +26,7 @@
 
   function roleIconUrl(role) {
     const file = role === 'batting' ? 'bat.png' : 'glove.png';
-    return `${OverlayBase.BASE_URL}/game_assets/msb/bat_glove/${file}`;
+    return `${OverlayBase.BASE_URL}/game_assets/msb/gameIcons/${file}`;
   }
 
   // ── Number formatting ────────────────────────────────────────────────────

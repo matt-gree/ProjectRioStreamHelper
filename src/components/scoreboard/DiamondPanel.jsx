@@ -1,6 +1,7 @@
 import { useCallback, useState, useMemo } from 'react';
 import { Paper, UnstyledButton, Popover, Tooltip } from '@mantine/core';
 import { useStateStore } from '../../context/store';
+import { useAssetUrls } from '../../lib/assets';
 import { ROSTER_SIZE } from '../../data/msb';
 import {
     FIELDER_POSITIONS,
@@ -8,7 +9,6 @@ import {
     BASE_HALF,
 } from '../../data/stadiums';
 
-const charIconUrl = (name) => `/game_assets/msb/characterIcons/${encodeURIComponent(name)}.png`;
 
 /* ------------------------------------------------------------------ */
 /*  SVG coordinate helpers                                            */
@@ -114,6 +114,7 @@ const CIRCLE_R_SMALL = 2.8;
 function PositionCircle({ cx, cy, r, label, charName, rosterOptions, onSelect, onClear, strokeColor, fillColor, labelAbove }) {
     const [opened, setOpened] = useState(false);
     const occupied = !!charName;
+    const { charIcon: charIconUrl } = useAssetUrls();
 
     return (
         <Popover opened={opened} onChange={setOpened} position="right" withArrow width={180} trapFocus>

@@ -6,6 +6,7 @@ import {
 import { notifications } from '@mantine/notifications';
 import LogsViewer from './LogsViewer';
 import { useSettingsStore } from '../context/store';
+import { useAssetsVersionStore } from '../lib/assets';
 import { SupportLinks } from './SupportLinks';
 
 
@@ -25,6 +26,19 @@ export default function SettingsModal({ opened, onClose }) {
     const [browsingInProgress, setBrowsingInProgress] = useState(false);
     const [savingPath, setSavingPath] = useState(false);
     const [hudPathError, setHudPathError] = useState('');
+
+    // MSB assets path state (mirrors HUD path UX)
+    const [assetsPath, setAssetsPath] = useState('');
+    const [assetsResolved, setAssetsResolved] = useState('');
+    const [assetsDefault, setAssetsDefault] = useState('');
+    const [assetsCategories, setAssetsCategories] = useState({});
+    const [assetsTotalExpected, setAssetsTotalExpected] = useState(0);
+    const [assetsTotalFound, setAssetsTotalFound] = useState(0);
+    const [assetsComplete, setAssetsComplete] = useState(false);
+    const [assetsBrowsing, setAssetsBrowsing] = useState(false);
+    const [assetsSaving, setAssetsSaving] = useState(false);
+    const [assetsRevealing, setAssetsRevealing] = useState(false);
+    const [assetsError, setAssetsError] = useState('');
 
     // Pinned player state
     const [pinnedPlayer, setPinnedPlayer] = useState('');
@@ -47,6 +61,8 @@ export default function SettingsModal({ opened, onClose }) {
     // Logs viewer
     const [logsOpen, setLogsOpen] = useState(false);
 
+    const bumpAssetsVersion = useAssetsVersionStore(s => s.bump);
+
     // Appearance — color scheme stored as a regular setting for portability.
     const colorScheme = useSettingsStore(state => state?.ui?.color_scheme) || 'auto';
     const setSetting = useSettingsStore(state => state.setItem);
@@ -61,6 +77,20 @@ export default function SettingsModal({ opened, onClose }) {
             setHudPath(data.configured || '');
             setResolvedPath(data.resolved || null);
             setDefaultPath(data.default || '');
+        } catch { /* ignore */ }
+    }, []);
+
+    const fetchAssetsPath = useCallback(async () => {
+        try {
+            const resp = await fetch('/api/v1/assets/msb');
+            const data = await resp.json();
+            setAssetsPath(data.configured || '');
+            setAssetsResolved(data.resolved || '');
+            setAssetsDefault(data.default || '');
+            setAssetsCategories(data.categories || {});
+            setAssetsTotalExpected(data.total_expected || 0);
+            setAssetsTotalFound(data.total_found || 0);
+            setAssetsComplete(!!data.complete);
         } catch { /* ignore */ }
     }, []);
 
@@ -219,6 +249,7 @@ export default function SettingsModal({ opened, onClose }) {
     useEffect(() => {
         if (opened) {
             fetchHudPath();
+            fetchAssetsPath();
             fetchPinnedPlayer();
             fetchChallongeStatus();
             fetchControllerStatus();
@@ -226,7 +257,7 @@ export default function SettingsModal({ opened, onClose }) {
             fetchAnnouncements();
             setChallongeKey('');
         }
-    }, [opened, fetchHudPath, fetchPinnedPlayer, fetchChallongeStatus, fetchControllerStatus, fetchStreamLabels, fetchAnnouncements]);
+    }, [opened, fetchHudPath, fetchAssetsPath, fetchPinnedPlayer, fetchChallongeStatus, fetchControllerStatus, fetchStreamLabels, fetchAnnouncements]);
 
     const handleSetHudPath = useCallback(async (path) => {
         setSavingPath(true);
@@ -274,9 +305,70 @@ export default function SettingsModal({ opened, onClose }) {
         setBrowsingInProgress(false);
     }, [handleSetHudPath]);
 
+    const handleSetAssetsPath = useCallback(async (path) => {
+        setAssetsSaving(true);
+        setAssetsError('');
+        try {
+            const resp = await fetch(`/api/v1/assets/msb?path=${encodeURIComponent(path)}`, { method: 'PUT' });
+            const data = await resp.json();
+            if (data.success) {
+                setAssetsPath(path);
+                setAssetsResolved(data.resolved || '');
+                setAssetsCategories(data.categories || {});
+                setAssetsTotalExpected(data.total_expected || 0);
+                setAssetsTotalFound(data.total_found || 0);
+                setAssetsComplete(!!data.complete);
+                bumpAssetsVersion();
+                notifications.show({ message: path ? 'MSB assets path updated' : 'MSB assets path reset to default', color: 'green' });
+            } else {
+                setAssetsError(data.error || 'Failed to set path');
+                notifications.show({ message: data.error || 'Failed to set MSB assets path', color: 'red' });
+            }
+        } catch (e) {
+            setAssetsError(String(e));
+            notifications.show({ message: 'Failed to set MSB assets path', color: 'red' });
+        }
+        setAssetsSaving(false);
+    }, []);
+
+    const handleClearAssetsPath = useCallback(async () => {
+        await handleSetAssetsPath('');
+    }, [handleSetAssetsPath]);
+
+    const handleBrowseAssets = useCallback(async () => {
+        setAssetsBrowsing(true);
+        setAssetsError('');
+        try {
+            const resp = await fetch('/api/v1/assets/msb/browse', { method: 'POST' });
+            const data = await resp.json();
+            if (data.success && data.path) {
+                await handleSetAssetsPath(data.path);
+            } else if (data.error) {
+                setAssetsError(data.error);
+            }
+        } catch (e) {
+            setAssetsError(String(e));
+        }
+        setAssetsBrowsing(false);
+    }, [handleSetAssetsPath]);
+
+    const handleRevealAssets = useCallback(async () => {
+        setAssetsRevealing(true);
+        try {
+            await fetch('/api/v1/assets/msb/reveal', { method: 'POST' });
+            // Re-check after a moment in case the user dropped files in, then
+            // bump the asset version so any cached <img> URLs refetch.
+            setTimeout(async () => {
+                await fetchAssetsPath();
+                bumpAssetsVersion();
+            }, 1500);
+        } catch { /* ignore */ }
+        setAssetsRevealing(false);
+    }, [fetchAssetsPath, bumpAssetsVersion]);
+
     return (
         <>
-        <Modal opened={opened} onClose={onClose} title="Settings" size="lg">
+        <Modal opened={opened} onClose={() => { bumpAssetsVersion(); onClose(); }} title="Settings" size="lg">
             <Stack gap="sm">
                 <Divider label="Appearance" labelPosition="center" />
 
@@ -363,6 +455,102 @@ export default function SettingsModal({ opened, onClose }) {
 
                 {hudPathError && (
                     <Text size="xs" c="red">{hudPathError}</Text>
+                )}
+
+                {/* MSB Image Assets */}
+                <Text size="sm" fw={500} mt="xs">MSB Image Assets</Text>
+                <Text size="xs" c="dimmed">
+                    Folder containing character icons, team logos, and other MSB images. Required — overlays and the UI will show broken images without it. The default location lives under user data so it survives app updates.
+                </Text>
+
+                {assetsPath ? (
+                    <Group gap="xs" wrap="nowrap">
+                        <TextInput
+                            size="xs"
+                            value={assetsPath}
+                            readOnly
+                            style={{ flex: 1 }}
+                        />
+                        <Tooltip label="Clear (use default)">
+                            <ActionIcon size="sm" variant="subtle" color="red" onClick={handleClearAssetsPath} loading={assetsSaving}>
+                                {'×'}
+                            </ActionIcon>
+                        </Tooltip>
+                    </Group>
+                ) : (
+                    <TextInput
+                        size="xs"
+                        value=""
+                        placeholder={assetsDefault}
+                        readOnly
+                    />
+                )}
+
+                <Group gap="xs" align="center">
+                    <Badge
+                        size="sm"
+                        color={assetsComplete ? 'green' : (assetsTotalFound > 0 ? 'yellow' : 'red')}
+                        variant="filled"
+                    >
+                        {assetsComplete
+                            ? 'Complete'
+                            : assetsTotalFound > 0
+                                ? `Incomplete (${assetsTotalFound}/${assetsTotalExpected})`
+                                : 'No images found'}
+                    </Badge>
+                    {assetsTotalFound > 0 && !assetsPath && (
+                        <Text size="xs" c="dimmed">(using default)</Text>
+                    )}
+                </Group>
+
+                {Object.keys(assetsCategories).length > 0 && (
+                    <Stack gap={4} pl="xs">
+                        {Object.entries(assetsCategories).map(([name, info]) => {
+                            const ok = info.missing_count === 0;
+                            return (
+                                <Group key={name} gap="xs" align="center" wrap="nowrap">
+                                    <Text size="xs" c={ok ? 'teal' : 'red'} style={{ minWidth: 18, fontWeight: 700 }}>
+                                        {ok ? '✓' : '✗'}
+                                    </Text>
+                                    <Text size="xs" style={{ minWidth: 110 }}>{name}/</Text>
+                                    <Text size="xs" c="dimmed">
+                                        {info.found}/{info.expected}
+                                    </Text>
+                                    {!ok && info.missing_sample.length > 0 && (
+                                        <Text size="xs" c="dimmed" style={{ flex: 1 }} truncate>
+                                            missing: {info.missing_sample.join(', ')}
+                                            {info.missing_count > info.missing_sample.length
+                                                ? ` (+${info.missing_count - info.missing_sample.length} more)`
+                                                : ''}
+                                        </Text>
+                                    )}
+                                </Group>
+                            );
+                        })}
+                    </Stack>
+                )}
+
+                <Group gap="xs">
+                    <Button
+                        size="xs"
+                        variant="filled"
+                        onClick={handleRevealAssets}
+                        loading={assetsRevealing}
+                    >
+                        Open Folder
+                    </Button>
+                    <Button
+                        size="xs"
+                        variant="outline"
+                        onClick={handleBrowseAssets}
+                        loading={assetsBrowsing}
+                    >
+                        Browse...
+                    </Button>
+                </Group>
+
+                {assetsError && (
+                    <Text size="xs" c="red">{assetsError}</Text>
                 )}
 
                 {/* Pinned Player */}

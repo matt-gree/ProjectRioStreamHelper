@@ -34,6 +34,33 @@ npm run dev:win        # Windows
 
 ---
 
+## Required: MSB Image Assets
+
+PRSH does **not** ship Mario Superstar Baseball images (Nintendo IP). Without them, the UI and overlays will render with broken images. You need to supply the asset folder yourself before the app is usable.
+
+**Where to put it.** PRSH looks for assets in a writable folder under your user data directory:
+
+- **macOS** — `~/Library/Application Support/PRSH/user_data/game_assets/msb/`
+- **Windows** — `%LOCALAPPDATA%\PRSH\user_data\game_assets\msb\`
+- **Run from source** — `./user_data/game_assets/msb/`
+
+The folder is created automatically on first launch. Drop your asset pack inside so the layout looks like:
+
+```
+.../user_data/game_assets/msb/
+├── characterIcons/    *.png — one per character (54)
+├── teamLogos/         *.png — one per in-game team name (48)
+└── gameIcons/         bat.png, glove.png, superstar.png
+```
+
+**Settings → Project Rio → MSB Image Assets** validates the folder against the canonical filename lists from [pyrio](https://github.com/matt-gree/pyrio) and shows exactly what's missing per category.
+
+The fastest way to find the folder is **Settings → Project Rio → MSB Image Assets → Open Folder**, which reveals it in Finder/Explorer. The Welcome screen also shows whether assets were found on first launch.
+
+**Custom location.** If you keep a shared asset pack for use across multiple tools, point PRSH at it via **Settings → Project Rio → MSB Image Assets → Browse...** and select your folder. The override persists in `settings.json`.
+
+---
+
 ## How It Works
 
 The web UI shows one or more **scoreboards**. Each scoreboard is an independent set of state keys (teams, players, score, inning, runners, etc.) that can be populated from one of four input methods. The same state drives both the in-app UI and the OBS browser-source overlays in `public/layout/`.
@@ -161,7 +188,7 @@ Each layout HTML file accepts a `?scoreboard=N` query parameter to bind to a spe
 - **`user_data/state.json`** — persisted scoreboard state. If the app fails to start due to corrupt state: `echo '{}' > user_data/state.json`.
 - **`user_data/branding/`** — drop tournament logos here; served at `/branding/`.
 - **`user_data/stream_labels/`** — text-file mirror of state (off by default).
-- **`public/game_assets/msb/`** — character icons and team logos. Add a new team logo by dropping an image into `teamLogos/` named after the MSB team.
+- **`user_data/game_assets/msb/`** — user-supplied MSB image pack (character icons, team logos, bat/glove sprites). See [Required: MSB Image Assets](#required-msb-image-assets) above. Add a new team logo by dropping an image into `teamLogos/` named after the MSB team.
 
 ---
 

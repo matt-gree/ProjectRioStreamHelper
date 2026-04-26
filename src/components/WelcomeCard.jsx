@@ -49,6 +49,7 @@ export default function WelcomeCard() {
 
     const [opened, setOpened] = useState(false);
     const [hudResolved, setHudResolved] = useState(null);
+    const [assetsState, setAssetsState] = useState(null); // null | { complete, total_found, total_expected }
 
     const challongeConfigured = !!(challongeKey && String(challongeKey).trim());
 
@@ -59,15 +60,26 @@ export default function WelcomeCard() {
         }
     }, [settingsLoaded, dismissed]);
 
-    // Check HUD state once the modal is opened.
+    // Check HUD + MSB assets state once the modal is opened.
     useEffect(() => {
         if (!opened) return;
         let alive = true;
         (async () => {
             try {
-                const r = await fetch('/api/v1/rio/hud-path');
-                const d = await r.json();
-                if (alive) setHudResolved(!!d.resolved);
+                const [hudR, assetsR] = await Promise.all([
+                    fetch('/api/v1/rio/hud-path'),
+                    fetch('/api/v1/assets/msb'),
+                ]);
+                const hudD = await hudR.json();
+                const assetsD = await assetsR.json();
+                if (alive) {
+                    setHudResolved(!!hudD.resolved);
+                    setAssetsState({
+                        complete: !!assetsD.complete,
+                        total_found: assetsD.total_found || 0,
+                        total_expected: assetsD.total_expected || 0,
+                    });
+                }
             } catch { /* ignore */ }
         })();
         return () => { alive = false; };
@@ -362,6 +374,15 @@ export default function WelcomeCard() {
                     </Text>
 
                     <Stack gap="xs" style={{ color: 'white' }}>
+                        <ChecklistRow done={assetsState?.complete === true} title="MSB image assets (required)">
+                            {assetsState === null
+                                ? 'Checking…'
+                                : assetsState.complete
+                                    ? `Complete (${assetsState.total_found} images) — overlays will render correctly.`
+                                    : assetsState.total_found > 0
+                                        ? `Incomplete (${assetsState.total_found}/${assetsState.total_expected}). Open Settings → Project Rio → MSB Image Assets to see what's missing.`
+                                        : 'Not found. Open Settings → Project Rio → MSB Image Assets and click "Open Folder" to drop your image pack in.'}
+                        </ChecklistRow>
                         <ChecklistRow done={hudResolved === true} title="Project Rio HUD file">
                             {hudResolved
                                 ? 'Found — game data will sync automatically.'

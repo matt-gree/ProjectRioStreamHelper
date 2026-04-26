@@ -44,6 +44,18 @@ def user_data_dir() -> Path:
     return p
 
 
+def default_msb_assets_dir() -> Path:
+    """Default location for user-supplied MSB image assets.
+
+    Lives under user_data/ so it survives app updates and is writable in
+    both dev and frozen builds. Created on access so the "Open Folder"
+    button in Settings always reveals a real directory.
+    """
+    p = user_data_dir() / "game_assets" / "msb"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
 def ensure_game_data():
     """Copy bundled game config files to the writable user_data on first run.
 
