@@ -128,7 +128,11 @@ class Tray:
 
                     def _patched_assert(self_icon=cls.icon, native=ns_image):
                         thickness = self_icon._status_bar.thickness()
-                        size = AppKit.NSMakeSize(thickness, thickness)
+                        # Leave a few points of padding so the icon visually
+                        # matches the size of other menu-bar items.
+                        padding = 4
+                        side = max(1, thickness - padding * 2)
+                        size = AppKit.NSMakeSize(side, side)
                         native.setSize_(size)
                         self_icon._icon_image = native
                         self_icon._status_item.button().setImage_(native)
