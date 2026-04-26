@@ -336,7 +336,7 @@ Their UI routes (`/ruleset`, `/thumbnail_settings`) have been removed from the n
 
 ## Performance Guidelines
 
-This application runs alongside games — **performance is a hard requirement, not a nice-to-have.** See `docs/performance/` for the full analysis.
+This application runs alongside games — **performance is a hard requirement, not a nice-to-have.**
 
 ### Backend: State Updates
 
