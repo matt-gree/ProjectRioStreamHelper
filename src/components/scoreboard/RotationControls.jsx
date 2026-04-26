@@ -337,6 +337,25 @@ export default memo(function RotationControls({ scoreboardNumber }) {
     useEffect(() => { autoPollingRef.current = autoPolling; }, [autoPolling]);
     const [autoPollInterval, setAutoPollInterval] = useState(60);
 
+    // Live (ongoing) auto-poll — mirrors the global ongoing_games.* setting,
+    // which is also toggled by the Live API Game source panel.
+    const liveAutoPollSetting = useSettingsStore(s => s?.ongoing_games?.auto_poll ?? false);
+    const liveAutoPollIntervalSetting = useSettingsStore(s => s?.ongoing_games?.poll_interval ?? 10);
+    const [liveAutoPolling, setLiveAutoPolling] = useState(liveAutoPollSetting);
+    const [liveAutoPollInterval, setLiveAutoPollInterval] = useState(liveAutoPollIntervalSetting);
+    useEffect(() => { setLiveAutoPolling(liveAutoPollSetting); }, [liveAutoPollSetting]);
+    useEffect(() => { setLiveAutoPollInterval(liveAutoPollIntervalSetting); }, [liveAutoPollIntervalSetting]);
+
+    const handleSetLiveAutoPoll = useCallback(async (enabled, interval) => {
+        const effective = interval ?? liveAutoPollInterval;
+        setLiveAutoPolling(enabled);
+        if (interval != null) setLiveAutoPollInterval(effective);
+        await fetch(
+            `/api/v1/game-pool/ongoing/auto-poll?enabled=${enabled}&interval=${effective}`,
+            { method: 'POST' },
+        ).catch(() => {});
+    }, [liveAutoPollInterval]);
+
     const tagOptions = useMemo(() => {
         const trimmed = draftTagSearch.trim();
         if (trimmed && !gameModeOptions.some(o => o.value === trimmed)) {
@@ -910,16 +929,36 @@ export default memo(function RotationControls({ scoreboardNumber }) {
                     {/* ── Live games tab ── */}
                     <Tabs.Panel value="ongoing">
                         <Stack gap="sm">
-                            {loadingOngoing ? (
-                                <Button size="xs" color="red" variant="light" onClick={handleCancelOngoing}
-                                    w="fit-content" leftSection={<Loader size={10} color="red" />}>
-                                    Cancel
-                                </Button>
-                            ) : (
-                                <Button size="xs" variant="light" onClick={fetchOngoing} w="fit-content">
-                                    Refresh Live Games
-                                </Button>
-                            )}
+                            <Group gap="sm" align="center">
+                                {loadingOngoing ? (
+                                    <Button size="xs" color="red" variant="light" onClick={handleCancelOngoing}
+                                        w="fit-content" leftSection={<Loader size={10} color="red" />}>
+                                        Cancel
+                                    </Button>
+                                ) : (
+                                    <Button size="xs" variant="light" onClick={fetchOngoing} w="fit-content">
+                                        Refresh Live Games
+                                    </Button>
+                                )}
+                                <Switch
+                                    size="xs"
+                                    label="Auto-poll"
+                                    checked={liveAutoPolling}
+                                    onChange={(e) => handleSetLiveAutoPoll(e.currentTarget.checked)}
+                                />
+                                {liveAutoPolling && (
+                                    <NumberInput
+                                        size="xs"
+                                        w={72}
+                                        min={5}
+                                        max={300}
+                                        step={5}
+                                        value={liveAutoPollInterval}
+                                        onChange={(val) => handleSetLiveAutoPoll(true, Number(val) || 10)}
+                                        suffix="s"
+                                    />
+                                )}
+                            </Group>
                             {ongoingGames.length === 0 ? (
                                 <Text size="xs" c="dimmed">No live games found. Click refresh to check.</Text>
                             ) : (
