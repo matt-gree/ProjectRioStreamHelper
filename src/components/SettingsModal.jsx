@@ -259,6 +259,16 @@ export default function SettingsModal({ opened, onClose }) {
         }
     }, [opened, fetchHudPath, fetchAssetsPath, fetchPinnedPlayer, fetchChallongeStatus, fetchControllerStatus, fetchStreamLabels, fetchAnnouncements]);
 
+    // Re-check the assets folder when the window regains focus — covers the
+    // case where the user dragged files into the folder in another app and
+    // tabbed back. Cheap: only fires on actual focus events.
+    useEffect(() => {
+        if (!opened) return;
+        const onFocus = () => { fetchAssetsPath(); bumpAssetsVersion(); };
+        window.addEventListener('focus', onFocus);
+        return () => window.removeEventListener('focus', onFocus);
+    }, [opened, fetchAssetsPath, bumpAssetsVersion]);
+
     const handleSetHudPath = useCallback(async (path) => {
         setSavingPath(true);
         setHudPathError('');

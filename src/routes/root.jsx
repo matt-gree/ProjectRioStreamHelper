@@ -15,7 +15,6 @@ const allTabs = [
   { name: "Competition Info", path: "/tournament_info" },
   { name: "Bracket", path: "/bracket" },
   { name: "Commentary", path: "/commentary" },
-  { name: "Player List", path: "/player_list" },
   { name: "Layouts", path: "/layouts" },
 ];
 
