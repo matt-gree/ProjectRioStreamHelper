@@ -1,7 +1,10 @@
 import {
-    Paper, Stack, Group, Text, Grid, Badge,
+    Paper, Stack, Group, Text, Grid, Badge, useMantineColorScheme,
 } from '@mantine/core';
 import { useStateStore } from '../../context/store';
+import { STADIUM_OPTIONS } from '../../data/stadiums';
+
+const STADIUM_LABELS = Object.fromEntries(STADIUM_OPTIONS.map(o => [o.value, o.label]));
 
 export default function CompletedGameInfo({ scoreboardNumber = 1 }) {
     const gameCompleted     = useStateStore(s => s?.score?.[scoreboardNumber]?.game_completed ?? false);
@@ -18,14 +21,27 @@ export default function CompletedGameInfo({ scoreboardNumber = 1 }) {
     const winnerUser        = useStateStore(s => s?.score?.[scoreboardNumber]?.winner_user ?? '');
     const loserUser         = useStateStore(s => s?.score?.[scoreboardNumber]?.loser_user ?? '');
 
+    const { colorScheme } = useMantineColorScheme();
     if (!gameCompleted) return null;
 
+    const bg = colorScheme === 'dark'
+        ? 'var(--mantine-color-violet-9)'
+        : 'var(--mantine-color-violet-0)';
+
     return (
-        <Paper p="xs" withBorder style={{ backgroundColor: 'var(--mantine-color-violet-0)' }}>
+        <Paper p="xs" withBorder style={{ backgroundColor: bg }}>
             <Stack gap={4}>
                 <Group justify="space-between">
                     <Text size="xs" fw={600} c="violet">Completed Game</Text>
-                    {gameId && <Badge size="xs" variant="light" color="violet">#{gameId}</Badge>}
+                    {gameId && (
+                        <Badge
+                            size="xs"
+                            variant={colorScheme === 'dark' ? 'white' : 'light'}
+                            color="violet"
+                        >
+                            #{gameId}
+                        </Badge>
+                    )}
                 </Group>
                 {(winnerUser || loserUser) && (
                     <Group gap="xs">
@@ -38,7 +54,7 @@ export default function CompletedGameInfo({ scoreboardNumber = 1 }) {
                     {stadium && (
                         <Grid.Col span={6}>
                             <Text size="xs" c="dimmed">Stadium</Text>
-                            <Text size="xs">{stadium}</Text>
+                            <Text size="xs">{STADIUM_LABELS[stadium] || stadium}</Text>
                         </Grid.Col>
                     )}
                     {gameMode && (
