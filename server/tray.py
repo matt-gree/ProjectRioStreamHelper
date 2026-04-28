@@ -130,7 +130,7 @@ class Tray:
                         thickness = self_icon._status_bar.thickness()
                         # Leave a few points of padding so the icon visually
                         # matches the size of other menu-bar items.
-                        padding = 4
+                        padding = 2
                         side = max(1, thickness - padding * 2)
                         size = AppKit.NSMakeSize(side, side)
                         native.setSize_(size)

@@ -17,9 +17,6 @@ on:
         required: false
         default: 'dev'
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 permissions:
   contents: write   # needed to create releases
 
@@ -61,15 +58,12 @@ jobs:
           - os: macos-latest
             arch: arm64
             artifact: PRSH-macOS-arm64
-            zip_contents: dist/PRSH.app
           - os: macos-latest
             arch: x86_64
             artifact: PRSH-macOS-x86_64
-            zip_contents: dist/PRSH.app
           - os: windows-latest
             arch: native
             artifact: PRSH-Windows
-            zip_contents: dist/PRSH
 
     runs-on: ${{ matrix.os }}
 
@@ -91,6 +85,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: 'pip'
 
       # ── Python setup (x86_64 via Rosetta) ──
       - name: Install x86_64 Python via Rosetta
@@ -112,57 +107,15 @@ jobs:
         if: matrix.arch != 'x86_64'
         shell: bash
         run: |
-          pip install --upgrade pip
-          pip install \
-            "fastapi>=0.111.0" \
-            "httpx[http2]>=0.28.1" \
-            "watchfiles>=0.21" \
-            "python-dateutil>=2.9.0" \
-            "loguru>=0.7.2" \
-            "orjson>=3.10.3" \
-            "websockets>=12.0" \
-            "python-socketio>=5.11.2" \
-            "uvicorn>=0.30.1" \
-            "pillow>=10.3.0" \
-            "cryptography>=44.0.1" \
-            "aiopath>=0.7.7" \
-            "aiomisc>=17.6.3" \
-            "pandas>=2.2.0" \
-            "requests>=2.31.0" \
-            "numpy" \
-            "jinja2" \
-            "python-multipart" \
-            "pystray" \
-            "git+https://github.com/matt-gree/pyrio.git" \
-            pyinstaller
+          python -m pip install --upgrade pip
+          pip install . pyinstaller
 
       - name: Install Python dependencies (x86_64)
         if: matrix.arch == 'x86_64'
         shell: bash
         run: |
-          arch -x86_64 pip install --upgrade pip
-          arch -x86_64 pip install \
-            "fastapi>=0.111.0" \
-            "httpx[http2]>=0.28.1" \
-            "watchfiles>=0.21" \
-            "python-dateutil>=2.9.0" \
-            "loguru>=0.7.2" \
-            "orjson>=3.10.3" \
-            "websockets>=12.0" \
-            "python-socketio>=5.11.2" \
-            "uvicorn>=0.30.1" \
-            "pillow>=10.3.0" \
-            "cryptography>=44.0.1" \
-            "aiopath>=0.7.7" \
-            "aiomisc>=17.6.3" \
-            "pandas>=2.2.0" \
-            "requests>=2.31.0" \
-            "numpy" \
-            "jinja2" \
-            "python-multipart" \
-            "pystray" \
-            "git+https://github.com/matt-gree/pyrio.git" \
-            pyinstaller
+          arch -x86_64 python -m pip install --upgrade pip
+          arch -x86_64 pip install . pyinstaller
 
       - name: Install macOS tray backend
         if: runner.os == 'macOS' && matrix.arch != 'x86_64'
@@ -199,7 +152,9 @@ jobs:
           $version = $match.Matches[0].Groups[1].Value
           Write-Host "Building installer for version $version"
           New-Item -ItemType Directory -Force -Path installer\out | Out-Null
-          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" `
+          $iscc = Get-ChildItem -Path "${env:ProgramFiles(x86)}\Inno Setup *\ISCC.exe","${env:ProgramFiles}\Inno Setup *\ISCC.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $iscc) { throw "Inno Setup compiler (ISCC.exe) not found" }
+          & $iscc.FullName `
             /DAppVersion=$version `
             /O"installer\out" `
             installer\PRSH.iss
