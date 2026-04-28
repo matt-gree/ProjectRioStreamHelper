@@ -69,7 +69,14 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, sourc
     const balls       = useStateStore(s => num(s?.score?.[scoreboardNumber]?.balls, 0));
 
     // Match info
-    const bestOf   = useStateStore(s => num(s?.score?.[scoreboardNumber]?.best_of, 3));
+    const bestOf   = useStateStore(s => {
+        const raw = s?.score?.[scoreboardNumber]?.best_of;
+        if (typeof raw === 'string') {
+            const m = raw.match(/\d+/);
+            return m ? Number(m[0]) : 3;
+        }
+        return num(raw, 3);
+    });
     const phase    = useStateStore(s => s?.score?.[scoreboardNumber]?.phase ?? '');
     const match    = useStateStore(s => s?.score?.[scoreboardNumber]?.match ?? '');
     const stadium  = useStateStore(s => s?.score?.[scoreboardNumber]?.stadium ?? '');
@@ -431,7 +438,7 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, sourc
                         <NumberInput
                             label="Best Of"
                             value={bestOf}
-                            onChange={val => setNum('best_of', val, 3)}
+                            onChange={val => set('best_of', `Best Of ${val === '' ? 3 : Number(val)}`)}
                             min={1} max={99} step={2}
                             size="xs"
                         />
