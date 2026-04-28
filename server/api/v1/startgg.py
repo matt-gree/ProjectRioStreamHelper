@@ -23,6 +23,17 @@ async def startgg_load_event(url: str = "", session_id: str | None = None) -> OR
 
 
 @method(
+    router.post, "/startgg/clear",
+    version="1", id="startgg.clear",
+    response_class=ORJSONResponse
+)
+async def startgg_clear(session_id: str | None = None) -> ORJSONResponse:
+    """Clear cached tournament data and the persisted bracket link."""
+    await StartGGProvider.Clear()
+    return ORJSONResponse({"success": True})
+
+
+@method(
     router.get, "/startgg/phases",
     version="1", id="startgg.phases",
     response_class=ORJSONResponse

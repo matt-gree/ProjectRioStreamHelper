@@ -59,13 +59,25 @@ export default function useTournament() {
 
     const base = () => BASES[sourceRef.current] || BASES.startgg;
 
-    const loadEvent = useCallback((url) => {
+    const loadEvent = useCallback(async (url) => {
         const detected = detectSource(url);
         if (detected) sourceRef.current = detected;
-        return wrap(() =>
-            api(base(), `/load-event?url=${encodeURIComponent(url)}`, { method: 'POST' })
-        );
-    }, [wrap]);
+        setLoading(true);
+        setError(null);
+        try {
+            const data = await api(base(), `/load-event?url=${encodeURIComponent(url)}`, { method: 'POST' });
+            if (data?.error) {
+                setError(data.error);
+                return { error: data.error };
+            }
+            return data;
+        } catch (e) {
+            setError(e.message);
+            return { error: e.message };
+        } finally {
+            setLoading(false);
+        }
+    }, []);
 
     /** Restore source from a previously loaded bracket_link without re-fetching. */
     const setSource = useCallback((url) => {
@@ -101,6 +113,16 @@ export default function useTournament() {
         api(base(), `/load-bracket?phase_group_id=${phaseGroupId}`, { method: 'POST' })
     ), [wrap]);
 
+    const clearEvent = useCallback(async () => {
+        // Clear both providers — the user might be switching sources or just
+        // wiping state, and we don't always know which one is active.
+        await Promise.allSettled([
+            fetch(`${BASES.startgg}/clear`, { method: 'POST' }),
+            fetch(`${BASES.challonge}/clear`, { method: 'POST' }),
+        ]);
+        sourceRef.current = null;
+    }, []);
+
     return {
         loading,
         error,
@@ -113,5 +135,6 @@ export default function useTournament() {
         loadSet,
         fetchEntrants,
         loadBracket,
+        clearEvent,
     };
 }

@@ -1,11 +1,23 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     Text, Paper, Stack, Group, TextInput, Button, Select, Table,
-    Alert, Badge, Checkbox, Pagination, Tooltip, Skeleton,
+    Alert, Badge, Checkbox, Tooltip, Loader, Center,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useStateStore, useSettingsStore, useBracketStore } from '../../context/store';
 import useTournament, { detectSource } from '../../hooks/useTournament';
+
+function formatRelative(ms) {
+    if (!ms) return '';
+    const diff = Math.max(0, Date.now() - ms);
+    const s = Math.floor(diff / 1000);
+    if (s < 5) return 'just now';
+    if (s < 60) return `${s}s ago`;
+    const m = Math.floor(s / 60);
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    return `${h}h ago`;
+}
 
 const STATE_COLORS = {
     active: 'green',
@@ -20,47 +32,53 @@ export default function Bracket() {
 
     const {
         loading, error,
-        setSource, loadEvent, fetchPhases, fetchSets, loadSet,
+        setSource, loadEvent, fetchPhases, fetchSets, loadSet, clearEvent,
     } = useTournament();
 
     // Pull all UI state from the persistent bracket store
     const bs = useBracketStore();
     const {
         tournament, phases, selectedPhase, selectedPool,
-        sets, setsPage, setsTotalPages, includeFinished, loadedSets,
+        includeFinished, loadedSets,
         update,
     } = bs;
 
     // Sync URL input from stored bracket_link on first render and auto-restore
     const url = bs.url ?? '';
-    const initialized = bs.initialized ?? false;
     useEffect(() => {
-        if (!initialized && bracketLink) {
-            update({ url: bracketLink, initialized: true });
-            setSource(bracketLink);
-            // Auto-restore: load event + phases from the persisted bracket_link
-            (async () => {
-                const result = await loadEvent(bracketLink);
-                if (!result) return;
-                const phaseUpdate = { tournament: result };
-                const phasesResult = await fetchPhases();
-                if (phasesResult) {
-                    phaseUpdate.phases = phasesResult;
-                    if (phasesResult.length === 1) {
-                        phaseUpdate.selectedPhase = String(phasesResult[0].id);
-                    }
-                }
-                update(phaseUpdate);
-            })();
+        // After Clear, we suppress auto-load until the server's bracket_link
+        // broadcast arrives (otherwise a stale bracketLink races a freshly
+        // null tournament and reloads the event we just cleared).
+        if (bs.suppressAutoLoad) {
+            if (!bracketLink) update({ suppressAutoLoad: false });
+            return;
         }
-    }, [bracketLink, initialized, update, loadEvent, fetchPhases]);
+        // Skip if we already have tournament data in the store — switching tabs
+        // shouldn't refetch. Only auto-restore on a true first load.
+        if (tournament || !bracketLink) return;
+        update({ url: bracketLink });
+        setSource(bracketLink);
+        (async () => {
+            const result = await loadEvent(bracketLink);
+            if (!result || result.error) return;
+            const phaseUpdate = { tournament: result };
+            const phasesResult = await fetchPhases();
+            if (phasesResult) {
+                phaseUpdate.phases = phasesResult;
+                if (phasesResult.length === 1) {
+                    phaseUpdate.selectedPhase = String(phasesResult[0].id);
+                }
+            }
+            update(phaseUpdate);
+        })();
+    }, [bracketLink, tournament, bs.suppressAutoLoad, update, setSource, loadEvent, fetchPhases]);
 
     // ── Load event ────────────────────────────────────────────
     const handleLoadEvent = useCallback(async () => {
         if (!url.trim()) return;
         const result = await loadEvent(url.trim());
-        if (!result) {
-            notifications.show({ message: 'Failed to load tournament', color: 'red' });
+        if (!result || result.error) {
+            notifications.show({ message: result?.error || 'Failed to load tournament', color: 'red' });
             return;
         }
 
@@ -88,22 +106,86 @@ export default function Bracket() {
     }, [url, loadEvent, fetchPhases, update]);
 
     // ── Fetch sets ────────────────────────────────────────────
-    const handleFetchSets = useCallback(async (page = 1) => {
-        const opts = { includeFinished };
-        if (selectedPool) {
-            opts.phaseGroupId = Number(selectedPool);
-        } else if (selectedPhase) {
-            opts.phaseId = Number(selectedPhase);
-        }
-        const result = await fetchSets(page, opts);
-        if (result) {
+    // Single fetch path: page 1 sequentially (to learn totalPages), then
+    // pages 2..N in parallel. Everything lands in `allSets`.
+    const allSetsKey = `${selectedPhase}|${selectedPool}|${includeFinished}`;
+    const [setsFetching, setSetsFetching] = useState(false);
+    const handleFetchSets = useCallback(async () => {
+        if (!selectedPhase) return;
+        setSetsFetching(true);
+        try {
+            const opts = { includeFinished };
+            if (selectedPool) opts.phaseGroupId = Number(selectedPool);
+            else opts.phaseId = Number(selectedPhase);
+
+            const first = await fetchSets(1, opts);
+            if (!first) return;
+            let collected = first.sets;
+            const total = first.pageInfo.totalPages || 1;
+            if (total > 1) {
+                const rest = await Promise.all(
+                    Array.from({ length: total - 1 }, (_, i) => fetchSets(i + 2, opts))
+                );
+                collected = collected.concat(...rest.filter(Boolean).map(r => r.sets));
+            }
             update({
-                sets: result.sets,
-                setsPage: result.pageInfo.page,
-                setsTotalPages: result.pageInfo.totalPages,
+                allSets: collected,
+                allSetsLoadedFor: `${selectedPhase}|${selectedPool}|${includeFinished}`,
+                lastFetchedAt: Date.now(),
             });
+        } finally {
+            setSetsFetching(false);
         }
     }, [selectedPhase, selectedPool, includeFinished, fetchSets, update]);
+
+    const handleClear = useCallback(async () => {
+        update({ suppressAutoLoad: true });
+        await clearEvent();
+        update({
+            tournament: null,
+            phases: [],
+            selectedPhase: null,
+            selectedPool: null,
+            sets: [],
+            setsPage: 1,
+            setsTotalPages: 0,
+            includeFinished: false,
+            loadedSets: {},
+            entrants: [],
+            entrantsPage: 1,
+            entrantsTotalPages: 0,
+            entrantsLoadedFor: null,
+            url: '',
+            lastFetchedKey: null,
+            lastFetchedAt: null,
+            allSets: [],
+            allSetsLoadedFor: null,
+        });
+        notifications.show({ message: 'Tournament cleared', color: 'gray' });
+    }, [clearEvent, update]);
+
+    const [playerSearch, setPlayerSearch] = useState('');
+    const allSets = bs.allSets ?? [];
+    const allSetsLoadedFor = bs.allSetsLoadedFor ?? null;
+
+    const filteredSets = useMemo(() => {
+        const q = playerSearch.trim().toLowerCase();
+        if (!q) return allSets;
+        return allSets.filter(s =>
+            (s.p1_name || '').toLowerCase().includes(q) ||
+            (s.p2_name || '').toLowerCase().includes(q)
+        );
+    }, [allSets, playerSearch]);
+
+    const searching = playerSearch.trim().length > 0;
+
+    // Re-render the "Updated Xs ago" label every 30s.
+    const [, setTick] = useState(0);
+    useEffect(() => {
+        if (!bs.lastFetchedAt) return;
+        const id = setInterval(() => setTick(t => t + 1), 30_000);
+        return () => clearInterval(id);
+    }, [bs.lastFetchedAt]);
 
     // ── Load set into scoreboard ──────────────────────────────
     const handleLoadSet = useCallback(async (setId, sbNum) => {
@@ -118,9 +200,11 @@ export default function Bracket() {
 
     // ── Auto-fetch sets when phase/pool/filter changes ────────
     useEffect(() => {
-        if (selectedPhase) {
-            handleFetchSets(1);
-        }
+        if (!selectedPhase) return;
+        // Skip refetch on tab remount when the cached sets already match the
+        // current selection.
+        if (allSetsLoadedFor === allSetsKey) return;
+        handleFetchSets();
     }, [selectedPhase, selectedPool, includeFinished]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ── Phase/pool select data ────────────────────────────────
@@ -160,6 +244,17 @@ export default function Bracket() {
                         >
                             Load
                         </Button>
+                        {tournament && (
+                            <Button
+                                size="sm"
+                                variant="subtle"
+                                color="red"
+                                onClick={handleClear}
+                                mb={1}
+                            >
+                                Clear
+                            </Button>
+                        )}
                     </Group>
                 </Stack>
             </Paper>
@@ -205,7 +300,9 @@ export default function Bracket() {
                                     update({
                                         selectedPhase: val,
                                         selectedPool: null,
-                                        sets: [],
+                                        allSets: [],
+                                        allSetsLoadedFor: null,
+                                        setsPage: 1,
                                     });
                                 }}
                                 size="sm"
@@ -220,7 +317,9 @@ export default function Bracket() {
                                     onChange={(val) => {
                                         update({
                                             selectedPool: val,
-                                            sets: [],
+                                            allSets: [],
+                                            allSetsLoadedFor: null,
+                                            setsPage: 1,
                                         });
                                     }}
                                     clearable
@@ -228,30 +327,75 @@ export default function Bracket() {
                                     style={{ minWidth: 150 }}
                                 />
                             )}
-                            <Checkbox
-                                label="Include completed"
-                                checked={includeFinished}
-                                onChange={e => {
-                                    update({
-                                        includeFinished: e.currentTarget.checked,
-                                        sets: [],
-                                    });
-                                }}
-                                size="sm"
-                                mt="lg"
-                            />
+                            <div style={{
+                                alignSelf: 'flex-end',
+                                display: 'flex',
+                                alignItems: 'center',
+                                height: 30, // matches Mantine Select size="sm" input height
+                            }}>
+                                <Checkbox
+                                    label="Include completed"
+                                    checked={includeFinished}
+                                    onChange={e => {
+                                        update({
+                                            includeFinished: e.currentTarget.checked,
+                                            allSets: [],
+                                            allSetsLoadedFor: null,
+                                            setsPage: 1,
+                                        });
+                                    }}
+                                    size="sm"
+                                />
+                            </div>
                         </Group>
                     </Stack>
                 </Paper>
             )}
 
+            {/* Loading state when fetching sets */}
+            {setsFetching && allSets.length === 0 && (
+                <Paper withBorder p="xl">
+                    <Center>
+                        <Group gap="sm">
+                            <Loader size="sm" />
+                            <Text size="sm" c="dimmed">Loading sets…</Text>
+                        </Group>
+                    </Center>
+                </Paper>
+            )}
+
             {/* Sets Table */}
-            {sets.length > 0 && (
+            {allSets.length > 0 && (
                 <Paper withBorder p="md">
                     <Stack gap="sm">
-                        <Text fw={600} size="sm">
-                            Sets {setsTotalPages > 1 && `(Page ${setsPage}/${setsTotalPages})`}
-                        </Text>
+                        <Group justify="space-between" align="center">
+                            <Text fw={600} size="sm">
+                                Sets {searching
+                                    ? `(${filteredSets.length} of ${allSets.length})`
+                                    : `(${allSets.length})`}
+                            </Text>
+                            <Group gap="xs">
+                                {bs.lastFetchedAt && (
+                                    <Text size="xs" c="dimmed">
+                                        Updated {formatRelative(bs.lastFetchedAt)}
+                                    </Text>
+                                )}
+                                <Button
+                                    size="compact-xs"
+                                    variant="light"
+                                    onClick={() => handleFetchSets()}
+                                    loading={setsFetching}
+                                >
+                                    Refresh
+                                </Button>
+                            </Group>
+                        </Group>
+                        <TextInput
+                            placeholder="Search players"
+                            value={playerSearch}
+                            onChange={e => setPlayerSearch(e.currentTarget.value)}
+                            size="xs"
+                        />
                         <Table striped highlightOnHover withTableBorder>
                             <Table.Thead>
                                 <Table.Tr>
@@ -264,7 +408,7 @@ export default function Bracket() {
                                 </Table.Tr>
                             </Table.Thead>
                             <Table.Tbody>
-                                {sets.map(s => (
+                                {filteredSets.map(s => (
                                     <Table.Tr key={s.id}>
                                         <Table.Td>
                                             <Text size="sm">{s.round_name}</Text>
@@ -322,16 +466,8 @@ export default function Bracket() {
                                 ))}
                             </Table.Tbody>
                         </Table>
-
-                        {setsTotalPages > 1 && (
-                            <Group justify="center">
-                                <Pagination
-                                    total={setsTotalPages}
-                                    value={setsPage}
-                                    onChange={(page) => handleFetchSets(page)}
-                                    size="sm"
-                                />
-                            </Group>
+                        {searching && filteredSets.length === 0 && (
+                            <Text size="xs" c="dimmed" ta="center">No sets match "{playerSearch}".</Text>
                         )}
                     </Stack>
                 </Paper>
@@ -349,7 +485,7 @@ export default function Bracket() {
             )}
 
             {/* Empty state when tournament loaded but no sets for selected phase */}
-            {tournament && selectedPhase && sets.length === 0 && !loading && (
+            {tournament && selectedPhase && allSets.length === 0 && !loading && !setsFetching && (
                 <Paper withBorder p="xl">
                     <Stack align="center" gap="xs">
                         <Text size="sm" c="dimmed">

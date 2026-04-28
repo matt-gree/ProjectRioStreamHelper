@@ -5,7 +5,7 @@ import {
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { FormattedMessage } from 'react-intl';
-import { useStateStore } from '../../context/store';
+import { useStateStore, useBracketStore } from '../../context/store';
 import useTournament from '../../hooks/useTournament';
 
 export default function TournamentInfo() {
@@ -42,23 +42,28 @@ export default function TournamentInfo() {
     const [sggUrl, setSggUrl] = useState(bracket_link);
     const [sggOpen, setSggOpen] = useState(false);
 
-    // Entrants list
-    const [entrantsList, setEntrantsList] = useState([]);
-    const [entrantsPage, setEntrantsPage] = useState(1);
-    const [entrantsTotalPages, setEntrantsTotalPages] = useState(0);
-    const [entrantsLoaded, setEntrantsLoaded] = useState(false);
+    // Entrants list — persisted in the bracket store so switching tabs
+    // doesn't trigger a refetch.
+    const entrantsList = useBracketStore(s => s.entrants);
+    const entrantsPage = useBracketStore(s => s.entrantsPage);
+    const entrantsTotalPages = useBracketStore(s => s.entrantsTotalPages);
+    const entrantsLoadedFor = useBracketStore(s => s.entrantsLoadedFor);
+    const updateBracket = useBracketStore(s => s.update);
     const [entrantsLoading, setEntrantsLoading] = useState(false);
 
     const handleFetchEntrants = useCallback(async (page = 1) => {
         setEntrantsLoading(true);
         const result = await fetchEntrants(page);
         if (result) {
-            setEntrantsList(result.entrants);
-            setEntrantsPage(result.pageInfo.page);
-            setEntrantsTotalPages(result.pageInfo.totalPages);
+            updateBracket({
+                entrants: result.entrants,
+                entrantsPage: result.pageInfo.page,
+                entrantsTotalPages: result.pageInfo.totalPages,
+                entrantsLoadedFor: bracket_link,
+            });
         }
         setEntrantsLoading(false);
-    }, [fetchEntrants]);
+    }, [fetchEntrants, updateBracket, bracket_link]);
 
     // Entrants sorting
     const [sortField, setSortField] = useState('seed');
@@ -102,16 +107,15 @@ export default function TournamentInfo() {
         return list;
     }, [entrantsList, sortField, sortDir, getPlayerField]);
 
-    // Auto-fetch entrants when bracket_link is set and not yet loaded
+    // Auto-fetch entrants when bracket_link is set and we haven't already
+    // loaded entrants for that exact link.
     useEffect(() => {
-        if (bracket_link && !entrantsLoaded) {
+        if (bracket_link && entrantsLoadedFor !== bracket_link) {
             setSource(bracket_link);
-            setEntrantsLoaded(true);
             handleFetchEntrants(1);
         }
-        if (!bracket_link) {
-            setEntrantsLoaded(false);
-            setEntrantsList([]);
+        if (!bracket_link && entrantsLoadedFor) {
+            updateBracket({ entrants: [], entrantsPage: 1, entrantsTotalPages: 0, entrantsLoadedFor: null });
         }
     }, [bracket_link]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -127,11 +131,11 @@ export default function TournamentInfo() {
     const handleSetTournament = useCallback(async () => {
         if (!sggUrl.trim()) return;
         const result = await loadEvent(sggUrl.trim());
-        if (result) {
+        if (result && !result.error) {
             setSggOpen(false);
             notifications.show({ message: `Tournament loaded: ${result.tournamentName}`, color: 'green' });
         } else {
-            notifications.show({ message: 'Failed to load tournament', color: 'red' });
+            notifications.show({ message: result?.error || 'Failed to load tournament', color: 'red' });
         }
     }, [sggUrl, loadEvent]);
 

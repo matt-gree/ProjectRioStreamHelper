@@ -50,6 +50,8 @@ class ChallongeProvider:
     _tournament_data: dict | None = None
     _tournament_id: int | None = None
     _community_permalink: str | None = None
+    _load_lock: asyncio.Lock = asyncio.Lock()
+    _restore_task: asyncio.Task | None = None
 
     # Cached data
     _participants: list | None = None
@@ -73,12 +75,50 @@ class ChallongeProvider:
                 cls._tournament_slug = slug
                 cls._tournament_url = bracket_link
                 logger.info("[challonge] restored slug from state: {}", slug)
+                cls._restore_task = asyncio.create_task(cls._background_refresh(bracket_link))
+
+    @classmethod
+    async def _background_refresh(cls, url: str):
+        try:
+            await cls.LoadEvent(url)
+            logger.info("[challonge] background-refreshed tournament data on startup")
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("[challonge] background refresh failed")
 
     @classmethod
     async def Stop(cls):
+        if cls._restore_task and not cls._restore_task.done():
+            cls._restore_task.cancel()
+            try:
+                await cls._restore_task
+            except (asyncio.CancelledError, Exception):
+                pass
+            cls._restore_task = None
         if cls._client:
             await cls._client.aclose()
             cls._client = None
+
+    @classmethod
+    async def Clear(cls):
+        """Clear cached tournament data and the persisted bracket link."""
+        cls._tournament_slug = None
+        cls._tournament_url = None
+        cls._tournament_data = None
+        cls._tournament_id = None
+        cls._community_permalink = None
+        cls._participants = None
+        cls._participants_by_id = None
+        cls._matches = None
+        await State.SetBatch([
+            ("tournamentInfo.bracket_link", ""),
+            ("tournamentInfo.name", ""),
+            ("tournamentInfo.location", ""),
+            ("tournamentInfo.date", ""),
+            ("tournamentInfo.entrants", ""),
+        ])
+        await State.Save()
 
     # ── core request method ───────────────────────────────────
 
@@ -214,17 +254,24 @@ class ChallongeProvider:
     @classmethod
     async def LoadEvent(cls, url: str) -> dict:
         """Load tournament data from a Challonge URL and write to State."""
+        async with cls._load_lock:
+            return await cls._load_event_impl(url)
+
+    @classmethod
+    async def _load_event_impl(cls, url: str) -> dict:
         slug, subdomain = cls._parse_url(url)
         if not slug:
             return {"error": "Could not parse Challonge URL"}
 
+        # Only invalidate caches when the tournament actually changes.
+        if cls._tournament_slug != slug:
+            cls._participants = None
+            cls._participants_by_id = None
+            cls._matches = None
+            cls._tournament_id = None
+            cls._community_permalink = None
         cls._tournament_slug = slug
         cls._tournament_url = url
-        cls._participants = None
-        cls._participants_by_id = None
-        cls._matches = None
-        cls._tournament_id = None
-        cls._community_permalink = None
 
         # Find the tournament (may require searching communities)
         tournament_resp = await cls._find_tournament(slug)
@@ -261,12 +308,15 @@ class ChallongeProvider:
 
         cls._tournament_data = result
 
+        canonical_url = attrs.get("full_challonge_url") or url
+        cls._tournament_url = canonical_url
+
         entries = [
             ("tournamentInfo.name", result["tournamentName"]),
             ("tournamentInfo.location", ""),
             ("tournamentInfo.date", date_str),
             ("tournamentInfo.entrants", str(num_entrants)),
-            ("tournamentInfo.bracket_link", url),
+            ("tournamentInfo.bracket_link", canonical_url),
         ]
         await State.SetBatch(entries)
         await State.Save()

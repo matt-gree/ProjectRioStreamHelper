@@ -23,6 +23,17 @@ async def challonge_load_event(url: str = "", session_id: str | None = None) -> 
 
 
 @method(
+    router.post, "/challonge/clear",
+    version="1", id="challonge.clear",
+    response_class=ORJSONResponse
+)
+async def challonge_clear(session_id: str | None = None) -> ORJSONResponse:
+    """Clear cached tournament data and the persisted bracket link."""
+    await ChallongeProvider.Clear()
+    return ORJSONResponse({"success": True})
+
+
+@method(
     router.get, "/challonge/phases",
     version="1", id="challonge.phases",
     response_class=ORJSONResponse

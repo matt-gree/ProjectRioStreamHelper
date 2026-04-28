@@ -56,6 +56,8 @@ class StartGGProvider:
     _event_url: str | None = None
     _tournament_data: dict | None = None
     _entrants_cache: dict | None = None  # {gamerTag_lower: parsed_player_dict}
+    _load_lock: asyncio.Lock = asyncio.Lock()
+    _restore_task: asyncio.Task | None = None
 
     # ── lifecycle ──────────────────────────────────────────────
 
@@ -68,18 +70,54 @@ class StartGGProvider:
         )
         # Restore event slug from persisted state so GetPhases() works after restart
         bracket_link = State.state.get("tournamentInfo", {}).get("bracket_link", "")
-        if bracket_link:
+        if bracket_link and "start.gg" in bracket_link:
             slug = cls._parse_slug(bracket_link)
             if slug:
                 cls._event_slug = slug
                 cls._event_url = bracket_link
                 logger.info("[startgg] restored event slug from state: {}", slug)
+                # Background refresh — same pattern as RotationManager: don't
+                # block startup, just shoot the API to update tournament data.
+                cls._restore_task = asyncio.create_task(cls._background_refresh(bracket_link))
+
+    @classmethod
+    async def _background_refresh(cls, url: str):
+        try:
+            await cls.LoadEvent(url)
+            logger.info("[startgg] background-refreshed tournament data on startup")
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("[startgg] background refresh failed")
 
     @classmethod
     async def Stop(cls):
+        if cls._restore_task and not cls._restore_task.done():
+            cls._restore_task.cancel()
+            try:
+                await cls._restore_task
+            except (asyncio.CancelledError, Exception):
+                pass
+            cls._restore_task = None
         if cls._client:
             await cls._client.aclose()
             cls._client = None
+
+    @classmethod
+    async def Clear(cls):
+        """Clear cached tournament data and the persisted bracket link."""
+        cls._event_slug = None
+        cls._event_url = None
+        cls._tournament_data = None
+        cls._entrants_cache = None
+        await State.SetBatch([
+            ("tournamentInfo.bracket_link", ""),
+            ("tournamentInfo.name", ""),
+            ("tournamentInfo.location", ""),
+            ("tournamentInfo.date", ""),
+            ("tournamentInfo.entrants", ""),
+        ])
+        await State.Save()
 
     # ── core query method ──────────────────────────────────────
 
@@ -116,37 +154,50 @@ class StartGGProvider:
 
     @staticmethod
     def _parse_slug(url: str) -> str | None:
-        """Extract the event slug from a start.gg URL.
+        """Extract the canonical event slug from a start.gg URL.
 
         Handles:
           https://www.start.gg/tournament/foo/event/bar
+          https://www.start.gg/tournament/foo/event/bar/overview  (trailing path stripped)
           https://start.gg/tournament/foo/event/bar
           tournament/foo/event/bar  (slug only)
+
+        Returns the canonical "tournament/<slug>/event/<slug>" form, or None
+        if the URL doesn't contain an /event/<name> segment.
         """
-        # Strip admin bracket URLs to get the event path
-        m = re.search(r"start\.gg/(.+)", url)
+        m = re.search(r"tournament/([^/?#]+)/event/([^/?#]+)", url)
         if m:
-            slug = m.group(1).rstrip("/")
-            # Remove query params
-            slug = slug.split("?")[0]
-            return slug
-        # Might already be a slug
-        if url.startswith("tournament/"):
-            return url.rstrip("/")
+            return f"tournament/{m.group(1)}/event/{m.group(2)}"
         return None
+
+    @staticmethod
+    def _has_tournament_only(url: str) -> bool:
+        """True if the URL points at a tournament but has no /event/<name>."""
+        return bool(re.search(r"(?:start\.gg/|^)tournament/[^/?#]+(?:/|$|\?|#)", url)) \
+            and not re.search(r"tournament/[^/?#]+/event/", url)
 
     # ── public methods ─────────────────────────────────────────
 
     @classmethod
     async def LoadEvent(cls, url: str) -> dict:
         """Load tournament + event data from a start.gg URL and write to State."""
+        async with cls._load_lock:
+            return await cls._load_event_impl(url)
+
+    @classmethod
+    async def _load_event_impl(cls, url: str) -> dict:
         slug = cls._parse_slug(url)
         if not slug:
+            if cls._has_tournament_only(url):
+                return {"error": "start.gg URL is missing the event. Use a link like .../tournament/<name>/event/<event-name>"}
             return {"error": "Could not parse start.gg URL"}
 
+        canonical_url = f"https://www.start.gg/{slug}"
+        # Only invalidate the entrants cache when the event actually changes.
+        if cls._event_slug != slug:
+            cls._entrants_cache = None
         cls._event_slug = slug
-        cls._event_url = url
-        cls._entrants_cache = None  # Clear cache for new event
+        cls._event_url = canonical_url
 
         data = await cls._query(
             "TournamentDataQuery",
@@ -187,7 +238,7 @@ class StartGGProvider:
             ("tournamentInfo.location", result["address"] or ("Online" if result["isOnline"] else "")),
             ("tournamentInfo.date", date_str),
             ("tournamentInfo.entrants", str(result["numEntrants"])),
-            ("tournamentInfo.bracket_link", url),
+            ("tournamentInfo.bracket_link", canonical_url),
         ]
         await State.SetBatch(entries)
         await State.Save()
