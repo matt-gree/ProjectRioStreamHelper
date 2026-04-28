@@ -34,11 +34,9 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[
-        # Frontend build output
+        # Frontend build output (only assets actually read at runtime —
+        # game_assets/layout/favicon/logos are read directly from ./public/)
         ('dist/assets', 'dist/assets'),
-        ('dist/game_assets', 'dist/game_assets'),
-        ('dist/layout', 'dist/layout'),
-        ('dist/favicon.png', 'dist'),
         ('dist/.vite/manifest.json', 'dist/.vite'),
         *([('dist/vite_manifest.json', 'dist')] if _vite_staged.is_file() else []),
         ('dist/index.html', 'dist'),
