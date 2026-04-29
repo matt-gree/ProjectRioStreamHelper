@@ -70,6 +70,20 @@ export default function SettingsModal({ opened, onClose }) {
         setSetting('ui.color_scheme', value);
     }, [setSetting]);
 
+    // Network — LAN access opt-in. Default is loopback-only; enabling exposes
+    // the app to anyone on the same WiFi (state, settings, Challonge key all
+    // unauthenticated).
+    const allowLan = useSettingsStore(state => state?.server?.allow_lan) === true;
+    const handleAllowLan = useCallback((value) => {
+        setSetting('server.allow_lan', !!value);
+        notifications.show({
+            message: value
+                ? 'LAN access enabled. Restart PRSH for the change to take effect.'
+                : 'LAN access disabled. Restart PRSH for the change to take effect.',
+            color: 'yellow',
+        });
+    }, [setSetting]);
+
     const fetchHudPath = useCallback(async () => {
         try {
             const resp = await fetch('/api/v1/rio/hud-path');
@@ -655,20 +669,26 @@ export default function SettingsModal({ opened, onClose }) {
                 </Button>
                 */}
 
+                <Divider label="Network" labelPosition="center" />
+
+                <Switch
+                    size="sm"
+                    label="Allow LAN access (bind 0.0.0.0)"
+                    description="By default PRSH listens on loopback only (127.0.0.1) — only this computer can reach the UI and OBS overlays. Enable LAN access to use a phone or tablet on the same WiFi as a remote control. Anyone on the network will be able to read and modify scoreboards, settings, and any saved tournament API keys, so leave this off on shared networks (cafes, conventions)."
+                    checked={allowLan}
+                    onChange={e => handleAllowLan(e.currentTarget.checked)}
+                />
+
                 <Divider label="Stream Labels" labelPosition="center" />
 
-                <Text size="xs" c="dimmed">
-                    Export every state key as an individual .txt file to user_data/stream_labels/. Use these as Text (GDI+) sources in OBS without needing the HTML overlays. Off by default.
-                </Text>
-                <Group justify="center">
-                    <Switch
-                        size="sm"
-                        label="Enable txt export"
-                        checked={streamLabelsEnabled}
-                        onChange={e => handleToggleStreamLabels(e.currentTarget.checked)}
-                        disabled={streamLabelsSaving}
-                    />
-                </Group>
+                <Switch
+                    size="sm"
+                    label="Enable txt export"
+                    description="Export every state key as an individual .txt file to user_data/stream_labels/. Use these as Text (GDI+) sources in OBS without needing the HTML overlays. Off by default."
+                    checked={streamLabelsEnabled}
+                    onChange={e => handleToggleStreamLabels(e.currentTarget.checked)}
+                    disabled={streamLabelsSaving}
+                />
 
                 <Divider label="Announcements" labelPosition="center" />
 

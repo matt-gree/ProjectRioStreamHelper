@@ -27,15 +27,25 @@ def _settings_path() -> Path:
 
 
 def read_server_config() -> tuple[str, int]:
-    """Read (host, port) from settings.json, falling back to defaults."""
-    host, port = "0.0.0.0", 5260
+    """Read (host, port) from settings.json, falling back to defaults.
+
+    Default is loopback-only. LAN access is opt-in via `server.allow_lan`.
+    Falls back to legacy `server.host` for upgrade compatibility — Settings.Load
+    rewrites it to allow_lan, but this preflight runs before that migration.
+    """
+    host, port = "127.0.0.1", 5260
     try:
         p = _settings_path()
         if p.exists():
             data = orjson.loads(p.read_bytes())
             server = data.get("server", {}) or {}
-            host = server.get("host", host) or host
             port = int(server.get("port", port) or port)
+            if "allow_lan" in server:
+                host = "0.0.0.0" if server.get("allow_lan") else "127.0.0.1"
+            else:
+                legacy_host = server.get("host")
+                if legacy_host and legacy_host not in ("127.0.0.1", "localhost", "::1"):
+                    host = "0.0.0.0"
     except Exception as e:
         logger.debug("[port_conflict] could not read settings: {}", e)
     return host, port

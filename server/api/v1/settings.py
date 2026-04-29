@@ -1,10 +1,7 @@
 from server.utils.router import method
 from fastapi import APIRouter
 from fastapi.responses import ORJSONResponse, Response
-from server.settings import Settings, Config
-
-# Keys whose raw value should never be returned via GET (config-only check)
-_SECRET_KEYS = {"challonge.api_key"}
+from server.settings import Settings, Config, SECRET_KEYS, redact_settings
 
 # This only needs to be declared once in the file
 router = APIRouter()
@@ -16,11 +13,11 @@ router = APIRouter()
 )
 async def settings_get(key: str | None = None, session_id: str | None = None) -> ORJSONResponse:
     if key == None or key == "":
-        return ORJSONResponse(Settings.settings)
+        return ORJSONResponse(redact_settings(Settings.settings))
 
     value = Settings.Get(key)
     # For secret keys, return whether configured (not the raw value)
-    if key in _SECRET_KEYS:
+    if key in SECRET_KEYS:
         return ORJSONResponse(bool(value))
     return ORJSONResponse(value)
 

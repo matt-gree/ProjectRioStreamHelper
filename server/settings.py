@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import tomllib
 import orjson
 from pathlib import Path
@@ -9,6 +10,33 @@ from server import socketio
 from server.paths import user_data_dir
 from server.utils import json
 from server.utils.deep_dict import deep_set, deep_unset, deep_get
+
+
+# Settings keys whose raw values must never leave the server. Reads return a
+# bool/sentinel; SocketIO broadcasts replace the value with the same sentinel.
+# At-rest these are still plaintext in settings.json — encrypting the file
+# doesn't defend against the LAN API surface, which is the actual exposure.
+SECRET_KEYS = frozenset({"challonge.api_key"})
+
+_REDACTED = "***"
+
+
+def redact_value(key: str, value):
+    """Redact a single setting value for wire output if its key is secret."""
+    if key not in SECRET_KEYS:
+        return value
+    return _REDACTED if value else ""
+
+
+def redact_settings(settings_dict: dict) -> dict:
+    """Return a deep copy of settings with secret-key values redacted."""
+    out = copy.deepcopy(settings_dict)
+    for dotted in SECRET_KEYS:
+        existing = deep_get(out, dotted, None)
+        if existing is None:
+            continue
+        deep_set(out, dotted, _REDACTED if existing else "")
+    return out
 
 
 def _deep_merge(defaults: dict, loaded: dict) -> dict:
@@ -31,7 +59,11 @@ def _deep_merge(defaults: dict, loaded: dict) -> dict:
 class Settings:
     settings = {
         "server": {
-            "host": "0.0.0.0",
+            # When False, bind to 127.0.0.1 (loopback only). When True, bind
+            # to 0.0.0.0 so phones/tablets on the same WiFi can reach the UI
+            # — but also exposes state, settings, and the Challonge key
+            # plaintext to anyone on the network. Opt-in via Settings.
+            "allow_lan": False,
             "port": 5260,
             "dev": True,
             "autostart": True
@@ -150,15 +182,28 @@ class Settings:
 
     @classmethod
     async def Load(cls) -> dict:
+        loaded_server: dict = {}
         try:
             async with cls._settings_out.open(mode='rb', encoding='utf-8') as f:
                 loaded = await asyncio.to_thread(
                     orjson.loads,
                     await f.read()
                 )
+                loaded_server = (loaded.get("server") or {}) if isinstance(loaded, dict) else {}
                 cls.settings = _deep_merge(cls.settings, loaded)
         except:
             logger.debug("using default settings dict")
+
+        # Migrate legacy `server.host` to `server.allow_lan`. Prior versions
+        # defaulted host to "0.0.0.0"; on upgrade preserve LAN access for
+        # users who already had it. New installs ship loopback-only.
+        if "host" in loaded_server and "allow_lan" not in loaded_server:
+            legacy_host = loaded_server.get("host")
+            if legacy_host and legacy_host not in ("127.0.0.1", "localhost", "::1"):
+                cls.settings["server"]["allow_lan"] = True
+        cls.settings.get("server", {}).pop("host", None)
+        if "host" in loaded_server:
+            await cls.Save()
 
     @classmethod
     async def Set(cls, key: str, value, session_id: str | None = None):
@@ -166,7 +211,7 @@ class Settings:
         await asyncio.gather(
             socketio.emit('v1.settings.set', {
                 "key": key,
-                "value": value,
+                "value": redact_value(key, value),
                 "sid": session_id
             }),
             cls.Save()

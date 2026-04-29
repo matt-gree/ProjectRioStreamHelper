@@ -66,7 +66,8 @@ async def main() -> int:
     dev_mode = os.environ.get("TSH_DEV") == "1"
     await Settings.Set("server.dev", dev_mode)
 
-    host = Settings.Get("server.host", "0.0.0.0")
+    allow_lan = bool(Settings.Get("server.allow_lan", False))
+    host = "0.0.0.0" if allow_lan else "127.0.0.1"
     port = Settings.Get("server.port", 5260)
     autostart = Settings.Get("server.autostart", True)
 
