@@ -8,9 +8,10 @@ from loguru import logger
 
 
 def _logo_path() -> Path:
-    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-        return Path(sys._MEIPASS) / "public" / "logo_tray.png"
-    return Path(__file__).parent.parent / "public" / "logo_tray.png"
+    base = Path(sys._MEIPASS) / "public" if (getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS')) else Path(__file__).parent.parent / "public"
+    # Prefer .ico — contains multiple resolutions for crisp taskbar rendering.
+    ico = base / "logo.ico"
+    return ico if ico.exists() else base / "logo_tray.png"
 
 
 class WinWindow:
@@ -21,11 +22,15 @@ class WinWindow:
         root.resizable(False, False)
 
         try:
-            from PIL import Image, ImageTk
-            img = Image.open(str(_logo_path()))
-            photo = ImageTk.PhotoImage(img)
-            root.iconphoto(True, photo)
-            root._photo = photo  # prevent GC
+            logo = _logo_path()
+            if logo.suffix == '.ico':
+                root.iconbitmap(str(logo))
+            else:
+                from PIL import Image, ImageTk
+                img = Image.open(str(logo))
+                photo = ImageTk.PhotoImage(img)
+                root.iconphoto(True, photo)
+                root._photo = photo  # prevent GC
         except Exception:
             logger.debug("[WinWindow] Could not load window icon")
 

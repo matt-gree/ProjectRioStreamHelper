@@ -153,7 +153,6 @@ export default function WelcomeCard() {
                         top: -90, right: -90, width: 360, height: 360,
                         animation: 'prsh-welcome-float-a 9s ease-in-out infinite',
                         pointerEvents: 'none',
-                        willChange: 'transform',
                     }}
                 >
                     <img
@@ -175,7 +174,6 @@ export default function WelcomeCard() {
                         bottom: -60, left: -60, width: 220, height: 220,
                         animation: 'prsh-welcome-float-b 11s ease-in-out infinite',
                         pointerEvents: 'none',
-                        willChange: 'transform',
                     }}
                 >
                     <img
@@ -197,7 +195,6 @@ export default function WelcomeCard() {
                         top: '35%', left: '72%', width: 130, height: 130,
                         animation: 'prsh-welcome-float-a 13s ease-in-out infinite reverse',
                         pointerEvents: 'none',
-                        willChange: 'transform',
                     }}
                 >
                     <img
@@ -219,7 +216,6 @@ export default function WelcomeCard() {
                         bottom: '22%', right: '28%', width: 80, height: 80,
                         animation: 'prsh-welcome-float-b 10s ease-in-out infinite reverse',
                         pointerEvents: 'none',
-                        willChange: 'transform',
                     }}
                 >
                     <img
@@ -244,7 +240,6 @@ export default function WelcomeCard() {
                         top: '18%', left: '40%', width: 60, height: 60,
                         animation: 'prsh-welcome-float-c 8s ease-in-out infinite',
                         pointerEvents: 'none',
-                        willChange: 'transform',
                     }}
                 >
                     <img
@@ -266,7 +261,6 @@ export default function WelcomeCard() {
                         top: '62%', left: '30%', width: 46, height: 46,
                         animation: 'prsh-welcome-float-d 7s ease-in-out infinite reverse',
                         pointerEvents: 'none',
-                        willChange: 'transform',
                     }}
                 >
                     <img
@@ -288,7 +282,6 @@ export default function WelcomeCard() {
                         top: '8%', right: '35%', width: 70, height: 70,
                         animation: 'prsh-welcome-float-c 12s ease-in-out infinite reverse',
                         pointerEvents: 'none',
-                        willChange: 'transform',
                     }}
                 >
                     <img

@@ -176,6 +176,7 @@ def _open_file_dialog() -> str | None:
         buf = ctypes.create_unicode_buffer(32768)
         ofn = OPENFILENAMEW()
         ofn.lStructSize    = ctypes.sizeof(OPENFILENAMEW)
+        ofn.hwndOwner      = ctypes.windll.user32.GetForegroundWindow()
         ofn.lpstrFilter    = "JSON files (*.json)\0*.json\0All files (*.*)\0*.*\0\0"
         ofn.nFilterIndex   = 1
         ofn.lpstrFile      = ctypes.addressof(buf)

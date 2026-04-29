@@ -153,21 +153,44 @@ def _open_folder_dialog() -> str | None:
         return path if path else None
 
     elif system == "Windows":
-        # Use the modern IFileDialog COM interface via PowerShell — simpler
-        # than ctypes wrappers around SHBrowseForFolderW and gives a real
-        # folder-picker dialog rather than the legacy tree view.
-        ps = (
-            "Add-Type -AssemblyName System.Windows.Forms; "
-            "$f = New-Object System.Windows.Forms.FolderBrowserDialog; "
-            "$f.Description = 'Select MSB image assets folder'; "
-            "if ($f.ShowDialog() -eq 'OK') { Write-Output $f.SelectedPath }"
-        )
-        result = subprocess.run(
-            ["powershell", "-NoProfile", "-STA", "-Command", ps],
-            capture_output=True, text=True, timeout=120
-        )
-        path = result.stdout.strip()
-        return path if path else None
+        # Native Win32 folder picker via ctypes — no subprocess or COM required,
+        # consistent with how the HUD file dialog is opened.
+        import ctypes
+        import ctypes.wintypes as wt
+
+        BIF_RETURNONLYFSDIRS = 0x0001
+        BIF_NEWDIALOGSTYLE   = 0x0040  # modern resizable dialog
+
+        class BROWSEINFOW(ctypes.Structure):
+            _fields_ = [
+                ("hwndOwner",      wt.HWND),
+                ("pidlRoot",       ctypes.c_void_p),
+                ("pszDisplayName", ctypes.c_wchar_p),
+                ("lpszTitle",      ctypes.c_wchar_p),
+                ("ulFlags",        wt.UINT),
+                ("lpfn",           ctypes.c_void_p),
+                ("lParam",         ctypes.c_void_p),
+                ("iImage",         ctypes.c_int),
+            ]
+
+        shell32 = ctypes.windll.shell32
+        ole32   = ctypes.windll.ole32
+        ole32.CoInitialize(None)
+
+        display_name = ctypes.create_unicode_buffer(260)
+        bi = BROWSEINFOW()
+        bi.hwndOwner      = ctypes.windll.user32.GetForegroundWindow()
+        bi.pszDisplayName = display_name
+        bi.lpszTitle      = "Select MSB image assets folder"
+        bi.ulFlags        = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE
+
+        pidl = shell32.SHBrowseForFolderW(ctypes.byref(bi))
+        if pidl:
+            path_buf = ctypes.create_unicode_buffer(32768)
+            shell32.SHGetPathFromIDListW(pidl, path_buf)
+            ole32.CoTaskMemFree(pidl)
+            return path_buf.value or None
+        return None
 
     return None
 
