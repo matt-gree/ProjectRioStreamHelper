@@ -1,4 +1,5 @@
 import asyncio
+import orjson
 from pathlib import Path
 from typing import Callable, Awaitable
 
@@ -103,7 +104,6 @@ class HudWatcher:
     def _read_and_parse(self) -> dict | None:
         """Read the HUD file and convert to flat game dict. Runs in thread."""
         with open(self.hud_file, "r") as f:
-            import orjson
             data = orjson.loads(f.read())
 
         hud = HudObj(data)

@@ -1,3 +1,4 @@
+from loguru import logger
 from server.utils.router import method
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import ORJSONResponse
@@ -107,7 +108,6 @@ async def refresh_completed_games(
     try:
         await CompletedGamePool.refresh(filters if filters else None)
     except Exception as e:
-        from loguru import logger
         logger.exception("[game_pool] refresh_completed_games failed")
         diag = get_last_completed_fetch_info()
         diag["error"] = diag.get("error") or str(e)

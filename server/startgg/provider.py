@@ -5,6 +5,7 @@ headers (same approach as upstream TournamentStreamHelper).
 """
 
 import asyncio
+from datetime import datetime, timezone
 import re
 
 import httpx
@@ -225,7 +226,6 @@ class StartGGProvider:
         start_ts = tournament.get("startAt")
         date_str = ""
         if start_ts:
-            from datetime import datetime, timezone
             date_str = datetime.fromtimestamp(start_ts, tz=timezone.utc).strftime("%Y-%m-%d")
 
         result = {

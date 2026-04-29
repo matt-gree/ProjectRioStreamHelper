@@ -146,7 +146,7 @@ class State:
             async with cls._program_state_out.open(mode='rb', encoding='utf-8') as f:
                 cls.state = await json.loads(await f.read())
         except:
-            logger.debug("unable to load state.json, using default dict")
+            logger.warning("unable to load state.json, using default dict")
         cls.last_state = copy.deepcopy(cls.state)
 
     @classmethod

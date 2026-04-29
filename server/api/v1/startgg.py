@@ -1,4 +1,3 @@
-from loguru import logger
 from server.utils.router import method
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import ORJSONResponse

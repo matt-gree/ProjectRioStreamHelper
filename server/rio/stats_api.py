@@ -4,8 +4,10 @@ All Project Rio API interactions should go through this module.
 RioWeb uses sync requests.Session, so calls are wrapped in asyncio.to_thread().
 """
 import asyncio
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlencode
 
 import pandas as pd
 from loguru import logger
@@ -46,7 +48,6 @@ def get_last_completed_fetch_info() -> dict:
 def set_no_players_diagnostic(tag: str | None) -> None:
     """Record that a stats refresh was attempted but no players are set."""
     global _last_fetch_info
-    from datetime import datetime, timezone
     _last_fetch_info = {
         "url": None,
         "tag": tag,
@@ -103,7 +104,6 @@ async def fetch_character_stats(
     Returns an empty DataFrame on error.
     """
     global _last_fetch_info
-    from datetime import datetime, timezone
 
     # Remove all whitespace from string parameters
     usernames = ["".join(u.split()) for u in usernames]
@@ -197,8 +197,6 @@ async def fetch_completed_games(
     winner/loser columns, resolved timestamps, stadium names, and game mode names.
     """
     global _last_completed_fetch_info
-    from datetime import datetime, timezone
-    from urllib.parse import urlencode
 
     client = _get_client()
     params = {}
