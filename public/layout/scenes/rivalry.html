@@ -321,19 +321,52 @@
         return;
       }
 
-      const statsHtml = info.stats.map(st =>
-        `<span class="stat"><span class="stat-value">${st.value}</span><span class="stat-label">${st.label}</span></span>`
-      ).join('');
+      bar.innerHTML = '';
 
-      let html = `<div class="stats-top-row">`;
-      html += `<div class="char-icon-wrap"><img src="${info.charIconUrl}" onerror="this.style.display='none'" /></div>`;
-      html += `<div class="stats-content"><div class="stats-row">${statsHtml}</div></div>`;
-      html += `</div>`;
-      if (info.gameLine) {
-        html += `<div class="game-line"><span>Game: </span>${info.gameLine}</div>`;
+      const topRow = document.createElement('div');
+      topRow.className = 'stats-top-row';
+
+      const iconWrap = document.createElement('div');
+      iconWrap.className = 'char-icon-wrap';
+      const img = document.createElement('img');
+      img.src = info.charIconUrl;
+      img.onerror = () => img.style.display = 'none';
+      iconWrap.appendChild(img);
+
+      const statsRow = document.createElement('div');
+      statsRow.className = 'stats-row';
+      for (const st of info.stats) {
+        const stat = document.createElement('span');
+        stat.className = 'stat';
+        const val = document.createElement('span');
+        val.className = 'stat-value';
+        val.textContent = st.value;
+        const lbl = document.createElement('span');
+        lbl.className = 'stat-label';
+        lbl.textContent = st.label;
+        stat.appendChild(val);
+        stat.appendChild(lbl);
+        statsRow.appendChild(stat);
       }
 
-      bar.innerHTML = html;
+      const content = document.createElement('div');
+      content.className = 'stats-content';
+      content.appendChild(statsRow);
+
+      topRow.appendChild(iconWrap);
+      topRow.appendChild(content);
+      bar.appendChild(topRow);
+
+      if (info.gameLine) {
+        const gameLineDiv = document.createElement('div');
+        gameLineDiv.className = 'game-line';
+        const label = document.createElement('span');
+        label.textContent = 'Game: ';
+        gameLineDiv.appendChild(label);
+        gameLineDiv.appendChild(document.createTextNode(info.gameLine));
+        bar.appendChild(gameLineDiv);
+      }
+
       bar.classList.remove('hidden');
     }
 

@@ -16,6 +16,8 @@ _MAX_SIZE = 2 * 1024 * 1024  # 2 MB
 _ALLOWED_TYPES = {"image/png", "image/jpeg", "image/svg+xml", "image/webp"}
 
 
+# Plain @router decorators throughout — UploadFile is multipart and can't be
+# forwarded through a SocketIO event, so @method isn't applicable here.
 @router.post("/logo", response_class=ORJSONResponse)
 async def upload_logo(file: UploadFile = File(...)):
     """Upload an overlay logo (PNG/JPEG/SVG/WebP, max 2 MB)."""
