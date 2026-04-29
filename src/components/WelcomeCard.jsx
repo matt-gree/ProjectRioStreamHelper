@@ -124,6 +124,11 @@ export default function WelcomeCard() {
                 style={{
                     position: 'relative',
                     overflow: 'hidden',
+                    // Force this container onto its own GPU compositing layer so
+                    // child elements with filter:blur() don't create competing
+                    // layers that bleed the gradient background on Windows after
+                    // a zoom change.
+                    transform: 'translateZ(0)',
                     // Fixed gradient stops (not theme-aware) so the card looks
                     // identical in light and dark mode. Start with a neutral
                     // dark grey at the top-left (matching the dark-mode

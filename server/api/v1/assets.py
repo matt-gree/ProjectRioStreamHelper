@@ -153,44 +153,56 @@ def _open_folder_dialog() -> str | None:
         return path if path else None
 
     elif system == "Windows":
-        # Native Win32 folder picker via ctypes — no subprocess or COM required,
-        # consistent with how the HUD file dialog is opened.
+        # SHBrowseForFolderW via ctypes on a dedicated STA thread.
+        # asyncio's thread pool is not STA, and BIF_NEWDIALOGSTYLE needs a
+        # message pump, so we spin a clean thread, initialise COM there, and
+        # join it.  The basic dialog (no BIF_NEWDIALOGSTYLE) works without a
+        # pre-existing message pump.
         import ctypes
         import ctypes.wintypes as wt
+        import threading
 
-        BIF_RETURNONLYFSDIRS = 0x0001
-        BIF_NEWDIALOGSTYLE   = 0x0040  # modern resizable dialog
+        owner_hwnd = ctypes.windll.user32.GetForegroundWindow()
+        result_holder: list[str | None] = [None]
 
-        class BROWSEINFOW(ctypes.Structure):
-            _fields_ = [
-                ("hwndOwner",      wt.HWND),
-                ("pidlRoot",       ctypes.c_void_p),
-                ("pszDisplayName", ctypes.c_wchar_p),
-                ("lpszTitle",      ctypes.c_wchar_p),
-                ("ulFlags",        wt.UINT),
-                ("lpfn",           ctypes.c_void_p),
-                ("lParam",         ctypes.c_void_p),
-                ("iImage",         ctypes.c_int),
-            ]
+        def _pick_folder() -> None:
+            shell32 = ctypes.windll.shell32
+            ole32   = ctypes.windll.ole32
 
-        shell32 = ctypes.windll.shell32
-        ole32   = ctypes.windll.ole32
-        ole32.CoInitialize(None)
+            class BROWSEINFOW(ctypes.Structure):
+                _fields_ = [
+                    ("hwndOwner",      wt.HWND),
+                    ("pidlRoot",       ctypes.c_void_p),
+                    ("pszDisplayName", ctypes.c_void_p),  # writable wchar_t* buffer
+                    ("lpszTitle",      ctypes.c_wchar_p),
+                    ("ulFlags",        wt.UINT),
+                    ("lpfn",           ctypes.c_void_p),
+                    ("lParam",         ctypes.c_void_p),
+                    ("iImage",         ctypes.c_int),
+                ]
 
-        display_name = ctypes.create_unicode_buffer(260)
-        bi = BROWSEINFOW()
-        bi.hwndOwner      = ctypes.windll.user32.GetForegroundWindow()
-        bi.pszDisplayName = display_name
-        bi.lpszTitle      = "Select MSB image assets folder"
-        bi.ulFlags        = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE
+            ole32.CoInitialize(None)
+            try:
+                display_buf = ctypes.create_unicode_buffer(260)
+                bi = BROWSEINFOW()
+                bi.hwndOwner      = owner_hwnd
+                bi.pszDisplayName = ctypes.addressof(display_buf)
+                bi.lpszTitle      = "Select MSB image assets folder"
+                bi.ulFlags        = 0x0001  # BIF_RETURNONLYFSDIRS
 
-        pidl = shell32.SHBrowseForFolderW(ctypes.byref(bi))
-        if pidl:
-            path_buf = ctypes.create_unicode_buffer(32768)
-            shell32.SHGetPathFromIDListW(pidl, path_buf)
-            ole32.CoTaskMemFree(pidl)
-            return path_buf.value or None
-        return None
+                pidl = shell32.SHBrowseForFolderW(ctypes.byref(bi))
+                if pidl:
+                    path_buf = ctypes.create_unicode_buffer(32768)
+                    shell32.SHGetPathFromIDListW(pidl, path_buf)
+                    ole32.CoTaskMemFree(pidl)
+                    result_holder[0] = path_buf.value or None
+            finally:
+                ole32.CoUninitialize()
+
+        t = threading.Thread(target=_pick_folder, daemon=True)
+        t.start()
+        t.join(timeout=120)
+        return result_holder[0]
 
     return None
 
