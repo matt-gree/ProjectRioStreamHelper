@@ -24,7 +24,7 @@ class RotationManager:
     @classmethod
     async def Start(cls):
         """Initialize rotation manager. Auto-resumes rotations that were active in the previous session."""
-        rotation_settings = await Settings.Get("scoreboards.rotation", {})
+        rotation_settings = Settings.Get("scoreboards.rotation", {})
         to_resume = {int(sb_id_str): config for sb_id_str, config in rotation_settings.items()
                      if config.get("enabled", False) and config.get("game_ids")}
 
@@ -104,7 +104,7 @@ class RotationManager:
     @classmethod
     async def get_config(cls, sb_id: int) -> dict:
         """Get rotation config for a scoreboard."""
-        return await Settings.Get(f"scoreboards.rotation.{sb_id}", {
+        return Settings.Get(f"scoreboards.rotation.{sb_id}", {
             "enabled": False,
             "interval": 30,
             "game_ids": [],

@@ -180,7 +180,7 @@ export default function SettingsModal({ opened, onClose }) {
         try {
             const resp = await fetch('/api/v1/announcements/dismiss-all', { method: 'POST' });
             const data = await resp.json();
-            if (data.success) {
+            if (resp.ok) {
                 const n = data.dismissed || 0;
                 setAnnouncementCount(0);
                 notifications.show({
@@ -188,7 +188,7 @@ export default function SettingsModal({ opened, onClose }) {
                     color: 'green',
                 });
             } else {
-                notifications.show({ message: 'Failed to clear announcements', color: 'red' });
+                notifications.show({ message: data.error || 'Failed to clear announcements', color: 'red' });
             }
         } catch {
             notifications.show({ message: 'Failed to clear announcements', color: 'red' });
@@ -212,6 +212,8 @@ export default function SettingsModal({ opened, onClose }) {
                 method: 'PUT',
             });
             const data = await resp.json();
+            // Controller endpoints intentionally return success/false in the body
+            // with HTTP 200 so the UI can read structured failure data.
             if (data.success) {
                 notifications.show({
                     message: data.available ? `gc-overlay found at ${data.path}` : 'Path saved but gc-overlay not found there',
@@ -234,11 +236,13 @@ export default function SettingsModal({ opened, onClose }) {
             const resp = await fetch(`/api/v1/settings?key=challonge.api_key&value=${encodeURIComponent(challongeKey.trim())}`, {
                 method: 'PUT',
             });
-            const data = await resp.json();
-            if (data.success) {
+            if (resp.ok) {
                 setChallongeConfigured(true);
                 setChallongeKey('');
                 notifications.show({ message: 'Challonge API key saved', color: 'green' });
+            } else {
+                const data = await resp.json().catch(() => ({}));
+                notifications.show({ message: data.error || 'Failed to save Challonge API key', color: 'red' });
             }
         } catch {
             notifications.show({ message: 'Failed to save Challonge API key', color: 'red' });
@@ -275,7 +279,7 @@ export default function SettingsModal({ opened, onClose }) {
         try {
             const resp = await fetch(`/api/v1/rio/hud-path?path=${encodeURIComponent(path)}`, { method: 'PUT' });
             const data = await resp.json();
-            if (data.success) {
+            if (resp.ok) {
                 setHudPath(path);
                 setResolvedPath(data.resolved || null);
                 if (data.warning) {
@@ -304,7 +308,7 @@ export default function SettingsModal({ opened, onClose }) {
         try {
             const resp = await fetch('/api/v1/rio/browse-hud', { method: 'POST' });
             const data = await resp.json();
-            if (data.success && data.path) {
+            if (resp.ok && data.path) {
                 await handleSetHudPath(data.path);
             } else if (data.error) {
                 setHudPathError(data.error);
@@ -321,7 +325,7 @@ export default function SettingsModal({ opened, onClose }) {
         try {
             const resp = await fetch(`/api/v1/assets/msb?path=${encodeURIComponent(path)}`, { method: 'PUT' });
             const data = await resp.json();
-            if (data.success) {
+            if (resp.ok) {
                 setAssetsPath(path);
                 setAssetsResolved(data.resolved || '');
                 setAssetsCategories(data.categories || {});
@@ -351,7 +355,7 @@ export default function SettingsModal({ opened, onClose }) {
         try {
             const resp = await fetch('/api/v1/assets/msb/browse', { method: 'POST' });
             const data = await resp.json();
-            if (data.success && data.path) {
+            if (resp.ok && data.path) {
                 await handleSetAssetsPath(data.path);
             } else if (data.error) {
                 setAssetsError(data.error);

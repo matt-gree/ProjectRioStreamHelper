@@ -103,8 +103,8 @@ export default function LogsViewer({ opened, onClose }) {
     const handleReveal = useCallback(async () => {
         try {
             const r = await fetch('/api/v1/logs/reveal', { method: 'POST' });
-            const d = await r.json();
-            if (!d.success) {
+            if (!r.ok) {
+                const d = await r.json().catch(() => ({}));
                 notifications.show({ message: d.error || 'Could not open folder', color: 'red' });
             }
         } catch (e) {

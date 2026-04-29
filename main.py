@@ -66,9 +66,9 @@ async def main() -> int:
     dev_mode = os.environ.get("TSH_DEV") == "1"
     await Settings.Set("server.dev", dev_mode)
 
-    host = await Settings.Get("server.host", "0.0.0.0")
-    port = await Settings.Get("server.port", 5260)
-    autostart = await Settings.Get("server.autostart", True)
+    host = Settings.Get("server.host", "0.0.0.0")
+    port = Settings.Get("server.port", 5260)
+    autostart = Settings.Get("server.autostart", True)
 
     uvi = Server(Config(
         app=ASGIApp(
@@ -77,7 +77,7 @@ async def main() -> int:
         ),
         host=host,
         port=port,
-        reload=await Settings.Get("dev", False),
+        reload=Settings.Get("dev", False),
         loop=asyncio.get_event_loop()
     ))
     global _uvicorn_server

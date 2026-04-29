@@ -1,6 +1,6 @@
 from loguru import logger
 from server.utils.router import method
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import ORJSONResponse
 from server.challonge.provider import ChallongeProvider
 
@@ -15,10 +15,10 @@ router = APIRouter()
 async def challonge_load_event(url: str = "", session_id: str | None = None) -> ORJSONResponse:
     """Load tournament data from a Challonge URL."""
     if not url:
-        return ORJSONResponse({"error": "URL is required"}, status_code=400)
+        raise HTTPException(status_code=400, detail="URL is required")
     result = await ChallongeProvider.LoadEvent(url)
     if "error" in result:
-        return ORJSONResponse(result, status_code=400)
+        raise HTTPException(status_code=400, detail=result["error"])
     return ORJSONResponse(result)
 
 
@@ -75,7 +75,7 @@ async def challonge_set(set_id: int, session_id: str | None = None) -> ORJSONRes
     """Get a single match by ID."""
     result = await ChallongeProvider.GetSet(set_id)
     if "error" in result:
-        return ORJSONResponse(result, status_code=404)
+        raise HTTPException(status_code=404, detail=result["error"])
     return ORJSONResponse(result)
 
 
@@ -91,10 +91,10 @@ async def challonge_load_set(
 ) -> ORJSONResponse:
     """Load a match's player data into a scoreboard."""
     if not set_id:
-        return ORJSONResponse({"error": "set_id is required"}, status_code=400)
+        raise HTTPException(status_code=400, detail="set_id is required")
     result = await ChallongeProvider.LoadSetIntoScoreboard(set_id, scoreboard_number)
     if "error" in result:
-        return ORJSONResponse(result, status_code=400)
+        raise HTTPException(status_code=400, detail=result["error"])
     return ORJSONResponse(result)
 
 
@@ -109,12 +109,12 @@ async def challonge_load_bracket(
 ) -> ORJSONResponse:
     """Fetch bracket structure for a phase group and write to State."""
     if not phase_group_id:
-        return ORJSONResponse({"error": "phase_group_id is required"}, status_code=400)
+        raise HTTPException(status_code=400, detail="phase_group_id is required")
     # Convert to int if numeric
     pgid = int(phase_group_id) if phase_group_id.isdigit() else phase_group_id
     result = await ChallongeProvider.LoadBracket(pgid)
     if "error" in result:
-        return ORJSONResponse(result, status_code=400)
+        raise HTTPException(status_code=400, detail=result["error"])
     return ORJSONResponse(result)
 
 
@@ -129,11 +129,11 @@ async def challonge_bracket_data(
 ) -> ORJSONResponse:
     """Get bracket structure without writing to State."""
     if not phase_group_id:
-        return ORJSONResponse({"error": "phase_group_id is required"}, status_code=400)
+        raise HTTPException(status_code=400, detail="phase_group_id is required")
     pgid = int(phase_group_id) if phase_group_id.isdigit() else phase_group_id
     result = await ChallongeProvider.GetBracketData(pgid)
     if "error" in result:
-        return ORJSONResponse(result, status_code=400)
+        raise HTTPException(status_code=400, detail=result["error"])
     return ORJSONResponse(result)
 
 

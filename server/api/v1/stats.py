@@ -1,5 +1,5 @@
 from server.utils.router import method
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import ORJSONResponse
 from server.rio.stats_tracker import StatsTracker
 from server.rio import stats_api
@@ -42,7 +42,7 @@ async def rio_stats_character(
                 **char_data,
             })
 
-    return ORJSONResponse({"error": f"No character at team {team}, roster index {roster_index}"}, status_code=404)
+    raise HTTPException(status_code=404, detail=f"No character at team {team}, roster index {roster_index}")
 
 
 @method(
@@ -96,7 +96,7 @@ async def rio_key_set(request: Request, session_id: str | None = None) -> ORJSON
     body = await request.json()
     key = body.get("key", "").strip()
     if not key:
-        return ORJSONResponse({"error": "key is required"}, status_code=400)
+        raise HTTPException(status_code=400, detail="key is required")
     stats_api.save_rio_key(key)
     stats_api.reset_client()
     return ORJSONResponse({"success": True})

@@ -2,8 +2,8 @@ import asyncio
 from pathlib import Path
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, HTMLResponse, ORJSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from loguru import logger
@@ -26,7 +26,7 @@ async def load_manifest() -> dict:
     css: list[str] = []
     js: list[str] = []
 
-    if await Settings.Get("server.dev") is True:
+    if Settings.Get("server.dev") is True:
         return {"css": css, "js": js}
 
     # PyInstaller on Windows drops files inside hidden (dot-prefixed) dirs,
@@ -109,6 +109,19 @@ async def lifespan(app: FastAPI):
     await asyncio.wait(shutdown_tasks, timeout=5.0)
 
 app = FastAPI(lifespan=lifespan)
+
+
+@app.exception_handler(HTTPException)
+async def _http_exception_handler(_request: Request, exc: HTTPException) -> ORJSONResponse:
+    """Render HTTPException as {"error": detail} so the wire shape is uniform."""
+    return ORJSONResponse({"error": exc.detail}, status_code=exc.status_code)
+
+
+@app.exception_handler(Exception)
+async def _unhandled_exception_handler(_request: Request, exc: Exception) -> ORJSONResponse:
+    """Catch-all: log the real error, return a generic 500 without leaking internals."""
+    logger.exception("unhandled exception in request handler: {}", exc)
+    return ORJSONResponse({"error": "Internal server error"}, status_code=500)
 
 # In dev mode dist/ may not exist yet; fall back to public/ for the template
 _template_dir = "./dist" if Path("./dist").is_dir() else "./public"
@@ -221,7 +234,7 @@ async def index(
 ) -> HTMLResponse:
     # In dev mode, use the request's host so the page works from any device.
     vite_host = request.headers.get("host", "localhost").split(":")[0]
-    vite_port = await Settings.Get("server.vite_port", 5173)
+    vite_port = Settings.Get("server.vite_port", 5173)
 
     return templates.TemplateResponse(
         request=request,

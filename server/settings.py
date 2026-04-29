@@ -184,7 +184,7 @@ class Settings:
         )
 
     @classmethod
-    async def Get(cls, key: str, default=None):
+    def Get(cls, key: str, default=None):
         return deep_get(cls.settings, key, default)
 
 class Config:

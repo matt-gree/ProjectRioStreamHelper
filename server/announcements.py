@@ -117,9 +117,8 @@ class Announcements:
     @classmethod
     async def Refresh(cls):
         current_version = Config.config.get("version", "0.0.0")
-        ann = Settings.settings.get("announcements", {}) or {}
-        dismissed = set(ann.get("dismissed_ids", []))
-        check_updates = ann.get("check_for_updates", True)
+        dismissed = set(Settings.Get("announcements.dismissed_ids", []))
+        check_updates = Settings.Get("announcements.check_for_updates", True)
 
         items: list = []
         async with httpx.AsyncClient(timeout=FETCH_TIMEOUT_SEC) as client:
@@ -178,8 +177,7 @@ class Announcements:
 
     @classmethod
     async def Dismiss(cls, announcement_id: str):
-        ann = Settings.settings.get("announcements", {}) or {}
-        dismissed = list(ann.get("dismissed_ids", []))
+        dismissed = list(Settings.Get("announcements.dismissed_ids", []))
         if announcement_id not in dismissed:
             dismissed.append(announcement_id)
             await Settings.Set("announcements.dismissed_ids", dismissed)
@@ -189,8 +187,7 @@ class Announcements:
     @classmethod
     async def DismissAll(cls):
         """Permanently dismiss every currently-active announcement."""
-        ann = Settings.settings.get("announcements", {}) or {}
-        dismissed = list(ann.get("dismissed_ids", []))
+        dismissed = list(Settings.Get("announcements.dismissed_ids", []))
         active_ids = [it.get("id") for it in cls._active if it.get("id")]
         added = False
         for aid in active_ids:

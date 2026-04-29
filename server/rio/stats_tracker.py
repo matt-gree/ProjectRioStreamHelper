@@ -218,7 +218,7 @@ class StatsTracker:
         logger.info(f"[StatsTracker] New game: {cls._players[0]} vs {cls._players[1]}")
 
         # Get game mode tag from settings for filtering stats
-        tag = await Settings.Get("project_rio.stats_tag", None)
+        tag = Settings.Get("project_rio.stats_tag", None)
 
         # Fire background API fetch
         usernames = [p for p in cls._players if p]
@@ -245,7 +245,7 @@ class StatsTracker:
             else:
                 logger.info("[StatsTracker] API stats returned empty DataFrame")
             if push:
-                sb_num = await Settings.Get("scoreboards.hud_target", 1)
+                sb_num = Settings.Get("scoreboards.hud_target", 1)
                 await cls.push_stats_to_state(sb_num, cls._sides_swapped)
         except Exception as e:
             logger.error(f"[StatsTracker] Failed to fetch API stats: {e}")
@@ -332,7 +332,7 @@ class StatsTracker:
         if scoreboard_number is not None:
             scoreboards = [scoreboard_number]
         else:
-            scoreboards = await Settings.Get("scoreboards.active", [1])
+            scoreboards = Settings.Get("scoreboards.active", [1])
         for sb in scoreboards:
             for t in (1, 2):
                 name = await State.Get(f"score.{sb}.player.{t}.rioName")
@@ -351,7 +351,7 @@ class StatsTracker:
             scoreboard_number: If given, only fetch stats for players on that
                                scoreboard. If None, uses all active scoreboards.
         """
-        tag = await Settings.Get("project_rio.stats_tag", None)
+        tag = Settings.Get("project_rio.stats_tag", None)
         usernames = await cls._read_players_from_state(scoreboard_number)
         if usernames:
             cls._api_ready = False
@@ -421,7 +421,7 @@ class StatsTracker:
         unique = list({u for u in usernames if u})
         if not unique:
             return
-        tag = await Settings.Get("project_rio.stats_tag", None)
+        tag = Settings.Get("project_rio.stats_tag", None)
         await cls._fetch_api_stats(unique, tag, push=False)
         logger.info(f"[StatsTracker] Pre-fetched stats for {len(unique)} rotation players")
 

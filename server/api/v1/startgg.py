@@ -1,6 +1,6 @@
 from loguru import logger
 from server.utils.router import method
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import ORJSONResponse
 from server.startgg.provider import StartGGProvider
 
@@ -15,10 +15,10 @@ router = APIRouter()
 async def startgg_load_event(url: str = "", session_id: str | None = None) -> ORJSONResponse:
     """Load tournament data from a start.gg event URL."""
     if not url:
-        return ORJSONResponse({"error": "URL is required"}, status_code=400)
+        raise HTTPException(status_code=400, detail="URL is required")
     result = await StartGGProvider.LoadEvent(url)
     if "error" in result:
-        return ORJSONResponse(result, status_code=400)
+        raise HTTPException(status_code=400, detail=result["error"])
     return ORJSONResponse(result)
 
 
@@ -75,7 +75,7 @@ async def startgg_set(set_id: int, session_id: str | None = None) -> ORJSONRespo
     """Get a single set by ID with full player detail."""
     result = await StartGGProvider.GetSet(set_id)
     if "error" in result:
-        return ORJSONResponse(result, status_code=404)
+        raise HTTPException(status_code=404, detail=result["error"])
     return ORJSONResponse(result)
 
 
@@ -91,10 +91,10 @@ async def startgg_load_set(
 ) -> ORJSONResponse:
     """Load a set's player tags and scores into a scoreboard."""
     if not set_id:
-        return ORJSONResponse({"error": "set_id is required"}, status_code=400)
+        raise HTTPException(status_code=400, detail="set_id is required")
     result = await StartGGProvider.LoadSetIntoScoreboard(set_id, scoreboard_number)
     if "error" in result:
-        return ORJSONResponse(result, status_code=400)
+        raise HTTPException(status_code=400, detail=result["error"])
     return ORJSONResponse(result)
 
 
@@ -109,10 +109,10 @@ async def startgg_load_bracket(
 ) -> ORJSONResponse:
     """Fetch bracket structure for a phase group and write to State for overlays."""
     if not phase_group_id:
-        return ORJSONResponse({"error": "phase_group_id is required"}, status_code=400)
+        raise HTTPException(status_code=400, detail="phase_group_id is required")
     result = await StartGGProvider.LoadBracket(phase_group_id)
     if "error" in result:
-        return ORJSONResponse(result, status_code=400)
+        raise HTTPException(status_code=400, detail=result["error"])
     return ORJSONResponse(result)
 
 
@@ -127,10 +127,10 @@ async def startgg_bracket_data(
 ) -> ORJSONResponse:
     """Get bracket structure for a phase group (without writing to State)."""
     if not phase_group_id:
-        return ORJSONResponse({"error": "phase_group_id is required"}, status_code=400)
+        raise HTTPException(status_code=400, detail="phase_group_id is required")
     result = await StartGGProvider.GetBracketData(phase_group_id)
     if "error" in result:
-        return ORJSONResponse(result, status_code=400)
+        raise HTTPException(status_code=400, detail=result["error"])
     return ORJSONResponse(result)
 
 

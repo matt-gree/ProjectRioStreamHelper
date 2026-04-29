@@ -14,7 +14,6 @@ from loguru import logger
 
 from server.settings import Settings
 from server.state import State
-from server.utils.keyring import decrypt_key
 
 _API_URL = "https://api.challonge.com/v2.1"
 _TIMEOUT = 20.0
@@ -132,8 +131,7 @@ class ChallongeProvider:
         if cls._client is None:
             await cls.Start()
 
-        raw_key = await Settings.Get("challonge.api_key", "")
-        api_key = decrypt_key(raw_key)
+        api_key = Settings.Get("challonge.api_key", "")
         if not api_key:
             return {"error": "Challonge API key not configured. Set it in Settings → Challonge."}
 

@@ -2,6 +2,7 @@ import orjson
 import asyncio
 from functools import partial
 from loguru import logger
+from fastapi import HTTPException
 from fastapi.responses import Response
 from server import socketio
 from server.utils import json
@@ -13,9 +14,11 @@ async def on_socketio_event(sid, data, func):
         content = await func(**data, session_id=sid)
         if isinstance(content, Response):
             content = await asyncio.to_thread(
-                content.body.decode, 
+                content.body.decode,
                 content.charset
             )
+    except HTTPException as e:
+        content = {"error": e.detail}
     except Exception as e:
         logger.exception("error while parsing socketio event")
         content = {

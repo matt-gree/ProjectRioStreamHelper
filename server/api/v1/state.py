@@ -63,17 +63,9 @@ async def state_get(key: str | None = None, session_id: str | None = None) -> OR
     response_class=ORJSONResponse
 )
 async def state_set(key: str = "", value: str | None = None, session_id: str | None = None):
-    try:
-        await State.Set(key, value, session_id=session_id)
-        await State.Save()
-    except Exception as e:
-        return ORJSONResponse({
-            "error": str(e)
-        })
-
-    return ORJSONResponse({
-        "success": True
-    })
+    await State.Set(key, value, session_id=session_id)
+    await State.Save()
+    return ORJSONResponse({"success": True})
 
 @method(
     router.post, "/state/export-all",
@@ -81,10 +73,7 @@ async def state_set(key: str = "", value: str | None = None, session_id: str | N
     response_class=ORJSONResponse
 )
 async def state_export_all(session_id: str | None = None):
-    try:
-        await State.ExportAll()
-    except Exception as e:
-        return ORJSONResponse({"error": str(e)})
+    await State.ExportAll()
     return ORJSONResponse({"success": True})
 
 @method(
@@ -93,14 +82,6 @@ async def state_export_all(session_id: str | None = None):
     response_class=ORJSONResponse
 )
 async def state_unset(key: str = "", session_id: str | None = None):
-    try:
-        await State.Unset(key, session_id=session_id)
-        await State.Save()
-    except Exception as e:
-        return ORJSONResponse({
-            "error": str(e)
-        })
-    
-    return ORJSONResponse({
-        "success": True
-    })
+    await State.Unset(key, session_id=session_id)
+    await State.Save()
+    return ORJSONResponse({"success": True})

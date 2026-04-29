@@ -23,7 +23,7 @@ class State:
 
     @classmethod
     async def _is_export_enabled(cls) -> bool:
-        disable_export = await Settings.Get("general.disable_export", True)
+        disable_export = Settings.Get("general.disable_export", True)
         if isinstance(disable_export, str):
             disable_export = disable_export.strip().lower() not in ("", "0", "false", "no", "off")
         return not disable_export
@@ -51,7 +51,7 @@ class State:
         """
         await cls.SaveImmediately()
 
-        disable_export = await Settings.Get("general.disable_export", True)
+        disable_export = Settings.Get("general.disable_export", True)
         # Setting may come in as a string ("1"/"") from query-param PUTs; coerce to bool.
         if isinstance(disable_export, str):
             disable_export = disable_export.strip().lower() not in ("", "0", "false", "no", "off")

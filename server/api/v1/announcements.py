@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import ORJSONResponse
 
 from server.announcements import Announcements
@@ -26,7 +26,7 @@ async def announcements_dismiss(
     session_id: str | None = None,
 ) -> ORJSONResponse:
     if not announcement_id:
-        return ORJSONResponse({"error": "announcement_id required"}, status_code=400)
+        raise HTTPException(status_code=400, detail="announcement_id required")
     await Announcements.Dismiss(announcement_id)
     return ORJSONResponse({"success": True})
 

@@ -25,7 +25,7 @@ def get_default_hud_file_path() -> Path:
 
 async def get_user_hud_path() -> Path | None:
     """Get user-configured HUD path from settings, falling back to OS default."""
-    user_path = await Settings.Get("project_rio.hud_path", "")
+    user_path = Settings.Get("project_rio.hud_path", "")
     if user_path:
         path = Path(user_path)
         if path.exists() and path.is_file() and path.suffix == ".json":
@@ -232,7 +232,7 @@ class RioGameDataProvider:
     @classmethod
     async def Start(cls):
         """Resolve HUD path and start the file watcher."""
-        cls._hud_target = await Settings.Get("scoreboards.hud_target", 1)
+        cls._hud_target = Settings.Get("scoreboards.hud_target", 1)
 
         hud_path = await get_user_hud_path()
         if not hud_path:
@@ -394,8 +394,7 @@ class RioGameDataProvider:
         cls._prev_inning = None
         cls._sides_swapped = False
         cls._user_overridden = False
-        # Refresh cached target from settings (sync read — settings are in-memory)
-        cls._hud_target = Settings.settings.get("scoreboards", {}).get("hud_target", 1)
+        cls._hud_target = Settings.Get("scoreboards.hud_target", 1)
         StatsTracker.reset()
 
     @classmethod
@@ -460,21 +459,6 @@ class RioGameDataProvider:
             await StatsTracker.push_stats_to_state(cls._hud_target, cls._sides_swapped)
 
     @classmethod
-    async def _pin_wants_swap(cls, player0: str, player1: str) -> bool | None:
-        """Check if the pinned player setting requires a swap."""
-        pinned_player = (await Settings.Get("project_rio.pinned_player", "")).strip()
-        if not pinned_player:
-            return None
-        pinned_side = await Settings.Get("project_rio.pinned_side", "Team 1")
-        pinned_index = 0 if pinned_side == "Team 1" else 1
-
-        if player0 == pinned_player:
-            return pinned_index == 1
-        elif player1 == pinned_player:
-            return pinned_index == 0
-        return None
-
-    @classmethod
     def _preserve_player_sides(cls, parsed: dict) -> dict:
         """Ensure consistent team sides across all HUD events in a game.
 
@@ -491,12 +475,10 @@ class RioGameDataProvider:
         player0 = parsed["entrants"][0][0].get("rioName", "")
         player1 = parsed["entrants"][1][0].get("rioName", "")
 
-        # Pin check needs to be sync here since this is called from sync context
-        # We use the cached settings value directly
-        pinned_player = Settings.settings.get("project_rio", {}).get("pinned_player", "").strip()
+        pinned_player = Settings.Get("project_rio.pinned_player", "").strip()
         pin_swap = None
         if pinned_player:
-            pinned_side = Settings.settings.get("project_rio", {}).get("pinned_side", "Team 1")
+            pinned_side = Settings.Get("project_rio.pinned_side", "Team 1")
             pinned_index = 0 if pinned_side == "Team 1" else 1
             if player0 == pinned_player:
                 pin_swap = pinned_index == 1

@@ -1,5 +1,5 @@
 from server.utils.router import method
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import ORJSONResponse
 from server.rio.provider import RioGameDataProvider
 from server.settings import Settings
@@ -24,10 +24,10 @@ def _lowest_available_id(active: list[int]) -> int:
 )
 async def list_scoreboards(session_id: str | None = None) -> ORJSONResponse:
     """List all active scoreboards with their source metadata."""
-    active = await Settings.Get("scoreboards.active", [1])
-    sources = await Settings.Get("scoreboards.sources", {})
-    aliases = await Settings.Get("scoreboards.aliases", {})
-    hud_target = await Settings.Get("scoreboards.hud_target", 1)
+    active = Settings.Get("scoreboards.active", [1])
+    sources = Settings.Get("scoreboards.sources", {})
+    aliases = Settings.Get("scoreboards.aliases", {})
+    hud_target = Settings.Get("scoreboards.hud_target", 1)
 
     scoreboards = []
     for sb_id in active:
@@ -49,7 +49,7 @@ async def list_scoreboards(session_id: str | None = None) -> ORJSONResponse:
 )
 async def add_scoreboard(session_id: str | None = None) -> ORJSONResponse:
     """Add a new scoreboard tab, reusing the lowest available ID."""
-    active = await Settings.Get("scoreboards.active", [1])
+    active = Settings.Get("scoreboards.active", [1])
 
     new_id = _lowest_available_id(active)
     active.append(new_id)
@@ -69,18 +69,18 @@ async def add_scoreboard(session_id: str | None = None) -> ORJSONResponse:
 )
 async def remove_scoreboard(sb_id: int, session_id: str | None = None) -> ORJSONResponse:
     """Remove a scoreboard tab and clear its state."""
-    active = await Settings.Get("scoreboards.active", [1])
+    active = Settings.Get("scoreboards.active", [1])
 
     if len(active) <= 1:
-        return ORJSONResponse({"success": False, "error": "Cannot remove last scoreboard"}, status_code=400)
+        raise HTTPException(status_code=400, detail="Cannot remove last scoreboard")
     if sb_id not in active:
-        return ORJSONResponse({"success": False, "error": "Scoreboard not found"}, status_code=404)
+        raise HTTPException(status_code=404, detail="Scoreboard not found")
 
     # Clear state for this scoreboard
     await State.Unset(f"score.{sb_id}")
 
     # If this was the HUD target, clear it — don't auto-assign to another
-    hud_target = await Settings.Get("scoreboards.hud_target", 1)
+    hud_target = Settings.Get("scoreboards.hud_target", 1)
     if hud_target == sb_id:
         await Settings.Set("scoreboards.hud_target", 0)
         RioGameDataProvider._reset_side_preservation()
@@ -106,23 +106,23 @@ async def set_scoreboard_source(
     session_id: str | None = None,
 ) -> ORJSONResponse:
     """Set the data source for a scoreboard (manual, hud, or api)."""
-    active = await Settings.Get("scoreboards.active", [1])
+    active = Settings.Get("scoreboards.active", [1])
     if sb_id not in active:
-        return ORJSONResponse({"success": False, "error": "Scoreboard not found"}, status_code=404)
+        raise HTTPException(status_code=404, detail="Scoreboard not found")
 
     valid_types = ("manual", "hud", "live_game", "rotator")
     if source_type not in valid_types:
-        return ORJSONResponse({"success": False, "error": f"Invalid source type. Must be one of: {valid_types}"}, status_code=400)
+        raise HTTPException(status_code=400, detail=f"Invalid source type. Must be one of: {valid_types}")
 
     # Clear scoreboard state on source change, except HUD → Manual (preserve displayed data)
-    old_source = await Settings.Get(f"scoreboards.sources.{sb_id}.type", "manual")
+    old_source = Settings.Get(f"scoreboards.sources.{sb_id}.type", "manual")
     if old_source != source_type and not (old_source == "hud" and source_type == "manual"):
         await State.Set(f"score.{sb_id}", {})
         await State.Save()
 
     if source_type == "hud":
         # Unlink previous HUD target
-        old_target = await Settings.Get("scoreboards.hud_target", 1)
+        old_target = Settings.Get("scoreboards.hud_target", 1)
         if old_target != sb_id and old_target in active:
             await Settings.Set(f"scoreboards.sources.{old_target}.type", "manual")
 
@@ -139,7 +139,7 @@ async def set_scoreboard_source(
             await RioGameDataProvider._apply_game_to_state(parsed)
     else:
         # If this was the HUD target, clear it
-        hud_target = await Settings.Get("scoreboards.hud_target", 1)
+        hud_target = Settings.Get("scoreboards.hud_target", 1)
         if hud_target == sb_id:
             await Settings.Set("scoreboards.hud_target", 0)
 
@@ -163,9 +163,9 @@ async def set_scoreboard_alias(
     session_id: str | None = None,
 ) -> ORJSONResponse:
     """Set a display alias for a scoreboard tab."""
-    active = await Settings.Get("scoreboards.active", [1])
+    active = Settings.Get("scoreboards.active", [1])
     if sb_id not in active:
-        return ORJSONResponse({"success": False, "error": "Scoreboard not found"}, status_code=404)
+        raise HTTPException(status_code=404, detail="Scoreboard not found")
 
     alias = alias.strip()
     if alias:

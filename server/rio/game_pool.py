@@ -43,10 +43,10 @@ def _pinned_swap_needed(player0: str, player1: str) -> bool | None:
     Returns True if swap needed, False if no swap needed, None if
     pinned player is not in this game.
     """
-    pinned_player = Settings.settings.get("project_rio", {}).get("pinned_player", "").strip()
+    pinned_player = Settings.Get("project_rio.pinned_player", "").strip()
     if not pinned_player:
         return None
-    pinned_side = Settings.settings.get("project_rio", {}).get("pinned_side", "Team 1")
+    pinned_side = Settings.Get("project_rio.pinned_side", "Team 1")
     pinned_index = 0 if pinned_side == "Team 1" else 1
 
     if player0 == pinned_player:
@@ -72,7 +72,7 @@ class OngoingGamePool:
     @classmethod
     async def Start(cls):
         cls._auto_poll = False
-        cls._poll_interval = await Settings.Get("ongoing_games.poll_interval", 10.0)
+        cls._poll_interval = Settings.Get("ongoing_games.poll_interval", 10.0)
         # Always start with auto-poll off regardless of previous session state
         await Settings.Set("ongoing_games.auto_poll", False)
         logger.info("[OngoingGamePool] Initialized (auto_poll=False)")
@@ -243,8 +243,8 @@ class CompletedGamePool:
     @classmethod
     async def Start(cls):
         cls._auto_poll = False
-        cls._poll_interval = await Settings.Get("completed_games.poll_interval", 60.0)
-        cls._filters = await Settings.Get("completed_games.filters", {})
+        cls._poll_interval = Settings.Get("completed_games.poll_interval", 60.0)
+        cls._filters = Settings.Get("completed_games.filters", {})
         # Always start with auto-poll off regardless of previous session state
         await Settings.Set("completed_games.auto_poll", False)
         logger.info("[CompletedGamePool] Initialized (auto_poll=False)")

@@ -8,7 +8,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import ORJSONResponse
 from loguru import logger
 
@@ -54,18 +54,14 @@ async def logs_list(session_id: str | None = None) -> ORJSONResponse:
     """List log files (name, size in bytes, mtime as epoch seconds)."""
     d = _logs_dir()
     items = []
-    try:
-        for entry in sorted(d.iterdir()):
-            if entry.is_file():
-                st = entry.stat()
-                items.append({
-                    "name": entry.name,
-                    "size": st.st_size,
-                    "mtime": st.st_mtime,
-                })
-    except Exception as e:
-        logger.exception("[logs] list failed")
-        return ORJSONResponse({"error": str(e), "items": []}, status_code=500)
+    for entry in sorted(d.iterdir()):
+        if entry.is_file():
+            st = entry.stat()
+            items.append({
+                "name": entry.name,
+                "size": st.st_size,
+                "mtime": st.st_mtime,
+            })
     return ORJSONResponse({"dir": str(d), "items": items})
 
 
@@ -87,30 +83,26 @@ async def logs_tail(
     """
     p = _safe_log_path(name)
     if p is None:
-        return ORJSONResponse({"error": "log not found"}, status_code=404)
+        raise HTTPException(status_code=404, detail="log not found")
 
     # Clamp to a sensible max so one request can't hog RAM.
     max_bytes = max(1024, min(int(bytes), 2 * 1024 * 1024))  # 1 KB .. 2 MB
 
-    try:
-        size = p.stat().st_size
-        with p.open("rb") as f:
-            if size > max_bytes:
-                f.seek(size - max_bytes)
-                # Align to line start so we don't render a partial first line.
-                f.readline()
-            data = f.read()
-        text = data.decode("utf-8", errors="replace")
-        return ORJSONResponse({
-            "name": p.name,
-            "size": size,
-            "returned": len(data),
-            "truncated": size > max_bytes,
-            "text": text,
-        })
-    except Exception as e:
-        logger.exception("[logs] tail failed")
-        return ORJSONResponse({"error": str(e)}, status_code=500)
+    size = p.stat().st_size
+    with p.open("rb") as f:
+        if size > max_bytes:
+            f.seek(size - max_bytes)
+            # Align to line start so we don't render a partial first line.
+            f.readline()
+        data = f.read()
+    text = data.decode("utf-8", errors="replace")
+    return ORJSONResponse({
+        "name": p.name,
+        "size": size,
+        "returned": len(data),
+        "truncated": size > max_bytes,
+        "text": text,
+    })
 
 
 @method(
@@ -121,14 +113,10 @@ async def logs_tail(
 async def logs_reveal(session_id: str | None = None) -> ORJSONResponse:
     """Reveal the logs folder in the OS file manager."""
     d = _logs_dir()
-    try:
-        if sys.platform == "darwin":
-            subprocess.Popen(["open", str(d)])
-        elif sys.platform == "win32":
-            os.startfile(str(d))  # type: ignore[attr-defined]
-        else:
-            subprocess.Popen(["xdg-open", str(d)])
-        return ORJSONResponse({"success": True, "dir": str(d)})
-    except Exception as e:
-        logger.exception("[logs] reveal failed")
-        return ORJSONResponse({"success": False, "error": str(e)}, status_code=500)
+    if sys.platform == "darwin":
+        subprocess.Popen(["open", str(d)])
+    elif sys.platform == "win32":
+        os.startfile(str(d))  # type: ignore[attr-defined]
+    else:
+        subprocess.Popen(["xdg-open", str(d)])
+    return ORJSONResponse({"success": True, "dir": str(d)})

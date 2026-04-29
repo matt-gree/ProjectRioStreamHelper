@@ -3,9 +3,8 @@ import platform
 import subprocess
 from pathlib import Path
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import ORJSONResponse
-from loguru import logger
 
 from server.paths import default_msb_assets_dir
 from server.rio.pyrio.assets import (
@@ -25,7 +24,7 @@ router = APIRouter()
 
 async def get_msb_assets_path() -> Path:
     """Resolve the active MSB assets folder: user override or default."""
-    user_path = await Settings.Get("assets.msb_path", "")
+    user_path = Settings.Get("assets.msb_path", "")
     if user_path:
         p = Path(user_path)
         if p.exists() and p.is_dir():
@@ -99,7 +98,7 @@ def _inspect_assets(path: Path) -> dict:
 )
 async def assets_msb(session_id: str | None = None) -> ORJSONResponse:
     """Get current MSB assets path info: configured, resolved, default, and file count."""
-    configured = await Settings.Get("assets.msb_path", "")
+    configured = Settings.Get("assets.msb_path", "")
     resolved = await get_msb_assets_path()
     default = default_msb_assets_dir()
     inspection = _inspect_assets(resolved)
@@ -121,10 +120,7 @@ async def assets_msb_set(path: str = "", session_id: str | None = None) -> ORJSO
     if path:
         p = Path(path)
         if not p.exists() or not p.is_dir():
-            return ORJSONResponse({
-                "success": False,
-                "error": "Path must be an existing directory",
-            })
+            raise HTTPException(status_code=400, detail="Path must be an existing directory")
 
     await Settings.Set("assets.msb_path", path, session_id=session_id)
     resolved = await get_msb_assets_path()
@@ -185,11 +181,8 @@ async def assets_msb_browse(session_id: str | None = None) -> ORJSONResponse:
     """Open the native OS folder picker."""
     system = platform.system()
     if system not in ("Darwin", "Windows"):
-        return ORJSONResponse({"success": False, "path": None, "error": f"Unsupported platform: {system}"}, status_code=400)
-    try:
-        selected = await asyncio.to_thread(_open_folder_dialog)
-    except Exception as e:
-        return ORJSONResponse({"success": False, "path": None, "error": str(e)}, status_code=500)
+        raise HTTPException(status_code=400, detail=f"Unsupported platform: {system}")
+    selected = await asyncio.to_thread(_open_folder_dialog)
     if selected:
         return ORJSONResponse({"success": True, "path": selected})
     return ORJSONResponse({"success": False, "path": None})
@@ -209,15 +202,11 @@ async def assets_msb_reveal(session_id: str | None = None) -> ORJSONResponse:
         path = default_msb_assets_dir()
 
     system = platform.system()
-    try:
-        if system == "Darwin":
-            await asyncio.to_thread(subprocess.Popen, ["open", str(path)])
-        elif system == "Windows":
-            await asyncio.to_thread(subprocess.Popen, ["explorer", str(path)])
-        else:
-            await asyncio.to_thread(subprocess.Popen, ["xdg-open", str(path)])
-    except Exception as e:
-        logger.exception("[assets_msb_reveal] failed")
-        return ORJSONResponse({"success": False, "error": str(e)}, status_code=500)
+    if system == "Darwin":
+        await asyncio.to_thread(subprocess.Popen, ["open", str(path)])
+    elif system == "Windows":
+        await asyncio.to_thread(subprocess.Popen, ["explorer", str(path)])
+    else:
+        await asyncio.to_thread(subprocess.Popen, ["xdg-open", str(path)])
 
     return ORJSONResponse({"success": True, "path": str(path)})

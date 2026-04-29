@@ -2,10 +2,9 @@ from server.utils.router import method
 from fastapi import APIRouter
 from fastapi.responses import ORJSONResponse, Response
 from server.settings import Settings, Config
-from server.utils.keyring import encrypt_key, decrypt_key
 
-# Keys that should be encrypted at rest
-_ENCRYPTED_KEYS = {"challonge.api_key"}
+# Keys whose raw value should never be returned via GET (config-only check)
+_SECRET_KEYS = {"challonge.api_key"}
 
 # This only needs to be declared once in the file
 router = APIRouter()
@@ -19,10 +18,10 @@ async def settings_get(key: str | None = None, session_id: str | None = None) ->
     if key == None or key == "":
         return ORJSONResponse(Settings.settings)
 
-    value = await Settings.Get(key)
-    # For encrypted keys, return whether configured (not the raw value)
-    if key in _ENCRYPTED_KEYS:
-        return ORJSONResponse(bool(decrypt_key(value) if value else False))
+    value = Settings.Get(key)
+    # For secret keys, return whether configured (not the raw value)
+    if key in _SECRET_KEYS:
+        return ORJSONResponse(bool(value))
     return ORJSONResponse(value)
 
 @method(
@@ -31,19 +30,8 @@ async def settings_get(key: str | None = None, session_id: str | None = None) ->
     response_class=ORJSONResponse
 )
 async def settings_set(key: str = "", value: str | None = None, session_id: str | None = None):
-    try:
-        # Encrypt sensitive keys before storing
-        if key in _ENCRYPTED_KEYS and value:
-            value = encrypt_key(value)
-        await Settings.Set(key, value, session_id=session_id)
-    except Exception as e:
-        return ORJSONResponse({
-            "error": str(e)
-        })
-
-    return ORJSONResponse({
-        "success": True
-    })
+    await Settings.Set(key, value, session_id=session_id)
+    return ORJSONResponse({"success": True})
 
 @method(
     router.delete, "/settings",
@@ -51,16 +39,8 @@ async def settings_set(key: str = "", value: str | None = None, session_id: str 
     response_class=ORJSONResponse
 )
 async def settings_unset(key: str = "", session_id: str | None = None):
-    try:
-        await Settings.Unset(key, session_id=session_id)
-    except Exception as e:
-        return ORJSONResponse({
-            "error": str(e)
-        })
-    
-    return ORJSONResponse({
-        "success": True
-    })
+    await Settings.Unset(key, session_id=session_id)
+    return ORJSONResponse({"success": True})
 
 @method(
     router.get, "/config",

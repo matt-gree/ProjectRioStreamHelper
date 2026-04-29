@@ -202,20 +202,18 @@ export default function ScoreboardManager() {
 
     const handleAddScoreboard = useCallback(async () => {
         const resp = await fetch('/api/v1/scoreboards', { method: 'POST' });
+        if (!resp.ok) return;
         const data = await resp.json();
-        if (data.success) {
-            setActiveTab(String(data.id));
-        }
+        setActiveTab(String(data.id));
     }, []);
 
     const handleRemoveScoreboard = useCallback(async (e, sbId) => {
         e.stopPropagation();
         const resp = await fetch(`/api/v1/scoreboards/${sbId}`, { method: 'DELETE' });
+        if (!resp.ok) return;
         const data = await resp.json();
-        if (data.success) {
-            const remaining = data.active ?? [1];
-            setActiveTab(String(remaining[0]));
-        }
+        const remaining = data.active ?? [1];
+        setActiveTab(String(remaining[0]));
     }, []);
 
     return (

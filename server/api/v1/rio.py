@@ -1,9 +1,8 @@
 import asyncio
 from pathlib import Path
 
-from loguru import logger
 from server.utils.router import method
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import ORJSONResponse
 from server.rio.provider import RioGameDataProvider, get_default_hud_file_path, get_user_hud_path
 from server.settings import Settings
@@ -29,9 +28,9 @@ async def rio_game(session_id: str | None = None) -> ORJSONResponse:
 async def rio_refresh(session_id: str | None = None) -> ORJSONResponse:
     """Force a re-read of the HUD file and update state."""
     game = await RioGameDataProvider.FetchHUDGame()
-    if game:
-        return ORJSONResponse({"success": True, "game": game})
-    return ORJSONResponse({"success": False, "error": "No HUD data available"}, status_code=404)
+    if not game:
+        raise HTTPException(status_code=404, detail="No HUD data available")
+    return ORJSONResponse({"success": True, "game": game})
 
 
 @method(
@@ -44,12 +43,12 @@ async def rio_swap(
     session_id: str | None = None,
 ) -> ORJSONResponse:
     """Toggle team sides (manual swap) for the HUD-linked scoreboard."""
-    hud_target = await Settings.Get("scoreboards.hud_target", 1)
+    hud_target = Settings.Get("scoreboards.hud_target", 1)
     if scoreboard_number is not None and scoreboard_number != hud_target:
-        return ORJSONResponse({
-            "success": False,
-            "error": f"Scoreboard {scoreboard_number} is not HUD-linked",
-        }, status_code=400)
+        raise HTTPException(
+            status_code=400,
+            detail=f"Scoreboard {scoreboard_number} is not HUD-linked",
+        )
 
     await RioGameDataProvider.toggle_sides_swapped()
 
@@ -66,7 +65,7 @@ async def rio_swap(
 )
 async def rio_hud_path(session_id: str | None = None) -> ORJSONResponse:
     """Get current HUD path info: configured path, resolved path, and default."""
-    configured = await Settings.Get("project_rio.hud_path", "")
+    configured = Settings.Get("project_rio.hud_path", "")
     resolved = await get_user_hud_path()
     default = get_default_hud_file_path()
     return ORJSONResponse({
@@ -86,21 +85,11 @@ async def rio_hud_path_set(path: str = "", session_id: str | None = None) -> ORJ
     if path:
         p = Path(path)
         if not p.exists() or not p.is_file() or p.suffix != ".json":
-            return ORJSONResponse({
-                "success": False,
-                "error": "Path must be an existing .json file",
-            })
+            raise HTTPException(status_code=400, detail="Path must be an existing .json file")
 
     await Settings.Set("project_rio.hud_path", path, session_id=session_id)
 
-    try:
-        loaded = await RioGameDataProvider.ReloadHudPath()
-    except Exception as e:
-        logger.exception("[rio_hud_path_set] ReloadHudPath failed")
-        return ORJSONResponse({
-            "success": False,
-            "error": str(e),
-        })
+    loaded = await RioGameDataProvider.ReloadHudPath()
 
     resolved = await get_user_hud_path()
     result = {
@@ -213,11 +202,8 @@ async def rio_browse_hud(session_id: str | None = None) -> ORJSONResponse:
     import platform
     system = platform.system()
     if system not in ("Darwin", "Windows"):
-        return ORJSONResponse({"success": False, "path": None, "error": f"Unsupported platform: {system}"}, status_code=400)
-    try:
-        selected = await asyncio.to_thread(_open_file_dialog)
-    except Exception as e:
-        return ORJSONResponse({"success": False, "path": None, "error": str(e)}, status_code=500)
+        raise HTTPException(status_code=400, detail=f"Unsupported platform: {system}")
+    selected = await asyncio.to_thread(_open_file_dialog)
     if selected:
         return ORJSONResponse({"success": True, "path": selected})
     return ORJSONResponse({"success": False, "path": None})

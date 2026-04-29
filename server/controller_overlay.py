@@ -80,15 +80,15 @@ class ControllerOverlay:
         cls._gc_overlay_path = _find_gc_overlay()
 
         # Check for custom path in settings
-        custom_path = await Settings.Get("controller_overlay.path", "")
+        custom_path = Settings.Get("controller_overlay.path", "")
         if custom_path:
             p = Path(custom_path)
             if (p / "main.py").exists():
                 cls._gc_overlay_path = p
 
-        cls._port = await Settings.Get("controller_overlay.port", 8069)
-        cls._controller = await Settings.Get("controller_overlay.controller", 1)
-        cls._auto_start = await Settings.Get("controller_overlay.auto_start", False)
+        cls._port = Settings.Get("controller_overlay.port", 8069)
+        cls._controller = Settings.Get("controller_overlay.controller", 1)
+        cls._auto_start = Settings.Get("controller_overlay.auto_start", False)
 
         if cls._gc_overlay_path:
             logger.info("[controller_overlay] found gc-overlay at: {}", cls._gc_overlay_path)

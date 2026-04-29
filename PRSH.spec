@@ -90,7 +90,6 @@ a = Analysis(
         'pystray',
         'pystray._darwin',   # macOS tray backend
         'pystray._win32',    # Windows tray backend
-        'cryptography',
 
         # Data science (required by pyrio)
         'pandas',

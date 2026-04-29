@@ -1,5 +1,5 @@
 from server.utils.router import method
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import ORJSONResponse
 from server.rio.game_pool import OngoingGamePool, CompletedGamePool
 from server.rio.stats_api import get_last_completed_fetch_info
@@ -163,7 +163,7 @@ async def assign_game(
     elif CompletedGamePool.get_game(game_id):
         success = await CompletedGamePool.apply_game_to_scoreboard(game_id, scoreboard_number)
     else:
-        return ORJSONResponse({"success": False, "error": "Game not found in any pool"}, status_code=404)
+        raise HTTPException(status_code=404, detail="Game not found in any pool")
 
     return ORJSONResponse({"success": success})
 
