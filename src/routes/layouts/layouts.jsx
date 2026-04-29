@@ -727,8 +727,12 @@ function BracketLayoutList({ selected, onSelect, baseUrl, onLoadBracket }) {
                             style={(theme) => ({
                                 borderRadius: theme.radius.sm,
                                 width: '100%',
+                                // Use the theme-adaptive var, not theme.colors.violet[0].
+                                // The palette-index-0 shade is near-white in both themes
+                                // and glares against dark mode; -light variants are
+                                // tinted-translucent and adapt automatically.
                                 backgroundColor: isGroupActive(pg.id)
-                                    ? theme.colors.violet[0]
+                                    ? 'var(--mantine-color-violet-light)'
                                     : 'transparent',
                             })}
                         >

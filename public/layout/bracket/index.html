@@ -373,7 +373,12 @@
         html += `<div class="phase-name">${esc(phaseName)}</div>`;
       }
 
-      const isRoundRobin = type === 'ROUND_ROBIN';
+      // Pool formats (round-robin and Swiss) lay out as flat lists of rounds
+      // with no inter-round connections. Treating Swiss like RR for now is
+      // a placeholder — Swiss really wants its own pairing-style layout, but
+      // suppressing connectors is closer to correct than drawing bracket-style
+      // lines that don't reflect actual Swiss pairings.
+      const isRoundRobin = type === 'ROUND_ROBIN' || type === 'SWISS';
 
       // Winners bracket
       if (!LOSERS_ONLY && winnersRounds && Object.keys(winnersRounds).length > 0) {

@@ -56,8 +56,13 @@ class StartGGProvider:
     _event_url: str | None = None
     _tournament_data: dict | None = None
     _entrants_cache: dict | None = None  # {gamerTag_lower: parsed_player_dict}
+    _bracket_cache: dict[int, dict] = {}  # phase_group_id -> parsed bracket dict
     _load_lock: asyncio.Lock = asyncio.Lock()
     _restore_task: asyncio.Task | None = None
+    _prefetch_task: asyncio.Task | None = None
+    # Cap concurrency against the unauthenticated start.gg endpoint —
+    # tournaments with many pools can have 20+ phase groups.
+    _PREFETCH_CONCURRENCY = 3
 
     # ── lifecycle ──────────────────────────────────────────────
 
@@ -92,13 +97,15 @@ class StartGGProvider:
 
     @classmethod
     async def Stop(cls):
-        if cls._restore_task and not cls._restore_task.done():
-            cls._restore_task.cancel()
-            try:
-                await cls._restore_task
-            except (asyncio.CancelledError, Exception):
-                pass
-            cls._restore_task = None
+        for attr in ("_restore_task", "_prefetch_task"):
+            t = getattr(cls, attr)
+            if t and not t.done():
+                t.cancel()
+                try:
+                    await t
+                except (asyncio.CancelledError, Exception):
+                    pass
+                setattr(cls, attr, None)
         if cls._client:
             await cls._client.aclose()
             cls._client = None
@@ -110,6 +117,7 @@ class StartGGProvider:
         cls._event_url = None
         cls._tournament_data = None
         cls._entrants_cache = None
+        cls._bracket_cache = {}
         await State.SetBatch([
             ("tournamentInfo.bracket_link", ""),
             ("tournamentInfo.name", ""),
@@ -193,9 +201,10 @@ class StartGGProvider:
             return {"error": "Could not parse start.gg URL"}
 
         canonical_url = f"https://www.start.gg/{slug}"
-        # Only invalidate the entrants cache when the event actually changes.
+        # Only invalidate caches when the event actually changes.
         if cls._event_slug != slug:
             cls._entrants_cache = None
+            cls._bracket_cache = {}
         cls._event_slug = slug
         cls._event_url = canonical_url
 
@@ -243,7 +252,70 @@ class StartGGProvider:
         await State.SetBatch(entries)
         await State.Save()
 
+        # Warm the bracket cache in the background so phase-switching in the
+        # Bracket tab is instant. Fire-and-forget — the user gets tournament
+        # info immediately; brackets fill in as the prefetch completes.
+        cls._start_prefetch(slug)
+
         return result
+
+    @classmethod
+    def _start_prefetch(cls, slug: str):
+        """(Re)start the bracket-prefetch background task for the given slug."""
+        if cls._prefetch_task and not cls._prefetch_task.done():
+            cls._prefetch_task.cancel()
+        cls._prefetch_task = asyncio.create_task(
+            cls._prefetch_brackets(slug),
+            name=f"startgg-prefetch-{slug}",
+        )
+
+    @classmethod
+    async def _prefetch_brackets(cls, slug: str):
+        """Walk every phase group of the loaded event and warm _bracket_cache.
+
+        Bounded concurrency keeps us polite to the public start.gg endpoint.
+        Bails out cleanly if the event changes mid-prefetch.
+        """
+        try:
+            phases = await cls.GetPhases()
+            if cls._event_slug != slug:
+                return  # event changed while we were fetching phases
+
+            phase_group_ids = [
+                pg["id"] for phase in phases
+                for pg in phase.get("phaseGroups", [])
+                if pg.get("id") is not None
+            ]
+            if not phase_group_ids:
+                return
+
+            sem = asyncio.Semaphore(cls._PREFETCH_CONCURRENCY)
+
+            async def fetch_one(pgid):
+                async with sem:
+                    if cls._event_slug != slug:
+                        return
+                    await cls.GetBracketData(pgid)
+
+            results = await asyncio.gather(
+                *[fetch_one(pgid) for pgid in phase_group_ids],
+                return_exceptions=True,
+            )
+            errs = [r for r in results if isinstance(r, Exception)
+                    and not isinstance(r, asyncio.CancelledError)]
+            if errs:
+                logger.warning(
+                    "[startgg] bracket prefetch: {}/{} pools failed",
+                    len(errs), len(phase_group_ids),
+                )
+            else:
+                logger.info(
+                    "[startgg] prefetched {} bracket(s)", len(phase_group_ids)
+                )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("[startgg] bracket prefetch failed")
 
     @classmethod
     async def GetPhases(cls) -> list:
@@ -285,9 +357,21 @@ class StartGGProvider:
         phase_group_id: int | None = None,
         include_finished: bool = False,
     ) -> dict:
-        """Get paginated sets for the current event."""
+        """Get paginated sets for the current event.
+
+        When the bracket cache has data for the requested phase_group_id, we
+        reshape it into the /sets response format instead of hitting start.gg
+        again — SETS_QUERY and BRACKET_SETS_QUERY return overlapping data, and
+        the prefetch downloads it eagerly. Falls back to a live query when the
+        cache misses (e.g. phase_id-only filter, prefetch hasn't finished).
+        """
         if not cls._event_slug:
             return {"sets": [], "pageInfo": {"page": 1, "totalPages": 0}}
+
+        if phase_group_id and phase_group_id in cls._bracket_cache:
+            return cls._sets_from_bracket_cache(
+                phase_group_id, page, include_finished,
+            )
 
         states = _ALL_STATES if include_finished else _ACTIVE_STATES
         filters = {"state": states, "hideEmpty": True}
@@ -319,6 +403,84 @@ class StartGGProvider:
                 "page": page_info.get("page", 1),
                 "totalPages": page_info.get("totalPages", 0),
                 "total": page_info.get("total", 0),
+            },
+        }
+
+    @classmethod
+    def _sets_from_bracket_cache(
+        cls,
+        phase_group_id: int,
+        page: int,
+        include_finished: bool,
+    ) -> dict:
+        """Reshape cached bracket data into the paginated /sets response shape.
+
+        The bracket cache stores sets organized by round (winners/losers/GF)
+        with players in a separate lookup. /sets wants a flat list with
+        per-set p1_name/p2_name/seeds. We flatten, look up player names, and
+        apply the same filtering and pagination the API path would.
+        """
+        cached = cls._bracket_cache[phase_group_id]
+        bracket_type = cached.get("type", "")
+        phase_label = cached.get("phaseName", "")
+        players = cached.get("players", {}) or {}
+
+        # Walk every round bucket. Losers rounds were stored as abs(round_num)
+        # so we re-flip the sign to preserve winners-vs-losers info downstream.
+        flat: list[tuple[int, dict]] = []
+        for r, round_data in (cached.get("winnersRounds") or {}).items():
+            rn = int(r)
+            for s in round_data.get("sets", []) or []:
+                flat.append((rn, s))
+        for r, round_data in (cached.get("losersRounds") or {}).items():
+            rn = -int(r)
+            for s in round_data.get("sets", []) or []:
+                flat.append((rn, s))
+        # Grand finals come after winners; use a large positive sentinel so
+        # they sort last among positive rounds.
+        for s in cached.get("grandFinals") or []:
+            flat.append((9999, s))
+
+        if not include_finished:
+            flat = [(rn, s) for (rn, s) in flat
+                    if s.get("state") != "completed"]
+
+        # Sort: live/called first, then pending, then complete; tie-break by
+        # round magnitude so earlier rounds appear first within a state group.
+        state_order = {"active": 0, "called": 0, "created": 1, "completed": 2}
+        flat.sort(key=lambda rs: (state_order.get(rs[1].get("state"), 9), abs(rs[0])))
+
+        parsed: list[dict] = []
+        for rn, s in flat:
+            p1 = players.get(str(s.get("entrant1Id") or ""), {}) or {}
+            p2 = players.get(str(s.get("entrant2Id") or ""), {}) or {}
+            parsed.append({
+                "id": s.get("id"),
+                "team1score": s.get("score1"),
+                "team2score": s.get("score2"),
+                "round_name": s.get("roundName", ""),
+                "round": rn,
+                "tournament_phase": phase_label,
+                "bracket_type": bracket_type,
+                "p1_name": p1.get("name", ""),
+                "p2_name": p2.get("name", ""),
+                "p1_seed": p1.get("seed"),
+                "p2_seed": p2.get("seed"),
+                "state": s.get("state", ""),
+            })
+
+        per_page = 64
+        total = len(parsed)
+        total_pages = max(1, (total + per_page - 1) // per_page)
+        start = max(0, (page - 1) * per_page)
+        page_items = parsed[start:start + per_page]
+
+        return {
+            "sets": page_items,
+            "pageInfo": {
+                "page": page,
+                "totalPages": total_pages,
+                "total": total,
             },
         }
 
@@ -383,7 +545,8 @@ class StartGGProvider:
 
         Fetches all pages from the entrants endpoint (which reliably returns
         user profile data on the public API) and caches them for the duration
-        of the loaded event.
+        of the loaded event. Page 1 reveals total_pages; remaining pages
+        fan out via asyncio.gather.
         """
         if cls._entrants_cache is not None:
             return
@@ -393,18 +556,24 @@ class StartGGProvider:
             return
 
         cache = {}
-        page = 1
-        while True:
-            result = await cls.GetEntrants(page)
-            for entrant in result.get("entrants", []):
-                for p in entrant.get("players", []):
-                    tag = (p.get("gamerTag") or "").lower()
-                    if tag:
-                        cache[tag] = p
-            total_pages = result.get("pageInfo", {}).get("totalPages", 0)
-            if page >= total_pages:
-                break
-            page += 1
+        first = await cls.GetEntrants(1)
+        for entrant in first.get("entrants", []):
+            for p in entrant.get("players", []):
+                tag = (p.get("gamerTag") or "").lower()
+                if tag:
+                    cache[tag] = p
+
+        total_pages = first.get("pageInfo", {}).get("totalPages", 0) or 0
+        if total_pages > 1:
+            rest = await asyncio.gather(*[
+                cls.GetEntrants(p) for p in range(2, total_pages + 1)
+            ])
+            for result in rest:
+                for entrant in result.get("entrants", []):
+                    for p in entrant.get("players", []):
+                        tag = (p.get("gamerTag") or "").lower()
+                        if tag:
+                            cache[tag] = p
 
         cls._entrants_cache = cache
         logger.info("[startgg] entrants cache built: {} players", len(cache))
@@ -485,38 +654,47 @@ class StartGGProvider:
           - losersRounds: {roundNum: {name, sets}} for negative rounds
           - grandFinals: list of GF sets (round numbers after last winners round)
           - players: {entrantId: {name, seed, prefix}}
+
+        Cached per phase_group_id within the loaded event. Cache is invalidated
+        on Clear() or when the event slug changes.
         """
-        all_sets = []
-        page = 1
-        bracket_type = None
-        phase_name = ""
-        display_id = ""
-        group_count = 0
+        # Cache hit — instant phase-switching for previously-viewed brackets.
+        cached = cls._bracket_cache.get(phase_group_id)
+        if cached is not None:
+            return cached
 
-        while True:
-            data = await cls._query(
-                "BracketSetsQuery",
-                BRACKET_SETS_QUERY,
-                {"phaseGroupId": phase_group_id, "page": page, "perPage": 64},
-            )
+        # Fetch page 1 to discover total_pages, then fan out the rest in
+        # parallel with asyncio.gather. For a 3-page bracket this turns
+        # ~3× round-trip latency into ~2×.
+        first = await cls._query(
+            "BracketSetsQuery",
+            BRACKET_SETS_QUERY,
+            {"phaseGroupId": phase_group_id, "page": 1, "perPage": 64},
+        )
+        pg = _deep(first, "data.phaseGroup", {})
+        if not pg:
+            return {"error": "Phase group not found"}
 
-            pg = _deep(data, "data.phaseGroup", {})
-            if not pg:
-                return {"error": "Phase group not found"}
+        bracket_type = pg.get("bracketType", "DOUBLE_ELIMINATION")
+        phase_name = _deep(pg, "phase.name", "")
+        group_count = _deep(pg, "phase.groupCount", 0) or 0
+        display_id = pg.get("displayIdentifier", "")
+        total_pages = _deep(pg, "sets.pageInfo.totalPages", 1) or 1
 
-            if bracket_type is None:
-                bracket_type = pg.get("bracketType", "DOUBLE_ELIMINATION")
-                phase_name = _deep(pg, "phase.name", "")
-                group_count = _deep(pg, "phase.groupCount", 0) or 0
-                display_id = pg.get("displayIdentifier", "")
+        all_sets = list(_deep(pg, "sets.nodes", []) or [])
 
-            nodes = _deep(pg, "sets.nodes", [])
-            all_sets.extend(nodes or [])
-
-            total_pages = _deep(pg, "sets.pageInfo.totalPages", 1)
-            if page >= total_pages:
-                break
-            page += 1
+        if total_pages > 1:
+            rest = await asyncio.gather(*[
+                cls._query(
+                    "BracketSetsQuery",
+                    BRACKET_SETS_QUERY,
+                    {"phaseGroupId": phase_group_id, "page": p, "perPage": 64},
+                )
+                for p in range(2, total_pages + 1)
+            ])
+            for page_data in rest:
+                nodes = _deep(page_data, "data.phaseGroup.sets.nodes", [])
+                all_sets.extend(nodes or [])
 
         # Build phase label
         phase_label = phase_name
@@ -617,7 +795,7 @@ class StartGGProvider:
             for r in sorted(rounds_map.keys()):
                 winners_rounds[r] = rounds_map[r]
 
-        return {
+        result = {
             "type": bracket_type,
             "phaseName": phase_label,
             "phaseGroupId": phase_group_id,
@@ -626,6 +804,9 @@ class StartGGProvider:
             "grandFinals": grand_finals,
             "players": players,
         }
+
+        cls._bracket_cache[phase_group_id] = result
+        return result
 
     @classmethod
     async def LoadBracket(cls, phase_group_id: int) -> dict:

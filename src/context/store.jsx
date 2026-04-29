@@ -102,6 +102,10 @@ export const useBracketStore = create((set) => ({
     entrantsPage: 1,
     entrantsTotalPages: 0,
     showEntrants: false,
+    // Per-phase sets cache. Keyed by `${phaseId}|${poolId}|${includeFinished}`.
+    // Means revisiting a phase is genuinely instant — no server round-trip,
+    // no empty-table flash while we wait, no spinner.
+    setsByKey: {},
     update: (partial) => set(partial),
 }));
 

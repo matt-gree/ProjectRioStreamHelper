@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Text, Paper, Stack, Group, TextInput, Button, Select, Table,
     Alert, Badge, Checkbox, Tooltip, Loader, Center,
@@ -32,8 +32,12 @@ export default function Bracket() {
 
     const {
         loading, error,
-        setSource, loadEvent, fetchPhases, fetchSets, loadSet, clearEvent,
+        setSource, loadEvent, fetchPhases, fetchSets, fetchEntrants, loadSet, clearEvent,
     } = useTournament();
+
+    const [prefetching, setPrefetching] = useState(false);
+    const [statusText, setStatusText] = useState('');
+    const prefetchInflightRef = useRef(false);
 
     // Pull all UI state from the persistent bracket store
     const bs = useBracketStore();
@@ -43,8 +47,94 @@ export default function Bracket() {
         update,
     } = bs;
 
-    // Sync URL input from stored bracket_link on first render and auto-restore
     const url = bs.url ?? '';
+
+    // ── Background prefetch: cache sets for every phase ───────
+    // Fires after phases load. Keeps the Load button spinning (via
+    // `prefetching`) so the user knows work is still happening, but does
+    // NOT block the rest of the UI — phase selectors/tables remain
+    // interactive and the existing on-demand fetch handles cache misses.
+    const prefetchTournamentData = useCallback((phasesList, link) => {
+        // Guard against concurrent invocations (Strict Mode double-effects, or
+        // a manual Load that overlaps the auto-restore). Without this, two
+        // runs share the same setStatusText and the counter visibly interleaves.
+        if (prefetchInflightRef.current) return;
+
+        const phasesToFetch = (phasesList || []).filter(p => p?.id != null);
+
+        // Cache both completed-filter variants per phase so the "Include
+        // completed" toggle is instant either way.
+        const setJobs = phasesToFetch.flatMap(p => [
+            { kind: 'sets', phase: p, finished: false },
+            { kind: 'sets', phase: p, finished: true },
+        ]);
+        const entrantsAlreadyCached =
+            link && useBracketStore.getState().entrantsLoadedFor === link;
+        const jobs = entrantsAlreadyCached
+            ? setJobs
+            : [...setJobs, { kind: 'entrants' }];
+
+        if (jobs.length === 0) return;
+
+        prefetchInflightRef.current = true;
+        setPrefetching(true);
+        let done = 0;
+        const total = jobs.length;
+        setStatusText(`Caching tournament data (0/${total})…`);
+
+        const fetchSetsJob = async ({ phase, finished }) => {
+            const key = `${phase.id}|${null}|${finished}`;
+            const existing = useBracketStore.getState().setsByKey?.[key];
+            if (existing) return;
+            const opts = { phaseId: Number(phase.id), includeFinished: finished };
+            const first = await fetchSets(1, opts);
+            if (!first) return;
+            let collected = first.sets;
+            const totalPages = first.pageInfo?.totalPages || 1;
+            if (totalPages > 1) {
+                const rest = await Promise.all(
+                    Array.from({ length: totalPages - 1 }, (_, i) => fetchSets(i + 2, opts))
+                );
+                collected = collected.concat(...rest.filter(Boolean).map(r => r.sets));
+            }
+            update({
+                setsByKey: { ...(useBracketStore.getState().setsByKey || {}), [key]: collected },
+            });
+        };
+
+        const fetchEntrantsJob = async () => {
+            const first = await fetchEntrants(1);
+            if (!first) return;
+            let collected = first.entrants;
+            const totalPages = first.pageInfo?.totalPages || 1;
+            if (totalPages > 1) {
+                const rest = await Promise.all(
+                    Array.from({ length: totalPages - 1 }, (_, i) => fetchEntrants(i + 2))
+                );
+                collected = collected.concat(...rest.filter(Boolean).map(r => r.entrants));
+            }
+            update({
+                entrants: collected,
+                entrantsPage: 1,
+                entrantsTotalPages: 1,
+                entrantsLoadedFor: link,
+            });
+        };
+
+        Promise.all(jobs.map(j =>
+            (j.kind === 'entrants' ? fetchEntrantsJob() : fetchSetsJob(j))
+                .finally(() => {
+                    done += 1;
+                    setStatusText(`Caching tournament data (${done}/${total})…`);
+                })
+        )).finally(() => {
+            prefetchInflightRef.current = false;
+            setPrefetching(false);
+            setStatusText('');
+        });
+    }, [fetchSets, fetchEntrants, update]);
+
+    // Sync URL input from stored bracket_link on first render and auto-restore
     useEffect(() => {
         // After Clear, we suppress auto-load until the server's bracket_link
         // broadcast arrives (otherwise a stale bracketLink races a freshly
@@ -70,14 +160,17 @@ export default function Bracket() {
                 }
             }
             update(phaseUpdate);
+            if (phasesResult) prefetchTournamentData(phasesResult, bracketLink);
         })();
-    }, [bracketLink, tournament, bs.suppressAutoLoad, update, setSource, loadEvent, fetchPhases]);
+    }, [bracketLink, tournament, bs.suppressAutoLoad, update, setSource, loadEvent, fetchPhases, prefetchTournamentData]);
 
     // ── Load event ────────────────────────────────────────────
     const handleLoadEvent = useCallback(async () => {
         if (!url.trim()) return;
+        setStatusText('Loading tournament…');
         const result = await loadEvent(url.trim());
         if (!result || result.error) {
+            setStatusText('');
             notifications.show({ message: result?.error || 'Failed to load tournament', color: 'red' });
             return;
         }
@@ -94,6 +187,7 @@ export default function Bracket() {
         });
 
         // Fetch phases immediately
+        setStatusText('Fetching phases…');
         const phasesResult = await fetchPhases();
         if (phasesResult) {
             const phaseUpdate = { phases: phasesResult };
@@ -102,16 +196,21 @@ export default function Bracket() {
                 phaseUpdate.selectedPhase = String(phasesResult[0].id);
             }
             update(phaseUpdate);
+            prefetchTournamentData(phasesResult, url.trim());
+        } else {
+            setStatusText('');
         }
-    }, [url, loadEvent, fetchPhases, update]);
+    }, [url, loadEvent, fetchPhases, update, prefetchTournamentData]);
 
     // ── Fetch sets ────────────────────────────────────────────
     // Single fetch path: page 1 sequentially (to learn totalPages), then
-    // pages 2..N in parallel. Everything lands in `allSets`.
+    // pages 2..N in parallel. Everything lands in `allSets` AND in
+    // `setsByKey[allSetsKey]` so revisiting the same phase is instant.
     const allSetsKey = `${selectedPhase}|${selectedPool}|${includeFinished}`;
     const [setsFetching, setSetsFetching] = useState(false);
     const handleFetchSets = useCallback(async () => {
         if (!selectedPhase) return;
+        const key = `${selectedPhase}|${selectedPool}|${includeFinished}`;
         setSetsFetching(true);
         try {
             const opts = { includeFinished };
@@ -130,8 +229,9 @@ export default function Bracket() {
             }
             update({
                 allSets: collected,
-                allSetsLoadedFor: `${selectedPhase}|${selectedPool}|${includeFinished}`,
+                allSetsLoadedFor: key,
                 lastFetchedAt: Date.now(),
+                setsByKey: { ...(useBracketStore.getState().setsByKey || {}), [key]: collected },
             });
         } finally {
             setSetsFetching(false);
@@ -140,6 +240,7 @@ export default function Bracket() {
 
     const handleClear = useCallback(async () => {
         update({ suppressAutoLoad: true });
+        setStatusText('');
         await clearEvent();
         update({
             tournament: null,
@@ -160,6 +261,7 @@ export default function Bracket() {
             lastFetchedAt: null,
             allSets: [],
             allSetsLoadedFor: null,
+            setsByKey: {},
         });
         notifications.show({ message: 'Tournament cleared', color: 'gray' });
     }, [clearEvent, update]);
@@ -239,7 +341,7 @@ export default function Bracket() {
                         <Button
                             size="sm"
                             onClick={handleLoadEvent}
-                            loading={loading}
+                            loading={loading || prefetching}
                             mb={1}
                         >
                             Load
@@ -256,6 +358,12 @@ export default function Bracket() {
                             </Button>
                         )}
                     </Group>
+                    {statusText && (
+                        <Group gap="xs" mt={4}>
+                            <Loader size="xs" />
+                            <Text size="xs" c="dimmed">{statusText}</Text>
+                        </Group>
+                    )}
                 </Stack>
             </Paper>
 
@@ -297,11 +405,16 @@ export default function Bracket() {
                                 data={phaseOptions}
                                 value={selectedPhase}
                                 onChange={(val) => {
+                                    // Hydrate from per-phase cache when we have it.
+                                    // Avoids the empty-table flash that triggers the
+                                    // "loading sets" spinner on every phase switch.
+                                    const key = `${val}|${null}|${includeFinished}`;
+                                    const cached = bs.setsByKey?.[key];
                                     update({
                                         selectedPhase: val,
                                         selectedPool: null,
-                                        allSets: [],
-                                        allSetsLoadedFor: null,
+                                        allSets: cached ?? [],
+                                        allSetsLoadedFor: cached ? key : null,
                                         setsPage: 1,
                                     });
                                 }}
@@ -315,10 +428,12 @@ export default function Bracket() {
                                     data={poolOptions}
                                     value={selectedPool}
                                     onChange={(val) => {
+                                        const key = `${selectedPhase}|${val}|${includeFinished}`;
+                                        const cached = bs.setsByKey?.[key];
                                         update({
                                             selectedPool: val,
-                                            allSets: [],
-                                            allSetsLoadedFor: null,
+                                            allSets: cached ?? [],
+                                            allSetsLoadedFor: cached ? key : null,
                                             setsPage: 1,
                                         });
                                     }}
@@ -337,10 +452,13 @@ export default function Bracket() {
                                     label="Include completed"
                                     checked={includeFinished}
                                     onChange={e => {
+                                        const newFinished = e.currentTarget.checked;
+                                        const key = `${selectedPhase}|${selectedPool}|${newFinished}`;
+                                        const cached = bs.setsByKey?.[key];
                                         update({
-                                            includeFinished: e.currentTarget.checked,
-                                            allSets: [],
-                                            allSetsLoadedFor: null,
+                                            includeFinished: newFinished,
+                                            allSets: cached ?? [],
+                                            allSetsLoadedFor: cached ? key : null,
                                             setsPage: 1,
                                         });
                                     }}

@@ -57,6 +57,8 @@ class ChallongeProvider:
     _participants: list | None = None
     _participants_by_id: dict | None = None
     _matches: list | None = None
+    _bracket_cache: dict = {}  # phase_group_id (str|int) -> parsed bracket dict
+    _prefetch_task: asyncio.Task | None = None
 
     # ── lifecycle ──────────────────────────────────────────────
 
@@ -89,13 +91,15 @@ class ChallongeProvider:
 
     @classmethod
     async def Stop(cls):
-        if cls._restore_task and not cls._restore_task.done():
-            cls._restore_task.cancel()
-            try:
-                await cls._restore_task
-            except (asyncio.CancelledError, Exception):
-                pass
-            cls._restore_task = None
+        for attr in ("_restore_task", "_prefetch_task"):
+            t = getattr(cls, attr)
+            if t and not t.done():
+                t.cancel()
+                try:
+                    await t
+                except (asyncio.CancelledError, Exception):
+                    pass
+                setattr(cls, attr, None)
         if cls._client:
             await cls._client.aclose()
             cls._client = None
@@ -111,6 +115,7 @@ class ChallongeProvider:
         cls._participants = None
         cls._participants_by_id = None
         cls._matches = None
+        cls._bracket_cache = {}
         await State.SetBatch([
             ("tournamentInfo.bracket_link", ""),
             ("tournamentInfo.name", ""),
@@ -268,6 +273,7 @@ class ChallongeProvider:
             cls._participants = None
             cls._participants_by_id = None
             cls._matches = None
+            cls._bracket_cache = {}
             cls._tournament_id = None
             cls._community_permalink = None
         cls._tournament_slug = slug
@@ -324,7 +330,62 @@ class ChallongeProvider:
         # Pre-fetch participants and matches (2 API calls)
         await cls._ensure_data()
 
+        # Warm the bracket cache so phase-switching is instant. Cheap on
+        # Challonge: no API calls, just CPU on already-cached _matches.
+        cls._start_prefetch(slug)
+
         return result
+
+    @classmethod
+    def _start_prefetch(cls, slug: str):
+        """(Re)start the bracket-prefetch background task for the given slug."""
+        if cls._prefetch_task and not cls._prefetch_task.done():
+            cls._prefetch_task.cancel()
+        cls._prefetch_task = asyncio.create_task(
+            cls._prefetch_brackets(slug),
+            name=f"challonge-prefetch-{slug}",
+        )
+
+    @classmethod
+    async def _prefetch_brackets(cls, slug: str):
+        """Walk every phase group and warm _bracket_cache.
+
+        No API calls — bracket data is built from already-cached
+        participants/matches. Just runs the parsing work eagerly so the
+        Bracket tab feels instant.
+        """
+        try:
+            phases = await cls.GetPhases()
+            if cls._tournament_slug != slug:
+                return
+
+            phase_group_ids = [
+                pg["id"] for phase in phases
+                for pg in phase.get("phaseGroups", [])
+                if pg.get("id") is not None
+            ]
+            if not phase_group_ids:
+                return
+
+            results = await asyncio.gather(
+                *[cls.GetBracketData(pgid) for pgid in phase_group_ids],
+                return_exceptions=True,
+            )
+            errs = [r for r in results if isinstance(r, Exception)
+                    and not isinstance(r, asyncio.CancelledError)]
+            if errs:
+                logger.warning(
+                    "[challonge] bracket prefetch: {}/{} pools failed",
+                    len(errs), len(phase_group_ids),
+                )
+            else:
+                logger.info(
+                    "[challonge] prefetched {} bracket(s)", len(phase_group_ids)
+                )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("[challonge] bracket prefetch failed")
 
     @classmethod
     async def GetPhases(cls) -> list:
@@ -529,7 +590,16 @@ class ChallongeProvider:
 
     @classmethod
     async def GetBracketData(cls, phase_group_id: str | int) -> dict:
-        """Build bracket data structure for a phase group."""
+        """Build bracket data structure for a phase group.
+
+        Cached per phase_group_id within the loaded tournament. Cache is
+        invalidated on Clear() or when the tournament slug changes.
+        """
+        cache_key = str(phase_group_id)
+        cached = cls._bracket_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
         if cls._matches is None:
             await cls._ensure_data()
 
@@ -648,7 +718,7 @@ class ChallongeProvider:
             if prereqs:
                 connections[match_id] = prereqs
 
-        return {
+        result = {
             "type": bracket_type,
             "phaseName": phase_label,
             "phaseGroupId": phase_group_id,
@@ -658,6 +728,9 @@ class ChallongeProvider:
             "players": players,
             "connections": connections,
         }
+
+        cls._bracket_cache[cache_key] = result
+        return result
 
     @classmethod
     async def LoadBracket(cls, phase_group_id: str | int) -> dict:
@@ -773,24 +846,40 @@ class ChallongeProvider:
 
     @classmethod
     async def _fetch_all_pages(cls, path: str) -> list:
-        """Fetch all pages from a paginated v2 endpoint."""
-        all_items = []
-        page = 1
-        while True:
-            data = await cls._request(path, {"per_page": 200, "page": page})
+        """Fetch all pages from a paginated v2 endpoint.
+
+        Page 1 reveals the total count; remaining pages fan out via
+        asyncio.gather for one round-trip's worth of latency instead of N.
+        """
+        per_page = 200
+        first = await cls._request(path, {"per_page": per_page, "page": 1})
+        if isinstance(first, dict) and "error" in first:
+            logger.warning("[challonge] error fetching {}: {}", path, first["error"])
+            return []
+
+        items = first.get("data", []) or []
+        all_items = list(items)
+        if not items:
+            return all_items
+
+        total = (first.get("meta") or {}).get("count", 0)
+        if total <= len(all_items):
+            return all_items
+
+        remaining_pages = (total + per_page - 1) // per_page
+        if remaining_pages <= 1:
+            return all_items
+
+        rest = await asyncio.gather(*[
+            cls._request(path, {"per_page": per_page, "page": p})
+            for p in range(2, remaining_pages + 1)
+        ])
+        for data in rest:
             if isinstance(data, dict) and "error" in data:
                 logger.warning("[challonge] error fetching {}: {}", path, data["error"])
-                break
-            items = data.get("data", [])
-            if not items:
-                break
-            all_items.extend(items)
-            # Check if there are more pages
-            meta = data.get("meta", {})
-            total = meta.get("count", 0)
-            if len(all_items) >= total or not items:
-                break
-            page += 1
+                continue
+            page_items = data.get("data", []) or []
+            all_items.extend(page_items)
         return all_items
 
     @classmethod
