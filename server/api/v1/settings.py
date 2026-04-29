@@ -38,9 +38,9 @@ async def settings_set(key: str = "", value: str | None = None, session_id: str 
         await Settings.Set(key, value, session_id=session_id)
     except Exception as e:
         return ORJSONResponse({
-            "error": e
+            "error": str(e)
         })
-    
+
     return ORJSONResponse({
         "success": True
     })
@@ -55,7 +55,7 @@ async def settings_unset(key: str = "", session_id: str | None = None):
         await Settings.Unset(key, session_id=session_id)
     except Exception as e:
         return ORJSONResponse({
-            "error": e
+            "error": str(e)
         })
     
     return ORJSONResponse({

@@ -76,27 +76,27 @@ async def logs_list(session_id: str | None = None) -> ORJSONResponse:
 )
 async def logs_tail(
     name: str = "tsh_info.txt",
-    bytes: int = 262144,  # 256 KB default
+    bytes: int = 262144,  # 256 KB default; query-param name kept for API stability
     session_id: str | None = None,
 ) -> ORJSONResponse:
     """Return the last N bytes of a log file as UTF-8 text.
 
-    If the file is shorter than `bytes`, returns the whole file. If the
-    requested byte offset splits a multi-byte char, we skip forward to
-    the next valid UTF-8 boundary.
+    If the file is shorter than the requested byte count, returns the whole
+    file. If the requested byte offset splits a multi-byte char, we skip
+    forward to the next valid UTF-8 boundary.
     """
     p = _safe_log_path(name)
     if p is None:
         return ORJSONResponse({"error": "log not found"}, status_code=404)
 
     # Clamp to a sensible max so one request can't hog RAM.
-    bytes = max(1024, min(int(bytes), 2 * 1024 * 1024))  # 1 KB .. 2 MB
+    max_bytes = max(1024, min(int(bytes), 2 * 1024 * 1024))  # 1 KB .. 2 MB
 
     try:
         size = p.stat().st_size
         with p.open("rb") as f:
-            if size > bytes:
-                f.seek(size - bytes)
+            if size > max_bytes:
+                f.seek(size - max_bytes)
                 # Align to line start so we don't render a partial first line.
                 f.readline()
             data = f.read()
@@ -105,7 +105,7 @@ async def logs_tail(
             "name": p.name,
             "size": size,
             "returned": len(data),
-            "truncated": size > bytes,
+            "truncated": size > max_bytes,
             "text": text,
         })
     except Exception as e:

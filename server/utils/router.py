@@ -19,7 +19,7 @@ async def on_socketio_event(sid, data, func):
     except Exception as e:
         logger.exception("error while parsing socketio event")
         content = {
-            "error": e
+            "error": str(e)
         }
 
     if isinstance(content, str):
