@@ -44,6 +44,16 @@ class Tray:
                 _main._uvicorn_server.should_exit = True
         except Exception:
             logger.exception("[Tray] failed to signal uvicorn shutdown")
+        # Hide the dock icon immediately so it doesn't linger while the server
+        # thread finishes its cleanup (the join in main.py can take up to 5s).
+        if sys.platform == "darwin":
+            try:
+                import AppKit
+                AppKit.NSApp.setActivationPolicy_(
+                    AppKit.NSApplicationActivationPolicyProhibited
+                )
+            except Exception:
+                pass
         if cls.icon:
             cls.icon.stop()
 
