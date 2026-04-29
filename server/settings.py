@@ -139,9 +139,14 @@ class Settings:
     @classmethod
     async def Save(cls):
         async with cls._save_lock:
-            async with cls._settings_out.open(mode='wb') as f:
+            # Write to a sibling .tmp file then atomically rename so a kill
+            # mid-write can't truncate settings.json and reset the user's
+            # config to defaults on the next launch.
+            tmp = AsyncPath(str(cls._settings_out) + ".tmp")
+            async with tmp.open(mode='wb') as f:
                 content = await json.dumps(cls.settings)
                 await f.write(content)
+            await tmp.replace(cls._settings_out)
 
     @classmethod
     async def Load(cls) -> dict:

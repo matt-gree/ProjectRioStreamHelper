@@ -16,5 +16,9 @@ async def dumps(*args, **kwargs):
     if "option" not in kwargs:
         kwargs["option"] = orjson.OPT_NON_STR_KEYS | orjson.OPT_INDENT_2
 
-    result = orjson.dumps(*args, **kwargs)
-    return result
+    # Always offload to a thread. We can't condition on output size (we'd
+    # have to serialize first to know it), and state can grow to hundreds of
+    # KB once a bracket is loaded — large enough to noticeably block the
+    # event loop. The ~50µs scheduler hop is invisible vs. the work it
+    # protects against.
+    return await to_thread(orjson.dumps, *args, **kwargs)

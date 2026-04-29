@@ -23,10 +23,13 @@ export const useStateStore = create((set, get) => ({
             }
             return s;
         });
-        if(emit && _socketRef) {
-            for (const { key, value } of entries) {
-                _socketRef.emit('v1.state.set', { key, value });
-            }
+        if(emit && _socketRef && entries.length > 0) {
+            // One frame, one disk commit on the server. Without this we'd
+            // emit N individual `v1.state.set` events for a single UI batch
+            // (e.g. swap teams = 9 frames + 9 atomic state.json writes).
+            _socketRef.emit('v1.state.set_batch', {
+                items: entries.map(({ key, value }) => ({ key, value })),
+            });
         }
     },
     getItem: (key, defaultValue=undefined) => {
@@ -47,10 +50,10 @@ export const useStateStore = create((set, get) => ({
             }
             return s;
         });
-        if(emit && _socketRef) {
-            for (const key of keys) {
-                _socketRef.emit('v1.state.unset', { key });
-            }
+        if(emit && _socketRef && keys.length > 0) {
+            _socketRef.emit('v1.state.unset_batch', {
+                items: keys.map(key => ({ key })),
+            });
         }
     },
     mergeItems: (items) => set(items)

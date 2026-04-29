@@ -1,3 +1,6 @@
+from loguru import logger
+
+from server import socketio
 from server.utils.router import method
 from fastapi import APIRouter
 from fastapi.responses import ORJSONResponse
@@ -5,6 +8,43 @@ from server.state import State
 
 # This only needs to be declared once in the file
 router = APIRouter()
+
+
+# ── SocketIO-only batch handlers ──────────────────────────────────
+# Frontend uses these to commit multi-key UI actions (swap teams, runner
+# placement, source change) atomically — one disk write, one rebroadcast,
+# one diff cycle instead of N. There's no REST equivalent because the
+# frontend never writes state via REST; if you ever need one, add it with
+# a Pydantic body model.
+
+@socketio.on('v1.state.set_batch')
+async def on_state_set_batch(sid, data):
+    """Apply a batch of {key, value} entries from a client. Echoes via sid."""
+    try:
+        items = data.get("items") or []
+        entries = [(item["key"], item["value"]) for item in items]
+        if entries:
+            await State.SetBatch(entries, session_id=sid)
+            await State.Save()
+        return {"success": True}
+    except Exception as e:
+        logger.exception("state.set_batch handler failed")
+        return {"error": str(e)}
+
+
+@socketio.on('v1.state.unset_batch')
+async def on_state_unset_batch(sid, data):
+    """Apply a batch of unset keys from a client. Echoes via sid."""
+    try:
+        items = data.get("items") or []
+        keys = [item["key"] for item in items]
+        if keys:
+            await State.UnsetBatch(keys, session_id=sid)
+            await State.Save()
+        return {"success": True}
+    except Exception as e:
+        logger.exception("state.unset_batch handler failed")
+        return {"error": str(e)}
 
 @method(
     router.get, "/state",
@@ -28,7 +68,7 @@ async def state_set(key: str = "", value: str | None = None, session_id: str | N
         await State.Save()
     except Exception as e:
         return ORJSONResponse({
-            "error": e
+            "error": str(e)
         })
 
     return ORJSONResponse({
@@ -58,7 +98,7 @@ async def state_unset(key: str = "", session_id: str | None = None):
         await State.Save()
     except Exception as e:
         return ORJSONResponse({
-            "error": e
+            "error": str(e)
         })
     
     return ORJSONResponse({

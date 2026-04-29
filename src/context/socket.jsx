@@ -10,7 +10,7 @@ export const SocketProvider = ({children}) => {
 
     const socket = useMemo(
         () => io(
-            (window.location.protocol === 'https' ? 'wss://' : 'ws://') + '' + window.location.host + '/', {
+            (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + '' + window.location.host + '/', {
                 transports: ['websocket'],
                 autoConnect: false
             }),
@@ -91,6 +91,16 @@ export const SocketProvider = ({children}) => {
             scheduleFlush();
         }
 
+        const doBatchUnset = (resp) => {
+            if("sid" in resp && resp.sid === socket.id) return;
+            if(resp.items && resp.items.length > 0) {
+                for (const item of resp.items) {
+                    unsetPending.push(item.key);
+                }
+                scheduleFlush();
+            }
+        }
+
         if(!useStateStore.getState().loaded) {
             socket.emit('v1.state.get', {}, resp => {
                 if('error' in resp) {
@@ -102,12 +112,14 @@ export const SocketProvider = ({children}) => {
                 socket.on('v1.state.set', doSet);
                 socket.on('v1.state.set_batch', doBatchSet);
                 socket.on('v1.state.unset', doUnset);
+                socket.on('v1.state.unset_batch', doBatchUnset);
                 useStateStore.getState().setLoaded(true);
             });
         } else {
             socket.on('v1.state.set', doSet);
             socket.on('v1.state.set_batch', doBatchSet);
             socket.on('v1.state.unset', doUnset);
+            socket.on('v1.state.unset_batch', doBatchUnset);
         }
 
         return () => {
@@ -115,6 +127,7 @@ export const SocketProvider = ({children}) => {
             socket.off('v1.state.set', doSet);
             socket.off('v1.state.set_batch', doBatchSet);
             socket.off('v1.state.unset', doUnset);
+            socket.off('v1.state.unset_batch', doBatchUnset);
             useStateStore.getState().setLoaded(false);
         }
     }, [socket]);

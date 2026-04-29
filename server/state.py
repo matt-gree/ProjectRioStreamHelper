@@ -90,8 +90,11 @@ class State:
     @classmethod
     async def Save(cls):
         """Compute changes from tracked keys and queue export."""
-        changes = cls._compute_changes()
-        cls.changed_keys = []
+        # Snapshot-and-clear in one statement so concurrent Set/SetBatch
+        # appends after this point go into the next Save's batch instead
+        # of being silently dropped.
+        tracked, cls.changed_keys = cls.changed_keys, []
+        changes = cls._compute_changes(tracked)
 
         if changes:
             # Update last_state snapshot for changed paths only
@@ -105,11 +108,11 @@ class State:
             await cls.queue.put(partial(cls.Export, changes=changes))
 
     @classmethod
-    def _compute_changes(cls) -> list[dict]:
+    def _compute_changes(cls, tracked: list[str]) -> list[dict]:
         """Build a list of changes by comparing tracked keys between last_state and state."""
         changes = []
         seen = set()
-        for key in cls.changed_keys:
+        for key in tracked:
             if key in seen:
                 continue
             seen.add(key)
@@ -128,9 +131,14 @@ class State:
 
     @classmethod
     async def SaveImmediately(cls):
-        async with cls._program_state_out.open(mode='wb') as f:
+        # Write to a sibling .tmp file then atomically rename. Without this,
+        # a kill mid-write leaves state.json truncated and Load() silently
+        # falls back to {}, losing all persisted state.
+        tmp = AsyncPath(str(cls._program_state_out) + ".tmp")
+        async with tmp.open(mode='wb') as f:
             d = await json.dumps(cls.state)
             await f.write(d)
+        await tmp.replace(cls._program_state_out)
 
     @classmethod
     async def Load(cls):
@@ -176,6 +184,23 @@ class State:
         cls.changed_keys.append(key)
         await socketio.emit('v1.state.unset', {
             "key": key,
+            "sid": session_id
+        })
+
+    @classmethod
+    async def UnsetBatch(cls, keys: list[str], session_id: str | None = None):
+        """Unset multiple keys at once and emit a single batched SocketIO event.
+
+        Mirrors SetBatch — collapses N socket frames + N disk writes into one.
+        """
+        items = []
+        for key in keys:
+            deep_unset(cls.state, key)
+            cls.changed_keys.append(key)
+            items.append({"key": key})
+
+        await socketio.emit('v1.state.unset_batch', {
+            "items": items,
             "sid": session_id
         })
 
