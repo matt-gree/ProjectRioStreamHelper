@@ -153,11 +153,11 @@ def _open_folder_dialog() -> str | None:
         return path if path else None
 
     elif system == "Windows":
-        # SHBrowseForFolderW via ctypes on a dedicated STA thread.
-        # asyncio's thread pool is not STA, and BIF_NEWDIALOGSTYLE needs a
-        # message pump, so we spin a clean thread, initialise COM there, and
-        # join it.  The basic dialog (no BIF_NEWDIALOGSTYLE) works without a
-        # pre-existing message pump.
+        # IFileOpenDialog with FOS_PICKFOLDERS — same modern Explorer-style
+        # window as GetOpenFileNameW used for the HUD file picker.
+        # IFileDialog is a COM STA object, so we spin a clean dedicated thread,
+        # initialise COM there, then join.  asyncio's thread pool threads are
+        # not STA and must not call CoInitialize themselves.
         import ctypes
         import ctypes.wintypes as wt
         import threading
@@ -166,38 +166,89 @@ def _open_folder_dialog() -> str | None:
         result_holder: list[str | None] = [None]
 
         def _pick_folder() -> None:
-            shell32 = ctypes.windll.shell32
-            ole32   = ctypes.windll.ole32
+            ole32 = ctypes.windll.ole32
 
-            class BROWSEINFOW(ctypes.Structure):
+            class GUID(ctypes.Structure):
                 _fields_ = [
-                    ("hwndOwner",      wt.HWND),
-                    ("pidlRoot",       ctypes.c_void_p),
-                    ("pszDisplayName", ctypes.c_void_p),  # writable wchar_t* buffer
-                    ("lpszTitle",      ctypes.c_wchar_p),
-                    ("ulFlags",        wt.UINT),
-                    ("lpfn",           ctypes.c_void_p),
-                    ("lParam",         ctypes.c_void_p),
-                    ("iImage",         ctypes.c_int),
+                    ("Data1", wt.DWORD),
+                    ("Data2", wt.WORD),
+                    ("Data3", wt.WORD),
+                    ("Data4", ctypes.c_ubyte * 8),
                 ]
 
-            ole32.CoInitialize(None)
-            try:
-                display_buf = ctypes.create_unicode_buffer(260)
-                bi = BROWSEINFOW()
-                bi.hwndOwner      = owner_hwnd
-                bi.pszDisplayName = ctypes.addressof(display_buf)
-                bi.lpszTitle      = "Select MSB image assets folder"
-                bi.ulFlags        = 0x0001  # BIF_RETURNONLYFSDIRS
+            def make_guid(d1, d2, d3, d4):
+                g = GUID()
+                g.Data1, g.Data2, g.Data3 = d1, d2, d3
+                for i, b in enumerate(d4):
+                    g.Data4[i] = b
+                return g
 
-                pidl = shell32.SHBrowseForFolderW(ctypes.byref(bi))
-                if pidl:
-                    path_buf = ctypes.create_unicode_buffer(32768)
-                    shell32.SHGetPathFromIDListW(pidl, path_buf)
-                    ole32.CoTaskMemFree(pidl)
-                    result_holder[0] = path_buf.value or None
+            # CLSID_FileOpenDialog = {DC1C5A9C-E88A-4DDE-A5A1-60F82A20AEF7}
+            CLSID_FileOpenDialog = make_guid(
+                0xDC1C5A9C, 0xE88A, 0x4DDE,
+                (0xA5, 0xA1, 0x60, 0xF8, 0x2A, 0x20, 0xAE, 0xF7),
+            )
+            # IID_IFileOpenDialog = {D57C7288-D4AD-4768-BE02-9D969532D960}
+            IID_IFileOpenDialog = make_guid(
+                0xD57C7288, 0xD4AD, 0x4768,
+                (0xBE, 0x02, 0x9D, 0x96, 0x95, 0x32, 0xD9, 0x60),
+            )
+
+            S_OK                 = 0
+            CLSCTX_INPROC_SERVER = 1
+            FOS_PICKFOLDERS      = 0x00000020
+            FOS_FORCEFILESYSTEM  = 0x00000040
+            # SIGDN_FILESYSPATH = 0x80058000 interpreted as signed 32-bit
+            SIGDN_FILESYSPATH    = -2147123200
+
+            hr_init = ole32.CoInitialize(None)
+            try:
+                pfd = ctypes.c_void_p()
+                hr = ole32.CoCreateInstance(
+                    ctypes.byref(CLSID_FileOpenDialog),
+                    None,
+                    CLSCTX_INPROC_SERVER,
+                    ctypes.byref(IID_IFileOpenDialog),
+                    ctypes.byref(pfd),
+                )
+                if hr != S_OK or not pfd.value:
+                    return
+
+                # Helper: call COM vtable method at index idx on ptr.
+                def meth(ptr, idx, restype, *argtypes):
+                    vptr = ctypes.cast(ptr, ctypes.POINTER(ctypes.c_void_p))
+                    vtbl = ctypes.cast(vptr[0], ctypes.POINTER(ctypes.c_void_p))
+                    proto = ctypes.WINFUNCTYPE(restype, ctypes.c_void_p, *argtypes)
+                    return proto(vtbl[idx])
+
+                pv = pfd.value
+                # IFileDialog::SetOptions (vtable 9)
+                meth(pv, 9, ctypes.HRESULT, wt.DWORD)(pv, FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM)
+                # IFileDialog::SetTitle (vtable 17)
+                meth(pv, 17, ctypes.HRESULT, ctypes.c_wchar_p)(pv, "Select MSB image assets folder")
+                # IModalWindow::Show (vtable 3)
+                hr = meth(pv, 3, ctypes.HRESULT, wt.HWND)(pv, owner_hwnd)
+
+                if hr == S_OK:
+                    psi = ctypes.c_void_p()
+                    # IFileDialog::GetResult (vtable 20)
+                    hr = meth(pv, 20, ctypes.HRESULT, ctypes.POINTER(ctypes.c_void_p))(pv, ctypes.byref(psi))
+                    if hr == S_OK and psi.value:
+                        sv = psi.value
+                        psz = ctypes.c_wchar_p()
+                        # IShellItem::GetDisplayName (vtable 5)
+                        hr = meth(sv, 5, ctypes.HRESULT, ctypes.c_int, ctypes.POINTER(ctypes.c_wchar_p))(
+                            sv, SIGDN_FILESYSPATH, ctypes.byref(psz)
+                        )
+                        if hr == S_OK and psz.value:
+                            result_holder[0] = psz.value
+                            ole32.CoTaskMemFree(psz)
+                        meth(sv, 2, wt.ULONG)(sv)  # IShellItem::Release
+
+                meth(pv, 2, wt.ULONG)(pv)  # IFileOpenDialog::Release
             finally:
-                ole32.CoUninitialize()
+                if hr_init in (0, 1):  # S_OK or S_FALSE (already initialised)
+                    ole32.CoUninitialize()
 
         t = threading.Thread(target=_pick_folder, daemon=True)
         t.start()
