@@ -35,8 +35,25 @@ echo "[3/5] Running PyInstaller..."
 pip install pyinstaller -q 2>/dev/null || true
 pyinstaller PRSH.spec --noconfirm
 
-# 5. Create zip for distribution
-echo "[4/5] Creating distribution zip..."
+# 5. Dedup macOS .app bundle.
+# PyInstaller's BUNDLE step copies the entire COLLECT tree into both
+# Contents/Frameworks/ and Contents/Resources/ instead of symlinking.
+# Replace each duplicated entry in Resources/ with a relative symlink
+# to its Frameworks/ counterpart, halving the .app size on disk.
+if [ -d "dist/PRSH.app/Contents/Resources" ] && [ -d "dist/PRSH.app/Contents/Frameworks" ]; then
+    echo "[4/5] Deduping .app bundle..."
+    pushd "dist/PRSH.app/Contents/Resources" > /dev/null
+    for entry in *; do
+        if [ -e "../Frameworks/$entry" ] && [ ! -L "$entry" ]; then
+            rm -rf "$entry"
+            ln -s "../Frameworks/$entry" "$entry"
+        fi
+    done
+    popd > /dev/null
+fi
+
+# 6. Create zip for distribution
+echo "[5/5] Creating distribution zip..."
 cd dist
 if [ -d "PRSH.app" ]; then
     zip -r -q "../PRSH-macOS.zip" PRSH.app

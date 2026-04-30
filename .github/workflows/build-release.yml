@@ -136,6 +136,24 @@ jobs:
           PYINSTALLER_TARGET_ARCH: x86_64
         run: arch -x86_64 pyinstaller PRSH.spec --noconfirm
 
+      # ── Dedup macOS .app bundle ──
+      # PyInstaller's BUNDLE step copies the entire COLLECT tree into
+      # both Contents/Frameworks/ and Contents/Resources/ instead of
+      # symlinking, roughly doubling the .app size. Replace each duplicated
+      # entry in Resources/ with a relative symlink to Frameworks/.
+      - name: Dedup macOS .app bundle
+        if: runner.os == 'macOS'
+        run: |
+          if [ -d "dist/PRSH.app/Contents/Resources" ] && [ -d "dist/PRSH.app/Contents/Frameworks" ]; then
+            cd "dist/PRSH.app/Contents/Resources"
+            for entry in *; do
+              if [ -e "../Frameworks/$entry" ] && [ ! -L "$entry" ]; then
+                rm -rf "$entry"
+                ln -s "../Frameworks/$entry" "$entry"
+              fi
+            done
+          fi
+
       # ── Package (macOS: pre-zip to preserve .app symlinks) ──
       - name: Create zip (macOS)
         if: runner.os == 'macOS'
