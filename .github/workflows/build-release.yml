@@ -155,11 +155,14 @@ jobs:
           fi
 
       # ── Package (macOS: pre-zip to preserve .app symlinks) ──
+      # -y is required to store symlinks as symlinks; without it `zip`
+      # dereferences each symlink and stores the linked file's contents,
+      # undoing the dedup step above and re-bloating the archive.
       - name: Create zip (macOS)
         if: runner.os == 'macOS'
         run: |
           cd dist
-          zip -r -q ../${{ matrix.artifact }}.zip PRSH.app
+          zip -ryq ../${{ matrix.artifact }}.zip PRSH.app
 
       # ── Build Windows installer (Inno Setup is preinstalled on windows-latest) ──
       - name: Build Windows installer

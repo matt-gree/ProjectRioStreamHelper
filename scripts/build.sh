@@ -55,14 +55,16 @@ fi
 # 6. Create zip for distribution
 echo "[5/5] Creating distribution zip..."
 cd dist
+# -y preserves symbolic links (without it, zip dereferences each symlink
+# and stores the linked file's contents, undoing the dedup step above).
 if [ -d "PRSH.app" ]; then
-    zip -r -q "../PRSH-macOS.zip" PRSH.app
+    zip -ry -q "../PRSH-macOS.zip" PRSH.app
     echo ""
     echo "=== Build complete ==="
     echo "Output: PRSH-macOS.zip"
     echo "To test: unzip PRSH-macOS.zip && open PRSH.app"
 elif [ -d "PRSH" ]; then
-    zip -r -q "../PRSH-macOS.zip" PRSH
+    zip -ry -q "../PRSH-macOS.zip" PRSH
     echo ""
     echo "=== Build complete ==="
     echo "Output: PRSH-macOS.zip"
