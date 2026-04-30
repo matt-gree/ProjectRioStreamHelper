@@ -5,7 +5,7 @@
 
 A web-based tournament stream overlay manager for **Mario Superstar Baseball (MSB)** played through the [Project Rio](https://www.projectrio.online/) emulator. PRSH runs locally on the streamer's machine, exposes a web UI for managing scoreboards, and serves OBS browser-source overlays that update in real time.
 
-PRSH is forked from [TournamentStreamHelper](https://github.com/joaorb64/TournamentStreamHelper) and rebuilt as a single-game web app on FastAPI + React.
+PRSH is forked from [TournamentStreamHelper](https://github.com/TournamentStreamHelper/TournamentStreamHelper) and rebuilt as a single-game web app on FastAPI + React.
 
 ---
 
