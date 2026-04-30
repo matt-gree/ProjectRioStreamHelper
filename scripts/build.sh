@@ -16,11 +16,11 @@ cd "$PROJECT_DIR"
 echo "=== ProjectRioStreamHelper macOS Build ==="
 
 # 1. Ensure git submodules
-echo "[1/5] Checking git submodules..."
+echo "[1/4] Checking git submodules..."
 git submodule update --init --recursive
 
 # 2. Build frontend
-echo "[2/5] Building frontend..."
+echo "[2/4] Building frontend..."
 npm install --silent
 npm run build
 
@@ -31,29 +31,12 @@ if [ ! -d "dist/assets" ]; then
 fi
 
 # 4. Run PyInstaller
-echo "[3/5] Running PyInstaller..."
+echo "[3/4] Running PyInstaller..."
 pip install pyinstaller -q 2>/dev/null || true
 pyinstaller PRSH.spec --noconfirm
 
-# 5. Dedup macOS .app bundle.
-# PyInstaller's BUNDLE step copies the entire COLLECT tree into both
-# Contents/Frameworks/ and Contents/Resources/ instead of symlinking.
-# Replace each duplicated entry in Resources/ with a relative symlink
-# to its Frameworks/ counterpart, halving the .app size on disk.
-if [ -d "dist/PRSH.app/Contents/Resources" ] && [ -d "dist/PRSH.app/Contents/Frameworks" ]; then
-    echo "[4/5] Deduping .app bundle..."
-    pushd "dist/PRSH.app/Contents/Resources" > /dev/null
-    for entry in *; do
-        if [ -e "../Frameworks/$entry" ] && [ ! -L "$entry" ]; then
-            rm -rf "$entry"
-            ln -s "../Frameworks/$entry" "$entry"
-        fi
-    done
-    popd > /dev/null
-fi
-
-# 6. Create zip for distribution
-echo "[5/5] Creating distribution zip..."
+# 5. Create zip for distribution
+echo "[4/4] Creating distribution zip..."
 cd dist
 # -y preserves symbolic links (without it, zip dereferences each symlink
 # and stores the linked file's contents, undoing the dedup step above).
