@@ -8,6 +8,7 @@ import asyncio
 
 import pandas as pd
 from loguru import logger
+from server.rio.pyrio.lookup import LookupDicts
 from server.rio.pyrio.stat_formatters import (
     derive_batting, derive_pitching,
     format_batting_line, format_pitching_line,
@@ -168,6 +169,10 @@ class StatsTracker:
     # state without importing provider (which already imports us at the top).
     _sides_swapped: bool = False
 
+    # Scoreboard to push stats to. None means use scoreboards.hud_target setting.
+    # Set explicitly when a game is loaded from the API game pool.
+    _push_sb: int | None = None
+
     @classmethod
     def reset(cls):
         """Reset all stats state."""
@@ -178,6 +183,7 @@ class StatsTracker:
         cls._rosters = {}
         cls._api_ready = False
         cls._sides_swapped = False
+        cls._push_sb = None
         if cls._fetch_task and not cls._fetch_task.done():
             cls._fetch_task.cancel()
         cls._fetch_task = None
@@ -198,21 +204,29 @@ class StatsTracker:
         return cls._api_index.get((username, char_name))
 
     @classmethod
-    async def on_new_game(cls, game_json: dict):
-        """Called when a new game is detected. Resets state and fetches API stats."""
+    async def on_new_game(cls, game_json: dict, scoreboard_number: int | None = None):
+        """Called when a new game is detected. Resets state and fetches API stats.
+
+        Args:
+            scoreboard_number: Scoreboard to push stats to after fetching.
+                               If None, falls back to scoreboards.hud_target setting.
+        """
         cls.reset()
+        cls._push_sb = scoreboard_number
 
         cls._players = [
             game_json.get("away_player", ""),
             game_json.get("home_player", ""),
         ]
 
-        # Extract rosters from game_json
+        # Extract rosters from game_json, resolving integer char IDs to names.
+        # HUD files already have string names; API responses use integer IDs.
         for team_idx in range(2):
             team = "away" if team_idx == 0 else "home"
+            raw = [game_json.get(f"{team}_roster_{i}_char", "") for i in range(9)]
             cls._rosters[team_idx] = [
-                game_json.get(f"{team}_roster_{i}_char", "")
-                for i in range(9)
+                LookupDicts.CHAR_NAME.get(c, str(c)) if isinstance(c, int) else str(c or "")
+                for c in raw
             ]
 
         logger.info(f"[StatsTracker] New game: {cls._players[0]} vs {cls._players[1]}")
@@ -245,7 +259,7 @@ class StatsTracker:
             else:
                 logger.info("[StatsTracker] API stats returned empty DataFrame")
             if push:
-                sb_num = Settings.Get("scoreboards.hud_target", 1)
+                sb_num = cls._push_sb if cls._push_sb is not None else Settings.Get("scoreboards.hud_target", 1)
                 await cls.push_stats_to_state(sb_num, cls._sides_swapped)
         except Exception as e:
             logger.error(f"[StatsTracker] Failed to fetch API stats: {e}")

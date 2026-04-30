@@ -2,7 +2,9 @@ from loguru import logger
 from server.utils.router import method
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import ORJSONResponse
-from server.rio.game_pool import OngoingGamePool, CompletedGamePool
+from server.rio.game_pool import OngoingGamePool, CompletedGamePool, _pinned_swap_needed
+from server.rio.stats_tracker import StatsTracker
+from server.rio.provider import RioGameDataProvider
 from server.rio.stats_api import get_last_completed_fetch_info
 
 router = APIRouter()
@@ -159,7 +161,19 @@ async def assign_game(
     """Assign a game (ongoing or completed) to a scoreboard."""
     # Try ongoing first, then completed
     if OngoingGamePool.get_game(game_id):
+        game = OngoingGamePool.get_game(game_id)
         success = await OngoingGamePool.apply_game_to_scoreboard(game_id, scoreboard_number)
+        if success:
+            # Initialize stats for this directly-assigned live game.
+            # Determine side swap the same way apply_game_to_scoreboard does so
+            # StatsTracker maps teams correctly when pushing stats.
+            parsed = RioGameDataProvider.parse_game_data(game)
+            entrants = parsed.get("entrants", [[{}], [{}]])
+            p0 = entrants[0][0].get("rioName", "") if entrants[0] else ""
+            p1 = entrants[1][0].get("rioName", "") if entrants[1] else ""
+            sides_swapped = _pinned_swap_needed(p0, p1) is True
+            await StatsTracker.on_new_game(game, scoreboard_number=scoreboard_number)
+            StatsTracker._sides_swapped = sides_swapped
     elif CompletedGamePool.get_game(game_id):
         success = await CompletedGamePool.apply_game_to_scoreboard(game_id, scoreboard_number)
     else:
