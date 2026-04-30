@@ -236,7 +236,7 @@ class Config:
     config = {
         "name": "ProjectRioStreamHelper",
         "version": "1.0.0",
-        "description": "Tournament scoreboard helper and overlays for fighting game tournaments",
+        "description": "Tournament scoreboard helper and overlays for Mario Superstar Baseball via Project Rio",
         "authors": [],
         "server_url": ""
     }

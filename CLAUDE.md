@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-A web-based tournament stream overlay manager for **Mario Superstar Baseball (MSB)** via the Project Rio mod. Forked from TournamentStreamHelper (90+ fighting games, Qt/PySide6) and rebuilt as a single-game web app with a modern stack.
+A web-based tournament stream overlay manager for **Mario Superstar Baseball (MSB)** via the Project Rio mod. Forked from TournamentStreamHelper (originally Qt/PySide6) and rebuilt as a single-game web app with a modern stack.
 
 **Tech stack:** Python 3.12+, FastAPI + python-socketio, asyncio, orjson, watchfiles, pyrio (git dep), React 19 + Zustand + Mantine 7, Vite
 
