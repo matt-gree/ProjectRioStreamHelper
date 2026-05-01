@@ -160,6 +160,20 @@ async def assign_game(
     session_id: str | None = None,
 ) -> ORJSONResponse:
     """Assign a game (ongoing or completed) to a scoreboard."""
+    # Authoritative server-side guard: only honor assigns when the
+    # scoreboard's current source can legitimately receive a pool game.
+    # Without this, a stale client (other tab, OBS browser source, in-flight
+    # poll fired before a source-change settings update arrived) can
+    # overwrite manual edits or a different source's data.
+    source_type = Settings.Get(
+        f"scoreboards.sources.{scoreboard_number}.type"
+    )
+    if source_type not in ("live_game", "rotator"):
+        raise HTTPException(
+            status_code=409,
+            detail=f"scoreboard {scoreboard_number} source is {source_type!r}, not assignable",
+        )
+
     # Detect whether this assignment is a *new* game for this scoreboard,
     # so live-game auto-poll re-applies (which fire on every poll cycle to
     # refresh score/state) don't trigger a stats refetch each tick.
@@ -178,11 +192,20 @@ async def assign_game(
             # right tag. Gated on is_new_game so the live auto-poll's
             # same-game re-applies don't re-trigger the frontend's
             # tag-change refresh effect on every tick.
+            #
+            # If the new game's mode is unknown ("" or "ID:..."), clear the
+            # stats_tag rather than leaving the previous game's tag in place —
+            # otherwise stats fetches run with the wrong tag for the new game.
             game_mode_name = game.get("game_mode_name", "")
             if game_mode_name and not game_mode_name.startswith("ID:"):
                 await Settings.Set(
                     f"scoreboards.sources.{scoreboard_number}.stats_tag",
                     game_mode_name,
+                )
+            else:
+                await Settings.Set(
+                    f"scoreboards.sources.{scoreboard_number}.stats_tag",
+                    "",
                 )
 
             # Initialize stats only on first load. Compute side swap the same

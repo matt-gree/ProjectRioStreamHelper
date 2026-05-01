@@ -173,9 +173,10 @@ async def set_scoreboard_source(
             RioGameDataProvider.current_game = parsed
             await RioGameDataProvider._apply_game_to_state(parsed)
     elif old_source == "hud":
-        # Demoted from HUD — refresh the cached target list so the watcher
-        # stops writing into this scoreboard.
-        RioGameDataProvider.refresh_hud_targets()
+        # Demoted from HUD — wipe side-preservation state so leftover swap
+        # flags from this scoreboard's last game don't carry into the next
+        # scoreboard promoted to HUD. Also refreshes the cached target list.
+        RioGameDataProvider._reset_side_preservation()
 
     # Flush any state changes accumulated during this handler (no-op if nothing changed)
     await State.Save()

@@ -1,7 +1,8 @@
 from server.utils.router import method
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import ORJSONResponse
 from server.rio.rotation import RotationManager
+from server.settings import Settings
 
 router = APIRouter()
 
@@ -57,6 +58,16 @@ async def set_rotation(
 )
 async def start_rotation(sb_id: int, session_id: str | None = None) -> ORJSONResponse:
     """Start rotation for a scoreboard."""
+    # Refuse to start a rotation on a scoreboard whose source isn't "rotator".
+    # _apply_current self-cancels, but writing enabled=True first leaves a stale
+    # flag that resume-on-startup has to clean up; rejecting here is symmetric
+    # with the assign_game guard and avoids the round-trip.
+    source_type = Settings.Get(f"scoreboards.sources.{sb_id}.type")
+    if source_type != "rotator":
+        raise HTTPException(
+            status_code=409,
+            detail=f"scoreboard {sb_id} source is {source_type!r}, not 'rotator'",
+        )
     await RotationManager.start_rotation(sb_id)
     return ORJSONResponse({"success": True, **RotationManager.get_status(sb_id)})
 
