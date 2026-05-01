@@ -11,6 +11,7 @@ from urllib.parse import urlencode
 
 import pandas as pd
 from loguru import logger
+from server import socketio
 from server.paths import user_data_dir
 from server.rio.pyrio.rio_web import RioWeb
 from server.rio.pyrio.exceptions import RioAPIError
@@ -18,15 +19,13 @@ from server.rio.pyrio.exceptions import RioAPIError
 _client: RioWeb | None = None
 _ENV_PATH = user_data_dir() / ".env"
 
-# Diagnostic state for the last stats fetch
-_last_fetch_info: dict = {
-    "url": None,
-    "tag": None,
-    "players": {},  # {username: {"char_count": int, "error": str|None}}
-    "fetched_at": None,
-}
+# Diagnostic state for the last stats fetch — keyed by scoreboard so each
+# scoreboard's diagnostics popover sees only its own fetch, not whichever
+# scoreboard happened to fetch last.
+_last_fetch_info: dict[int, dict] = {}
 
-# Diagnostic state for the last completed games fetch
+# Diagnostic state for the last completed games fetch (single shared pool, so
+# this stays a single dict).
 _last_completed_fetch_info: dict = {
     "url": None,
     "count": 0,
@@ -35,9 +34,22 @@ _last_completed_fetch_info: dict = {
 }
 
 
-def get_last_fetch_info() -> dict:
-    """Return diagnostic info about the last stats fetch."""
-    return _last_fetch_info.copy()
+def _empty_fetch_info() -> dict:
+    return {
+        "url": None,
+        "tag": None,
+        "players": {},
+        "fetched_at": None,
+    }
+
+
+def get_last_fetch_info(scoreboard_number: int | None = None) -> dict:
+    """Return diagnostic info about the last stats fetch for a scoreboard."""
+    if scoreboard_number is None:
+        # Back-compat: caller didn't specify a scoreboard. Return an empty
+        # shape rather than leaking another scoreboard's data.
+        return _empty_fetch_info()
+    return _last_fetch_info.get(scoreboard_number, _empty_fetch_info()).copy()
 
 
 def get_last_completed_fetch_info() -> dict:
@@ -45,16 +57,33 @@ def get_last_completed_fetch_info() -> dict:
     return _last_completed_fetch_info.copy()
 
 
-def set_no_players_diagnostic(tag: str | None) -> None:
+async def set_no_players_diagnostic(scoreboard_number: int, tag: str | None) -> None:
     """Record that a stats refresh was attempted but no players are set."""
-    global _last_fetch_info
-    _last_fetch_info = {
+    info = {
         "url": None,
         "tag": tag,
         "players": {},
         "fetched_at": datetime.now(timezone.utc).isoformat(),
+        "status": "done",
         "error": "No players detected. A game must be active (via HUD or API) before stats can be fetched.",
     }
+    _last_fetch_info[scoreboard_number] = info
+    await _emit_fetch_status(scoreboard_number, info)
+
+
+def reset_fetch_info(scoreboard_number: int) -> None:
+    """Drop a scoreboard's diagnostics slot (e.g. on source change/removal)."""
+    _last_fetch_info.pop(scoreboard_number, None)
+
+
+async def _emit_fetch_status(scoreboard_number: int, info: dict) -> None:
+    """Broadcast the current fetch state for one scoreboard.
+
+    Lets the frontend stop polling /rio/stats/diagnostics — it gets push
+    updates instead. Payload mirrors what GET /rio/stats/diagnostics returns,
+    plus the scoreboard id so the client can filter.
+    """
+    await socketio.emit("v1.stats.fetch_status", {"scoreboard": scoreboard_number, **info})
 
 
 def load_rio_key() -> str | None:
@@ -93,6 +122,7 @@ def _get_client() -> RioWeb:
 async def fetch_character_stats(
     usernames: list[str],
     tag: Optional[str] = None,
+    scoreboard_number: int | None = None,
 ) -> pd.DataFrame:
     """Fetch per-character stats from the Project Rio API in a single request.
 
@@ -102,9 +132,11 @@ async def fetch_character_stats(
       - Stat columns: Batting_summary_at_bats, Pitching_batters_faced, etc.
 
     Returns an empty DataFrame on error.
-    """
-    global _last_fetch_info
 
+    Args:
+        scoreboard_number: which scoreboard's diagnostics slot to write to.
+            If None, no diagnostics are recorded (the fetch still runs).
+    """
     # Remove all whitespace from string parameters
     usernames = ["".join(u.split()) for u in usernames]
     usernames = [u for u in usernames if u]
@@ -135,13 +167,16 @@ async def fetch_character_stats(
     diag_url = f"{client.base_url}/stats/?{base_qs}&{user_qs}"
 
     # Set loading state immediately so the UI can show it
-    _last_fetch_info = {
-        "url": diag_url,
-        "tag": tag,
-        "players": {u: {"char_count": 0, "error": None, "status": "loading"} for u in usernames},
-        "fetched_at": datetime.now(timezone.utc).isoformat(),
-        "status": "loading",
-    }
+    if scoreboard_number is not None:
+        loading_info = {
+            "url": diag_url,
+            "tag": tag,
+            "players": {u: {"char_count": 0, "error": None, "status": "loading"} for u in usernames},
+            "fetched_at": datetime.now(timezone.utc).isoformat(),
+            "status": "loading",
+        }
+        _last_fetch_info[scoreboard_number] = loading_info
+        await _emit_fetch_status(scoreboard_number, loading_info)
 
     try:
         # raw=False → pyrio processes the response into a flat DataFrame
@@ -152,27 +187,30 @@ async def fetch_character_stats(
                 char_count = len(df[df["username"] == username])
             else:
                 char_count = 0
-            logger.info(f"[StatsAPI] Fetched stats for {username}: {char_count} characters")
+            logger.info(f"[StatsAPI] sb{scoreboard_number} fetched stats for {username}: {char_count} characters")
             player_diag[username] = {"char_count": char_count, "error": None, "status": "done"}
 
     except RioAPIError as e:
-        logger.warning(f"[StatsAPI] API error fetching stats: {e}")
+        logger.warning(f"[StatsAPI] sb{scoreboard_number} API error fetching stats: {e}")
         df = pd.DataFrame()
         for username in usernames:
             player_diag[username] = {"char_count": 0, "error": str(e), "status": "error"}
     except Exception as e:
-        logger.error(f"[StatsAPI] Unexpected error fetching stats: {e}")
+        logger.error(f"[StatsAPI] sb{scoreboard_number} unexpected error fetching stats: {e}")
         df = pd.DataFrame()
         for username in usernames:
             player_diag[username] = {"char_count": 0, "error": str(e), "status": "error"}
 
-    _last_fetch_info = {
-        "url": diag_url,
-        "tag": tag,
-        "players": player_diag,
-        "fetched_at": datetime.now(timezone.utc).isoformat(),
-        "status": "done",
-    }
+    if scoreboard_number is not None:
+        done_info = {
+            "url": diag_url,
+            "tag": tag,
+            "players": player_diag,
+            "fetched_at": datetime.now(timezone.utc).isoformat(),
+            "status": "done",
+        }
+        _last_fetch_info[scoreboard_number] = done_info
+        await _emit_fetch_status(scoreboard_number, done_info)
 
     return df
 

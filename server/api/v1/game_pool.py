@@ -6,6 +6,7 @@ from server.rio.game_pool import OngoingGamePool, CompletedGamePool, _pinned_swa
 from server.rio.stats_tracker import StatsTracker
 from server.rio.provider import RioGameDataProvider
 from server.rio.stats_api import get_last_completed_fetch_info
+from server.settings import Settings
 
 router = APIRouter()
 
@@ -159,21 +160,45 @@ async def assign_game(
     session_id: str | None = None,
 ) -> ORJSONResponse:
     """Assign a game (ongoing or completed) to a scoreboard."""
+    # Detect whether this assignment is a *new* game for this scoreboard,
+    # so live-game auto-poll re-applies (which fire on every poll cycle to
+    # refresh score/state) don't trigger a stats refetch each tick.
+    prev_game_id = Settings.Get(
+        f"scoreboards.sources.{scoreboard_number}.api_game_id"
+    )
+    is_new_game = prev_game_id != game_id
+
     # Try ongoing first, then completed
     if OngoingGamePool.get_game(game_id):
         game = OngoingGamePool.get_game(game_id)
         success = await OngoingGamePool.apply_game_to_scoreboard(game_id, scoreboard_number)
-        if success:
-            # Initialize stats for this directly-assigned live game.
-            # Determine side swap the same way apply_game_to_scoreboard does so
-            # StatsTracker maps teams correctly when pushing stats.
+        if success and is_new_game:
+            # New live game on this scoreboard — sync the per-scoreboard
+            # stats_tag to this game's mode so the stats fetch uses the
+            # right tag. Gated on is_new_game so the live auto-poll's
+            # same-game re-applies don't re-trigger the frontend's
+            # tag-change refresh effect on every tick.
+            game_mode_name = game.get("game_mode_name", "")
+            if game_mode_name and not game_mode_name.startswith("ID:"):
+                await Settings.Set(
+                    f"scoreboards.sources.{scoreboard_number}.stats_tag",
+                    game_mode_name,
+                )
+
+            # Initialize stats only on first load. Compute side swap the same
+            # way apply_game_to_scoreboard does so the slot maps teams
+            # correctly when pushing.
             parsed = RioGameDataProvider.parse_game_data(game)
             entrants = parsed.get("entrants", [[{}], [{}]])
             p0 = entrants[0][0].get("rioName", "") if entrants[0] else ""
             p1 = entrants[1][0].get("rioName", "") if entrants[1] else ""
             sides_swapped = _pinned_swap_needed(p0, p1) is True
-            await StatsTracker.on_new_game(game, scoreboard_number=scoreboard_number)
-            StatsTracker._sides_swapped = sides_swapped
+            await StatsTracker.on_new_game(
+                game,
+                scoreboard_number=scoreboard_number,
+                await_fetch=True,
+                sides_swapped=sides_swapped,
+            )
     elif CompletedGamePool.get_game(game_id):
         success = await CompletedGamePool.apply_game_to_scoreboard(game_id, scoreboard_number)
     else:

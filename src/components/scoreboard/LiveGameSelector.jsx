@@ -38,6 +38,16 @@ export default memo(function LiveGameSelector({ scoreboardNumber }) {
     const currentGameIdRef = useRef(currentGameId);
     useEffect(() => { currentGameIdRef.current = currentGameId; }, [currentGameId]);
 
+    // Mirror the current source type into a ref so the socket callback can
+    // bail out if the user has switched this scoreboard away from live_game
+    // (the component may briefly remain mounted during the transition).
+    const sourceTypeSetting = useSettingsStore(
+        s => s?.scoreboards?.sources?.[scoreboardNumber]?.type
+            ?? s?.scoreboards?.sources?.[String(scoreboardNumber)]?.type,
+    );
+    const sourceTypeRef = useRef(sourceTypeSetting);
+    useEffect(() => { sourceTypeRef.current = sourceTypeSetting; }, [sourceTypeSetting]);
+
     // Countdown to next auto-poll refresh
     const [secondsRemaining, setSecondsRemaining] = useState(null);
     const lastUpdateAtRef = useRef(null);
@@ -87,6 +97,10 @@ export default memo(function LiveGameSelector({ scoreboardNumber }) {
     }, [resetCountdown]);
 
     const handleLoad = useCallback(async (gameId) => {
+        // Optimistically update the ref BEFORE the fetch so a poll that fires
+        // before the new score.{sb}.game_id round-trips back from the server
+        // doesn't see a stale id and re-assign the previously-loaded game.
+        currentGameIdRef.current = gameId;
         await fetch(
             `/api/v1/game-pool/assign?game_id=${gameId}&scoreboard_number=${scoreboardNumber}`,
             { method: 'POST' },
@@ -101,10 +115,16 @@ export default memo(function LiveGameSelector({ scoreboardNumber }) {
         setGames(updated);
         resetCountdown();
 
+        // Skip the auto re-apply if this scoreboard is no longer a live_game
+        // source — otherwise we'd overwrite whatever the user just switched to.
+        if (sourceTypeRef.current !== 'live_game') return;
+
         const loadedId = currentGameIdRef.current;
         if (loadedId == null) return;
         const stillLive = updated.some(g => g.game_id === loadedId);
         if (stillLive) {
+            // Same game_id as last poll → assign_game's is_new_game guard
+            // skips the stats refetch and only refreshes score/state.
             fetch(
                 `/api/v1/game-pool/assign?game_id=${loadedId}&scoreboard_number=${scoreboardNumber}`,
                 { method: 'POST' },

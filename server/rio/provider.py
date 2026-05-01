@@ -11,6 +11,13 @@ from server.settings import Settings
 from server.state import State
 
 
+def _read_hud_targets() -> list[int]:
+    """Active scoreboards whose source type is 'hud'."""
+    active = Settings.Get("scoreboards.active", [1])
+    sources = Settings.Get("scoreboards.sources", {})
+    return [sb for sb in active if sources.get(str(sb), {}).get("type") == "hud"]
+
+
 def get_default_hud_file_path() -> Path:
     """Returns the OS-specific path to Project Rio's decoded.hud.json file."""
     system = platform.system()
@@ -139,8 +146,9 @@ async def apply_completed_game_to_state(game: dict, scoreboard_number: int):
         (f"{sb}.score_left", game.get("away_score", 0)),
         (f"{sb}.score_right", game.get("home_score", 0)),
 
-        # Game metadata
-        (f"{sb}.source_type", "rotator"),
+        # Game metadata. source_type is owned by Settings (per-scoreboard
+        # source config); don't mirror it into State here — that would
+        # silently override the user's selected source.
         (f"{sb}.game_id", game.get("game_id")),
         (f"{sb}.game_completed", True),
         (f"{sb}.date_time_start", _ts(game.get("date_time_start"))),
@@ -220,8 +228,10 @@ class RioGameDataProvider:
     hud_watcher: HudWatcher | None = None
     current_game: dict | None = None
 
-    # Cached settings — avoids async Settings.Get() on every HUD event
-    _hud_target: int = 1
+    # Cached HUD-target list — avoids re-scanning settings on every HUD event.
+    # Derived from per-scoreboard source.type == "hud"; refreshed in
+    # _reset_side_preservation (called whenever sources change).
+    _hud_targets: list[int] = []
 
     # Player side preservation state
     _prev_player_sides: dict = {}
@@ -232,7 +242,7 @@ class RioGameDataProvider:
     @classmethod
     async def Start(cls):
         """Resolve HUD path and start the file watcher."""
-        cls._hud_target = Settings.Get("scoreboards.hud_target", 1)
+        cls._hud_targets = _read_hud_targets()
 
         hud_path = await get_user_hud_path()
         if not hud_path:
@@ -293,13 +303,15 @@ class RioGameDataProvider:
         await cls.ReloadHudPath()
         if cls.hud_watcher and cls.hud_watcher.latest_game_data:
             game_json = cls.hud_watcher.latest_game_data
-            StatsTracker.on_hud_update(game_json)
+            for sb in cls._hud_targets:
+                StatsTracker.on_hud_update(game_json, sb)
             parsed = cls.parse_game_data(game_json)
             parsed = cls._preserve_player_sides(parsed)
             cls.current_game = parsed
             await cls._apply_game_to_state(parsed)
 
-            await StatsTracker.push_stats_to_state(cls._hud_target, cls._sides_swapped)
+            for sb in cls._hud_targets:
+                await StatsTracker.push_stats_to_state(sb, cls._sides_swapped)
             return parsed
         return None
 
@@ -388,20 +400,33 @@ class RioGameDataProvider:
         return data
 
     @classmethod
+    def refresh_hud_targets(cls):
+        """Re-scan settings for the current HUD-target list.
+
+        Call after any change to scoreboards.sources or scoreboards.active so
+        the HUD watcher stops writing into demoted/removed scoreboards and
+        starts writing into newly-promoted ones, without otherwise disturbing
+        side-preservation state.
+        """
+        cls._hud_targets = _read_hud_targets()
+
+    @classmethod
     def _reset_side_preservation(cls):
         """Reset side preservation state when HUD target changes."""
         cls._prev_player_sides = {}
         cls._prev_inning = None
         cls._sides_swapped = False
         cls._user_overridden = False
-        cls._hud_target = Settings.Get("scoreboards.hud_target", 1)
-        StatsTracker.reset()
+        cls._hud_targets = _read_hud_targets()
+        for sb in cls._hud_targets:
+            StatsTracker.reset_scoreboard(sb)
 
     @classmethod
     async def _apply_game_to_state(cls, parsed: dict):
-        """Push all parsed game data into the HUD target scoreboard."""
+        """Push parsed game data to every HUD-target scoreboard."""
         home_team = 1 if cls._sides_swapped else 2
-        await apply_parsed_game_to_state(parsed, cls._hud_target, home_team=home_team)
+        for sb in cls._hud_targets:
+            await apply_parsed_game_to_state(parsed, sb, home_team=home_team)
 
     # --- Player side preservation (3-layer system) ---
 
@@ -410,22 +435,29 @@ class RioGameDataProvider:
         """Callback from HudWatcher when the HUD file changes."""
         # Check for new game before parsing (uses raw inning from game_json)
         current_inning = game_json.get("inning", 1)
-        if cls._is_new_game(current_inning):
-            await StatsTracker.on_new_game(game_json)
+        is_new_game = cls._is_new_game(current_inning)
 
-        # Update HUD stats on every event
-        StatsTracker.on_hud_update(game_json)
+        for sb in cls._hud_targets:
+            if is_new_game:
+                await StatsTracker.on_new_game(
+                    game_json,
+                    sb,
+                    await_fetch=False,
+                    sides_swapped=cls._sides_swapped,
+                )
+            StatsTracker.on_hud_update(game_json, sb)
 
         parsed = cls.parse_game_data(game_json)
         parsed = cls._preserve_player_sides(parsed)
         cls.current_game = parsed
-        # Keep StatsTracker's cached value in sync so its background fetch task
-        # can read it without importing back into provider (breaks the cycle).
-        StatsTracker._sides_swapped = cls._sides_swapped
+        # Mirror current swap state into each slot so background fetches push
+        # with the correct team mapping when they land.
+        for sb in cls._hud_targets:
+            StatsTracker.set_sides_swapped(sb, cls._sides_swapped)
         await cls._apply_game_to_state(parsed)
 
-        # Push merged stats to state after game data
-        await StatsTracker.push_stats_to_state(cls._hud_target, cls._sides_swapped)
+        for sb in cls._hud_targets:
+            await StatsTracker.push_stats_to_state(sb, cls._sides_swapped)
 
     @classmethod
     def _is_new_game(cls, current_inning: int) -> bool:
@@ -455,8 +487,9 @@ class RioGameDataProvider:
             cls.current_game = parsed
             await cls._apply_game_to_state(parsed)
 
-            # Re-push stats with new swap state
-            await StatsTracker.push_stats_to_state(cls._hud_target, cls._sides_swapped)
+            # Re-push stats with new swap state to every HUD target
+            for sb in cls._hud_targets:
+                await StatsTracker.push_stats_to_state(sb, cls._sides_swapped)
 
     @classmethod
     def _preserve_player_sides(cls, parsed: dict) -> dict:

@@ -2,6 +2,8 @@ from server.utils.router import method
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import ORJSONResponse
 from server.rio.provider import RioGameDataProvider
+from server.rio.rotation import RotationManager
+from server.rio.stats_tracker import StatsTracker
 from server.settings import Settings
 from server.state import State
 
@@ -17,6 +19,18 @@ def _lowest_available_id(active: list[int]) -> int:
     return n
 
 
+def hud_target_scoreboards() -> list[int]:
+    """Return all active scoreboards whose source type is 'hud'.
+
+    HUD-target is derived from per-scoreboard source config rather than a
+    separate setting, so any number of scoreboards can mirror the local HUD
+    game simultaneously.
+    """
+    active = Settings.Get("scoreboards.active", [1])
+    sources = Settings.Get("scoreboards.sources", {})
+    return [sb for sb in active if sources.get(str(sb), {}).get("type") == "hud"]
+
+
 @method(
     router.get, "/scoreboards",
     version="1", id="scoreboards.list",
@@ -27,7 +41,6 @@ async def list_scoreboards(session_id: str | None = None) -> ORJSONResponse:
     active = Settings.Get("scoreboards.active", [1])
     sources = Settings.Get("scoreboards.sources", {})
     aliases = Settings.Get("scoreboards.aliases", {})
-    hud_target = Settings.Get("scoreboards.hud_target", 1)
 
     scoreboards = []
     for sb_id in active:
@@ -37,7 +50,7 @@ async def list_scoreboards(session_id: str | None = None) -> ORJSONResponse:
             "id": sb_id,
             "alias": aliases.get(key, ""),
             "source": source_cfg,
-            "is_hud_target": sb_id == hud_target,
+            "is_hud_target": source_cfg.get("type") == "hud",
         })
     return ORJSONResponse(scoreboards)
 
@@ -79,16 +92,23 @@ async def remove_scoreboard(sb_id: int, session_id: str | None = None) -> ORJSON
     # Clear state for this scoreboard
     await State.Unset(f"score.{sb_id}")
 
-    # If this was the HUD target, clear it — don't auto-assign to another
-    hud_target = Settings.Get("scoreboards.hud_target", 1)
-    if hud_target == sb_id:
-        await Settings.Set("scoreboards.hud_target", 0)
-        RioGameDataProvider._reset_side_preservation()
+    old_source = Settings.Get(f"scoreboards.sources.{sb_id}.type")
+
+    # Tear down any background work owned by this scoreboard before its
+    # settings are removed, so resume-on-startup can't pick it back up.
+    await RotationManager.stop_rotation(sb_id)
+    await Settings.Unset(f"scoreboards.rotation.{sb_id}")
 
     active.remove(sb_id)
     await Settings.Set("scoreboards.active", active)
     await Settings.Unset(f"scoreboards.sources.{sb_id}")
     await Settings.Unset(f"scoreboards.aliases.{sb_id}")
+
+    StatsTracker.reset_scoreboard(sb_id)
+    if old_source == "hud":
+        RioGameDataProvider._reset_side_preservation()
+    else:
+        RioGameDataProvider.refresh_hud_targets()
 
     await State.Save()
     return ORJSONResponse({"success": True, "active": active})
@@ -116,20 +136,35 @@ async def set_scoreboard_source(
 
     # Clear scoreboard state on source change, except HUD → Manual (preserve displayed data)
     old_source = Settings.Get(f"scoreboards.sources.{sb_id}.type", "manual")
-    if old_source != source_type and not (old_source == "hud" and source_type == "manual"):
+    source_changed = old_source != source_type
+    if source_changed and not (old_source == "hud" and source_type == "manual"):
         await State.Set(f"score.{sb_id}", {})
         await State.Save()
 
-    if source_type == "hud":
-        # Unlink previous HUD target
-        old_target = Settings.Get("scoreboards.hud_target", 1)
-        if old_target != sb_id and old_target in active:
-            await Settings.Set(f"scoreboards.sources.{old_target}.type", "manual")
+    # Stop any rotation when leaving the rotator source so it can't keep
+    # writing into a scoreboard the user has reassigned. Persist enabled=False
+    # so resume-on-startup also skips it.
+    if source_changed and old_source == "rotator":
+        await RotationManager.stop_rotation(sb_id)
 
-        await Settings.Set("scoreboards.hud_target", sb_id)
+    # Update only the keys that this endpoint owns. Preserve sibling keys
+    # (e.g. stats_tag) so a source-type change doesn't silently drop the
+    # user's per-scoreboard game-mode selection.
+    await Settings.Set(f"scoreboards.sources.{sb_id}.type", source_type)
+    await Settings.Set(f"scoreboards.sources.{sb_id}.api_game_id", api_game_id)
+
+    # Drop this scoreboard's stats slot whenever the source actually changes —
+    # the previous source's cached players/rosters no longer apply.
+    if source_changed:
+        StatsTracker.reset_scoreboard(sb_id)
+
+    if source_type == "hud":
+        # Side preservation operates on the single HUD-derived game shared by
+        # all HUD targets, so resetting it on any HUD-target change is fine.
+        # _reset_side_preservation also refreshes the cached HUD-target list.
         RioGameDataProvider._reset_side_preservation()
 
-        # Re-apply current HUD data to the new target
+        # Re-apply current HUD data to all HUD targets (which now includes sb_id)
         if RioGameDataProvider.hud_watcher and RioGameDataProvider.hud_watcher.latest_game_data:
             parsed = RioGameDataProvider.parse_game_data(
                 RioGameDataProvider.hud_watcher.latest_game_data
@@ -137,14 +172,10 @@ async def set_scoreboard_source(
             parsed = RioGameDataProvider._preserve_player_sides(parsed)
             RioGameDataProvider.current_game = parsed
             await RioGameDataProvider._apply_game_to_state(parsed)
-    else:
-        # If this was the HUD target, clear it
-        hud_target = Settings.Get("scoreboards.hud_target", 1)
-        if hud_target == sb_id:
-            await Settings.Set("scoreboards.hud_target", 0)
-
-    await Settings.Set(f"scoreboards.sources.{sb_id}",
-                       {"type": source_type, "api_game_id": api_game_id})
+    elif old_source == "hud":
+        # Demoted from HUD — refresh the cached target list so the watcher
+        # stops writing into this scoreboard.
+        RioGameDataProvider.refresh_hud_targets()
 
     # Flush any state changes accumulated during this handler (no-op if nothing changed)
     await State.Save()
