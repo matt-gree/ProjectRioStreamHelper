@@ -216,13 +216,16 @@ class OngoingGamePool:
 
         await apply_parsed_game_to_state(parsed, scoreboard_number, home_team=home_team)
 
-        await Settings.Set(f"scoreboards.sources.{scoreboard_number}",
-                           {"type": "live_game", "api_game_id": game_id})
-
-        # Load the game's mode into the stats tag selector (if resolved)
-        game_mode_name = game.get("game_mode_name", "")
-        if game_mode_name and not game_mode_name.startswith("ID:"):
-            await Settings.Set("project_rio.stats_tag", game_mode_name)
+        # Update the current api_game_id for this scoreboard. Leave `type`
+        # alone — it was set by the user via the source dropdown, and a
+        # rotator tick must not overwrite it (would turn the scoreboard into
+        # a live_game source on every advance). Likewise, do NOT auto-set
+        # stats_tag from the game's mode: that would (a) override the user's
+        # selected game mode and (b) trigger a stats refetch on every poll
+        # via the frontend's tag-change effect.
+        await Settings.Set(
+            f"scoreboards.sources.{scoreboard_number}.api_game_id", game_id
+        )
 
         return True
 
@@ -360,8 +363,11 @@ class CompletedGamePool:
 
         await apply_completed_game_to_state(game, scoreboard_number)
 
-        await Settings.Set(f"scoreboards.sources.{scoreboard_number}",
-                           {"type": "rotator", "api_game_id": game_id})
+        # Update only api_game_id — preserve user-selected type (rotator,
+        # live_game, etc.). See OngoingGamePool.apply_game_to_scoreboard.
+        await Settings.Set(
+            f"scoreboards.sources.{scoreboard_number}.api_game_id", game_id
+        )
         return True
 
 

@@ -91,7 +91,6 @@ class Settings:
         },
         "scoreboards": {
             "active": [1],
-            "hud_target": 1,
             "aliases": {},
             "sources": {
                 "1": {"type": "manual", "api_game_id": None}

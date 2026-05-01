@@ -5,6 +5,7 @@ import {
     Popover, Badge, Loader, Tooltip, UnstyledButton, Collapse,
 } from '@mantine/core';
 import { useStateStore, useSettingsStore } from '../../context/store';
+import { useSocketSubscribe } from '../../context/socket';
 import { HALF_INNINGS } from '../../data/msb';
 import { STADIUM_OPTIONS } from '../../data/stadiums';
 
@@ -81,8 +82,11 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, sourc
     const match    = useStateStore(s => s?.score?.[scoreboardNumber]?.match ?? '');
     const stadium  = useStateStore(s => s?.score?.[scoreboardNumber]?.stadium ?? '');
 
-    // Game mode
-    const statsTag = useSettingsStore(s => s?.project_rio?.stats_tag ?? '');
+    // Game mode is per-scoreboard. No global fallback — empty means "don't
+    // fetch stats for this scoreboard until the user picks a mode."
+    const statsTag = useSettingsStore(s =>
+        s?.scoreboards?.sources?.[scoreboardNumber]?.stats_tag ?? ''
+    );
     const [gameModes, setGameModes] = useState([]);
     const [diagOpen, setDiagOpen] = useState(false);
     const [diagnostics, setDiagnostics] = useState(null);
@@ -103,24 +107,14 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, sourc
             .catch(() => {});
     }, []);
 
-    // Poll diagnostics while a fetch is in progress
-    const pollRef = useRef(null);
-    const pollDiagnostics = useCallback(() => {
-        if (pollRef.current) clearInterval(pollRef.current);
-        pollRef.current = setInterval(() => {
-            fetch('/api/v1/rio/stats/diagnostics')
-                .then(r => r.json())
-                .then(d => {
-                    setDiagnostics(d);
-                    if (d.status !== 'loading') {
-                        clearInterval(pollRef.current);
-                        pollRef.current = null;
-                        setFetchingStats(false);
-                    }
-                })
-                .catch(() => {});
-        }, 500);
-    }, []);
+    // Push-based diagnostics: server emits v1.stats.fetch_status on every
+    // loading→done transition for this scoreboard. No polling, no spinner lag.
+    const handleFetchStatus = useCallback((payload) => {
+        if (payload?.scoreboard !== scoreboardNumber) return;
+        setDiagnostics(payload);
+        setFetchingStats(payload.status === 'loading');
+    }, [scoreboardNumber]);
+    useSocketSubscribe('v1.stats.fetch_status', handleFetchStatus);
 
     // Auto-fetch stats when game mode changes (skip if blank)
     useEffect(() => {
@@ -128,38 +122,38 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, sourc
             prevTagRef.current = statsTag;
             if (!statsTag) {
                 setDiagnostics(null);
+                setFetchingStats(false);
                 return;
             }
             setFetchingStats(true);
-            // Fire refresh (don't await — we poll diagnostics instead)
-            fetch('/api/v1/rio/stats/refresh', { method: 'POST' })
-                .catch(() => {});
-            // Start polling diagnostics after a short delay for the loading state to be set
-            setTimeout(pollDiagnostics, 200);
+            // Fire refresh — server pushes status updates via SocketIO.
+            fetch(`/api/v1/rio/stats/refresh?scoreboard=${scoreboardNumber}`, { method: 'POST' })
+                .catch(() => setFetchingStats(false));
         }
-    }, [statsTag, pollDiagnostics]);
-
-    // Cleanup poll on unmount
-    useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
+    }, [statsTag, scoreboardNumber]);
 
     const handleGameModeChange = useCallback((val) => {
-        settingsSetItem('project_rio.stats_tag', val ?? '');
-    }, [settingsSetItem]);
+        settingsSetItem(`scoreboards.sources.${scoreboardNumber}.stats_tag`, val ?? '');
+    }, [settingsSetItem, scoreboardNumber]);
 
     const handleInspect = useCallback(() => {
         setDiagOpen(true);
-        fetch('/api/v1/rio/stats/diagnostics')
-            .then(r => r.json())
-            .then(d => setDiagnostics(d))
-            .catch(() => {});
-    }, []);
+        // One-shot read for the case where the user opens the popover without
+        // having triggered a fetch this session — without it, diagnostics
+        // would show null until the next fetch.
+        if (diagnostics == null) {
+            fetch(`/api/v1/rio/stats/diagnostics?scoreboard=${scoreboardNumber}`)
+                .then(r => r.json())
+                .then(d => setDiagnostics(d))
+                .catch(() => {});
+        }
+    }, [scoreboardNumber, diagnostics]);
 
     const handleRefreshStats = useCallback(() => {
         setFetchingStats(true);
         fetch(`/api/v1/rio/stats/refresh?scoreboard=${scoreboardNumber}`, { method: 'POST' })
-            .catch(() => {});
-        setTimeout(pollDiagnostics, 200);
-    }, [scoreboardNumber, pollDiagnostics]);
+            .catch(() => setFetchingStats(false));
+    }, [scoreboardNumber]);
 
     const set = useCallback((field, value) => {
         setItem(`${base}.${field}`, value);

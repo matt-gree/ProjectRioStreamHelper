@@ -42,9 +42,14 @@ async def rio_swap(
     scoreboard_number: int | None = None,
     session_id: str | None = None,
 ) -> ORJSONResponse:
-    """Toggle team sides (manual swap) for the HUD-linked scoreboard."""
-    hud_target = Settings.Get("scoreboards.hud_target", 1)
-    if scoreboard_number is not None and scoreboard_number != hud_target:
+    """Toggle team sides (manual swap) for the HUD-linked scoreboards.
+
+    The swap is applied to all HUD-target scoreboards since they all mirror
+    the same HUD-derived game.
+    """
+    from server.api.v1.scoreboards import hud_target_scoreboards
+    hud_targets = hud_target_scoreboards()
+    if scoreboard_number is not None and scoreboard_number not in hud_targets:
         raise HTTPException(
             status_code=400,
             detail=f"Scoreboard {scoreboard_number} is not HUD-linked",

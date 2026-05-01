@@ -25,8 +25,27 @@ class RotationManager:
     async def Start(cls):
         """Initialize rotation manager. Auto-resumes rotations that were active in the previous session."""
         rotation_settings = Settings.Get("scoreboards.rotation", {})
-        to_resume = {int(sb_id_str): config for sb_id_str, config in rotation_settings.items()
-                     if config.get("enabled", False) and config.get("game_ids")}
+        sources = Settings.Get("scoreboards.sources", {})
+        active = set(Settings.Get("scoreboards.active", [1]))
+
+        # Only resume rotations whose scoreboard still exists AND whose
+        # current source type is "rotator". Otherwise a stale rotation can
+        # keep writing into a scoreboard the user has reassigned.
+        to_resume = {}
+        for sb_id_str, config in rotation_settings.items():
+            try:
+                sb_id = int(sb_id_str)
+            except (TypeError, ValueError):
+                continue
+            if sb_id not in active:
+                continue
+            if sources.get(sb_id_str, {}).get("type") != "rotator":
+                # Drop the stale enabled flag so we don't keep skipping it.
+                if config.get("enabled"):
+                    await Settings.Set(f"scoreboards.rotation.{sb_id}.enabled", False)
+                continue
+            if config.get("enabled", False) and config.get("game_ids"):
+                to_resume[sb_id] = config
 
         if not to_resume:
             logger.info("[RotationManager] Initialized (no rotations to resume)")
@@ -157,8 +176,11 @@ class RotationManager:
         await Settings.Set(f"scoreboards.rotation.{sb_id}.enabled", True)
         await cls._emit_status(sb_id)
 
-        # Pre-fetch stats in the background — don't block the HTTP response
-        cls._prefetch_task = asyncio.create_task(cls._prefetch_rotation_stats(game_ids))
+        # Stats are intentionally not collected for rotator scoreboards:
+        # game-mode-wide character stats don't say much about a single
+        # completed game, and the prefetch + per-tick push added cost without
+        # value. Re-enable by restoring the _prefetch_rotation_stats task and
+        # the push_api_stats_for_scoreboard call in RotationState._apply_current.
         logger.info("[RotationManager] Started rotation for scoreboard {} "
                      "({}s interval, {} games)", sb_id, interval, len(game_ids))
 
@@ -214,7 +236,7 @@ class RotationManager:
         }
 
     @classmethod
-    async def _prefetch_rotation_stats(cls, game_ids: list):
+    async def _prefetch_rotation_stats(cls, sb_id: int, game_ids: list):
         """Collect all unique player names from rotation games and pre-fetch stats."""
         try:
             usernames = set()
@@ -235,7 +257,7 @@ class RotationManager:
                         usernames.add(name)
 
             if usernames:
-                await StatsTracker.prefetch_for_players(list(usernames))
+                await StatsTracker.prefetch_for_players(list(usernames), sb_id)
         except Exception:
             logger.exception("[RotationManager] _prefetch_rotation_stats failed")
 
@@ -339,6 +361,25 @@ class RotationState:
         if not self.game_ids:
             return
 
+        # Self-cancel if the scoreboard's source is no longer "rotator".
+        # Catches lingering tasks left over from earlier code paths that
+        # didn't stop the rotation on source change. Without this, an
+        # orphaned task keeps writing into a scoreboard the user has
+        # reassigned (e.g. flipping a live_game scoreboard between two of
+        # the rotator's old games).
+        current_type = Settings.Get(f"scoreboards.sources.{self.sb_id}.type")
+        if current_type != "rotator":
+            logger.warning(
+                "[RotationState] sb {} source is {!r}, not 'rotator'; "
+                "self-cancelling lingering rotation task",
+                self.sb_id, current_type,
+            )
+            await Settings.Set(f"scoreboards.rotation.{self.sb_id}.enabled", False)
+            # Schedule cleanup outside this task — stop_rotation cancels
+            # self.task, so calling it inline would cancel us mid-await.
+            asyncio.create_task(RotationManager.stop_rotation(self.sb_id))
+            return
+
         game_id = self.game_ids[self.current_index]
 
         # Try ongoing first, then completed
@@ -351,8 +392,7 @@ class RotationState:
             await RotationManager._emit_status(self.sb_id)
             return
 
-        # Push pre-fetched API stats for this scoreboard's players
-        await StatsTracker.push_api_stats_for_scoreboard(self.sb_id)
+        # Stats deliberately not pushed — see RotationManager.start_rotation.
 
         # Schedule the next advance so the UI can show an accurate countdown.
         self.next_advance_at = time.time() + self.interval

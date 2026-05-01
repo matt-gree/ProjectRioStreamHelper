@@ -12,9 +12,12 @@ router = APIRouter()
     version="1", id="rio.stats",
     response_class=ORJSONResponse
 )
-async def rio_stats(session_id: str | None = None) -> ORJSONResponse:
-    """Get all merged character stats for the active game."""
-    return ORJSONResponse(StatsTracker.get_all_stats())
+async def rio_stats(
+    scoreboard: int | None = None,
+    session_id: str | None = None,
+) -> ORJSONResponse:
+    """Get all merged character stats for the active game on a scoreboard."""
+    return ORJSONResponse(StatsTracker.get_all_stats(scoreboard_number=scoreboard))
 
 
 @method(
@@ -25,10 +28,11 @@ async def rio_stats(session_id: str | None = None) -> ORJSONResponse:
 async def rio_stats_character(
     team: int = 1,
     roster_index: int = 0,
+    scoreboard: int | None = None,
     session_id: str | None = None,
 ) -> ORJSONResponse:
     """Get merged stats for a single character by team and roster index."""
-    all_stats = StatsTracker.get_all_stats()
+    all_stats = StatsTracker.get_all_stats(scoreboard_number=scoreboard)
     team_key = f"team_{team}"
     team_data = all_stats.get(team_key, {})
     characters = team_data.get("characters", {})
@@ -60,10 +64,13 @@ async def rio_stats_refresh(
         scoreboard: If given, only fetch stats for players on that scoreboard.
     """
     await StatsTracker.refresh_api_stats(scoreboard_number=scoreboard)
-    return ORJSONResponse({
-        "success": True,
-        "api_ready": StatsTracker._api_ready,
-    })
+    if scoreboard is not None:
+        ready = {scoreboard: StatsTracker.is_api_ready(scoreboard)}
+    else:
+        from server.settings import Settings
+        ready = {sb: StatsTracker.is_api_ready(sb)
+                 for sb in Settings.Get("scoreboards.active", [1])}
+    return ORJSONResponse({"success": True, "api_ready": ready})
 
 
 @method(
@@ -71,9 +78,12 @@ async def rio_stats_refresh(
     version="1", id="rio.stats.diagnostics",
     response_class=ORJSONResponse
 )
-async def rio_stats_diagnostics(session_id: str | None = None) -> ORJSONResponse:
-    """Return diagnostic info about the last stats API fetch."""
-    return ORJSONResponse(stats_api.get_last_fetch_info())
+async def rio_stats_diagnostics(
+    scoreboard: int | None = None,
+    session_id: str | None = None,
+) -> ORJSONResponse:
+    """Return diagnostic info about the last stats API fetch for a scoreboard."""
+    return ORJSONResponse(stats_api.get_last_fetch_info(scoreboard_number=scoreboard))
 
 
 @method(
