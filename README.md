@@ -15,8 +15,8 @@ PRSH is forked from [TournamentStreamHelper](https://github.com/TournamentStream
 
 Pre-built installers are produced from `PRSH.spec` (PyInstaller) and `installer/PRSH.iss` (Inno Setup, Windows):
 
-- **macOS** — `dist/PRSH.app`
-- **Windows** — `dist/PRSH/PRSH.exe` (or the Inno Setup installer)
+- **macOS** — `PRSH-macOS-arm64.zip` or `PRSH-macOS-x86_64.zip` from the [latest release](https://github.com/matt-gree/PRSH/releases/latest); unzip and drag `PRSH.app` to Applications.
+- **Windows** — `PRSH-Setup.exe` from the [latest release](https://github.com/matt-gree/PRSH/releases/latest); run the installer.
 
 Launch the app, then open `http://localhost:5260` in any browser. A system-tray icon stays running while the server is up.
 

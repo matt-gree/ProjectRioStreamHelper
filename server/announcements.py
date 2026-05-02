@@ -65,6 +65,34 @@ def _version_in_range(current: str, min_v: str | None, max_v: str | None) -> boo
     return True
 
 
+def _prune_stale_update_dismissals(
+    dismissed: list, current_version: str
+) -> tuple[list, bool]:
+    """Drop `update-X.Y.Z` dismissal entries whose version is <= the running one.
+
+    The update announcement id encodes the target version (`update-1.0.2`), so
+    dismissing 1.0.1 has no effect on whether the user sees 1.0.2 — the entry
+    just sits in settings forever. Once we're at or past the dismissed version,
+    that entry can never match a future announcement and is pure cruft.
+
+    Non-`update-*` ids (manual announcements from the announcements branch) are
+    left untouched. Malformed `update-X` ids whose tail doesn't parse as a
+    version get treated as version 0.0.0 by `_parse_version` and so are also
+    pruned — they were never going to match anything either.
+    """
+    cv = _parse_version(current_version)
+    pruned: list = []
+    changed = False
+    for aid in dismissed:
+        if isinstance(aid, str) and aid.startswith("update-"):
+            tag = aid[len("update-"):]
+            if _parse_version(tag) <= cv:
+                changed = True
+                continue
+        pruned.append(aid)
+    return pruned, changed
+
+
 def _not_expired(expires_at: str | None) -> bool:
     if not expires_at:
         return True
@@ -117,8 +145,21 @@ class Announcements:
     @classmethod
     async def Refresh(cls):
         current_version = Config.config.get("version", "0.0.0")
-        dismissed = set(Settings.Get("announcements.dismissed_ids", []))
         check_updates = Settings.Get("announcements.check_for_updates", True)
+
+        # Prune `update-X.Y.Z` dismissals at or below the running version
+        # before we read the dismissed set. They can never match a future
+        # announcement id (each release ships a new tag-stamped id), so
+        # leaving them in just bloats settings.json on every release.
+        raw_dismissed = list(Settings.Get("announcements.dismissed_ids", []))
+        pruned, changed = _prune_stale_update_dismissals(raw_dismissed, current_version)
+        if changed:
+            await Settings.Set("announcements.dismissed_ids", pruned)
+            logger.debug(
+                "[Announcements] pruned {} stale update dismissal(s)",
+                len(raw_dismissed) - len(pruned),
+            )
+        dismissed = set(pruned)
 
         items: list = []
         async with httpx.AsyncClient(timeout=FETCH_TIMEOUT_SEC) as client:

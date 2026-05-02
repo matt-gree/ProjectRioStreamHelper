@@ -694,14 +694,43 @@ export default function SettingsModal({ opened, onClose }) {
 
                 <Divider label="Stream Labels" labelPosition="center" />
 
-                <Switch
-                    size="sm"
-                    label="Enable txt export"
-                    description="Export every state key as an individual .txt file to user_data/stream_labels/. Use these as Text (GDI+) sources in OBS without needing the HTML overlays. Off by default."
-                    checked={streamLabelsEnabled}
-                    onChange={e => handleToggleStreamLabels(e.currentTarget.checked)}
-                    disabled={streamLabelsSaving}
-                />
+                <Group justify="space-between" align="flex-start" wrap="nowrap" gap="md">
+                    <Switch
+                        size="sm"
+                        label="Enable txt export"
+                        description="Export every state key as an individual .txt file to user_data/stream_labels/. Use these as Text (GDI+) sources in OBS without needing the HTML overlays. Off by default."
+                        checked={streamLabelsEnabled}
+                        onChange={e => handleToggleStreamLabels(e.currentTarget.checked)}
+                        disabled={streamLabelsSaving}
+                        style={{ flex: 1, minWidth: 0 }}
+                    />
+                    <Button
+                        size="xs"
+                        variant="filled"
+                        onClick={async () => {
+                            try {
+                                const resp = await fetch(
+                                    '/api/v1/state/stream-labels/reveal',
+                                    { method: 'POST' },
+                                );
+                                if (!resp.ok) {
+                                    notifications.show({
+                                        message: `Reveal failed (${resp.status}). The server may need a restart to register the endpoint.`,
+                                        color: 'red',
+                                    });
+                                }
+                            } catch (e) {
+                                notifications.show({
+                                    message: `Reveal failed: ${e?.message ?? e}`,
+                                    color: 'red',
+                                });
+                            }
+                        }}
+                        style={{ flexShrink: 0 }}
+                    >
+                        Open Folder
+                    </Button>
+                </Group>
 
                 <Divider label="Announcements" labelPosition="center" />
 
