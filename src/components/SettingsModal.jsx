@@ -5,7 +5,7 @@ import {
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import LogsViewer from './LogsViewer';
-import { useSettingsStore } from '../context/store';
+import { useSettingsStore, useConfigStore } from '../context/store';
 import { useAssetsVersionStore } from '../lib/assets';
 import { SupportLinks } from './SupportLinks';
 
@@ -64,6 +64,8 @@ export default function SettingsModal({ opened, onClose }) {
     const bumpAssetsVersion = useAssetsVersionStore(s => s.bump);
 
     // Appearance — color scheme stored as a regular setting for portability.
+    const appName = useConfigStore(state => state.name) || 'PRSH';
+    const appVersion = useConfigStore(state => state.version);
     const colorScheme = useSettingsStore(state => state?.ui?.color_scheme) || 'auto';
     const setSetting = useSettingsStore(state => state.setItem);
     const handleColorScheme = useCallback((value) => {
@@ -398,34 +400,48 @@ export default function SettingsModal({ opened, onClose }) {
         <>
         <Modal opened={opened} onClose={() => { bumpAssetsVersion(); onClose(); }} title="Settings" size="lg">
             <Stack gap="sm">
-                <Divider label="Appearance" labelPosition="center" />
-
-                <Group justify="space-between" align="center">
-                    <Text size="sm">Theme</Text>
-                    <SegmentedControl
-                        size="xs"
-                        value={colorScheme}
-                        onChange={handleColorScheme}
-                        data={[
-                            { label: 'Light', value: 'light' },
-                            { label: 'Dark', value: 'dark' },
-                            { label: 'Auto', value: 'auto' },
-                        ]}
-                    />
+                {/* About blurb — version moved here from the app title */}
+                <Group gap="xs" align="center">
+                    <img src="/favicon.png" alt="" width={28} height={28} />
+                    <Stack gap={0}>
+                        <Text size="sm" fw={600}>
+                            {appName}{appVersion ? ` v${appVersion}` : ''}
+                        </Text>
+                        <Text size="xs" c="dimmed">
+                            Tournament stream overlay manager for Mario Superstar Baseball.
+                        </Text>
+                    </Stack>
                 </Group>
 
-                <Group justify="space-between" align="center">
-                    <Text size="sm">Welcome screen</Text>
-                    <Button
-                        size="xs"
-                        variant="outline"
-                        onClick={() => {
-                            setSetting('ui.welcome_dismissed', false);
-                            onClose();
-                        }}
-                    >
-                        Show again
-                    </Button>
+                <Divider label="Appearance" labelPosition="center" />
+
+                <Group justify="space-between" align="center" wrap="nowrap">
+                    <Group gap="xs" align="center" wrap="nowrap">
+                        <Text size="sm">Theme</Text>
+                        <SegmentedControl
+                            size="xs"
+                            value={colorScheme}
+                            onChange={handleColorScheme}
+                            data={[
+                                { label: 'Light', value: 'light' },
+                                { label: 'Dark', value: 'dark' },
+                                { label: 'Auto', value: 'auto' },
+                            ]}
+                        />
+                    </Group>
+                    <Group gap="xs" align="center" wrap="nowrap">
+                        <Text size="sm">Welcome screen</Text>
+                        <Button
+                            size="xs"
+                            variant="outline"
+                            onClick={() => {
+                                setSetting('ui.welcome_dismissed', false);
+                                onClose();
+                            }}
+                        >
+                            Show again
+                        </Button>
+                    </Group>
                 </Group>
 
                 <Divider label="Project Rio" labelPosition="center" />
@@ -491,91 +507,88 @@ export default function SettingsModal({ opened, onClose }) {
                     Folder containing character icons, team logos, and other MSB images. Required — overlays and the UI will show broken images without it. The default location lives under user data so it survives app updates.
                 </Text>
 
-                {assetsPath ? (
-                    <Group gap="xs" wrap="nowrap">
-                        <TextInput
-                            size="xs"
-                            value={assetsPath}
-                            readOnly
-                            style={{ flex: 1 }}
-                        />
-                        <Tooltip label="Clear (use default)">
-                            <ActionIcon size="sm" variant="subtle" color="red" onClick={handleClearAssetsPath} loading={assetsSaving}>
-                                {'×'}
-                            </ActionIcon>
-                        </Tooltip>
-                    </Group>
-                ) : (
-                    <TextInput
-                        size="xs"
-                        value=""
-                        placeholder={assetsDefault}
-                        readOnly
-                    />
-                )}
+                <Group gap="md" align="flex-start" wrap="nowrap">
+                    {/* Left column: path input, status, action buttons */}
+                    <Stack gap="xs" style={{ flex: 1, minWidth: 0 }}>
+                        {assetsPath ? (
+                            <Group gap="xs" wrap="nowrap">
+                                <TextInput
+                                    size="xs"
+                                    value={assetsPath}
+                                    readOnly
+                                    style={{ flex: 1 }}
+                                />
+                                <Tooltip label="Clear (use default)">
+                                    <ActionIcon size="sm" variant="subtle" color="red" onClick={handleClearAssetsPath} loading={assetsSaving}>
+                                        {'×'}
+                                    </ActionIcon>
+                                </Tooltip>
+                            </Group>
+                        ) : (
+                            <TextInput
+                                size="xs"
+                                value=""
+                                placeholder={assetsDefault}
+                                readOnly
+                            />
+                        )}
 
-                <Group gap="xs" align="center">
-                    <Badge
-                        size="sm"
-                        color={assetsComplete ? 'green' : (assetsTotalFound > 0 ? 'yellow' : 'red')}
-                        variant="filled"
-                    >
-                        {assetsComplete
-                            ? 'Complete'
-                            : assetsTotalFound > 0
-                                ? `Incomplete (${assetsTotalFound}/${assetsTotalExpected})`
-                                : 'No images found'}
-                    </Badge>
-                    {assetsTotalFound > 0 && !assetsPath && (
-                        <Text size="xs" c="dimmed">(using default)</Text>
+                        <Group gap="xs">
+                            <Button
+                                size="xs"
+                                variant="filled"
+                                onClick={handleRevealAssets}
+                                loading={assetsRevealing}
+                            >
+                                Open Folder
+                            </Button>
+                            <Button
+                                size="xs"
+                                variant="outline"
+                                onClick={handleBrowseAssets}
+                                loading={assetsBrowsing}
+                            >
+                                Browse...
+                            </Button>
+                        </Group>
+                    </Stack>
+
+                    {/* Right column: per-category checkmarks */}
+                    {Object.keys(assetsCategories).length > 0 && (
+                        <Stack gap={4} style={{ flexShrink: 0 }}>
+                            {Object.entries(assetsCategories).map(([name, info]) => {
+                                const ok = info.missing_count === 0;
+                                return (
+                                    <Group key={name} gap="xs" align="center" wrap="nowrap">
+                                        <Text size="xs" c={ok ? 'teal' : 'red'} style={{ minWidth: 12, fontWeight: 700 }}>
+                                            {ok ? '✓' : '✗'}
+                                        </Text>
+                                        <Text size="xs" style={{ minWidth: 100 }}>{name}/</Text>
+                                        <Text size="xs" c="dimmed">
+                                            {info.found}/{info.expected}
+                                        </Text>
+                                    </Group>
+                                );
+                            })}
+                        </Stack>
                     )}
                 </Group>
 
-                {Object.keys(assetsCategories).length > 0 && (
-                    <Stack gap={4} pl="xs">
-                        {Object.entries(assetsCategories).map(([name, info]) => {
-                            const ok = info.missing_count === 0;
-                            return (
-                                <Group key={name} gap="xs" align="center" wrap="nowrap">
-                                    <Text size="xs" c={ok ? 'teal' : 'red'} style={{ minWidth: 18, fontWeight: 700 }}>
-                                        {ok ? '✓' : '✗'}
-                                    </Text>
-                                    <Text size="xs" style={{ minWidth: 110 }}>{name}/</Text>
-                                    <Text size="xs" c="dimmed">
-                                        {info.found}/{info.expected}
-                                    </Text>
-                                    {!ok && info.missing_sample.length > 0 && (
-                                        <Text size="xs" c="dimmed" style={{ flex: 1 }} truncate>
-                                            missing: {info.missing_sample.join(', ')}
-                                            {info.missing_count > info.missing_sample.length
-                                                ? ` (+${info.missing_count - info.missing_sample.length} more)`
-                                                : ''}
-                                        </Text>
-                                    )}
-                                </Group>
-                            );
-                        })}
+                {/* Missing-file detail (full width, below the side-by-side block) */}
+                {Object.entries(assetsCategories).some(([, info]) => info.missing_count > 0 && info.missing_sample.length > 0) && (
+                    <Stack gap={2} pl="xs">
+                        {Object.entries(assetsCategories)
+                            .filter(([, info]) => info.missing_count > 0 && info.missing_sample.length > 0)
+                            .map(([name, info]) => (
+                                <Text key={name} size="xs" c="dimmed" truncate>
+                                    {name}/ missing: {info.missing_sample.join(', ')}
+                                    {info.missing_count > info.missing_sample.length
+                                        ? ` (+${info.missing_count - info.missing_sample.length} more)`
+                                        : ''}
+                                </Text>
+                            ))}
                     </Stack>
                 )}
-
-                <Group gap="xs">
-                    <Button
-                        size="xs"
-                        variant="filled"
-                        onClick={handleRevealAssets}
-                        loading={assetsRevealing}
-                    >
-                        Open Folder
-                    </Button>
-                    <Button
-                        size="xs"
-                        variant="outline"
-                        onClick={handleBrowseAssets}
-                        loading={assetsBrowsing}
-                    >
-                        Browse...
-                    </Button>
-                </Group>
 
                 {assetsError && (
                     <Text size="xs" c="red">{assetsError}</Text>
