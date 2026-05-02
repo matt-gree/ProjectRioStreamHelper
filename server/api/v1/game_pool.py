@@ -109,7 +109,7 @@ async def refresh_completed_games(
         filters["vs_captain"] = vs_captain
 
     try:
-        await CompletedGamePool.refresh(filters if filters else None)
+        await CompletedGamePool.fetch(filters if filters else None)
     except Exception as e:
         logger.exception("[game_pool] refresh_completed_games failed")
         diag = get_last_completed_fetch_info()
@@ -125,25 +125,6 @@ async def refresh_completed_games(
         "success": True,
         "count": len(CompletedGamePool.games),
         "diagnostics": diag,
-    })
-
-
-@method(
-    router.post, "/game-pool/completed/auto-poll",
-    version="1", id="game_pool.completed.auto_poll",
-    response_class=ORJSONResponse
-)
-async def set_completed_auto_poll(
-    enabled: bool = False,
-    interval: float | None = None,
-    session_id: str | None = None,
-) -> ORJSONResponse:
-    """Enable or disable auto-polling for completed games."""
-    await CompletedGamePool.set_auto_poll(enabled, interval)
-    return ORJSONResponse({
-        "success": True,
-        "auto_poll": enabled,
-        "interval": interval or CompletedGamePool._poll_interval,
     })
 
 

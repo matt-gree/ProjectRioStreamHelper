@@ -1,8 +1,25 @@
+import json
+
+from typing import Any
+
+from pydantic import BaseModel
+
 from server.utils.router import method
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import ORJSONResponse
 from server.rio.rotation import RotationManager
 from server.settings import Settings
+
+
+class RotationGamesPayload(BaseModel):
+    """Body for POST /rotation/{sb_id}/games — full snapshot of the
+    rotation's pool. `games` are the completed-game dicts from the modal
+    search results (ongoing games are resolved live from OngoingGamePool
+    and are not persisted). `game_ids` is the user's selected order, which
+    may include both completed and ongoing ids.
+    """
+    games: list[dict[str, Any]] = []
+    game_ids: list[int] = []
 
 router = APIRouter()
 
@@ -31,9 +48,16 @@ async def set_rotation(
     game_ids: str | None = None,
     poll_interval: float | None = None,
     source_pool: str | None = None,
+    filters: str | None = None,
     session_id: str | None = None,
 ) -> ORJSONResponse:
-    """Update rotation config for a scoreboard."""
+    """Update rotation config for a scoreboard.
+
+    `filters` is a JSON-encoded dict of completed-games filters
+    (tag, username, vs_username, limit_games, etc.) — persisted on the
+    rotation so each scoreboard's rotator can fetch its own slice of games
+    independently.
+    """
     config = {}
     if enabled is not None:
         config["enabled"] = enabled
@@ -46,9 +70,46 @@ async def set_rotation(
         config["poll_interval"] = poll_interval
     if source_pool is not None:
         config["source_pool"] = source_pool
+    if filters is not None:
+        try:
+            parsed = json.loads(filters) if filters else {}
+            if not isinstance(parsed, dict):
+                raise ValueError("filters must be a JSON object")
+            config["filters"] = parsed
+        except (json.JSONDecodeError, ValueError) as e:
+            raise HTTPException(status_code=400, detail=f"invalid filters: {e}")
 
     await RotationManager.set_config(sb_id, config)
     return ORJSONResponse({"success": True, **await RotationManager.get_config(sb_id)})
+
+
+@method(
+    router.post, "/rotation/{sb_id}/games",
+    version="1", id="rotation.set_games",
+    response_class=ORJSONResponse
+)
+async def set_rotation_games(
+    sb_id: int,
+    payload: RotationGamesPayload,
+    session_id: str | None = None,
+) -> ORJSONResponse:
+    """Set the rotation's persisted game pool (cached_games + game_ids).
+
+    This is the source of truth the rotator reads from. Filters seed the
+    poll's auto-discovery of new matches but never replace this snapshot.
+    Frontend calls this before /start so resume works across restart.
+    """
+    await RotationManager.set_config(sb_id, {
+        "cached_games": payload.games,
+        "game_ids": payload.game_ids,
+        # Reset index whenever the pool changes wholesale
+        "current_index": 0,
+    })
+    return ORJSONResponse({
+        "success": True,
+        "count": len(payload.game_ids),
+        "cached": len(payload.games),
+    })
 
 
 @method(

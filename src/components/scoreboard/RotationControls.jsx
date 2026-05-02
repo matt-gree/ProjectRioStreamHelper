@@ -290,9 +290,6 @@ const PoolPanel = memo(function PoolPanel({ title, color, games, actionLabel, on
 // ─── RotationControls ─────────────────────────────────────────────────────────
 
 export default memo(function RotationControls({ scoreboardNumber }) {
-    const settingsSetItem = useSettingsStore(s => s.setItem);
-    const savedFilters = useSettingsStore(s => s?.rotation_search);
-
     // Rotation state
     const [rotationConfig, setRotationConfig] = useState({
         enabled: false,
@@ -300,6 +297,7 @@ export default memo(function RotationControls({ scoreboardNumber }) {
         game_ids: [],
         poll_interval: 0,
         source_pool: 'both',
+        filters: {},
     });
     const [rotationStatus, setRotationStatus] = useState({ active: false });
     const [selectedGameIds, setSelectedGameIds] = useState(new Set());
@@ -423,30 +421,32 @@ export default memo(function RotationControls({ scoreboardNumber }) {
         setSelectedGameIds(prev => { const n = new Set(prev); gameIds.forEach(id => n.delete(id)); return n; });
     }, []);
 
-    // Fetch on mount — restore rotation config, filters, and re-query if needed
+    // Fetch on mount — restore rotation config (including its persisted
+    // filters) and re-run the search to repopulate the modal preview.
     useEffect(() => {
         (async () => {
             try {
                 const data = await fetch(`/api/v1/rotation/${scoreboardNumber}`).then(r => r.json());
-                setRotationConfig(prev => ({ ...prev, ...data }));
+                setRotationConfig(prev => ({ ...prev, ...data, filters: data.filters ?? {} }));
                 setRotationStatus({ active: data.active ?? false, ...data });
 
                 const gameIds = data.game_ids ?? [];
-                if (gameIds.length === 0) return;
-
-                // Restore persisted filter inputs
-                const filters = savedFilters ?? {};
-                const username = filters.username ?? '';
-                const vsUsername = filters.vs_username ?? '';
-                const tags = filters.tags ?? [];
-                const limit = filters.limit ?? null;
+                const filters = data.filters ?? {};
+                const usernameArr = filters.username ?? [];
+                const vsUsernameArr = filters.vs_username ?? [];
+                const tags = filters.tag ?? [];
+                const limit = filters.limit_games ?? null;
+                const username = Array.isArray(usernameArr) ? (usernameArr[0] ?? '') : (usernameArr || '');
+                const vsUsername = Array.isArray(vsUsernameArr) ? (vsUsernameArr[0] ?? '') : (vsUsernameArr || '');
 
                 setDraftUsername(username);
                 setDraftVsUsername(vsUsername);
                 setDraftTags(tags);
                 setDraftLimit(limit);
 
-                // Re-run the search to repopulate the game pool from the API
+                if (gameIds.length === 0 && !username && !vsUsername && tags.length === 0) return;
+
+                // Re-run the search to repopulate the modal's game pool preview
                 const params = new URLSearchParams();
                 if (username) params.append('username', username);
                 if (vsUsername) params.append('vs_username', vsUsername);
@@ -471,7 +471,7 @@ export default memo(function RotationControls({ scoreboardNumber }) {
                         games,
                         isAutoPoll: false,
                     }]);
-                    setSelectedGameIds(new Set(gameIds));
+                    if (gameIds.length > 0) setSelectedGameIds(new Set(gameIds));
                 }
             } catch { /* noop */ }
         })();
@@ -588,12 +588,6 @@ export default memo(function RotationControls({ scoreboardNumber }) {
         for (const tag of draftTags) params.append('tag', tag);
         params.append('limit_games', String(draftLimit ?? 500));
 
-        // Persist filter inputs so they survive page reload
-        settingsSetItem('rotation_search.username', draftUsername.trim());
-        settingsSetItem('rotation_search.vs_username', draftVsUsername.trim());
-        settingsSetItem('rotation_search.tags', [...draftTags]);
-        settingsSetItem('rotation_search.limit', draftLimit);
-
         try {
             await fetch(`/api/v1/game-pool/completed/refresh?${params}`, { method: 'POST', signal: ctrl.signal });
             const data = await fetch('/api/v1/game-pool/completed', { signal: ctrl.signal }).then(r => r.json());
@@ -618,7 +612,7 @@ export default memo(function RotationControls({ scoreboardNumber }) {
         } finally {
             setLoadingSearch(false);
         }
-    }, [draftUsername, draftVsUsername, draftTags, draftLimit, settingsSetItem]);
+    }, [draftUsername, draftVsUsername, draftTags, draftLimit]);
 
     const handleRemoveSearchSet = useCallback((setId) => {
         setSearchSets(prev => {
@@ -645,10 +639,47 @@ export default memo(function RotationControls({ scoreboardNumber }) {
     const handleStartRotation = useCallback(async () => {
         const gameIds = Array.from(selectedGameIds);
         if (gameIds.length === 0) return;
-        await fetch(`/api/v1/rotation/${scoreboardNumber}?game_ids=${gameIds.join(',')}&interval=${rotationConfig.interval}&source_pool=${rotationConfig.source_pool}&poll_interval=${rotationConfig.poll_interval}`, { method: 'PUT' });
+
+        // Snapshot the full completed-game dicts the user selected — this
+        // becomes the rotation's persisted pool. Sent as a JSON body since
+        // the list can be large (78+ games) and won't fit in a query string.
+        // Ongoing games aren't persisted here; they're resolved live from
+        // OngoingGamePool by ID at apply time.
+        const completedById = new Map(allPoolGames.map(g => [g.game_id, g]));
+        const games = gameIds
+            .map(id => completedById.get(id))
+            .filter(Boolean);
+
+        // Persist the rotation's filter set so the optional poll loop can
+        // augment the pool with newly-matching games (it never replaces the
+        // user's selection).
+        const filters = {};
+        if (draftUsername.trim()) filters.username = [draftUsername.trim()];
+        if (draftVsUsername.trim()) filters.vs_username = [draftVsUsername.trim()];
+        if (draftTags.length) filters.tag = [...draftTags];
+        if (draftLimit != null) filters.limit_games = draftLimit;
+
+        // 1. Set the pool snapshot (body) — source of truth
+        await fetch(`/api/v1/rotation/${scoreboardNumber}/games`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ games, game_ids: gameIds }),
+        });
+
+        // 2. PUT the small fields (interval, filters, etc.)
+        const params = new URLSearchParams({
+            interval: String(rotationConfig.interval),
+            source_pool: rotationConfig.source_pool,
+            poll_interval: String(rotationConfig.poll_interval),
+            filters: JSON.stringify(filters),
+        });
+        await fetch(`/api/v1/rotation/${scoreboardNumber}?${params}`, { method: 'PUT' });
+
+        // 3. Start
         const data = await fetch(`/api/v1/rotation/${scoreboardNumber}/start`, { method: 'POST' }).then(r => r.json());
         setRotationStatus(data);
-    }, [scoreboardNumber, selectedGameIds, rotationConfig]);
+        setRotationConfig(c => ({ ...c, filters }));
+    }, [scoreboardNumber, selectedGameIds, rotationConfig, draftUsername, draftVsUsername, draftTags, draftLimit, allPoolGames]);
 
     const handleStopRotation = useCallback(async () => {
         await fetch(`/api/v1/rotation/${scoreboardNumber}/stop`, { method: 'POST' });
@@ -663,20 +694,20 @@ export default memo(function RotationControls({ scoreboardNumber }) {
         setRotationStatus(await fetch(`/api/v1/rotation/${scoreboardNumber}/prev`, { method: 'POST' }).then(r => r.json()));
     }, [scoreboardNumber]);
 
+    // Toggle this rotation's per-state poll loop (RotationState._poll_loop).
+    // Setting poll_interval > 0 makes the rotation refetch its filtered
+    // game list on the configured cadence; 0 disables the loop entirely.
     const handleSetAutoPoll = useCallback(async (enabled, interval) => {
         const effectiveInterval = interval ?? autoPollInterval;
         setAutoPolling(enabled);
         if (interval != null) setAutoPollInterval(effectiveInterval);
-        if (enabled) {
-            const params = new URLSearchParams();
-            if (draftUsername.trim()) params.append('username', draftUsername.trim());
-            if (draftVsUsername.trim()) params.append('vs_username', draftVsUsername.trim());
-            for (const tag of draftTags) params.append('tag', tag);
-            params.append('limit_games', String(draftLimit ?? 500));
-            await fetch(`/api/v1/game-pool/completed/refresh?${params}`, { method: 'POST' });
-        }
-        await fetch(`/api/v1/game-pool/completed/auto-poll?enabled=${enabled}&interval=${effectiveInterval}`, { method: 'POST' });
-    }, [autoPollInterval, draftUsername, draftVsUsername, draftTags, draftLimit]);
+        const pollValue = enabled ? effectiveInterval : 0;
+        setRotationConfig(c => ({ ...c, poll_interval: pollValue }));
+        await fetch(
+            `/api/v1/rotation/${scoreboardNumber}?poll_interval=${pollValue}`,
+            { method: 'PUT' },
+        );
+    }, [autoPollInterval, scoreboardNumber]);
 
     const searchCount = searchSets.length;
 

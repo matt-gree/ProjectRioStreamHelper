@@ -3,7 +3,13 @@ import time
 
 from loguru import logger
 from server import socketio
-from server.rio.game_pool import OngoingGamePool, CompletedGamePool
+from server.rio.game_pool import (
+    OngoingGamePool,
+    CompletedGamePool,
+    apply_completed_game_dict,
+)
+from server.rio import stats_api
+from server.rio.game_pool import _sanitize_row
 from server.rio.stats_tracker import StatsTracker
 from server.settings import Settings
 
@@ -57,33 +63,15 @@ class RotationManager:
 
     @classmethod
     async def _resume_rotations(cls, to_resume: dict):
-        """Re-fetch games from the API and restart previously active rotations."""
-        try:
-            await CompletedGamePool.refresh()
-            logger.info("[RotationManager] Re-fetched {} completed games for rotation resume",
-                        len(CompletedGamePool.games))
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            logger.exception("[RotationManager] Failed to re-fetch completed games")
+        """Restart previously active rotations.
 
+        Each rotation refetches its own completed games using its persisted
+        filters (scoreboards.rotation.{sb_id}.filters); there is no shared
+        snapshot, so two rotations on different filters resume independently.
+        """
         resumed = []
         for sb_id, config in to_resume.items():
             try:
-                # Rebuild game_ids from the current pool so newly-added games are included
-                source_pool = config.get("source_pool", "both")
-                new_ids = []
-                if source_pool in ("ongoing", "both"):
-                    new_ids.extend(g.get("game_id") for g in OngoingGamePool.list_games()
-                                   if g.get("game_id"))
-                if source_pool in ("completed", "both"):
-                    new_ids.extend(g.get("game_id") for g in CompletedGamePool.list_games()
-                                   if g.get("game_id"))
-                if new_ids:
-                    config["game_ids"] = new_ids
-                    config["current_index"] = 0
-                    await Settings.Set(f"scoreboards.rotation.{sb_id}", config)
-
                 await cls.start_rotation(sb_id)
                 resumed.append(sb_id)
             except asyncio.CancelledError:
@@ -130,6 +118,15 @@ class RotationManager:
             "current_index": 0,
             "poll_interval": 0,
             "source_pool": "both",
+            "filters": {},
+            # Snapshot of the completed-game dicts the user selected at Start.
+            # This is the authoritative source of truth for what the rotation
+            # rotates through — `filters` only seeds the auto-poll's
+            # discovery of newly-matching games, not the base list. Persisting
+            # the dicts means resume after a server restart works even if the
+            # selection spans multiple search filter combinations (which is
+            # the common case in the manual browser).
+            "cached_games": [],
         })
 
     @classmethod
@@ -152,14 +149,20 @@ class RotationManager:
             await cls.stop_rotation(sb_id)
 
         config = await cls.get_config(sb_id)
-        game_ids = config.get("game_ids", [])
-        if not game_ids:
-            return
-
+        game_ids = list(config.get("game_ids", []))
         interval = config.get("interval", 30)
-        current_index = config.get("current_index", 0) % len(game_ids)
         source_pool = config.get("source_pool", "both")
         poll_interval = config.get("poll_interval", 0)
+        filters = config.get("filters", {}) or {}
+        cached_games = config.get("cached_games", []) or []
+        current_index = (config.get("current_index", 0) % len(game_ids)) if game_ids else 0
+
+        # Hydrate the rotation's completed-game cache from the persisted
+        # snapshot. This is the authoritative store the rotator reads from —
+        # we never overwrite the user's game_ids with a filter refetch.
+        completed_games = {
+            g.get("game_id"): g for g in cached_games if g.get("game_id") is not None
+        }
 
         state = RotationState(
             sb_id=sb_id,
@@ -168,7 +171,13 @@ class RotationManager:
             current_index=current_index,
             source_pool=source_pool,
             poll_interval=poll_interval,
+            filters=filters,
         )
+        state.completed_games = completed_games
+
+        if not state.game_ids:
+            logger.warning("[RotationManager] No games available for sb {}", sb_id)
+            return
 
         state.task = asyncio.create_task(state.run())
         cls._rotations[sb_id] = state
@@ -236,32 +245,6 @@ class RotationManager:
         }
 
     @classmethod
-    async def _prefetch_rotation_stats(cls, sb_id: int, game_ids: list):
-        """Collect all unique player names from rotation games and pre-fetch stats."""
-        try:
-            usernames = set()
-            for game_id in game_ids:
-                game = OngoingGamePool.get_game(game_id) or CompletedGamePool.get_game(game_id)
-                if not game:
-                    continue
-                entrants = game.get("entrants", [])
-                for team in entrants:
-                    if team and team[0]:
-                        name = team[0].get("rioName", "")
-                        if name:
-                            usernames.add(name)
-                # Completed games store names differently
-                for key in ("away_user", "home_user"):
-                    name = game.get(key, "")
-                    if name:
-                        usernames.add(name)
-
-            if usernames:
-                await StatsTracker.prefetch_for_players(list(usernames), sb_id)
-        except Exception:
-            logger.exception("[RotationManager] _prefetch_rotation_stats failed")
-
-    @classmethod
     async def _emit_status(cls, sb_id: int):
         await socketio.emit("v1.rotation.status", cls.get_status(sb_id))
 
@@ -271,13 +254,18 @@ class RotationState:
 
     def __init__(self, sb_id: int, game_ids: list, interval: float,
                  current_index: int = 0, source_pool: str = "both",
-                 poll_interval: float = 0):
+                 poll_interval: float = 0, filters: dict | None = None):
         self.sb_id = sb_id
         self.game_ids = game_ids
         self.interval = interval
         self.current_index = current_index
         self.source_pool = source_pool
         self.poll_interval = poll_interval
+        self.filters: dict = filters or {}
+        # Per-rotation cache of completed games matching `filters`. Populated
+        # by fetch_games(); used by _apply_current to look up the current
+        # game without consulting the manual-browser singleton pool.
+        self.completed_games: dict = {}
         self.task: asyncio.Task | None = None
         self._poll_task: asyncio.Task | None = None
         # Unix timestamp (seconds) when the next automatic advance is scheduled.
@@ -333,19 +321,52 @@ class RotationState:
                 logger.exception("[RotationState] Poll error for sb {}", self.sb_id)
 
     async def _refresh_game_list(self):
-        """Refresh game list from the pools based on source_pool setting."""
-        new_ids = []
-        if self.source_pool in ("ongoing", "both"):
-            new_ids.extend(g.get("game_id") for g in OngoingGamePool.list_games()
-                           if g.get("game_id"))
-        if self.source_pool in ("completed", "both"):
-            new_ids.extend(g.get("game_id") for g in CompletedGamePool.list_games()
-                           if g.get("game_id"))
+        """Poll-driven additive refresh.
 
-        if new_ids and new_ids != self.game_ids:
-            self.game_ids = new_ids
-            self.current_index = self.current_index % len(self.game_ids)
-            await Settings.Set(f"scoreboards.rotation.{self.sb_id}.game_ids", self.game_ids)
+        The rotation's authoritative game list (game_ids + completed_games
+        cache) is set at Start time from what the user selected in the modal.
+        This poll *augments* that: it refetches `filters` and adds any new
+        matching games (and ongoing-pool ids if source_pool includes ongoing).
+        It never removes the user's existing selections. With poll_interval=0
+        this loop never runs.
+        """
+        try:
+            additions: list[int] = []
+
+            # Completed: refetch filters, add any new ids to cache + game_ids
+            if self.source_pool in ("completed", "both") and self.filters:
+                df = await stats_api.fetch_completed_games(**(self.filters or {}))
+                if not df.empty:
+                    for _, row in df.iterrows():
+                        game = _sanitize_row(row.to_dict())
+                        gid = game.get("game_id")
+                        if gid is None or gid in self.completed_games:
+                            continue
+                        game["source_type"] = "rotator"
+                        game["game_completed"] = True
+                        self.completed_games[gid] = game
+                        additions.append(gid)
+
+            # Ongoing pool is shared and live; pick up any new ids
+            if self.source_pool in ("ongoing", "both"):
+                for g in OngoingGamePool.list_games():
+                    gid = g.get("game_id")
+                    if gid and gid not in self.game_ids and gid not in additions:
+                        additions.append(gid)
+
+            if additions:
+                self.game_ids = [*self.game_ids, *additions]
+                await Settings.Set(
+                    f"scoreboards.rotation.{self.sb_id}.game_ids", self.game_ids,
+                )
+                # Persist the augmented completed-games cache so resume sees
+                # the additions too.
+                await Settings.Set(
+                    f"scoreboards.rotation.{self.sb_id}.cached_games",
+                    list(self.completed_games.values()),
+                )
+        except Exception:
+            logger.exception("[RotationState] _refresh_game_list failed for sb {}", self.sb_id)
 
     async def advance(self, direction: int = 1):
         """Move to next/previous game in rotation."""
@@ -382,13 +403,15 @@ class RotationState:
 
         game_id = self.game_ids[self.current_index]
 
-        # Try ongoing first, then completed
+        # Ongoing pool is shared (no filters); completed lookup uses this
+        # rotation's own cache so two rotations on different filters can
+        # legitimately resolve different game_ids.
         if OngoingGamePool.get_game(game_id):
             await OngoingGamePool.apply_game_to_scoreboard(game_id, self.sb_id)
-        elif CompletedGamePool.get_game(game_id):
-            await CompletedGamePool.apply_game_to_scoreboard(game_id, self.sb_id)
+        elif game_id in self.completed_games:
+            await apply_completed_game_dict(self.completed_games[game_id], self.sb_id)
         else:
-            logger.warning("[RotationState] Game {} not found in any pool", game_id)
+            logger.warning("[RotationState] Game {} not found in rotation's cache or ongoing pool", game_id)
             await RotationManager._emit_status(self.sb_id)
             return
 

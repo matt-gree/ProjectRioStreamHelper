@@ -230,108 +230,90 @@ class OngoingGamePool:
         return True
 
 
-class CompletedGamePool:
-    """Pool of completed Project Rio games fetched from the /games endpoint.
+async def apply_completed_game_dict(game: dict, scoreboard_number: int) -> bool:
+    """Apply a completed-game dict to a scoreboard.
 
-    Stores processed game data from pyrio's DataFrame output. Auto-poll is
-    optional (default off); games can be fetched on-demand via refresh.
+    Used by both the manual browser (CompletedGamePool.apply_game_to_scoreboard)
+    and rotations (RotationState, which holds its own per-rotation game cache).
+    Performs the pinned-player side swap and persists api_game_id.
+    """
+    if not game:
+        return False
+
+    away_user = game.get("away_user", "")
+    home_user = game.get("home_user", "")
+    swap = _pinned_swap_needed(away_user, home_user)
+
+    if swap:
+        game = dict(game)
+        game["away_user"], game["home_user"] = game["home_user"], game["away_user"]
+        game["away_score"], game["home_score"] = game.get("home_score", 0), game.get("away_score", 0)
+        game["away_captain"], game["home_captain"] = game.get("home_captain", ""), game.get("away_captain", "")
+
+    await apply_completed_game_to_state(game, scoreboard_number)
+    await Settings.Set(
+        f"scoreboards.sources.{scoreboard_number}.api_game_id", game.get("game_id")
+    )
+    return True
+
+
+class CompletedGamePool:
+    """One-shot completed-game search helper for the manual browser UI.
+
+    Rotations no longer use this — each RotationState holds its own filters
+    and game cache (server.rio.rotation.RotationState). What remains here is
+    a thin convenience layer for the Game Pool Manager modal: a single
+    `fetch(filters)` call that runs a query, caches the latest result so
+    `assign_game` can resolve it by id, and emits a SocketIO update for the
+    modal table.
+
+    There is no auto-poll loop and no persisted filter set. The modal calls
+    fetch on user action; the cache is purely a transient memo of the most
+    recent search.
     """
 
-    games: dict = {}  # game_id -> game dict
-    _poll_task: asyncio.Task | None = None
-    _auto_poll: bool = False
-    _poll_interval: float = 60.0
-    _filters: dict = {}
+    games: dict = {}  # game_id -> game dict (latest search result)
 
     @classmethod
     async def Start(cls):
-        cls._auto_poll = False
-        cls._poll_interval = Settings.Get("completed_games.poll_interval", 60.0)
-        cls._filters = Settings.Get("completed_games.filters", {})
-        # Always start with auto-poll off regardless of previous session state
-        await Settings.Set("completed_games.auto_poll", False)
-        logger.info("[CompletedGamePool] Initialized (auto_poll=False)")
+        logger.info("[CompletedGamePool] Initialized")
 
     @classmethod
     async def Stop(cls):
-        cls._stop_polling()
         cls.games = {}
         logger.info("[CompletedGamePool] Stopped")
 
     @classmethod
-    def _start_polling(cls):
-        if cls._poll_task and not cls._poll_task.done():
-            return
-        cls._poll_task = asyncio.create_task(cls._poll_loop())
+    async def fetch(cls, filters: dict | None = None) -> dict:
+        """Run a one-shot completed-games query.
 
-    @classmethod
-    def _stop_polling(cls):
-        if cls._poll_task and not cls._poll_task.done():
-            cls._poll_task.cancel()
-        cls._poll_task = None
-
-    @classmethod
-    async def _poll_loop(cls):
-        while True:
-            try:
-                await cls.refresh()
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                logger.exception("[CompletedGamePool] Poll error")
-            await asyncio.sleep(cls._poll_interval)
-
-    @classmethod
-    async def refresh(cls, filters: dict | None = None):
-        """Fetch completed games from the API. Uses stored filters if none provided."""
-        if filters is not None:
-            cls._filters = filters
-            await Settings.Set("completed_games.filters", filters)
-
-        df = await stats_api.fetch_completed_games(**cls._filters)
+        Updates `cls.games` with the result (so the manual browser's `assign`
+        endpoint can resolve game_ids back to dicts) and emits an update
+        event for the modal. Returns the {game_id: game} dict; callers that
+        own their own cache (rotations) should use this return value rather
+        than relying on the class-level cache.
+        """
+        filters = filters or {}
+        df = await stats_api.fetch_completed_games(**filters)
         diag = get_last_completed_fetch_info()
-        if df.empty:
-            cls.games = {}
-            await socketio.emit("v1.game_pool.completed_update", {
-                "games": [],
-                "diagnostics": diag,
-            })
-            return
 
-        new_games = {}
-        for _, row in df.iterrows():
-            game = _sanitize_row(row.to_dict())
-            game_id = game.get("game_id")
-            if game_id is None:
-                continue
-            # Mark as completed
-            game["source_type"] = "rotator"
-            game["game_completed"] = True
-            new_games[game_id] = game
+        new_games: dict = {}
+        if not df.empty:
+            for _, row in df.iterrows():
+                game = _sanitize_row(row.to_dict())
+                game_id = game.get("game_id")
+                if game_id is None:
+                    continue
+                game["source_type"] = "rotator"
+                game["game_completed"] = True
+                new_games[game_id] = game
 
         cls.games = new_games
         await socketio.emit("v1.game_pool.completed_update", {
             "games": cls.list_games(),
             "diagnostics": diag,
         })
-
-    @classmethod
-    async def set_auto_poll(cls, enabled: bool, interval: float | None = None):
-        """Enable or disable auto-polling. Restarts the poll loop if interval changes."""
-        cls._auto_poll = enabled
-        await Settings.Set("completed_games.auto_poll", enabled)
-        if interval is not None:
-            cls._poll_interval = interval
-            await Settings.Set("completed_games.poll_interval", interval)
-
-        # Always stop existing task first so interval changes take effect
-        cls._stop_polling()
-        if enabled:
-            cls._start_polling()
-            logger.info("[CompletedGamePool] Auto-poll enabled (interval={}s, filters={})",
-                        cls._poll_interval, cls._filters)
-        else:
-            logger.info("[CompletedGamePool] Auto-poll disabled")
+        return new_games
 
     @classmethod
     def get_game(cls, game_id) -> dict | None:
@@ -343,32 +325,8 @@ class CompletedGamePool:
 
     @classmethod
     async def apply_game_to_scoreboard(cls, game_id, scoreboard_number: int) -> bool:
-        """Apply a completed game's data to a scoreboard's state."""
-        game = cls.get_game(game_id)
-        if not game:
-            return False
-
-        # Check if pinned player requires a side swap
-        # Completed games use away_user (Team 1) and home_user (Team 2)
-        away_user = game.get("away_user", "")
-        home_user = game.get("home_user", "")
-        swap = _pinned_swap_needed(away_user, home_user)
-
-        if swap:
-            # Swap away/home fields so the pinned player lands on the correct side
-            game = dict(game)
-            game["away_user"], game["home_user"] = game["home_user"], game["away_user"]
-            game["away_score"], game["home_score"] = game.get("home_score", 0), game.get("away_score", 0)
-            game["away_captain"], game["home_captain"] = game.get("home_captain", ""), game.get("away_captain", "")
-
-        await apply_completed_game_to_state(game, scoreboard_number)
-
-        # Update only api_game_id — preserve user-selected type (rotator,
-        # live_game, etc.). See OngoingGamePool.apply_game_to_scoreboard.
-        await Settings.Set(
-            f"scoreboards.sources.{scoreboard_number}.api_game_id", game_id
-        )
-        return True
+        """Apply a cached completed game (by id) to a scoreboard."""
+        return await apply_completed_game_dict(cls.get_game(game_id), scoreboard_number)
 
 
 # Backward-compatible alias for imports that reference the old name
