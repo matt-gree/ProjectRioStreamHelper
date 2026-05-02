@@ -1,8 +1,13 @@
+import asyncio
+import platform
+import subprocess
+from pathlib import Path
+
 from loguru import logger
 
 from server import socketio
 from server.utils.router import method
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import ORJSONResponse
 from server.state import State
 
@@ -75,6 +80,34 @@ async def state_set(key: str = "", value: str | None = None, session_id: str | N
 async def state_export_all(session_id: str | None = None):
     await State.ExportAll()
     return ORJSONResponse({"success": True})
+
+
+@method(
+    router.post, "/state/stream-labels/reveal",
+    version="1", id="state.stream_labels.reveal",
+    response_class=ORJSONResponse
+)
+async def state_stream_labels_reveal(session_id: str | None = None):
+    """Reveal the stream_labels export folder in the OS file manager.
+
+    The folder is created on demand if it doesn't exist yet — the user
+    may click this before enabling the txt export switch.
+    """
+    path = Path(str(State._stream_labels_out))
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        raise HTTPException(status_code=500, detail=f"Cannot create folder: {e}")
+
+    system = platform.system()
+    if system == "Darwin":
+        await asyncio.to_thread(subprocess.Popen, ["open", str(path)])
+    elif system == "Windows":
+        await asyncio.to_thread(subprocess.Popen, ["explorer", str(path)])
+    else:
+        await asyncio.to_thread(subprocess.Popen, ["xdg-open", str(path)])
+
+    return ORJSONResponse({"success": True, "path": str(path)})
 
 @method(
     router.delete, "/state",

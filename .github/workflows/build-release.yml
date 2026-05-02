@@ -248,14 +248,10 @@ jobs:
         with:
           path: artifacts
 
-      # Windows artifact is now uploaded as a raw folder (no pre-zip) so that
-      # downloads from the Actions UI aren't double-zipped. For the release,
-      # re-zip it here into a single clean PRSH-Windows.zip.
-      - name: Zip Windows artifact for release
-        run: |
-          cd artifacts/PRSH-Windows
-          zip -r -q ../../PRSH-Windows.zip PRSH
-
+      # The Windows portable folder (PRSH-Windows) is still uploaded as a
+      # workflow artifact for debugging / workflow_dispatch downloads, but
+      # the public release attaches only the Inno Setup installer to keep
+      # users on a single, signable, auto-updating distribution path.
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -264,5 +260,4 @@ jobs:
           files: |
             artifacts/PRSH-macOS-arm64/PRSH-macOS-arm64.zip
             artifacts/PRSH-macOS-x86_64/PRSH-macOS-x86_64.zip
-            PRSH-Windows.zip
             artifacts/PRSH-Windows-Installer/PRSH-Setup.exe
