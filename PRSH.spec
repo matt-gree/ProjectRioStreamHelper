@@ -13,9 +13,18 @@ Prerequisites:
 import os
 import platform
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 block_cipher = None
+
+# Freeze the app version into server/_version.py before bundling. This is
+# the sole source of truth at runtime for frozen builds (no git available
+# inside the .app/.exe). See scripts/freeze-version.py.
+_freeze = Path('scripts/freeze-version.py')
+if _freeze.is_file():
+    subprocess.run([sys.executable, str(_freeze)], check=True)
 
 # PyInstaller on Windows silently drops files inside hidden (dot-prefixed)
 # directories, which strips dist/.vite/manifest.json from the bundle and
@@ -53,6 +62,11 @@ a = Analysis(
 
         # pyrio submodule data
         ('server/rio/pyrio/CharNames.csv', 'server/rio/pyrio'),
+
+        # Frozen version stamp (generated above by scripts/freeze-version.py).
+        # Read at runtime by Config.Load() since `git describe` isn't
+        # available inside a packaged .app/.exe.
+        *([('server/_version.py', 'server')] if Path('server/_version.py').is_file() else []),
 
         # Default user_data game config (only if directory exists)
         *([('user_data/games', 'user_data/games')] if os.path.isdir('user_data/games') else []),

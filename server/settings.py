@@ -1,5 +1,7 @@
 import asyncio
 import copy
+import importlib.util
+import sys
 import tomllib
 import orjson
 from pathlib import Path
@@ -10,6 +12,48 @@ from server import socketio
 from server.paths import user_data_dir
 from server.utils import json
 from server.utils.deep_dict import deep_set, deep_unset, deep_get
+
+
+def _resolve_version() -> str:
+    """Resolve app version via scripts/freeze-version.py.
+
+    Used by Config.Load(). The freeze-version module lives outside the
+    `server` package because it has to be runnable as a standalone build
+    script too (Vite prebuild, PyInstaller hook, CI checks). We import it
+    by file path so the import works in dev *and* in PyInstaller bundles
+    where the layout is flattened.
+    """
+    candidates = [
+        Path(__file__).resolve().parent.parent / "scripts" / "freeze-version.py",
+        Path(getattr(sys, "_MEIPASS", "")) / "scripts" / "freeze-version.py"
+            if getattr(sys, "_MEIPASS", None) else None,
+    ]
+    for path in filter(None, candidates):
+        if not path.is_file():
+            continue
+        try:
+            spec = importlib.util.spec_from_file_location("_freeze_version", path)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)  # type: ignore[union-attr]
+            return mod.resolve_version()
+        except Exception as e:
+            logger.warning("[Config] freeze-version load failed at {}: {}", path, e)
+
+    # Fallback: the resolver couldn't be loaded at all. Try the frozen
+    # _version.py directly so a packaged build still shows something useful.
+    frozen = Path(__file__).resolve().parent / "_version.py"
+    if frozen.is_file():
+        try:
+            for line in frozen.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line.startswith("VERSION") and "=" in line:
+                    _, _, rhs = line.partition("=")
+                    v = rhs.strip().strip('"').strip("'")
+                    if v:
+                        return v
+        except OSError:
+            pass
+    return "0.0.0-dev"
 
 
 # Settings keys whose raw values must never leave the server. Reads return a
@@ -242,17 +286,23 @@ class Config:
 
     @classmethod
     async def Load(cls) -> dict:
+        # Read non-version metadata from pyproject.toml (name, description,
+        # authors). Version is resolved separately via scripts/freeze-version.py
+        # so it stays anchored to the git tag (or the frozen _version.py
+        # generated at build time) rather than a hand-edited file. See
+        # scripts/freeze-version.py for the resolution chain.
         try:
             text = await asyncio.to_thread(
                 Path('./pyproject.toml').read_text, encoding='utf-8'
             )
             context = tomllib.loads(text)["tool"]["poetry"]
             cls.config["name"] = context["name"]
-            cls.config["version"] = context["version"]
             cls.config["description"] = context["description"]
             cls.config["authors"] = context["authors"]
         except Exception:
             pass  # frozen build or missing file; hardcoded defaults used
+
+        cls.config["version"] = await asyncio.to_thread(_resolve_version)
         return cls.config
     
     @classmethod

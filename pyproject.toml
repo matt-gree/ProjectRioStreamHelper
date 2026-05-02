@@ -1,6 +1,10 @@
 [tool.poetry]
 name = "ProjectRioStreamHelper"
-version = "1.0.0"
+# Placeholder — the canonical app version is resolved at build/run time by
+# scripts/freeze-version.py from the git tag (or server/_version.py for
+# frozen builds). Don't bump this; tag the release instead. Poetry only
+# requires the field to be present.
+version = "0.0.0"
 description = "Tournament scoreboard helper and overlays for Mario Superstar Baseball via Project Rio"
 authors = ["João Ribeiro Bezerra <joaorb64@gmail.com>", "Isatis <isatis@foxes.gay>", "Mathias Wolfbrok <wolfy76700>", "Eion Dailey <zombiehdgaming>"]
 readme = "README.md"
