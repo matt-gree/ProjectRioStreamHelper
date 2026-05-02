@@ -33,7 +33,7 @@ export default function TSHFields() {
                 <Group gap="xs" align="center">
                     <img src="/favicon.png" alt="" width={24} height={24} />
                     <Title order={4}>
-                        {app_name || 'TSH'} {app_version ? `v${app_version}` : ''}
+                        {app_name || 'TSH'}
                     </Title>
                 </Group>
                 <Group gap="xs" align="center">
