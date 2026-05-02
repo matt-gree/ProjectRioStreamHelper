@@ -21,12 +21,41 @@ permissions:
   contents: write   # needed to create releases
 
 jobs:
+  # ── Verify tag matches resolved version (tag pushes only) ──
+  # Catches the case where someone pushes `v1.1.0` but forgot to bump or
+  # left junk in the working tree. The resolver also runs in `build` jobs
+  # via prebuild/PRSH.spec; this guard short-circuits the whole pipeline
+  # before doing the (slow) cross-platform build.
+  verify-version:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (with full history for git describe)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Resolve version from freeze-version.py
+        id: version
+        run: |
+          resolved="$(python3 scripts/freeze-version.py --print)"
+          tag="${GITHUB_REF_NAME#v}"
+          echo "Resolved: $resolved"
+          echo "Tag:      $tag"
+          if [ "$resolved" != "$tag" ]; then
+            echo "::error::Tag/version mismatch: tag=$tag resolved=$resolved"
+            echo "::error::Either the tag isn't on the right commit, or the working tree is dirty."
+            exit 1
+          fi
+          echo "version=$resolved" >> "$GITHUB_OUTPUT"
+
   # ── Build frontend (shared by all platform jobs) ──
   frontend:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0    # frontend prebuild needs git history for freeze-version.py
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -50,7 +79,13 @@ jobs:
 
   # ── Build executables ──
   build:
-    needs: frontend
+    needs: [frontend, verify-version]
+    # verify-version is gated on tag pushes; treat 'skipped' as a pass so
+    # workflow_dispatch and non-tag builds aren't blocked by it.
+    if: |
+      always() &&
+      needs.frontend.result == 'success' &&
+      (needs.verify-version.result == 'success' || needs.verify-version.result == 'skipped')
     strategy:
       fail-fast: false
       matrix:
@@ -72,6 +107,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+          fetch-depth: 0    # PRSH.spec runs freeze-version.py, which needs git history
 
       - name: Download frontend build
         uses: actions/download-artifact@v4
@@ -151,14 +187,21 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $match = Select-String -Path pyproject.toml -Pattern '^version\s*=\s*"([^"]+)"' | Select-Object -First 1
-          $version = $match.Matches[0].Groups[1].Value
-          Write-Host "Building installer for version $version"
+          # Resolve version from git/freeze-version.py (matches what the
+          # bundled app reports). Inno Setup needs an X.Y.Z numeric form
+          # for the installer metadata, so we strip any -N-gSHA[-dirty]
+          # suffix that `git describe` appends on non-tag commits.
+          $version = (& python scripts/freeze-version.py --print).Trim()
+          $numeric = ($version -split '-')[0]
+          if (-not ($numeric -match '^\d+\.\d+\.\d+$')) {
+            throw "Refusing to build installer with non-numeric version '$numeric' (resolved '$version')"
+          }
+          Write-Host "Building installer for version $numeric (resolved $version)"
           New-Item -ItemType Directory -Force -Path installer\out | Out-Null
           $iscc = Get-ChildItem -Path "${env:ProgramFiles(x86)}\Inno Setup *\ISCC.exe","${env:ProgramFiles}\Inno Setup *\ISCC.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
           if (-not $iscc) { throw "Inno Setup compiler (ISCC.exe) not found" }
           & $iscc.FullName `
-            /DAppVersion=$version `
+            /DAppVersion=$numeric `
             /O"installer\out" `
             installer\PRSH.iss
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup compilation failed" }
