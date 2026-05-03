@@ -39,6 +39,7 @@ const LAYOUT_SETTINGS = {
         { key: 'accentColor', type: 'color-override', label: 'Accent Color Override', description: 'Override the global accent color for this overlay' },
     ],
     stats: [
+        { key: 'transitionType', type: 'select', label: 'Batter Transition', description: 'Animation when switching to a new batter', options: [{ value: 'fade', label: 'Fade' }, { value: 'none', label: 'None' }], defaultValue: 'fade' },
         { key: 'accentColor',    type: 'color-override', label: 'Accent Color',  description: 'Override the global accent color for this overlay' },
         { key: 'statValueColor', type: 'color-override', label: 'Stat Value Color', description: 'Color of the main stat numbers (e.g. AVG, ERA)' },
         { key: 'subtextColor',   type: 'color-override', label: 'Subtext Color',    description: 'Color of stat labels and the game line text' },
@@ -1403,6 +1404,21 @@ function LayoutSettingsPanel({ layoutType, supportedSettings }) {
                             size="sm"
                             checked={checked}
                             onChange={(e) => setItem(settingsKey, e.currentTarget.checked)}
+                        />
+                    );
+                }
+
+                if (def.type === 'select') {
+                    const value = overlaySettings?.[def.key] ?? def.defaultValue;
+                    return (
+                        <Select
+                            key={def.key}
+                            label={def.label}
+                            description={def.description}
+                            size="sm"
+                            value={value}
+                            onChange={(val) => setItem(settingsKey, val)}
+                            data={def.options}
                         />
                     );
                 }
