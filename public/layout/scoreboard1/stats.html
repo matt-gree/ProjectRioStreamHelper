@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <meta name="overlay-settings" content="accentColor, cardBg, borderRadius, borderColor, borderWidth, fontFamily, cardShadow, textShadow, statValueColor, subtextColor" />
+  <meta name="overlay-settings" content="accentColor, cardBg, borderRadius, borderColor, borderWidth, fontFamily, cardShadow, textShadow, statValueColor, subtextColor, transitionType" />
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
 
@@ -51,6 +51,14 @@
     }
     .stats-inner.content-in {
       animation: contentIn 0.25s ease forwards;
+    }
+    @keyframes statValueFlash {
+      0%   { color: var(--stat-value-color, var(--text-primary, #fff)); }
+      35%  { color: var(--accent-color, #f59e0b); }
+      100% { color: var(--stat-value-color, var(--text-primary, #fff)); }
+    }
+    .stat-value.stat-changed {
+      animation: statValueFlash 0.6s ease forwards;
     }
 
     .hidden { display: none !important; }
@@ -153,6 +161,7 @@
     const { deepGet, state, applyDesignSettings } = OverlayBase;
 
     let prevCharName = '';
+    let prevStats = null;
 
     // Compute the text-shadow value directly from settings.
     // Reads live from OverlayBase.settings so it's always current.
@@ -173,12 +182,34 @@
       });
     }
 
-    function buildContent(info) {
+    function getStatsMap(bar) {
+      const map = {};
+      bar.querySelectorAll('.stat[data-label]').forEach(el => {
+        const valEl = el.querySelector('.stat-value');
+        if (valEl) map[el.dataset.label] = valEl.textContent;
+      });
+      return map;
+    }
+
+    function flashChangedStats(bar, oldStats) {
+      if (!oldStats) return;
+      bar.querySelectorAll('.stat[data-label]').forEach(el => {
+        const valEl = el.querySelector('.stat-value');
+        if (!valEl) return;
+        if (el.dataset.label in oldStats && oldStats[el.dataset.label] !== valEl.textContent) {
+          valEl.classList.remove('stat-changed');
+          void valEl.offsetWidth;
+          valEl.classList.add('stat-changed');
+        }
+      });
+    }
+
+    function buildContent(info, animate = true) {
       const statsHtml = info.stats.map(st =>
-        `<span class="stat"><span class="stat-value">${st.value}</span><span class="stat-label">${st.label}</span></span>`
+        `<span class="stat" data-label="${st.label}"><span class="stat-value">${st.value}</span><span class="stat-label">${st.label}</span></span>`
       ).join('');
 
-      let html = `<div class="stats-inner content-in">`;
+      let html = `<div class="stats-inner${animate ? ' content-in' : ''}">`;
       html += `<div class="top-row">`;
       html += `<div class="char-icon-wrap"><img src="${info.charIconUrl}" onerror="this.style.display='none'" /></div>`;
       html += `<div class="stats-content"><div class="stats-row">${statsHtml}</div></div>`;
@@ -201,10 +232,14 @@
         return;
       }
 
+      const { deepGet: g, settings } = OverlayBase;
+      const useFade = (g(settings, 'overlays.stats.transitionType', 'fade') === 'fade');
+
       const changed = info.charName !== prevCharName;
       prevCharName = info.charName;
 
-      if (changed && !bar.classList.contains('hidden')) {
+      if (changed && useFade && !bar.classList.contains('hidden')) {
+        prevStats = null;
         const inner = bar.querySelector('.stats-inner');
         if (inner) {
           inner.classList.remove('content-in');
@@ -212,15 +247,20 @@
           setTimeout(() => {
             bar.innerHTML = buildContent(info);
             applyTextShadow();
+            prevStats = getStatsMap(bar);
           }, 200);
         } else {
           bar.innerHTML = buildContent(info);
           applyTextShadow();
+          prevStats = getStatsMap(bar);
         }
       } else {
-        bar.innerHTML = buildContent(info);
+        const oldStats = changed ? null : prevStats;
+        bar.innerHTML = buildContent(info, false);
         bar.classList.remove('hidden');
         applyTextShadow();
+        if (useFade) flashChangedStats(bar, oldStats);
+        prevStats = getStatsMap(bar);
       }
     }
 
