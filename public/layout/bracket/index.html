@@ -1147,14 +1147,31 @@
       }
     }
 
+    // Vertical center of a .set's slot-divider line. With box-sizing:
+    // border-box and `.slot { height: 28px }` + `.slot:first-child {
+    // border-bottom: 1px }`, the divider sits *inside* slot 1's box as its
+    // last pixel — its visual midline is `slot1.bottom - borderWidth/2`,
+    // ~0.5px above the set's geometric center. Anchoring connectors here
+    // (rather than at fromRect.top + fromRect.height/2) makes the line land
+    // exactly on the white divider.
+    function setMidY(setEl, fallbackRect) {
+      const slots = setEl.querySelectorAll('.slot');
+      if (slots.length >= 2) {
+        const slot1 = slots[0];
+        const bw = parseFloat(getComputedStyle(slot1).borderBottomWidth) || 0;
+        return slot1.getBoundingClientRect().bottom - bw / 2;
+      }
+      return fallbackRect.top + fallbackRect.height / 2;
+    }
+
     function addConnector(svg, sectionRect, fromEl, toEl, lineStart, lineDuration) {
       const fromRect = fromEl.getBoundingClientRect();
       const toRect = toEl.getBoundingClientRect();
 
       const x1 = fromRect.right - sectionRect.left;
-      const y1 = fromRect.top + fromRect.height / 2 - sectionRect.top;
+      const y1 = setMidY(fromEl, fromRect) - sectionRect.top;
       const x2 = toRect.left - sectionRect.left;
-      const y2 = toRect.top + toRect.height / 2 - sectionRect.top;
+      const y2 = setMidY(toEl, toRect) - sectionRect.top;
       const xMid = x1 + (x2 - x1) / 2;
 
       const d = `M ${x1} ${y1} L ${xMid} ${y1} L ${xMid} ${y2} L ${x2} ${y2}`;
