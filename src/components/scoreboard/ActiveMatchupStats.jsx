@@ -9,11 +9,21 @@ import {
 } from '../../utils/statCalc';
 
 /**
- * Find a character's stats across both teams by matching on name.
+ * Find a character's stats by roster index (preferred) or name fallback.
  * Returns { teamNum, charIdx, stats } or null.
  */
-function findCharStats(scoreState, charName) {
+function findCharStats(scoreState, charName, rosterIndex) {
     if (!charName || !scoreState?.stats) return null;
+
+    if (rosterIndex != null && rosterIndex >= 0) {
+        for (const teamNum of [1, 2]) {
+            const charData = scoreState.stats?.[teamNum]?.character?.[rosterIndex];
+            if (charData?.name === charName) {
+                return { teamNum, charIdx: rosterIndex, stats: charData };
+            }
+        }
+    }
+
     for (const teamNum of [1, 2]) {
         const chars = scoreState.stats[teamNum]?.character;
         if (!chars) continue;
@@ -67,14 +77,16 @@ export default function ActiveMatchupStats({ scoreboardNumber = 1 }) {
     const scoreState = useStateStore(s => s?.score?.[scoreboardNumber]);
     const batter = scoreState?.batter ?? '';
     const pitcher = scoreState?.pitcher ?? '';
+    const batterRosterIndex = scoreState?.batter_roster_index ?? -1;
+    const pitcherRosterIndex = scoreState?.pitcher_roster_index ?? -1;
 
     const batterInfo = useMemo(
-        () => findCharStats(scoreState, batter),
-        [scoreState, batter],
+        () => findCharStats(scoreState, batter, batterRosterIndex),
+        [scoreState, batter, batterRosterIndex],
     );
     const pitcherInfo = useMemo(
-        () => findCharStats(scoreState, pitcher),
-        [scoreState, pitcher],
+        () => findCharStats(scoreState, pitcher, pitcherRosterIndex),
+        [scoreState, pitcher, pitcherRosterIndex],
     );
 
     const handleRefresh = useCallback(async () => {

@@ -70,6 +70,8 @@ async def apply_parsed_game_to_state(parsed: dict, scoreboard_number: int, home_
         (f"{sb}.balls", parsed.get("balls", 0)),
         (f"{sb}.batter", parsed.get("batter", "")),
         (f"{sb}.pitcher", parsed.get("pitcher", "")),
+        (f"{sb}.batter_roster_index", parsed.get("batter_roster_index", -1)),
+        (f"{sb}.pitcher_roster_index", parsed.get("pitcher_roster_index", -1)),
         (f"{sb}.batter_hand", parsed.get("batter_hand", 0)),
         (f"{sb}.pitcher_hand", parsed.get("pitcher_hand", 0)),
         (f"{sb}.batterSide", "left" if parsed.get("batter_hand") == 1 else "right"),
@@ -183,6 +185,8 @@ async def apply_completed_game_to_state(game: dict, scoreboard_number: int):
         (f"{sb}.balls", 0),
         (f"{sb}.batter", ""),
         (f"{sb}.pitcher", ""),
+        (f"{sb}.batter_roster_index", -1),
+        (f"{sb}.pitcher_roster_index", -1),
         (f"{sb}.cbRioRunnerOn1", False),
         (f"{sb}.cbRioRunnerOn2", False),
         (f"{sb}.cbRioRunnerOn3", False),
@@ -366,6 +370,9 @@ class RioGameDataProvider:
 
             batter_index = game_json["batter"]
             pitcher_index = game_json["pitcher"]
+
+            data["batter_roster_index"] = batter_index
+            data["pitcher_roster_index"] = pitcher_index
 
             if game_json["half_inning"] == 0:
                 data["half_inning"] = "Top"

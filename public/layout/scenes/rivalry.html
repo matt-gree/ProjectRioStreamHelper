@@ -31,7 +31,7 @@
     /* ── Phase banner ── */
     #phase-banner {
       position: absolute;
-      top: 0;
+      top: 2px;
       left: 0;
       right: 0;
       height: 72px;
@@ -42,7 +42,7 @@
     }
     #phase-text {
       font-family: 'Bebas Neue Bold', sans-serif;
-      font-size: 48px;
+      font-size: 56px;
       font-weight: 700;
       text-transform: uppercase;
       -webkit-text-stroke: 5px black;
@@ -55,7 +55,7 @@
     /* ── Player panels ── */
     .player-panel {
       position: absolute;
-      top: 10px;
+      top: 14px;
       width: 348px;
       display: flex;
       flex-direction: column;
@@ -67,7 +67,7 @@
 
     .player-name {
       font-family: 'Bebas Neue Bold', sans-serif;
-      font-size: 44px;
+      font-size: 56px;
       font-weight: 700;
       text-transform: uppercase;
       text-align: center;
@@ -85,7 +85,7 @@
     /* ── Facecam reservation (blank — facecam placed manually in OBS) ── */
     .facecam-slot {
       width: 280px;
-      height: 300px;
+      height: 375px;
     }
 
     /* ── Handle bar (YouTube / Twitter) ── */
@@ -113,7 +113,7 @@
     }
     .handle-text {
       font-family: 'Bebas Neue Bold', sans-serif;
-      font-size: 24px;
+      font-size: 36px;
       font-weight: 700;
       text-transform: uppercase;
       text-shadow: 5px 5px 3px rgba(0,0,0,1), var(--text-shadow, none);
@@ -135,33 +135,21 @@
     }
     .roster-grid {
       display: inline-grid;
-      grid-template-columns: 80px repeat(4, 40px);
-      grid-template-rows: 48px 48px;
-      column-gap: 4px;
-      row-gap: 4px;
     }
-    .captain-slot {
-      grid-column: 1;
-      grid-row: 1 / 3;
+    .captain-slot, .role-container, .team-logo-slot {
       display: flex;
       align-items: center;
       justify-content: center;
     }
-    .captain-slot img { width: 80px; height: auto; object-fit: contain; }
+    .captain-slot img { width: var(--captain-size, 80px); height: auto; object-fit: contain; }
     .char-slot {
       display: flex;
       align-items: center;
       justify-content: center;
     }
-    .char-slot img { width: 40px; height: auto; object-fit: contain; }
-    .role-container {
-      grid-column: 6;
-      grid-row: 1 / 3;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .role-container img { width: 80px; height: auto; object-fit: contain; }
+    .char-slot img { width: var(--char-size, 40px); height: auto; object-fit: contain; }
+    .role-container img { width: var(--trailing-size, 80px); height: auto; object-fit: contain; }
+    .team-logo-slot img { width: var(--trailing-size, 80px); height: auto; object-fit: contain; }
 
     /* ── Stats bar ── */
     .stats-bar {
@@ -308,16 +296,70 @@
       captain: 'captain-slot',
       char: 'char-slot',
       role: 'role-container',
+      teamLogo: 'team-logo-slot',
     };
+
+    // Panel width for this scene — the natural roster (with trailing icons at captain size)
+    // is uniformly scaled down to fit when it would otherwise overflow.
+    const PANEL_W = 348;
+
+    // Reference roster icon sizes — trailing icons match captain, all scale uniformly to fit.
+    const CHAR_SIZE = 40;
+    const CAPTAIN_SIZE = 80;
+    const ROW_H = 48;
+    const GAP = 4;
+
+    function rosterFitScale(trailingCount) {
+      const cols = 5 + trailingCount;
+      const naturalGridW = CAPTAIN_SIZE + 4 * CHAR_SIZE + trailingCount * CAPTAIN_SIZE + (cols - 1) * GAP;
+      return Math.min(1, PANEL_W / naturalGridW);
+    }
 
     function renderRoster(teamNum, containerId) {
       const container = document.getElementById(containerId);
       container.innerHTML = '';
 
-      const slots = RioData.getRosterSlots(state, SCOREBOARD, teamNum, { includeRole: true });
+      const { deepGet: g, settings } = OverlayBase;
+      const showRole = g(settings, 'overlays.roster.showRoleIcon', true) !== false;
+      const showTeamLogo = g(settings, 'overlays.roster.showTeamLogo', true) !== false;
+
+      const slots = RioData.getRosterSlots(state, SCOREBOARD, teamNum, {
+        includeRole: showRole,
+        includeTeamLogo: showTeamLogo,
+      });
+
+      const hasLogo = slots.some(s => s.kind === 'teamLogo');
+      const trailingCount = (showRole ? 1 : 0) + (hasLogo ? 1 : 0);
+      const s = rosterFitScale(trailingCount);
+      const charSize = CHAR_SIZE * s;
+      const captainSize = CAPTAIN_SIZE * s;
+      const gap = GAP * s;
+      const rowH = ROW_H * s;
+
+      container.style.setProperty('--char-size', charSize + 'px');
+      container.style.setProperty('--captain-size', captainSize + 'px');
+      container.style.setProperty('--trailing-size', captainSize + 'px');
+      container.style.columnGap = gap + 'px';
+      container.style.rowGap = gap + 'px';
+      container.style.gridTemplateRows = `${rowH}px ${rowH}px`;
+
+      let cols = `${captainSize}px repeat(4, ${charSize}px)`;
+      if (showRole)  cols += ` ${captainSize}px`;
+      if (hasLogo)   cols += ` ${captainSize}px`;
+      container.style.gridTemplateColumns = cols;
+
+      let trailingCol = 5;
       for (const slot of slots) {
         const div = document.createElement('div');
         div.className = SLOT_CLASS[slot.kind];
+        if (slot.kind === 'captain') {
+          div.style.gridColumn = '1';
+          div.style.gridRow = '1 / 3';
+        } else if (slot.kind === 'role' || slot.kind === 'teamLogo') {
+          trailingCol++;
+          div.style.gridColumn = String(trailingCol);
+          div.style.gridRow = '1 / 3';
+        }
         const img = document.createElement('img');
         img.src = slot.imgUrl;
         img.onerror = () => img.style.display = 'none';
@@ -364,10 +406,15 @@
         const gameLineDiv = document.createElement('div');
         gameLineDiv.className = 'game-line';
         const label = document.createElement('span');
-        label.textContent = 'Game: ';
+        label.textContent = info.bottomLabel + ': ';
         gameLineDiv.appendChild(label);
         gameLineDiv.appendChild(document.createTextNode(info.gameLine));
         bar.appendChild(gameLineDiv);
+      } else if (info.bottomLabel) {
+        const labelDiv = document.createElement('div');
+        labelDiv.className = 'game-line';
+        labelDiv.textContent = info.bottomLabel;
+        bar.appendChild(labelDiv);
       }
     }
 
@@ -482,7 +529,7 @@
         || key === `score.${SCOREBOARD}.half_inning`
         || key === `score.${SCOREBOARD}.home_team`
         || key.startsWith(`score.${SCOREBOARD}.stats.`),
-      shouldRenderSettings: (key) => key.startsWith('overlays.'),
+      shouldRenderSettings: (key) => key.startsWith('overlays.') || key.startsWith('scoreboards.sources.'),
     });
   </script>
 </body>

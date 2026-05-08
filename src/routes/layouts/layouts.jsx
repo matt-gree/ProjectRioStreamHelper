@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
-    Stack, Paper, Text, Group, Grid, UnstyledButton,
+    Stack, Paper, Text, Group, Grid, SimpleGrid, UnstyledButton,
     CopyButton, ActionIcon, Button, Tooltip, Box, Loader, Alert, Tabs, Badge, Switch,
-    Collapse, ColorInput, FileButton, Image, TextInput, Autocomplete, Select, NumberInput, Divider,
+    Collapse, ColorInput, FileButton, Image, Input, TextInput, Autocomplete, Select, NumberInput, Divider,
+    Menu,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useSettingsStore, useStateStore } from '../../context/store';
@@ -11,44 +12,26 @@ import useTournament from '../../hooks/useTournament';
 
 const PREVIEW_HEIGHT = 500;
 
-// ── Per-layout-type settings definitions ──
-// Each entry: { key, type, label, description? }
-// Supported control types: 'switch', 'color-override', 'color-opacity-override', 'number-override'
-// color-opacity-override extras: globalKey, globalFallback
-// number-override extras: globalKey, globalFallback, min, max, step, suffix
+// ── Per-layout-type element-only settings ──
+// These are settings unique to a specific overlay (not shared across the
+// design system). Global design properties (accent, cardBg, shadow, etc.) live
+// in overlays.global and are NOT duplicated here — users can pin a per-layout
+// override for any of those via the "+ Add style override" UI below the panel.
+// Supported control types: 'switch', 'color-override', 'number-override', 'select'
 const LAYOUT_SETTINGS = {
     scoreboard: [
-        { key: 'showCaptains', type: 'switch', label: 'Show Captains', description: 'Display captain character icons' },
         { key: 'showElo', type: 'switch', label: 'Show ELO', description: 'Display ELO ratings on completed games' },
         { key: 'showTeamLogos', type: 'switch', label: 'Show Team Logos', description: 'Display MSB team logos' },
-        { key: 'showLogo', type: 'switch', label: 'Show Overlay Logo', description: 'Display the uploaded logo on scoreboard' },
-        { key: 'showBackdropBlur', type: 'switch', label: 'Backdrop Blur', description: 'Enable glass blur effect on card background' },
-        { key: 'showShadow', type: 'switch', label: 'Card Shadow', description: 'Show drop shadow behind the overlay card' },
-        { key: 'accentColor', type: 'color-override', label: 'Accent Color', description: 'Override the global accent color for this overlay' },
-        { key: 'textColor', type: 'color-override', label: 'Text Color', description: 'Override the global text color for this overlay' },
-        { key: 'finalBadgeColor', type: 'color-override', label: 'Final Badge Color', description: 'Override the color of the "Final" badge on completed games' },
-        { key: 'cardBg', type: 'color-opacity-override', label: 'Card Background', description: 'Background color for this overlay card', globalKey: 'cardBg', globalFallback: 'rgba(15, 15, 25, 0.88)' },
-        { key: 'borderColor', type: 'color-opacity-override', label: 'Border Color', description: 'Border color for this overlay card', globalKey: 'borderColor', globalFallback: 'rgba(255, 255, 255, 0.08)' },
-        { key: 'borderRadius', type: 'number-override', label: 'Border Radius', description: 'Corner rounding for this overlay card (px)', globalKey: 'borderRadius', globalFallback: 16, min: 0, max: 48, step: 2, suffix: 'px' },
-        { key: 'borderWidth', type: 'number-override', label: 'Border Thickness', description: 'Border width for this overlay card (px)', globalKey: 'borderWidth', globalFallback: 1, min: 0, max: 16, step: 1, suffix: 'px' },
-        { key: 'cardShadowBlur', type: 'number-override', label: 'Card Shadow Blur', description: 'Override the card shadow blur for this overlay (px)', globalKey: 'cardShadowBlur', globalFallback: 16, min: 0, max: 80, step: 2, suffix: 'px' },
-        { key: 'textShadowBlur', type: 'number-override', label: 'Text Shadow Blur', description: 'Override the text shadow blur for this overlay (px)', globalKey: 'textShadowBlur', globalFallback: 4, min: 0, max: 20, step: 1, suffix: 'px' },
     ],
     roster: [
         { key: 'showSuperstars', type: 'switch', label: 'Show Superstar Icons', description: 'Display superstar badge on starred characters' },
-        { key: 'accentColor', type: 'color-override', label: 'Accent Color Override', description: 'Override the global accent color for this overlay' },
+        { key: 'showRoleIcon', type: 'switch', label: 'Show Batting/Fielding Icon', description: 'Display the bat or glove icon indicating the team role' },
+        { key: 'showTeamLogo', type: 'switch', label: 'Show Team Logo', description: 'Display the team logo next to the roster' },
     ],
     stats: [
         { key: 'transitionType', type: 'select', label: 'Batter Transition', description: 'Animation when switching to a new batter', options: [{ value: 'fade', label: 'Fade' }, { value: 'none', label: 'None' }], defaultValue: 'fade' },
-        { key: 'accentColor',    type: 'color-override', label: 'Accent Color',  description: 'Override the global accent color for this overlay' },
         { key: 'statValueColor', type: 'color-override', label: 'Stat Value Color', description: 'Color of the main stat numbers (e.g. AVG, ERA)' },
         { key: 'subtextColor',   type: 'color-override', label: 'Subtext Color',    description: 'Color of stat labels and the game line text' },
-        { key: 'cardBg', type: 'color-opacity-override', label: 'Card Background', description: 'Background color for this overlay card', globalKey: 'cardBg', globalFallback: 'rgba(15, 15, 25, 0.88)' },
-        { key: 'borderColor', type: 'color-opacity-override', label: 'Border Color', description: 'Border color for this overlay card', globalKey: 'borderColor', globalFallback: 'rgba(255, 255, 255, 0.08)' },
-        { key: 'borderRadius', type: 'number-override', label: 'Border Radius', description: 'Corner rounding for this overlay card (px)', globalKey: 'borderRadius', globalFallback: 16, min: 0, max: 48, step: 2, suffix: 'px' },
-        { key: 'borderWidth', type: 'number-override', label: 'Border Thickness', description: 'Border width for this overlay card (px)', globalKey: 'borderWidth', globalFallback: 1, min: 0, max: 16, step: 1, suffix: 'px' },
-        { key: 'cardShadowBlur', type: 'number-override', label: 'Card Shadow Blur', description: 'Override the card shadow blur for this overlay (px)', globalKey: 'cardShadowBlur', globalFallback: 16, min: 0, max: 80, step: 2, suffix: 'px' },
-        { key: 'textShadowBlur', type: 'number-override', label: 'Text Glow Blur', description: 'Override text glow blur for this overlay (px)', globalKey: 'textShadowBlur', globalFallback: 4, min: 0, max: 40, step: 1, suffix: 'px' },
     ],
     teamlogo: [],
     scene: [
@@ -56,19 +39,50 @@ const LAYOUT_SETTINGS = {
         { key: 'team2ShowYouTube', type: 'switch', label: 'Player 2: Show YouTube', description: 'When on, shows the YouTube handle. When off, shows the Twitter/X handle.' },
     ],
     bracket: [
-        { key: 'accentColor', type: 'color-override', label: 'Accent Color Override', description: 'Override the global accent color for this overlay' },
-        { key: 'connectorColor', type: 'color-override', label: 'Connector Line Color', description: 'Override the color of bracket connector lines' },
-        { key: 'activeColor', type: 'color-override', label: 'Active Match Color', description: 'Override the highlight color for active/in-progress matches' },
+        { key: 'connectorColor', type: 'color-override', label: 'Connector Line Color', description: 'Color of bracket connector lines' },
+        { key: 'activeColor', type: 'color-override', label: 'Active Match Color', description: 'Highlight color for active/in-progress matches' },
+        { key: 'maxScale', type: 'number-override', label: 'Max Upscale', description: '1.0 = never enlarge past designed pixel sizes (small brackets stay native, centered). 1.5+ lets small brackets grow to fill the OBS source.', defaultValue: 1.0, min: 0.5, max: 3.0, step: 0.1 },
+    ],
+    ticker: [
+        { key: 'tickerSpeed', type: 'number-override', label: 'Scroll Speed', description: 'Horizontal scroll rate of the ticker (pixels per second)', defaultValue: 60, min: 10, max: 300, step: 10, suffix: 'px/s' },
+        { key: 'tickerGap', type: 'number-override', label: 'Card Spacing', description: 'Space between game cards (px)', defaultValue: 16, min: 0, max: 80, step: 2, suffix: 'px' },
     ],
 };
 
+// ── Global design keys eligible for per-layout override ──
+// Each entry corresponds to a key in overlays.global.* that the user can pin
+// a per-layout override on via the "+ Add style override" picker. The `meta`
+// field links to the synthetic name(s) used in each overlay's
+// <meta name="overlay-settings"> whitelist; an override is offered for a
+// layout only if at least one of the meta names appears in that whitelist.
+const OVERRIDABLE_GLOBAL_KEYS = [
+    { key: 'accentColor',    meta: ['accentColor'],    type: 'color',         label: 'Accent Color',       defaultValue: '#f59e0b' },
+    { key: 'textColor',      meta: ['textColor'],      type: 'color',         label: 'Text Color',         defaultValue: '#ffffff' },
+    { key: 'cardBg',         meta: ['cardBg'],         type: 'color-opacity', label: 'Card Background',    defaultValue: 'rgba(15, 15, 25, 0.88)' },
+    { key: 'borderColor',    meta: ['borderColor'],    type: 'color-opacity', label: 'Border Color',       defaultValue: 'rgba(255, 255, 255, 0.08)' },
+    { key: 'borderRadius',   meta: ['borderRadius'],   type: 'number',        label: 'Border Radius',      defaultValue: 16, min: 0, max: 48, step: 2, suffix: 'px' },
+    { key: 'borderWidth',    meta: ['borderWidth'],    type: 'number',        label: 'Border Thickness',   defaultValue: 1,  min: 0, max: 16, step: 1, suffix: 'px' },
+    { key: 'cardShadowBlur', meta: ['cardShadow'],     type: 'number',        label: 'Card Shadow Blur',   defaultValue: 16, min: 0, max: 80, step: 2, suffix: 'px' },
+    { key: 'textShadowBlur', meta: ['textShadow'],     type: 'number',        label: 'Text Shadow Blur',   defaultValue: 4,  min: 0, max: 40, step: 1, suffix: 'px' },
+    { key: 'showCaptains',     meta: ['showCaptains'],     type: 'switch', label: 'Show Captains' },
+    { key: 'showLogo',         meta: ['showLogo'],         type: 'switch', label: 'Show Overlay Logo' },
+    { key: 'showBackdropBlur', meta: ['showBackdropBlur'], type: 'switch', label: 'Backdrop Blur' },
+    { key: 'showShadow',       meta: ['showShadow'],       type: 'switch', label: 'Card Shadow' },
+    { key: 'finalBadgeColor',  meta: ['finalBadgeColor'],  type: 'color',  label: 'Final Badge Color' },
+];
+
+// Includes the default values for every "color" / "color-opacity" field in
+// GLOBAL_DESIGN_DEFAULTS so a user can always click the suggested swatch to
+// restore a stock value: #f59e0b (accent), #0f0f19 (card bg), #ffffff (text /
+// border), #000000 (shadows). Remaining entries are general-purpose accents.
 const COLOR_SWATCHES = [
     '#f59e0b', '#ef4444', '#22c55e', '#3b82f6',
     '#a855f7', '#ec4899', '#14b8a6', '#f97316',
     '#6366f1', '#64748b',
+    '#0f0f19', '#ffffff', '#000000',
 ];
 
-function ScaledIframe({ src, fallbackWidth, fallbackHeight }) {
+function ScaledIframe({ src, fallbackWidth, fallbackHeight, height = PREVIEW_HEIGHT }) {
     const containerRef = useRef(null);
     const iframeRef = useRef(null);
     const [nativeSize, setNativeSize] = useState(null);
@@ -159,7 +173,8 @@ function ScaledIframe({ src, fallbackWidth, fallbackHeight }) {
             ref={containerRef}
             style={{
                 position: 'relative',
-                height: PREVIEW_HEIGHT,
+                height,
+                width: '100%',
                 // Neutral dark grey in dark mode, neutral light grey in
                 // light mode, so the preview frame reads as a calm stage
                 // rather than pure black. Mantine's default-hover var is
@@ -267,9 +282,13 @@ function LayoutList({ layouts, selected, onSelect, activeTab }) {
         );
     }
 
-    // Separate size-variant layouts (scoreboard) from team-based layouts
+    // Separate size-variant layouts (scoreboard) from team-based layouts.
+    // Anything without sizeVariant or team falls into the "other" bucket so
+    // single-variant standalone overlays (e.g. rotator/ticker) still render
+    // instead of being silently dropped.
     const sizeVariantLayouts = layouts.filter(l => l.sizeVariant);
     const teamLayouts = layouts.filter(l => l.team != null);
+    const otherLayouts = layouts.filter(l => !l.sizeVariant && l.team == null);
 
     // Group size-variant layouts by parentName
     const groups = {};
@@ -330,6 +349,21 @@ function LayoutList({ layouts, selected, onSelect, activeTab }) {
                     </div>
                 );
             })}
+
+            {/* Other standalone layouts (e.g. rotator ticker) */}
+            {otherLayouts.length > 0 && (
+                <Stack gap={2}>
+                    {otherLayouts.map((item) => (
+                        <LayoutItem
+                            key={item.url}
+                            item={item}
+                            selected={selected}
+                            onSelect={onSelect}
+                            activeTab={activeTab}
+                        />
+                    ))}
+                </Stack>
+            )}
 
             {/* Two-column Team 1 / Team 2 section */}
             {(team1.length > 0 || team2.length > 0) && (
@@ -908,6 +942,8 @@ const GLOBAL_DESIGN_KEYS = [
     'accentColor', 'cardBg', 'textColor', 'borderRadius', 'borderColor', 'borderWidth', 'fontFamily',
     'showShadow', 'cardShadowBlur', 'cardShadowColor',
     'textShadowEnabled', 'textShadowBlur', 'textShadowColor',
+    // Promoted from per-layout in v2:
+    'showCaptains', 'showLogo', 'showBackdropBlur', 'finalBadgeColor',
 ];
 
 const GLOBAL_DESIGN_DEFAULTS = {
@@ -924,6 +960,10 @@ const GLOBAL_DESIGN_DEFAULTS = {
     textShadowEnabled: false,
     textShadowBlur:    4,
     textShadowColor:   'rgba(0, 0, 0, 0.8)',
+    showCaptains:      true,
+    showLogo:          true,
+    showBackdropBlur:  true,
+    finalBadgeColor:   null,
 };
 
 // Parse "rgba(r, g, b, a)" or "rgb(r, g, b)" into { hex, opacity }
@@ -967,10 +1007,12 @@ function ColorWithOpacity({ label, description, value, onChange }) {
 
     useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
 
+    // Wrap in Input.Wrapper so the label uses Mantine's native label styling
+    // (font size, weight, and label→input gap). A plain <Text> label here
+    // doesn't match the spacing of sibling NumberInput/TextInput labels and
+    // misaligns the input row when laid out side-by-side in a SimpleGrid.
     return (
-        <div>
-            {label && <Text size="sm" fw={500}>{label}</Text>}
-            {description && <Text size="xs" c="dimmed" mb={4}>{description}</Text>}
+        <Input.Wrapper label={label} description={description} size="sm">
             <Group gap="xs" align="flex-end" wrap="nowrap">
                 <ColorInput
                     size="sm"
@@ -991,7 +1033,7 @@ function ColorWithOpacity({ label, description, value, onChange }) {
                     w={80}
                 />
             </Group>
-        </div>
+        </Input.Wrapper>
     );
 }
 
@@ -1019,7 +1061,7 @@ function PresetsPanel() {
         for (const key of GLOBAL_DESIGN_KEYS) {
             global[key] = globalDesign[key] ?? GLOBAL_DESIGN_DEFAULTS[key];
         }
-        const preset = { global, layouts: allLayoutSettings };
+        const preset = { version: 2, global, layouts: allLayoutSettings };
         setItem(`overlays.presets.${name}`, preset);
         setPresetName('');
         setSavingPreset(false);
@@ -1029,14 +1071,21 @@ function PresetsPanel() {
     const handleLoadPreset = useCallback((name) => {
         const preset = presets[name];
         if (!preset) return;
+        const isV1 = !preset.version;
         const globalData = preset.global ?? preset;
         for (const key of GLOBAL_DESIGN_KEYS) {
             if (globalData[key] != null) setItem(`overlays.global.${key}`, globalData[key]);
         }
+        // v1 presets stored several keys (showCaptains, showLogo, etc.) under
+        // each per-layout dict. Strip them on load so the global value wins.
+        const promotedToGlobal = new Set([
+            'showCaptains', 'showLogo', 'showShadow', 'showBackdropBlur', 'finalBadgeColor',
+        ]);
         if (preset.layouts) {
             for (const [layoutType, layoutValues] of Object.entries(preset.layouts)) {
-                if (!LAYOUT_SETTINGS[layoutType]) continue;
+                if (!layoutValues) continue;
                 for (const [key, value] of Object.entries(layoutValues)) {
+                    if (isV1 && promotedToGlobal.has(key)) continue;
                     setItem(`overlays.${layoutType}.${key}`, value);
                 }
             }
@@ -1057,11 +1106,11 @@ function PresetsPanel() {
     }, [setItem]);
 
     const resetOverrides = useCallback(() => {
-        for (const [layoutType, defs] of Object.entries(LAYOUT_SETTINGS)) {
-            for (const def of defs) {
-                if (def.type !== 'switch') {
-                    setItem(`overlays.${layoutType}.${def.key}`, null);
-                }
+        // Clear any per-layout pins of the globally-overridable keys (the
+        // values surfaced as chips in each layout's "Style overrides" area).
+        for (const layoutType of Object.keys(LAYOUT_SETTINGS)) {
+            for (const def of OVERRIDABLE_GLOBAL_KEYS) {
+                setItem(`overlays.${layoutType}.${def.key}`, null);
             }
         }
         notifications.show({ message: 'All layout overrides cleared', color: 'blue' });
@@ -1088,7 +1137,8 @@ function PresetsPanel() {
                 const name = data.name || file.name.replace(/\.json$/i, '');
                 const global = data.global ?? {};
                 const layouts = data.layouts ?? {};
-                setItem(`overlays.presets.${name}`, { global, layouts });
+                const version = data.version ?? 1;
+                setItem(`overlays.presets.${name}`, { version, global, layouts });
                 notifications.show({ message: `Imported preset "${name}"`, color: 'green' });
             } catch {
                 notifications.show({ message: 'Invalid preset file', color: 'red' });
@@ -1176,16 +1226,150 @@ function PresetsPanel() {
     );
 }
 
-// ── Global Design Section (rendered inline on layout tabs) ──
-// supportedSettings: array of keys from the overlay's <meta name="overlay-settings">.
-// When provided, only matching controls are shown. When null/undefined, all are shown.
-function GlobalDesignSection({ supportedSettings }) {
+// ── Live preview grid for the Design tab ──
+// Each preview keeps its overlay's natural aspect ratio. Layout (row × col):
+//   Row 1: Large Scoreboard | Player Stats   (50/50)
+//   Row 2: Small Scoreboard | Bracket        (50/50)
+//   Row 3: Ticker                            (full width)
+//
+// Sample data wired in each overlay's preview-mode boot:
+//   - scoreboard, stats → scoreboard_sample.json (your scoreboard 1 snapshot)
+//   - ticker            → ticker_sample.json (10 games from sb3 rotator)
+//   - bracket           → bracket_sample.json (current Top Cut)
+const PREVIEW_ROWS = [
+    [
+        { label: 'Large Scoreboard', path: '/layout/scoreboard1/scoreboard.html?scoreboard=1&size=l', w: 800,  h: 460 },
+        // Match the Large Scoreboard tile aspect (800×460) so both tiles in
+        // row 1 render at the same height. The stats body (325×120) is
+        // centered with letterboxing inside the larger tile.
+        { label: 'Player Stats',     path: '/layout/scoreboard1/stats.html?scoreboard=1',             w: 800,  h: 460 },
+    ],
+    [
+        { label: 'Small Scoreboard', path: '/layout/scoreboard1/scoreboard.html?scoreboard=1&size=s', w: 500,  h: 80  },
+        // Bracket is fluid — body fills any frame and content scales to fit
+        // (capped by overlays.bracket.maxScale). 16:9 is just a reasonable
+        // tile aspect; the bracket fills it without cropping.
+        { label: 'Bracket',          path: '/layout/bracket/index.html',                              w: 960, h: 540 },
+    ],
+    [
+        { label: 'Ticker',           path: '/layout/rotator/ticker.html',                             w: 1920, h: 80  },
+    ],
+];
+
+function PreviewTile({ label, path, w, h, src, reloadKey }) {
+    return (
+        <div>
+            <Text size="xs" fw={600} c="dimmed" mb={4}>{label}</Text>
+            <Box style={{
+                width: '100%',
+                maxWidth: w,
+                aspectRatio: `${w} / ${h}`,
+                margin: '0 auto',
+                overflow: 'hidden',
+                borderRadius: 8,
+                border: '1px solid var(--mantine-color-dark-4)',
+                background: '#0b0b0f',
+            }}>
+                <ScaledIframe
+                    key={reloadKey}
+                    src={src}
+                    fallbackWidth={w}
+                    fallbackHeight={h}
+                    height="100%"
+                />
+            </Box>
+        </div>
+    );
+}
+
+function DesignPreviews({ baseUrl, showOverrides, onToggleOverrides }) {
+    // Build URL with preview flags. Re-keying the iframe on toggle reloads
+    // it so applyDesignSettings re-reads with the new globals-only flag.
+    const buildUrl = (path) => {
+        const sep = path.includes('?') ? '&' : '?';
+        const flags = `preview=1${showOverrides ? '' : '&preview_globals_only=1'}`;
+        return `${baseUrl}${path}${sep}${flags}`;
+    };
+    const reloadSuffix = showOverrides ? 'ov' : 'g';
+
+    return (
+        <Stack gap="sm">
+            <Group justify="space-between" align="center" wrap="nowrap">
+                <Text size="xs" c="dimmed" style={{ flex: 1 }}>
+                    Live previews — every control on the left updates these in real time.
+                </Text>
+                <Tooltip label={showOverrides
+                    ? 'Showing per-layout overrides on top of the global design'
+                    : 'Showing the global design only — per-layout overrides hidden'}>
+                    <Switch
+                        size="xs"
+                        label="Apply overrides"
+                        checked={showOverrides}
+                        onChange={(e) => onToggleOverrides(e.currentTarget.checked)}
+                    />
+                </Tooltip>
+            </Group>
+
+            {PREVIEW_ROWS.map((row, rowIdx) => (
+                <Grid key={rowIdx} gutter="sm">
+                    {row.map(item => (
+                        <Grid.Col key={item.path} span={12 / row.length}>
+                            <PreviewTile
+                                {...item}
+                                src={buildUrl(item.path)}
+                                reloadKey={`${item.path}-${reloadSuffix}`}
+                            />
+                        </Grid.Col>
+                    ))}
+                </Grid>
+            ))}
+        </Stack>
+    );
+}
+
+// ── Design tab body (controls + previews + presets) ──
+function DesignTabBody({ baseUrl }) {
+    // Defaults to globals-only so the previews show what the Design tab
+    // settings produce in isolation, regardless of any pinned per-layout
+    // overrides. Users can flip the switch to see overrides applied.
+    const [showOverrides, setShowOverrides] = useState(false);
+
+    return (
+        <Stack gap="lg">
+            <Grid gutter="md">
+                <Grid.Col span={{ base: 12, md: 4 }}>
+                    <Paper withBorder p="md">
+                        <Text size="sm" fw={700} mb="md">Global Design</Text>
+                        <GlobalDesignSection />
+                    </Paper>
+                </Grid.Col>
+                <Grid.Col span={{ base: 12, md: 8 }}>
+                    <Paper withBorder p="md">
+                        <DesignPreviews
+                            baseUrl={baseUrl}
+                            showOverrides={showOverrides}
+                            onToggleOverrides={setShowOverrides}
+                        />
+                    </Paper>
+                </Grid.Col>
+            </Grid>
+
+            <Paper withBorder p="md">
+                <Text size="sm" fw={700} mb="md">Presets & Branding</Text>
+                <PresetsPanel />
+            </Paper>
+        </Stack>
+    );
+}
+
+// ── Global Design Section (rendered inside the Design tab) ──
+// Single source of truth for every overlay's visual identity. Promoted v2 keys
+// (showCaptains/showLogo/showBackdropBlur/finalBadgeColor) live here too;
+// per-layout overrides for any of these are pinned via the chip UI on each
+// layout's panel.
+function GlobalDesignSection() {
     const globalDesign = useSettingsStore(useShallow(s => s?.overlays?.global ?? {}));
     const setItem = useSettingsStore(s => s.setItem);
-
-    const has = useCallback((key) =>
-        !supportedSettings || supportedSettings.includes(key),
-    [supportedSettings]);
 
     const accentColor       = globalDesign.accentColor       ?? '#f59e0b';
     const cardBg            = globalDesign.cardBg            ?? 'rgba(15, 15, 25, 0.88)';
@@ -1200,151 +1384,182 @@ function GlobalDesignSection({ supportedSettings }) {
     const textShadowEnabled = globalDesign.textShadowEnabled === true;
     const textShadowBlur    = globalDesign.textShadowBlur    ?? 4;
     const textShadowColor   = globalDesign.textShadowColor   ?? 'rgba(0, 0, 0, 0.8)';
+    const showCaptains      = globalDesign.showCaptains      !== false;
+    const showLogo          = globalDesign.showLogo          !== false;
+    const showBackdropBlur  = globalDesign.showBackdropBlur  !== false;
+    const finalBadgeColor   = globalDesign.finalBadgeColor   ?? '';
 
     return (
-        <Stack gap="xs">
-            {has('accentColor') && (
-                <DebouncedColorInput
-                    label="Accent Color"
-                    description="Primary highlight color across all overlays"
-                    size="sm"
-                    value={accentColor}
-                    onChange={(color) => setItem('overlays.global.accentColor', color)}
-                    format="hex"
-                    swatches={COLOR_SWATCHES}
-                />
-            )}
-
-            {has('cardBg') && (
-                <ColorWithOpacity
-                    label="Card Background"
-                    description="Background color for overlay cards"
-                    value={cardBg}
-                    onChange={(val) => setItem('overlays.global.cardBg', val)}
-                />
-            )}
-
-            {has('textColor') && (
-                <DebouncedColorInput
-                    label="Text Color"
-                    description="Primary text color on overlays"
-                    size="sm"
-                    value={textColor}
-                    onChange={(color) => setItem('overlays.global.textColor', color)}
-                    format="hex"
-                    swatches={['#ffffff', '#f1f5f9', '#e2e8f0', '#cbd5e1', '#94a3b8', '#64748b', '#1e293b', '#0f172a']}
-                />
-            )}
-
-            {has('borderRadius') && (
-                <NumberInput
-                    label="Border Radius"
-                    description="Corner rounding for overlay cards (px)"
-                    size="sm"
-                    value={borderRadius}
-                    onChange={(val) => setItem('overlays.global.borderRadius', val)}
-                    min={0}
-                    max={48}
-                    step={2}
-                />
-            )}
-
-            {has('borderWidth') && (
-                <NumberInput
-                    label="Border Thickness"
-                    description="Border width for overlay cards (px)"
-                    size="sm"
-                    value={borderWidth}
-                    onChange={(val) => setItem('overlays.global.borderWidth', val)}
-                    min={0}
-                    max={16}
-                    step={1}
-                />
-            )}
-
-            {has('borderColor') && (
-                <ColorWithOpacity
-                    label="Border Color"
-                    description="Border color for overlay cards"
-                    value={borderColor}
-                    onChange={(val) => setItem('overlays.global.borderColor', val)}
-                />
-            )}
-
-            {has('fontFamily') && (
-                <Select
-                    label="Font Family"
-                    description="Font used across all overlays"
-                    size="sm"
-                    value={fontFamily}
-                    onChange={(val) => setItem('overlays.global.fontFamily', val)}
-                    data={FONT_OPTIONS}
-                    searchable
-                />
-            )}
-
-            {has('cardShadow') && (
-                <div>
-                    <Switch
-                        label="Card Shadow"
-                        description="Show drop shadow behind overlay cards"
+        <Stack gap="md">
+            <div>
+                <Text size="xs" fw={700} tt="uppercase" c="dimmed" mb="xs">Color & Typography</Text>
+                <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="xs" verticalSpacing="xs">
+                    <DebouncedColorInput
+                        label="Accent Color"
                         size="sm"
-                        checked={showShadow}
-                        onChange={(e) => setItem('overlays.global.showShadow', e.currentTarget.checked)}
+                        value={accentColor}
+                        onChange={(color) => setItem('overlays.global.accentColor', color)}
+                        format="hex"
+                        swatches={COLOR_SWATCHES}
                     />
-                    <Collapse in={showShadow}>
-                        <Stack gap="xs" mt="xs" pl="sm">
-                            <NumberInput
-                                label="Shadow Blur"
-                                description="Blur radius of the card drop shadow (px)"
-                                size="sm"
-                                value={cardShadowBlur}
-                                onChange={(val) => setItem('overlays.global.cardShadowBlur', val ?? 16)}
-                                min={0}
-                                max={80}
-                                step={2}
-                                suffix="px"
-                            />
-                            <ColorWithOpacity
-                                label="Shadow Color"
-                                value={cardShadowColor}
-                                onChange={(val) => setItem('overlays.global.cardShadowColor', val)}
-                            />
-                        </Stack>
-                    </Collapse>
-                </div>
-            )}
-
-            {has('textShadow') && (
-                <div>
-                    <Switch
-                        label="Text Shadow"
-                        description="Show drop shadow on text across overlays"
+                    <DebouncedColorInput
+                        label="Text Color"
                         size="sm"
-                        checked={textShadowEnabled}
-                        onChange={(e) => setItem('overlays.global.textShadowEnabled', e.currentTarget.checked)}
+                        value={textColor}
+                        onChange={(color) => setItem('overlays.global.textColor', color)}
+                        format="hex"
+                        swatches={['#ffffff', '#f1f5f9', '#e2e8f0', '#cbd5e1', '#94a3b8', '#64748b', '#1e293b', '#0f172a']}
                     />
-                    <Collapse in={textShadowEnabled}>
-                        <Stack gap="xs" mt="xs" pl="sm">
-                            <NumberInput
-                                label="Blur"
-                                size="sm"
-                                value={textShadowBlur}
-                                onChange={(val) => setItem('overlays.global.textShadowBlur', val ?? 4)}
-                                min={0}
-                                max={40}
-                                step={1}
-                                suffix="px"
-                            />
-                            <ColorWithOpacity
-                                label="Shadow Color"
-                                value={textShadowColor}
-                                onChange={(val) => setItem('overlays.global.textShadowColor', val)}
-                            />
-                        </Stack>
-                    </Collapse>
-                </div>
-            )}
+                    <ColorWithOpacity
+                        label="Card Background"
+                        value={cardBg}
+                        onChange={(val) => setItem('overlays.global.cardBg', val)}
+                    />
+                    <ColorWithOpacity
+                        label="Border Color"
+                        value={borderColor}
+                        onChange={(val) => setItem('overlays.global.borderColor', val)}
+                    />
+                    <Group gap="xs" align="flex-end" wrap="nowrap">
+                        <DebouncedColorInput
+                            label="Final Badge Color"
+                            size="sm"
+                            value={finalBadgeColor}
+                            placeholder="Default"
+                            onChange={(color) => setItem('overlays.global.finalBadgeColor', color || null)}
+                            format="hex"
+                            swatches={COLOR_SWATCHES}
+                            style={{ flex: 1 }}
+                        />
+                        {finalBadgeColor && (
+                            <Button
+                                variant="subtle"
+                                size="compact-sm"
+                                color="gray"
+                                onClick={() => setItem('overlays.global.finalBadgeColor', null)}
+                            >
+                                Reset
+                            </Button>
+                        )}
+                    </Group>
+                    <Select
+                        label="Font Family"
+                        size="sm"
+                        value={fontFamily}
+                        onChange={(val) => setItem('overlays.global.fontFamily', val)}
+                        data={FONT_OPTIONS}
+                        searchable
+                    />
+                </SimpleGrid>
+            </div>
+
+            <div>
+                <Text size="xs" fw={700} tt="uppercase" c="dimmed" mb="xs">Card Chrome</Text>
+                <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="xs" verticalSpacing="xs">
+                    <NumberInput
+                        label="Border Radius"
+                        size="sm"
+                        value={borderRadius}
+                        onChange={(val) => setItem('overlays.global.borderRadius', val)}
+                        min={0}
+                        max={48}
+                        step={2}
+                        suffix="px"
+                    />
+                    <NumberInput
+                        label="Border Thickness"
+                        size="sm"
+                        value={borderWidth}
+                        onChange={(val) => setItem('overlays.global.borderWidth', val)}
+                        min={0}
+                        max={16}
+                        step={1}
+                        suffix="px"
+                    />
+                </SimpleGrid>
+                <Stack gap="xs" mt="xs">
+                    <div>
+                        <Switch
+                            label="Card Shadow"
+                            description="Drop shadow behind overlay cards"
+                            size="sm"
+                            checked={showShadow}
+                            onChange={(e) => setItem('overlays.global.showShadow', e.currentTarget.checked)}
+                        />
+                        <Collapse in={showShadow}>
+                            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="xs" verticalSpacing="xs" mt="xs">
+                                <NumberInput
+                                    label="Shadow Blur"
+                                    size="sm"
+                                    value={cardShadowBlur}
+                                    onChange={(val) => setItem('overlays.global.cardShadowBlur', val ?? 16)}
+                                    min={0}
+                                    max={80}
+                                    step={2}
+                                    suffix="px"
+                                />
+                                <ColorWithOpacity
+                                    label="Shadow Color"
+                                    value={cardShadowColor}
+                                    onChange={(val) => setItem('overlays.global.cardShadowColor', val)}
+                                />
+                            </SimpleGrid>
+                        </Collapse>
+                    </div>
+                    <div>
+                        <Switch
+                            label="Text Shadow"
+                            description="Drop shadow on text across overlays"
+                            size="sm"
+                            checked={textShadowEnabled}
+                            onChange={(e) => setItem('overlays.global.textShadowEnabled', e.currentTarget.checked)}
+                        />
+                        <Collapse in={textShadowEnabled}>
+                            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="xs" verticalSpacing="xs" mt="xs">
+                                <NumberInput
+                                    label="Blur"
+                                    size="sm"
+                                    value={textShadowBlur}
+                                    onChange={(val) => setItem('overlays.global.textShadowBlur', val ?? 4)}
+                                    min={0}
+                                    max={40}
+                                    step={1}
+                                    suffix="px"
+                                />
+                                <ColorWithOpacity
+                                    label="Shadow Color"
+                                    value={textShadowColor}
+                                    onChange={(val) => setItem('overlays.global.textShadowColor', val)}
+                                />
+                            </SimpleGrid>
+                        </Collapse>
+                    </div>
+                </Stack>
+            </div>
+
+            <div>
+                <Text size="xs" fw={700} tt="uppercase" c="dimmed" mb="xs">Display Toggles</Text>
+                <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="xs" verticalSpacing="xs">
+                    <Switch
+                        label="Show Captains"
+                        size="sm"
+                        checked={showCaptains}
+                        onChange={(e) => setItem('overlays.global.showCaptains', e.currentTarget.checked)}
+                    />
+                    <Switch
+                        label="Show Overlay Logo"
+                        size="sm"
+                        checked={showLogo}
+                        onChange={(e) => setItem('overlays.global.showLogo', e.currentTarget.checked)}
+                    />
+                    <Switch
+                        label="Backdrop Blur"
+                        size="sm"
+                        checked={showBackdropBlur}
+                        onChange={(e) => setItem('overlays.global.showBackdropBlur', e.currentTarget.checked)}
+                    />
+                </SimpleGrid>
+            </div>
         </Stack>
     );
 }
@@ -1377,143 +1592,231 @@ function DebouncedColorInput({ value, onChange, ...props }) {
 }
 
 // ── Per-layout settings panel ──
-// supportedSettings: when provided, only show settings whose key is in the list.
+// Renders this layout's element-only settings on top, then a "Style overrides"
+// section listing pinned global overrides as full editor rows. Users add a new
+// override via the "+ Add style override" menu, which lists eligible global
+// keys (filtered against the overlay's <meta name="overlay-settings"> list).
+//
+// Unlike the previous design, global controls are NOT duplicated here. Their
+// single source of truth lives in the Design tab.
 function LayoutSettingsPanel({ layoutType, supportedSettings }) {
-    const allDefs = LAYOUT_SETTINGS[layoutType];
+    const allDefs = LAYOUT_SETTINGS[layoutType] ?? [];
     const settingsDefs = supportedSettings
-        ? allDefs?.filter(def => supportedSettings.includes(def.key))
+        ? allDefs.filter(def => supportedSettings.includes(def.key))
         : allDefs;
-    const overlaySettings = useSettingsStore(useShallow(s => s?.overlays?.[layoutType]));
+    const overlaySettings = useSettingsStore(useShallow(s => s?.overlays?.[layoutType] ?? {}));
     const globalSettings = useSettingsStore(useShallow(s => s?.overlays?.global ?? {}));
     const setItem = useSettingsStore(s => s.setItem);
 
-    if (!settingsDefs || settingsDefs.length === 0) return null;
+    // Which global keys is this overlay allowed to override? An override is
+    // available when at least one of its meta names is in the overlay's
+    // <meta name="overlay-settings"> whitelist (or the whitelist is unset).
+    const overridable = useMemo(() => OVERRIDABLE_GLOBAL_KEYS.filter(def =>
+        !supportedSettings || def.meta.some(m => supportedSettings.includes(m))
+    ), [supportedSettings]);
+
+    const pinned = overridable.filter(def => overlaySettings[def.key] != null);
+    const available = overridable.filter(def => overlaySettings[def.key] == null);
+
+    const setOverride = useCallback((key, value) =>
+        setItem(`overlays.${layoutType}.${key}`, value), [layoutType, setItem]);
 
     return (
-        <Stack gap="xs">
-            {settingsDefs.map((def) => {
-                const settingsKey = `overlays.${layoutType}.${def.key}`;
+        <Stack gap="md">
+            {settingsDefs.length > 0 && (
+                <Stack gap="xs">
+                    {settingsDefs.map(def => renderElementSetting(def, layoutType, overlaySettings, setItem))}
+                </Stack>
+            )}
 
-                if (def.type === 'switch') {
-                    const checked = overlaySettings?.[def.key] !== false;
-                    return (
-                        <Switch
-                            key={def.key}
-                            label={def.label}
-                            description={def.description}
-                            size="sm"
-                            checked={checked}
-                            onChange={(e) => setItem(settingsKey, e.currentTarget.checked)}
-                        />
-                    );
-                }
+            {(pinned.length > 0 || available.length > 0) && (
+                <div>
+                    {settingsDefs.length > 0 && <Divider mb="sm" />}
+                    <Group justify="space-between" align="center" mb="xs">
+                        <div>
+                            <Text size="sm" fw={600}>Style Overrides</Text>
+                            <Text size="xs" c="dimmed">
+                                Pin per-overlay values that win over the global Design settings.
+                            </Text>
+                        </div>
+                        {available.length > 0 && (
+                            <Menu shadow="md" width={220} position="bottom-end">
+                                <Menu.Target>
+                                    <Button variant="light" size="compact-xs">+ Add override</Button>
+                                </Menu.Target>
+                                <Menu.Dropdown>
+                                    <Menu.Label>Override a global setting</Menu.Label>
+                                    {available.map(def => (
+                                        <Menu.Item
+                                            key={def.key}
+                                            onClick={() => {
+                                                const seed = globalSettings[def.key] ?? def.defaultValue ?? '';
+                                                setOverride(def.key, seed === '' ? def.defaultValue ?? '#000000' : seed);
+                                            }}
+                                        >
+                                            {def.label}
+                                        </Menu.Item>
+                                    ))}
+                                </Menu.Dropdown>
+                            </Menu>
+                        )}
+                    </Group>
 
-                if (def.type === 'select') {
-                    const value = overlaySettings?.[def.key] ?? def.defaultValue;
-                    return (
-                        <Select
-                            key={def.key}
-                            label={def.label}
-                            description={def.description}
-                            size="sm"
-                            value={value}
-                            onChange={(val) => setItem(settingsKey, val)}
-                            data={def.options}
-                        />
-                    );
-                }
-
-                if (def.type === 'color-override') {
-                    const overrideValue = overlaySettings?.[def.key] ?? null;
-                    return (
-                        <div key={def.key}>
-                            <Text size="sm" fw={500}>{def.label}</Text>
-                            {def.description && <Text size="xs" c="dimmed" mb={4}>{def.description}</Text>}
-                            <Group gap="xs" align="flex-end" wrap="nowrap">
-                                <DebouncedColorInput
-                                    size="sm"
-                                    value={overrideValue ?? ''}
-                                    placeholder="Default (not overridden)"
-                                    onChange={(color) => setItem(settingsKey, color || null)}
-                                    format="hex"
-                                    swatches={COLOR_SWATCHES}
-                                    style={{ flex: 1 }}
+                    {pinned.length === 0 ? (
+                        <Text size="xs" c="dimmed">No overrides — using global values from the Design tab.</Text>
+                    ) : (
+                        <Stack gap="xs">
+                            {pinned.map(def => (
+                                <OverrideRow
+                                    key={def.key}
+                                    def={def}
+                                    value={overlaySettings[def.key]}
+                                    onChange={(v) => setOverride(def.key, v)}
+                                    onRemove={() => setOverride(def.key, null)}
                                 />
-                                {overrideValue != null && (
-                                    <Button
-                                        variant="subtle"
-                                        size="compact-sm"
-                                        color="gray"
-                                        onClick={() => setItem(settingsKey, null)}
-                                    >
-                                        Reset
-                                    </Button>
-                                )}
-                            </Group>
-                        </div>
-                    );
-                }
+                            ))}
+                        </Stack>
+                    )}
+                </div>
+            )}
 
-                if (def.type === 'color-opacity-override') {
-                    const overrideValue = overlaySettings?.[def.key] ?? null;
-                    const globalVal = globalSettings[def.globalKey] ?? def.globalFallback;
-                    const isOverridden = overrideValue != null;
-                    return (
-                        <div key={def.key}>
-                            <Group gap="xs" justify="space-between" align="center" mb={2}>
-                                <div>
-                                    <Text size="sm" fw={500}>{def.label}</Text>
-                                    <Text size="xs" c="dimmed">{isOverridden ? def.description : `${def.description} — using global`}</Text>
-                                </div>
-                                {isOverridden && (
-                                    <Button variant="subtle" size="compact-xs" color="gray"
-                                        onClick={() => setItem(settingsKey, null)}>
-                                        Reset
-                                    </Button>
-                                )}
-                            </Group>
-                            <ColorWithOpacity
-                                value={isOverridden ? overrideValue : globalVal}
-                                onChange={(val) => setItem(settingsKey, val)}
-                            />
-                        </div>
-                    );
-                }
-
-                if (def.type === 'number-override') {
-                    const overrideValue = overlaySettings?.[def.key] ?? null;
-                    const globalVal = globalSettings[def.globalKey] ?? def.globalFallback;
-                    const isOverridden = overrideValue != null;
-                    return (
-                        <div key={def.key}>
-                            <Group gap="xs" align="flex-end" wrap="nowrap">
-                                <NumberInput
-                                    label={def.label}
-                                    description={isOverridden ? def.description : `${def.description} — using global (${globalVal})`}
-                                    size="sm"
-                                    value={isOverridden ? overrideValue : globalVal}
-                                    onChange={(val) => setItem(settingsKey, val ?? null)}
-                                    min={def.min}
-                                    max={def.max}
-                                    step={def.step}
-                                    suffix={def.suffix}
-                                    style={{ flex: 1 }}
-                                />
-                                {isOverridden && (
-                                    <Button variant="subtle" size="compact-sm" color="gray"
-                                        onClick={() => setItem(settingsKey, null)}
-                                        style={{ marginBottom: 2 }}>
-                                        Reset
-                                    </Button>
-                                )}
-                            </Group>
-                        </div>
-                    );
-                }
-
-                return null;
-            })}
+            {settingsDefs.length === 0 && pinned.length === 0 && available.length === 0 && (
+                <Text size="xs" c="dimmed">This overlay has no configurable settings.</Text>
+            )}
         </Stack>
+    );
+}
+
+function renderElementSetting(def, layoutType, overlaySettings, setItem) {
+    const settingsKey = `overlays.${layoutType}.${def.key}`;
+
+    if (def.type === 'switch') {
+        const checked = overlaySettings?.[def.key] !== false;
+        return (
+            <Switch
+                key={def.key}
+                label={def.label}
+                description={def.description}
+                size="sm"
+                checked={checked}
+                onChange={(e) => setItem(settingsKey, e.currentTarget.checked)}
+            />
+        );
+    }
+    if (def.type === 'select') {
+        const value = overlaySettings?.[def.key] ?? def.defaultValue;
+        return (
+            <Select
+                key={def.key}
+                label={def.label}
+                description={def.description}
+                size="sm"
+                value={value}
+                onChange={(val) => setItem(settingsKey, val)}
+                data={def.options}
+            />
+        );
+    }
+    if (def.type === 'color-override') {
+        const value = overlaySettings?.[def.key] ?? null;
+        return (
+            <div key={def.key}>
+                <Text size="sm" fw={500}>{def.label}</Text>
+                {def.description && <Text size="xs" c="dimmed" mb={4}>{def.description}</Text>}
+                <Group gap="xs" align="flex-end" wrap="nowrap">
+                    <DebouncedColorInput
+                        size="sm"
+                        value={value ?? ''}
+                        placeholder="Default"
+                        onChange={(color) => setItem(settingsKey, color || null)}
+                        format="hex"
+                        swatches={COLOR_SWATCHES}
+                        style={{ flex: 1 }}
+                    />
+                    {value != null && (
+                        <Button variant="subtle" size="compact-sm" color="gray"
+                            onClick={() => setItem(settingsKey, null)}>
+                            Reset
+                        </Button>
+                    )}
+                </Group>
+            </div>
+        );
+    }
+    if (def.type === 'number-override') {
+        const value = overlaySettings?.[def.key] ?? def.defaultValue;
+        return (
+            <NumberInput
+                key={def.key}
+                label={def.label}
+                description={def.description}
+                size="sm"
+                value={value}
+                onChange={(val) => setItem(settingsKey, val ?? def.defaultValue)}
+                min={def.min}
+                max={def.max}
+                step={def.step}
+                suffix={def.suffix}
+            />
+        );
+    }
+    return null;
+}
+
+// One pinned override row (any type). The first column is the editor; the
+// trailing X removes the pin so the global value takes back over.
+function OverrideRow({ def, value, onChange, onRemove }) {
+    const sharedRemove = (
+        <Tooltip label="Remove override (use global value)">
+            <ActionIcon variant="subtle" color="gray" onClick={onRemove} size="lg">×</ActionIcon>
+        </Tooltip>
+    );
+
+    let editor = null;
+    if (def.type === 'color') {
+        editor = (
+            <DebouncedColorInput
+                label={def.label}
+                size="sm"
+                value={value ?? ''}
+                onChange={(c) => onChange(c || null)}
+                format="hex"
+                swatches={COLOR_SWATCHES}
+                style={{ flex: 1 }}
+            />
+        );
+    } else if (def.type === 'color-opacity') {
+        editor = <ColorWithOpacity label={def.label} value={value} onChange={onChange} />;
+    } else if (def.type === 'number') {
+        editor = (
+            <NumberInput
+                label={def.label}
+                size="sm"
+                value={value ?? def.defaultValue}
+                onChange={(v) => onChange(v ?? def.defaultValue)}
+                min={def.min}
+                max={def.max}
+                step={def.step}
+                suffix={def.suffix}
+                style={{ flex: 1 }}
+            />
+        );
+    } else if (def.type === 'switch') {
+        editor = (
+            <Switch
+                label={def.label}
+                size="sm"
+                checked={value !== false}
+                onChange={(e) => onChange(e.currentTarget.checked)}
+            />
+        );
+    }
+
+    return (
+        <Group gap="xs" align="flex-end" wrap="nowrap">
+            <div style={{ flex: 1, minWidth: 0 }}>{editor}</div>
+            {sharedRemove}
+        </Group>
     );
 }
 
@@ -1749,12 +2052,15 @@ export default function LayoutBrowser() {
 
     // Filter layouts — show all scoreboard layouts for every tab (files live in
     // scoreboard1/ but work for any scoreboard via URL params). Apply search.
+    // The rotator/ group hosts overlays that visualize a specific scoreboard's
+    // rotation; they take ?scoreboard=N like the rest, so they belong here too.
     const filteredLayouts = useMemo(() => {
         const q = searchQuery.toLowerCase().trim();
         return allLayouts.filter(l => {
             // Bracket layouts are handled by BracketLayoutList
             if (l.group === 'bracket') return false;
-            if (!l.group.startsWith('scoreboard')) return false;
+            const isScoreboard = l.group.startsWith('scoreboard') || l.group === 'rotator';
+            if (!isScoreboard) return false;
             if (q && !l.name.toLowerCase().includes(q)) return false;
             return true;
         });
@@ -1812,12 +2118,12 @@ export default function LayoutBrowser() {
         const match = allLayouts.find(l => l.type === selectedType && l.supportedSettings);
         return match?.supportedSettings ?? null;
     }, [selected?.supportedSettings, selectedType, allLayouts]);
+    // The per-layout settings panel is offered whenever an overlay declares
+    // any supported settings — element-only entries from LAYOUT_SETTINGS or
+    // any global key from OVERRIDABLE_GLOBAL_KEYS that the overlay's <meta>
+    // whitelist allows. Empty <meta> (e.g. teamlogo.html) hides the panel.
     const hasAnySupportedSettings = supportedSettings === null || supportedSettings.length > 0;
-    const hasLayoutSettings = selectedType && supportedSettings
-        ? LAYOUT_SETTINGS[selectedType]?.some(def => supportedSettings.includes(def.key))
-        : selectedType && LAYOUT_SETTINGS[selectedType]?.length > 0;
-    const showGlobalDesign = hasAnySupportedSettings && mode !== 'design';
-    const showSettingsPanel = showGlobalDesign || hasLayoutSettings;
+    const showSettingsPanel = !!selectedType && hasAnySupportedSettings && mode !== 'design';
 
     // Build the URL — inject scoreboard param for scoreboard-type layouts only
     const selectedUrl = useMemo(() => {
@@ -1880,7 +2186,7 @@ export default function LayoutBrowser() {
             )}
 
             {mode === 'design' ? (
-                <PresetsPanel />
+                <DesignTabBody baseUrl={baseUrl} />
             ) : (
                 <Grid gutter="md">
                     {/* Left panel: layout list */}
@@ -2018,27 +2324,17 @@ export default function LayoutBrowser() {
                             )}
                         </Paper>
 
-                        {/* Settings panel: global design + per-layout overrides */}
+                        {/* Per-layout settings: element-only controls + chip-style global overrides */}
                         {showSettingsPanel && (
                             <Collapse in={settingsOpen}>
                                 <Paper withBorder p="sm" mt="xs">
-                                    {showGlobalDesign && (
-                                        <>
-                                            <Text size="sm" fw={600} mb="xs">Global Design</Text>
-                                            <GlobalDesignSection supportedSettings={supportedSettings} />
-                                        </>
-                                    )}
-                                    {showGlobalDesign && hasLayoutSettings && (
-                                        <Divider my="sm" label="Layout Overrides" labelPosition="center" />
-                                    )}
-                                    {hasLayoutSettings && (
-                                        <>
-                                            <Text size="sm" fw={600} mb="xs" tt="capitalize">
-                                                {selectedType} Settings
-                                            </Text>
-                                            <LayoutSettingsPanel layoutType={selectedType} supportedSettings={supportedSettings} />
-                                        </>
-                                    )}
+                                    <Text size="sm" fw={600} mb="xs" tt="capitalize">
+                                        {selectedType} Settings
+                                    </Text>
+                                    <LayoutSettingsPanel
+                                        layoutType={selectedType}
+                                        supportedSettings={supportedSettings}
+                                    />
                                 </Paper>
                             </Collapse>
                         )}

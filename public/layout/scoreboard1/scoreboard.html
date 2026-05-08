@@ -448,11 +448,20 @@
     document.body.dataset.refW = sizeConf.w;
     document.body.dataset.refH = sizeConf.h;
 
-    // Auto-scale: design at reference size, scale to fill the OBS browser source
+    // Auto-scale: design at reference size, scale to fill the OBS browser source.
+    // In preview mode (Layouts tab), the parent ScaledIframe owns scaling — we
+    // hold the body at native ref dimensions so the parent's transform-scale
+    // produces a correct, single-stage scale.
     function autoScale() {
       const overlay = document.getElementById('overlay');
       overlay.style.width = sizeConf.w + 'px';
       overlay.style.height = sizeConf.h + 'px';
+      if (OverlayBase.PREVIEW_MODE) {
+        document.body.style.width = sizeConf.w + 'px';
+        document.body.style.height = sizeConf.h + 'px';
+        overlay.style.transform = '';
+        return;
+      }
       const needsScale = Math.abs(window.innerWidth - sizeConf.w) > 2 || Math.abs(window.innerHeight - sizeConf.h) > 2;
       if (needsScale) {
         const scale = Math.min(window.innerWidth / sizeConf.w, window.innerHeight / sizeConf.h);
@@ -487,26 +496,18 @@
     let isAnimating = false;
     let pendingRender = null;
 
-    /* ── Settings getters ── */
-    function showCaptains() {
-      return deepGet(settings, 'overlays.scoreboard.showCaptains', true) !== false;
-    }
+    /* ── Settings getters ──
+       Promoted-to-global keys read via OverlayBase.readSetting which respects
+       both the override chain and the ?preview_globals_only=1 preview flag. */
+    const readToggle = (k, d) => OverlayBase.readSetting('scoreboard', k, d) !== false;
+    function showCaptains()      { return readToggle('showCaptains',     true); }
+    function showLogo()          { return readToggle('showLogo',         true); }
+    function showBackdropBlur()  { return readToggle('showBackdropBlur', true); }
     function showElo() {
       return deepGet(settings, 'overlays.scoreboard.showElo', true) !== false;
     }
     function showTeamLogos() {
       return deepGet(settings, 'overlays.scoreboard.showTeamLogos', true) !== false;
-    }
-    function showLogo() {
-      return deepGet(settings, 'overlays.scoreboard.showLogo', true) !== false;
-    }
-    function showBackdropBlur() {
-      return deepGet(settings, 'overlays.scoreboard.showBackdropBlur', true) !== false;
-    }
-    function showShadow() {
-      const perLayout = deepGet(settings, 'overlays.scoreboard.showShadow', null);
-      if (perLayout !== null) return perLayout !== false;
-      return deepGet(settings, 'overlays.global.showShadow', true) !== false;
     }
 
     /* ── Game change detection + animation ── */
@@ -875,13 +876,27 @@
       }
     }
 
-    /* ── Init via OverlayBase ── */
-    OverlayBase.init({
-      render,
-      shouldRender: (key) => key.startsWith(`score.${SB}.`),
-      shouldRenderSettings: (key) => key.startsWith('overlays.'),
-      fetchSettings: true,
-    });
+    /* ── Init via OverlayBase ──
+       In preview mode, prime `state.score.${SB}` with the static sample BEFORE
+       init runs and tell init to skip state fetches/socket. Avoids races where
+       the server state would otherwise wipe our sample once SocketIO catches up. */
+    async function boot() {
+      if (OverlayBase.PREVIEW_MODE) {
+        try {
+          const resp = await fetch(`${BASE_URL}/layout/preview/scoreboard_sample.json`);
+          const data = resp.ok ? await resp.json() : null;
+          if (data) OverlayBase.deepSet(state, `score.${SB}`, data);
+        } catch { /* ignore */ }
+      }
+      OverlayBase.init({
+        render,
+        shouldRender: (key) => key.startsWith(`score.${SB}.`),
+        shouldRenderSettings: (key) => key.startsWith('overlays.'),
+        fetchSettings: true,
+        skipState: OverlayBase.PREVIEW_MODE,
+      });
+    }
+    boot();
   </script>
 </body>
 </html>

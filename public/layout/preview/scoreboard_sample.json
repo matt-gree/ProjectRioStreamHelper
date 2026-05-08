@@ -1,0 +1,1870 @@
+{
+  "home_team": 1,
+  "game_id": null,
+  "score_left": 5,
+  "score_right": 7,
+  "inning": 5,
+  "half_inning": "Bottom",
+  "outs": 2,
+  "strikes": 1,
+  "balls": 0,
+  "batter": "Petey",
+  "pitcher": "Boo",
+  "batter_roster_index": 4,
+  "pitcher_roster_index": 5,
+  "batter_hand": 1,
+  "pitcher_hand": 1,
+  "batterSide": "left",
+  "cbRioRunnerOn1": false,
+  "cbRioRunnerOn2": false,
+  "cbRioRunnerOn3": false,
+  "runner1Name": "",
+  "runner2Name": "",
+  "runner3Name": "",
+  "player": {
+    "1": {
+      "rioName": "Baltor33",
+      "msb_team": "Birdo Beauties",
+      "rio_captainIndex": 3,
+      "character": {
+        "0": {
+          "name": "Paratroopa(G)",
+          "batting_hand": 1,
+          "fielding_hand": 0,
+          "is_starred": false
+        },
+        "1": {
+          "name": "Bowser",
+          "batting_hand": 1,
+          "fielding_hand": 0,
+          "is_starred": false
+        },
+        "2": {
+          "name": "Yoshi",
+          "batting_hand": 1,
+          "fielding_hand": 0,
+          "is_starred": false
+        },
+        "3": {
+          "name": "Birdo",
+          "batting_hand": 0,
+          "fielding_hand": 0,
+          "is_starred": false
+        },
+        "4": {
+          "name": "Petey",
+          "batting_hand": 1,
+          "fielding_hand": 1,
+          "is_starred": false
+        },
+        "5": {
+          "name": "Magikoopa(B)",
+          "batting_hand": 1,
+          "fielding_hand": 0,
+          "is_starred": false
+        },
+        "6": {
+          "name": "Pianta(R)",
+          "batting_hand": 0,
+          "fielding_hand": 0,
+          "is_starred": false
+        },
+        "7": {
+          "name": "Luigi",
+          "batting_hand": 1,
+          "fielding_hand": 0,
+          "is_starred": false
+        },
+        "8": {
+          "name": "Dixie",
+          "batting_hand": 1,
+          "fielding_hand": 0,
+          "is_starred": false
+        }
+      },
+      "youtube": "Baltor And Buddies"
+    },
+    "2": {
+      "rioName": "MattGree",
+      "msb_team": "Mario Heroes",
+      "rio_captainIndex": 7,
+      "character": {
+        "0": {
+          "name": "Toadsworth",
+          "batting_hand": 0,
+          "fielding_hand": 0,
+          "is_starred": false
+        },
+        "1": {
+          "name": "DK",
+          "batting_hand": 1,
+          "fielding_hand": 0,
+          "is_starred": false
+        },
+        "2": {
+          "name": "Waluigi",
+          "batting_hand": 1,
+          "fielding_hand": 1,
+          "is_starred": false
+        },
+        "3": {
+          "name": "Bro(H)",
+          "batting_hand": 0,
+          "fielding_hand": 0,
+          "is_starred": false
+        },
+        "4": {
+          "name": "King Boo",
+          "batting_hand": 1,
+          "fielding_hand": 0,
+          "is_starred": false
+        },
+        "5": {
+          "name": "Boo",
+          "batting_hand": 1,
+          "fielding_hand": 1,
+          "is_starred": false
+        },
+        "6": {
+          "name": "Wario",
+          "batting_hand": 1,
+          "fielding_hand": 0,
+          "is_starred": false
+        },
+        "7": {
+          "name": "Mario",
+          "batting_hand": 0,
+          "fielding_hand": 0,
+          "is_starred": false
+        },
+        "8": {
+          "name": "Noki(G)",
+          "batting_hand": 1,
+          "fielding_hand": 0,
+          "is_starred": false
+        }
+      },
+      "youtube": "MattGree"
+    }
+  },
+  "stats": {
+    "1": {
+      "character": {
+        "0": {
+          "name": "Paratroopa(G)",
+          "api": {
+            "batting": {
+              "at_bats": 16,
+              "hits": 7,
+              "singles": 6,
+              "doubles": 1,
+              "triples": 0,
+              "homeruns": 0,
+              "sac_flys": 0,
+              "strikeouts": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "rbi": 2,
+              "stolen_bases": 0
+            },
+            "pitching": {
+              "batters_faced": 7,
+              "runs_allowed": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "hits_allowed": 1,
+              "total_pitches": 13,
+              "strikeouts_pitched": 2,
+              "outs_pitched": 7,
+              "hrs_allowed": 0
+            }
+          },
+          "batting": {
+            "at_bats": 19,
+            "hits": 8,
+            "singles": 7,
+            "doubles": 1,
+            "triples": 0,
+            "homeruns": 0,
+            "sac_flys": 0,
+            "strikeouts": 0,
+            "walks_bb": 0,
+            "walks_hbp": 0,
+            "rbi": 3,
+            "stolen_bases": 0,
+            "avg": 0.421,
+            "slg": 0.474,
+            "obp": 0.421,
+            "ops": 0.895,
+            "so_pct": 0.0
+          },
+          "pitching": {
+            "batters_faced": 14,
+            "runs_allowed": 0,
+            "walks_bb": 0,
+            "walks_hbp": 0,
+            "hits_allowed": 2,
+            "total_pitches": 26,
+            "strikeouts_pitched": 4,
+            "outs_pitched": 14,
+            "hrs_allowed": 0,
+            "earned_runs": 0,
+            "era": 0.0,
+            "ip": "4.2",
+            "k_pct": 28.6,
+            "opp_avg": 0.143
+          },
+          "current_game": {
+            "batting": {
+              "at_bats": 3,
+              "hits": 1,
+              "singles": 1,
+              "doubles": 0,
+              "triples": 0,
+              "homeruns": 0,
+              "sac_flys": 0,
+              "strikeouts": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "rbi": 1,
+              "stolen_bases": 0
+            },
+            "pitching": {
+              "batters_faced": 7,
+              "runs_allowed": 0,
+              "earned_runs": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "hits_allowed": 1,
+              "total_pitches": 13,
+              "strikeouts_pitched": 2,
+              "outs_pitched": 7,
+              "hrs_allowed": 0
+            },
+            "batting_line": "1-for-3, RBI",
+            "pitching_line": "2.1, 1 H, 0 R, 0 ER, 0 BB, 2 K, 0 HR, 13 P"
+          }
+        },
+        "1": {
+          "name": "Bowser",
+          "api": {
+            "batting": {
+              "at_bats": 17,
+              "hits": 8,
+              "singles": 2,
+              "doubles": 1,
+              "triples": 0,
+              "homeruns": 5,
+              "sac_flys": 0,
+              "strikeouts": 1,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "rbi": 10,
+              "stolen_bases": 0
+            },
+            "pitching": {
+              "batters_faced": 0,
+              "runs_allowed": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "hits_allowed": 0,
+              "total_pitches": 0,
+              "strikeouts_pitched": 0,
+              "outs_pitched": 0,
+              "hrs_allowed": 0
+            }
+          },
+          "batting": {
+            "at_bats": 20,
+            "hits": 9,
+            "singles": 2,
+            "doubles": 1,
+            "triples": 0,
+            "homeruns": 6,
+            "sac_flys": 0,
+            "strikeouts": 2,
+            "walks_bb": 0,
+            "walks_hbp": 0,
+            "rbi": 14,
+            "stolen_bases": 0,
+            "avg": 0.45,
+            "slg": 1.4,
+            "obp": 0.45,
+            "ops": 1.85,
+            "so_pct": 10.0
+          },
+          "pitching": {
+            "batters_faced": 0,
+            "runs_allowed": 0,
+            "walks_bb": 0,
+            "walks_hbp": 0,
+            "hits_allowed": 0,
+            "total_pitches": 0,
+            "strikeouts_pitched": 0,
+            "outs_pitched": 0,
+            "hrs_allowed": 0,
+            "earned_runs": 0,
+            "era": 0.0,
+            "ip": "0.0",
+            "k_pct": 0.0,
+            "opp_avg": 0.0
+          },
+          "current_game": {
+            "batting": {
+              "at_bats": 3,
+              "hits": 1,
+              "singles": 0,
+              "doubles": 0,
+              "triples": 0,
+              "homeruns": 1,
+              "sac_flys": 0,
+              "strikeouts": 1,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "rbi": 4,
+              "stolen_bases": 0
+            },
+            "pitching": {
+              "batters_faced": 0,
+              "runs_allowed": 0,
+              "earned_runs": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "hits_allowed": 0,
+              "total_pitches": 0,
+              "strikeouts_pitched": 0,
+              "outs_pitched": 0,
+              "hrs_allowed": 0
+            },
+            "batting_line": "1-for-3, HR, 4 RBI",
+            "pitching_line": "0.0, 0 H, 0 R, 0 ER, 0 BB, 0 K, 0 HR, 0 P"
+          }
+        },
+        "2": {
+          "name": "Yoshi",
+          "api": {
+            "batting": {
+              "at_bats": 18,
+              "hits": 5,
+              "singles": 4,
+              "doubles": 1,
+              "triples": 0,
+              "homeruns": 0,
+              "sac_flys": 0,
+              "strikeouts": 1,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "rbi": 1,
+              "stolen_bases": 0
+            },
+            "pitching": {
+              "batters_faced": 0,
+              "runs_allowed": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "hits_allowed": 0,
+              "total_pitches": 0,
+              "strikeouts_pitched": 0,
+              "outs_pitched": 0,
+              "hrs_allowed": 0
+            }
+          },
+          "batting": {
+            "at_bats": 21,
+            "hits": 6,
+            "singles": 5,
+            "doubles": 1,
+            "triples": 0,
+            "homeruns": 0,
+            "sac_flys": 0,
+            "strikeouts": 1,
+            "walks_bb": 0,
+            "walks_hbp": 0,
+            "rbi": 1,
+            "stolen_bases": 0,
+            "avg": 0.286,
+            "slg": 0.333,
+            "obp": 0.286,
+            "ops": 0.619,
+            "so_pct": 4.8
+          },
+          "pitching": {
+            "batters_faced": 0,
+            "runs_allowed": 0,
+            "walks_bb": 0,
+            "walks_hbp": 0,
+            "hits_allowed": 0,
+            "total_pitches": 0,
+            "strikeouts_pitched": 0,
+            "outs_pitched": 0,
+            "hrs_allowed": 0,
+            "earned_runs": 0,
+            "era": 0.0,
+            "ip": "0.0",
+            "k_pct": 0.0,
+            "opp_avg": 0.0
+          },
+          "current_game": {
+            "batting": {
+              "at_bats": 3,
+              "hits": 1,
+              "singles": 1,
+              "doubles": 0,
+              "triples": 0,
+              "homeruns": 0,
+              "sac_flys": 0,
+              "strikeouts": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "rbi": 0,
+              "stolen_bases": 0
+            },
+            "pitching": {
+              "batters_faced": 0,
+              "runs_allowed": 0,
+              "earned_runs": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "hits_allowed": 0,
+              "total_pitches": 0,
+              "strikeouts_pitched": 0,
+              "outs_pitched": 0,
+              "hrs_allowed": 0
+            },
+            "batting_line": "1-for-3",
+            "pitching_line": "0.0, 0 H, 0 R, 0 ER, 0 BB, 0 K, 0 HR, 0 P"
+          }
+        },
+        "3": {
+          "name": "Birdo",
+          "api": {
+            "batting": {
+              "at_bats": 12,
+              "hits": 7,
+              "singles": 6,
+              "doubles": 1,
+              "triples": 0,
+              "homeruns": 0,
+              "sac_flys": 0,
+              "strikeouts": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "rbi": 5,
+              "stolen_bases": 0
+            },
+            "pitching": {
+              "batters_faced": 0,
+              "runs_allowed": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "hits_allowed": 0,
+              "total_pitches": 0,
+              "strikeouts_pitched": 0,
+              "outs_pitched": 0,
+              "hrs_allowed": 0
+            }
+          },
+          "batting": {
+            "at_bats": 15,
+            "hits": 8,
+            "singles": 7,
+            "doubles": 1,
+            "triples": 0,
+            "homeruns": 0,
+            "sac_flys": 0,
+            "strikeouts": 0,
+            "walks_bb": 0,
+            "walks_hbp": 0,
+            "rbi": 5,
+            "stolen_bases": 0,
+            "avg": 0.533,
+            "slg": 0.6,
+            "obp": 0.533,
+            "ops": 1.133,
+            "so_pct": 0.0
+          },
+          "pitching": {
+            "batters_faced": 0,
+            "runs_allowed": 0,
+            "walks_bb": 0,
+            "walks_hbp": 0,
+            "hits_allowed": 0,
+            "total_pitches": 0,
+            "strikeouts_pitched": 0,
+            "outs_pitched": 0,
+            "hrs_allowed": 0,
+            "earned_runs": 0,
+            "era": 0.0,
+            "ip": "0.0",
+            "k_pct": 0.0,
+            "opp_avg": 0.0
+          },
+          "current_game": {
+            "batting": {
+              "at_bats": 3,
+              "hits": 1,
+              "singles": 1,
+              "doubles": 0,
+              "triples": 0,
+              "homeruns": 0,
+              "sac_flys": 0,
+              "strikeouts": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "rbi": 0,
+              "stolen_bases": 0
+            },
+            "pitching": {
+              "batters_faced": 0,
+              "runs_allowed": 0,
+              "earned_runs": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "hits_allowed": 0,
+              "total_pitches": 0,
+              "strikeouts_pitched": 0,
+              "outs_pitched": 0,
+              "hrs_allowed": 0
+            },
+            "batting_line": "1-for-3",
+            "pitching_line": "0.0, 0 H, 0 R, 0 ER, 0 BB, 0 K, 0 HR, 0 P"
+          }
+        },
+        "4": {
+          "name": "Petey",
+          "api": {
+            "batting": {
+              "at_bats": 24,
+              "hits": 7,
+              "singles": 3,
+              "doubles": 0,
+              "triples": 0,
+              "homeruns": 4,
+              "sac_flys": 0,
+              "strikeouts": 4,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "rbi": 5,
+              "stolen_bases": 0
+            },
+            "pitching": {
+              "batters_faced": 0,
+              "runs_allowed": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "hits_allowed": 0,
+              "total_pitches": 0,
+              "strikeouts_pitched": 0,
+              "outs_pitched": 0,
+              "hrs_allowed": 0
+            }
+          },
+          "batting": {
+            "at_bats": 27,
+            "hits": 7,
+            "singles": 3,
+            "doubles": 0,
+            "triples": 0,
+            "homeruns": 4,
+            "sac_flys": 0,
+            "strikeouts": 4,
+            "walks_bb": 0,
+            "walks_hbp": 0,
+            "rbi": 5,
+            "stolen_bases": 0,
+            "avg": 0.259,
+            "slg": 0.704,
+            "obp": 0.259,
+            "ops": 0.963,
+            "so_pct": 14.8
+          },
+          "pitching": {
+            "batters_faced": 0,
+            "runs_allowed": 0,
+            "walks_bb": 0,
+            "walks_hbp": 0,
+            "hits_allowed": 0,
+            "total_pitches": 0,
+            "strikeouts_pitched": 0,
+            "outs_pitched": 0,
+            "hrs_allowed": 0,
+            "earned_runs": 0,
+            "era": 0.0,
+            "ip": "0.0",
+            "k_pct": 0.0,
+            "opp_avg": 0.0
+          },
+          "current_game": {
+            "batting": {
+              "at_bats": 3,
+              "hits": 0,
+              "singles": 0,
+              "doubles": 0,
+              "triples": 0,
+              "homeruns": 0,
+              "sac_flys": 0,
+              "strikeouts": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "rbi": 0,
+              "stolen_bases": 0
+            },
+            "pitching": {
+              "batters_faced": 0,
+              "runs_allowed": 0,
+              "earned_runs": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "hits_allowed": 0,
+              "total_pitches": 0,
+              "strikeouts_pitched": 0,
+              "outs_pitched": 0,
+              "hrs_allowed": 0
+            },
+            "batting_line": "0-for-3",
+            "pitching_line": "0.0, 0 H, 0 R, 0 ER, 0 BB, 0 K, 0 HR, 0 P"
+          }
+        },
+        "5": {
+          "name": "Magikoopa(B)",
+          "api": {
+            "batting": {
+              "at_bats": 14,
+              "hits": 7,
+              "singles": 6,
+              "doubles": 1,
+              "triples": 0,
+              "homeruns": 0,
+              "sac_flys": 0,
+              "strikeouts": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "rbi": 2,
+              "stolen_bases": 0
+            },
+            "pitching": {
+              "batters_faced": 0,
+              "runs_allowed": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "hits_allowed": 0,
+              "total_pitches": 0,
+              "strikeouts_pitched": 0,
+              "outs_pitched": 0,
+              "hrs_allowed": 0
+            }
+          },
+          "batting": {
+            "at_bats": 16,
+            "hits": 7,
+            "singles": 6,
+            "doubles": 1,
+            "triples": 0,
+            "homeruns": 0,
+            "sac_flys": 0,
+            "strikeouts": 0,
+            "walks_bb": 0,
+            "walks_hbp": 0,
+            "rbi": 2,
+            "stolen_bases": 0,
+            "avg": 0.438,
+            "slg": 0.5,
+            "obp": 0.438,
+            "ops": 0.938,
+            "so_pct": 0.0
+          },
+          "pitching": {
+            "batters_faced": 0,
+            "runs_allowed": 0,
+            "walks_bb": 0,
+            "walks_hbp": 0,
+            "hits_allowed": 0,
+            "total_pitches": 0,
+            "strikeouts_pitched": 0,
+            "outs_pitched": 0,
+            "hrs_allowed": 0,
+            "earned_runs": 0,
+            "era": 0.0,
+            "ip": "0.0",
+            "k_pct": 0.0,
+            "opp_avg": 0.0
+          },
+          "current_game": {
+            "batting": {
+              "at_bats": 2,
+              "hits": 0,
+              "singles": 0,
+              "doubles": 0,
+              "triples": 0,
+              "homeruns": 0,
+              "sac_flys": 0,
+              "strikeouts": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "rbi": 0,
+              "stolen_bases": 0
+            },
+            "pitching": {
+              "batters_faced": 0,
+              "runs_allowed": 0,
+              "earned_runs": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "hits_allowed": 0,
+              "total_pitches": 0,
+              "strikeouts_pitched": 0,
+              "outs_pitched": 0,
+              "hrs_allowed": 0
+            },
+            "batting_line": "0-for-2",
+            "pitching_line": "0.0, 0 H, 0 R, 0 ER, 0 BB, 0 K, 0 HR, 0 P"
+          }
+        },
+        "6": {
+          "name": "Pianta(R)",
+          "api": {
+            "batting": {
+              "at_bats": 23,
+              "hits": 13,
+              "singles": 8,
+              "doubles": 5,
+              "triples": 0,
+              "homeruns": 0,
+              "sac_flys": 2,
+              "strikeouts": 3,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "rbi": 8,
+              "stolen_bases": 0
+            },
+            "pitching": {
+              "batters_faced": 0,
+              "runs_allowed": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "hits_allowed": 0,
+              "total_pitches": 0,
+              "strikeouts_pitched": 0,
+              "outs_pitched": 0,
+              "hrs_allowed": 0
+            }
+          },
+          "batting": {
+            "at_bats": 25,
+            "hits": 15,
+            "singles": 9,
+            "doubles": 6,
+            "triples": 0,
+            "homeruns": 0,
+            "sac_flys": 2,
+            "strikeouts": 3,
+            "walks_bb": 0,
+            "walks_hbp": 0,
+            "rbi": 8,
+            "stolen_bases": 0,
+            "avg": 0.6,
+            "slg": 0.84,
+            "obp": 0.556,
+            "ops": 1.396,
+            "so_pct": 12.0
+          },
+          "pitching": {
+            "batters_faced": 0,
+            "runs_allowed": 0,
+            "walks_bb": 0,
+            "walks_hbp": 0,
+            "hits_allowed": 0,
+            "total_pitches": 0,
+            "strikeouts_pitched": 0,
+            "outs_pitched": 0,
+            "hrs_allowed": 0,
+            "earned_runs": 0,
+            "era": 0.0,
+            "ip": "0.0",
+            "k_pct": 0.0,
+            "opp_avg": 0.0
+          },
+          "current_game": {
+            "batting": {
+              "at_bats": 2,
+              "hits": 2,
+              "singles": 1,
+              "doubles": 1,
+              "triples": 0,
+              "homeruns": 0,
+              "sac_flys": 0,
+              "strikeouts": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "rbi": 0,
+              "stolen_bases": 0
+            },
+            "pitching": {
+              "batters_faced": 0,
+              "runs_allowed": 0,
+              "earned_runs": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "hits_allowed": 0,
+              "total_pitches": 0,
+              "strikeouts_pitched": 0,
+              "outs_pitched": 0,
+              "hrs_allowed": 0
+            },
+            "batting_line": "2-for-2, 2B",
+            "pitching_line": "0.0, 0 H, 0 R, 0 ER, 0 BB, 0 K, 0 HR, 0 P"
+          }
+        },
+        "7": {
+          "name": "Luigi",
+          "api": {
+            "batting": {
+              "at_bats": 29,
+              "hits": 10,
+              "singles": 9,
+              "doubles": 1,
+              "triples": 0,
+              "homeruns": 0,
+              "sac_flys": 0,
+              "strikeouts": 2,
+              "walks_bb": 0,
+              "walks_hbp": 1,
+              "rbi": 0,
+              "stolen_bases": 0
+            },
+            "pitching": {
+              "batters_faced": 0,
+              "runs_allowed": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "hits_allowed": 0,
+              "total_pitches": 0,
+              "strikeouts_pitched": 0,
+              "outs_pitched": 0,
+              "hrs_allowed": 0
+            }
+          },
+          "batting": {
+            "at_bats": 30,
+            "hits": 10,
+            "singles": 9,
+            "doubles": 1,
+            "triples": 0,
+            "homeruns": 0,
+            "sac_flys": 0,
+            "strikeouts": 2,
+            "walks_bb": 0,
+            "walks_hbp": 2,
+            "rbi": 0,
+            "stolen_bases": 0,
+            "avg": 0.333,
+            "slg": 0.367,
+            "obp": 0.375,
+            "ops": 0.742,
+            "so_pct": 6.7
+          },
+          "pitching": {
+            "batters_faced": 0,
+            "runs_allowed": 0,
+            "walks_bb": 0,
+            "walks_hbp": 0,
+            "hits_allowed": 0,
+            "total_pitches": 0,
+            "strikeouts_pitched": 0,
+            "outs_pitched": 0,
+            "hrs_allowed": 0,
+            "earned_runs": 0,
+            "era": 0.0,
+            "ip": "0.0",
+            "k_pct": 0.0,
+            "opp_avg": 0.0
+          },
+          "current_game": {
+            "batting": {
+              "at_bats": 1,
+              "hits": 0,
+              "singles": 0,
+              "doubles": 0,
+              "triples": 0,
+              "homeruns": 0,
+              "sac_flys": 0,
+              "strikeouts": 0,
+              "walks_bb": 0,
+              "walks_hbp": 1,
+              "rbi": 0,
+              "stolen_bases": 0
+            },
+            "pitching": {
+              "batters_faced": 0,
+              "runs_allowed": 0,
+              "earned_runs": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "hits_allowed": 0,
+              "total_pitches": 0,
+              "strikeouts_pitched": 0,
+              "outs_pitched": 0,
+              "hrs_allowed": 0
+            },
+            "batting_line": "0-for-1, HBP",
+            "pitching_line": "0.0, 0 H, 0 R, 0 ER, 0 BB, 0 K, 0 HR, 0 P"
+          }
+        },
+        "8": {
+          "name": "Dixie",
+          "api": {
+            "batting": {
+              "at_bats": 4,
+              "hits": 1,
+              "singles": 1,
+              "doubles": 0,
+              "triples": 0,
+              "homeruns": 0,
+              "sac_flys": 0,
+              "strikeouts": 1,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "rbi": 0,
+              "stolen_bases": 0
+            },
+            "pitching": {
+              "batters_faced": 47,
+              "runs_allowed": 12,
+              "walks_bb": 0,
+              "walks_hbp": 3,
+              "hits_allowed": 20,
+              "total_pitches": 88,
+              "strikeouts_pitched": 0,
+              "outs_pitched": 23,
+              "hrs_allowed": 0
+            }
+          },
+          "batting": {
+            "at_bats": 6,
+            "hits": 2,
+            "singles": 2,
+            "doubles": 0,
+            "triples": 0,
+            "homeruns": 0,
+            "sac_flys": 0,
+            "strikeouts": 1,
+            "walks_bb": 0,
+            "walks_hbp": 0,
+            "rbi": 0,
+            "stolen_bases": 0,
+            "avg": 0.333,
+            "slg": 0.333,
+            "obp": 0.333,
+            "ops": 0.666,
+            "so_pct": 16.7
+          },
+          "pitching": {
+            "batters_faced": 67,
+            "runs_allowed": 19,
+            "walks_bb": 0,
+            "walks_hbp": 5,
+            "hits_allowed": 30,
+            "total_pitches": 129,
+            "strikeouts_pitched": 0,
+            "outs_pitched": 31,
+            "hrs_allowed": 1,
+            "earned_runs": 19,
+            "era": 16.5,
+            "ip": "10.1",
+            "k_pct": 0.0,
+            "opp_avg": 0.448
+          },
+          "current_game": {
+            "batting": {
+              "at_bats": 2,
+              "hits": 1,
+              "singles": 1,
+              "doubles": 0,
+              "triples": 0,
+              "homeruns": 0,
+              "sac_flys": 0,
+              "strikeouts": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "rbi": 0,
+              "stolen_bases": 0
+            },
+            "pitching": {
+              "batters_faced": 20,
+              "runs_allowed": 7,
+              "earned_runs": 7,
+              "walks_bb": 0,
+              "walks_hbp": 2,
+              "hits_allowed": 10,
+              "total_pitches": 41,
+              "strikeouts_pitched": 0,
+              "outs_pitched": 8,
+              "hrs_allowed": 1
+            },
+            "batting_line": "1-for-2",
+            "pitching_line": "2.2, 10 H, 7 R, 7 ER, 2 BB, 0 K, 1 HR, 41 P"
+          }
+        }
+      }
+    },
+    "2": {
+      "character": {
+        "0": {
+          "name": "Toadsworth",
+          "api": {
+            "batting": {
+              "at_bats": 21,
+              "hits": 10,
+              "singles": 9,
+              "doubles": 1,
+              "triples": 0,
+              "homeruns": 0,
+              "sac_flys": 0,
+              "strikeouts": 2,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "rbi": 2,
+              "stolen_bases": 0
+            },
+            "pitching": {
+              "batters_faced": 0,
+              "runs_allowed": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "hits_allowed": 0,
+              "total_pitches": 0,
+              "strikeouts_pitched": 0,
+              "outs_pitched": 0,
+              "hrs_allowed": 0
+            }
+          },
+          "batting": {
+            "at_bats": 24,
+            "hits": 11,
+            "singles": 10,
+            "doubles": 1,
+            "triples": 0,
+            "homeruns": 0,
+            "sac_flys": 0,
+            "strikeouts": 2,
+            "walks_bb": 0,
+            "walks_hbp": 0,
+            "rbi": 2,
+            "stolen_bases": 0,
+            "avg": 0.458,
+            "slg": 0.5,
+            "obp": 0.458,
+            "ops": 0.958,
+            "so_pct": 8.3
+          },
+          "pitching": {
+            "batters_faced": 0,
+            "runs_allowed": 0,
+            "walks_bb": 0,
+            "walks_hbp": 0,
+            "hits_allowed": 0,
+            "total_pitches": 0,
+            "strikeouts_pitched": 0,
+            "outs_pitched": 0,
+            "hrs_allowed": 0,
+            "earned_runs": 0,
+            "era": 0.0,
+            "ip": "0.0",
+            "k_pct": 0.0,
+            "opp_avg": 0.0
+          },
+          "current_game": {
+            "batting": {
+              "at_bats": 3,
+              "hits": 1,
+              "singles": 1,
+              "doubles": 0,
+              "triples": 0,
+              "homeruns": 0,
+              "sac_flys": 0,
+              "strikeouts": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "rbi": 0,
+              "stolen_bases": 0
+            },
+            "pitching": {
+              "batters_faced": 0,
+              "runs_allowed": 0,
+              "earned_runs": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "hits_allowed": 0,
+              "total_pitches": 0,
+              "strikeouts_pitched": 0,
+              "outs_pitched": 0,
+              "hrs_allowed": 0
+            },
+            "batting_line": "1-for-3",
+            "pitching_line": "0.0, 0 H, 0 R, 0 ER, 0 BB, 0 K, 0 HR, 0 P"
+          }
+        },
+        "1": {
+          "name": "DK",
+          "api": {
+            "batting": {
+              "at_bats": 12,
+              "hits": 8,
+              "singles": 5,
+              "doubles": 2,
+              "triples": 1,
+              "homeruns": 0,
+              "sac_flys": 0,
+              "strikeouts": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "rbi": 2,
+              "stolen_bases": 0
+            },
+            "pitching": {
+              "batters_faced": 0,
+              "runs_allowed": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "hits_allowed": 0,
+              "total_pitches": 0,
+              "strikeouts_pitched": 0,
+              "outs_pitched": 0,
+              "hrs_allowed": 0
+            }
+          },
+          "batting": {
+            "at_bats": 15,
+            "hits": 11,
+            "singles": 7,
+            "doubles": 3,
+            "triples": 1,
+            "homeruns": 0,
+            "sac_flys": 0,
+            "strikeouts": 0,
+            "walks_bb": 0,
+            "walks_hbp": 0,
+            "rbi": 3,
+            "stolen_bases": 0,
+            "avg": 0.733,
+            "slg": 1.067,
+            "obp": 0.733,
+            "ops": 1.8,
+            "so_pct": 0.0
+          },
+          "pitching": {
+            "batters_faced": 0,
+            "runs_allowed": 0,
+            "walks_bb": 0,
+            "walks_hbp": 0,
+            "hits_allowed": 0,
+            "total_pitches": 0,
+            "strikeouts_pitched": 0,
+            "outs_pitched": 0,
+            "hrs_allowed": 0,
+            "earned_runs": 0,
+            "era": 0.0,
+            "ip": "0.0",
+            "k_pct": 0.0,
+            "opp_avg": 0.0
+          },
+          "current_game": {
+            "batting": {
+              "at_bats": 3,
+              "hits": 3,
+              "singles": 2,
+              "doubles": 1,
+              "triples": 0,
+              "homeruns": 0,
+              "sac_flys": 0,
+              "strikeouts": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "rbi": 1,
+              "stolen_bases": 0
+            },
+            "pitching": {
+              "batters_faced": 0,
+              "runs_allowed": 0,
+              "earned_runs": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "hits_allowed": 0,
+              "total_pitches": 0,
+              "strikeouts_pitched": 0,
+              "outs_pitched": 0,
+              "hrs_allowed": 0
+            },
+            "batting_line": "3-for-3, 2B, RBI",
+            "pitching_line": "0.0, 0 H, 0 R, 0 ER, 0 BB, 0 K, 0 HR, 0 P"
+          }
+        },
+        "2": {
+          "name": "Waluigi",
+          "api": {
+            "batting": {
+              "at_bats": 22,
+              "hits": 9,
+              "singles": 6,
+              "doubles": 1,
+              "triples": 2,
+              "homeruns": 0,
+              "sac_flys": 0,
+              "strikeouts": 1,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "rbi": 0,
+              "stolen_bases": 0
+            },
+            "pitching": {
+              "batters_faced": 98,
+              "runs_allowed": 14,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "hits_allowed": 43,
+              "total_pitches": 166,
+              "strikeouts_pitched": 5,
+              "outs_pitched": 59,
+              "hrs_allowed": 0
+            }
+          },
+          "batting": {
+            "at_bats": 25,
+            "hits": 9,
+            "singles": 6,
+            "doubles": 1,
+            "triples": 2,
+            "homeruns": 0,
+            "sac_flys": 0,
+            "strikeouts": 1,
+            "walks_bb": 0,
+            "walks_hbp": 0,
+            "rbi": 0,
+            "stolen_bases": 0,
+            "avg": 0.36,
+            "slg": 0.56,
+            "obp": 0.36,
+            "ops": 0.92,
+            "so_pct": 4.0
+          },
+          "pitching": {
+            "batters_faced": 98,
+            "runs_allowed": 14,
+            "walks_bb": 0,
+            "walks_hbp": 0,
+            "hits_allowed": 43,
+            "total_pitches": 166,
+            "strikeouts_pitched": 5,
+            "outs_pitched": 59,
+            "hrs_allowed": 0,
+            "earned_runs": 14,
+            "era": 6.4,
+            "ip": "19.2",
+            "k_pct": 5.1,
+            "opp_avg": 0.439
+          },
+          "current_game": {
+            "batting": {
+              "at_bats": 3,
+              "hits": 0,
+              "singles": 0,
+              "doubles": 0,
+              "triples": 0,
+              "homeruns": 0,
+              "sac_flys": 0,
+              "strikeouts": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "rbi": 0,
+              "stolen_bases": 0
+            },
+            "pitching": {
+              "batters_faced": 0,
+              "runs_allowed": 0,
+              "earned_runs": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "hits_allowed": 0,
+              "total_pitches": 0,
+              "strikeouts_pitched": 0,
+              "outs_pitched": 0,
+              "hrs_allowed": 0
+            },
+            "batting_line": "0-for-3",
+            "pitching_line": "0.0, 0 H, 0 R, 0 ER, 0 BB, 0 K, 0 HR, 0 P"
+          }
+        },
+        "3": {
+          "name": "Bro(H)",
+          "api": {
+            "batting": {
+              "at_bats": 20,
+              "hits": 7,
+              "singles": 2,
+              "doubles": 3,
+              "triples": 0,
+              "homeruns": 2,
+              "sac_flys": 1,
+              "strikeouts": 3,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "rbi": 4,
+              "stolen_bases": 0
+            },
+            "pitching": {
+              "batters_faced": 0,
+              "runs_allowed": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "hits_allowed": 0,
+              "total_pitches": 0,
+              "strikeouts_pitched": 0,
+              "outs_pitched": 0,
+              "hrs_allowed": 0
+            }
+          },
+          "batting": {
+            "at_bats": 23,
+            "hits": 8,
+            "singles": 2,
+            "doubles": 3,
+            "triples": 0,
+            "homeruns": 3,
+            "sac_flys": 1,
+            "strikeouts": 4,
+            "walks_bb": 0,
+            "walks_hbp": 0,
+            "rbi": 6,
+            "stolen_bases": 0,
+            "avg": 0.348,
+            "slg": 0.87,
+            "obp": 0.333,
+            "ops": 1.203,
+            "so_pct": 17.4
+          },
+          "pitching": {
+            "batters_faced": 0,
+            "runs_allowed": 0,
+            "walks_bb": 0,
+            "walks_hbp": 0,
+            "hits_allowed": 0,
+            "total_pitches": 0,
+            "strikeouts_pitched": 0,
+            "outs_pitched": 0,
+            "hrs_allowed": 0,
+            "earned_runs": 0,
+            "era": 0.0,
+            "ip": "0.0",
+            "k_pct": 0.0,
+            "opp_avg": 0.0
+          },
+          "current_game": {
+            "batting": {
+              "at_bats": 3,
+              "hits": 1,
+              "singles": 0,
+              "doubles": 0,
+              "triples": 0,
+              "homeruns": 1,
+              "sac_flys": 0,
+              "strikeouts": 1,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "rbi": 2,
+              "stolen_bases": 0
+            },
+            "pitching": {
+              "batters_faced": 0,
+              "runs_allowed": 0,
+              "earned_runs": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "hits_allowed": 0,
+              "total_pitches": 0,
+              "strikeouts_pitched": 0,
+              "outs_pitched": 0,
+              "hrs_allowed": 0
+            },
+            "batting_line": "1-for-3, HR, 2 RBI",
+            "pitching_line": "0.0, 0 H, 0 R, 0 ER, 0 BB, 0 K, 0 HR, 0 P"
+          }
+        },
+        "4": {
+          "name": "King Boo",
+          "api": {
+            "batting": {
+              "at_bats": 22,
+              "hits": 9,
+              "singles": 5,
+              "doubles": 1,
+              "triples": 0,
+              "homeruns": 3,
+              "sac_flys": 0,
+              "strikeouts": 3,
+              "walks_bb": 0,
+              "walks_hbp": 1,
+              "rbi": 8,
+              "stolen_bases": 0
+            },
+            "pitching": {
+              "batters_faced": 0,
+              "runs_allowed": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "hits_allowed": 0,
+              "total_pitches": 0,
+              "strikeouts_pitched": 0,
+              "outs_pitched": 0,
+              "hrs_allowed": 0
+            }
+          },
+          "batting": {
+            "at_bats": 24,
+            "hits": 9,
+            "singles": 5,
+            "doubles": 1,
+            "triples": 0,
+            "homeruns": 3,
+            "sac_flys": 0,
+            "strikeouts": 4,
+            "walks_bb": 0,
+            "walks_hbp": 2,
+            "rbi": 8,
+            "stolen_bases": 0,
+            "avg": 0.375,
+            "slg": 0.792,
+            "obp": 0.423,
+            "ops": 1.215,
+            "so_pct": 16.7
+          },
+          "pitching": {
+            "batters_faced": 0,
+            "runs_allowed": 0,
+            "walks_bb": 0,
+            "walks_hbp": 0,
+            "hits_allowed": 0,
+            "total_pitches": 0,
+            "strikeouts_pitched": 0,
+            "outs_pitched": 0,
+            "hrs_allowed": 0,
+            "earned_runs": 0,
+            "era": 0.0,
+            "ip": "0.0",
+            "k_pct": 0.0,
+            "opp_avg": 0.0
+          },
+          "current_game": {
+            "batting": {
+              "at_bats": 2,
+              "hits": 0,
+              "singles": 0,
+              "doubles": 0,
+              "triples": 0,
+              "homeruns": 0,
+              "sac_flys": 0,
+              "strikeouts": 1,
+              "walks_bb": 0,
+              "walks_hbp": 1,
+              "rbi": 0,
+              "stolen_bases": 0
+            },
+            "pitching": {
+              "batters_faced": 0,
+              "runs_allowed": 0,
+              "earned_runs": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "hits_allowed": 0,
+              "total_pitches": 0,
+              "strikeouts_pitched": 0,
+              "outs_pitched": 0,
+              "hrs_allowed": 0
+            },
+            "batting_line": "0-for-2, HBP",
+            "pitching_line": "0.0, 0 H, 0 R, 0 ER, 0 BB, 0 K, 0 HR, 0 P"
+          }
+        },
+        "5": {
+          "name": "Boo",
+          "api": {
+            "batting": {
+              "at_bats": 17,
+              "hits": 6,
+              "singles": 5,
+              "doubles": 0,
+              "triples": 1,
+              "homeruns": 0,
+              "sac_flys": 0,
+              "strikeouts": 2,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "rbi": 2,
+              "stolen_bases": 0
+            },
+            "pitching": {
+              "batters_faced": 136,
+              "runs_allowed": 15,
+              "walks_bb": 0,
+              "walks_hbp": 2,
+              "hits_allowed": 47,
+              "total_pitches": 245,
+              "strikeouts_pitched": 9,
+              "outs_pitched": 93,
+              "hrs_allowed": 0
+            }
+          },
+          "batting": {
+            "at_bats": 20,
+            "hits": 7,
+            "singles": 5,
+            "doubles": 0,
+            "triples": 2,
+            "homeruns": 0,
+            "sac_flys": 0,
+            "strikeouts": 2,
+            "walks_bb": 0,
+            "walks_hbp": 0,
+            "rbi": 3,
+            "stolen_bases": 0,
+            "avg": 0.35,
+            "slg": 0.55,
+            "obp": 0.35,
+            "ops": 0.9,
+            "so_pct": 10.0
+          },
+          "pitching": {
+            "batters_faced": 159,
+            "runs_allowed": 20,
+            "walks_bb": 0,
+            "walks_hbp": 3,
+            "hits_allowed": 54,
+            "total_pitches": 279,
+            "strikeouts_pitched": 10,
+            "outs_pitched": 108,
+            "hrs_allowed": 1,
+            "earned_runs": 20,
+            "era": 5.0,
+            "ip": "36.0",
+            "k_pct": 6.3,
+            "opp_avg": 0.34
+          },
+          "current_game": {
+            "batting": {
+              "at_bats": 3,
+              "hits": 1,
+              "singles": 0,
+              "doubles": 0,
+              "triples": 1,
+              "homeruns": 0,
+              "sac_flys": 0,
+              "strikeouts": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "rbi": 1,
+              "stolen_bases": 0
+            },
+            "pitching": {
+              "batters_faced": 23,
+              "runs_allowed": 5,
+              "earned_runs": 5,
+              "walks_bb": 0,
+              "walks_hbp": 1,
+              "hits_allowed": 7,
+              "total_pitches": 34,
+              "strikeouts_pitched": 1,
+              "outs_pitched": 15,
+              "hrs_allowed": 1
+            },
+            "batting_line": "1-for-3, 3B, RBI",
+            "pitching_line": "5.0, 7 H, 5 R, 5 ER, 1 BB, 1 K, 1 HR, 34 P"
+          }
+        },
+        "6": {
+          "name": "Wario",
+          "api": {
+            "batting": {
+              "at_bats": 16,
+              "hits": 7,
+              "singles": 2,
+              "doubles": 4,
+              "triples": 0,
+              "homeruns": 1,
+              "sac_flys": 0,
+              "strikeouts": 0,
+              "walks_bb": 0,
+              "walks_hbp": 1,
+              "rbi": 8,
+              "stolen_bases": 0
+            },
+            "pitching": {
+              "batters_faced": 0,
+              "runs_allowed": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "hits_allowed": 0,
+              "total_pitches": 0,
+              "strikeouts_pitched": 0,
+              "outs_pitched": 0,
+              "hrs_allowed": 0
+            }
+          },
+          "batting": {
+            "at_bats": 18,
+            "hits": 8,
+            "singles": 3,
+            "doubles": 4,
+            "triples": 0,
+            "homeruns": 1,
+            "sac_flys": 0,
+            "strikeouts": 0,
+            "walks_bb": 0,
+            "walks_hbp": 2,
+            "rbi": 8,
+            "stolen_bases": 0,
+            "avg": 0.444,
+            "slg": 0.833,
+            "obp": 0.5,
+            "ops": 1.333,
+            "so_pct": 0.0
+          },
+          "pitching": {
+            "batters_faced": 0,
+            "runs_allowed": 0,
+            "walks_bb": 0,
+            "walks_hbp": 0,
+            "hits_allowed": 0,
+            "total_pitches": 0,
+            "strikeouts_pitched": 0,
+            "outs_pitched": 0,
+            "hrs_allowed": 0,
+            "earned_runs": 0,
+            "era": 0.0,
+            "ip": "0.0",
+            "k_pct": 0.0,
+            "opp_avg": 0.0
+          },
+          "current_game": {
+            "batting": {
+              "at_bats": 2,
+              "hits": 1,
+              "singles": 1,
+              "doubles": 0,
+              "triples": 0,
+              "homeruns": 0,
+              "sac_flys": 0,
+              "strikeouts": 0,
+              "walks_bb": 0,
+              "walks_hbp": 1,
+              "rbi": 0,
+              "stolen_bases": 0
+            },
+            "pitching": {
+              "batters_faced": 0,
+              "runs_allowed": 0,
+              "earned_runs": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "hits_allowed": 0,
+              "total_pitches": 0,
+              "strikeouts_pitched": 0,
+              "outs_pitched": 0,
+              "hrs_allowed": 0
+            },
+            "batting_line": "1-for-2, HBP",
+            "pitching_line": "0.0, 0 H, 0 R, 0 ER, 0 BB, 0 K, 0 HR, 0 P"
+          }
+        },
+        "7": {
+          "name": "Mario",
+          "api": {
+            "batting": {
+              "at_bats": 23,
+              "hits": 9,
+              "singles": 6,
+              "doubles": 3,
+              "triples": 0,
+              "homeruns": 0,
+              "sac_flys": 1,
+              "strikeouts": 0,
+              "walks_bb": 0,
+              "walks_hbp": 1,
+              "rbi": 4,
+              "stolen_bases": 0
+            },
+            "pitching": {
+              "batters_faced": 0,
+              "runs_allowed": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "hits_allowed": 0,
+              "total_pitches": 0,
+              "strikeouts_pitched": 0,
+              "outs_pitched": 0,
+              "hrs_allowed": 0
+            }
+          },
+          "batting": {
+            "at_bats": 26,
+            "hits": 11,
+            "singles": 7,
+            "doubles": 4,
+            "triples": 0,
+            "homeruns": 0,
+            "sac_flys": 1,
+            "strikeouts": 0,
+            "walks_bb": 0,
+            "walks_hbp": 1,
+            "rbi": 5,
+            "stolen_bases": 0,
+            "avg": 0.423,
+            "slg": 0.577,
+            "obp": 0.429,
+            "ops": 1.006,
+            "so_pct": 0.0
+          },
+          "pitching": {
+            "batters_faced": 0,
+            "runs_allowed": 0,
+            "walks_bb": 0,
+            "walks_hbp": 0,
+            "hits_allowed": 0,
+            "total_pitches": 0,
+            "strikeouts_pitched": 0,
+            "outs_pitched": 0,
+            "hrs_allowed": 0,
+            "earned_runs": 0,
+            "era": 0.0,
+            "ip": "0.0",
+            "k_pct": 0.0,
+            "opp_avg": 0.0
+          },
+          "current_game": {
+            "batting": {
+              "at_bats": 3,
+              "hits": 2,
+              "singles": 1,
+              "doubles": 1,
+              "triples": 0,
+              "homeruns": 0,
+              "sac_flys": 0,
+              "strikeouts": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "rbi": 1,
+              "stolen_bases": 0
+            },
+            "pitching": {
+              "batters_faced": 0,
+              "runs_allowed": 0,
+              "earned_runs": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "hits_allowed": 0,
+              "total_pitches": 0,
+              "strikeouts_pitched": 0,
+              "outs_pitched": 0,
+              "hrs_allowed": 0
+            },
+            "batting_line": "2-for-3, 2B, RBI",
+            "pitching_line": "0.0, 0 H, 0 R, 0 ER, 0 BB, 0 K, 0 HR, 0 P"
+          }
+        },
+        "8": {
+          "name": "Noki(G)",
+          "api": {
+            "batting": {
+              "at_bats": 19,
+              "hits": 10,
+              "singles": 7,
+              "doubles": 3,
+              "triples": 0,
+              "homeruns": 0,
+              "sac_flys": 0,
+              "strikeouts": 1,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "rbi": 5,
+              "stolen_bases": 0
+            },
+            "pitching": {
+              "batters_faced": 0,
+              "runs_allowed": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "hits_allowed": 0,
+              "total_pitches": 0,
+              "strikeouts_pitched": 0,
+              "outs_pitched": 0,
+              "hrs_allowed": 0
+            }
+          },
+          "batting": {
+            "at_bats": 22,
+            "hits": 12,
+            "singles": 9,
+            "doubles": 3,
+            "triples": 0,
+            "homeruns": 0,
+            "sac_flys": 0,
+            "strikeouts": 1,
+            "walks_bb": 0,
+            "walks_hbp": 0,
+            "rbi": 7,
+            "stolen_bases": 0,
+            "avg": 0.545,
+            "slg": 0.682,
+            "obp": 0.545,
+            "ops": 1.227,
+            "so_pct": 4.5
+          },
+          "pitching": {
+            "batters_faced": 0,
+            "runs_allowed": 0,
+            "walks_bb": 0,
+            "walks_hbp": 0,
+            "hits_allowed": 0,
+            "total_pitches": 0,
+            "strikeouts_pitched": 0,
+            "outs_pitched": 0,
+            "hrs_allowed": 0,
+            "earned_runs": 0,
+            "era": 0.0,
+            "ip": "0.0",
+            "k_pct": 0.0,
+            "opp_avg": 0.0
+          },
+          "current_game": {
+            "batting": {
+              "at_bats": 3,
+              "hits": 2,
+              "singles": 2,
+              "doubles": 0,
+              "triples": 0,
+              "homeruns": 0,
+              "sac_flys": 0,
+              "strikeouts": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "rbi": 2,
+              "stolen_bases": 0
+            },
+            "pitching": {
+              "batters_faced": 0,
+              "runs_allowed": 0,
+              "earned_runs": 0,
+              "walks_bb": 0,
+              "walks_hbp": 0,
+              "hits_allowed": 0,
+              "total_pitches": 0,
+              "strikeouts_pitched": 0,
+              "outs_pitched": 0,
+              "hrs_allowed": 0
+            },
+            "batting_line": "2-for-3, 2 RBI",
+            "pitching_line": "0.0, 0 H, 0 R, 0 ER, 0 BB, 0 K, 0 HR, 0 P"
+          }
+        }
+      }
+    }
+  }
+}

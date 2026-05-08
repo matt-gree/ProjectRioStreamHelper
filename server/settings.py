@@ -154,11 +154,13 @@ class Settings:
             "auto_start": False
         },
         "overlays": {
+            "schema_version": 2,
             "global": {
                 "accentColor": "#f59e0b",
                 "cardBg": "rgba(15, 15, 25, 0.88)",
                 "textColor": "#ffffff",
                 "borderRadius": 16,
+                "borderWidth": 1,
                 "borderColor": "rgba(255, 255, 255, 0.08)",
                 "fontFamily": "Inter",
                 "showShadow": True,
@@ -166,44 +168,44 @@ class Settings:
                 "cardShadowColor": "rgba(0, 0, 0, 0.5)",
                 "textShadowEnabled": False,
                 "textShadowBlur": 4,
-                "textShadowColor": "rgba(0, 0, 0, 0.8)"
-            },
-            "presets": {},
-            "scoreboard": {
+                "textShadowColor": "rgba(0, 0, 0, 0.8)",
                 "showCaptains": True,
-                "showElo": True,
-                "showTeamLogos": True,
                 "showLogo": True,
                 "showBackdropBlur": True,
                 "finalBadgeColor": None,
-                "accentColor": None,
-                "textColor": None,
-                "cardBg": None,
-                "borderColor": None,
-                "borderRadius": None,
-                "borderWidth": None,
-                "cardShadowBlur": None,
-                "textShadowBlur": None,
+            },
+            "presets": {},
+            "scoreboard": {
+                "showElo": True,
+                "showTeamLogos": True,
             },
             "roster": {
-                "accentColor": None
+                "showSuperstars": True,
+                "showRoleIcon": True,
+                "showTeamLogo": True,
             },
             "stats": {
-                "accentColor": None,
+                "transitionType": "fade",
                 "statValueColor": None,
                 "subtextColor": None,
-                "cardBg": None,
-                "borderColor": None,
-                "borderRadius": None,
-                "borderWidth": None,
-                "cardShadowBlur": None,
-                "textShadowBlur": None,
             },
             "teamlogo": {},
+            "scene": {
+                "team1ShowYouTube": False,
+                "team2ShowYouTube": False,
+            },
+            "ticker": {
+                "tickerSpeed": 60,
+                "tickerGap": 16,
+            },
             "bracket": {
                 "connectorColor": None,
                 "activeColor": None,
-                "accentColor": None
+                # Cap on how much the bracket scales UP to fill the OBS frame.
+                # 1.0 = never enlarge past designed pixel sizes (small brackets
+                # render at native size, centered in the source). 1.5 lets
+                # small brackets grow a bit. >2.0 = "always fill the frame."
+                "maxScale": 1.0,
             }
         },
         "lang": "en-US"
@@ -246,6 +248,30 @@ class Settings:
                 cls.settings["server"]["allow_lan"] = True
         cls.settings.get("server", {}).pop("host", None)
         if "host" in loaded_server:
+            await cls.Save()
+
+        # One-time overlay schema migration to v2: keys that were previously
+        # duplicated as per-layout overrides (showCaptains, showLogo, etc.)
+        # have been promoted to globals. Strip stale per-layout copies so the
+        # global value is the single source of truth. Layout-specific fields
+        # (showElo, statValueColor, etc.) are preserved.
+        overlays = cls.settings.get("overlays", {})
+        if overlays.get("schema_version", 1) < 2:
+            promoted_to_global = {
+                "showCaptains", "showLogo", "showShadow", "showBackdropBlur",
+                "finalBadgeColor", "accentColor", "textColor", "cardBg",
+                "borderColor", "borderRadius", "borderWidth",
+                "cardShadowBlur", "textShadowBlur",
+            }
+            for layout_type, layout_dict in list(overlays.items()):
+                if layout_type in ("global", "presets", "schema_version"):
+                    continue
+                if not isinstance(layout_dict, dict):
+                    continue
+                for key in list(layout_dict.keys()):
+                    if key in promoted_to_global:
+                        layout_dict.pop(key, None)
+            overlays["schema_version"] = 2
             await cls.Save()
 
     @classmethod

@@ -60,6 +60,12 @@ _DISPLAY_NAMES = {
     "teamlogo": "Team Logo",
 }
 
+# Friendlier display names keyed by "{group}/{stem}" for the catch-all branch
+# (single-variant standalone layouts that aren't size or team variants).
+_STANDALONE_DISPLAY_NAMES = {
+    "rotator/ticker": "Results Ticker",
+}
+
 
 def _derive_type(stem: str, group: str = "") -> str:
     """Derive a layout type from the filename stem and group folder.
@@ -136,9 +142,10 @@ async def list_layouts(request: Request):
                         entry["supportedSettings"] = supported
                     layouts.append(entry)
             else:
+                display = _STANDALONE_DISPLAY_NAMES.get(f"{group}/{f.stem}", f.stem)
                 entry = {
                     "group": group,
-                    "name": f.stem,
+                    "name": display,
                     "type": layout_type,
                     "url": base_url,
                 }

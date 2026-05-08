@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="overlay-settings" content="accentColor, cardBg, textColor, borderRadius, borderColor, borderWidth, fontFamily, cardShadow, textShadow, showBackdropBlur, showShadow, showCaptains, showLogo, finalBadgeColor, tickerSpeed, tickerGap" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --accent: #f59e0b;
+      --accent-rgb: 245, 158, 11;
+      --gap: 16px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      overflow: hidden;
+      width: 1920px;
+      height: 80px;
+      background: transparent;
+      font-family: var(--font-family, 'Inter', sans-serif);
+      color: var(--text-primary, #fff);
+      text-shadow: var(--text-shadow, none);
+    }
+
+    #overlay {
+      width: 1920px;
+      height: 80px;
+      position: relative;
+    }
+
+    /* Card shell — the visible ticker bar */
+    #bar {
+      position: absolute;
+      inset: 0;
+      background: var(--card-bg, rgba(15, 15, 25, 0.88));
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: var(--border-width, 1px) solid var(--border-color, rgba(255, 255, 255, 0.08));
+      border-radius: var(--border-radius, 12px);
+      filter: var(--card-shadow-filter, none);
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+    }
+
+    #bar.hidden { display: none; }
+
+    /* Optional left-pin "RESULTS" badge — fully solid, no opacity bleed */
+    .ticker-badge {
+      flex-shrink: 0;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 22px;
+      background: var(--accent);
+      border-right: 1px solid rgba(0, 0, 0, 0.25);
+      z-index: 4;
+      /* Stay opaque even when the bar's backdrop-filter would otherwise let
+         the OBS source bleed through (backdrop-filter is composited under
+         children, but explicit alpha=1 background guarantees opacity). */
+      opacity: 1;
+    }
+    .ticker-badge img {
+      height: 32px;
+      width: auto;
+      object-fit: contain;
+    }
+    .ticker-badge .badge-label {
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 1.8px;
+      color: #fff;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    }
+
+    /* Edge fade so cards seem to dissolve in/out on the right.
+       The left edge already has the solid Results badge, so no left fade. */
+    .fade-mask {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 60px;
+      pointer-events: none;
+      z-index: 3;
+    }
+    .fade-mask.right {
+      right: 0;
+      background: linear-gradient(270deg,
+        var(--card-bg, rgba(15,15,25,0.88)) 0%,
+        rgba(15,15,25,0) 100%);
+    }
+
+    /* Track holds two copies of the cards row for seamless looping */
+    #track {
+      flex: 1;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      will-change: transform;
+    }
+
+    .row {
+      display: flex;
+      align-items: center;
+      gap: var(--gap);
+      padding: 0 calc(var(--gap) / 2);
+      flex-shrink: 0;
+    }
+
+    /* Individual game card — two rows: main matchup + meta line beneath */
+    .game {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      justify-content: center;
+      gap: 1px;
+      padding: 4px 14px 5px;
+      height: 64px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 10px;
+      flex-shrink: 0;
+      min-width: 240px;
+      transition: background 0.2s ease, border-color 0.2s ease;
+    }
+
+    /* Main row: away captain + name + score + name + home captain.
+       Negative top margin pulls the matchup up a hair so the meta line
+       below feels attached, not crowded. */
+    .game-main {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex: 1;
+      min-height: 0;
+      margin-top: -1px;
+    }
+
+    .game-side {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .game-side .captain {
+      width: 28px;
+      height: 28px;
+      object-fit: contain;
+      flex-shrink: 0;
+    }
+
+    .game-side .name {
+      font-size: 14px;
+      font-weight: 700;
+      white-space: nowrap;
+      max-width: 110px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .game-side.right { flex-direction: row-reverse; }
+
+    .vs {
+      font-size: 9px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: rgba(255, 255, 255, 0.4);
+    }
+
+    .scores {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      background: rgba(0, 0, 0, 0.35);
+      border-radius: 6px;
+    }
+    .scores .num {
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--accent);
+      min-width: 18px;
+      text-align: center;
+      line-height: 1;
+    }
+    .scores .num.loser {
+      color: rgba(255, 255, 255, 0.5);
+    }
+    .scores .dash {
+      font-size: 14px;
+      color: rgba(255, 255, 255, 0.3);
+      font-weight: 300;
+    }
+
+    /* Meta sub-line: stadium · date, sits beneath the matchup row */
+    .game-meta {
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.7px;
+      color: rgba(255, 255, 255, 0.5);
+      text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      line-height: 1.2;
+      flex-shrink: 0;
+    }
+    .game-meta .meta-sep {
+      margin: 0 5px;
+      opacity: 0.5;
+    }
+
+    .empty-msg {
+      flex: 1;
+      text-align: center;
+      font-size: 13px;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.45);
+      padding: 0 16px;
+    }
+  </style>
+</head>
+<body>
+  <div id="overlay">
+    <div id="bar" class="hidden">
+      <div class="ticker-badge" id="badge">
+        <span class="badge-label">Results</span>
+      </div>
+      <div id="track"></div>
+      <div class="fade-mask right"></div>
+    </div>
+  </div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="/layout/lib/overlay-base.js"></script>
+  <script>
+    /* ── Config from URL params ── */
+    const params = new URLSearchParams(window.location.search);
+    const SB = parseInt(params.get('scoreboard')) || 1;
+
+    const { deepGet, charImg, applyDesignSettings, brandingLogoUrl, BASE_URL, state, settings } = OverlayBase;
+
+    // Reference dimensions for the iframe preview detector
+    document.body.dataset.refW = 1920;
+    document.body.dataset.refH = 80;
+
+    function autoScale() {
+      const overlay = document.getElementById('overlay');
+      const refW = 1920, refH = 80;
+      // In preview mode, the parent ScaledIframe owns scaling — keep native size.
+      if (OverlayBase.PREVIEW_MODE) {
+        document.body.style.width = refW + 'px';
+        document.body.style.height = refH + 'px';
+        overlay.style.transform = '';
+        return;
+      }
+      const needsScale = Math.abs(window.innerWidth - refW) > 2 || Math.abs(window.innerHeight - refH) > 2;
+      if (needsScale) {
+        const scale = Math.min(window.innerWidth / refW, window.innerHeight / refH);
+        document.body.style.width = window.innerWidth + 'px';
+        document.body.style.height = window.innerHeight + 'px';
+        overlay.style.transform = `scale(${scale})`;
+        overlay.style.transformOrigin = 'top left';
+      } else {
+        document.body.style.width = refW + 'px';
+        document.body.style.height = refH + 'px';
+        overlay.style.transform = '';
+      }
+    }
+    window.addEventListener('resize', autoScale);
+    autoScale();
+
+    /* ── Settings getters ──
+       Promoted-to-global keys read via OverlayBase.readSetting which respects
+       both the override chain and the ?preview_globals_only=1 preview flag. */
+    const readToggle = (k, d) => OverlayBase.readSetting('ticker', k, d) !== false;
+    function showCaptains()     { return readToggle('showCaptains',     true); }
+    function showLogo()         { return readToggle('showLogo',         true); }
+    function showBackdropBlur() { return readToggle('showBackdropBlur', true); }
+    function tickerSpeedPxPerSec() {
+      // Pixels per second of horizontal scroll; tunable in settings.
+      const v = parseFloat(deepGet(settings, 'overlays.ticker.tickerSpeed', 60));
+      return Number.isFinite(v) && v > 0 ? v : 60;
+    }
+    function tickerGap() {
+      const v = parseInt(deepGet(settings, 'overlays.ticker.tickerGap', 16));
+      return Number.isFinite(v) && v >= 0 ? v : 16;
+    }
+
+    /* ── Game card builder ── */
+    function buildGame(game) {
+      const away = game.away_user || game.away_player || '';
+      const home = game.home_user || game.home_player || '';
+      const aScore = game.away_score;
+      const hScore = game.home_score;
+      const aCap = game.away_captain || game.away_captain_name || '';
+      const hCap = game.home_captain || game.home_captain_name || '';
+      const completed = game.game_completed === true;
+      const stadium = game.stadium || '';
+      const dateRaw = game.date_time_end || '';
+
+      // Format date as e.g. "Mar 14" — keep it tight so the meta line fits.
+      // Catch invalid timestamps so a bad row doesn't break the marquee.
+      let dateStr = '';
+      if (dateRaw) {
+        try {
+          const d = new Date(dateRaw);
+          if (!isNaN(d.getTime())) {
+            dateStr = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+          }
+        } catch (e) { /* ignore */ }
+      }
+
+      const showCap = showCaptains();
+      const aWin = completed && aScore != null && hScore != null && aScore > hScore;
+      const hWin = completed && aScore != null && hScore != null && hScore > aScore;
+
+      let html = '<div class="game">';
+
+      // ── Main row: matchup ──
+      html += '<div class="game-main">';
+
+      html += '<div class="game-side">';
+      if (showCap && aCap) html += charImg(aCap, 'captain');
+      html += `<span class="name">${away || '?'}</span>`;
+      html += '</div>';
+
+      if (completed && aScore != null && hScore != null) {
+        html += '<div class="scores">';
+        html += `<span class="num${aWin ? '' : ' loser'}">${aScore}</span>`;
+        html += '<span class="dash">&ndash;</span>';
+        html += `<span class="num${hWin ? '' : ' loser'}">${hScore}</span>`;
+        html += '</div>';
+      } else {
+        html += '<span class="vs">vs</span>';
+      }
+
+      html += '<div class="game-side right">';
+      if (showCap && hCap) html += charImg(hCap, 'captain');
+      html += `<span class="name">${home || '?'}</span>`;
+      html += '</div>';
+
+      html += '</div>';  // /.game-main
+
+      // ── Meta row: stadium · date (omit row entirely if both empty) ──
+      if (stadium || dateStr) {
+        html += '<div class="game-meta">';
+        if (stadium && dateStr) {
+          html += `<span>${stadium}</span><span class="meta-sep">&middot;</span><span>${dateStr}</span>`;
+        } else {
+          html += `<span>${stadium || dateStr}</span>`;
+        }
+        html += '</div>';
+      }
+
+      html += '</div>';  // /.game
+      return html;
+    }
+
+    /* ── Marquee scroll loop (rAF-driven, frame-rate independent) ── */
+    let scrollX = 0;
+    let lastTs = null;
+    let rowWidth = 0;        // width of ONE row (we render two for seamless wrap)
+    let rafId = null;
+
+    function step(ts) {
+      if (lastTs == null) lastTs = ts;
+      const dt = (ts - lastTs) / 1000;
+      lastTs = ts;
+      if (rowWidth > 0) {
+        scrollX -= tickerSpeedPxPerSec() * dt;
+        // Wrap at -rowWidth so the second copy slides in seamlessly.
+        if (scrollX <= -rowWidth) scrollX += rowWidth;
+        const track = document.getElementById('track');
+        if (track) track.style.transform = `translateX(${scrollX}px)`;
+      }
+      rafId = requestAnimationFrame(step);
+    }
+
+    function ensureLoop() {
+      if (rafId == null) rafId = requestAnimationFrame(step);
+    }
+
+    /* ── Render ── */
+    function render() {
+      applyDesignSettings('ticker');
+
+      const bar = document.getElementById('bar');
+      const track = document.getElementById('track');
+
+      const cached = deepGet(state, `scoreboards.rotation.${SB}.cached_games`, []);
+      const gameIds = deepGet(state, `scoreboards.rotation.${SB}.game_ids`, []);
+
+      // Backdrop blur toggle
+      if (!showBackdropBlur()) {
+        bar.style.backdropFilter = 'none';
+        bar.style.webkitBackdropFilter = 'none';
+      } else {
+        bar.style.backdropFilter = '';
+        bar.style.webkitBackdropFilter = '';
+      }
+
+      document.documentElement.style.setProperty('--gap', tickerGap() + 'px');
+
+      // Index cached games by id and walk game_ids to preserve user order.
+      // Ongoing-pool ids that aren't in cache are skipped (the cache only
+      // persists completed-game dicts; ongoing entries are live-resolved
+      // by the rotator and don't have a snapshot here).
+      const byId = {};
+      for (const g of cached) {
+        if (g && g.game_id != null) byId[g.game_id] = g;
+      }
+      const ordered = [];
+      const order = (gameIds && gameIds.length) ? gameIds : cached.map(g => g?.game_id);
+      for (const id of order) {
+        if (byId[id]) ordered.push({ game: byId[id], id });
+      }
+
+      if (!ordered.length) {
+        bar.classList.add('hidden');
+        return;
+      }
+      bar.classList.remove('hidden');
+
+      // Build one row's HTML, then duplicate it for the seamless loop.
+      let rowHtml = '<div class="row">';
+      for (const { game } of ordered) {
+        rowHtml += buildGame(game);
+      }
+      rowHtml += '</div>';
+      track.innerHTML = rowHtml + rowHtml;
+
+      // Measure the first row so we know where to wrap the marquee.
+      // requestAnimationFrame defers until layout is ready.
+      requestAnimationFrame(() => {
+        const firstRow = track.querySelector('.row');
+        if (firstRow) {
+          rowWidth = firstRow.getBoundingClientRect().width + tickerGap();
+          // Reset scroll if the new content is shorter than current offset.
+          if (scrollX <= -rowWidth) scrollX = 0;
+        }
+        ensureLoop();
+      });
+    }
+
+    /* ── Init via OverlayBase ──
+       In preview mode, prime `state` with the static sample JSON BEFORE init
+       runs and tell init to skip its state fetches/socket subscriptions. This
+       avoids a race where the server state would otherwise wipe our sample
+       data once the SocketIO `v1.state.get` callback fires. */
+    async function boot() {
+      if (OverlayBase.PREVIEW_MODE) {
+        try {
+          const resp = await fetch(`${BASE_URL}/layout/preview/ticker_sample.json`);
+          const games = (resp.ok ? await resp.json() : []) || [];
+          const trimmed = games.slice(0, 10);
+          OverlayBase.deepSet(state, `scoreboards.rotation.${SB}.cached_games`, trimmed);
+          OverlayBase.deepSet(state, `scoreboards.rotation.${SB}.game_ids`,
+            trimmed.map(g => g?.game_id).filter(Boolean));
+        } catch { /* ignore — render will show empty bar */ }
+      }
+      OverlayBase.init({
+        render,
+        shouldRender: (key) => key.startsWith(`scoreboards.rotation.${SB}.`),
+        shouldRenderSettings: (key) => key.startsWith('overlays.'),
+        fetchSettings: true,
+        skipState: OverlayBase.PREVIEW_MODE,
+      });
+    }
+    boot();
+  </script>
+</body>
+</html>
