@@ -205,6 +205,7 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, sourc
             setItem(`${base}.player.${t}.rio_captainIndex`, -1);
             for (let i = 0; i < 9; i++) {
                 setItem(`${base}.player.${t}.character.${i}.name`, '');
+                setItem(`${base}.player.${t}.character.${i}.is_starred`, false);
             }
         }
     }, [base, setItem]);

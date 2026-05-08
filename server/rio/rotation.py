@@ -12,6 +12,24 @@ from server.rio import stats_api
 from server.rio.game_pool import _sanitize_row
 from server.rio.stats_tracker import StatsTracker
 from server.settings import Settings
+from server.state import State
+
+
+async def _mirror_to_state(sb_id: int, **fields):
+    """Mirror rotation fields into State so overlays can subscribe to
+    `scoreboards.rotation.{sb_id}.*` like any other state-backed data.
+
+    Settings remains the persistence layer (used by resume-on-startup);
+    State is just a live broadcast view for overlays + the React store.
+    Pass only the fields that actually changed.
+    """
+    if not fields:
+        return
+    entries = [
+        (f"scoreboards.rotation.{sb_id}.{k}", v) for k, v in fields.items()
+    ]
+    await State.SetBatch(entries)
+    await State.Save()
 
 
 class RotationManager:
@@ -136,6 +154,14 @@ class RotationManager:
         current.update(config)
         await Settings.Set(f"scoreboards.rotation.{sb_id}", current)
 
+        # Mirror only the fields the overlay needs into State. Filtering to
+        # the touched keys keeps the broadcast small for partial updates
+        # (e.g. interval-only edits don't re-send cached_games).
+        mirror_keys = {"cached_games", "game_ids", "current_index", "enabled"}
+        to_mirror = {k: current[k] for k in mirror_keys if k in config and k in current}
+        if to_mirror:
+            await _mirror_to_state(sb_id, **to_mirror)
+
         # If rotation is running, restart it with new config
         if sb_id in cls._rotations:
             await cls.stop_rotation(sb_id)
@@ -183,6 +209,14 @@ class RotationManager:
         cls._rotations[sb_id] = state
 
         await Settings.Set(f"scoreboards.rotation.{sb_id}.enabled", True)
+        # Push the live snapshot the overlay needs in one batch.
+        await _mirror_to_state(
+            sb_id,
+            enabled=True,
+            game_ids=state.game_ids,
+            current_index=state.current_index,
+            cached_games=cached_games,
+        )
         await cls._emit_status(sb_id)
 
         # Stats are intentionally not collected for rotator scoreboards:
@@ -205,6 +239,7 @@ class RotationManager:
                 pass
 
         await Settings.Set(f"scoreboards.rotation.{sb_id}.enabled", False)
+        await _mirror_to_state(sb_id, enabled=False)
         await cls._emit_status(sb_id)
         logger.info("[RotationManager] Stopped rotation for scoreboard {}", sb_id)
 
@@ -356,14 +391,19 @@ class RotationState:
 
             if additions:
                 self.game_ids = [*self.game_ids, *additions]
+                cached = list(self.completed_games.values())
                 await Settings.Set(
                     f"scoreboards.rotation.{self.sb_id}.game_ids", self.game_ids,
                 )
                 # Persist the augmented completed-games cache so resume sees
                 # the additions too.
                 await Settings.Set(
-                    f"scoreboards.rotation.{self.sb_id}.cached_games",
-                    list(self.completed_games.values()),
+                    f"scoreboards.rotation.{self.sb_id}.cached_games", cached,
+                )
+                await _mirror_to_state(
+                    self.sb_id,
+                    game_ids=self.game_ids,
+                    cached_games=cached,
                 )
         except Exception:
             logger.exception("[RotationState] _refresh_game_list failed for sb {}", self.sb_id)
@@ -375,6 +415,7 @@ class RotationState:
         self.current_index = (self.current_index + direction) % len(self.game_ids)
         await Settings.Set(f"scoreboards.rotation.{self.sb_id}.current_index",
                            self.current_index)
+        await _mirror_to_state(self.sb_id, current_index=self.current_index)
         await self._apply_current()
 
     async def _apply_current(self):
@@ -396,6 +437,7 @@ class RotationState:
                 self.sb_id, current_type,
             )
             await Settings.Set(f"scoreboards.rotation.{self.sb_id}.enabled", False)
+            await _mirror_to_state(self.sb_id, enabled=False)
             # Schedule cleanup outside this task — stop_rotation cancels
             # self.task, so calling it inline would cancel us mid-await.
             asyncio.create_task(RotationManager.stop_rotation(self.sb_id))

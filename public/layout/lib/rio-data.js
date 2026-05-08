@@ -29,10 +29,21 @@
     return `${OverlayBase.BASE_URL}/game_assets/msb/gameIcons/${file}`;
   }
 
+  function teamLogoUrl(teamName) {
+    if (!teamName) return '';
+    return `${OverlayBase.BASE_URL}/game_assets/msb/teamLogos/${encodeURIComponent(teamName)}.png`;
+  }
+
   // ── Number formatting ────────────────────────────────────────────────────
   function fmt3(v) { return Number(v).toFixed(3); }
   function fmt2(v) { return Number(v).toFixed(2); }
   function fmt1(v) { return Number(v).toFixed(1); }
+
+  // ── Source detection ─────────────────────────────────────────────────────
+  function isHudSource(sb) {
+    const type = deepGet(OverlayBase.settings, `scoreboards.sources.${sb}.type`, 'manual');
+    return type === 'hud';
+  }
 
   // ── Role detection ───────────────────────────────────────────────────────
   /** Which side is `team` on this half-inning? 'batting' or 'pitching'. */
@@ -88,11 +99,17 @@
       slots.push({ kind, name, imgUrl: charIconUrl(name), isStarred: !!char.is_starred });
     }
 
-    if (includeRole) {
-      const hasAnyChar = slots.some(s => s.name);
-      if (hasAnyChar) {
+    const hasAnyChar = slots.some(s => s.name);
+    if (hasAnyChar) {
+      if (includeRole) {
         const role = getTeamRole(state, sb, team);
         slots.push({ kind: 'role', role, imgUrl: roleIconUrl(role) });
+      }
+      if (opts.includeTeamLogo) {
+        const teamName = deepGet(player, 'msb_team') || '';
+        if (teamName) {
+          slots.push({ kind: 'teamLogo', imgUrl: teamLogoUrl(teamName) });
+        }
       }
     }
 
@@ -120,8 +137,15 @@
     const charName = role === 'batting'
       ? (deepGet(state, `score.${sb}.batter`) || '')
       : (deepGet(state, `score.${sb}.pitcher`) || '');
-    const charIndex = findCharIndex(state, sb, team, charName);
-    if (!charName || charIndex < 0) return null;
+    if (!charName) return null;
+
+    const rosterIdx = role === 'batting'
+      ? deepGet(state, `score.${sb}.batter_roster_index`)
+      : deepGet(state, `score.${sb}.pitcher_roster_index`);
+    const charIndex = (rosterIdx != null && rosterIdx >= 0)
+      ? rosterIdx
+      : findCharIndex(state, sb, team, charName);
+    if (charIndex < 0) return null;
 
     const statsObj = deepGet(state, `score.${sb}.stats.${team}.character.${charIndex}`);
     const b = statsObj?.batting ?? {};
@@ -135,7 +159,9 @@
         { label: 'SLG', value: fmt3(b.slg    ?? 0) },
         { label: 'SO%', value: fmt1(b.so_pct ?? 0) + '%' },
       ];
-      gameLine = statsObj?.current_game?.batting_line ?? '';
+      gameLine = isHudSource(sb)
+        ? (statsObj?.current_game?.batting_line ?? '')
+        : '';
     } else {
       stats = [
         { label: 'ERA', value: fmt2(p.era     ?? 0) },
@@ -143,8 +169,13 @@
         { label: 'K%',  value: fmt1(p.k_pct  ?? 0) + '%' },
         { label: 'AVG', value: fmt3(p.opp_avg ?? 0) },
       ];
-      gameLine = statsObj?.current_game?.pitching_line ?? '';
+      gameLine = isHudSource(sb)
+        ? (statsObj?.current_game?.pitching_line ?? '')
+        : '';
     }
+
+    const isHud = isHudSource(sb);
+    const bottomLabel = isHud && gameLine ? 'Game' : (isHud ? '' : 'Season Stats');
 
     return {
       charName,
@@ -153,13 +184,16 @@
       role,
       stats,
       gameLine,
+      bottomLabel,
     };
   }
 
   window.RioData = {
     charIconUrl,
     roleIconUrl,
+    teamLogoUrl,
     fmt1, fmt2, fmt3,
+    isHudSource,
     getTeamRole,
     findCharIndex,
     getRosterSlots,

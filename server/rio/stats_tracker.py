@@ -490,7 +490,8 @@ class StatsTracker:
                 hud_batting = hud_char.get("batting", _empty_batting())
                 hud_pitching = hud_char.get("pitching", _empty_pitching())
 
-                result[team_key]["characters"][char_name] = {
+                result[team_key]["characters"][i] = {
+                    "name": char_name,
                     "roster_index": i,
                     "batting": _merge_batting(api_batting, hud_batting),
                     "pitching": _merge_pitching(api_pitching, hud_pitching),

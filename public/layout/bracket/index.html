@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <meta name="overlay-settings" content="accentColor, cardBg, borderRadius, borderColor, borderWidth, fontFamily, connectorColor, activeColor" />
+  <meta name="overlay-settings" content="accentColor, cardBg, borderRadius, borderColor, borderWidth, fontFamily, connectorColor, activeColor, maxScale" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet" />
@@ -29,13 +29,30 @@
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
+    /* The bracket is intrinsically sized by its data (round count drives
+       width, round-1 match count drives height), so the body fills whatever
+       OBS browser source size the user picks and `#bracket-frame` centers a
+       scaled copy of `#bracket-container` inside it. autoScale() (below) caps
+       upscaling at `overlays.bracket.maxScale` so small brackets aren't blown
+       up to fill a huge source. */
+    html, body {
+      width: 100%;
+      height: 100%;
+    }
     body {
       overflow: hidden;
-      width: 1600px;
-      height: 900px;
       background: transparent;
       font-family: var(--font-family, 'Inter', sans-serif);
       color: var(--text-primary, #fff);
+    }
+
+    /* Centering frame — fills the body, centers the scaled bracket. */
+    #bracket-frame {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
     #bracket-container {
@@ -43,6 +60,15 @@
       flex-direction: column;
       gap: 24px;
       padding: 16px;
+      transform-origin: center center;
+      /* Keep the bracket sized to its content. Without this the parent flex
+         (#bracket-frame) shrinks the box to frame width while content
+         overflows; transform-origin center then sits at the BOX center, not
+         the CONTENT center, so scaling shifts content sideways. */
+      flex-shrink: 0;
+      flex-grow: 0;
+      width: max-content;
+      max-width: none;
     }
 
     /* ── Section headers ── */
@@ -113,6 +139,38 @@
     .set.active {
       border-color: rgba(59, 130, 246, 0.5);
       box-shadow: 0 0 8px rgba(59, 130, 246, 0.2);
+    }
+
+    /* ── Bye placeholder ──
+       Same outer dimensions as a real .set so the round 1 layout reads as a
+       full-bracket grid (e.g. 14-player single elim renders as a 16-slot
+       round 1 with two visible bye gaps). Visually muted so a bye doesn't
+       compete for attention with real matches. */
+    .set.bye {
+      border-color: transparent;
+      background: transparent;
+    }
+    .set.bye .bye-slot {
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text-dimmed);
+      font-style: italic;
+      justify-content: space-between;
+    }
+    .set.bye .bye-badge {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: var(--text-dimmed);
+      padding: 1px 6px;
+      border: 1px solid var(--text-dimmed);
+      border-radius: 3px;
+    }
+    .set.bye .bye-spacer {
+      background: transparent;
+      border-bottom: none;
+    }
+    .set.bye .slot-name.empty {
+      font-style: italic;
     }
 
     /* ── Player slot ── */
@@ -303,6 +361,7 @@
   </style>
 </head>
 <body>
+  <div id="bracket-frame">
   <div id="bracket-container">
     <div class="empty-state" id="empty-state">
       Load a bracket from the Bracket tab to display it here.
@@ -312,28 +371,49 @@
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <script src="/layout/lib/overlay-base.js"></script>
   <script>
-    const REF_W = 1600, REF_H = 900;
-    document.body.dataset.refW = REF_W;
-    document.body.dataset.refH = REF_H;
+    // Reference dims for the iframe-preview detector (Layouts tab's
+    // ScaledIframe). The bracket itself is fluid in OBS — body fills the
+    // browser source — but inside an iframe wrapper the parent needs SOME
+    // size to inflate the iframe element to. 1600x900 is a sensible "design
+    // canvas" big enough that the bracket renders at native pixel sizes,
+    // which the preview iframe then scales down to fit its tile.
+    document.body.dataset.refW = 1600;
+    document.body.dataset.refH = 900;
+
+    /* Content-sized scaling.
+       The bracket's natural pixel size is determined by its data, not a fixed
+       canvas. After every render we measure the bracket-container, compute
+       scale = min(frameW/contentW, frameH/contentH, maxScale), and apply it
+       via transform. The flex parent (#bracket-frame) handles centering.
+
+       maxScale (default 1.0) caps upscaling so a small bracket in a big OBS
+       source stays at designed pixel sizes, centered with empty space around
+       it, instead of being blown up to fill the frame. */
+    function getMaxScale() {
+      // In preview mode (Design tab iframe tiles), let the bracket scale up
+      // to fill the tile so small sample brackets are easy to inspect. The
+      // user-configurable maxScale only caps real OBS sources.
+      if (OverlayBase.PREVIEW_MODE) return Infinity;
+      const v = parseFloat(OverlayBase.deepGet(OverlayBase.settings, 'overlays.bracket.maxScale', 1.0));
+      return Number.isFinite(v) && v > 0 ? v : 1.0;
+    }
+
     function autoScale() {
       const el = document.getElementById('bracket-container');
-      const needsScale = Math.abs(window.innerWidth - REF_W) > 2 || Math.abs(window.innerHeight - REF_H) > 2;
-      if (needsScale) {
-        const scale = Math.min(window.innerWidth / REF_W, window.innerHeight / REF_H);
-        document.body.style.width = window.innerWidth + 'px';
-        document.body.style.height = window.innerHeight + 'px';
-        el.style.transform = `scale(${scale})`;
-        el.style.transformOrigin = 'top left';
-        el.style.width = REF_W + 'px';
-        el.style.height = REF_H + 'px';
-      } else {
-        document.body.style.width = REF_W + 'px';
-        document.body.style.height = REF_H + 'px';
-        el.style.transform = '';
-      }
+      if (!el) return;
+      // Measure unscaled content. Reset transform first so scrollWidth/Height
+      // reflect natural pixels, not the previously-scaled box.
+      el.style.transform = 'none';
+      const contentW = el.scrollWidth;
+      const contentH = el.scrollHeight;
+      const frameW = window.innerWidth;
+      const frameH = window.innerHeight;
+      if (contentW <= 0 || contentH <= 0 || frameW <= 0 || frameH <= 0) return;
+
+      const fit = Math.min(frameW / contentW, frameH / contentH);
+      const scale = Math.min(fit, getMaxScale());
+      el.style.transform = `scale(${scale})`;
     }
-    window.addEventListener('resize', autoScale);
-    autoScale();
 
     /* ─── Configuration ─── */
     const params = new URLSearchParams(window.location.search);
@@ -341,7 +421,120 @@
     const LOSERS_ONLY = params.get('losers_only') === 'true';
     const { deepGet, state, settings, applyDesignSettings } = OverlayBase;
 
+    /* ─── Helpers: infer connections + bye layout from entrant IDs ───
+       Many bracket providers (notably start.gg as we ingest it) don't include
+       an explicit `connections` map. The renderer's heuristic fallback uses
+       proportional mapping (set j of round N+1 fed by set floor(j*ratio) of
+       round N), which is wrong whenever a round contains byes — half the R2
+       entrants come from R1 winners but the other half came directly from
+       seeding. To draw connectors correctly we infer prereqs from entrant
+       IDs: for each R(N+1) set, find the R(N) set whose winner is one of its
+       entrants. The "missing" entrant slot is a bye recipient.
+
+       Also computes a slot-by-slot layout for round 1 that includes invisible
+       "bye placeholder" slots, so a 14-player single elim renders as if it
+       were a 16-player bracket with the two bye gaps visible at their
+       seeded positions. */
+    function getSetWinner(s) {
+      if (!s) return null;
+      if (s.score1 === 'W') return s.entrant1Id;
+      if (s.score2 === 'W') return s.entrant2Id;
+      return null;
+    }
+
+    function inferRoundLayouts(bracket) {
+      // Returns:
+      //   { connections: { destSetId: [prereqSetId, ...] },
+      //     roundLayouts: { 'winners-1': [{kind:'set', set} | {kind:'bye', id, entrantId, after}], ... } }
+      const out = { connections: {}, roundLayouts: {} };
+      const sections = ['winners', 'losers'];
+      for (const sec of sections) {
+        const rounds = sec === 'winners' ? (bracket.winnersRounds || {}) : (bracket.losersRounds || {});
+        const roundNums = Object.keys(rounds).map(Number).sort((a, b) => a - b);
+        if (roundNums.length === 0) continue;
+
+        // Build winner→sourceSetId map for each round.
+        const winnerOf = {}; // roundNum → { entrantId: sourceSetId }
+        for (const rn of roundNums) {
+          const sets = rounds[rn].sets || [];
+          const m = {};
+          for (const s of sets) {
+            const w = getSetWinner(s);
+            if (w != null) m[String(w)] = s.id;
+          }
+          winnerOf[rn] = m;
+        }
+
+        // Build connections by walking each non-first round and matching
+        // entrants back to the previous round's winners.
+        for (let i = 1; i < roundNums.length; i++) {
+          const prevWinners = winnerOf[roundNums[i - 1]] || {};
+          for (const s of (rounds[roundNums[i]].sets || [])) {
+            const prereqs = [];
+            for (const eid of [s.entrant1Id, s.entrant2Id]) {
+              if (eid != null && prevWinners[String(eid)] != null) {
+                prereqs.push(prevWinners[String(eid)]);
+              }
+            }
+            if (prereqs.length > 0) out.connections[s.id] = prereqs;
+          }
+        }
+
+        // Compute round-1 layout with bye placeholders.
+        // Each R2 set pairs two R1 slots in seeded order. For R2 set i, slot
+        // 2i is its top entrant's source, slot 2i+1 is its bottom entrant's
+        // source. If either entrant doesn't match an R1 winner, that slot is
+        // a bye placeholder.
+        if (roundNums.length >= 2) {
+          const r1Num = roundNums[0];
+          const r2Num = roundNums[1];
+          const r1Sets = rounds[r1Num].sets || [];
+          const r2Sets = rounds[r2Num].sets || [];
+          const r1Winners = winnerOf[r1Num] || {};
+          const usedR1 = new Set();
+          const layout = [];
+          for (let i = 0; i < r2Sets.length; i++) {
+            const r2 = r2Sets[i];
+            const prereqIds = [];
+            for (const eid of [r2.entrant1Id, r2.entrant2Id]) {
+              if (eid != null && r1Winners[String(eid)] != null) {
+                const srcId = r1Winners[String(eid)];
+                const srcSet = r1Sets.find(s => s.id === srcId);
+                layout.push({ kind: 'set', set: srcSet });
+                usedR1.add(srcId);
+                prereqIds.push(srcId);
+              } else {
+                const byeId = `bye-${sec}-${r2.id}-${eid ?? 'empty'}`;
+                layout.push({ kind: 'bye', id: byeId, entrantId: eid });
+                prereqIds.push(byeId);
+              }
+            }
+            // Replace the R2 set's connection list with the slot-aware
+            // prereqs (real R1 sets + bye placeholders) so
+            // positionRoundWithConnections centers R2 between its two slot
+            // anchors instead of just on the real R1 set.
+            if (prereqIds.length > 0) out.connections[r2.id] = prereqIds;
+          }
+          // Append any R1 sets that weren't matched to an R2 entrant
+          // (shouldn't happen for a well-formed bracket, but safer than
+          // dropping data on the floor).
+          for (const s of r1Sets) {
+            if (!usedR1.has(s.id)) layout.push({ kind: 'set', set: s });
+          }
+          out.roundLayouts[`${sec}-${r1Num}`] = layout;
+        }
+      }
+      return out;
+    }
+
     /* ─── Render ─── */
+    // Cached signature of the last rendered bracket. The start.gg/challonge
+    // poller can re-push identical bracket data multiple times in succession
+    // on initial load; without this guard the bracket DOM gets stripped and
+    // re-inserted on each push, restarting animations and producing a blank
+    // round-1 flash while staggered animation-delays catch up.
+    let lastBracketSig = null;
+
     function render() {
       applyDesignSettings('bracket');
 
@@ -359,12 +552,31 @@
 
       if (!bracket || !bracket.players || Object.keys(bracket.players).length === 0) {
         emptyState.classList.remove('hidden');
+        lastBracketSig = null;
         return;
       }
       emptyState.classList.add('hidden');
 
+      // Skip the expensive DOM rebuild if the bracket data hasn't actually
+      // changed. Settings-only re-renders (which only mutate CSS variables)
+      // still flow through the early lines above before this guard returns.
+      const sig = JSON.stringify(bracket);
+      if (sig === lastBracketSig) return;
+      lastBracketSig = sig;
+
       const { type, phaseName, winnersRounds, losersRounds, grandFinals, players } = bracket;
       const isDoubleElim = type === 'DOUBLE_ELIMINATION';
+
+      // If the source bracket data lacks explicit prereq connections (start.gg
+      // brackets don't include them today), infer them from entrant IDs and
+      // build a round-1 layout that surfaces byes as visible empty slots.
+      const inferred = inferRoundLayouts(bracket);
+      const hadConnections = bracket.connections && Object.keys(bracket.connections).length > 0;
+      const connections = hadConnections ? bracket.connections : inferred.connections;
+      // Mutate so alignBracketRounds + drawConnectors (which read
+      // state.bracket.connections directly) pick this up too.
+      bracket.connections = connections;
+      const roundLayouts = inferred.roundLayouts;
 
       let html = '';
 
@@ -387,7 +599,8 @@
           winnersRounds,
           players,
           'winners',
-          isRoundRobin
+          isRoundRobin,
+          roundLayouts
         );
       }
 
@@ -398,7 +611,7 @@
 
       // Losers bracket
       if (!WINNERS_ONLY && isDoubleElim && losersRounds && Object.keys(losersRounds).length > 0) {
-        html += renderSection('Losers Bracket', losersRounds, players, 'losers', false);
+        html += renderSection('Losers Bracket', losersRounds, players, 'losers', false, roundLayouts);
       }
 
       // Only replace inner content (keep empty-state element)
@@ -408,11 +621,23 @@
 
       container.insertAdjacentHTML('beforeend', html);
 
-      // Align rounds into pyramid, then animate in
+      // Order matters here:
+      //   1. Reset container transform to none so getBoundingClientRect calls
+      //      below return native (unscaled) viewport coordinates. Otherwise
+      //      pyramid alignment and connector paths get computed in already-
+      //      scaled space and come out wrong on every render after the first.
+      //   2. alignBracketRounds + drawConnectors at native scale.
+      //   3. autoScale measures + applies the fit-to-frame scale.
+      //   4. animateIn starts CSS animations *inside* the now-scaled
+      //      container — running them before autoScale would cause a visible
+      //      snap when the scale lands mid-animation.
       requestAnimationFrame(() => {
+        const container = document.getElementById('bracket-container');
+        if (container) container.style.transform = 'none';
         alignBracketRounds();
-        animateIn();
         drawConnectors();
+        autoScale();
+        animateIn();
       });
     }
 
@@ -573,13 +798,17 @@
         return;
       }
 
-      // Apply margins, preventing overlap
+      // Apply margins, preventing overlap. Also zero margin-bottom — the
+      // .set stylesheet rule applies `margin: var(--set-gap) 0`, and with
+      // flex `gap: 0` that 6px bottom margin would otherwise stack between
+      // siblings and push each subsequent set 6px below its desired center.
       let lastBottom = 0;
       for (let j = 0; j < alignSets.length; j++) {
         const setHeight = alignSets[j].getBoundingClientRect().height;
         const desiredTop = desiredCenters[j] - setHeight / 2 - containerTop;
         const marginTop = Math.max(0, desiredTop - lastBottom);
         alignSets[j].style.marginTop = `${marginTop}px`;
+        alignSets[j].style.marginBottom = '0';
         lastBottom = desiredTop + setHeight;
       }
     }
@@ -644,19 +873,32 @@
         }
       }
 
-      // Apply margins, preventing overlap
+      // Apply margins, preventing overlap. See sibling function for why
+      // margin-bottom must be explicitly zeroed.
       let lastBottom = 0;
       for (let j = 0; j < alignSets.length; j++) {
         const setHeight = alignSets[j].getBoundingClientRect().height;
         const desiredTop = desiredCenters[j] - setHeight / 2 - containerTop;
         const marginTop = Math.max(0, desiredTop - lastBottom);
         alignSets[j].style.marginTop = `${marginTop}px`;
+        alignSets[j].style.marginBottom = '0';
         lastBottom = desiredTop + setHeight;
       }
     }
 
     /* ─── Staggered entrance animation ─── */
     function animateIn() {
+      // In preview mode (Design tab iframes), render fully visible at once.
+      // Animations are noisy when the user is tweaking design controls and
+      // expecting an instant before/after view.
+      if (OverlayBase.PREVIEW_MODE) {
+        for (const el of document.querySelectorAll('.phase-name, .section-header, .round, .grand-finals')) {
+          el.style.animation = 'none';
+          el.style.opacity = '1';
+          el.style.transform = 'none';
+        }
+        return;
+      }
       let delay = 0;
       const ROUND_STAGGER = 150; // ms between each round
       const HEADER_DURATION = 200;
@@ -699,7 +941,7 @@
     }
 
     /* ─── Render a bracket section (winners or losers) ─── */
-    function renderSection(title, rounds, players, sectionClass, isRoundRobin = false) {
+    function renderSection(title, rounds, players, sectionClass, isRoundRobin = false, roundLayouts = null) {
       const roundNums = Object.keys(rounds).map(Number).sort((a, b) => a - b);
       if (roundNums.length === 0) return '';
 
@@ -713,13 +955,22 @@
       for (const roundNum of roundNums) {
         const round = rounds[roundNum];
         const sets = round.sets || [];
+        const layout = roundLayouts ? roundLayouts[`${sectionClass}-${roundNum}`] : null;
 
         html += `<div class="round" data-round="${roundNum}" data-section="${sectionClass}">`;
         html += `<div class="round-label">${esc(round.name || `Round ${roundNum}`)}</div>`;
         html += `<div class="round-sets">`;
 
-        for (const set of sets) {
-          html += renderSet(set, players);
+        if (layout && layout.length > 0) {
+          // Render in slot order with bye placeholders interleaved.
+          for (const slot of layout) {
+            if (slot.kind === 'set') html += renderSet(slot.set, players);
+            else html += renderByePlaceholder(slot.id, slot.entrantId, players);
+          }
+        } else {
+          for (const set of sets) {
+            html += renderSet(set, players);
+          }
         }
 
         html += `</div></div>`;
@@ -747,6 +998,25 @@
     }
 
     /* ─── Render a single set ─── */
+    /* A blank set-shaped placeholder reserving a slot for a bye recipient.
+       Shows just the seeded player's name + "BYE" so the gap reads as
+       intentional rather than a layout glitch, while keeping the same
+       outer dimensions as a real .set so positionRoundWithConnections
+       can use it as a prereq anchor. */
+    function renderByePlaceholder(id, entrantId, players) {
+      const p = entrantId != null ? players[entrantId] : null;
+      const name = p ? esc(p.name) : '';
+      return (
+        `<div class="set bye" data-set-id="${id}">` +
+        `  <div class="slot bye-slot">` +
+        `    <span class="slot-name${name ? '' : ' empty'}">${name || ''}</span>` +
+        `    <span class="bye-badge">BYE</span>` +
+        `  </div>` +
+        `  <div class="slot bye-spacer"></div>` +
+        `</div>`
+      );
+    }
+
     function renderSet(set, players) {
       const isActive = set.state === 'active' || set.state === 'called';
       const isCompleted = set.completed;
@@ -896,7 +1166,11 @@
       path.style.setProperty('--line-length', len);
       path.style.setProperty('--line-delay', `${lineStart}ms`);
       path.style.setProperty('--line-duration', `${lineDuration}ms`);
-      path.classList.add('animate-line');
+      // Skip the dashoffset draw-in animation in preview mode so connectors
+      // appear immediately alongside the bracket.
+      if (!OverlayBase.PREVIEW_MODE) {
+        path.classList.add('animate-line');
+      }
     }
 
     /* ─── Helpers ─── */
@@ -907,16 +1181,45 @@
       return div.innerHTML;
     }
 
-    /* ─── Init ─── */
-    OverlayBase.init({
-      render,
-      fetchSettings: true,
-      shouldRender: (key) => key === 'bracket' || key.startsWith('bracket.'),
-      shouldRenderSettings: (key) => key.startsWith('overlays.bracket'),
-    });
+    /* ─── Init ───
+       In preview mode, prime `state.bracket` from the sample JSON BEFORE init
+       runs and tell init to skip state — otherwise the SocketIO v1.state.get
+       wipe would race over our sample data. */
+    async function boot() {
+      if (OverlayBase.PREVIEW_MODE) {
+        try {
+          const resp = await fetch(`${OverlayBase.BASE_URL}/layout/preview/bracket_sample.json`);
+          const data = resp.ok ? await resp.json() : null;
+          if (data) OverlayBase.deepSet(OverlayBase.state, 'bracket', data);
+        } catch { /* ignore — render will show empty bracket */ }
+      }
+      OverlayBase.init({
+        render,
+        fetchSettings: true,
+        shouldRender: (key) => key === 'bracket' || key.startsWith('bracket.'),
+        // Re-render on global design changes (color, font, shadows, etc.)
+        // and bracket-specific overrides (connectorColor, activeColor, maxScale).
+        // NOT on unrelated scoreboard/ticker setting changes — those used to
+        // strip/re-insert the bracket DOM and restart animations needlessly.
+        shouldRenderSettings: (key) => key.startsWith('overlays.global.') || key.startsWith('overlays.bracket.'),
+        skipState: OverlayBase.PREVIEW_MODE,
+      });
+    }
+    boot();
 
-    // Redraw connectors on resize
-    window.addEventListener('resize', () => requestAnimationFrame(drawConnectors));
+    // Window resize: rescale only. drawConnectors is intentionally NOT
+    // re-called here — its math reads getBoundingClientRect at the current
+    // (scaled) layout, so re-running while a transform is applied would
+    // produce wrong path coords. Connectors render correctly through the
+    // parent transform, so the existing SVG just scales with everything else.
+    window.addEventListener('resize', () => requestAnimationFrame(autoScale));
+
+    // Re-fit once everything has settled (fonts loaded, async layout flushed).
+    // A single settle-pass on document.fonts.ready instead of a ResizeObserver,
+    // which fired mid-animation and produced visible scale shifts on completion.
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(() => requestAnimationFrame(autoScale));
+    }
   </script>
 </body>
 </html>

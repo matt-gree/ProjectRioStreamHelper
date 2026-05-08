@@ -139,6 +139,13 @@
     document.body.dataset.refH = REF_H;
     function autoScale() {
       const el = document.getElementById('scale-wrapper');
+      // In preview mode, the parent ScaledIframe owns scaling — keep native size.
+      if (OverlayBase.PREVIEW_MODE) {
+        document.body.style.width = REF_W + 'px';
+        document.body.style.height = REF_H + 'px';
+        el.style.transform = '';
+        return;
+      }
       const needsScale = Math.abs(window.innerWidth - REF_W) > 2 || Math.abs(window.innerHeight - REF_H) > 2;
       if (needsScale) {
         const scale = Math.min(window.innerWidth / REF_W, window.innerHeight / REF_H);
@@ -215,7 +222,9 @@
       html += `<div class="stats-content"><div class="stats-row">${statsHtml}</div></div>`;
       html += `</div>`;
       if (info.gameLine) {
-        html += `<div class="batting-line"><span>Game: </span>${info.gameLine}</div>`;
+        html += `<div class="batting-line"><span>${info.bottomLabel}: </span>${info.gameLine}</div>`;
+      } else if (info.bottomLabel) {
+        html += `<div class="batting-line">${info.bottomLabel}</div>`;
       }
       html += `</div>`;
       return html;
@@ -264,11 +273,24 @@
       }
     }
 
-    OverlayBase.init({
-      render,
-      fetchSettings: true,
-      shouldRenderSettings: (key) => key.startsWith('overlays.'),
-    });
+    /* In preview mode, prime `state.score.${SCOREBOARD}` from the snapshot
+       and skip the live state fetches/socket so server state can't race in. */
+    async function boot() {
+      if (OverlayBase.PREVIEW_MODE) {
+        try {
+          const resp = await fetch(`${OverlayBase.BASE_URL}/layout/preview/scoreboard_sample.json`);
+          const data = resp.ok ? await resp.json() : null;
+          if (data) OverlayBase.deepSet(state, `score.${SCOREBOARD}`, data);
+        } catch { /* ignore */ }
+      }
+      OverlayBase.init({
+        render,
+        fetchSettings: true,
+        shouldRenderSettings: (key) => key.startsWith('overlays.') || key.startsWith('scoreboards.sources.'),
+        skipState: OverlayBase.PREVIEW_MODE,
+      });
+    }
+    boot();
   </script>
 </body>
 </html>

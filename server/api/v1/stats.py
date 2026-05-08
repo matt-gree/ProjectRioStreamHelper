@@ -37,14 +37,12 @@ async def rio_stats_character(
     team_data = all_stats.get(team_key, {})
     characters = team_data.get("characters", {})
 
-    for char_name, char_data in characters.items():
-        if char_data.get("roster_index") == roster_index:
-            return ORJSONResponse({
-                "name": char_name,
-                "team": team,
-                "roster_index": roster_index,
-                **char_data,
-            })
+    char_data = characters.get(roster_index)
+    if char_data:
+        return ORJSONResponse({
+            "team": team,
+            **char_data,
+        })
 
     raise HTTPException(status_code=404, detail=f"No character at team {team}, roster index {roster_index}")
 

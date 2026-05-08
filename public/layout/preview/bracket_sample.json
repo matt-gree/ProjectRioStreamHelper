@@ -1,0 +1,173 @@
+{
+  "type": "SINGLE_ELIMINATION",
+  "phaseName": "Top Cut",
+  "phaseGroupId": 2900523,
+  "winnersRounds": {
+    "2": {
+      "name": "Quarter-Final",
+      "sets": [
+        {
+          "id": 90590777,
+          "identifier": "G",
+          "entrant1Id": "19954440",
+          "entrant2Id": "19957680",
+          "score1": "L",
+          "score2": "W",
+          "state": "completed",
+          "completed": true,
+          "roundName": "Quarter-Final"
+        },
+        {
+          "id": 90590778,
+          "identifier": "H",
+          "entrant1Id": "19973024",
+          "entrant2Id": "18809652",
+          "score1": "W",
+          "score2": "L",
+          "state": "completed",
+          "completed": true,
+          "roundName": "Quarter-Final"
+        },
+        {
+          "id": 90590779,
+          "identifier": "I",
+          "entrant1Id": "18581050",
+          "entrant2Id": "20235738",
+          "score1": "W",
+          "score2": "L",
+          "state": "completed",
+          "completed": true,
+          "roundName": "Quarter-Final"
+        },
+        {
+          "id": 90590780,
+          "identifier": "J",
+          "entrant1Id": "19967424",
+          "entrant2Id": "19037324",
+          "score1": "L",
+          "score2": "W",
+          "state": "completed",
+          "completed": true,
+          "roundName": "Quarter-Final"
+        }
+      ]
+    },
+    "3": {
+      "name": "Semi-Final",
+      "sets": [
+        {
+          "id": 90590781,
+          "identifier": "K",
+          "entrant1Id": "19957680",
+          "entrant2Id": "19973024",
+          "score1": "L",
+          "score2": "W",
+          "state": "completed",
+          "completed": true,
+          "roundName": "Semi-Final"
+        },
+        {
+          "id": 90590782,
+          "identifier": "L",
+          "entrant1Id": "18581050",
+          "entrant2Id": "19037324",
+          "score1": "L",
+          "score2": "W",
+          "state": "completed",
+          "completed": true,
+          "roundName": "Semi-Final"
+        }
+      ]
+    },
+    "4": {
+      "name": "Final",
+      "sets": [
+        {
+          "id": 90590783,
+          "identifier": "M",
+          "entrant1Id": "19973024",
+          "entrant2Id": "19037324",
+          "score1": "L",
+          "score2": "W",
+          "state": "completed",
+          "completed": true,
+          "roundName": "Final"
+        }
+      ]
+    }
+  },
+  "losersRounds": {},
+  "grandFinals": [],
+  "players": {
+    "20338515": {
+      "name": "C\u00e9zar-ito",
+      "seed": 9,
+      "prefix": ""
+    },
+    "19957680": {
+      "name": "Samn",
+      "seed": 6,
+      "prefix": "NP6"
+    },
+    "19973024": {
+      "name": "remkey",
+      "seed": 4,
+      "prefix": ""
+    },
+    "19922423": {
+      "name": "Mr Joe",
+      "seed": 19,
+      "prefix": "DC"
+    },
+    "19983676": {
+      "name": "Buffcat70",
+      "seed": 15,
+      "prefix": ""
+    },
+    "18809652": {
+      "name": "JustAGrump",
+      "seed": 20,
+      "prefix": "GAMK"
+    },
+    "19060279": {
+      "name": "BennyOkay",
+      "seed": 12,
+      "prefix": "OK"
+    },
+    "20235738": {
+      "name": "faceman",
+      "seed": 3,
+      "prefix": "NP6"
+    },
+    "18577874": {
+      "name": "Hellzhero",
+      "seed": 2,
+      "prefix": ""
+    },
+    "19967424": {
+      "name": "Super63",
+      "seed": 5,
+      "prefix": "NP6"
+    },
+    "19037324": {
+      "name": "Melthrax",
+      "seed": 7,
+      "prefix": ""
+    },
+    "19574775": {
+      "name": "Balamb Transfer",
+      "seed": 10,
+      "prefix": ""
+    },
+    "19954440": {
+      "name": "BigNick",
+      "seed": 8,
+      "prefix": "NP6"
+    },
+    "18581050": {
+      "name": "Stuffed Flatbread",
+      "seed": 18,
+      "prefix": "PJF"
+    }
+  }
+}
