@@ -447,6 +447,11 @@
       //   { connections: { destSetId: [prereqSetId, ...] },
       //     roundLayouts: { 'winners-1': [{kind:'set', set} | {kind:'bye', id, entrantId, after}], ... } }
       const out = { connections: {}, roundLayouts: {} };
+      // Round-robin and Swiss formats don't have elimination-style prereqs —
+      // each round is independent, byes happen per-round (not as positional
+      // R1 placeholders), and there are no connectors. Skip the inference
+      // entirely so byes don't get force-placed in round 1.
+      if (bracket.type === 'ROUND_ROBIN' || bracket.type === 'SWISS') return out;
       const sections = ['winners', 'losers'];
       for (const sec of sections) {
         const rounds = sec === 'winners' ? (bracket.winnersRounds || {}) : (bracket.losersRounds || {});
