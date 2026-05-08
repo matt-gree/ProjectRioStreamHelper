@@ -718,8 +718,8 @@ function BracketLayoutList({ selected, onSelect, baseUrl, onLoadBracket }) {
             name: `${pg.label} — ${variant.label}`,
             type: 'bracket',
             url,
-            width: 1600,
-            height: 900,
+            width: 1920,
+            height: 1080,
             _phaseGroupId: pg.id,
         };
 
@@ -805,7 +805,7 @@ function BracketLayoutList({ selected, onSelect, baseUrl, onLoadBracket }) {
                                             <Group justify="space-between" wrap="nowrap" gap={4}>
                                                 <div style={{ minWidth: 0, flex: 1 }}>
                                                     <Text size="sm">{variant.label}</Text>
-                                                    <Text size="xs" c="dimmed">1600 x 900</Text>
+                                                    <Text size="xs" c="dimmed">1920 x 1080</Text>
                                                 </div>
                                                 <CopyButton value={`${baseUrl}${variant.path}`}>
                                                     {({ copied, copy }) => (

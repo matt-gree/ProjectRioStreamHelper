@@ -60,6 +60,14 @@ _DISPLAY_NAMES = {
     "teamlogo": "Team Logo",
 }
 
+# Fallback dimensions for layouts whose body is fluid (e.g. body { width: 100%
+# }) so _parse_html_meta returns None. Used as the recommended OBS browser-
+# source size displayed in the layouts list. Bracket scales to fit any source,
+# but 1920x1080 is the typical streaming canvas users size against.
+_DEFAULT_DIMS = {
+    "bracket": (1920, 1080),
+}
+
 # Friendlier display names keyed by "{group}/{stem}" for the catch-all branch
 # (single-variant standalone layouts that aren't size or team variants).
 _STANDALONE_DISPLAY_NAMES = {
@@ -106,6 +114,8 @@ async def list_layouts(request: Request):
 
             # If this layout type has size variants, expand into multiple entries
             w, h, supported = _parse_html_meta(f)
+            if (w is None or h is None) and layout_type in _DEFAULT_DIMS:
+                w, h = _DEFAULT_DIMS[layout_type]
 
             size_variants = _SIZE_VARIANTS.get(layout_type)
             team_variants = _TEAM_VARIANTS.get(layout_type)
