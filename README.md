@@ -164,7 +164,7 @@ Loaded bracket data is exposed both in the in-app Bracket view and via the brack
 
 ---
 
-## Controller Overlay (future) (optional)
+## Controller Overlay (optional)
 
 PRSH can manage an optional `gc-overlay` subprocess that draws controller inputs as an OBS browser source. Configure under **Settings → Controller Overlay**:
 - **Path** — auto-detected as a sibling `../gc-overlay/` directory or inside the frozen bundle; can be set manually.
