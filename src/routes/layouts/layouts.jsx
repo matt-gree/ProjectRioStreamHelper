@@ -2157,8 +2157,7 @@ export default function LayoutBrowser() {
                     <Tabs.Tab value="scoreboard">Scoreboards</Tabs.Tab>
                     <Tabs.Tab value="scenes">Scenes</Tabs.Tab>
                     <Tabs.Tab value="bracket">Bracket</Tabs.Tab>
-                    {/* Controller overlay hidden until Project Rio adds needed support. Code preserved. */}
-                    {/* <Tabs.Tab value="controller">Controller</Tabs.Tab> */}
+                    <Tabs.Tab value="controller">Controller</Tabs.Tab>
                 </Tabs.List>
             </Tabs>
 

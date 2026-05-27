@@ -650,7 +650,6 @@ export default function SettingsModal({ opened, onClose }) {
                     Save Key
                 </Button>
 
-                {/* Controller Overlay section hidden until Project Rio adds needed support. Code preserved below.
                 <Divider label="Controller Overlay" labelPosition="center" />
 
                 <Group justify="space-between">
@@ -680,7 +679,6 @@ export default function SettingsModal({ opened, onClose }) {
                 >
                     Save Path
                 </Button>
-                */}
 
                 <Divider label="Network" labelPosition="center" />
 
