@@ -211,6 +211,63 @@
       });
     }
 
+    // Does the existing DOM match the shape of `info` closely enough that we
+    // can update text/values in place instead of rebuilding? Rebuilding mid-
+    // animation is what caused the card to "pop" after the batter-change
+    // dissolve — every subsequent HUD event was destroying the still-fading
+    // DOM and replacing it with a fresh, fully-opaque copy.
+    function canUpdateInPlace(bar, info) {
+      if (bar.classList.contains('hidden')) return false;
+      if (!bar.querySelector('.stats-inner')) return false;
+      const labels = Array.from(bar.querySelectorAll('.stat[data-label]'))
+        .map(el => el.dataset.label);
+      const newLabels = info.stats.map(s => s.label);
+      if (labels.length !== newLabels.length) return false;
+      for (let i = 0; i < labels.length; i++) {
+        if (labels[i] !== newLabels[i]) return false;
+      }
+      const hasLine = !!bar.querySelector('.batting-line');
+      const wantsLine = !!(info.gameLine || info.bottomLabel);
+      return hasLine === wantsLine;
+    }
+
+    // Update only the parts of the existing DOM whose values changed. Leaves
+    // every other node (and any in-progress CSS animation) untouched.
+    function updateStatsInPlace(bar, info) {
+      const img = bar.querySelector('.char-icon-wrap img');
+      if (img && !img.src.endsWith(info.charIconUrl)) {
+        img.src = info.charIconUrl;
+      }
+      bar.querySelectorAll('.stat[data-label]').forEach(el => {
+        const next = info.stats.find(s => s.label === el.dataset.label);
+        if (!next) return;
+        const valEl = el.querySelector('.stat-value');
+        const nextText = String(next.value);
+        if (valEl && valEl.textContent !== nextText) {
+          valEl.textContent = nextText;
+        }
+      });
+      const line = bar.querySelector('.batting-line');
+      if (line) {
+        if (info.gameLine) {
+          // Structure: <span>{label}: </span>{gameLine text}
+          let span = line.querySelector('span');
+          if (!span) {
+            line.textContent = '';
+            span = document.createElement('span');
+            line.appendChild(span);
+          }
+          const labelText = info.bottomLabel + ': ';
+          if (span.textContent !== labelText) span.textContent = labelText;
+          // Replace everything after the span with the new gameLine text
+          while (line.childNodes.length > 1) line.removeChild(line.lastChild);
+          line.appendChild(document.createTextNode(info.gameLine));
+        } else if (info.bottomLabel) {
+          if (line.textContent !== info.bottomLabel) line.textContent = info.bottomLabel;
+        }
+      }
+    }
+
     function buildContent(info, animate = true) {
       const statsHtml = info.stats.map(st =>
         `<span class="stat" data-label="${st.label}"><span class="stat-value">${st.value}</span><span class="stat-label">${st.label}</span></span>`
@@ -265,10 +322,18 @@
         }
       } else {
         const oldStats = changed ? null : prevStats;
-        bar.innerHTML = buildContent(info, false);
-        bar.classList.remove('hidden');
-        applyTextShadow();
-        if (useFade) flashChangedStats(bar, oldStats);
+        // In-place update path: do NOT rebuild innerHTML when the only thing
+        // changing is stat values. Rebuilding here used to destroy the DOM
+        // mid-fade-in from a recent batter change, producing a visible pop.
+        if (canUpdateInPlace(bar, info)) {
+          updateStatsInPlace(bar, info);
+          if (useFade) flashChangedStats(bar, oldStats);
+        } else {
+          bar.innerHTML = buildContent(info, false);
+          bar.classList.remove('hidden');
+          applyTextShadow();
+          if (useFade) flashChangedStats(bar, oldStats);
+        }
         prevStats = getStatsMap(bar);
       }
     }

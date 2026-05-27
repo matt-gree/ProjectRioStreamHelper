@@ -400,6 +400,58 @@
       });
     }
 
+    // Can we update text/values in place instead of rebuilding the DOM?
+    // Rebuilding mid-animation is what caused the stats bar to pop after the
+    // batter-change dissolve — every subsequent HUD event was destroying the
+    // still-fading DOM and replacing it with a fresh, fully-opaque copy.
+    function canUpdateStatsInPlace(bar, info) {
+      if (bar.classList.contains('hidden')) return false;
+      if (!bar.querySelector('.stats-top-row')) return false;
+      const labels = Array.from(bar.querySelectorAll('.stat[data-label]'))
+        .map(el => el.dataset.label);
+      const newLabels = info.stats.map(s => s.label);
+      if (labels.length !== newLabels.length) return false;
+      for (let i = 0; i < labels.length; i++) {
+        if (labels[i] !== newLabels[i]) return false;
+      }
+      const hasLine = !!bar.querySelector('.game-line');
+      const wantsLine = !!(info.gameLine || info.bottomLabel);
+      return hasLine === wantsLine;
+    }
+
+    function updateStatsInPlace(bar, info) {
+      const img = bar.querySelector('.char-icon-wrap img');
+      if (img && !img.src.endsWith(info.charIconUrl)) {
+        img.src = info.charIconUrl;
+      }
+      bar.querySelectorAll('.stat[data-label]').forEach(el => {
+        const next = info.stats.find(s => s.label === el.dataset.label);
+        if (!next) return;
+        const valEl = el.querySelector('.stat-value');
+        const nextText = String(next.value);
+        if (valEl && valEl.textContent !== nextText) {
+          valEl.textContent = nextText;
+        }
+      });
+      const line = bar.querySelector('.game-line');
+      if (line) {
+        if (info.gameLine) {
+          let span = line.querySelector('span');
+          if (!span) {
+            line.textContent = '';
+            span = document.createElement('span');
+            line.appendChild(span);
+          }
+          const labelText = info.bottomLabel + ': ';
+          if (span.textContent !== labelText) span.textContent = labelText;
+          while (line.childNodes.length > 1) line.removeChild(line.lastChild);
+          line.appendChild(document.createTextNode(info.gameLine));
+        } else if (info.bottomLabel) {
+          if (line.textContent !== info.bottomLabel) line.textContent = info.bottomLabel;
+        }
+      }
+    }
+
     function renderStats(teamNum, barId) {
       const bar = document.getElementById(barId);
       const info = RioData.getStatsLine(state, SCOREBOARD, teamNum);
@@ -426,9 +478,17 @@
           statsState[teamNum].statsMap = getStatsMap(bar);
         }, 200);
       } else {
-        buildStatsDOM(bar, info);
-        bar.classList.remove('hidden');
-        if (useFade) flashChangedStats(bar, oldStats);
+        // In-place update path: do NOT rebuild the DOM when the only thing
+        // changing is stat values. Rebuilding here used to destroy the DOM
+        // mid-fade-in from a recent batter change, producing a visible pop.
+        if (canUpdateStatsInPlace(bar, info)) {
+          updateStatsInPlace(bar, info);
+          if (useFade) flashChangedStats(bar, oldStats);
+        } else {
+          buildStatsDOM(bar, info);
+          bar.classList.remove('hidden');
+          if (useFade) flashChangedStats(bar, oldStats);
+        }
         statsState[teamNum].statsMap = getStatsMap(bar);
       }
     }
