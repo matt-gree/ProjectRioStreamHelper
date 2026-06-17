@@ -160,6 +160,7 @@ function ScaledIframe({ src, fallbackWidth, fallbackHeight, height = PREVIEW_HEI
 
 const SOURCE_COLORS = { hud: 'green', api: 'blue', manual: 'gray' };
 
+
 function LayoutItem({ item, selected, onSelect, activeTab }) {
     const copyUrl = useMemo(() => {
         try {
@@ -216,7 +217,7 @@ function LayoutItem({ item, selected, onSelect, activeTab }) {
 }
 
 // Order in which team layouts appear in the two-column section
-const TEAM_LAYOUT_ORDER = ['roster', 'stats', 'teamlogo'];
+const TEAM_LAYOUT_ORDER = ['roster', 'stats', 'teamlogo', 'playername'];
 
 function LayoutList({ layouts, selected, onSelect, activeTab }) {
     const [expandedGroups, setExpandedGroups] = useState({});
