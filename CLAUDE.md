@@ -139,6 +139,7 @@ public/
 │   ├── bracket/             # index/winners_only/losers_only/player_schedule
 │   ├── scenes/              # Full 1920×1080 scene overlays (NNL, rivalry)
 │   ├── rotator/             # Rotation-display layouts (ticker)
+│   ├── controller/          # Per-team controller-input overlay (?team=1|2; iframes the running gc-overlay at the side's HUD port)
 │   ├── preview/             # Sample state JSON blobs for in-app preview rendering
 │   └── lib/overlay-base.js  # Shared SocketIO client + setting resolution
 ├── game_assets/             # (dev-mode only — frozen builds use user_data)
@@ -198,10 +199,16 @@ score.{N}.inning, score.{N}.half_inning
 score.{N}.outs, score.{N}.strikes, score.{N}.balls
 score.{N}.batter, score.{N}.pitcher
 score.{N}.cbRioRunnerOn1/2/3                          (booleans)
+score.{N}.star_chance, score.{N}.stadium             (slug), score.{N}.innings_selected
+score.{N}.tag_set                                     (game-mode id of the live game)
+score.{N}.away_linescore, score.{N}.home_linescore   (per-inning runs; live + final)
 score.{N}.player.{T}.rioName                          (T ∈ {1,2}: 1 = left, 2 = right)
 score.{N}.player.{T}.rio_captainIndex
-score.{N}.player.{T}.msb_team
-score.{N}.player.{T}.character.{C}                    (roster of 9)
+score.{N}.player.{T}.msb_team                         (roster-derived team name, team_name_algo)
+score.{N}.player.{T}.logo                             (explicit in-game banner; may differ from msb_team)
+score.{N}.player.{T}.port                             (0-indexed controller port, HUD only)
+score.{N}.player.{T}.team_stars                       (team star-meter count)
+score.{N}.player.{T}.character.{C}                    (roster of 9; .name/.position/.is_starred/.batting_hand/.fielding_hand)
 
 scoreboards.active                                    (list of active scoreboard N's)
 scoreboards.sources.{N}.type                          (manual | hud | live_api | rotator)
@@ -369,6 +376,14 @@ In-app log viewer (`LogsViewer.jsx` + `server/api/v1/logs.py`). Lists rotated lo
 - Custom path via Settings → Controller Overlay.
 - Runs on its own port (default 8069), serves its own WebSocket + HTML.
 - Settings: `controller_overlay.path`, `.port`, `.controller`, `.auto_start`.
+
+**Per-team (home/away) follow.** gc-overlay shows one controller per browser source, selectable via `?port=N` (0-indexed) or a runtime `{port}` WebSocket message. The HUD reports each player's controller port (`Away Port`/`Home Port`), which `provider.py` writes to `score.{N}.player.{T}.port`. The `public/layout/controller/controller.html` wrapper (`?team=1|2&scoreboard=N`) reads that port from PRSH state and iframes the running gc-overlay at the matching port, reloading only when the port changes — so a "left/right controller" browser source follows whoever is on that side. The side→port mapping lives entirely in PRSH; gc-overlay is unmodified.
+
+---
+
+## HUD → Web Stats Auto-Fetch
+
+The HUD file now carries `TagSetID` (the game mode being played). On a new HUD game, `RioGameDataProvider._apply_hud_game_mode()` resolves it to the game-mode name and writes `scoreboards.sources.{sb}.stats_tag` for every HUD-target scoreboard — which both drives the automatic stats fetch and visually updates the per-scoreboard game-mode selectbox. This mirrors the live-API assignment path, which already sets `stats_tag` from the assigned game's mode. A manual selection is overwritten on each new game start.
 
 ---
 

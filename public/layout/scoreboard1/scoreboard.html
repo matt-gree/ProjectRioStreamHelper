@@ -725,8 +725,11 @@
     function buildScoreboard(isCompleted) {
       const p1 = deepGet(state, `score.${SB}.player.1.rioName`, '');
       const p2 = deepGet(state, `score.${SB}.player.2.rioName`, '');
-      const team1 = deepGet(state, `score.${SB}.player.1.msb_team`, '');
-      const team2 = deepGet(state, `score.${SB}.player.2.msb_team`, '');
+      // Prefer the explicit in-game banner (player.T.logo) — players sometimes
+      // set a banner that doesn't match their roster on purpose. Fall back to
+      // the roster-derived team name (msb_team).
+      const team1 = deepGet(state, `score.${SB}.player.1.logo`, '') || deepGet(state, `score.${SB}.player.1.msb_team`, '');
+      const team2 = deepGet(state, `score.${SB}.player.2.logo`, '') || deepGet(state, `score.${SB}.player.2.msb_team`, '');
       const sL = deepGet(state, `score.${SB}.score_left`, 0);
       const sR = deepGet(state, `score.${SB}.score_right`, 0);
       const inn = deepGet(state, `score.${SB}.inning`, '');
@@ -815,8 +818,10 @@
         html += '</div>';
       }
 
-      // ── Linescore box score (l and xl completed games only, pinned to bottom) ──
-      if (sizeConf.showRoster && isCompleted) {
+      // ── Linescore box score (l and xl, pinned to bottom) ──
+      // Renders for live games too: away/home_linescore is now populated from
+      // the HUD / ongoing inning scores. buildLinescore no-ops when empty.
+      if (sizeConf.showRoster) {
         html += buildLinescore(p1, p2);
       }
 
