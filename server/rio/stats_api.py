@@ -357,3 +357,18 @@ async def fetch_game_modes(force: bool = False) -> dict[str, int]:
             logger.error(f"[StatsAPI] Unexpected error fetching game modes: {e}")
 
     return _game_modes
+
+
+async def resolve_tag_set_name(tag_set_id) -> str:
+    """Resolve a tag-set id (e.g. from a HUD/ongoing game) to its game-mode name.
+
+    Ensures the game-mode cache is populated first. Returns '' when the id is
+    missing or not an active game mode.
+    """
+    if tag_set_id is None or tag_set_id == -1:
+        return ""
+    modes = _game_modes or await fetch_game_modes()
+    for name, tid in modes.items():
+        if tid == tag_set_id:
+            return name
+    return ""

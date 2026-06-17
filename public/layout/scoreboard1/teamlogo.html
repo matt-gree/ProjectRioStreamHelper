@@ -56,13 +56,16 @@
     const params = new URLSearchParams(window.location.search);
     const SCOREBOARD = parseInt(params.get('scoreboard')) || 1;
     const TEAM_NUM = parseInt(params.get('team')) || 1;
-    const STATE_KEY = `score.${SCOREBOARD}.player.${TEAM_NUM}.msb_team`;
+    // Prefer the explicit in-game banner (player.T.logo); fall back to the
+    // roster-derived team name (msb_team) when no banner is set.
+    const LOGO_KEY = `score.${SCOREBOARD}.player.${TEAM_NUM}.logo`;
+    const TEAM_KEY = `score.${SCOREBOARD}.player.${TEAM_NUM}.msb_team`;
     const { deepGet, BASE_URL, state } = OverlayBase;
 
     function render() {
       const container = document.getElementById('team-logo-container');
       container.innerHTML = '';
-      const teamName = deepGet(state, STATE_KEY);
+      const teamName = deepGet(state, LOGO_KEY) || deepGet(state, TEAM_KEY);
       if (teamName) {
         const img = document.createElement('img');
         img.src = `${BASE_URL}/game_assets/msb/teamLogos/${encodeURIComponent(teamName)}.png`;
@@ -74,7 +77,7 @@
 
     OverlayBase.init({
       render,
-      shouldRender: (key) => key === STATE_KEY || key.startsWith(STATE_KEY + '.'),
+      shouldRender: (key) => key === LOGO_KEY || key === TEAM_KEY,
     });
   </script>
 </body>

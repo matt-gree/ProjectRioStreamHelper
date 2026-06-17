@@ -21,10 +21,19 @@
   "runner1Name": "",
   "runner2Name": "",
   "runner3Name": "",
+  "star_chance": false,
+  "stadium": "wario_palace",
+  "innings_selected": 9,
+  "tag_set": 210,
+  "away_linescore": [0, 2, 0, 1, 2],
+  "home_linescore": [3, 0, 0, 4, 0],
   "player": {
     "1": {
       "rioName": "Baltor33",
       "msb_team": "Birdo Beauties",
+      "logo": "Birdo Beauties",
+      "port": 1,
+      "team_stars": 2,
       "rio_captainIndex": 3,
       "character": {
         "0": {
@@ -87,6 +96,9 @@
     "2": {
       "rioName": "MattGree",
       "msb_team": "Mario Heroes",
+      "logo": "Mario Heroes",
+      "port": 0,
+      "team_stars": 1,
       "rio_captainIndex": 7,
       "character": {
         "0": {

@@ -294,6 +294,45 @@ class StatsTracker:
                 }
 
     @classmethod
+    def on_live_game_update(cls, game_json: dict, scoreboard_number: int):
+        """Record the current batter's & pitcher's game stats from an ongoing
+        API game.
+
+        Unlike a HUD file (which carries full per-roster offensive/defensive
+        stats every frame), the ongoing-games feed only exposes the two active
+        characters via `batter_stats` / `pitcher_stats`. Those dicts use the
+        same key names as the HUD roster stats, so the existing HUD extractors
+        apply directly.
+
+        We accumulate snapshots into the slot across polls — preserving slots
+        we've already recorded — so a live game's per-character current_game
+        structure fills in ("builds out") as the lineup cycles, matching the
+        shape produced by a HUD-sourced game. Index orientation is the data
+        orientation (team_idx 0 = away, 1 = home); push_stats_to_state applies
+        any side swap when writing to State.
+        """
+        slot = cls._slot(scoreboard_number)
+        half = game_json.get("half_inning", 0)
+        batting_idx = 0 if half == 0 else 1
+        fielding_idx = 1 - batting_idx
+        batter_loc = game_json.get("batter")
+        pitcher_loc = game_json.get("pitcher")
+        batter_stats = game_json.get("batter_stats") or {}
+        pitcher_stats = game_json.get("pitcher_stats") or {}
+
+        def _cell(team_idx: int, roster_idx: int) -> dict:
+            team = slot.hud_stats.setdefault(team_idx, {})
+            return team.setdefault(
+                roster_idx,
+                {"batting": _empty_batting(), "pitching": _empty_pitching()},
+            )
+
+        if isinstance(batter_loc, int) and 0 <= batter_loc <= 8 and batter_stats:
+            _cell(batting_idx, batter_loc)["batting"] = _extract_hud_batting(batter_stats)
+        if isinstance(pitcher_loc, int) and 0 <= pitcher_loc <= 8 and pitcher_stats:
+            _cell(fielding_idx, pitcher_loc)["pitching"] = _extract_hud_pitching(pitcher_stats)
+
+    @classmethod
     async def push_stats_to_state(cls, scoreboard_number: int, sides_swapped: bool):
         """Merge historical + current HUD stats and push to State via batch."""
         slot = cls._slot(scoreboard_number)
