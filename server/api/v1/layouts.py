@@ -48,18 +48,20 @@ _SIZE_VARIANTS = {
 # Team variants for layouts that support ?team= param.
 # Each: (team_num, label)
 _TEAM_VARIANTS = {
-    "stats":      [(1, "Team 1"), (2, "Team 2")],
-    "roster":     [(1, "Team 1"), (2, "Team 2")],
-    "teamlogo":   [(1, "Team 1"), (2, "Team 2")],
-    "controller": [(1, "Team 1"), (2, "Team 2")],
+    "stats":       [(1, "Team 1"), (2, "Team 2")],
+    "roster":      [(1, "Team 1"), (2, "Team 2")],
+    "teamlogo":    [(1, "Team 1"), (2, "Team 2")],
+    "controller":  [(1, "Team 1"), (2, "Team 2")],
+    "playername":  [(1, "Team 1"), (2, "Team 2")],
 }
 
 # Human-readable display names for layout types shown in the UI
 _DISPLAY_NAMES = {
-    "stats":      "Stats",
-    "roster":     "Roster",
-    "teamlogo":   "Team Logo",
-    "controller": "Controller",
+    "stats":       "Stats",
+    "roster":      "Roster",
+    "teamlogo":    "Team Logo",
+    "controller":  "Controller",
+    "playername":  "Player Name",
 }
 
 # Fallback dimensions for layouts whose body is fluid (e.g. body { width: 100%
