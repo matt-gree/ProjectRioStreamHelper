@@ -1,0 +1,64 @@
+# Run the automated test suite (see TESTING.md) on every PR and on pushes to
+# main. Separate from build-release.yml, which only builds/ships executables.
+name: Test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Cancel an in-progress run when new commits are pushed to the same ref.
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (with pyrio submodule)
+        uses: actions/checkout@v4
+        with:
+          # pyrio lives at server/rio/pyrio as a git submodule; without this the
+          # provider/stats imports fail at collection and the whole suite errors.
+          submodules: recursive
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install dependencies
+        # `pip install .` resolves the main deps from pyproject via the
+        # poetry-core build backend — the same install path build-release.yml
+        # uses, so it needs no poetry.lock. Test tools (the dev group) are
+        # installed explicitly to keep them out of the shipped bundle.
+        run: |
+          python -m pip install --upgrade pip
+          pip install .
+          pip install pytest pytest-asyncio pytest-cov
+
+      - name: Run tests
+        run: pytest --cov=server --cov-report=term-missing
+
+  frontend:
+    name: Frontend (vitest)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm run test:run

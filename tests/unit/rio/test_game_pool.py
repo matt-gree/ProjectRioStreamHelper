@@ -1,0 +1,112 @@
+"""Game-pool helpers: pandas/numpy row sanitizing, pinned-swap detection, and
+the completed-game apply path (swap + persist)."""
+import math
+
+import numpy as np
+import pandas as pd
+import pytest
+
+from server.rio.game_pool import (
+    _sanitize_row,
+    _pinned_swap_needed,
+    apply_completed_game_dict,
+)
+from server.settings import Settings
+from server.state import State
+from server.utils.deep_dict import deep_get
+
+
+# --- _sanitize_row ---
+
+def test_sanitize_timestamp_to_isoformat():
+    out = _sanitize_row({"t": pd.Timestamp("2024-01-02T03:04:05")})
+    assert out["t"] == "2024-01-02T03:04:05"
+
+
+def test_sanitize_nat_and_nan_to_none():
+    out = _sanitize_row({
+        "a": pd.NaT,
+        "b": np.float64(np.nan),
+        "c": float("nan"),
+    })
+    assert out == {"a": None, "b": None, "c": None}
+
+
+def test_sanitize_numpy_scalars_to_python_types():
+    out = _sanitize_row({
+        "i": np.int64(5),
+        "f": np.float64(1.5),
+        "b": np.bool_(True),
+    })
+    assert out["i"] == 5 and isinstance(out["i"], int)
+    assert out["f"] == 1.5 and isinstance(out["f"], float)
+    assert out["b"] is True and isinstance(out["b"], bool)
+
+
+def test_sanitize_passthrough_plain_values():
+    out = _sanitize_row({"s": "hello", "n": 7, "ok": True})
+    assert out == {"s": "hello", "n": 7, "ok": True}
+
+
+# --- _pinned_swap_needed ---
+
+def test_pinned_swap_none_when_no_pin():
+    assert _pinned_swap_needed("Alice", "Bob") is None
+
+
+def test_pinned_swap_none_when_pin_not_in_game(set_setting):
+    set_setting("project_rio.pinned_player", "Zoe")
+    assert _pinned_swap_needed("Alice", "Bob") is None
+
+
+@pytest.mark.parametrize("side,p0,p1,expected", [
+    ("Team 1", "Alice", "Bob", False),  # pinned Alice already on left
+    ("Team 2", "Alice", "Bob", True),   # pinned Alice on left, wants right
+    ("Team 1", "Bob", "Alice", True),   # pinned Alice on right, wants left
+    ("Team 2", "Bob", "Alice", False),  # pinned Alice already on right
+])
+def test_pinned_swap_decisions(set_setting, side, p0, p1, expected):
+    set_setting("project_rio.pinned_player", "Alice")
+    set_setting("project_rio.pinned_side", side)
+    assert _pinned_swap_needed(p0, p1) is expected
+
+
+# --- apply_completed_game_dict ---
+
+def _completed(**over):
+    g = {
+        "away_user": "Alice", "home_user": "Bob",
+        "away_score": 2, "home_score": 7,
+        "away_captain": "Mario", "home_captain": "Luigi",
+        "game_id": "C1",
+        "linescore": {"0": [0, 1, 1], "1": [2, 3, 2]},
+        "stadium": "Mario Stadium",
+    }
+    g.update(over)
+    return g
+
+
+def s(key):
+    return deep_get(State.state, key)
+
+
+async def test_apply_completed_dict_returns_false_on_empty():
+    assert await apply_completed_game_dict(None, 1) is False
+
+
+async def test_apply_completed_dict_no_pin(mock_socket):
+    ok = await apply_completed_game_dict(_completed(), 1)
+    assert ok is True
+    assert s("score.1.player.1.rioName") == "Alice"
+    assert s("score.1.score_left") == 2
+    assert Settings.Get("scoreboards.sources.1.api_game_id") == "C1"
+
+
+async def test_apply_completed_dict_applies_pinned_swap(set_setting, mock_socket):
+    # Pin the home player to Team 1 → away/home must swap before applying.
+    set_setting("project_rio.pinned_player", "Bob")
+    set_setting("project_rio.pinned_side", "Team 1")
+    await apply_completed_game_dict(_completed(), 1)
+    assert s("score.1.player.1.rioName") == "Bob"      # swapped to the left
+    assert s("score.1.player.2.rioName") == "Alice"
+    assert s("score.1.score_left") == 7                # home score now on left
