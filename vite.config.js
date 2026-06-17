@@ -16,4 +16,11 @@ export default defineConfig({
   plugins: [
     react()
   ],
+  // Vitest config — read by `vitest` from this same file.
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: './src/test/setup.js',
+    include: ['src/**/*.test.{js,jsx}'],
+  },
 });
