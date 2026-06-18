@@ -66,6 +66,9 @@ export default function SettingsModal({ opened, onClose }) {
     // Appearance — color scheme stored as a regular setting for portability.
     const appName = useConfigStore(state => state.name) || 'PRSH';
     const appVersion = useConfigStore(state => state.version);
+    // gc-overlay (controller input) only works on macOS — hide its settings
+    // elsewhere. The flag comes from the server Config (see settings.py).
+    const controllerSupported = useConfigStore(state => state.controller_overlay_supported);
     const colorScheme = useSettingsStore(state => state?.ui?.color_scheme) || 'auto';
     const setSetting = useSettingsStore(state => state.setItem);
     const handleColorScheme = useCallback((value) => {
@@ -650,35 +653,39 @@ export default function SettingsModal({ opened, onClose }) {
                     Save Key
                 </Button>
 
-                <Divider label="Controller Overlay" labelPosition="center" />
+                {controllerSupported !== false && (
+                    <>
+                        <Divider label="Controller Overlay" labelPosition="center" />
 
-                <Group justify="space-between">
-                    <Text size="sm">gc-overlay</Text>
-                    <Badge
-                        size="sm"
-                        color={controllerStatus?.available ? 'green' : 'red'}
-                        variant="filled"
-                    >
-                        {controllerStatus?.available ? 'Found' : 'Not Found'}
-                    </Badge>
-                </Group>
-                <Text size="xs" c="dimmed">
-                    Path to the gc-overlay directory. Leave empty to auto-detect (looks for a sibling gc-overlay folder).
-                </Text>
-                <TextInput
-                    size="xs"
-                    placeholder={controllerStatus?.available ? controllerStatus.path : 'Not detected — enter path manually'}
-                    value={controllerPath}
-                    onChange={e => setControllerPath(e.currentTarget.value)}
-                />
-                <Button
-                    size="xs"
-                    variant="outline"
-                    onClick={handleSaveControllerPath}
-                    loading={controllerPathSaving}
-                >
-                    Save Path
-                </Button>
+                        <Group justify="space-between">
+                            <Text size="sm">gc-overlay</Text>
+                            <Badge
+                                size="sm"
+                                color={controllerStatus?.available ? 'green' : 'red'}
+                                variant="filled"
+                            >
+                                {controllerStatus?.available ? 'Found' : 'Not Found'}
+                            </Badge>
+                        </Group>
+                        <Text size="xs" c="dimmed">
+                            Path to the gc-overlay directory. Leave empty to auto-detect (looks for a sibling gc-overlay folder).
+                        </Text>
+                        <TextInput
+                            size="xs"
+                            placeholder={controllerStatus?.available ? controllerStatus.path : 'Not detected — enter path manually'}
+                            value={controllerPath}
+                            onChange={e => setControllerPath(e.currentTarget.value)}
+                        />
+                        <Button
+                            size="xs"
+                            variant="outline"
+                            onClick={handleSaveControllerPath}
+                            loading={controllerPathSaving}
+                        >
+                            Save Path
+                        </Button>
+                    </>
+                )}
 
                 <Divider label="Network" labelPosition="center" />
 

@@ -1,3 +1,6 @@
 [submodule "server/rio/pyrio"]
 	path = server/rio/pyrio
 	url = https://github.com/matt-gree/pyrio.git
+[submodule "gc-overlay"]
+	path = gc-overlay
+	url = https://github.com/matt-gree/gc-overlay.git

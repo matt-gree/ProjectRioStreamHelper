@@ -1,6 +1,7 @@
 import asyncio
 import copy
 import importlib.util
+import platform
 import sys
 import tomllib
 import orjson
@@ -307,7 +308,11 @@ class Config:
         "version": "1.0.0",
         "description": "Tournament scoreboard helper and overlays for Mario Superstar Baseball via Project Rio",
         "authors": [],
-        "server_url": ""
+        "server_url": "",
+        # gc-overlay (controller input display) only works on macOS. The
+        # frontend reads this to hide the feature's UI elsewhere; the build
+        # only bundles gc-overlay in macOS builds. See controller_overlay.py.
+        "controller_overlay_supported": platform.system() == "Darwin",
     }
 
     @classmethod

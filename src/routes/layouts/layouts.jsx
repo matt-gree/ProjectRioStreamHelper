@@ -6,7 +6,7 @@ import {
     Menu,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { useSettingsStore, useStateStore } from '../../context/store';
+import { useSettingsStore, useStateStore, useConfigStore } from '../../context/store';
 import { useShallow } from 'zustand/react/shallow';
 import useTournament from '../../hooks/useTournament';
 import {
@@ -1939,6 +1939,9 @@ export default function LayoutBrowser() {
     const active = useSettingsStore(s => s?.scoreboards?.active ?? [1]);
     const sources = useSettingsStore(s => s?.scoreboards?.sources ?? {});
     const aliases = useSettingsStore(s => s?.scoreboards?.aliases ?? {});
+    // gc-overlay (controller input) is macOS-only — hide the Controller tab
+    // elsewhere. Flag comes from the server Config (see settings.py).
+    const controllerSupported = useConfigStore(s => s.controller_overlay_supported) !== false;
 
     const [allLayouts, setAllLayouts] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -2077,7 +2080,7 @@ export default function LayoutBrowser() {
                     <Tabs.Tab value="scoreboard">Scoreboards</Tabs.Tab>
                     <Tabs.Tab value="scenes">Scenes</Tabs.Tab>
                     <Tabs.Tab value="bracket">Bracket</Tabs.Tab>
-                    <Tabs.Tab value="controller">Controller</Tabs.Tab>
+                    {controllerSupported && <Tabs.Tab value="controller">Controller</Tabs.Tab>}
                 </Tabs.List>
             </Tabs>
 
