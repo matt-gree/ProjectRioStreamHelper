@@ -372,8 +372,12 @@ In-app log viewer (`LogsViewer.jsx` + `server/api/v1/logs.py`). Lists rotated lo
 
 `ControllerOverlay` manages an optional subprocess that draws controller inputs as a separate OBS browser source.
 
-- Auto-detects as sibling `../gc-overlay/` directory or inside the frozen bundle.
-- Custom path via Settings → Controller Overlay.
+- **macOS only.** gc-overlay's Dolphin reader uses AF_UNIX MemoryWatcher sockets and macOS config paths, so the whole feature is gated on `platform.system() == "Darwin"`: `controller_overlay.PLATFORM_SUPPORTED` (detection/launch/status), the `Config.controller_overlay_supported` flag broadcast to the frontend (hides the Settings section + Layouts "Controller" tab), `layouts.py` (omits the `controller/` browser source from the catalog), and `PRSH.spec` (builds/bundles gc-overlay on Darwin only — Windows builds and the Inno installer omit it).
+- **Bundled via the `gc-overlay/` git submodule** (`matt-gree/gc-overlay`). On macOS it ships in every PRSH build and works out of the box — no extra user setup.
+- **Detection order** (`_find_gc_overlay`, first launchable wins): frozen nested binary alongside the PRSH executable → in-repo submodule `./gc-overlay/` (dev) → sibling `../gc-overlay/` (dev convenience). Custom override via Settings → Controller Overlay.
+- **Launch dispatch** (`_base_command`): frozen builds run the standalone **binary** directly; source checkouts run `python main.py` via gc-overlay's own venv. PyInstaller `datas` can strip the exec bit, so the binary is `chmod +x`'d before launch on POSIX.
+- **Build:** `scripts/build-gc-overlay.py` freezes the submodule into `gc-overlay/dist/gc-overlay/` (isolated venv, gc-overlay's `aiohttp`/`pyusb` deps kept out of PRSH's interpreter). Invoked from the top of `PRSH.spec`; `PRSH.spec` then bundles that folder. Set `SKIP_GC_OVERLAY_BUILD=1` to skip.
+- **Versioning:** gc-overlay owns `_version.py` + a `--version` flag. PRSH reads it (`_read_gc_version`) and surfaces it in `GetStatus().version`. **Update flow:** release gc-overlay standalone → in PRSH `git submodule update --remote gc-overlay && git commit` → rebuild PRSH. Two independent release cadences.
 - Runs on its own port (default 8069), serves its own WebSocket + HTML.
 - Settings: `controller_overlay.path`, `.port`, `.controller`, `.auto_start`.
 
