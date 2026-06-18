@@ -114,6 +114,18 @@ async def apply_parsed_game_to_state(parsed: dict, scoreboard_number: int, home_
         (f"{sb}.runner2Name", parsed.get("runner2Name", "")),
         (f"{sb}.runner3Name", parsed.get("runner3Name", "")),
 
+        # Fielding team's defenders placed onto the diamond (the DiamondPanel
+        # reads these by position). Pitcher is carried separately above. The 8
+        # field spots flip teams each half-inning, recomputed on every event.
+        (f"{sb}.field.C", parsed.get("field", {}).get("C", "")),
+        (f"{sb}.field.1B", parsed.get("field", {}).get("1B", "")),
+        (f"{sb}.field.2B", parsed.get("field", {}).get("2B", "")),
+        (f"{sb}.field.3B", parsed.get("field", {}).get("3B", "")),
+        (f"{sb}.field.SS", parsed.get("field", {}).get("SS", "")),
+        (f"{sb}.field.LF", parsed.get("field", {}).get("LF", "")),
+        (f"{sb}.field.CF", parsed.get("field", {}).get("CF", "")),
+        (f"{sb}.field.RF", parsed.get("field", {}).get("RF", "")),
+
         # Game-level metadata now sourced from HUD + ongoing API alike.
         (f"{sb}.star_chance", parsed.get("star_chance", False)),
         (f"{sb}.stadium", _stadium_slug(parsed.get("stadium_id"))),
@@ -446,6 +458,18 @@ class RioGameDataProvider:
                     cls._resolve_position(positions_raw[j]) if j < len(positions_raw) else ""
                     for j in range(9)
                 ]
+                # Position-indexed diamond: index 0=P..8=RF -> roster slot there
+                # (or None). The HUD path supplies it directly via pyrio's
+                # HudObj.defensive_diamond(); the API ongoing feed has no such
+                # field, so derive it from the resolved positions instead.
+                diamond = game_json.get(f"{team}_defensive_diamond")
+                if not isinstance(diamond, list):
+                    diamond = [None] * 9
+                    for slot, pos in enumerate(entrant["positions"]):
+                        idx = LookupDicts.POSITION_INDEX.get(pos)
+                        if idx is not None:
+                            diamond[idx] = slot
+                entrant["diamond"] = diamond
                 entrant["captainIndex"] = game_json[f"{team}_captain"]
                 entrant["rioName"] = game_json[f"{team}_player"]
                 entrant["msb_team"] = cls._get_msb_team_name(
@@ -473,7 +497,27 @@ class RioGameDataProvider:
             else:
                 data["half_inning"] = "Bottom"
             data["batter"] = data["entrants"][batting_idx][0]["roster"][batter_index]
-            data["pitcher"] = data["entrants"][fielding_idx][0]["roster"][pitcher_index]
+
+            # Place every fielding-team defender onto the diamond the same way:
+            # diamond is position-indexed (0=P..8=RF) -> roster slot, resolved to
+            # a character name. The pitcher is just position 0 — no special case.
+            fielding_entrant = data["entrants"][fielding_idx][0]
+            fielding_roster = fielding_entrant["roster"]
+            fielding_diamond = fielding_entrant.get("diamond", [None] * 9)
+            field = {}
+            for pos_idx, label in LookupDicts.POSITION.items():
+                if not isinstance(pos_idx, int) or label == "Inv":
+                    continue
+                slot = fielding_diamond[pos_idx] if pos_idx < len(fielding_diamond) else None
+                field[label] = (
+                    fielding_roster[slot]
+                    if isinstance(slot, int) and 0 <= slot < len(fielding_roster)
+                    else ""
+                )
+            data["field"] = field
+            # The DiamondPanel reads the pitcher from score.{N}.pitcher; source it
+            # from the same diamond (position 0) rather than the live pitcher index.
+            data["pitcher"] = field.get("P", "")
             data["batter_hand"] = data["entrants"][batting_idx][0]["batting_hands"][batter_index]
             data["pitcher_hand"] = data["entrants"][fielding_idx][0]["fielding_hands"][pitcher_index]
 
