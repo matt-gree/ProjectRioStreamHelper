@@ -200,12 +200,36 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, sourc
         setItem(`${base}.runner3Name`, '');
         setItem(`${base}.batter`, '');
         setItem(`${base}.pitcher`, '');
+        setItem(`${base}.batter_hand`, 0);
+        setItem(`${base}.pitcher_hand`, 0);
+        setItem(`${base}.batterSide`, 'right');
+        setItem(`${base}.batter_roster_index`, -1);
+        setItem(`${base}.pitcher_roster_index`, -1);
+        setItem(`${base}.star_chance`, false);
+        setItem(`${base}.game_completed`, false);
+        setItem(`${base}.game_id`, null);
+        setItem(`${base}.home_team`, 2);
+        setItem(`${base}.innings_selected`, null);
+        setItem(`${base}.stadium`, '');
+        setItem(`${base}.tag_set`, null);
+        setItem(`${base}.away_linescore`, []);
+        setItem(`${base}.home_linescore`, []);
+        for (const pos of ['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF']) {
+            setItem(`${base}.field.${pos}`, '');
+        }
         for (const t of [1, 2]) {
+            setItem(`${base}.player.${t}.rioName`, '');
             setItem(`${base}.player.${t}.msb_team`, '');
             setItem(`${base}.player.${t}.rio_captainIndex`, -1);
+            setItem(`${base}.player.${t}.logo`, '');
+            setItem(`${base}.player.${t}.port`, null);
+            setItem(`${base}.player.${t}.team_stars`, 0);
+            setItem(`${base}.player.${t}.batting_hands`, []);
+            setItem(`${base}.player.${t}.fielding_hands`, []);
             for (let i = 0; i < 9; i++) {
                 setItem(`${base}.player.${t}.character.${i}.name`, '');
                 setItem(`${base}.player.${t}.character.${i}.is_starred`, false);
+                setItem(`${base}.player.${t}.character.${i}.position`, '');
             }
         }
     }, [base, setItem]);

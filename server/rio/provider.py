@@ -114,10 +114,12 @@ async def apply_parsed_game_to_state(parsed: dict, scoreboard_number: int, home_
         (f"{sb}.runner2Name", parsed.get("runner2Name", "")),
         (f"{sb}.runner3Name", parsed.get("runner3Name", "")),
 
-        # Fielding team's defenders placed onto the diamond (the DiamondPanel
-        # reads these by position). Pitcher is carried separately above. The 8
-        # field spots flip teams each half-inning, recomputed on every event.
-        (f"{sb}.field.C", parsed.get("field", {}).get("C", "")),
+        # All 9 fielding positions from the same diamond lookup.
+        # Pitcher is also stored at score.{N}.pitcher for the DiamondPanel
+        # and ActiveMatchupStats, but field.P keeps the namespace uniform.
+        # These flip teams each half-inning, recomputed on every event.
+        (f"{sb}.field.P",  parsed.get("field", {}).get("P",  "")),
+        (f"{sb}.field.C",  parsed.get("field", {}).get("C",  "")),
         (f"{sb}.field.1B", parsed.get("field", {}).get("1B", "")),
         (f"{sb}.field.2B", parsed.get("field", {}).get("2B", "")),
         (f"{sb}.field.3B", parsed.get("field", {}).get("3B", "")),
@@ -158,12 +160,10 @@ async def apply_parsed_game_to_state(parsed: dict, scoreboard_number: int, home_
         fielding_hands = player.get("fielding_hands", [])
         is_starred = player.get("is_starred", [])
         positions = player.get("positions", [])
+        entries.append((f"{prefix}.batting_hands", batting_hands))
+        entries.append((f"{prefix}.fielding_hands", fielding_hands))
         for char_idx, char_name in enumerate(roster):
             entries.append((f"{prefix}.character.{char_idx}.name", char_name))
-            if char_idx < len(batting_hands):
-                entries.append((f"{prefix}.character.{char_idx}.batting_hand", batting_hands[char_idx]))
-            if char_idx < len(fielding_hands):
-                entries.append((f"{prefix}.character.{char_idx}.fielding_hand", fielding_hands[char_idx]))
             if char_idx < len(is_starred):
                 entries.append((f"{prefix}.character.{char_idx}.is_starred", is_starred[char_idx]))
             if char_idx < len(positions):
@@ -260,6 +260,23 @@ async def apply_completed_game_to_state(game: dict, scoreboard_number: int):
         (f"{sb}.runner1Name", ""),
         (f"{sb}.runner2Name", ""),
         (f"{sb}.runner3Name", ""),
+
+        # Clear in-play display state that completed games don't provide.
+        # Without these, the previous live game's values bleed through.
+        (f"{sb}.batter_hand", 0),
+        (f"{sb}.pitcher_hand", 0),
+        (f"{sb}.batterSide", "right"),
+        (f"{sb}.star_chance", False),
+        (f"{sb}.tag_set", None),
+        (f"{sb}.field.P",  ""),
+        (f"{sb}.field.C",  ""),
+        (f"{sb}.field.1B", ""),
+        (f"{sb}.field.2B", ""),
+        (f"{sb}.field.3B", ""),
+        (f"{sb}.field.SS", ""),
+        (f"{sb}.field.LF", ""),
+        (f"{sb}.field.CF", ""),
+        (f"{sb}.field.RF", ""),
     ]
 
     # Team data — captain only, no full roster
@@ -282,13 +299,17 @@ async def apply_completed_game_to_state(game: dict, scoreboard_number: int):
         entries.append((f"{prefix}.logo", ""))
         entries.append((f"{prefix}.port", None))
         entries.append((f"{prefix}.team_stars", 0))
+        entries.append((f"{prefix}.batting_hands", []))
+        entries.append((f"{prefix}.fielding_hands", []))
 
-        # Captain in slot 0, clear remaining slots (and stale positions)
+        # Captain in slot 0, clear remaining slots and all stale per-character data.
         entries.append((f"{prefix}.character.0.name", captain))
         entries.append((f"{prefix}.character.0.position", ""))
+        entries.append((f"{prefix}.character.0.is_starred", False))
         for char_idx in range(1, 9):
             entries.append((f"{prefix}.character.{char_idx}.name", None))
             entries.append((f"{prefix}.character.{char_idx}.position", ""))
+            entries.append((f"{prefix}.character.{char_idx}.is_starred", False))
 
     await State.SetBatch(entries)
     await State.Save()
@@ -499,10 +520,7 @@ class RioGameDataProvider:
                 entrant["inning_scores"] = list(game_json.get(f"{team}_inning_scores", []) or [])
 
             batter_index = game_json["batter"]
-            pitcher_index = game_json["pitcher"]
-
             data["batter_roster_index"] = batter_index
-            data["pitcher_roster_index"] = pitcher_index
 
             half = game_json["half_inning"]
             # Batting side: Top (0) → away, Bottom (1) → home.
@@ -531,11 +549,14 @@ class RioGameDataProvider:
                     else ""
                 )
             data["field"] = field
-            # The DiamondPanel reads the pitcher from score.{N}.pitcher; source it
-            # from the same diamond (position 0) rather than the live pitcher index.
+            # Pitcher is diamond position 0 — same lookup method as every other
+            # fielder. roster_index and hand all resolve from the same slot so
+            # pitcher name, hand, and stats always refer to the same player.
+            diamond_pitcher_slot = fielding_diamond[0]
             data["pitcher"] = field.get("P", "")
+            data["pitcher_roster_index"] = diamond_pitcher_slot
             data["batter_hand"] = data["entrants"][batting_idx][0]["batting_hands"][batter_index]
-            data["pitcher_hand"] = data["entrants"][fielding_idx][0]["fielding_hands"][pitcher_index]
+            data["pitcher_hand"] = fielding_entrant["fielding_hands"][diamond_pitcher_slot]
 
             data["inning"] = game_json["inning"]
             data["outs"] = game_json["outs"]
