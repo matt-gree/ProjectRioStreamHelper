@@ -173,6 +173,21 @@ async def apply_parsed_game_to_state(parsed: dict, scoreboard_number: int, home_
     await State.Save()
 
 
+def _linescore_side(linescore, side: int) -> list:
+    """Extract one side's per-inning run list from a linescore value.
+
+    TODO: Remove list branch once all users are on the updated Project Rio
+    server that standardizes linescore as {"0": [...], "1": [...]}. The list
+    form [[away...], [home...]] was returned by older server builds and caused
+    AttributeError crashes in rotation advance (v1.1.0 bug).
+    """
+    if not linescore:
+        return []
+    if isinstance(linescore, list):
+        return linescore[side] if side < len(linescore) else []
+    return linescore.get(str(side), [])
+
+
 async def apply_completed_game_to_state(game: dict, scoreboard_number: int):
     """Write completed game data into State under score.{scoreboard_number}.
 
@@ -211,10 +226,11 @@ async def apply_completed_game_to_state(game: dict, scoreboard_number: int):
         (f"{sb}.stadium", stadium_slug),
         (f"{sb}.game_mode", game.get("game_mode", "")),
 
-        # Linescore (per-inning runs, returned by API with include_linescore=1)
-        # API returns {"0": [away innings...], "1": [home innings...]}
-        (f"{sb}.away_linescore", (game.get("linescore") or {}).get("0", [])),
-        (f"{sb}.home_linescore", (game.get("linescore") or {}).get("1", [])),
+        # Linescore (per-inning runs, returned by API with include_linescore=1).
+        # API returns {"0": [away innings...], "1": [home innings...]} but may
+        # also return a list [[away...], [home...]] for some game records.
+        (f"{sb}.away_linescore", _linescore_side(game.get("linescore"), 0)),
+        (f"{sb}.home_linescore", _linescore_side(game.get("linescore"), 1)),
 
         # ELO
         (f"{sb}.winner_incoming_elo", game.get("winner_incoming_elo")),
