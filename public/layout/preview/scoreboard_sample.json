@@ -21,128 +21,65 @@
   "runner1Name": "",
   "runner2Name": "",
   "runner3Name": "",
+  "star_chance": false,
+  "stadium": "wario_palace",
+  "innings_selected": 9,
+  "tag_set": 210,
+  "away_linescore": [0, 2, 0, 1, 2],
+  "home_linescore": [3, 0, 0, 4, 0],
+  "field": {
+    "P":  "Boo",
+    "C":  "Toadsworth",
+    "1B": "DK",
+    "2B": "Waluigi",
+    "3B": "Bro(H)",
+    "SS": "King Boo",
+    "LF": "Wario",
+    "CF": "Mario",
+    "RF": "Noki(G)"
+  },
   "player": {
     "1": {
       "rioName": "Baltor33",
       "msb_team": "Birdo Beauties",
+      "logo": "Birdo Beauties",
+      "port": 1,
+      "team_stars": 2,
       "rio_captainIndex": 3,
+      "batting_hands":  [1, 1, 1, 0, 1, 1, 0, 1, 1],
+      "fielding_hands": [0, 0, 0, 0, 1, 0, 0, 0, 0],
       "character": {
-        "0": {
-          "name": "Paratroopa(G)",
-          "batting_hand": 1,
-          "fielding_hand": 0,
-          "is_starred": false
-        },
-        "1": {
-          "name": "Bowser",
-          "batting_hand": 1,
-          "fielding_hand": 0,
-          "is_starred": false
-        },
-        "2": {
-          "name": "Yoshi",
-          "batting_hand": 1,
-          "fielding_hand": 0,
-          "is_starred": false
-        },
-        "3": {
-          "name": "Birdo",
-          "batting_hand": 0,
-          "fielding_hand": 0,
-          "is_starred": false
-        },
-        "4": {
-          "name": "Petey",
-          "batting_hand": 1,
-          "fielding_hand": 1,
-          "is_starred": false
-        },
-        "5": {
-          "name": "Magikoopa(B)",
-          "batting_hand": 1,
-          "fielding_hand": 0,
-          "is_starred": false
-        },
-        "6": {
-          "name": "Pianta(R)",
-          "batting_hand": 0,
-          "fielding_hand": 0,
-          "is_starred": false
-        },
-        "7": {
-          "name": "Luigi",
-          "batting_hand": 1,
-          "fielding_hand": 0,
-          "is_starred": false
-        },
-        "8": {
-          "name": "Dixie",
-          "batting_hand": 1,
-          "fielding_hand": 0,
-          "is_starred": false
-        }
+        "0": { "name": "Paratroopa(G)", "is_starred": false },
+        "1": { "name": "Bowser",        "is_starred": false },
+        "2": { "name": "Yoshi",         "is_starred": false },
+        "3": { "name": "Birdo",         "is_starred": false },
+        "4": { "name": "Petey",         "is_starred": false },
+        "5": { "name": "Magikoopa(B)",  "is_starred": false },
+        "6": { "name": "Pianta(R)",     "is_starred": false },
+        "7": { "name": "Luigi",         "is_starred": false },
+        "8": { "name": "Dixie",         "is_starred": false }
       },
       "youtube": "Baltor And Buddies"
     },
     "2": {
       "rioName": "MattGree",
       "msb_team": "Mario Heroes",
+      "logo": "Mario Heroes",
+      "port": 0,
+      "team_stars": 1,
       "rio_captainIndex": 7,
+      "batting_hands":  [0, 1, 1, 0, 1, 1, 1, 0, 1],
+      "fielding_hands": [0, 0, 1, 0, 0, 1, 0, 0, 0],
       "character": {
-        "0": {
-          "name": "Toadsworth",
-          "batting_hand": 0,
-          "fielding_hand": 0,
-          "is_starred": false
-        },
-        "1": {
-          "name": "DK",
-          "batting_hand": 1,
-          "fielding_hand": 0,
-          "is_starred": false
-        },
-        "2": {
-          "name": "Waluigi",
-          "batting_hand": 1,
-          "fielding_hand": 1,
-          "is_starred": false
-        },
-        "3": {
-          "name": "Bro(H)",
-          "batting_hand": 0,
-          "fielding_hand": 0,
-          "is_starred": false
-        },
-        "4": {
-          "name": "King Boo",
-          "batting_hand": 1,
-          "fielding_hand": 0,
-          "is_starred": false
-        },
-        "5": {
-          "name": "Boo",
-          "batting_hand": 1,
-          "fielding_hand": 1,
-          "is_starred": false
-        },
-        "6": {
-          "name": "Wario",
-          "batting_hand": 1,
-          "fielding_hand": 0,
-          "is_starred": false
-        },
-        "7": {
-          "name": "Mario",
-          "batting_hand": 0,
-          "fielding_hand": 0,
-          "is_starred": false
-        },
-        "8": {
-          "name": "Noki(G)",
-          "batting_hand": 1,
-          "fielding_hand": 0,
-          "is_starred": false
-        }
+        "0": { "name": "Toadsworth", "is_starred": false },
+        "1": { "name": "DK",         "is_starred": false },
+        "2": { "name": "Waluigi",    "is_starred": false },
+        "3": { "name": "Bro(H)",     "is_starred": false },
+        "4": { "name": "King Boo",   "is_starred": false },
+        "5": { "name": "Boo",        "is_starred": false },
+        "6": { "name": "Wario",      "is_starred": false },
+        "7": { "name": "Mario",      "is_starred": false },
+        "8": { "name": "Noki(G)",    "is_starred": false }
       },
       "youtube": "MattGree"
     }

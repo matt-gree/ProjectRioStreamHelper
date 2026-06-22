@@ -308,6 +308,10 @@
       if (activeColor) root.setProperty('--active-color', activeColor);
       else root.removeProperty('--active-color');
     }
+    if (effectiveLayoutType === 'playername') {
+      const textColor = g('overlays.playername.textColor', null);
+      if (textColor) root.setProperty('--text-primary', textColor);
+    }
   }
 
   // ── Backward-compatible alias ──

@@ -1,3 +1,4 @@
+import platform
 import re
 from pathlib import Path
 from fastapi import APIRouter, Request
@@ -6,6 +7,10 @@ from fastapi.responses import ORJSONResponse
 router = APIRouter()
 
 _layout_dir = Path("./public/layout")
+
+# The controller browser-source wraps gc-overlay, which only runs on macOS.
+# Hide that layout group from the catalog on other platforms.
+_CONTROLLER_SUPPORTED = platform.system() == "Darwin"
 
 _body_w_re = re.compile(r"body\s*\{[^}]*width:\s*(\d+)px", re.DOTALL)
 _body_h_re = re.compile(r"body\s*\{[^}]*height:\s*(\d+)px", re.DOTALL)
@@ -48,16 +53,20 @@ _SIZE_VARIANTS = {
 # Team variants for layouts that support ?team= param.
 # Each: (team_num, label)
 _TEAM_VARIANTS = {
-    "stats":     [(1, "Team 1"), (2, "Team 2")],
-    "roster":    [(1, "Team 1"), (2, "Team 2")],
-    "teamlogo":  [(1, "Team 1"), (2, "Team 2")],
+    "stats":       [(1, "Team 1"), (2, "Team 2")],
+    "roster":      [(1, "Team 1"), (2, "Team 2")],
+    "teamlogo":    [(1, "Team 1"), (2, "Team 2")],
+    "controller":  [(1, "Team 1"), (2, "Team 2")],
+    "playername":  [(1, "Team 1"), (2, "Team 2")],
 }
 
 # Human-readable display names for layout types shown in the UI
 _DISPLAY_NAMES = {
-    "stats":    "Stats",
-    "roster":   "Roster",
-    "teamlogo": "Team Logo",
+    "stats":       "Stats",
+    "roster":      "Roster",
+    "teamlogo":    "Team Logo",
+    "controller":  "Controller",
+    "playername":  "Player Name",
 }
 
 # Fallback dimensions for layouts whose body is fluid (e.g. body { width: 100%
@@ -109,6 +118,11 @@ async def list_layouts(request: Request):
         for f in sorted(_layout_dir.rglob("*.html")):
             rel = f.relative_to(_layout_dir)
             group = str(rel.parent) if rel.parent != Path(".") else "ungrouped"
+
+            # gc-overlay is macOS-only; omit its browser source elsewhere.
+            if not _CONTROLLER_SUPPORTED and group == "controller":
+                continue
+
             layout_type = _derive_type(f.stem, group)
             base_url = f"{base}/layout/{rel}"
 

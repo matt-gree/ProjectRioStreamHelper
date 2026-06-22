@@ -47,6 +47,9 @@ Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription
 
 [Files]
 ; Bundle everything PyInstaller produced under dist\PRSH\ (includes _internal\).
+; Note: the gc-overlay controller input display is macOS-only and is not built
+; or bundled on Windows (PRSH.spec gates it on Darwin), so it is intentionally
+; absent here — the in-app UI hides the feature on Windows as well.
 Source: "..\dist\PRSH\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
