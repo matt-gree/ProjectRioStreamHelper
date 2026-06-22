@@ -11,6 +11,34 @@ from server.settings import Settings
 from server.state import State
 
 
+# Map pyrio's human-readable stadium names to the slug values used by the
+# frontend's STADIUM_OPTIONS / stadium renderer.
+_STADIUM_SLUGS = {
+    "Mario Stadium":  "mario_stadium",
+    "Bowser Castle":  "bowser_castle",
+    "Wario Palace":   "wario_palace",
+    "Yoshi Park":     "yoshi_park",
+    "Peach Garden":   "peach_garden",
+    "DK Jungle":      "dk_jungle",
+    "Toy Field":      "toy_field",
+}
+
+
+def _stadium_slug(val) -> str:
+    """Resolve a stadium value to the frontend slug.
+
+    Accepts an integer id (API ongoing feed), a human-readable name (HUD /
+    completed games), or an already-resolved slug. Returns '' when unknown.
+    """
+    if val is None or val == "" or val == -1:
+        return ""
+    if isinstance(val, bool):
+        return ""
+    if isinstance(val, int):
+        val = LookupDicts.STADIUM.get(val, "")
+    return _STADIUM_SLUGS.get(val, val)
+
+
 def _read_hud_targets() -> list[int]:
     """Active scoreboards whose source type is 'hud'."""
     active = Settings.Get("scoreboards.active", [1])
@@ -58,6 +86,10 @@ async def apply_parsed_game_to_state(parsed: dict, scoreboard_number: int, home_
     """
     sb = f"score.{scoreboard_number}"
 
+    entrants = parsed.get("entrants", [[{}], [{}]])
+    left = entrants[0][0] if entrants[0] else {}
+    right = entrants[1][0] if entrants[1] else {}
+
     entries = [
         (f"{sb}.home_team", home_team),
         (f"{sb}.game_id", parsed.get("game_id")),
@@ -81,9 +113,35 @@ async def apply_parsed_game_to_state(parsed: dict, scoreboard_number: int, home_
         (f"{sb}.runner1Name", parsed.get("runner1Name", "")),
         (f"{sb}.runner2Name", parsed.get("runner2Name", "")),
         (f"{sb}.runner3Name", parsed.get("runner3Name", "")),
+
+        # All 9 fielding positions from the same diamond lookup.
+        # Pitcher is also stored at score.{N}.pitcher for the DiamondPanel
+        # and ActiveMatchupStats, but field.P keeps the namespace uniform.
+        # These flip teams each half-inning, recomputed on every event.
+        (f"{sb}.field.P",  parsed.get("field", {}).get("P",  "")),
+        (f"{sb}.field.C",  parsed.get("field", {}).get("C",  "")),
+        (f"{sb}.field.1B", parsed.get("field", {}).get("1B", "")),
+        (f"{sb}.field.2B", parsed.get("field", {}).get("2B", "")),
+        (f"{sb}.field.3B", parsed.get("field", {}).get("3B", "")),
+        (f"{sb}.field.SS", parsed.get("field", {}).get("SS", "")),
+        (f"{sb}.field.LF", parsed.get("field", {}).get("LF", "")),
+        (f"{sb}.field.CF", parsed.get("field", {}).get("CF", "")),
+        (f"{sb}.field.RF", parsed.get("field", {}).get("RF", "")),
+
+        # Game-level metadata now sourced from HUD + ongoing API alike.
+        (f"{sb}.star_chance", parsed.get("star_chance", False)),
+        (f"{sb}.stadium", _stadium_slug(parsed.get("stadium_id"))),
+        (f"{sb}.innings_selected", parsed.get("innings_selected")),
+        (f"{sb}.tag_set", parsed.get("tag_set")),
+        # Live game — clear any completed-game framing left over on this slot.
+        (f"{sb}.game_completed", False),
+
+        # Per-inning runs for the box score. Reuses the same keys the completed
+        # game linescore renders from, so overlays render live + final the same.
+        (f"{sb}.away_linescore", left.get("inning_scores", [])),
+        (f"{sb}.home_linescore", right.get("inning_scores", [])),
     ]
 
-    entrants = parsed.get("entrants", [[{}], [{}]])
     for team_idx in range(2):
         team_num = team_idx + 1
         player = entrants[team_idx][0] if entrants[team_idx] else {}
@@ -92,22 +150,42 @@ async def apply_parsed_game_to_state(parsed: dict, scoreboard_number: int, home_
         entries.append((f"{prefix}.rioName", player.get("rioName", "")))
         entries.append((f"{prefix}.msb_team", player.get("msb_team", "")))
         entries.append((f"{prefix}.rio_captainIndex", player.get("captainIndex", 0)))
+        # Explicit banner art (may differ from the roster-derived msb_team).
+        entries.append((f"{prefix}.logo", player.get("logo", "")))
+        entries.append((f"{prefix}.port", player.get("port")))
+        entries.append((f"{prefix}.team_stars", player.get("team_stars", 0)))
 
         roster = player.get("roster", [])
         batting_hands = player.get("batting_hands", [])
         fielding_hands = player.get("fielding_hands", [])
         is_starred = player.get("is_starred", [])
+        positions = player.get("positions", [])
+        entries.append((f"{prefix}.batting_hands", batting_hands))
+        entries.append((f"{prefix}.fielding_hands", fielding_hands))
         for char_idx, char_name in enumerate(roster):
             entries.append((f"{prefix}.character.{char_idx}.name", char_name))
-            if char_idx < len(batting_hands):
-                entries.append((f"{prefix}.character.{char_idx}.batting_hand", batting_hands[char_idx]))
-            if char_idx < len(fielding_hands):
-                entries.append((f"{prefix}.character.{char_idx}.fielding_hand", fielding_hands[char_idx]))
             if char_idx < len(is_starred):
                 entries.append((f"{prefix}.character.{char_idx}.is_starred", is_starred[char_idx]))
+            if char_idx < len(positions):
+                entries.append((f"{prefix}.character.{char_idx}.position", positions[char_idx]))
 
     await State.SetBatch(entries)
     await State.Save()
+
+
+def _linescore_side(linescore, side: int) -> list:
+    """Extract one side's per-inning run list from a linescore value.
+
+    TODO: Remove list branch once all users are on the updated Project Rio
+    server that standardizes linescore as {"0": [...], "1": [...]}. The list
+    form [[away...], [home...]] was returned by older server builds and caused
+    AttributeError crashes in rotation advance (v1.1.0 bug).
+    """
+    if not linescore:
+        return []
+    if isinstance(linescore, list):
+        return linescore[side] if side < len(linescore) else []
+    return linescore.get(str(side), [])
 
 
 async def apply_completed_game_to_state(game: dict, scoreboard_number: int):
@@ -126,19 +204,7 @@ async def apply_completed_game_to_state(game: dict, scoreboard_number: int):
             return val.isoformat()
         return val
 
-    # Map pyrio's human-readable stadium names to the slug values used by the
-    # frontend's STADIUM_OPTIONS / stadium renderer.
-    _STADIUM_SLUGS = {
-        "Mario Stadium":  "mario_stadium",
-        "Bowser Castle":  "bowser_castle",
-        "Wario Palace":   "wario_palace",
-        "Yoshi Park":     "yoshi_park",
-        "Peach Garden":   "peach_garden",
-        "DK Jungle":      "dk_jungle",
-        "Toy Field":      "toy_field",
-    }
-    raw_stadium = game.get("stadium", "")
-    stadium_slug = _STADIUM_SLUGS.get(raw_stadium, raw_stadium)
+    stadium_slug = _stadium_slug(game.get("stadium", ""))
 
     entries = [
         # Home team designation (completed games always away=1, home=2)
@@ -160,10 +226,11 @@ async def apply_completed_game_to_state(game: dict, scoreboard_number: int):
         (f"{sb}.stadium", stadium_slug),
         (f"{sb}.game_mode", game.get("game_mode", "")),
 
-        # Linescore (per-inning runs, returned by API with include_linescore=1)
-        # API returns {"0": [away innings...], "1": [home innings...]}
-        (f"{sb}.away_linescore", (game.get("linescore") or {}).get("0", [])),
-        (f"{sb}.home_linescore", (game.get("linescore") or {}).get("1", [])),
+        # Linescore (per-inning runs, returned by API with include_linescore=1).
+        # API returns {"0": [away innings...], "1": [home innings...]} but may
+        # also return a list [[away...], [home...]] for some game records.
+        (f"{sb}.away_linescore", _linescore_side(game.get("linescore"), 0)),
+        (f"{sb}.home_linescore", _linescore_side(game.get("linescore"), 1)),
 
         # ELO
         (f"{sb}.winner_incoming_elo", game.get("winner_incoming_elo")),
@@ -193,6 +260,23 @@ async def apply_completed_game_to_state(game: dict, scoreboard_number: int):
         (f"{sb}.runner1Name", ""),
         (f"{sb}.runner2Name", ""),
         (f"{sb}.runner3Name", ""),
+
+        # Clear in-play display state that completed games don't provide.
+        # Without these, the previous live game's values bleed through.
+        (f"{sb}.batter_hand", 0),
+        (f"{sb}.pitcher_hand", 0),
+        (f"{sb}.batterSide", "right"),
+        (f"{sb}.star_chance", False),
+        (f"{sb}.tag_set", None),
+        (f"{sb}.field.P",  ""),
+        (f"{sb}.field.C",  ""),
+        (f"{sb}.field.1B", ""),
+        (f"{sb}.field.2B", ""),
+        (f"{sb}.field.3B", ""),
+        (f"{sb}.field.SS", ""),
+        (f"{sb}.field.LF", ""),
+        (f"{sb}.field.CF", ""),
+        (f"{sb}.field.RF", ""),
     ]
 
     # Team data — captain only, no full roster
@@ -210,11 +294,22 @@ async def apply_completed_game_to_state(game: dict, scoreboard_number: int):
         entries.append((f"{prefix}.rioName", username))
         entries.append((f"{prefix}.msb_team", ""))
         entries.append((f"{prefix}.rio_captainIndex", 0))
+        # Completed games carry no live banner/port/star data — clear any
+        # values left over from a previous live game on this scoreboard.
+        entries.append((f"{prefix}.logo", ""))
+        entries.append((f"{prefix}.port", None))
+        entries.append((f"{prefix}.team_stars", 0))
+        entries.append((f"{prefix}.batting_hands", []))
+        entries.append((f"{prefix}.fielding_hands", []))
 
-        # Captain in slot 0, clear remaining slots
+        # Captain in slot 0, clear remaining slots and all stale per-character data.
         entries.append((f"{prefix}.character.0.name", captain))
+        entries.append((f"{prefix}.character.0.position", ""))
+        entries.append((f"{prefix}.character.0.is_starred", False))
         for char_idx in range(1, 9):
             entries.append((f"{prefix}.character.{char_idx}.name", None))
+            entries.append((f"{prefix}.character.{char_idx}.position", ""))
+            entries.append((f"{prefix}.character.{char_idx}.is_starred", False))
 
     await State.SetBatch(entries)
     await State.Save()
@@ -333,6 +428,38 @@ class RioGameDataProvider:
         return str(c)
 
     @classmethod
+    def _resolve_logo(cls, v) -> str:
+        """Convert a team-logo value to its in-game name string.
+
+        Handles both integer ids (API ongoing feed) and name strings (HUD).
+        Returns '' for None. This is the explicit team-banner art, distinct
+        from the roster-derived team name (see _get_msb_team_name).
+        """
+        if v is None or v == "":
+            return ''
+        if isinstance(v, bool):
+            return ''
+        if isinstance(v, int):
+            return LookupDicts.LOGO.get(v, '')
+        return str(v)
+
+    @classmethod
+    def _resolve_position(cls, v) -> str:
+        """Convert a fielding-position value to its abbreviation string.
+
+        Handles both integer ids (API ongoing feed) and abbreviation strings
+        (HUD). Returns '' for None/invalid.
+        """
+        if v is None or v == "":
+            return ''
+        if isinstance(v, bool):
+            return ''
+        if isinstance(v, int):
+            name = LookupDicts.POSITION.get(v, '')
+            return '' if name in ('Inv', 'None') else name
+        return str(v)
+
+    @classmethod
     def parse_game_data(cls, game_json: dict) -> dict:
         """Convert a Project Rio game JSON into a TSH-compatible data format.
 
@@ -352,40 +479,84 @@ class RioGameDataProvider:
                     cls._resolve_char(game_json[f"{team}_roster_{j}_char"])
                     for j in range(9)
                 ]
-                data["entrants"][i][0]["roster"] = roster
-                data["entrants"][i][0]["batting_hands"] = [
+                positions_raw = game_json.get(f"{team}_fielding_positions", [])
+                entrant = data["entrants"][i][0]
+                entrant["roster"] = roster
+                entrant["batting_hands"] = [
                     game_json.get(f"{team}_roster_{j}_batting_hand", 0) for j in range(9)
                 ]
-                data["entrants"][i][0]["fielding_hands"] = [
+                entrant["fielding_hands"] = [
                     game_json.get(f"{team}_roster_{j}_fielding_hand", 0) for j in range(9)
                 ]
-                data["entrants"][i][0]["is_starred"] = [
+                entrant["is_starred"] = [
                     game_json.get(f"{team}_roster_{j}_is_starred", False) for j in range(9)
                 ]
-                data["entrants"][i][0]["captainIndex"] = game_json[f"{team}_captain"]
-                data["entrants"][i][0]["rioName"] = game_json[f"{team}_player"]
-                data["entrants"][i][0]["msb_team"] = cls._get_msb_team_name(
+                entrant["positions"] = [
+                    cls._resolve_position(positions_raw[j]) if j < len(positions_raw) else ""
+                    for j in range(9)
+                ]
+                # Position-indexed diamond: index 0=P..8=RF -> roster slot there
+                # (or None). The HUD path supplies it directly via pyrio's
+                # HudObj.defensive_diamond(); the API ongoing feed has no such
+                # field, so derive it from the resolved positions instead.
+                diamond = game_json.get(f"{team}_defensive_diamond")
+                if not isinstance(diamond, list):
+                    diamond = [None] * 9
+                    for slot, pos in enumerate(entrant["positions"]):
+                        idx = LookupDicts.POSITION_INDEX.get(pos)
+                        if idx is not None:
+                            diamond[idx] = slot
+                entrant["diamond"] = diamond
+                entrant["captainIndex"] = game_json[f"{team}_captain"]
+                entrant["rioName"] = game_json[f"{team}_player"]
+                entrant["msb_team"] = cls._get_msb_team_name(
                     roster, game_json[f"{team}_captain"]
                 )
+                # Explicit in-game banner art — independent of the roster-derived
+                # team name; players sometimes pick a banner on purpose.
+                entrant["logo"] = cls._resolve_logo(game_json.get(f"{team}_logo"))
+                entrant["port"] = game_json.get(f"{team}_port")
+                entrant["team_stars"] = game_json.get(f"{team}_stars", 0)
+                entrant["inning_scores"] = list(game_json.get(f"{team}_inning_scores", []) or [])
 
             batter_index = game_json["batter"]
-            pitcher_index = game_json["pitcher"]
-
             data["batter_roster_index"] = batter_index
-            data["pitcher_roster_index"] = pitcher_index
 
-            if game_json["half_inning"] == 0:
+            half = game_json["half_inning"]
+            # Batting side: Top (0) → away, Bottom (1) → home.
+            batting_idx = 0 if half == 0 else 1
+            fielding_idx = 1 - batting_idx
+            if half == 0:
                 data["half_inning"] = "Top"
-                data["batter"] = data["entrants"][0][0]["roster"][batter_index]
-                data["pitcher"] = data["entrants"][1][0]["roster"][pitcher_index]
-                data["batter_hand"] = data["entrants"][0][0]["batting_hands"][batter_index]
-                data["pitcher_hand"] = data["entrants"][1][0]["fielding_hands"][pitcher_index]
             else:
                 data["half_inning"] = "Bottom"
-                data["batter"] = data["entrants"][1][0]["roster"][batter_index]
-                data["pitcher"] = data["entrants"][0][0]["roster"][pitcher_index]
-                data["batter_hand"] = data["entrants"][1][0]["batting_hands"][batter_index]
-                data["pitcher_hand"] = data["entrants"][0][0]["fielding_hands"][pitcher_index]
+            data["batter"] = data["entrants"][batting_idx][0]["roster"][batter_index]
+
+            # Place every fielding-team defender onto the diamond the same way:
+            # diamond is position-indexed (0=P..8=RF) -> roster slot, resolved to
+            # a character name. The pitcher is just position 0 — no special case.
+            fielding_entrant = data["entrants"][fielding_idx][0]
+            fielding_roster = fielding_entrant["roster"]
+            fielding_diamond = fielding_entrant.get("diamond", [None] * 9)
+            field = {}
+            for pos_idx, label in LookupDicts.POSITION.items():
+                if not isinstance(pos_idx, int) or label == "Inv":
+                    continue
+                slot = fielding_diamond[pos_idx] if pos_idx < len(fielding_diamond) else None
+                field[label] = (
+                    fielding_roster[slot]
+                    if isinstance(slot, int) and 0 <= slot < len(fielding_roster)
+                    else ""
+                )
+            data["field"] = field
+            # Pitcher is diamond position 0 — same lookup method as every other
+            # fielder. roster_index and hand all resolve from the same slot so
+            # pitcher name, hand, and stats always refer to the same player.
+            diamond_pitcher_slot = fielding_diamond[0]
+            data["pitcher"] = field.get("P", "")
+            data["pitcher_roster_index"] = diamond_pitcher_slot
+            data["batter_hand"] = data["entrants"][batting_idx][0]["batting_hands"][batter_index]
+            data["pitcher_hand"] = fielding_entrant["fielding_hands"][diamond_pitcher_slot]
 
             data["inning"] = game_json["inning"]
             data["outs"] = game_json["outs"]
@@ -395,10 +566,29 @@ class RioGameDataProvider:
             data["runnerOn1"] = game_json["runner_on_first"]
             data["runnerOn2"] = game_json["runner_on_second"]
             data["runnerOn3"] = game_json["runner_on_third"]
-            data["runner1Name"] = game_json.get("runner_1b_name", "")
-            data["runner2Name"] = game_json.get("runner_2b_name", "")
-            data["runner3Name"] = game_json.get("runner_3b_name", "")
 
+            # Runner names: resolve from the batting team's roster + per-base
+            # roster index. Works for both HUD and API ongoing feeds (the API no
+            # longer ships runner_*_name strings). Falls back to any name string
+            # the source did provide.
+            batting_roster = data["entrants"][batting_idx][0]["roster"]
+
+            def _runner_name(base_word: str, base_num: int) -> str:
+                loc = game_json.get(f"runner_on_{base_word}_roster")
+                if isinstance(loc, int) and 0 <= loc < len(batting_roster):
+                    return batting_roster[loc]
+                return cls._resolve_char(game_json.get(f"runner_{base_num}b_name", ""))
+
+            data["runner1Name"] = _runner_name("first", 1) if data["runnerOn1"] else ""
+            data["runner2Name"] = _runner_name("second", 2) if data["runnerOn2"] else ""
+            data["runner3Name"] = _runner_name("third", 3) if data["runnerOn3"] else ""
+
+            # Game-level metadata (now available from both HUD and ongoing API).
+            data["star_chance"] = bool(game_json.get("star_chance", False))
+            data["stadium_id"] = game_json.get("stadium_id")
+            data["innings_selected"] = game_json.get("innings_selected")
+            data["first_batting_team"] = game_json.get("first_batting_team")
+            data["tag_set"] = game_json.get("tag_set")
             data["game_mode"] = game_json.get("tag_set", -1)
 
         except Exception as e:
@@ -444,6 +634,14 @@ class RioGameDataProvider:
         current_inning = game_json.get("inning", 1)
         is_new_game = cls._is_new_game(current_inning)
 
+        # On a new game, auto-select the game mode from the HUD's tag set so
+        # web stats fetch automatically — and the per-scoreboard game-mode
+        # selectbox visually reflects the mode actually being played. Mirrors
+        # the live-API assignment path, which already does this from the game's
+        # mode. Done before on_new_game so its stats fetch uses the new tag.
+        if is_new_game:
+            await cls._apply_hud_game_mode(game_json)
+
         for sb in cls._hud_targets:
             if is_new_game:
                 await StatsTracker.on_new_game(
@@ -465,6 +663,26 @@ class RioGameDataProvider:
 
         for sb in cls._hud_targets:
             await StatsTracker.push_stats_to_state(sb, cls._sides_swapped)
+
+    @classmethod
+    async def _apply_hud_game_mode(cls, game_json: dict):
+        """Set each HUD-target scoreboard's game-mode tag from the HUD tag set.
+
+        Resolves the HUD game's TagSetID to its game-mode name and writes it to
+        scoreboards.sources.{sb}.stats_tag. This drives the stats fetch and
+        updates the UI selectbox. If the id can't be resolved (unknown/inactive
+        mode) the existing manual selection is left untouched.
+        """
+        from server.rio import stats_api  # local import avoids cycle at module load
+
+        tag_set_id = game_json.get("tag_set")
+        name = await stats_api.resolve_tag_set_name(tag_set_id)
+        if not name:
+            return
+        for sb in cls._hud_targets:
+            current = Settings.Get(f"scoreboards.sources.{sb}.stats_tag", None)
+            if current != name:
+                await Settings.Set(f"scoreboards.sources.{sb}.stats_tag", name)
 
     @classmethod
     def _is_new_game(cls, current_inning: int) -> bool:

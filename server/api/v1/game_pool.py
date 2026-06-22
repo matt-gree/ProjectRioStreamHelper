@@ -167,42 +167,51 @@ async def assign_game(
     if OngoingGamePool.get_game(game_id):
         game = OngoingGamePool.get_game(game_id)
         success = await OngoingGamePool.apply_game_to_scoreboard(game_id, scoreboard_number)
-        if success and is_new_game:
-            # New live game on this scoreboard — sync the per-scoreboard
-            # stats_tag to this game's mode so the stats fetch uses the
-            # right tag. Gated on is_new_game so the live auto-poll's
-            # same-game re-applies don't re-trigger the frontend's
-            # tag-change refresh effect on every tick.
-            #
-            # If the new game's mode is unknown ("" or "ID:..."), clear the
-            # stats_tag rather than leaving the previous game's tag in place —
-            # otherwise stats fetches run with the wrong tag for the new game.
-            game_mode_name = game.get("game_mode_name", "")
-            if game_mode_name and not game_mode_name.startswith("ID:"):
-                await Settings.Set(
-                    f"scoreboards.sources.{scoreboard_number}.stats_tag",
-                    game_mode_name,
-                )
-            else:
-                await Settings.Set(
-                    f"scoreboards.sources.{scoreboard_number}.stats_tag",
-                    "",
-                )
-
-            # Initialize stats only on first load. Compute side swap the same
-            # way apply_game_to_scoreboard does so the slot maps teams
-            # correctly when pushing.
+        if success:
+            # Compute side swap the same way apply_game_to_scoreboard does so
+            # the stats slot maps teams correctly when pushing.
             parsed = RioGameDataProvider.parse_game_data(game)
             entrants = parsed.get("entrants", [[{}], [{}]])
             p0 = entrants[0][0].get("rioName", "") if entrants[0] else ""
             p1 = entrants[1][0].get("rioName", "") if entrants[1] else ""
             sides_swapped = _pinned_swap_needed(p0, p1) is True
-            await StatsTracker.on_new_game(
-                game,
-                scoreboard_number=scoreboard_number,
-                await_fetch=True,
-                sides_swapped=sides_swapped,
-            )
+
+            if is_new_game:
+                # New live game on this scoreboard — sync the per-scoreboard
+                # stats_tag to this game's mode so the stats fetch uses the
+                # right tag. Gated on is_new_game so the live auto-poll's
+                # same-game re-applies don't re-trigger the frontend's
+                # tag-change refresh effect on every tick.
+                #
+                # If the new game's mode is unknown ("" or "ID:..."), clear the
+                # stats_tag rather than leaving the previous game's tag in place
+                # — otherwise stats fetches run with the wrong tag for the game.
+                game_mode_name = game.get("game_mode_name", "")
+                if game_mode_name and not game_mode_name.startswith("ID:"):
+                    await Settings.Set(
+                        f"scoreboards.sources.{scoreboard_number}.stats_tag",
+                        game_mode_name,
+                    )
+                else:
+                    await Settings.Set(
+                        f"scoreboards.sources.{scoreboard_number}.stats_tag",
+                        "",
+                    )
+
+                # Initialize the slot + historical API stats on first load.
+                await StatsTracker.on_new_game(
+                    game,
+                    scoreboard_number=scoreboard_number,
+                    await_fetch=True,
+                    sides_swapped=sides_swapped,
+                )
+
+            # Record the current batter/pitcher game stats from the ongoing feed
+            # and push the merged result. The feed only exposes the two active
+            # characters, so the per-character current_game structure fills in
+            # as the lineup cycles across polls — matching a HUD-sourced game.
+            StatsTracker.on_live_game_update(game, scoreboard_number)
+            await StatsTracker.push_stats_to_state(scoreboard_number, sides_swapped)
     elif CompletedGamePool.get_game(game_id):
         success = await CompletedGamePool.apply_game_to_scoreboard(game_id, scoreboard_number)
     else:

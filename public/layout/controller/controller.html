@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <!-- Thin wrapper that binds a controller-input display to a scoreboard SIDE
+       (left/right player) rather than a fixed GameCube port. PRSH owns the
+       side→port mapping: the HUD reports each player's controller port, which
+       provider.py writes to score.{N}.player.{T}.port. This overlay reads that
+       port and embeds the running gc-overlay (which already supports ?port=N),
+       reloading only when the port actually changes (between games / on swap).
+       No gc-overlay changes required. -->
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { width: 512px; height: 256px; overflow: hidden; background: transparent; }
+    #wrap { width: 512px; height: 256px; }
+    #gc { width: 512px; height: 256px; border: 0; background: transparent; }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div id="wrap">
+    <iframe id="gc" class="hidden" allowtransparency="true"></iframe>
+  </div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="/layout/lib/overlay-base.js"></script>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const SB = parseInt(params.get('scoreboard')) || 1;
+    // team = 1 (left player) | 2 (right player). Mirrors the scoreboard sides.
+    const TEAM = parseInt(params.get('team')) || 1;
+    // Optional fixed override: ?port=0..3 ignores the HUD mapping entirely.
+    const PORT_OVERRIDE = params.has('port') ? parseInt(params.get('port')) : null;
+
+    const { deepGet, BASE_URL, state } = OverlayBase;
+    const PORT_KEY = `score.${SB}.player.${TEAM}.port`;
+
+    let gcBaseUrl = null;     // e.g. http://localhost:8069 (from controller status)
+    let lastPort = undefined; // last port we loaded the iframe with
+
+    // Resolve the running gc-overlay base URL. Returns '' when not running.
+    async function resolveGcBaseUrl() {
+      try {
+        const r = await fetch(`${BASE_URL}/api/v1/controller/status`);
+        if (!r.ok) return '';
+        const s = await r.json();
+        return s && s.running && s.url ? s.url : '';
+      } catch { return ''; }
+    }
+
+    function currentPort() {
+      if (PORT_OVERRIDE != null && !Number.isNaN(PORT_OVERRIDE)) return PORT_OVERRIDE;
+      const p = deepGet(state, PORT_KEY);
+      return (typeof p === 'number') ? p : null;
+    }
+
+    async function render() {
+      const iframe = document.getElementById('gc');
+      const port = currentPort();
+
+      if (port == null) {
+        iframe.classList.add('hidden');
+        iframe.src = 'about:blank';
+        lastPort = undefined;
+        return;
+      }
+
+      if (!gcBaseUrl) {
+        gcBaseUrl = await resolveGcBaseUrl();
+        if (!gcBaseUrl) {
+          // gc-overlay not running yet — retry shortly.
+          iframe.classList.add('hidden');
+          setTimeout(render, 2000);
+          return;
+        }
+      }
+
+      if (port !== lastPort) {
+        lastPort = port;
+        iframe.src = `${gcBaseUrl}/?port=${port}`;
+        iframe.classList.remove('hidden');
+      }
+    }
+
+    OverlayBase.init({
+      render,
+      shouldRender: (key) => key === PORT_KEY,
+    });
+  </script>
+</body>
+</html>

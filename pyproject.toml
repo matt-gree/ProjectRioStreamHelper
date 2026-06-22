@@ -29,6 +29,21 @@ numpy = "*"
 jinja2 = "*"
 python-multipart = "*"
 
+[tool.poetry.group.dev.dependencies]
+# Test-only deps — kept out of the frozen build (PyInstaller bundles the main
+# dependency group only).
+pytest = ">=8.3"
+pytest-asyncio = ">=0.24"
+pytest-cov = ">=5.0"
+
+[tool.pytest.ini_options]
+# Auto mode: `async def test_*` runs without per-test decorators — almost every
+# state path in this app is async.
+asyncio_mode = "auto"
+testpaths = ["tests"]
+# Put the repo root on sys.path so tests can `import server` when run from root.
+pythonpath = ["."]
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"

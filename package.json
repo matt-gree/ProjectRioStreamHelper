@@ -14,7 +14,10 @@
     "build": "vite build",
     "vite": "vite",
     "vite:lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
-    "vite:preview": "vite preview"
+    "vite:preview": "vite preview",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:cov": "vitest run --coverage"
   },
   "dependencies": {
     "react": "^19.0.0",
@@ -24,10 +27,15 @@
     "@mantine/core": "^7.17.0",
     "@mantine/hooks": "^7.17.0",
     "@mantine/notifications": "^7.17.0",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
     "@vitejs/plugin-react": "^4.3.4",
+    "@vitest/coverage-v8": "^4.1.9",
     "concurrently": "^9.1.2",
+    "jsdom": "^29.1.1",
     "postcss": "^8.5.3",
     "postcss-preset-mantine": "^1.17.0",
     "postcss-simple-vars": "^7.0.1",
@@ -36,6 +44,7 @@
     "react-router-dom": "^7.2.0",
     "socket.io-client": "^4.8.1",
     "vite": "^6.1.1",
+    "vitest": "^4.1.9",
     "zustand": "^5.0.3"
   }
 }

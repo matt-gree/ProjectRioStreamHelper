@@ -2,41 +2,50 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <meta name="overlay-settings" content="" />
+  <meta name="overlay-settings" content="textColor, fontFamily, textShadow" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet" />
   <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      overflow: hidden;
-      margin: 0;
-      width: 360px;
-      height: 360px;
+      width: 400px;
+      height: 100px;
       background: transparent;
+      font-family: var(--font-family, 'Inter', sans-serif);
     }
-    .team-logo-container {
+    .name-container {
       display: flex;
       align-items: center;
       justify-content: center;
-      width: 360px;
-      height: 360px;
+      width: 100%;
+      height: 100%;
+      padding: 16px;
       transform-origin: top left;
     }
-    .team-logo {
-      width: 360px;
-      height: 360px;
-      object-fit: contain;
+    .player-name {
+      font-size: 36px;
+      font-weight: 700;
+      color: var(--text-primary, #ffffff);
+      text-shadow: var(--text-shadow, none);
+      white-space: nowrap;
     }
   </style>
 </head>
 <body>
-  <div class="team-logo-container" id="team-logo-container"></div>
+  <div class="name-container" id="name-container">
+    <span class="player-name" id="name-text"></span>
+  </div>
 
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <script src="/layout/lib/overlay-base.js"></script>
   <script>
-    const REF_W = 360, REF_H = 360;
+    const REF_W = 400, REF_H = 100;
     document.body.dataset.refW = REF_W;
     document.body.dataset.refH = REF_H;
+
     function autoScale() {
-      const el = document.getElementById('team-logo-container');
+      const el = document.getElementById('name-container');
       const needsScale = Math.abs(window.innerWidth - REF_W) > 2 || Math.abs(window.innerHeight - REF_H) > 2;
       if (needsScale) {
         const scale = Math.min(window.innerWidth / REF_W, window.innerHeight / REF_H);
@@ -56,28 +65,20 @@
     const params = new URLSearchParams(window.location.search);
     const SCOREBOARD = parseInt(params.get('scoreboard')) || 1;
     const TEAM_NUM = parseInt(params.get('team')) || 1;
-    // Prefer the explicit in-game banner (player.T.logo); fall back to the
-    // roster-derived team name (msb_team) when no banner is set.
-    const LOGO_KEY = `score.${SCOREBOARD}.player.${TEAM_NUM}.logo`;
-    const TEAM_KEY = `score.${SCOREBOARD}.player.${TEAM_NUM}.msb_team`;
-    const { deepGet, BASE_URL, state } = OverlayBase;
+    const NAME_KEY = `score.${SCOREBOARD}.player.${TEAM_NUM}.rioName`;
+    const { deepGet, state, applyDesignSettings } = OverlayBase;
 
     function render() {
-      const container = document.getElementById('team-logo-container');
-      container.innerHTML = '';
-      const teamName = deepGet(state, LOGO_KEY) || deepGet(state, TEAM_KEY);
-      if (teamName) {
-        const img = document.createElement('img');
-        img.src = `${BASE_URL}/game_assets/msb/teamLogos/${encodeURIComponent(teamName)}.png`;
-        img.className = 'team-logo';
-        img.onerror = () => img.style.display = 'none';
-        container.appendChild(img);
-      }
+      applyDesignSettings('playername');
+      const name = deepGet(state, NAME_KEY, '');
+      document.getElementById('name-text').textContent = name;
     }
 
     OverlayBase.init({
       render,
-      shouldRender: (key) => key === LOGO_KEY || key === TEAM_KEY,
+      fetchSettings: true,
+      shouldRender: (key) => key === NAME_KEY,
+      shouldRenderSettings: (key) => key.startsWith('overlays.'),
     });
   </script>
 </body>
