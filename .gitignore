@@ -203,6 +203,13 @@ bower_components
 # node-waf configuration
 .lock-wscript
 
+# Agent git worktrees live here. Must be ignored: they nest under the project
+# root, so Tailwind v4's content crawler (which scans everything not in
+# .gitignore) would otherwise pick up each worktree's duplicate source +
+# public assets, and a removed worktree leaves dangling url() refs
+# (vite:css-analysis ENOENT). Also keeps `git status` quiet.
+.claude/worktrees/
+
 # Dependency directories
 # No trailing slash so a `node_modules` symlink (used to share deps into a
 # git worktree) is ignored too, not just a real directory.
