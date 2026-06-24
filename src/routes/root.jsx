@@ -3,6 +3,7 @@ import TSHFields from '../components/fields';
 import WelcomeCard from '../components/WelcomeCard';
 import { cn } from "../lib/utils";
 
+import Production from './production/production';
 import Bracket from './bracket/bracket';
 import Commentary from './commentary/commentary';
 import PlayerList from './player_list/player_list';
@@ -11,7 +12,8 @@ import TournamentInfo from "./tournament_info/tournament_info";
 import LayoutBrowser from "./layouts/layouts";
 
 const allTabs = [
-  { name: "Scoreboard", path: "/" },
+  { name: "Production", path: "/" },
+  { name: "Scoreboard", path: "/scoreboard" },
   { name: "Competition Info", path: "/tournament_info" },
   { name: "Bracket", path: "/bracket" },
   { name: "Commentary", path: "/commentary" },
@@ -47,7 +49,8 @@ export default function Root() {
       </nav>
       <div className="p-5">
         <Routes>
-          <Route path="/" element={<ScoreboardManager />} />
+          <Route path="/" element={<Production />} />
+          <Route path="/scoreboard" element={<ScoreboardManager />} />
           <Route path="/tournament_info" element={<TournamentInfo />} />
           <Route path="/bracket" element={<Bracket />} />
           <Route path="/commentary" element={<Commentary />} />

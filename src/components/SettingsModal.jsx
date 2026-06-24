@@ -10,10 +10,25 @@ import { Label } from './ui/label';
 import { SegmentedControl } from './ui/segmented-control';
 import { SimpleTooltip } from './ui/simple-tooltip';
 import { notifications } from '../lib/notify';
+import { cn } from '../lib/utils';
 import LogsViewer from './LogsViewer';
 import { useSettingsStore, useConfigStore } from '../context/store';
+import { useObsStore } from '../context/obs';
 import { useAssetsVersionStore } from '../lib/assets';
 import { SupportLinks } from './SupportLinks';
+
+const OBS_DOT = {
+    connected: 'bg-emerald-500',
+    connecting: 'bg-amber-400 animate-pulse',
+    error: 'bg-destructive',
+    disconnected: 'bg-muted-foreground/50',
+};
+const OBS_LABEL = {
+    connected: 'Connected',
+    connecting: 'Connecting…',
+    error: 'Connection error',
+    disconnected: 'Not connected',
+};
 
 /**
  * Settings modal with HUD path configuration and Challonge API key.
@@ -66,6 +81,13 @@ export default function SettingsModal({ opened, onClose }) {
     // Logs viewer
     const [logsOpen, setLogsOpen] = useState(false);
 
+    // OBS connection — edited as local draft, applied on "Save & Connect" so we
+    // don't reconnect on every keystroke (the ObsConnectionManager reconnects
+    // whenever host/port/password change).
+    const [obsHost, setObsHost] = useState('127.0.0.1');
+    const [obsPort, setObsPort] = useState('4455');
+    const [obsPassword, setObsPassword] = useState('');
+
     const bumpAssetsVersion = useAssetsVersionStore(s => s.bump);
 
     // Appearance — color scheme stored as a regular setting for portability.
@@ -93,6 +115,24 @@ export default function SettingsModal({ opened, onClose }) {
             color: 'yellow',
         });
     }, [setSetting]);
+
+    // OBS — live connection status (read) + auto-connect toggle (write).
+    const obsStatus = useObsStore(state => state.status);
+    const obsError = useObsStore(state => state.error);
+    const obsVersion = useObsStore(state => state.obsVersion);
+    const obsConnect = useObsStore(state => state.connect);
+    const obsAutoConnect = useSettingsStore(state => state?.obs?.auto_connect) !== false;
+    const handleObsAutoConnect = useCallback((value) => {
+        setSetting('obs.auto_connect', !!value);
+    }, [setSetting]);
+    const handleApplyObs = useCallback(() => {
+        setSetting('obs.host', obsHost.trim() || '127.0.0.1');
+        setSetting('obs.port', Number(obsPort) || 4455);
+        setSetting('obs.password', obsPassword);
+        // Settings now updated synchronously; connect reads the fresh values.
+        obsConnect();
+        notifications.show({ message: 'OBS connection settings saved.', color: 'green' });
+    }, [setSetting, obsHost, obsPort, obsPassword, obsConnect]);
 
     const fetchHudPath = useCallback(async () => {
         try {
@@ -284,6 +324,10 @@ export default function SettingsModal({ opened, onClose }) {
             fetchStreamLabels();
             fetchAnnouncements();
             setChallongeKey('');
+            const obs = useSettingsStore.getState()?.obs ?? {};
+            setObsHost(obs.host ?? '127.0.0.1');
+            setObsPort(String(obs.port ?? 4455));
+            setObsPassword(obs.password ?? '');
         }
     }, [opened, fetchHudPath, fetchAssetsPath, fetchPinnedPlayer, fetchChallongeStatus, fetchControllerStatus, fetchStreamLabels, fetchAnnouncements]);
 
@@ -645,6 +689,67 @@ export default function SettingsModal({ opened, onClose }) {
                             <Text size="sm">Allow LAN access (bind 0.0.0.0)</Text>
                             <Text size="xs" dimmed>
                                 By default PRSH listens on loopback only (127.0.0.1) — only this computer can reach the UI and OBS overlays. Enable LAN access to use a phone or tablet on the same WiFi as a remote control. Anyone on the network will be able to read and modify scoreboards, settings, and any saved tournament API keys, so leave this off on shared networks (cafes, conventions).
+                            </Text>
+                        </span>
+                    </Label>
+
+                    <Divider label="OBS Connection" />
+
+                    <Text size="xs" dimmed>
+                        Connect to OBS via its WebSocket server (OBS 28+: Tools → WebSocket Server Settings → enable, default port 4455). PRSH connects from your browser, so use the address of the machine running OBS — localhost if that’s this computer. Powers the Production page’s On Air / Preview rail.
+                    </Text>
+
+                    <div className="grid grid-cols-[1fr_120px] gap-2">
+                        <div className="flex flex-col gap-1">
+                            <Label htmlFor="obs-host"><Text size="xs" dimmed>Host</Text></Label>
+                            <Input
+                                id="obs-host"
+                                value={obsHost}
+                                onChange={e => setObsHost(e.currentTarget.value)}
+                                placeholder="127.0.0.1"
+                            />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                            <Label htmlFor="obs-port"><Text size="xs" dimmed>Port</Text></Label>
+                            <Input
+                                id="obs-port"
+                                inputMode="numeric"
+                                value={obsPort}
+                                onChange={e => setObsPort(e.currentTarget.value.replace(/[^0-9]/g, ''))}
+                                placeholder="4455"
+                            />
+                        </div>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                        <Label htmlFor="obs-pass"><Text size="xs" dimmed>Password (optional)</Text></Label>
+                        <PasswordInput
+                            id="obs-pass"
+                            value={obsPassword}
+                            onChange={e => setObsPassword(e.currentTarget.value)}
+                            placeholder="If authentication is enabled in OBS"
+                        />
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                            <span className={cn('size-2 rounded-full', OBS_DOT[obsStatus] ?? OBS_DOT.disconnected)} />
+                            <Text size="sm">
+                                {OBS_LABEL[obsStatus] ?? 'Not connected'}
+                                {obsStatus === 'connected' && obsVersion ? ` · v${obsVersion}` : ''}
+                            </Text>
+                        </div>
+                        <Button size="xs" className="shrink-0" onClick={handleApplyObs}>Save &amp; Connect</Button>
+                    </div>
+                    {obsStatus === 'error' && obsError && (
+                        <Text size="xs" className="text-destructive">{obsError}</Text>
+                    )}
+
+                    <Label className="flex items-start gap-2">
+                        <Switch checked={obsAutoConnect} onCheckedChange={handleObsAutoConnect} className="mt-0.5" />
+                        <span className="flex flex-col">
+                            <Text size="sm">Auto-connect on launch</Text>
+                            <Text size="xs" dimmed>
+                                Connect to OBS automatically when PRSH starts, and keep retrying if OBS isn’t open yet.
                             </Text>
                         </span>
                     </Label>

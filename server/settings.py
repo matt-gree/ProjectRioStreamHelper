@@ -144,6 +144,17 @@ class Settings:
         "challonge": {
             "api_key": ""
         },
+        "obs": {
+            # OBS WebSocket (obs-websocket v5, OBS 28+). The connection is made
+            # from the browser (frontend) to localhost:4455, NOT from this
+            # backend — so it reaches the OBS the producer is sitting at even in
+            # dual-machine setups (OBS on the streaming PC, PRSH on the gaming
+            # PC). Enable the server in OBS via Tools -> WebSocket Server Settings.
+            "host": "127.0.0.1",
+            "port": 4455,
+            "password": "",
+            "auto_connect": True
+        },
         "announcements": {
             "dismissed_ids": [],
             "check_for_updates": True,
