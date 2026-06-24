@@ -1,14 +1,19 @@
 import { useState, useEffect, useCallback } from 'react';
-import {
-    Modal, Stack, PasswordInput, Button, Group, Badge, Text, Divider,
-    TextInput, ActionIcon, Tooltip, SegmentedControl, Switch,
-} from '@mantine/core';
-import { notifications } from '@mantine/notifications';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
+import { Stack, Text, Divider, Loader } from './ui/primitives';
+import { Button } from './ui/button';
+import { Badge } from './ui/badge';
+import { Input } from './ui/input';
+import { PasswordInput } from './ui/password-input';
+import { Switch } from './ui/switch';
+import { Label } from './ui/label';
+import { SegmentedControl } from './ui/segmented-control';
+import { SimpleTooltip } from './ui/simple-tooltip';
+import { notifications } from '../lib/notify';
 import LogsViewer from './LogsViewer';
 import { useSettingsStore, useConfigStore } from '../context/store';
 import { useAssetsVersionStore } from '../lib/assets';
 import { SupportLinks } from './SupportLinks';
-
 
 /**
  * Settings modal with HUD path configuration and Challonge API key.
@@ -69,7 +74,7 @@ export default function SettingsModal({ opened, onClose }) {
     // gc-overlay (controller input) only works on macOS — hide its settings
     // elsewhere. The flag comes from the server Config (see settings.py).
     const controllerSupported = useConfigStore(state => state.controller_overlay_supported);
-    const colorScheme = useSettingsStore(state => state?.ui?.color_scheme) || 'auto';
+    const colorScheme = useSettingsStore(state => state?.ui?.color_scheme) || 'dark';
     const setSetting = useSettingsStore(state => state.setItem);
     const handleColorScheme = useCallback((value) => {
         setSetting('ui.color_scheme', value);
@@ -401,382 +406,321 @@ export default function SettingsModal({ opened, onClose }) {
 
     return (
         <>
-        <Modal opened={opened} onClose={() => { bumpAssetsVersion(); onClose(); }} title="Settings" size="lg">
-            <Stack gap="sm">
-                {/* About blurb — version moved here from the app title */}
-                <Group gap="xs" align="center">
-                    <img src="/favicon.png" alt="" width={28} height={28} />
-                    <Stack gap={0}>
-                        <Text size="sm" fw={600}>
-                            {appName}{appVersion ? ` v${appVersion}` : ''}
-                        </Text>
-                        <Text size="xs" c="dimmed">
-                            Tournament stream overlay manager for Mario Superstar Baseball.
-                        </Text>
-                    </Stack>
-                </Group>
+        <Dialog open={opened} onOpenChange={(o) => { if (!o) { bumpAssetsVersion(); onClose(); } }}>
+            <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
+                <DialogHeader>
+                    <DialogTitle className="label-display">Settings</DialogTitle>
+                </DialogHeader>
+                <Stack gap="sm">
+                    {/* About blurb — version moved here from the app title */}
+                    <div className="flex items-center gap-2">
+                        <img src="/favicon.png" alt="" width={28} height={28} className="pixelated" />
+                        <div className="flex flex-col">
+                            <Text size="sm" fw={600}>
+                                {appName}{appVersion ? ` v${appVersion}` : ''}
+                            </Text>
+                            <Text size="xs" dimmed>
+                                Tournament stream overlay manager for Mario Superstar Baseball.
+                            </Text>
+                        </div>
+                    </div>
 
-                <Divider label="Appearance" labelPosition="center" />
+                    <Divider label="Appearance" />
 
-                <Group justify="space-between" align="center" wrap="nowrap">
-                    <Group gap="xs" align="center" wrap="nowrap">
-                        <Text size="sm">Theme</Text>
-                        <SegmentedControl
-                            size="xs"
-                            value={colorScheme}
-                            onChange={handleColorScheme}
-                            data={[
-                                { label: 'Light', value: 'light' },
-                                { label: 'Dark', value: 'dark' },
-                                { label: 'Auto', value: 'auto' },
-                            ]}
-                        />
-                    </Group>
-                    <Group gap="xs" align="center" wrap="nowrap">
-                        <Text size="sm">Welcome screen</Text>
-                        <Button
-                            size="xs"
-                            variant="outline"
-                            onClick={() => {
-                                setSetting('ui.welcome_dismissed', false);
-                                onClose();
-                            }}
-                        >
-                            Show again
-                        </Button>
-                    </Group>
-                </Group>
-
-                <Divider label="Project Rio" labelPosition="center" />
-
-                {/* HUD File Path */}
-                <Text size="sm" fw={500}>HUD File Path</Text>
-                <Text size="xs" c="dimmed">
-                    Path to Project Rio's decoded.hud.json file. Leave empty to use the default location.
-                </Text>
-
-                {hudPath ? (
-                    <Group gap="xs" wrap="nowrap">
-                        <TextInput
-                            size="xs"
-                            value={hudPath}
-                            readOnly
-                            style={{ flex: 1 }}
-                        />
-                        <Tooltip label="Clear (use default)">
-                            <ActionIcon size="sm" variant="subtle" color="red" onClick={handleClearHudPath} loading={savingPath}>
-                                {'×'}
-                            </ActionIcon>
-                        </Tooltip>
-                    </Group>
-                ) : (
-                    <TextInput
-                        size="xs"
-                        value=""
-                        placeholder={defaultPath}
-                        readOnly
-                    />
-                )}
-
-                <Group gap="xs">
-                    <Badge
-                        size="sm"
-                        color={resolvedPath ? 'green' : 'red'}
-                        variant="filled"
-                    >
-                        {resolvedPath ? 'Found' : 'Not Found'}
-                    </Badge>
-                    {resolvedPath && !hudPath && (
-                        <Text size="xs" c="dimmed">(using default)</Text>
-                    )}
-                </Group>
-
-                <Button
-                    size="xs"
-                    variant="outline"
-                    onClick={handleBrowse}
-                    loading={browsingInProgress}
-                >
-                    Browse...
-                </Button>
-
-                {hudPathError && (
-                    <Text size="xs" c="red">{hudPathError}</Text>
-                )}
-
-                {/* MSB Image Assets */}
-                <Text size="sm" fw={500} mt="xs">MSB Image Assets</Text>
-                <Text size="xs" c="dimmed">
-                    Folder containing character icons, team logos, and other MSB images. Required — overlays and the UI will show broken images without it. The default location lives under user data so it survives app updates.
-                </Text>
-
-                <Group gap="md" align="flex-start" wrap="nowrap">
-                    {/* Left column: path input, status, action buttons */}
-                    <Stack gap="xs" style={{ flex: 1, minWidth: 0 }}>
-                        {assetsPath ? (
-                            <Group gap="xs" wrap="nowrap">
-                                <TextInput
-                                    size="xs"
-                                    value={assetsPath}
-                                    readOnly
-                                    style={{ flex: 1 }}
-                                />
-                                <Tooltip label="Clear (use default)">
-                                    <ActionIcon size="sm" variant="subtle" color="red" onClick={handleClearAssetsPath} loading={assetsSaving}>
-                                        {'×'}
-                                    </ActionIcon>
-                                </Tooltip>
-                            </Group>
-                        ) : (
-                            <TextInput
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <Text size="sm">Theme</Text>
+                            <SegmentedControl
                                 size="xs"
-                                value=""
-                                placeholder={assetsDefault}
-                                readOnly
+                                value={colorScheme}
+                                onChange={handleColorScheme}
+                                data={[
+                                    { label: 'Light', value: 'light' },
+                                    { label: 'Dark', value: 'dark' },
+                                    { label: 'Auto', value: 'auto' },
+                                ]}
                             />
-                        )}
-
-                        <Group gap="xs">
-                            <Button
-                                size="xs"
-                                variant="filled"
-                                onClick={handleRevealAssets}
-                                loading={assetsRevealing}
-                            >
-                                Open Folder
-                            </Button>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <Text size="sm">Welcome screen</Text>
                             <Button
                                 size="xs"
                                 variant="outline"
-                                onClick={handleBrowseAssets}
-                                loading={assetsBrowsing}
+                                onClick={() => {
+                                    setSetting('ui.welcome_dismissed', false);
+                                    onClose();
+                                }}
                             >
-                                Browse...
+                                Show again
                             </Button>
-                        </Group>
-                    </Stack>
+                        </div>
+                    </div>
 
-                    {/* Right column: per-category checkmarks */}
-                    {Object.keys(assetsCategories).length > 0 && (
-                        <Stack gap={4} style={{ flexShrink: 0 }}>
-                            {Object.entries(assetsCategories).map(([name, info]) => {
-                                const ok = info.missing_count === 0;
-                                return (
-                                    <Group key={name} gap="xs" align="center" wrap="nowrap">
-                                        <Text size="xs" c={ok ? 'teal' : 'red'} style={{ minWidth: 12, fontWeight: 700 }}>
-                                            {ok ? '✓' : '✗'}
-                                        </Text>
-                                        <Text size="xs" style={{ minWidth: 100 }}>{name}/</Text>
-                                        <Text size="xs" c="dimmed">
-                                            {info.found}/{info.expected}
-                                        </Text>
-                                    </Group>
-                                );
-                            })}
-                        </Stack>
+                    <Divider label="Project Rio" />
+
+                    {/* HUD File Path */}
+                    <Text size="sm" fw={500}>HUD File Path</Text>
+                    <Text size="xs" dimmed>
+                        Path to Project Rio's decoded.hud.json file. Leave empty to use the default location.
+                    </Text>
+
+                    {hudPath ? (
+                        <div className="flex items-center gap-2">
+                            <Input value={hudPath} readOnly className="flex-1" />
+                            <SimpleTooltip label="Clear (use default)">
+                                <Button size="icon-sm" variant="ghost" className="text-destructive" onClick={handleClearHudPath} disabled={savingPath}>×</Button>
+                            </SimpleTooltip>
+                        </div>
+                    ) : (
+                        <Input value="" placeholder={defaultPath} readOnly />
                     )}
-                </Group>
 
-                {/* Missing-file detail (full width, below the side-by-side block) */}
-                {Object.entries(assetsCategories).some(([, info]) => info.missing_count > 0 && info.missing_sample.length > 0) && (
-                    <Stack gap={2} pl="xs">
-                        {Object.entries(assetsCategories)
-                            .filter(([, info]) => info.missing_count > 0 && info.missing_sample.length > 0)
-                            .map(([name, info]) => (
-                                <Text key={name} size="xs" c="dimmed" truncate>
-                                    {name}/ missing: {info.missing_sample.join(', ')}
-                                    {info.missing_count > info.missing_sample.length
-                                        ? ` (+${info.missing_count - info.missing_sample.length} more)`
-                                        : ''}
-                                </Text>
-                            ))}
-                    </Stack>
-                )}
+                    <div className="flex items-center gap-2">
+                        <Badge className={resolvedPath ? 'bg-[#22c55e] text-black' : 'bg-destructive text-white'}>
+                            {resolvedPath ? 'Found' : 'Not Found'}
+                        </Badge>
+                        {resolvedPath && !hudPath && (
+                            <Text size="xs" dimmed>(using default)</Text>
+                        )}
+                    </div>
 
-                {assetsError && (
-                    <Text size="xs" c="red">{assetsError}</Text>
-                )}
+                    <Button size="xs" variant="outline" onClick={handleBrowse} disabled={browsingInProgress}>
+                        {browsingInProgress && <Loader size={12} />}
+                        Browse...
+                    </Button>
 
-                {/* Pinned Player */}
-                <Text size="sm" fw={500} mt="xs">Player Lock</Text>
-                <Text size="xs" c="dimmed">
-                    Lock a Rio username to always appear on a specific side when a game is loaded.
-                </Text>
-                <TextInput
-                    size="xs"
-                    placeholder="Rio username"
-                    value={pinnedPlayer}
-                    onChange={e => setPinnedPlayer(e.currentTarget.value)}
-                />
-                <SegmentedControl
-                    size="xs"
-                    value={pinnedSide}
-                    onChange={setPinnedSide}
-                    data={['Team 1', 'Team 2']}
-                />
-                <Button
-                    size="xs"
-                    variant="outline"
-                    onClick={handleSavePinnedPlayer}
-                    loading={pinnedSaving}
-                >
-                    {pinnedPlayer.trim() ? 'Save Lock' : 'Clear Lock'}
-                </Button>
+                    {hudPathError && (
+                        <Text size="xs" c="#ff5a5f">{hudPathError}</Text>
+                    )}
 
-                <Divider label="Challonge" labelPosition="center" />
+                    {/* MSB Image Assets */}
+                    <Text size="sm" fw={500} className="mt-2">MSB Image Assets</Text>
+                    <Text size="xs" dimmed>
+                        Folder containing character icons, team logos, and other MSB images. Required — overlays and the UI will show broken images without it. The default location lives under user data so it survives app updates.
+                    </Text>
 
-                <Group justify="space-between">
-                    <Text size="sm">API Key</Text>
-                    <Badge
-                        size="sm"
-                        color={challongeConfigured ? 'green' : 'red'}
-                        variant="filled"
-                    >
-                        {challongeConfigured ? 'Configured' : 'Not Set'}
-                    </Badge>
-                </Group>
-                <Text size="xs" c="dimmed">
-                    Required to load Challonge tournaments. Get your key from your Challonge account settings. You must be an admin in the Mario Superstar Baseball Netplay Events Challonge Community. Note: Challonge support will be deprecated in the future as its API support is limited.
-                </Text>
-                <PasswordInput
-                    placeholder="Enter your Challonge API key"
-                    size="xs"
-                    value={challongeKey}
-                    onChange={e => setChallongeKey(e.currentTarget.value)}
-                />
-                <Button
-                    size="xs"
-                    onClick={handleSaveChallongeKey}
-                    disabled={!challongeKey.trim() || challongeSaving}
-                    loading={challongeSaving}
-                >
-                    Save Key
-                </Button>
+                    <div className="flex items-start gap-4">
+                        {/* Left column: path input, status, action buttons */}
+                        <div className="flex min-w-0 flex-1 flex-col gap-2">
+                            {assetsPath ? (
+                                <div className="flex items-center gap-2">
+                                    <Input value={assetsPath} readOnly className="flex-1" />
+                                    <SimpleTooltip label="Clear (use default)">
+                                        <Button size="icon-sm" variant="ghost" className="text-destructive" onClick={handleClearAssetsPath} disabled={assetsSaving}>×</Button>
+                                    </SimpleTooltip>
+                                </div>
+                            ) : (
+                                <Input value="" placeholder={assetsDefault} readOnly />
+                            )}
 
-                {controllerSupported !== false && (
-                    <>
-                        <Divider label="Controller Overlay" labelPosition="center" />
+                            <div className="flex items-center gap-2">
+                                <Button size="xs" onClick={handleRevealAssets} disabled={assetsRevealing}>
+                                    {assetsRevealing && <Loader size={12} />}
+                                    Open Folder
+                                </Button>
+                                <Button size="xs" variant="outline" onClick={handleBrowseAssets} disabled={assetsBrowsing}>
+                                    {assetsBrowsing && <Loader size={12} />}
+                                    Browse...
+                                </Button>
+                            </div>
+                        </div>
 
-                        <Group justify="space-between">
-                            <Text size="sm">gc-overlay</Text>
-                            <Badge
-                                size="sm"
-                                color={controllerStatus?.available ? 'green' : 'red'}
-                                variant="filled"
-                            >
-                                {controllerStatus?.available ? 'Found' : 'Not Found'}
-                            </Badge>
-                        </Group>
-                        <Text size="xs" c="dimmed">
-                            Path to the gc-overlay directory. Leave empty to auto-detect (looks for a sibling gc-overlay folder).
-                        </Text>
-                        <TextInput
-                            size="xs"
-                            placeholder={controllerStatus?.available ? controllerStatus.path : 'Not detected — enter path manually'}
-                            value={controllerPath}
-                            onChange={e => setControllerPath(e.currentTarget.value)}
-                        />
-                        <Button
-                            size="xs"
-                            variant="outline"
-                            onClick={handleSaveControllerPath}
-                            loading={controllerPathSaving}
-                        >
-                            Save Path
-                        </Button>
-                    </>
-                )}
+                        {/* Right column: per-category checkmarks */}
+                        {Object.keys(assetsCategories).length > 0 && (
+                            <div className="flex shrink-0 flex-col gap-1">
+                                {Object.entries(assetsCategories).map(([name, info]) => {
+                                    const ok = info.missing_count === 0;
+                                    return (
+                                        <div key={name} className="flex items-center gap-2">
+                                            <Text size="xs" fw={700} c={ok ? '#2dd4bf' : '#ff5a5f'} className="min-w-3">
+                                                {ok ? '✓' : '✗'}
+                                            </Text>
+                                            <Text size="xs" className="min-w-[100px]">{name}/</Text>
+                                            <Text size="xs" dimmed className="tabular-nums">
+                                                {info.found}/{info.expected}
+                                            </Text>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
 
-                <Divider label="Network" labelPosition="center" />
+                    {/* Missing-file detail (full width, below the side-by-side block) */}
+                    {Object.entries(assetsCategories).some(([, info]) => info.missing_count > 0 && info.missing_sample.length > 0) && (
+                        <div className="flex flex-col gap-0.5 pl-2">
+                            {Object.entries(assetsCategories)
+                                .filter(([, info]) => info.missing_count > 0 && info.missing_sample.length > 0)
+                                .map(([name, info]) => (
+                                    <Text key={name} size="xs" dimmed truncate>
+                                        {name}/ missing: {info.missing_sample.join(', ')}
+                                        {info.missing_count > info.missing_sample.length
+                                            ? ` (+${info.missing_count - info.missing_sample.length} more)`
+                                            : ''}
+                                    </Text>
+                                ))}
+                        </div>
+                    )}
 
-                <Switch
-                    size="sm"
-                    label="Allow LAN access (bind 0.0.0.0)"
-                    description="By default PRSH listens on loopback only (127.0.0.1) — only this computer can reach the UI and OBS overlays. Enable LAN access to use a phone or tablet on the same WiFi as a remote control. Anyone on the network will be able to read and modify scoreboards, settings, and any saved tournament API keys, so leave this off on shared networks (cafes, conventions)."
-                    checked={allowLan}
-                    onChange={e => handleAllowLan(e.currentTarget.checked)}
-                />
+                    {assetsError && (
+                        <Text size="xs" c="#ff5a5f">{assetsError}</Text>
+                    )}
 
-                <Divider label="Stream Labels" labelPosition="center" />
+                    {/* Pinned Player */}
+                    <Text size="sm" fw={500} className="mt-2">Player Lock</Text>
+                    <Text size="xs" dimmed>
+                        Lock a Rio username to always appear on a specific side when a game is loaded.
+                    </Text>
+                    <Input
+                        placeholder="Rio username"
+                        value={pinnedPlayer}
+                        onChange={e => setPinnedPlayer(e.currentTarget.value)}
+                    />
+                    <SegmentedControl
+                        size="xs"
+                        value={pinnedSide}
+                        onChange={setPinnedSide}
+                        data={['Team 1', 'Team 2']}
+                    />
+                    <Button size="xs" variant="outline" onClick={handleSavePinnedPlayer} disabled={pinnedSaving}>
+                        {pinnedSaving && <Loader size={12} />}
+                        {pinnedPlayer.trim() ? 'Save Lock' : 'Clear Lock'}
+                    </Button>
 
-                <Group justify="space-between" align="flex-start" wrap="nowrap" gap="md">
-                    <Switch
-                        size="sm"
-                        label="Enable txt export"
-                        description="Export every state key as an individual .txt file to user_data/stream_labels/. Use these as Text (GDI+) sources in OBS without needing the HTML overlays. Off by default."
-                        checked={streamLabelsEnabled}
-                        onChange={e => handleToggleStreamLabels(e.currentTarget.checked)}
-                        disabled={streamLabelsSaving}
-                        style={{ flex: 1, minWidth: 0 }}
+                    <Divider label="Challonge" />
+
+                    <div className="flex items-center justify-between">
+                        <Text size="sm">API Key</Text>
+                        <Badge className={challongeConfigured ? 'bg-[#22c55e] text-black' : 'bg-destructive text-white'}>
+                            {challongeConfigured ? 'Configured' : 'Not Set'}
+                        </Badge>
+                    </div>
+                    <Text size="xs" dimmed>
+                        Required to load Challonge tournaments. Get your key from your Challonge account settings. You must be an admin in the Mario Superstar Baseball Netplay Events Challonge Community. Note: Challonge support will be deprecated in the future as its API support is limited.
+                    </Text>
+                    <PasswordInput
+                        placeholder="Enter your Challonge API key"
+                        value={challongeKey}
+                        onChange={e => setChallongeKey(e.currentTarget.value)}
                     />
                     <Button
                         size="xs"
-                        variant="filled"
-                        onClick={async () => {
-                            try {
-                                const resp = await fetch(
-                                    '/api/v1/state/stream-labels/reveal',
-                                    { method: 'POST' },
-                                );
-                                if (!resp.ok) {
-                                    notifications.show({
-                                        message: `Reveal failed (${resp.status}). The server may need a restart to register the endpoint.`,
-                                        color: 'red',
-                                    });
+                        onClick={handleSaveChallongeKey}
+                        disabled={!challongeKey.trim() || challongeSaving}
+                    >
+                        {challongeSaving && <Loader size={12} />}
+                        Save Key
+                    </Button>
+
+                    {controllerSupported !== false && (
+                        <>
+                            <Divider label="Controller Overlay" />
+
+                            <div className="flex items-center justify-between">
+                                <Text size="sm">gc-overlay</Text>
+                                <Badge className={controllerStatus?.available ? 'bg-[#22c55e] text-black' : 'bg-destructive text-white'}>
+                                    {controllerStatus?.available ? 'Found' : 'Not Found'}
+                                </Badge>
+                            </div>
+                            <Text size="xs" dimmed>
+                                Path to the gc-overlay directory. Leave empty to auto-detect (looks for a sibling gc-overlay folder).
+                            </Text>
+                            <Input
+                                placeholder={controllerStatus?.available ? controllerStatus.path : 'Not detected — enter path manually'}
+                                value={controllerPath}
+                                onChange={e => setControllerPath(e.currentTarget.value)}
+                            />
+                            <Button size="xs" variant="outline" onClick={handleSaveControllerPath} disabled={controllerPathSaving}>
+                                {controllerPathSaving && <Loader size={12} />}
+                                Save Path
+                            </Button>
+                        </>
+                    )}
+
+                    <Divider label="Network" />
+
+                    <Label className="flex items-start gap-2">
+                        <Switch checked={allowLan} onCheckedChange={handleAllowLan} className="mt-0.5" />
+                        <span className="flex flex-col">
+                            <Text size="sm">Allow LAN access (bind 0.0.0.0)</Text>
+                            <Text size="xs" dimmed>
+                                By default PRSH listens on loopback only (127.0.0.1) — only this computer can reach the UI and OBS overlays. Enable LAN access to use a phone or tablet on the same WiFi as a remote control. Anyone on the network will be able to read and modify scoreboards, settings, and any saved tournament API keys, so leave this off on shared networks (cafes, conventions).
+                            </Text>
+                        </span>
+                    </Label>
+
+                    <Divider label="Stream Labels" />
+
+                    <div className="flex items-start justify-between gap-4">
+                        <Label className="flex flex-1 items-start gap-2">
+                            <Switch checked={streamLabelsEnabled} onCheckedChange={handleToggleStreamLabels} disabled={streamLabelsSaving} className="mt-0.5" />
+                            <span className="flex flex-col">
+                                <Text size="sm">Enable txt export</Text>
+                                <Text size="xs" dimmed>
+                                    Export every state key as an individual .txt file to user_data/stream_labels/. Use these as Text (GDI+) sources in OBS without needing the HTML overlays. Off by default.
+                                </Text>
+                            </span>
+                        </Label>
+                        <Button
+                            size="xs"
+                            className="shrink-0"
+                            onClick={async () => {
+                                try {
+                                    const resp = await fetch('/api/v1/state/stream-labels/reveal', { method: 'POST' });
+                                    if (!resp.ok) {
+                                        notifications.show({
+                                            message: `Reveal failed (${resp.status}). The server may need a restart to register the endpoint.`,
+                                            color: 'red',
+                                        });
+                                    }
+                                } catch (e) {
+                                    notifications.show({ message: `Reveal failed: ${e?.message ?? e}`, color: 'red' });
                                 }
-                            } catch (e) {
-                                notifications.show({
-                                    message: `Reveal failed: ${e?.message ?? e}`,
-                                    color: 'red',
-                                });
-                            }
-                        }}
-                        style={{ flexShrink: 0 }}
-                    >
-                        Open Folder
-                    </Button>
-                </Group>
+                            }}
+                        >
+                            Open Folder
+                        </Button>
+                    </div>
 
-                <Divider label="Announcements" labelPosition="center" />
+                    <Divider label="Announcements" />
 
-                <Text size="xs" c="dimmed">
-                    Announcements reappear each time the app launches until you clear them here or they expire. Closing a toast just hides it for the current session.
-                </Text>
-                <Group wrap="nowrap" align="center" gap="xs">
-                    <Text size="sm" style={{ whiteSpace: 'nowrap' }}>
-                        {announcementCount === 0
-                            ? 'No active announcements'
-                            : `${announcementCount} active announcement${announcementCount === 1 ? '' : 's'}`}
+                    <Text size="xs" dimmed>
+                        Announcements reappear each time the app launches until you clear them here or they expire. Closing a toast just hides it for the current session.
                     </Text>
-                    <Button
-                        size="xs"
-                        variant="outline"
-                        color="red"
-                        onClick={handleClearAnnouncements}
-                        loading={announcementsClearing}
-                        disabled={announcementCount === 0}
-                        style={{ flex: 1 }}
-                    >
-                        Clear
+                    <div className="flex items-center gap-2">
+                        <Text size="sm" className="whitespace-nowrap">
+                            {announcementCount === 0
+                                ? 'No active announcements'
+                                : `${announcementCount} active announcement${announcementCount === 1 ? '' : 's'}`}
+                        </Text>
+                        <Button
+                            size="xs"
+                            variant="outline"
+                            className="flex-1 border-destructive/40 text-destructive hover:bg-destructive/10"
+                            onClick={handleClearAnnouncements}
+                            disabled={announcementsClearing || announcementCount === 0}
+                        >
+                            {announcementsClearing && <Loader size={12} />}
+                            Clear
+                        </Button>
+                    </div>
+
+                    <Divider label="Logs" />
+
+                    <Text size="xs" dimmed>
+                        View recent application logs. Useful when reporting a bug — you can copy the tail, or open the folder to grab the full rotated file.
+                    </Text>
+                    <Button size="xs" variant="outline" className="w-full" onClick={() => setLogsOpen(true)}>
+                        View logs
                     </Button>
-                </Group>
 
-                <Divider label="Logs" labelPosition="center" />
-
-                <Text size="xs" c="dimmed">
-                    View recent application logs. Useful when reporting a bug — you can copy the tail, or open the folder to grab the full rotated file.
-                </Text>
-                <Button size="xs" variant="outline" onClick={() => setLogsOpen(true)} fullWidth>
-                    View logs
-                </Button>
-
-                <Text size="xs" c="dimmed" ta="center">
-                    Enjoy PRSH? Consider supporting those who make it all possible.
-                </Text>
-                <SupportLinks size="sm" gap="md" justify="center" />
-
-            </Stack>
-        </Modal>
+                    <Text size="xs" dimmed ta="center">
+                        Enjoy PRSH? Consider supporting those who make it all possible.
+                    </Text>
+                    <SupportLinks />
+                </Stack>
+            </DialogContent>
+        </Dialog>
         <LogsViewer opened={logsOpen} onClose={() => setLogsOpen(false)} />
         </>
     );

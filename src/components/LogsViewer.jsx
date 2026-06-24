@@ -1,9 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import {
-    Modal, Stack, Group, Button, SegmentedControl, Text, ScrollArea,
-    Code, Loader, Badge, Tooltip, ActionIcon, Switch,
-} from '@mantine/core';
-import { notifications } from '@mantine/notifications';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
+import { Stack, Text, Loader } from './ui/primitives';
+import { Button } from './ui/button';
+import { Badge } from './ui/badge';
+import { Switch } from './ui/switch';
+import { Label } from './ui/label';
+import { ScrollArea } from './ui/scroll-area';
+import { SegmentedControl } from './ui/segmented-control';
+import { SimpleTooltip } from './ui/simple-tooltip';
+import { notifications } from '../lib/notify';
 
 // Tail the end of a log file as text. Polls on a timer when "Follow" is on.
 const POLL_MS = 2000;
@@ -129,99 +134,82 @@ export default function LogsViewer({ opened, onClose }) {
     const currentMeta = files.find(f => f.name === selected);
 
     return (
-        <Modal
-            opened={opened}
-            onClose={onClose}
-            title="Logs"
-            size="90%"
-            styles={{ body: { paddingTop: 8 } }}
-        >
-            <Stack gap="xs">
-                <Group justify="space-between" align="flex-end" wrap="wrap">
-                    <Group gap="xs">
-                        <Button size="xs" variant="light" onClick={handleReveal}>
-                            Open logs folder
-                        </Button>
-                        <Tooltip label={dir || 'logs directory'}>
-                            <Text size="xs" c="dimmed" truncate maw={420}>{dir}</Text>
-                        </Tooltip>
-                    </Group>
-                    <Group gap="xs">
-                        <Switch
+        <Dialog open={opened} onOpenChange={(o) => { if (!o) onClose(); }}>
+            <DialogContent className="max-w-[90vw] sm:max-w-[90vw]">
+                <DialogHeader>
+                    <DialogTitle className="label-display">Logs</DialogTitle>
+                </DialogHeader>
+                <Stack gap="xs">
+                    <div className="flex flex-wrap items-end justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                            <Button size="xs" variant="secondary" onClick={handleReveal}>
+                                Open logs folder
+                            </Button>
+                            <SimpleTooltip label={dir || 'logs directory'}>
+                                <Text size="xs" dimmed truncate className="max-w-[420px]">{dir}</Text>
+                            </SimpleTooltip>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <Label className="flex items-center gap-1.5 text-xs">
+                                <Switch checked={wrap} onCheckedChange={setWrap} />
+                                Wrap
+                            </Label>
+                            <Label className="flex items-center gap-1.5 text-xs">
+                                <Switch checked={follow} onCheckedChange={setFollow} />
+                                Follow
+                            </Label>
+                            <Button size="xs" variant="outline" onClick={() => fetchTail(selected)} disabled={loading}>
+                                {loading && <Loader size={10} />}
+                                Refresh
+                            </Button>
+                            <Button size="xs" variant="outline" onClick={handleCopy}>
+                                Copy
+                            </Button>
+                        </div>
+                    </div>
+
+                    {options.length > 1 ? (
+                        <SegmentedControl
                             size="xs"
-                            label="Wrap"
-                            checked={wrap}
-                            onChange={e => setWrap(e.currentTarget.checked)}
+                            value={selected}
+                            onChange={setSelected}
+                            data={options}
                         />
-                        <Switch
-                            size="xs"
-                            label="Follow"
-                            checked={follow}
-                            onChange={e => setFollow(e.currentTarget.checked)}
-                        />
-                        <Button
-                            size="xs"
-                            variant="default"
-                            onClick={() => fetchTail(selected)}
-                            loading={loading}
+                    ) : options.length === 1 ? (
+                        <Text size="xs" dimmed>{options[0].label}</Text>
+                    ) : (
+                        <Text size="xs" dimmed>No log files yet.</Text>
+                    )}
+
+                    <div className="flex items-center gap-2">
+                        {currentMeta && (
+                            <Badge variant="secondary">
+                                {fmtSize(currentMeta.size)} · modified {fmtMtime(currentMeta.mtime)}
+                            </Badge>
+                        )}
+                        {meta?.truncated && (
+                            <Badge className="bg-[#f5bb00] text-black">
+                                Showing last {fmtSize(meta.returned)} of {fmtSize(meta.size)}
+                            </Badge>
+                        )}
+                        {loading && <Loader size={14} />}
+                    </div>
+
+                    <ScrollArea viewportRef={viewportRef} className="h-[65vh] rounded-md bg-night-950" type="auto">
+                        <pre
+                            className="min-h-full bg-transparent p-3 font-mono text-fog-300"
+                            style={{
+                                fontSize: 10,
+                                lineHeight: 1.35,
+                                whiteSpace: wrap ? 'pre-wrap' : 'pre',
+                                wordBreak: wrap ? 'break-word' : 'normal',
+                            }}
                         >
-                            Refresh
-                        </Button>
-                        <Button size="xs" variant="default" onClick={handleCopy}>
-                            Copy
-                        </Button>
-                    </Group>
-                </Group>
-
-                {options.length > 1 ? (
-                    <SegmentedControl
-                        size="xs"
-                        value={selected}
-                        onChange={setSelected}
-                        data={options}
-                    />
-                ) : options.length === 1 ? (
-                    <Text size="xs" c="dimmed">{options[0].label}</Text>
-                ) : (
-                    <Text size="xs" c="dimmed">No log files yet.</Text>
-                )}
-
-                <Group gap="xs">
-                    {currentMeta && (
-                        <Badge size="sm" variant="light">
-                            {fmtSize(currentMeta.size)} · modified {fmtMtime(currentMeta.mtime)}
-                        </Badge>
-                    )}
-                    {meta?.truncated && (
-                        <Badge size="sm" color="yellow" variant="light">
-                            Showing last {fmtSize(meta.returned)} of {fmtSize(meta.size)}
-                        </Badge>
-                    )}
-                    {loading && <Loader size="xs" />}
-                </Group>
-
-                <ScrollArea
-                    h="65vh"
-                    type="auto"
-                    viewportRef={viewportRef}
-                    styles={{ viewport: { backgroundColor: 'var(--mantine-color-dark-8)' } }}
-                >
-                    <Code
-                        block
-                        style={{
-                            fontSize: 10,
-                            lineHeight: 1.35,
-                            whiteSpace: wrap ? 'pre-wrap' : 'pre',
-                            wordBreak: wrap ? 'break-word' : 'normal',
-                            backgroundColor: 'transparent',
-                            color: 'var(--mantine-color-gray-1)',
-                            minHeight: '100%',
-                        }}
-                    >
-                        {text || (loading ? '' : '(empty)')}
-                    </Code>
-                </ScrollArea>
-            </Stack>
-        </Modal>
+                            {text || (loading ? '' : '(empty)')}
+                        </pre>
+                    </ScrollArea>
+                </Stack>
+            </DialogContent>
+        </Dialog>
     );
 }

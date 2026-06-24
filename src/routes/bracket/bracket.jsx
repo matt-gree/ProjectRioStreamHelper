@@ -1,11 +1,30 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Stack, Text, Title, Loader } from '../../components/ui/primitives';
+import { Panel } from '../../components/ui/panel';
+import { TextField } from '../../components/ui/text-field';
+import { Input } from '../../components/ui/input';
+import { Button } from '../../components/ui/button';
+import { SimpleSelect } from '../../components/ui/simple-select';
+import { Badge } from '../../components/ui/badge';
+import { Checkbox } from '../../components/ui/checkbox';
+import { Label } from '../../components/ui/label';
+import { Alert, AlertTitle, AlertDescription } from '../../components/ui/alert';
+import { SimpleTooltip } from '../../components/ui/simple-tooltip';
 import {
-    Text, Paper, Stack, Group, TextInput, Button, Select, Table,
-    Alert, Badge, Checkbox, Tooltip, Loader, Center,
-} from '@mantine/core';
-import { notifications } from '@mantine/notifications';
+    Table, TableHeader, TableBody, TableHead, TableRow, TableCell,
+} from '../../components/ui/table';
+import { cn } from '../../lib/utils';
+import { notifications } from '../../lib/notify';
 import { useStateStore, useSettingsStore, useBracketStore } from '../../context/store';
 import useTournament, { detectSource } from '../../hooks/useTournament';
+
+// Tinted-translucent chips per set state, matching the brand.
+const STATE_BADGE = {
+    active: 'bg-[#22c55e]/15 text-[#4ade80]',
+    called: 'bg-[#f5bb00]/15 text-[#f5bb00]',
+    created: 'bg-muted text-muted-foreground',
+    completed: 'bg-[#3b82f6]/15 text-[#60a5fa]',
+};
 
 function formatRelative(ms) {
     if (!ms) return '';
@@ -18,13 +37,6 @@ function formatRelative(ms) {
     const h = Math.floor(m / 60);
     return `${h}h ago`;
 }
-
-const STATE_COLORS = {
-    active: 'green',
-    called: 'yellow',
-    created: 'gray',
-    completed: 'blue',
-};
 
 export default function Bracket() {
     const activeScoreboards = useSettingsStore(s => s?.scoreboards?.active ?? [1]);
@@ -322,85 +334,75 @@ export default function Bracket() {
 
     return (
         <Stack gap="md">
-            <Text size="lg" fw={700}>Bracket</Text>
+            <Title order={3}>Bracket</Title>
 
             {/* URL Input */}
-            <Paper withBorder p="md">
-                <Stack gap="xs">
-                    <Group gap="sm" align="end">
-                        <TextInput
+            <Panel title="Load Tournament">
+                <Stack gap="xs" className="p-4">
+                    <div className="flex items-end gap-2">
+                        <TextField
                             label="Tournament URL"
                             placeholder="https://start.gg/tournament/.../event/... or https://challonge.com/..."
                             description="Paste a start.gg event URL or Challonge tournament URL"
-                            style={{ flex: 1 }}
-                            size="sm"
+                            className="flex-1"
                             value={url}
                             onChange={e => update({ url: e.currentTarget.value })}
                             onKeyDown={e => e.key === 'Enter' && handleLoadEvent()}
                         />
-                        <Button
-                            size="sm"
-                            onClick={handleLoadEvent}
-                            loading={loading || prefetching}
-                            mb={1}
-                        >
+                        <Button size="sm" onClick={handleLoadEvent} disabled={loading || prefetching}>
+                            {(loading || prefetching) && <Loader size={12} />}
                             Load
                         </Button>
                         {tournament && (
-                            <Button
-                                size="sm"
-                                variant="subtle"
-                                color="red"
-                                onClick={handleClear}
-                                mb={1}
-                            >
+                            <Button size="sm" variant="outline" className="border-destructive/40 text-destructive" onClick={handleClear}>
                                 Clear
                             </Button>
                         )}
-                    </Group>
+                    </div>
                     {statusText && (
-                        <Group gap="xs" mt={4}>
-                            <Loader size="xs" />
-                            <Text size="xs" c="dimmed">{statusText}</Text>
-                        </Group>
+                        <div className="mt-1 flex items-center gap-2">
+                            <Loader size={12} />
+                            <Text size="xs" dimmed>{statusText}</Text>
+                        </div>
                     )}
                 </Stack>
-            </Paper>
+            </Panel>
 
             {error && (
-                <Alert variant="light" color="red" title="Error">
-                    {error}
+                <Alert variant="destructive">
+                    <AlertTitle>Error</AlertTitle>
+                    <AlertDescription>{error}</AlertDescription>
                 </Alert>
             )}
 
             {/* Tournament Summary */}
             {tournament && (
-                <Paper withBorder p="sm">
-                    <Group gap="lg">
+                <Panel glow={false} className="p-3">
+                    <div className="flex flex-wrap items-center gap-6">
                         <Text fw={600}>{tournament.tournamentName}</Text>
                         {tournament.eventName && (
-                            <Badge variant="light">{tournament.eventName}</Badge>
+                            <Badge variant="secondary">{tournament.eventName}</Badge>
                         )}
-                        <Text size="sm" c="dimmed">
+                        <Text size="sm" dimmed>
                             {tournament.numEntrants} entrants
                         </Text>
                         {tournament.address && (
-                            <Text size="sm" c="dimmed">{tournament.address}</Text>
+                            <Text size="sm" dimmed>{tournament.address}</Text>
                         )}
                         {tournament.isOnline && (
-                            <Badge variant="light" color="cyan" size="sm">Online</Badge>
+                            <Badge className="bg-[#22b8cf] text-black">Online</Badge>
                         )}
-                    </Group>
-                </Paper>
+                    </div>
+                </Panel>
             )}
 
             {/* Phase / Pool Selectors + Fetch Sets */}
             {tournament && phases.length > 0 && (
-                <Paper withBorder p="md">
-                    <Stack gap="sm">
-                        <Group gap="sm" align="end">
-                            <Select
-                                label="Phase"
+                <Panel title="Phase & Pool">
+                    <div className="flex flex-wrap items-end gap-3 p-4">
+                        <div className="flex min-w-[200px] flex-col gap-1">
+                            <Label className="field-label">Phase</Label>
+                            <SimpleSelect
                                 placeholder="Select phase"
                                 data={phaseOptions}
                                 value={selectedPhase}
@@ -418,12 +420,12 @@ export default function Bracket() {
                                         setsPage: 1,
                                     });
                                 }}
-                                size="sm"
-                                style={{ minWidth: 200 }}
                             />
-                            {poolOptions.length > 0 && (
-                                <Select
-                                    label="Pool"
+                        </div>
+                        {poolOptions.length > 0 && (
+                            <div className="flex min-w-[150px] flex-col gap-1">
+                                <Label className="field-label">Pool</Label>
+                                <SimpleSelect
                                     placeholder="All pools"
                                     data={poolOptions}
                                     value={selectedPool}
@@ -437,180 +439,155 @@ export default function Bracket() {
                                             setsPage: 1,
                                         });
                                     }}
-                                    clearable
-                                    size="sm"
-                                    style={{ minWidth: 150 }}
-                                />
-                            )}
-                            <div style={{
-                                alignSelf: 'flex-end',
-                                display: 'flex',
-                                alignItems: 'center',
-                                height: 30, // matches Mantine Select size="sm" input height
-                            }}>
-                                <Checkbox
-                                    label="Include completed"
-                                    checked={includeFinished}
-                                    onChange={e => {
-                                        const newFinished = e.currentTarget.checked;
-                                        const key = `${selectedPhase}|${selectedPool}|${newFinished}`;
-                                        const cached = bs.setsByKey?.[key];
-                                        update({
-                                            includeFinished: newFinished,
-                                            allSets: cached ?? [],
-                                            allSetsLoadedFor: cached ? key : null,
-                                            setsPage: 1,
-                                        });
-                                    }}
-                                    size="sm"
                                 />
                             </div>
-                        </Group>
-                    </Stack>
-                </Paper>
+                        )}
+                        <Label className="flex h-9 items-center gap-2 text-sm">
+                            <Checkbox
+                                checked={includeFinished}
+                                onCheckedChange={(checked) => {
+                                    const newFinished = !!checked;
+                                    const key = `${selectedPhase}|${selectedPool}|${newFinished}`;
+                                    const cached = bs.setsByKey?.[key];
+                                    update({
+                                        includeFinished: newFinished,
+                                        allSets: cached ?? [],
+                                        allSetsLoadedFor: cached ? key : null,
+                                        setsPage: 1,
+                                    });
+                                }}
+                            />
+                            Include completed
+                        </Label>
+                    </div>
+                </Panel>
             )}
 
             {/* Loading state when fetching sets */}
             {setsFetching && allSets.length === 0 && (
-                <Paper withBorder p="xl">
-                    <Center>
-                        <Group gap="sm">
-                            <Loader size="sm" />
-                            <Text size="sm" c="dimmed">Loading sets…</Text>
-                        </Group>
-                    </Center>
-                </Paper>
+                <Panel glow={false} className="p-8">
+                    <div className="flex items-center justify-center gap-2">
+                        <Loader size={18} />
+                        <Text size="sm" dimmed>Loading sets…</Text>
+                    </div>
+                </Panel>
             )}
 
             {/* Sets Table */}
             {allSets.length > 0 && (
-                <Paper withBorder p="md">
-                    <Stack gap="sm">
-                        <Group justify="space-between" align="center">
-                            <Text fw={600} size="sm">
-                                Sets {searching
-                                    ? `(${filteredSets.length} of ${allSets.length})`
-                                    : `(${allSets.length})`}
-                            </Text>
-                            <Group gap="xs">
-                                {bs.lastFetchedAt && (
-                                    <Text size="xs" c="dimmed">
-                                        Updated {formatRelative(bs.lastFetchedAt)}
-                                    </Text>
-                                )}
-                                <Button
-                                    size="compact-xs"
-                                    variant="light"
-                                    onClick={() => handleFetchSets()}
-                                    loading={setsFetching}
-                                >
-                                    Refresh
-                                </Button>
-                            </Group>
-                        </Group>
-                        <TextInput
+                <Panel
+                    title={`Sets ${searching ? `(${filteredSets.length} of ${allSets.length})` : `(${allSets.length})`}`}
+                    actions={
+                        <>
+                            {bs.lastFetchedAt && (
+                                <Text size="xs" dimmed>Updated {formatRelative(bs.lastFetchedAt)}</Text>
+                            )}
+                            <Button size="xs" variant="secondary" onClick={() => handleFetchSets()} disabled={setsFetching}>
+                                {setsFetching && <Loader size={10} />}
+                                Refresh
+                            </Button>
+                        </>
+                    }
+                >
+                    <Stack gap="sm" className="p-4">
+                        <Input
                             placeholder="Search players"
                             value={playerSearch}
                             onChange={e => setPlayerSearch(e.currentTarget.value)}
-                            size="xs"
                         />
-                        <Table striped highlightOnHover withTableBorder>
-                            <Table.Thead>
-                                <Table.Tr>
-                                    <Table.Th>Round</Table.Th>
-                                    <Table.Th>Player 1</Table.Th>
-                                    <Table.Th style={{ textAlign: 'center' }}>Score</Table.Th>
-                                    <Table.Th>Player 2</Table.Th>
-                                    <Table.Th>Status</Table.Th>
-                                    <Table.Th>Load</Table.Th>
-                                </Table.Tr>
-                            </Table.Thead>
-                            <Table.Tbody>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Round</TableHead>
+                                    <TableHead>Player 1</TableHead>
+                                    <TableHead className="text-center">Score</TableHead>
+                                    <TableHead>Player 2</TableHead>
+                                    <TableHead>Status</TableHead>
+                                    <TableHead>Load</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
                                 {filteredSets.map(s => (
-                                    <Table.Tr key={s.id}>
-                                        <Table.Td>
+                                    <TableRow key={s.id}>
+                                        <TableCell>
                                             <Text size="sm">{s.round_name}</Text>
                                             {s.tournament_phase && (
-                                                <Text size="xs" c="dimmed">{s.tournament_phase}</Text>
+                                                <Text size="xs" dimmed>{s.tournament_phase}</Text>
                                             )}
-                                        </Table.Td>
-                                        <Table.Td>
+                                        </TableCell>
+                                        <TableCell>
                                             <Text size="sm" fw={500}>
                                                 {s.p1_name || '—'}
-                                                {s.p1_seed && <Text span size="xs" c="dimmed"> ({s.p1_seed})</Text>}
+                                                {s.p1_seed && <Text span size="xs" dimmed> ({s.p1_seed})</Text>}
                                             </Text>
-                                        </Table.Td>
-                                        <Table.Td style={{ textAlign: 'center' }}>
-                                            <Text size="sm" fw={600}>
+                                        </TableCell>
+                                        <TableCell className="text-center">
+                                            <Text size="sm" fw={600} className="tabular-nums">
                                                 {s.team1score ?? '—'} - {s.team2score ?? '—'}
                                             </Text>
-                                        </Table.Td>
-                                        <Table.Td>
+                                        </TableCell>
+                                        <TableCell>
                                             <Text size="sm" fw={500}>
                                                 {s.p2_name || '—'}
-                                                {s.p2_seed && <Text span size="xs" c="dimmed"> ({s.p2_seed})</Text>}
+                                                {s.p2_seed && <Text span size="xs" dimmed> ({s.p2_seed})</Text>}
                                             </Text>
-                                        </Table.Td>
-                                        <Table.Td>
-                                            <Badge
-                                                size="sm"
-                                                variant="light"
-                                                color={STATE_COLORS[s.state] || 'gray'}
-                                            >
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge className={cn('text-[11px]', STATE_BADGE[s.state] || STATE_BADGE.created)}>
                                                 {s.state}
                                             </Badge>
-                                        </Table.Td>
-                                        <Table.Td>
-                                            <Group gap={4}>
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="flex gap-1">
                                                 {activeScoreboards.map(sb => {
                                                     const isLoaded = loadedSets?.[sb] === s.id;
                                                     return (
-                                                        <Tooltip key={sb} label={`Load into Scoreboard ${sb}`}>
+                                                        <SimpleTooltip key={sb} label={`Load into Scoreboard ${sb}`}>
                                                             <Button
-                                                                size="compact-xs"
-                                                                variant={isLoaded ? 'filled' : 'light'}
-                                                                color={isLoaded ? 'green' : 'blue'}
+                                                                size="xs"
+                                                                variant={isLoaded ? 'default' : 'secondary'}
+                                                                className={cn(isLoaded && 'bg-[#22c55e] text-black hover:bg-[#22c55e]/90')}
                                                                 onClick={() => handleLoadSet(s.id, sb)}
-                                                                loading={loading}
+                                                                disabled={loading}
                                                             >
                                                                 {activeScoreboards.length > 1 ? `SB${sb}` : 'Load'}
                                                             </Button>
-                                                        </Tooltip>
+                                                        </SimpleTooltip>
                                                     );
                                                 })}
-                                            </Group>
-                                        </Table.Td>
-                                    </Table.Tr>
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
                                 ))}
-                            </Table.Tbody>
+                            </TableBody>
                         </Table>
                         {searching && filteredSets.length === 0 && (
-                            <Text size="xs" c="dimmed" ta="center">No sets match "{playerSearch}".</Text>
+                            <Text size="xs" dimmed ta="center">No sets match "{playerSearch}".</Text>
                         )}
                     </Stack>
-                </Paper>
+                </Panel>
             )}
 
             {/* Empty state when no tournament loaded */}
             {!tournament && !loading && (
-                <Paper withBorder p="xl">
-                    <Stack align="center" gap="xs">
-                        <Text size="sm" c="dimmed">
+                <Panel glow={false} className="p-8">
+                    <div className="flex flex-col items-center gap-2">
+                        <Text size="sm" dimmed>
                             No tournament loaded. Paste a Start.gg or Challonge URL above to get started.
                         </Text>
-                    </Stack>
-                </Paper>
+                    </div>
+                </Panel>
             )}
 
             {/* Empty state when tournament loaded but no sets for selected phase */}
             {tournament && selectedPhase && allSets.length === 0 && !loading && !setsFetching && (
-                <Paper withBorder p="xl">
-                    <Stack align="center" gap="xs">
-                        <Text size="sm" c="dimmed">
+                <Panel glow={false} className="p-8">
+                    <div className="flex flex-col items-center gap-2">
+                        <Text size="sm" dimmed>
                             No sets found for this phase. Try enabling "Include completed" or selecting a different phase.
                         </Text>
-                    </Stack>
-                </Paper>
+                    </div>
+                </Panel>
             )}
 
         </Stack>

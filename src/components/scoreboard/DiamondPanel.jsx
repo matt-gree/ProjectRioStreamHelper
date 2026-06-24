@@ -1,5 +1,7 @@
 import { useCallback, useState, useMemo } from 'react';
-import { Paper, UnstyledButton, Popover, Tooltip } from '@mantine/core';
+import { Panel } from '../ui/panel';
+import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
+import { SimpleTooltip } from '../ui/simple-tooltip';
 import { useStateStore } from '../../context/store';
 import { useAssetUrls } from '../../lib/assets';
 import { ROSTER_SIZE } from '../../data/msb';
@@ -117,12 +119,9 @@ function PositionCircle({ cx, cy, r, label, charName, rosterOptions, onSelect, o
     const { charIcon: charIconUrl } = useAssetUrls();
 
     return (
-        <Popover opened={opened} onChange={setOpened} position="right" withArrow width={180} trapFocus>
-            <Popover.Target>
-                <g
-                    style={{ cursor: 'pointer' }}
-                    onClick={() => setOpened(o => !o)}
-                >
+        <Popover open={opened} onOpenChange={setOpened}>
+            <PopoverTrigger asChild>
+                <g style={{ cursor: 'pointer' }}>
                     <circle
                         cx={cx} cy={cy} r={r}
                         fill={occupied ? fillColor : 'rgba(30,30,30,0.35)'}
@@ -158,24 +157,17 @@ function PositionCircle({ cx, cy, r, label, charName, rosterOptions, onSelect, o
                         {label}
                     </text>
                 </g>
-            </Popover.Target>
-            <Popover.Dropdown p={6}>
-                <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(5, 1fr)',
-                    gap: 3,
-                    justifyItems: 'center',
-                }}>
+            </PopoverTrigger>
+            <PopoverContent side="right" className="w-[180px] p-1.5">
+                <div className="grid grid-cols-5 justify-items-center gap-1">
                     {rosterOptions.map(opt => (
-                        <Tooltip key={opt.value} label={opt.label} withArrow position="top">
-                            <UnstyledButton
+                        <SimpleTooltip key={opt.value} label={opt.label}>
+                            <button
+                                type="button"
                                 onClick={() => { onSelect(opt.value); setOpened(false); }}
+                                className="rounded-[4px] border-2 p-0.5"
                                 style={{
-                                    padding: 2,
-                                    borderRadius: 4,
-                                    border: charName === opt.value
-                                        ? '2px solid var(--mantine-color-yellow-5)'
-                                        : '2px solid transparent',
+                                    borderColor: charName === opt.value ? '#f5bb00' : 'transparent',
                                 }}
                             >
                                 <img
@@ -183,29 +175,24 @@ function PositionCircle({ cx, cy, r, label, charName, rosterOptions, onSelect, o
                                     alt={opt.label}
                                     width={22}
                                     height={22}
-                                    style={{ objectFit: 'contain', display: 'block' }}
+                                    className="block object-contain"
                                 />
-                            </UnstyledButton>
-                        </Tooltip>
+                            </button>
+                        </SimpleTooltip>
                     ))}
                     {occupied && (
-                        <UnstyledButton
+                        <button
+                            type="button"
                             onClick={() => { onClear(); setOpened(false); }}
-                            style={{
-                                padding: 2, borderRadius: 4,
-                                border: '2px solid transparent',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                width: 26, height: 26,
-                                color: 'var(--mantine-color-red-6)',
-                                fontSize: 14, fontWeight: 700,
-                            }}
                             title="Clear position"
+                            className="flex size-[26px] items-center justify-center rounded-[4px] border-2 border-transparent text-sm font-bold"
+                            style={{ color: '#cc0010' }}
                         >
                             ✕
-                        </UnstyledButton>
+                        </button>
                     )}
                 </div>
-            </Popover.Dropdown>
+            </PopoverContent>
         </Popover>
     );
 }
@@ -365,7 +352,8 @@ export default function DiamondPanel({ scoreboardNumber = 1 }) {
     const inactiveBatterPos = BATTER_POSITIONS[inactiveSide];
 
     return (
-        <Paper withBorder p={4} style={{ width: '100%' }}>
+        <Panel glow={false} title="Field" className="w-full">
+            <div className="p-2">
             <svg
                 viewBox={`${bounds.xMin} 0 ${vbWidth} ${vbHeight}`}
                 width="100%"
@@ -541,6 +529,7 @@ export default function DiamondPanel({ scoreboardNumber = 1 }) {
                     );
                 })()}
             </svg>
-        </Paper>
+            </div>
+        </Panel>
     );
 }

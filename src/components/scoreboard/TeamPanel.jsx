@@ -1,5 +1,8 @@
 import { useCallback } from 'react';
-import { Paper, Stack } from '@mantine/core';
+import { Panel } from '../ui/panel';
+import { Stack } from '../ui/primitives';
+import { Badge } from '../ui/badge';
+import { cn } from '../../lib/utils';
 import { useStateStore } from '../../context/store';
 import PlayerSlot from './PlayerSlot';
 
@@ -47,19 +50,40 @@ export default function TeamPanel({ scoreboardNumber = 1, teamNumber, playerCoun
                 teamNumber={teamNumber}
                 playerNumber={p}
                 sourceType={sourceType}
-                losers={losers}
-                isHome={isHome}
-                onToggleLosers={toggleLosers}
-                onToggleHome={toggleHome}
             />
         );
     }
 
+    // Side + bracket-side controls live in the panel header so the player
+    // row below stays uncluttered.
+    const headerActions = (
+        <>
+            <button type="button" onClick={toggleLosers} title="Losers bracket">
+                <Badge
+                    className={cn(
+                        'px-1.5 text-[10px] font-semibold uppercase tracking-wider',
+                        losers ? 'bg-destructive/15 text-destructive' : 'bg-muted text-muted-foreground'
+                    )}
+                >Losers</Badge>
+            </button>
+            <button type="button" onClick={toggleHome} title="Toggle home/away">
+                <Badge
+                    className={cn(
+                        'min-w-[48px] justify-center px-1.5 text-[10px] font-semibold uppercase tracking-wider',
+                        isHome ? 'bg-[#3b82f6]/15 text-[#60a5fa]' : 'bg-muted text-muted-foreground'
+                    )}
+                >{isHome ? 'Home' : 'Away'}</Badge>
+            </button>
+        </>
+    );
+
     return (
-        <Paper withBorder px="sm" pt={4} pb="sm" style={{ flex: 1 }}>
-            <Stack gap="xs">
-                {playerSlots}
-            </Stack>
-        </Paper>
+        <Panel glow={false} title={`Team ${teamNumber}`} actions={headerActions} className="flex-1">
+            <div className="p-3.5">
+                <Stack gap="md">
+                    {playerSlots}
+                </Stack>
+            </div>
+        </Panel>
     );
 }

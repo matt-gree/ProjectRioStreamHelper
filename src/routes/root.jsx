@@ -1,7 +1,7 @@
 import { Routes, Route, Link, useLocation } from "react-router-dom";
-import { Tabs, Box } from "@mantine/core";
 import TSHFields from '../components/fields';
 import WelcomeCard from '../components/WelcomeCard';
+import { cn } from "../lib/utils";
 
 import Bracket from './bracket/bracket';
 import Commentary from './commentary/commentary';
@@ -22,24 +22,30 @@ export default function Root() {
   const location = useLocation();
 
   return (
-    <Box style={{ minHeight: '100vh' }}>
+    <div className="min-h-screen">
       <TSHFields />
       <WelcomeCard />
-      <Tabs value={location.pathname} variant="outline" mx="md">
-        <Tabs.List>
-          {allTabs.map(tab => (
-            <Tabs.Tab
+      {/* Rio nav: night bar, Rajdhani labels, rio-red active underline. */}
+      <nav className="mx-5 flex items-end gap-1 border-b border-border">
+        {allTabs.map(tab => {
+          const active = location.pathname === tab.path;
+          return (
+            <Link
               key={tab.path}
-              value={tab.path}
-              component={Link}
               to={tab.path}
+              className={cn(
+                "label-display border-b-2 px-4 py-3 text-sm transition-colors",
+                active
+                  ? "border-rio-500 text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              )}
             >
               {tab.name}
-            </Tabs.Tab>
-          ))}
-        </Tabs.List>
-      </Tabs>
-      <Box p="md">
+            </Link>
+          );
+        })}
+      </nav>
+      <div className="p-5">
         <Routes>
           <Route path="/" element={<ScoreboardManager />} />
           <Route path="/tournament_info" element={<TournamentInfo />} />
@@ -48,7 +54,7 @@ export default function Root() {
           <Route path="/player_list" element={<PlayerList />} />
           <Route path="/layouts" element={<LayoutBrowser />} />
         </Routes>
-      </Box>
-    </Box>
+      </div>
+    </div>
   );
 }

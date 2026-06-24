@@ -1,7 +1,8 @@
 import { useState, useCallback, useMemo } from 'react';
-import {
-    Paper, Stack, Text, Group, SegmentedControl, Button, Loader, Divider,
-} from '@mantine/core';
+import { Panel } from '../ui/panel';
+import { Stack, Text, Divider, Loader } from '../ui/primitives';
+import { SegmentedControl } from '../ui/segmented-control';
+import { Button } from '../ui/button';
 import { useStateStore } from '../../context/store';
 import {
     deriveBatting, derivePitching,
@@ -50,16 +51,16 @@ function StatLine({ label, stats, type, scope }) {
         : ['era', 'k_pct', 'ip'];
 
     return (
-        <Stack gap={2}>
-            <Text size="xs" fw={600}>{label}</Text>
-            <Group gap="sm">
+        <Stack gap="xs">
+            <span className="field-label">{label}</span>
+            <div className="flex flex-wrap gap-5">
                 {keys.map(k => (
-                    <Text key={k} size="xs">
-                        <Text span c="dimmed">{labels[k]}</Text>{' '}
-                        <Text span fw={600}>{derived[k]}</Text>
-                    </Text>
+                    <div key={k} className="flex flex-col gap-0.5">
+                        <span className="eyebrow">{labels[k]}</span>
+                        <span className="text-base font-semibold tabular-nums leading-none">{derived[k]}</span>
+                    </div>
                 ))}
-            </Group>
+            </div>
         </Stack>
     );
 }
@@ -105,30 +106,30 @@ export default function ActiveMatchupStats({ scoreboardNumber = 1 }) {
 
     if (!hasBatter && !hasPitcher) {
         return (
-            <Paper withBorder p="sm">
-                <Text size="xs" c="dimmed" ta="center">
-                    No active batter/pitcher
-                </Text>
-            </Paper>
+            <Panel glow={false} title="Current Matchup">
+                <div className="p-3.5">
+                    <Text size="xs" dimmed ta="center">No active batter or pitcher</Text>
+                </div>
+            </Panel>
         );
     }
 
-    return (
-        <Paper withBorder p="sm">
-            <Stack gap="xs">
-                <Group justify="space-between">
-                    <Text size="sm" fw={700}>Current Matchup</Text>
-                    <SegmentedControl
-                        size="xs"
-                        value={scope}
-                        onChange={setScope}
-                        data={[
-                            { value: 'season', label: 'Season' },
-                            { value: 'game', label: 'This Game' },
-                        ]}
-                    />
-                </Group>
+    const scopeToggle = (
+        <SegmentedControl
+            size="xs"
+            value={scope}
+            onChange={setScope}
+            data={[
+                { value: 'season', label: 'Season' },
+                { value: 'game', label: 'This Game' },
+            ]}
+        />
+    );
 
+    return (
+        <Panel glow={false} title="Current Matchup" actions={scopeToggle}>
+            <div className="p-3.5">
+            <Stack gap="md">
                 {hasBatter && (
                     <StatLine
                         label={`At Bat: ${batter} (${teamName(batterInfo.teamNum)})`}
@@ -149,18 +150,19 @@ export default function ActiveMatchupStats({ scoreboardNumber = 1 }) {
                     />
                 )}
 
-                <Group justify="center">
+                <div className="flex justify-center">
                     <Button
-                        size="xs"
-                        variant="subtle"
+                        size="sm"
+                        variant="ghost"
                         onClick={handleRefresh}
                         disabled={refreshing}
-                        leftSection={refreshing ? <Loader size={12} /> : null}
                     >
+                        {refreshing ? <Loader size={12} /> : null}
                         {refreshing ? 'Refreshing...' : 'Refresh Stats'}
                     </Button>
-                </Group>
+                </div>
             </Stack>
-        </Paper>
+            </div>
+        </Panel>
     );
 }

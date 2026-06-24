@@ -1,11 +1,28 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { Copy, Check, RotateCw, Settings as SettingsIcon, X } from 'lucide-react';
+import { Stack, Text, Loader, Divider } from '../../components/ui/primitives';
+import { Panel } from '../../components/ui/panel';
+import { Button } from '../../components/ui/button';
+import { Badge } from '../../components/ui/badge';
+import { Input } from '../../components/ui/input';
+import { Label } from '../../components/ui/label';
+import { TextField } from '../../components/ui/text-field';
+import { NumberInput } from '../../components/ui/number-input';
+import { ColorInput } from '../../components/ui/color-input';
+import { Combobox } from '../../components/ui/combobox';
+import { SimpleSelect } from '../../components/ui/simple-select';
+import { Switch } from '../../components/ui/switch';
+import { Collapsible, CollapsibleContent } from '../../components/ui/collapsible';
+import { Alert, AlertTitle, AlertDescription } from '../../components/ui/alert';
+import { Tabs, TabsList, TabsTrigger } from '../../components/ui/tabs';
+import { SimpleTooltip } from '../../components/ui/simple-tooltip';
+import { CopyButton } from '../../components/ui/copy-button';
+import { FileButton } from '../../components/ui/file-button';
 import {
-    Stack, Paper, Text, Group, Grid, SimpleGrid, UnstyledButton,
-    CopyButton, ActionIcon, Button, Tooltip, Box, Loader, Alert, Tabs, Badge, Switch,
-    Collapse, ColorInput, FileButton, Image, Input, TextInput, Autocomplete, Select, NumberInput, Divider,
-    Menu,
-} from '@mantine/core';
-import { notifications } from '@mantine/notifications';
+    DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
+} from '../../components/ui/dropdown-menu';
+import { cn } from '../../lib/utils';
+import { notifications } from '../../lib/notify';
 import { useSettingsStore, useStateStore, useConfigStore } from '../../context/store';
 import { useShallow } from 'zustand/react/shallow';
 import useTournament from '../../hooks/useTournament';
@@ -17,6 +34,14 @@ import {
 } from './designConstants';
 
 const PREVIEW_HEIGHT = 500;
+
+// Selected-row tint helper (replaces the per-item Mantine theme callbacks).
+const itemClass = (active, accent = 'primary') => cn(
+    'block w-full rounded-md p-2 text-left transition-colors',
+    active
+        ? (accent === 'violet' ? 'border border-[#a78bfa] bg-[#a78bfa]/15' : 'border border-primary bg-primary/10')
+        : 'border border-transparent hover:bg-accent'
+);
 
 // Includes the default values for every "color" / "color-opacity" field in
 // GLOBAL_DESIGN_DEFAULTS so a user can always click the suggested swatch to
@@ -64,19 +89,11 @@ function ScaledIframe({ src, fallbackWidth, fallbackHeight, height = PREVIEW_HEI
             try {
                 const doc = iframeRef.current?.contentDocument;
                 if (!doc) {
-                    // cross-origin: contentDocument is null
                     if (fallbackWidth && fallbackHeight) {
                         setNativeSize({ w: fallbackWidth, h: fallbackHeight });
                     }
                     return;
                 }
-                // Overlay HTML files don't set an html-element background,
-                // so Chromium paints the iframe's default white canvas. In
-                // the preview we want the container's scheme-aware grey to
-                // show through instead of a stark white rectangle. Inject a
-                // stylesheet + inline styles with !important so nothing the
-                // overlay does can override it. color-scheme: normal keeps
-                // the UA canvas neutral.
                 try {
                     doc.documentElement.style.background = 'transparent';
                     doc.documentElement.style.colorScheme = 'normal';
@@ -90,7 +107,6 @@ function ScaledIframe({ src, fallbackWidth, fallbackHeight, height = PREVIEW_HEI
                         doc.head.appendChild(injected);
                     }
                 } catch { /* ignore */ }
-                // Prefer data-ref-w/h attributes (set by overlay auto-scale JS)
                 const refW = parseFloat(doc.body.dataset.refW);
                 const refH = parseFloat(doc.body.dataset.refH);
                 if (refW > 0 && refH > 0) {
@@ -106,7 +122,6 @@ function ScaledIframe({ src, fallbackWidth, fallbackHeight, height = PREVIEW_HEI
                     setNativeSize({ w, h });
                 }
             } catch (e) {
-                // cross-origin fallback
                 if (fallbackWidth && fallbackHeight) {
                     setNativeSize({ w: fallbackWidth, h: fallbackHeight });
                 }
@@ -116,19 +131,10 @@ function ScaledIframe({ src, fallbackWidth, fallbackHeight, height = PREVIEW_HEI
     }, [fallbackWidth, fallbackHeight]);
 
     return (
-        <Box
+        <div
             ref={containerRef}
-            style={{
-                position: 'relative',
-                height,
-                width: '100%',
-                // Neutral dark grey in dark mode, neutral light grey in
-                // light mode, so the preview frame reads as a calm stage
-                // rather than pure black. Mantine's default-hover var is
-                // scheme-aware (gray-0 in light, dark-5 in dark).
-                background: 'var(--mantine-color-default-hover)',
-                overflow: 'hidden',
-            }}
+            className="relative w-full overflow-hidden bg-muted"
+            style={{ height }}
         >
             <iframe
                 ref={iframeRef}
@@ -141,9 +147,6 @@ function ScaledIframe({ src, fallbackWidth, fallbackHeight, height = PREVIEW_HEI
                     width: nativeSize ? `${nativeSize.w}px` : '1px',
                     height: nativeSize ? `${nativeSize.h}px` : '1px',
                     border: 'none',
-                    // Iframes default to white in Chromium; the explicit
-                    // color-scheme keeps the UA canvas neutral and lets the
-                    // container's scheme-aware grey show through.
                     backgroundColor: 'transparent',
                     colorScheme: 'normal',
                     opacity: nativeSize ? 1 : 0,
@@ -154,12 +157,40 @@ function ScaledIframe({ src, fallbackWidth, fallbackHeight, height = PREVIEW_HEI
                 }}
                 title="Layout Preview"
             />
-        </Box>
+        </div>
     );
 }
 
-const SOURCE_COLORS = { hud: 'green', api: 'blue', manual: 'gray' };
+// Tinted-translucent source chips, matching the brand.
+const SOURCE_COLORS = {
+    hud: 'bg-[#22c55e]/15 text-[#4ade80]',
+    live_game: 'bg-[#3b82f6]/15 text-[#60a5fa]',
+    api: 'bg-[#3b82f6]/15 text-[#60a5fa]',
+    rotator: 'bg-[#a855f7]/15 text-[#c084fc]',
+    manual: 'bg-muted text-muted-foreground',
+};
 
+// Friendly source labels (matches the Scoreboard tab's vocabulary).
+const SOURCE_LABEL = { hud: 'HUD', live_game: 'API', rotator: 'Rotator', manual: 'Manual' };
+
+function CopyIconButton({ value }) {
+    return (
+        <CopyButton value={value}>
+            {({ copied, copy }) => (
+                <SimpleTooltip label={copied ? 'Copied!' : 'Copy URL'}>
+                    <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        className={copied ? 'text-[#14b8a6]' : ''}
+                        onClick={(e) => { e.stopPropagation(); copy(); }}
+                    >
+                        {copied ? <Check size={14} /> : <Copy size={14} />}
+                    </Button>
+                </SimpleTooltip>
+            )}
+        </CopyButton>
+    );
+}
 
 function LayoutItem({ item, selected, onSelect, activeTab }) {
     const copyUrl = useMemo(() => {
@@ -171,48 +202,21 @@ function LayoutItem({ item, selected, onSelect, activeTab }) {
     }, [item.url, activeTab]);
 
     return (
-        <UnstyledButton
-            onClick={() => onSelect(item)}
-            p="xs"
-            style={(theme) => ({
-                borderRadius: theme.radius.sm,
-                backgroundColor: selected?.url === item.url
-                    ? 'var(--mantine-color-blue-light)'
-                    : 'transparent',
-                border: selected?.url === item.url
-                    ? `1px solid var(--mantine-color-blue-filled)`
-                    : '1px solid transparent',
-            })}
-        >
-            <Group justify="space-between" wrap="nowrap" gap={4}>
-                <div style={{ minWidth: 0, flex: 1 }}>
+        <button type="button" onClick={() => onSelect(item)} className={itemClass(selected?.url === item.url)}>
+            <div className="flex flex-nowrap items-center justify-between gap-1">
+                <div className="min-w-0 flex-1">
                     <Text size="sm" truncate>
                         {item.sizeVariant
                             ? `${item.sizeLabel} (${item.sizeVariant.toUpperCase()})`
                             : item.name}
                     </Text>
                     {item.width && item.height && (
-                        <Text size="xs" c="dimmed">{item.width} x {item.height}</Text>
+                        <Text size="xs" dimmed>{item.width} x {item.height}</Text>
                     )}
                 </div>
-                <CopyButton value={copyUrl}>
-                    {({ copied, copy }) => (
-                        <Tooltip label={copied ? 'Copied!' : 'Copy URL'}>
-                            <ActionIcon
-                                variant="subtle"
-                                color={copied ? 'teal' : 'gray'}
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    copy();
-                                }}
-                            >
-                                {copied ? '\u2713' : '\u2398'}
-                            </ActionIcon>
-                        </Tooltip>
-                    )}
-                </CopyButton>
-            </Group>
-        </UnstyledButton>
+                <CopyIconButton value={copyUrl} />
+            </div>
+        </button>
     );
 }
 
@@ -224,21 +228,16 @@ function LayoutList({ layouts, selected, onSelect, activeTab }) {
 
     if (layouts.length === 0) {
         return (
-            <Text size="sm" c="dimmed">
+            <Text size="sm" dimmed>
                 No layouts found for this scoreboard.
             </Text>
         );
     }
 
-    // Separate size-variant layouts (scoreboard) from team-based layouts.
-    // Anything without sizeVariant or team falls into the "other" bucket so
-    // single-variant standalone overlays (e.g. rotator/ticker) still render
-    // instead of being silently dropped.
     const sizeVariantLayouts = layouts.filter(l => l.sizeVariant);
     const teamLayouts = layouts.filter(l => l.team != null);
     const otherLayouts = layouts.filter(l => !l.sizeVariant && l.team == null);
 
-    // Group size-variant layouts by parentName
     const groups = {};
     for (const item of sizeVariantLayouts) {
         const key = `${item.group}/${item.parentName}`;
@@ -252,104 +251,64 @@ function LayoutList({ layouts, selected, onSelect, activeTab }) {
 
     const isGroupActive = (items) => items.some(i => i.url === selected?.url);
 
-    // Split team layouts into team 1 and team 2, sorted by TEAM_LAYOUT_ORDER
     const team1 = TEAM_LAYOUT_ORDER.map(t => teamLayouts.find(l => l.type === t && l.team === 1)).filter(Boolean);
     const team2 = TEAM_LAYOUT_ORDER.map(t => teamLayouts.find(l => l.type === t && l.team === 2)).filter(Boolean);
 
     return (
-        <Stack gap={4}>
-            {/* Scoreboard size-variant groups */}
+        <Stack gap="xs">
             {Object.entries(groups).map(([key, { parentName, items }]) => {
                 const open = expandedGroups[key] || isGroupActive(items);
                 return (
                     <div key={key}>
-                        <UnstyledButton
-                            onClick={() => toggleGroup(key)}
-                            p="xs"
-                            style={(theme) => ({
-                                borderRadius: theme.radius.sm,
-                                width: '100%',
-                                backgroundColor: isGroupActive(items)
-                                    ? 'var(--mantine-color-blue-light)'
-                                    : 'transparent',
-                            })}
-                        >
-                            <Group justify="space-between" wrap="nowrap">
+                        <button type="button" onClick={() => toggleGroup(key)} className={itemClass(isGroupActive(items))}>
+                            <div className="flex flex-nowrap items-center justify-between">
                                 <Text size="sm" fw={600}>{parentName}</Text>
-                                <Text size="xs" c="dimmed">
-                                    {open ? '\u25B4' : '\u25BE'} {items.length} sizes
+                                <Text size="xs" dimmed>
+                                    {open ? '▴' : '▾'} {items.length} sizes
                                 </Text>
-                            </Group>
-                        </UnstyledButton>
-                        <Collapse in={open}>
-                            <Stack gap={2} pl="sm">
-                                {items.map((item) => (
-                                    <LayoutItem
-                                        key={item.url}
-                                        item={item}
-                                        selected={selected}
-                                        onSelect={onSelect}
-                                        activeTab={activeTab}
-                                    />
-                                ))}
-                            </Stack>
-                        </Collapse>
+                            </div>
+                        </button>
+                        <Collapsible open={open}>
+                            <CollapsibleContent>
+                                <Stack gap="xs" className="pl-3 pt-1">
+                                    {items.map((item) => (
+                                        <LayoutItem key={item.url} item={item} selected={selected} onSelect={onSelect} activeTab={activeTab} />
+                                    ))}
+                                </Stack>
+                            </CollapsibleContent>
+                        </Collapsible>
                     </div>
                 );
             })}
 
-            {/* Other standalone layouts (e.g. rotator ticker) */}
             {otherLayouts.length > 0 && (
-                <Stack gap={2}>
+                <Stack gap="xs">
                     {otherLayouts.map((item) => (
-                        <LayoutItem
-                            key={item.url}
-                            item={item}
-                            selected={selected}
-                            onSelect={onSelect}
-                            activeTab={activeTab}
-                        />
+                        <LayoutItem key={item.url} item={item} selected={selected} onSelect={onSelect} activeTab={activeTab} />
                     ))}
                 </Stack>
             )}
 
-            {/* Two-column Team 1 / Team 2 section */}
             {(team1.length > 0 || team2.length > 0) && (
-                <div style={{ borderTop: '1px solid var(--mantine-color-gray-3)', marginTop: 4, paddingTop: 8 }}>
-                    <Grid columns={2} gutter={8}>
-                        <Grid.Col span={1}>
-                            <Text size="xs" fw={600} c="dimmed" tt="uppercase" mb={4} style={{ letterSpacing: '0.5px' }}>
-                                Team 1
-                            </Text>
-                            <Stack gap={2}>
+                <div className="mt-1 border-t border-border pt-2">
+                    <div className="grid grid-cols-2 gap-2">
+                        <div>
+                            <Text size="xs" fw={600} dimmed className="mb-1 uppercase tracking-wide">Team 1</Text>
+                            <Stack gap="xs">
                                 {team1.map((item) => (
-                                    <LayoutItem
-                                        key={item.url}
-                                        item={item}
-                                        selected={selected}
-                                        onSelect={onSelect}
-                                        activeTab={activeTab}
-                                    />
+                                    <LayoutItem key={item.url} item={item} selected={selected} onSelect={onSelect} activeTab={activeTab} />
                                 ))}
                             </Stack>
-                        </Grid.Col>
-                        <Grid.Col span={1}>
-                            <Text size="xs" fw={600} c="dimmed" tt="uppercase" mb={4} style={{ letterSpacing: '0.5px' }}>
-                                Team 2
-                            </Text>
-                            <Stack gap={2}>
+                        </div>
+                        <div>
+                            <Text size="xs" fw={600} dimmed className="mb-1 uppercase tracking-wide">Team 2</Text>
+                            <Stack gap="xs">
                                 {team2.map((item) => (
-                                    <LayoutItem
-                                        key={item.url}
-                                        item={item}
-                                        selected={selected}
-                                        onSelect={onSelect}
-                                        activeTab={activeTab}
-                                    />
+                                    <LayoutItem key={item.url} item={item} selected={selected} onSelect={onSelect} activeTab={activeTab} />
                                 ))}
                             </Stack>
-                        </Grid.Col>
-                    </Grid>
+                        </div>
+                    </div>
                 </div>
             )}
         </Stack>
@@ -374,7 +333,6 @@ function PlayerSchedulePanel({ selected, onSelect, baseUrl, phases, phasesLoaded
 
     useEffect(() => { setDraftPlayer(activePlayer); }, [activePlayer]);
 
-    // Auto-select round-robin (pool) phase groups when phases load
     useEffect(() => {
         if (!phasesLoaded || phases.length === 0) return;
         const poolIds = new Set();
@@ -388,8 +346,6 @@ function PlayerSchedulePanel({ selected, onSelect, baseUrl, phases, phasesLoaded
 
     const isLoaded = loadedCount !== null;
 
-    // When loaded, checked state lives in playerSchedule.visiblePgIds (state);
-    // before load, it lives in local selectedPgIds.
     const checkedPgIds = useMemo(() =>
         isLoaded
             ? new Set((playerScheduleData?.visiblePgIds ?? []).map(String))
@@ -417,7 +373,6 @@ function PlayerSchedulePanel({ selected, onSelect, baseUrl, phases, phasesLoaded
 
     const isStartGG = bracketLink && /start\.gg/i.test(bracketLink);
 
-    // Build flat list of phase groups across all phases
     const allPgs = useMemo(() => phases.flatMap(phase =>
         (phase.phaseGroups || []).map(pg => ({
             ...pg,
@@ -432,7 +387,6 @@ function PlayerSchedulePanel({ selected, onSelect, baseUrl, phases, phasesLoaded
         setLoading(true);
         try {
             const baseApi = isStartGG ? '/api/v1/startgg' : '/api/v1/challonge';
-            // Load ALL phase groups upfront so visibility can be toggled without reloading
             const results = await Promise.all(
                 allPgs.map((pg) =>
                     fetch(`${baseApi}/bracket-data?phase_group_id=${pg.id}`)
@@ -459,7 +413,6 @@ function PlayerSchedulePanel({ selected, onSelect, baseUrl, phases, phasesLoaded
                     mergedSets.push({ ...set, phaseName: result.phaseName, phaseGroupId: result._pgId, bracketType });
                 }
             }
-            // visiblePgIds initialised from the pre-load checkbox selection
             setStateItem('playerSchedule', {
                 players: mergedPlayers,
                 sets: mergedSets,
@@ -480,13 +433,11 @@ function PlayerSchedulePanel({ selected, onSelect, baseUrl, phases, phasesLoaded
         { key: 'progressive', label: 'Progressive Reveal', url: `${scheduleUrl}?progressive=true` },
     ];
 
-    // Autocomplete options from loaded schedule players
     const playerNames = useMemo(() =>
         Object.values(playerScheduleData?.players ?? {})
             .map(p => p.name).filter(Boolean).sort(),
     [playerScheduleData]);
 
-    // After loading + player name entered, filter phases to only those the player appears in
     const visiblePgs = useMemo(() => {
         if (!playerScheduleData || !draftPlayer) return allPgs;
         const { sets = [], players = {} } = playerScheduleData;
@@ -495,97 +446,78 @@ function PlayerSchedulePanel({ selected, onSelect, baseUrl, phases, phasesLoaded
             if ((p.name || '').toLowerCase() === draftPlayer.toLowerCase()) { targetId = id; break; }
         }
         if (!targetId) return allPgs;
-        // Which phase groups were actually loaded into playerSchedule
         const loadedPgIds = new Set(sets.map(s => s.phaseGroupId).filter(Boolean));
-        // Which loaded phase groups contain this player's sets
         const playerPgIds = new Set(
             sets.filter(s => s.entrant1Id === targetId || s.entrant2Id === targetId)
                 .map(s => s.phaseGroupId).filter(Boolean)
         );
         if (playerPgIds.size === 0 && loadedPgIds.size === 0) return allPgs;
-        // Show: phases the player is in, plus phases not yet loaded (unknown)
         return allPgs.filter(pg => playerPgIds.has(pg.id) || !loadedPgIds.has(pg.id));
     }, [allPgs, playerScheduleData, draftPlayer]);
 
+    const dlId = 'player-schedule-names';
+
     return (
         <Stack gap="xs">
-            <Text size="xs" fw={600} c="dimmed" tt="uppercase" style={{ letterSpacing: '0.5px' }}>
+            <Text size="xs" fw={600} dimmed className="uppercase tracking-wide">
                 Player Schedule
             </Text>
-            <Autocomplete
-                placeholder="Player name..."
-                size="xs"
-                value={draftPlayer}
-                onChange={setDraftPlayer}
-                onOptionSubmit={(val) => { setDraftPlayer(val); setActivePlayer(val); }}
-                onBlur={() => setActivePlayer(draftPlayer)}
-                onKeyDown={(e) => { if (e.key === 'Enter') setActivePlayer(draftPlayer); }}
-                data={playerNames}
-                limit={10}
-                description="Shown in the schedule overlay"
-            />
+            <div className="flex flex-col gap-1">
+                <Input
+                    placeholder="Player name..."
+                    value={draftPlayer}
+                    list={dlId}
+                    onChange={(e) => setDraftPlayer(e.currentTarget.value)}
+                    onBlur={() => setActivePlayer(draftPlayer)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') setActivePlayer(draftPlayer); }}
+                />
+                <datalist id={dlId}>
+                    {playerNames.slice(0, 10).map(n => <option key={n} value={n} />)}
+                </datalist>
+                <Text size="xs" dimmed>Shown in the schedule overlay</Text>
+            </div>
 
             {phasesLoaded && visiblePgs.length > 0 && (
                 <>
-                    <Text size="xs" c="dimmed">Phases to include:</Text>
-                    <Stack gap={2}>
+                    <Text size="xs" dimmed>Phases to include:</Text>
+                    <Stack gap="xs">
                         {visiblePgs.map(pg => {
                             const sel = checkedPgIds.has(pg.id) || checkedPgIds.has(String(pg.id));
                             const typeLabel = pg.bracketType === 'ROUND_ROBIN' ? 'Pool' : pg.bracketType === 'DOUBLE_ELIMINATION' ? 'DE' : 'SE';
                             return (
-                                <UnstyledButton key={pg.id} onClick={() => togglePg(pg.id)} p="xs"
-                                    style={(theme) => ({
-                                        borderRadius: theme.radius.sm,
-                                        backgroundColor: sel ? 'var(--mantine-color-blue-light)' : 'transparent',
-                                        border: `1px solid ${sel ? 'var(--mantine-color-blue-filled)' : 'var(--mantine-color-default-border)'}`,
-                                    })}
-                                >
-                                    <Group gap={6} wrap="nowrap">
-                                        <Box style={{ width: 11, height: 11, borderRadius: 2, border: '1.5px solid var(--mantine-color-blue-6)', background: sel ? 'var(--mantine-color-blue-6)' : 'transparent', flexShrink: 0 }} />
-                                        <Text size="xs" style={{ flex: 1, minWidth: 0 }} truncate>{pg.label}</Text>
-                                        <Badge size="xs" variant="outline" color="gray">{typeLabel}</Badge>
-                                    </Group>
-                                </UnstyledButton>
+                                <button type="button" key={pg.id} onClick={() => togglePg(pg.id)} className={itemClass(sel)}>
+                                    <div className="flex flex-nowrap items-center gap-1.5">
+                                        <span className="size-[11px] shrink-0 rounded-sm border-[1.5px] border-[#3b82f6]" style={{ background: sel ? '#3b82f6' : 'transparent' }} />
+                                        <Text size="xs" truncate className="min-w-0 flex-1">{pg.label}</Text>
+                                        <Badge variant="outline" className="text-[10px]">{typeLabel}</Badge>
+                                    </div>
+                                </button>
                             );
                         })}
                     </Stack>
-                    <Button size="compact-xs" variant="light" loading={loading} disabled={allPgs.length === 0} onClick={handleLoad}>
+                    <Button size="xs" variant="secondary" disabled={loading || allPgs.length === 0} onClick={handleLoad}>
+                        {loading && <Loader size={10} />}
                         {loadedCount !== null ? `Reload All (${loadedCount} games)` : 'Load All Phases'}
                     </Button>
                 </>
             )}
 
             {loadedCount !== null && (
-                <Stack gap={2} mt={2}>
+                <Stack gap="xs" className="mt-0.5">
                     {variants.map(v => {
                         const isActive = selected?.url === v.url;
                         return (
-                            <UnstyledButton key={v.key}
+                            <button type="button" key={v.key}
                                 onClick={() => onSelect({ group: 'bracket', name: v.label, type: 'bracket', url: v.url, width: 440, height: 600 })}
-                                p="xs"
-                                style={(theme) => ({
-                                    borderRadius: theme.radius.sm,
-                                    backgroundColor: isActive ? 'var(--mantine-color-blue-light)' : 'transparent',
-                                    border: isActive ? `1px solid var(--mantine-color-blue-filled)` : '1px solid transparent',
-                                })}
-                            >
-                                <Group justify="space-between" wrap="nowrap" gap={4}>
-                                    <div style={{ minWidth: 0, flex: 1 }}>
+                                className={itemClass(isActive)}>
+                                <div className="flex flex-nowrap items-center justify-between gap-1">
+                                    <div className="min-w-0 flex-1">
                                         <Text size="sm">{v.label}</Text>
-                                        <Text size="xs" c="dimmed">440 x 600</Text>
+                                        <Text size="xs" dimmed>440 x 600</Text>
                                     </div>
-                                    <CopyButton value={v.url}>
-                                        {({ copied, copy }) => (
-                                            <Tooltip label={copied ? 'Copied!' : 'Copy URL'}>
-                                                <ActionIcon variant="subtle" color={copied ? 'teal' : 'gray'} size="sm"
-                                                    onClick={(e) => { e.stopPropagation(); copy(); }}>
-                                                    {copied ? '✓' : '⎘'}
-                                                </ActionIcon>
-                                            </Tooltip>
-                                        )}
-                                    </CopyButton>
-                                </Group>
-                            </UnstyledButton>
+                                    <CopyIconButton value={v.url} />
+                                </div>
+                            </button>
                         );
                     })}
                 </Stack>
@@ -603,7 +535,6 @@ function BracketLayoutList({ selected, onSelect, baseUrl, onLoadBracket }) {
     const [loadedPgId, setLoadedPgId] = useState(null);
     const [phasesLoaded, setPhasesLoaded] = useState(false);
 
-    // Fetch phases when bracket_link exists
     useEffect(() => {
         if (bracketLink && !phasesLoaded) {
             setSource(bracketLink);
@@ -616,7 +547,6 @@ function BracketLayoutList({ selected, onSelect, baseUrl, onLoadBracket }) {
         }
     }, [bracketLink, phasesLoaded, fetchPhases]);
 
-    // Reset if bracket_link changes
     useEffect(() => {
         setPhasesLoaded(false);
         setPhases([]);
@@ -625,33 +555,28 @@ function BracketLayoutList({ selected, onSelect, baseUrl, onLoadBracket }) {
 
     if (!bracketLink) {
         return (
-            <Text size="xs" c="dimmed" fs="italic">
+            <Text size="xs" dimmed className="italic">
                 Load a tournament in the Bracket tab to see bracket layouts.
             </Text>
         );
     }
 
     if (!phasesLoaded) {
-        return <Loader size="xs" />;
+        return <Loader size={18} />;
     }
 
-    // Build phase groups from phases
     const phaseGroups = [];
     for (const phase of phases) {
         for (const pg of (phase.phaseGroups || [])) {
             const label = phases.length > 1 || (phase.phaseGroups?.length > 1)
                 ? `${phase.name}${phase.phaseGroups.length > 1 ? ` - Pool ${pg.displayIdentifier}` : ''}`
                 : phase.name;
-            phaseGroups.push({
-                id: pg.id,
-                label,
-                bracketType: pg.bracketType,
-            });
+            phaseGroups.push({ id: pg.id, label, bracketType: pg.bracketType });
         }
     }
 
     if (phaseGroups.length === 0) {
-        return <Text size="xs" c="dimmed">No bracket phases found.</Text>;
+        return <Text size="xs" dimmed>No bracket phases found.</Text>;
     }
 
     const toggleGroup = (key) => {
@@ -659,7 +584,6 @@ function BracketLayoutList({ selected, onSelect, baseUrl, onLoadBracket }) {
     };
 
     const handleSelect = async (pg, variant) => {
-        // Build the item for the layout preview
         const url = `${baseUrl}${variant.path}`;
         const item = {
             group: 'bracket',
@@ -670,15 +594,10 @@ function BracketLayoutList({ selected, onSelect, baseUrl, onLoadBracket }) {
             height: 1080,
             _phaseGroupId: pg.id,
         };
-
-        // Load bracket data into State if not already loaded for this phase group
         if (loadedPgId !== pg.id) {
             const result = await loadBracket(pg.id);
-            if (result) {
-                setLoadedPgId(pg.id);
-            }
+            if (result) setLoadedPgId(pg.id);
         }
-
         onSelect(item);
         if (onLoadBracket) onLoadBracket(pg.id);
     };
@@ -694,104 +613,60 @@ function BracketLayoutList({ selected, onSelect, baseUrl, onLoadBracket }) {
     const isGroupActive = (pgId) => selected?._phaseGroupId === pgId;
 
     return (
-        <Stack gap={4}>
+        <Stack gap="xs">
             {phaseGroups.map(pg => {
                 const key = `bracket-${pg.id}`;
                 const open = expandedGroups[key] || isGroupActive(pg.id);
                 const variants = pg.bracketType === 'ROUND_ROBIN'
-                    ? [BRACKET_VARIANTS[0]] // Round robin only has full view
+                    ? [BRACKET_VARIANTS[0]]
                     : BRACKET_VARIANTS;
 
                 return (
                     <div key={key}>
-                        <UnstyledButton
-                            onClick={() => toggleGroup(key)}
-                            p="xs"
-                            style={(theme) => ({
-                                borderRadius: theme.radius.sm,
-                                width: '100%',
-                                // Use the theme-adaptive var, not theme.colors.violet[0].
-                                // The palette-index-0 shade is near-white in both themes
-                                // and glares against dark mode; -light variants are
-                                // tinted-translucent and adapt automatically.
-                                backgroundColor: isGroupActive(pg.id)
-                                    ? 'var(--mantine-color-violet-light)'
-                                    : 'transparent',
-                            })}
-                        >
-                            <Group justify="space-between" wrap="nowrap">
+                        <button type="button" onClick={() => toggleGroup(key)} className={itemClass(isGroupActive(pg.id), 'violet')}>
+                            <div className="flex flex-nowrap items-center justify-between">
                                 <Text size="sm" fw={600}>{pg.label}</Text>
-                                <Group gap={4}>
+                                <div className="flex items-center gap-1">
                                     {loadedPgId === pg.id && (
-                                        <Badge size="xs" variant="light" color="green">loaded</Badge>
+                                        <Badge className="bg-[#22c55e] text-[10px] text-black">loaded</Badge>
                                     )}
-                                    <Text size="xs" c="dimmed">
-                                        {open ? '\u25B4' : '\u25BE'}
-                                    </Text>
-                                </Group>
-                            </Group>
-                        </UnstyledButton>
-                        <Collapse in={open}>
-                            <Stack gap={2} pl="sm">
-                                {variants.map(variant => {
-                                    const active = isVariantSelected(pg.id, variant.key);
-                                    return (
-                                        <UnstyledButton
-                                            key={variant.key}
-                                            onClick={() => handleSelect(pg, variant)}
-                                            p="xs"
-                                            style={(theme) => ({
-                                                borderRadius: theme.radius.sm,
-                                                backgroundColor: active
-                                                    ? 'var(--mantine-color-blue-light)'
-                                                    : 'transparent',
-                                                border: active
-                                                    ? `1px solid var(--mantine-color-blue-filled)`
-                                                    : '1px solid transparent',
-                                            })}
-                                        >
-                                            <Group justify="space-between" wrap="nowrap" gap={4}>
-                                                <div style={{ minWidth: 0, flex: 1 }}>
-                                                    <Text size="sm">{variant.label}</Text>
-                                                    <Text size="xs" c="dimmed">1920 x 1080</Text>
+                                    <Text size="xs" dimmed>{open ? '▴' : '▾'}</Text>
+                                </div>
+                            </div>
+                        </button>
+                        <Collapsible open={open}>
+                            <CollapsibleContent>
+                                <Stack gap="xs" className="pl-3 pt-1">
+                                    {variants.map(variant => {
+                                        const active = isVariantSelected(pg.id, variant.key);
+                                        return (
+                                            <button type="button" key={variant.key} onClick={() => handleSelect(pg, variant)} className={itemClass(active)}>
+                                                <div className="flex flex-nowrap items-center justify-between gap-1">
+                                                    <div className="min-w-0 flex-1">
+                                                        <Text size="sm">{variant.label}</Text>
+                                                        <Text size="xs" dimmed>1920 x 1080</Text>
+                                                    </div>
+                                                    <CopyIconButton value={`${baseUrl}${variant.path}`} />
                                                 </div>
-                                                <CopyButton value={`${baseUrl}${variant.path}`}>
-                                                    {({ copied, copy }) => (
-                                                        <Tooltip label={copied ? 'Copied!' : 'Copy URL'}>
-                                                            <ActionIcon
-                                                                variant="subtle"
-                                                                color={copied ? 'teal' : 'gray'}
-                                                                size="sm"
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    copy();
-                                                                }}
-                                                            >
-                                                                {copied ? '\u2713' : '\u2398'}
-                                                            </ActionIcon>
-                                                        </Tooltip>
-                                                    )}
-                                                </CopyButton>
-                                            </Group>
-                                        </UnstyledButton>
-                                    );
-                                })}
-                            </Stack>
-                        </Collapse>
+                                            </button>
+                                        );
+                                    })}
+                                </Stack>
+                            </CollapsibleContent>
+                        </Collapsible>
                     </div>
                 );
             })}
 
-            {/* Player Schedule */}
-            <div style={{ borderTop: '1px solid var(--mantine-color-gray-3)', paddingTop: 8, marginTop: 4 }}>
+            <div className="mt-1 border-t border-border pt-2">
                 <PlayerSchedulePanel
-                                selected={selected}
-                                onSelect={onSelect}
-                                baseUrl={baseUrl}
-                                phases={phases}
-                                phasesLoaded={phasesLoaded}
-                                bracketLink={bracketLink}
-                            />
+                    selected={selected}
+                    onSelect={onSelect}
+                    baseUrl={baseUrl}
+                    phases={phases}
+                    phasesLoaded={phasesLoaded}
+                    bracketLink={bracketLink}
+                />
             </div>
         </Stack>
     );
@@ -799,7 +674,7 @@ function BracketLayoutList({ selected, onSelect, baseUrl, onLoadBracket }) {
 
 // ── Tournament Logo Upload ──
 function LogoUpload({ label, description }) {
-    const [logoInfo, setLogoInfo] = useState(null); // { exists, url }
+    const [logoInfo, setLogoInfo] = useState(null);
     const [uploading, setUploading] = useState(false);
 
     const fetchLogo = useCallback(async () => {
@@ -833,42 +708,29 @@ function LogoUpload({ label, description }) {
     return (
         <div>
             <Text size="sm" fw={500}>{label}</Text>
-            {description && <Text size="xs" c="dimmed" mb={4}>{description}</Text>}
-            <Group gap="sm" align="center">
+            {description && <Text size="xs" dimmed className="mb-1">{description}</Text>}
+            <div className="flex items-center gap-2">
                 {logoInfo?.exists && logoInfo.url && (
-                    <Image
+                    <img
                         src={logoInfo.url + '?t=' + Date.now()}
                         alt="Tournament logo"
-                        w={48}
-                        h={48}
-                        fit="contain"
-                        radius="sm"
-                        style={{ border: '1px solid var(--mantine-color-gray-3)' }}
+                        className="size-12 rounded-md border border-border object-contain"
                     />
                 )}
                 <FileButton onChange={handleUpload} accept="image/png,image/jpeg,image/svg+xml,image/webp">
                     {(props) => (
-                        <Button
-                            {...props}
-                            variant="light"
-                            size="compact-xs"
-                            loading={uploading}
-                        >
+                        <Button {...props} variant="secondary" size="xs" disabled={uploading}>
+                            {uploading && <Loader size={10} />}
                             {logoInfo?.exists ? 'Replace' : 'Upload'}
                         </Button>
                     )}
                 </FileButton>
                 {logoInfo?.exists && (
-                    <Button
-                        variant="subtle"
-                        size="compact-xs"
-                        color="red"
-                        onClick={handleRemove}
-                    >
+                    <Button variant="ghost" size="xs" className="text-destructive" onClick={handleRemove}>
                         Remove
                     </Button>
                 )}
-            </Group>
+            </div>
         </div>
     );
 }
@@ -886,14 +748,12 @@ const FONT_OPTIONS = [
     { value: 'Lalezar', label: 'Lalezar' },
 ];
 
-// Parse "rgba(r, g, b, a)" or "rgb(r, g, b)" into { hex, opacity }
 function parseRgba(val) {
     const m = val.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+))?\s*\)/);
     if (m) {
         const hex = '#' + [m[1], m[2], m[3]].map(n => parseInt(n).toString(16).padStart(2, '0')).join('');
         return { hex, opacity: m[4] != null ? parseFloat(m[4]) : 1 };
     }
-    // Fallback: treat as hex
     return { hex: val.startsWith('#') ? val : '#000000', opacity: 1 };
 }
 
@@ -910,7 +770,6 @@ function ColorWithOpacity({ label, description, value, onChange }) {
     const [localOpacity, setLocalOpacity] = useState(opacity);
     const timerRef = useRef(null);
 
-    // Sync when external value changes (preset load, etc.)
     useEffect(() => {
         const parsed = parseRgba(value);
         setLocalHex(parsed.hex);
@@ -927,33 +786,28 @@ function ColorWithOpacity({ label, description, value, onChange }) {
 
     useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
 
-    // Wrap in Input.Wrapper so the label uses Mantine's native label styling
-    // (font size, weight, and label→input gap). A plain <Text> label here
-    // doesn't match the spacing of sibling NumberInput/TextInput labels and
-    // misaligns the input row when laid out side-by-side in a SimpleGrid.
     return (
-        <Input.Wrapper label={label} description={description} size="sm">
-            <Group gap="xs" align="flex-end" wrap="nowrap">
+        <div className="flex flex-col gap-1">
+            {label && <Label className="field-label">{label}</Label>}
+            {description && <Text size="xs" dimmed>{description}</Text>}
+            <div className="flex items-end gap-2">
                 <ColorInput
-                    size="sm"
                     value={localHex}
                     onChange={(color) => { setLocalHex(color); scheduleChange(color, localOpacity); }}
-                    format="hex"
                     swatches={COLOR_SWATCHES}
-                    style={{ flex: 1 }}
+                    className="flex-1"
                 />
                 <NumberInput
-                    size="sm"
                     value={Math.round(localOpacity * 100)}
                     onChange={(val) => { const o = (val ?? 100) / 100; setLocalOpacity(o); scheduleChange(localHex, o); }}
                     min={0}
                     max={100}
                     step={5}
                     suffix="%"
-                    w={80}
+                    className="w-20"
                 />
-            </Group>
-        </Input.Wrapper>
+            </div>
+        </div>
     );
 }
 
@@ -996,8 +850,6 @@ function PresetsPanel() {
         for (const key of GLOBAL_DESIGN_KEYS) {
             if (globalData[key] != null) setItem(`overlays.global.${key}`, globalData[key]);
         }
-        // v1 presets stored several keys (showCaptains, showLogo, etc.) under
-        // each per-layout dict. Strip them on load so the global value wins.
         const promotedToGlobal = new Set([
             'showCaptains', 'showLogo', 'showShadow', 'showBackdropBlur', 'finalBadgeColor',
         ]);
@@ -1026,8 +878,6 @@ function PresetsPanel() {
     }, [setItem]);
 
     const resetOverrides = useCallback(() => {
-        // Clear any per-layout pins of the globally-overridable keys (the
-        // values surfaced as chips in each layout's "Style overrides" area).
         for (const layoutType of Object.keys(LAYOUT_SETTINGS)) {
             for (const def of OVERRIDABLE_GLOBAL_KEYS) {
                 setItem(`overlays.${layoutType}.${def.key}`, null);
@@ -1070,105 +920,75 @@ function PresetsPanel() {
     const presetNames = Object.keys(presets).filter(k => presets[k] != null);
 
     return (
-        <Stack gap="md" maw={500}>
+        <Stack gap="md" className="max-w-[500px]">
             <LogoUpload
                 label="Overlay Logo"
                 description="Upload a logo to display on overlays (channel logo, league logo, etc.)"
             />
 
             <div>
-                <Text size="sm" fw={500} mb={4}>Presets</Text>
-                <Text size="xs" c="dimmed" mb="xs">Save and load full design configurations including global settings and per-layout overrides.</Text>
+                <Text size="sm" fw={500} className="mb-1">Presets</Text>
+                <Text size="xs" dimmed className="mb-2">Save and load full design configurations including global settings and per-layout overrides.</Text>
                 <Stack gap="xs">
                     {presetNames.map(name => (
-                        <Group key={name} gap="xs" justify="space-between" wrap="nowrap">
-                            <Text size="sm" truncate style={{ flex: 1, minWidth: 0 }}>
-                                {name}
-                            </Text>
-                            <Group gap={4} wrap="nowrap">
-                                <Button variant="light" size="compact-xs" onClick={() => handleLoadPreset(name)}>
-                                    Load
-                                </Button>
-                                <Button variant="subtle" size="compact-xs" color="gray" onClick={() => handleExportPreset(name)}>
-                                    Export
-                                </Button>
-                                <Button variant="subtle" size="compact-xs" color="red" onClick={() => handleDeletePreset(name)}>
-                                    Delete
-                                </Button>
-                            </Group>
-                        </Group>
+                        <div key={name} className="flex flex-nowrap items-center justify-between gap-2">
+                            <Text size="sm" truncate className="min-w-0 flex-1">{name}</Text>
+                            <div className="flex flex-nowrap gap-1">
+                                <Button variant="secondary" size="xs" onClick={() => handleLoadPreset(name)}>Load</Button>
+                                <Button variant="ghost" size="xs" onClick={() => handleExportPreset(name)}>Export</Button>
+                                <Button variant="ghost" size="xs" className="text-destructive" onClick={() => handleDeletePreset(name)}>Delete</Button>
+                            </div>
+                        </div>
                     ))}
 
                     {savingPreset ? (
-                        <Group gap="xs" wrap="nowrap">
-                            <TextInput
-                                size="xs"
+                        <div className="flex flex-nowrap items-center gap-2">
+                            <Input
                                 placeholder="Preset name"
                                 value={presetName}
                                 onChange={(e) => setPresetName(e.currentTarget.value)}
                                 onKeyDown={(e) => { if (e.key === 'Enter') handleSavePreset(); }}
-                                style={{ flex: 1 }}
+                                className="flex-1"
                                 autoFocus
                             />
-                            <Button size="compact-xs" onClick={handleSavePreset} disabled={!presetName.trim()}>
-                                Save
-                            </Button>
-                            <Button size="compact-xs" variant="subtle" color="gray" onClick={() => { setSavingPreset(false); setPresetName(''); }}>
-                                Cancel
-                            </Button>
-                        </Group>
+                            <Button size="xs" onClick={handleSavePreset} disabled={!presetName.trim()}>Save</Button>
+                            <Button size="xs" variant="ghost" onClick={() => { setSavingPreset(false); setPresetName(''); }}>Cancel</Button>
+                        </div>
                     ) : (
-                        <Group gap="xs" wrap="nowrap">
-                            <Button variant="light" size="compact-xs" onClick={() => setSavingPreset(true)}>
+                        <div className="flex flex-nowrap items-center gap-2">
+                            <Button variant="secondary" size="xs" onClick={() => setSavingPreset(true)}>
                                 Save current as preset
                             </Button>
                             <FileButton onChange={handleImportPreset} accept=".json">
                                 {(props) => (
-                                    <Button {...props} variant="light" size="compact-xs" color="gray">
-                                        Import preset
-                                    </Button>
+                                    <Button {...props} variant="secondary" size="xs">Import preset</Button>
                                 )}
                             </FileButton>
-                        </Group>
+                        </div>
                     )}
                 </Stack>
             </div>
 
-            <Group gap="xs">
-                <Button variant="light" size="compact-sm" color="gray" onClick={resetGlobalDesign}>
+            <div className="flex items-center gap-2">
+                <Button variant="secondary" size="sm" onClick={resetGlobalDesign}>
                     Reset global design
                 </Button>
-                <Button variant="light" size="compact-sm" color="gray" onClick={resetOverrides}>
+                <Button variant="secondary" size="sm" onClick={resetOverrides}>
                     Reset all overrides
                 </Button>
-            </Group>
+            </div>
         </Stack>
     );
 }
 
 // ── Live preview grid for the Design tab ──
-// Each preview keeps its overlay's natural aspect ratio. Layout (row × col):
-//   Row 1: Large Scoreboard | Player Stats   (50/50)
-//   Row 2: Small Scoreboard | Bracket        (50/50)
-//   Row 3: Ticker                            (full width)
-//
-// Sample data wired in each overlay's preview-mode boot:
-//   - scoreboard, stats → scoreboard_sample.json (your scoreboard 1 snapshot)
-//   - ticker            → ticker_sample.json (10 games from sb3 rotator)
-//   - bracket           → bracket_sample.json (current Top Cut)
 const PREVIEW_ROWS = [
     [
         { label: 'Large Scoreboard', path: '/layout/scoreboard1/scoreboard.html?scoreboard=1&size=l', w: 800,  h: 460 },
-        // Match the Large Scoreboard tile aspect (800×460) so both tiles in
-        // row 1 render at the same height. The stats body (325×120) is
-        // centered with letterboxing inside the larger tile.
         { label: 'Player Stats',     path: '/layout/scoreboard1/stats.html?scoreboard=1',             w: 800,  h: 460 },
     ],
     [
         { label: 'Small Scoreboard', path: '/layout/scoreboard1/scoreboard.html?scoreboard=1&size=s', w: 500,  h: 80  },
-        // Bracket is fluid — body fills any frame and content scales to fit
-        // (capped by overlays.bracket.maxScale). 16:9 is just a reasonable
-        // tile aspect; the bracket fills it without cropping.
         { label: 'Bracket',          path: '/layout/bracket/index.html',                              w: 960, h: 540 },
     ],
     [
@@ -1179,32 +999,18 @@ const PREVIEW_ROWS = [
 function PreviewTile({ label, path, w, h, src, reloadKey }) {
     return (
         <div>
-            <Text size="xs" fw={600} c="dimmed" mb={4}>{label}</Text>
-            <Box style={{
-                width: '100%',
-                maxWidth: w,
-                aspectRatio: `${w} / ${h}`,
-                margin: '0 auto',
-                overflow: 'hidden',
-                borderRadius: 8,
-                border: '1px solid var(--mantine-color-dark-4)',
-                background: '#0b0b0f',
-            }}>
-                <ScaledIframe
-                    key={reloadKey}
-                    src={src}
-                    fallbackWidth={w}
-                    fallbackHeight={h}
-                    height="100%"
-                />
-            </Box>
+            <Text size="xs" fw={600} dimmed className="mb-1">{label}</Text>
+            <div
+                className="mx-auto overflow-hidden rounded-lg border border-night-600"
+                style={{ width: '100%', maxWidth: w, aspectRatio: `${w} / ${h}`, background: '#0b0b0f' }}
+            >
+                <ScaledIframe key={reloadKey} src={src} fallbackWidth={w} fallbackHeight={h} height="100%" />
+            </div>
         </div>
     );
 }
 
 function DesignPreviews({ baseUrl, showOverrides, onToggleOverrides }) {
-    // Build URL with preview flags. Re-keying the iframe on toggle reloads
-    // it so applyDesignSettings re-reads with the new globals-only flag.
     const buildUrl = (path) => {
         const sep = path.includes('?') ? '&' : '?';
         const flags = `preview=1${showOverrides ? '' : '&preview_globals_only=1'}`;
@@ -1214,34 +1020,26 @@ function DesignPreviews({ baseUrl, showOverrides, onToggleOverrides }) {
 
     return (
         <Stack gap="sm">
-            <Group justify="space-between" align="center" wrap="nowrap">
-                <Text size="xs" c="dimmed" style={{ flex: 1 }}>
+            <div className="flex flex-nowrap items-center justify-between">
+                <Text size="xs" dimmed className="flex-1">
                     Live previews — every control on the left updates these in real time.
                 </Text>
-                <Tooltip label={showOverrides
+                <SimpleTooltip label={showOverrides
                     ? 'Showing per-layout overrides on top of the global design'
                     : 'Showing the global design only — per-layout overrides hidden'}>
-                    <Switch
-                        size="xs"
-                        label="Apply overrides"
-                        checked={showOverrides}
-                        onChange={(e) => onToggleOverrides(e.currentTarget.checked)}
-                    />
-                </Tooltip>
-            </Group>
+                    <Label className="flex items-center gap-1.5 text-xs">
+                        <Switch checked={showOverrides} onCheckedChange={onToggleOverrides} />
+                        Apply overrides
+                    </Label>
+                </SimpleTooltip>
+            </div>
 
             {PREVIEW_ROWS.map((row, rowIdx) => (
-                <Grid key={rowIdx} gutter="sm">
+                <div key={rowIdx} className="grid gap-3" style={{ gridTemplateColumns: `repeat(${row.length}, minmax(0, 1fr))` }}>
                     {row.map(item => (
-                        <Grid.Col key={item.path} span={12 / row.length}>
-                            <PreviewTile
-                                {...item}
-                                src={buildUrl(item.path)}
-                                reloadKey={`${item.path}-${reloadSuffix}`}
-                            />
-                        </Grid.Col>
+                        <PreviewTile key={item.path} {...item} src={buildUrl(item.path)} reloadKey={`${item.path}-${reloadSuffix}`} />
                     ))}
-                </Grid>
+                </div>
             ))}
         </Stack>
     );
@@ -1249,44 +1047,37 @@ function DesignPreviews({ baseUrl, showOverrides, onToggleOverrides }) {
 
 // ── Design tab body (controls + previews + presets) ──
 function DesignTabBody({ baseUrl }) {
-    // Defaults to globals-only so the previews show what the Design tab
-    // settings produce in isolation, regardless of any pinned per-layout
-    // overrides. Users can flip the switch to see overrides applied.
     const [showOverrides, setShowOverrides] = useState(false);
 
     return (
         <Stack gap="lg">
-            <Grid gutter="md">
-                <Grid.Col span={{ base: 12, md: 4 }}>
-                    <Paper withBorder p="md">
-                        <Text size="sm" fw={700} mb="md">Global Design</Text>
-                        <GlobalDesignSection />
-                    </Paper>
-                </Grid.Col>
-                <Grid.Col span={{ base: 12, md: 8 }}>
-                    <Paper withBorder p="md">
-                        <DesignPreviews
-                            baseUrl={baseUrl}
-                            showOverrides={showOverrides}
-                            onToggleOverrides={setShowOverrides}
-                        />
-                    </Paper>
-                </Grid.Col>
-            </Grid>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-12">
+                <div className="md:col-span-4">
+                    <Panel title="Global Design">
+                        <div className="p-4">
+                            <GlobalDesignSection />
+                        </div>
+                    </Panel>
+                </div>
+                <div className="md:col-span-8">
+                    <Panel title="Previews">
+                        <div className="p-4">
+                            <DesignPreviews baseUrl={baseUrl} showOverrides={showOverrides} onToggleOverrides={setShowOverrides} />
+                        </div>
+                    </Panel>
+                </div>
+            </div>
 
-            <Paper withBorder p="md">
-                <Text size="sm" fw={700} mb="md">Presets & Branding</Text>
-                <PresetsPanel />
-            </Paper>
+            <Panel title="Presets & Branding">
+                <div className="p-4">
+                    <PresetsPanel />
+                </div>
+            </Panel>
         </Stack>
     );
 }
 
 // ── Global Design Section (rendered inside the Design tab) ──
-// Single source of truth for every overlay's visual identity. Promoted v2 keys
-// (showCaptains/showLogo/showBackdropBlur/finalBadgeColor) live here too;
-// per-layout overrides for any of these are pinned via the chip UI on each
-// layout's panel.
 function GlobalDesignSection() {
     const globalDesign = useSettingsStore(useShallow(s => s?.overlays?.global ?? {}));
     const setItem = useSettingsStore(s => s.setItem);
@@ -1312,184 +1103,126 @@ function GlobalDesignSection() {
     return (
         <Stack gap="md">
             <div>
-                <Text size="xs" fw={700} tt="uppercase" c="dimmed" mb="xs">Color & Typography</Text>
-                <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="xs" verticalSpacing="xs">
-                    <DebouncedColorInput
-                        label="Accent Color"
-                        size="sm"
-                        value={accentColor}
-                        onChange={(color) => setItem('overlays.global.accentColor', color)}
-                        format="hex"
-                        swatches={COLOR_SWATCHES}
-                    />
-                    <DebouncedColorInput
-                        label="Text Color"
-                        size="sm"
-                        value={textColor}
-                        onChange={(color) => setItem('overlays.global.textColor', color)}
-                        format="hex"
-                        swatches={['#ffffff', '#f1f5f9', '#e2e8f0', '#cbd5e1', '#94a3b8', '#64748b', '#1e293b', '#0f172a']}
-                    />
-                    <ColorWithOpacity
-                        label="Card Background"
-                        value={cardBg}
-                        onChange={(val) => setItem('overlays.global.cardBg', val)}
-                    />
-                    <ColorWithOpacity
-                        label="Border Color"
-                        value={borderColor}
-                        onChange={(val) => setItem('overlays.global.borderColor', val)}
-                    />
-                    <Group gap="xs" align="flex-end" wrap="nowrap">
-                        <DebouncedColorInput
-                            label="Final Badge Color"
-                            size="sm"
-                            value={finalBadgeColor}
-                            placeholder="Default"
-                            onChange={(color) => setItem('overlays.global.finalBadgeColor', color || null)}
-                            format="hex"
-                            swatches={COLOR_SWATCHES}
-                            style={{ flex: 1 }}
-                        />
-                        {finalBadgeColor && (
-                            <Button
-                                variant="subtle"
-                                size="compact-sm"
-                                color="gray"
-                                onClick={() => setItem('overlays.global.finalBadgeColor', null)}
-                            >
-                                Reset
-                            </Button>
-                        )}
-                    </Group>
-                    <Select
-                        label="Font Family"
-                        size="sm"
-                        value={fontFamily}
-                        onChange={(val) => setItem('overlays.global.fontFamily', val)}
-                        data={FONT_OPTIONS}
-                        searchable
-                    />
-                </SimpleGrid>
+                <Text size="xs" fw={700} dimmed className="mb-2 uppercase tracking-wide">Color & Typography</Text>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <LabeledColor label="Accent Color" value={accentColor} onChange={(color) => setItem('overlays.global.accentColor', color)} swatches={COLOR_SWATCHES} />
+                    <LabeledColor label="Text Color" value={textColor} onChange={(color) => setItem('overlays.global.textColor', color)} swatches={['#ffffff', '#f1f5f9', '#e2e8f0', '#cbd5e1', '#94a3b8', '#64748b', '#1e293b', '#0f172a']} />
+                    <ColorWithOpacity label="Card Background" value={cardBg} onChange={(val) => setItem('overlays.global.cardBg', val)} />
+                    <ColorWithOpacity label="Border Color" value={borderColor} onChange={(val) => setItem('overlays.global.borderColor', val)} />
+                    <div className="flex flex-col gap-1">
+                        <Label className="field-label">Final Badge Color</Label>
+                        <div className="flex items-end gap-2">
+                            <DebouncedColorInput
+                                value={finalBadgeColor}
+                                placeholder="Default"
+                                onChange={(color) => setItem('overlays.global.finalBadgeColor', color || null)}
+                                swatches={COLOR_SWATCHES}
+                                className="flex-1"
+                            />
+                            {finalBadgeColor && (
+                                <Button variant="ghost" size="sm" onClick={() => setItem('overlays.global.finalBadgeColor', null)}>Reset</Button>
+                            )}
+                        </div>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                        <Label className="field-label">Font Family</Label>
+                        <Combobox value={fontFamily} onChange={(val) => setItem('overlays.global.fontFamily', val)} data={FONT_OPTIONS} />
+                    </div>
+                </div>
             </div>
 
             <div>
-                <Text size="xs" fw={700} tt="uppercase" c="dimmed" mb="xs">Card Chrome</Text>
-                <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="xs" verticalSpacing="xs">
-                    <NumberInput
-                        label="Border Radius"
-                        size="sm"
-                        value={borderRadius}
-                        onChange={(val) => setItem('overlays.global.borderRadius', val)}
-                        min={0}
-                        max={48}
-                        step={2}
-                        suffix="px"
-                    />
-                    <NumberInput
-                        label="Border Thickness"
-                        size="sm"
-                        value={borderWidth}
-                        onChange={(val) => setItem('overlays.global.borderWidth', val)}
-                        min={0}
-                        max={16}
-                        step={1}
-                        suffix="px"
-                    />
-                </SimpleGrid>
-                <Stack gap="xs" mt="xs">
+                <Text size="xs" fw={700} dimmed className="mb-2 uppercase tracking-wide">Card Chrome</Text>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <div className="flex flex-col gap-1">
+                        <Label className="field-label">Border Radius</Label>
+                        <NumberInput value={borderRadius} onChange={(val) => setItem('overlays.global.borderRadius', val)} min={0} max={48} step={2} suffix="px" />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                        <Label className="field-label">Border Thickness</Label>
+                        <NumberInput value={borderWidth} onChange={(val) => setItem('overlays.global.borderWidth', val)} min={0} max={16} step={1} suffix="px" />
+                    </div>
+                </div>
+                <Stack gap="xs" className="mt-2">
                     <div>
-                        <Switch
-                            label="Card Shadow"
-                            description="Drop shadow behind overlay cards"
-                            size="sm"
-                            checked={showShadow}
-                            onChange={(e) => setItem('overlays.global.showShadow', e.currentTarget.checked)}
-                        />
-                        <Collapse in={showShadow}>
-                            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="xs" verticalSpacing="xs" mt="xs">
-                                <NumberInput
-                                    label="Shadow Blur"
-                                    size="sm"
-                                    value={cardShadowBlur}
-                                    onChange={(val) => setItem('overlays.global.cardShadowBlur', val ?? 16)}
-                                    min={0}
-                                    max={80}
-                                    step={2}
-                                    suffix="px"
-                                />
-                                <ColorWithOpacity
-                                    label="Shadow Color"
-                                    value={cardShadowColor}
-                                    onChange={(val) => setItem('overlays.global.cardShadowColor', val)}
-                                />
-                            </SimpleGrid>
-                        </Collapse>
+                        <Label className="flex items-start gap-2">
+                            <Switch checked={showShadow} onCheckedChange={(c) => setItem('overlays.global.showShadow', c)} className="mt-0.5" />
+                            <span className="flex flex-col">
+                                <Text size="sm">Card Shadow</Text>
+                                <Text size="xs" dimmed>Drop shadow behind overlay cards</Text>
+                            </span>
+                        </Label>
+                        <Collapsible open={showShadow}>
+                            <CollapsibleContent>
+                                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                    <div className="flex flex-col gap-1">
+                                        <Label className="field-label">Shadow Blur</Label>
+                                        <NumberInput value={cardShadowBlur} onChange={(val) => setItem('overlays.global.cardShadowBlur', val ?? 16)} min={0} max={80} step={2} suffix="px" />
+                                    </div>
+                                    <ColorWithOpacity label="Shadow Color" value={cardShadowColor} onChange={(val) => setItem('overlays.global.cardShadowColor', val)} />
+                                </div>
+                            </CollapsibleContent>
+                        </Collapsible>
                     </div>
                     <div>
-                        <Switch
-                            label="Text Shadow"
-                            description="Drop shadow on text across overlays"
-                            size="sm"
-                            checked={textShadowEnabled}
-                            onChange={(e) => setItem('overlays.global.textShadowEnabled', e.currentTarget.checked)}
-                        />
-                        <Collapse in={textShadowEnabled}>
-                            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="xs" verticalSpacing="xs" mt="xs">
-                                <NumberInput
-                                    label="Blur"
-                                    size="sm"
-                                    value={textShadowBlur}
-                                    onChange={(val) => setItem('overlays.global.textShadowBlur', val ?? 4)}
-                                    min={0}
-                                    max={40}
-                                    step={1}
-                                    suffix="px"
-                                />
-                                <ColorWithOpacity
-                                    label="Shadow Color"
-                                    value={textShadowColor}
-                                    onChange={(val) => setItem('overlays.global.textShadowColor', val)}
-                                />
-                            </SimpleGrid>
-                        </Collapse>
+                        <Label className="flex items-start gap-2">
+                            <Switch checked={textShadowEnabled} onCheckedChange={(c) => setItem('overlays.global.textShadowEnabled', c)} className="mt-0.5" />
+                            <span className="flex flex-col">
+                                <Text size="sm">Text Shadow</Text>
+                                <Text size="xs" dimmed>Drop shadow on text across overlays</Text>
+                            </span>
+                        </Label>
+                        <Collapsible open={textShadowEnabled}>
+                            <CollapsibleContent>
+                                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                    <div className="flex flex-col gap-1">
+                                        <Label className="field-label">Blur</Label>
+                                        <NumberInput value={textShadowBlur} onChange={(val) => setItem('overlays.global.textShadowBlur', val ?? 4)} min={0} max={40} step={1} suffix="px" />
+                                    </div>
+                                    <ColorWithOpacity label="Shadow Color" value={textShadowColor} onChange={(val) => setItem('overlays.global.textShadowColor', val)} />
+                                </div>
+                            </CollapsibleContent>
+                        </Collapsible>
                     </div>
                 </Stack>
             </div>
 
             <div>
-                <Text size="xs" fw={700} tt="uppercase" c="dimmed" mb="xs">Display Toggles</Text>
-                <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="xs" verticalSpacing="xs">
-                    <Switch
-                        label="Show Captains"
-                        size="sm"
-                        checked={showCaptains}
-                        onChange={(e) => setItem('overlays.global.showCaptains', e.currentTarget.checked)}
-                    />
-                    <Switch
-                        label="Show Overlay Logo"
-                        size="sm"
-                        checked={showLogo}
-                        onChange={(e) => setItem('overlays.global.showLogo', e.currentTarget.checked)}
-                    />
-                    <Switch
-                        label="Backdrop Blur"
-                        size="sm"
-                        checked={showBackdropBlur}
-                        onChange={(e) => setItem('overlays.global.showBackdropBlur', e.currentTarget.checked)}
-                    />
-                </SimpleGrid>
+                <Text size="xs" fw={700} dimmed className="mb-2 uppercase tracking-wide">Display Toggles</Text>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    <Label className="flex items-center gap-2 text-sm">
+                        <Switch checked={showCaptains} onCheckedChange={(c) => setItem('overlays.global.showCaptains', c)} />
+                        Show Captains
+                    </Label>
+                    <Label className="flex items-center gap-2 text-sm">
+                        <Switch checked={showLogo} onCheckedChange={(c) => setItem('overlays.global.showLogo', c)} />
+                        Show Overlay Logo
+                    </Label>
+                    <Label className="flex items-center gap-2 text-sm">
+                        <Switch checked={showBackdropBlur} onCheckedChange={(c) => setItem('overlays.global.showBackdropBlur', c)} />
+                        Backdrop Blur
+                    </Label>
+                </div>
             </div>
         </Stack>
     );
 }
 
-// ── Debounced color input — updates local display immediately, saves after 1s idle ──
+// Labeled color input (debounced) used in the global design grid.
+function LabeledColor({ label, ...props }) {
+    return (
+        <div className="flex flex-col gap-1">
+            <Label className="field-label">{label}</Label>
+            <DebouncedColorInput {...props} />
+        </div>
+    );
+}
+
+// ── Debounced color input — updates local display immediately, saves after idle ──
 function DebouncedColorInput({ value, onChange, ...props }) {
     const [local, setLocal] = useState(value ?? '');
     const timerRef = useRef(null);
 
-    // Sync external value changes (e.g. preset load) into local state
     useEffect(() => {
         setLocal(value ?? '');
     }, [value]);
@@ -1503,7 +1236,6 @@ function DebouncedColorInput({ value, onChange, ...props }) {
         }, 200);
     }, [onChange]);
 
-    // Flush on unmount so nothing is lost
     useEffect(() => () => {
         if (timerRef.current) clearTimeout(timerRef.current);
     }, []);
@@ -1512,13 +1244,6 @@ function DebouncedColorInput({ value, onChange, ...props }) {
 }
 
 // ── Per-layout settings panel ──
-// Renders this layout's element-only settings on top, then a "Style overrides"
-// section listing pinned global overrides as full editor rows. Users add a new
-// override via the "+ Add style override" menu, which lists eligible global
-// keys (filtered against the overlay's <meta name="overlay-settings"> list).
-//
-// Unlike the previous design, global controls are NOT duplicated here. Their
-// single source of truth lives in the Design tab.
 function LayoutSettingsPanel({ layoutType, supportedSettings }) {
     const allDefs = LAYOUT_SETTINGS[layoutType] ?? [];
     const settingsDefs = supportedSettings
@@ -1528,9 +1253,6 @@ function LayoutSettingsPanel({ layoutType, supportedSettings }) {
     const globalSettings = useSettingsStore(useShallow(s => s?.overlays?.global ?? {}));
     const setItem = useSettingsStore(s => s.setItem);
 
-    // Which global keys is this overlay allowed to override? An override is
-    // available when at least one of its meta names is in the overlay's
-    // <meta name="overlay-settings"> whitelist (or the whitelist is unset).
     const overridable = useMemo(() => OVERRIDABLE_GLOBAL_KEYS.filter(def =>
         !supportedSettings || def.meta.some(m => supportedSettings.includes(m))
     ), [supportedSettings]);
@@ -1551,23 +1273,23 @@ function LayoutSettingsPanel({ layoutType, supportedSettings }) {
 
             {(pinned.length > 0 || available.length > 0) && (
                 <div>
-                    {settingsDefs.length > 0 && <Divider mb="sm" />}
-                    <Group justify="space-between" align="center" mb="xs">
+                    {settingsDefs.length > 0 && <Divider className="mb-3" />}
+                    <div className="mb-2 flex items-center justify-between">
                         <div>
                             <Text size="sm" fw={600}>Style Overrides</Text>
-                            <Text size="xs" c="dimmed">
+                            <Text size="xs" dimmed>
                                 Pin per-overlay values that win over the global Design settings.
                             </Text>
                         </div>
                         {available.length > 0 && (
-                            <Menu shadow="md" width={220} position="bottom-end">
-                                <Menu.Target>
-                                    <Button variant="light" size="compact-xs">+ Add override</Button>
-                                </Menu.Target>
-                                <Menu.Dropdown>
-                                    <Menu.Label>Override a global setting</Menu.Label>
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="secondary" size="xs">+ Add override</Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-[220px]">
+                                    <DropdownMenuLabel>Override a global setting</DropdownMenuLabel>
                                     {available.map(def => (
-                                        <Menu.Item
+                                        <DropdownMenuItem
                                             key={def.key}
                                             onClick={() => {
                                                 const seed = globalSettings[def.key] ?? def.defaultValue ?? '';
@@ -1575,15 +1297,15 @@ function LayoutSettingsPanel({ layoutType, supportedSettings }) {
                                             }}
                                         >
                                             {def.label}
-                                        </Menu.Item>
+                                        </DropdownMenuItem>
                                     ))}
-                                </Menu.Dropdown>
-                            </Menu>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
                         )}
-                    </Group>
+                    </div>
 
                     {pinned.length === 0 ? (
-                        <Text size="xs" c="dimmed">No overrides — using global values from the Design tab.</Text>
+                        <Text size="xs" dimmed>No overrides — using global values from the Design tab.</Text>
                     ) : (
                         <Stack gap="xs">
                             {pinned.map(def => (
@@ -1601,7 +1323,7 @@ function LayoutSettingsPanel({ layoutType, supportedSettings }) {
             )}
 
             {settingsDefs.length === 0 && pinned.length === 0 && available.length === 0 && (
-                <Text size="xs" c="dimmed">This overlay has no configurable settings.</Text>
+                <Text size="xs" dimmed>This overlay has no configurable settings.</Text>
             )}
         </Stack>
     );
@@ -1613,28 +1335,23 @@ function renderElementSetting(def, layoutType, overlaySettings, setItem) {
     if (def.type === 'switch') {
         const checked = overlaySettings?.[def.key] !== false;
         return (
-            <Switch
-                key={def.key}
-                label={def.label}
-                description={def.description}
-                size="sm"
-                checked={checked}
-                onChange={(e) => setItem(settingsKey, e.currentTarget.checked)}
-            />
+            <Label key={def.key} className="flex items-start gap-2">
+                <Switch checked={checked} onCheckedChange={(c) => setItem(settingsKey, c)} className="mt-0.5" />
+                <span className="flex flex-col">
+                    <Text size="sm">{def.label}</Text>
+                    {def.description && <Text size="xs" dimmed>{def.description}</Text>}
+                </span>
+            </Label>
         );
     }
     if (def.type === 'select') {
         const value = overlaySettings?.[def.key] ?? def.defaultValue;
         return (
-            <Select
-                key={def.key}
-                label={def.label}
-                description={def.description}
-                size="sm"
-                value={value}
-                onChange={(val) => setItem(settingsKey, val)}
-                data={def.options}
-            />
+            <div key={def.key} className="flex flex-col gap-1">
+                <Label className="field-label">{def.label}</Label>
+                {def.description && <Text size="xs" dimmed>{def.description}</Text>}
+                <SimpleSelect value={value} onChange={(val) => setItem(settingsKey, val)} data={def.options} />
+            </div>
         );
     }
     if (def.type === 'color-override') {
@@ -1642,101 +1359,74 @@ function renderElementSetting(def, layoutType, overlaySettings, setItem) {
         return (
             <div key={def.key}>
                 <Text size="sm" fw={500}>{def.label}</Text>
-                {def.description && <Text size="xs" c="dimmed" mb={4}>{def.description}</Text>}
-                <Group gap="xs" align="flex-end" wrap="nowrap">
+                {def.description && <Text size="xs" dimmed className="mb-1">{def.description}</Text>}
+                <div className="flex items-end gap-2">
                     <DebouncedColorInput
-                        size="sm"
                         value={value ?? ''}
                         placeholder="Default"
                         onChange={(color) => setItem(settingsKey, color || null)}
-                        format="hex"
                         swatches={COLOR_SWATCHES}
-                        style={{ flex: 1 }}
+                        className="flex-1"
                     />
                     {value != null && (
-                        <Button variant="subtle" size="compact-sm" color="gray"
-                            onClick={() => setItem(settingsKey, null)}>
-                            Reset
-                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => setItem(settingsKey, null)}>Reset</Button>
                     )}
-                </Group>
+                </div>
             </div>
         );
     }
     if (def.type === 'number-override') {
         const value = overlaySettings?.[def.key] ?? def.defaultValue;
         return (
-            <NumberInput
-                key={def.key}
-                label={def.label}
-                description={def.description}
-                size="sm"
-                value={value}
-                onChange={(val) => setItem(settingsKey, val ?? def.defaultValue)}
-                min={def.min}
-                max={def.max}
-                step={def.step}
-                suffix={def.suffix}
-            />
+            <div key={def.key} className="flex flex-col gap-1">
+                <Label className="field-label">{def.label}</Label>
+                {def.description && <Text size="xs" dimmed>{def.description}</Text>}
+                <NumberInput value={value} onChange={(val) => setItem(settingsKey, val ?? def.defaultValue)} min={def.min} max={def.max} step={def.step} suffix={def.suffix} />
+            </div>
         );
     }
     return null;
 }
 
-// One pinned override row (any type). The first column is the editor; the
-// trailing X removes the pin so the global value takes back over.
+// One pinned override row (any type).
 function OverrideRow({ def, value, onChange, onRemove }) {
     const sharedRemove = (
-        <Tooltip label="Remove override (use global value)">
-            <ActionIcon variant="subtle" color="gray" onClick={onRemove} size="lg">×</ActionIcon>
-        </Tooltip>
+        <SimpleTooltip label="Remove override (use global value)">
+            <Button variant="ghost" size="icon-sm" onClick={onRemove}><X size={14} /></Button>
+        </SimpleTooltip>
     );
 
     let editor = null;
     if (def.type === 'color') {
         editor = (
-            <DebouncedColorInput
-                label={def.label}
-                size="sm"
-                value={value ?? ''}
-                onChange={(c) => onChange(c || null)}
-                format="hex"
-                swatches={COLOR_SWATCHES}
-                style={{ flex: 1 }}
-            />
+            <div className="flex flex-col gap-1">
+                <Label className="field-label">{def.label}</Label>
+                <DebouncedColorInput value={value ?? ''} onChange={(c) => onChange(c || null)} swatches={COLOR_SWATCHES} className="flex-1" />
+            </div>
         );
     } else if (def.type === 'color-opacity') {
         editor = <ColorWithOpacity label={def.label} value={value} onChange={onChange} />;
     } else if (def.type === 'number') {
         editor = (
-            <NumberInput
-                label={def.label}
-                size="sm"
-                value={value ?? def.defaultValue}
-                onChange={(v) => onChange(v ?? def.defaultValue)}
-                min={def.min}
-                max={def.max}
-                step={def.step}
-                suffix={def.suffix}
-                style={{ flex: 1 }}
-            />
+            <div className="flex flex-col gap-1">
+                <Label className="field-label">{def.label}</Label>
+                <NumberInput value={value ?? def.defaultValue} onChange={(v) => onChange(v ?? def.defaultValue)} min={def.min} max={def.max} step={def.step} suffix={def.suffix} />
+            </div>
         );
     } else if (def.type === 'switch') {
         editor = (
-            <Switch
-                label={def.label}
-                size="sm"
-                checked={value !== false}
-                onChange={(e) => onChange(e.currentTarget.checked)}
-            />
+            <Label className="flex items-center gap-2 text-sm">
+                <Switch checked={value !== false} onCheckedChange={onChange} />
+                {def.label}
+            </Label>
         );
     }
 
     return (
-        <Group gap="xs" align="flex-end" wrap="nowrap">
-            <div style={{ flex: 1, minWidth: 0 }}>{editor}</div>
+        <div className="flex items-end gap-2">
+            <div className="min-w-0 flex-1">{editor}</div>
             {sharedRemove}
-        </Group>
+        </div>
     );
 }
 
@@ -1754,7 +1444,6 @@ function ControllerOverlayPanel({ selected, onSelect }) {
 
     useEffect(() => { fetchStatus(); }, [fetchStatus]);
 
-    // Poll status while running
     useEffect(() => {
         if (!status?.running) return;
         const id = setInterval(fetchStatus, 5000);
@@ -1782,11 +1471,10 @@ function ControllerOverlayPanel({ selected, onSelect }) {
                             <Text size="sm">
                                 Another process is using port {data.port}. Switch to port {suggested}?
                             </Text>
-                            <Group gap="xs">
+                            <div className="flex items-center gap-2">
                                 <Button size="xs" onClick={async () => {
                                     notifications.hide(notifId);
                                     await fetch(`/api/v1/controller/port?port=${suggested}`, { method: 'PUT' });
-                                    // Re-invoke start
                                     const r2 = await fetch('/api/v1/controller/start', { method: 'POST' });
                                     const d2 = await r2.json();
                                     if (d2.success) {
@@ -1796,7 +1484,7 @@ function ControllerOverlayPanel({ selected, onSelect }) {
                                         notifications.show({ message: d2.error || 'Failed to start', color: 'red' });
                                     }
                                 }}>Use port {suggested}</Button>
-                            </Group>
+                            </div>
                         </Stack>
                     ) : 'No nearby free port found. Change the port manually in settings.',
                 });
@@ -1835,99 +1523,65 @@ function ControllerOverlayPanel({ selected, onSelect }) {
         });
     }, [status?.port, onSelect]);
 
-    if (!status) return <Loader size="xs" />;
+    if (!status) return <Loader size={18} />;
 
     if (!status.available) {
         return (
             <Stack gap="xs">
-                <Text size="sm" c="dimmed">
-                    Controller overlay (gc-overlay) not found.
-                </Text>
-                <Text size="xs" c="dimmed">
-                    Place the gc-overlay repository next to this project, or set the path in Settings.
-                </Text>
+                <Text size="sm" dimmed>Controller overlay (gc-overlay) not found.</Text>
+                <Text size="xs" dimmed>Place the gc-overlay repository next to this project, or set the path in Settings.</Text>
             </Stack>
         );
     }
 
     return (
         <Stack gap="sm">
-            <Group justify="space-between">
-                <Group gap="xs">
-                    <Box
-                        style={{
-                            width: 8,
-                            height: 8,
-                            borderRadius: '50%',
-                            backgroundColor: status.running ? '#22c55e' : '#6b7280',
-                        }}
-                    />
-                    <Text size="sm" fw={600}>
-                        {status.running ? 'Running' : 'Stopped'}
-                    </Text>
-                </Group>
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                    <span className="size-2 rounded-full" style={{ backgroundColor: status.running ? '#22c55e' : '#6b7280' }} />
+                    <Text size="sm" fw={600}>{status.running ? 'Running' : 'Stopped'}</Text>
+                </div>
                 <Button
-                    size="compact-xs"
-                    variant={status.running ? 'light' : 'filled'}
-                    color={status.running ? 'red' : 'green'}
+                    size="xs"
+                    variant={status.running ? 'outline' : 'default'}
+                    className={status.running ? 'border-destructive/40 text-destructive' : ''}
                     onClick={status.running ? handleStop : handleStart}
-                    loading={loading}
+                    disabled={loading}
                 >
+                    {loading && <Loader size={10} />}
                     {status.running ? 'Stop' : 'Start'}
                 </Button>
-            </Group>
+            </div>
 
             {status.running && (
-                <Text size="xs" c="dimmed">OBS Browser Source: 512 x 256</Text>
+                <Text size="xs" dimmed>OBS Browser Source: 512 x 256</Text>
             )}
 
-            {/* Port entries */}
-            <Stack gap={4}>
+            <Stack gap="xs">
                 {[1, 2, 3, 4].map(portNum => {
                     const isActive = selected?._controllerPort === portNum;
                     const portUrl = `http://localhost:${status.port}/?port=${portNum}&bg=transparent`;
                     return (
-                        <UnstyledButton
+                        <button
                             key={portNum}
+                            type="button"
                             onClick={() => handleSelectPort(portNum)}
-                            p="xs"
-                            style={(theme) => ({
-                                borderRadius: theme.radius.sm,
-                                backgroundColor: isActive ? 'var(--mantine-color-blue-light)' : 'transparent',
-                                border: isActive
-                                    ? `1px solid var(--mantine-color-blue-filled)`
-                                    : '1px solid transparent',
-                                opacity: status.running ? 1 : 0.5,
-                            })}
+                            className={cn(itemClass(isActive), !status.running && 'opacity-50')}
                             disabled={!status.running}
                         >
-                            <Group justify="space-between" wrap="nowrap" gap={4}>
-                                <div style={{ minWidth: 0, flex: 1 }}>
+                            <div className="flex flex-nowrap items-center justify-between gap-1">
+                                <div className="min-w-0 flex-1">
                                     <Text size="sm">Player {portNum}</Text>
                                 </div>
-                                {status.running && (
-                                    <CopyButton value={portUrl}>
-                                        {({ copied, copy }) => (
-                                            <Tooltip label={copied ? 'Copied!' : 'Copy OBS URL'}>
-                                                <ActionIcon
-                                                    variant="subtle"
-                                                    color={copied ? 'teal' : 'gray'}
-                                                    onClick={(e) => { e.stopPropagation(); copy(); }}
-                                                >
-                                                    {copied ? '\u2713' : '\u2398'}
-                                                </ActionIcon>
-                                            </Tooltip>
-                                        )}
-                                    </CopyButton>
-                                )}
-                            </Group>
-                        </UnstyledButton>
+                                {status.running && <CopyIconButton value={portUrl} />}
+                            </div>
+                        </button>
                     );
                 })}
             </Stack>
 
             {!status.running && (
-                <Text size="xs" c="dimmed" fs="italic">
+                <Text size="xs" dimmed className="italic">
                     Start the overlay to preview and copy OBS URLs.
                 </Text>
             )}
@@ -1939,8 +1593,6 @@ export default function LayoutBrowser() {
     const active = useSettingsStore(s => s?.scoreboards?.active ?? [1]);
     const sources = useSettingsStore(s => s?.scoreboards?.sources ?? {});
     const aliases = useSettingsStore(s => s?.scoreboards?.aliases ?? {});
-    // gc-overlay (controller input) is macOS-only — hide the Controller tab
-    // elsewhere. Flag comes from the server Config (see settings.py).
     const controllerSupported = useConfigStore(s => s.controller_overlay_supported) !== false;
 
     const [allLayouts, setAllLayouts] = useState([]);
@@ -1952,7 +1604,6 @@ export default function LayoutBrowser() {
     const [searchQuery, setSearchQuery] = useState('');
     const [previewRevision, setPreviewRevision] = useState(0);
 
-    // Top-level mode: 'scoreboard', 'scenes', 'bracket', 'controller', or 'design'
     const [mode, setMode] = useState('scoreboard');
 
     const fetchLayouts = useCallback(async () => {
@@ -1973,14 +1624,9 @@ export default function LayoutBrowser() {
         fetchLayouts();
     }, [fetchLayouts]);
 
-    // Filter layouts — show all scoreboard layouts for every tab (files live in
-    // scoreboard1/ but work for any scoreboard via URL params). Apply search.
-    // The rotator/ group hosts overlays that visualize a specific scoreboard's
-    // rotation; they take ?scoreboard=N like the rest, so they belong here too.
     const filteredLayouts = useMemo(() => {
         const q = searchQuery.toLowerCase().trim();
         return allLayouts.filter(l => {
-            // Bracket layouts are handled by BracketLayoutList
             if (l.group === 'bracket') return false;
             const isScoreboard = l.group.startsWith('scoreboard') || l.group === 'rotator';
             if (!isScoreboard) return false;
@@ -1989,7 +1635,6 @@ export default function LayoutBrowser() {
         });
     }, [allLayouts, searchQuery]);
 
-    // Scene layouts (full 1920×1080 compositions)
     const sceneLayouts = useMemo(() => {
         const q = searchQuery.toLowerCase().trim();
         return allLayouts.filter(l => {
@@ -1999,7 +1644,6 @@ export default function LayoutBrowser() {
         });
     }, [allLayouts, searchQuery]);
 
-    // Auto-select first layout when mode/layouts change
     useEffect(() => {
         const activeLayouts = mode === 'scenes' ? sceneLayouts : filteredLayouts;
         if (mode !== 'scoreboard' && mode !== 'scenes') return;
@@ -2013,7 +1657,6 @@ export default function LayoutBrowser() {
         }
     }, [filteredLayouts, sceneLayouts, mode]);
 
-    // Clear search and selection on mode switch
     useEffect(() => {
         setSearchQuery('');
         setSelected(null);
@@ -2021,34 +1664,24 @@ export default function LayoutBrowser() {
         setPreviewRevision(0);
     }, [mode]);
 
-    // Clear search on scoreboard tab switch
     useEffect(() => {
         setSearchQuery('');
     }, [activeScoreboardTab]);
 
-    // Close settings panel when layout selection changes
     useEffect(() => {
         setSettingsOpen(false);
     }, [selected?.url]);
 
     const selectedType = selected?.type;
-    // supportedSettings from the HTML overlay's <meta name="overlay-settings">.
-    // Items constructed by BracketLayoutList/ControllerOverlayPanel won't have it,
-    // so fall back to the first matching layout from allLayouts by type.
     const supportedSettings = useMemo(() => {
         if (selected?.supportedSettings) return selected.supportedSettings;
         if (!selectedType) return null;
         const match = allLayouts.find(l => l.type === selectedType && l.supportedSettings);
         return match?.supportedSettings ?? null;
     }, [selected?.supportedSettings, selectedType, allLayouts]);
-    // The per-layout settings panel is offered whenever an overlay declares
-    // any supported settings — element-only entries from LAYOUT_SETTINGS or
-    // any global key from OVERRIDABLE_GLOBAL_KEYS that the overlay's <meta>
-    // whitelist allows. Empty <meta> (e.g. teamlogo.html) hides the panel.
     const hasAnySupportedSettings = supportedSettings === null || supportedSettings.length > 0;
     const showSettingsPanel = !!selectedType && hasAnySupportedSettings && mode !== 'design';
 
-    // Build the URL — inject scoreboard param for scoreboard-type layouts only
     const selectedUrl = useMemo(() => {
         if (!selected?.url) return null;
         try {
@@ -2056,7 +1689,6 @@ export default function LayoutBrowser() {
             if (mode === 'scoreboard') {
                 u.searchParams.set('scoreboard', activeScoreboardTab);
             }
-            // scenes and other modes use the URL as-is
             return u.toString();
         } catch {
             return selected.url;
@@ -2074,194 +1706,146 @@ export default function LayoutBrowser() {
     return (
         <Stack gap="md">
             {/* Top-level mode tabs */}
-            <Tabs value={mode} onChange={setMode} variant="pills">
-                <Tabs.List>
-                    <Tabs.Tab value="design">Design Presets</Tabs.Tab>
-                    <Tabs.Tab value="scoreboard">Scoreboards</Tabs.Tab>
-                    <Tabs.Tab value="scenes">Scenes</Tabs.Tab>
-                    <Tabs.Tab value="bracket">Bracket</Tabs.Tab>
-                    {controllerSupported && <Tabs.Tab value="controller">Controller</Tabs.Tab>}
-                </Tabs.List>
+            <Tabs value={mode} onValueChange={setMode}>
+                <TabsList>
+                    <TabsTrigger value="design">Design Presets</TabsTrigger>
+                    <TabsTrigger value="scoreboard">Scoreboards</TabsTrigger>
+                    <TabsTrigger value="scenes">Scenes</TabsTrigger>
+                    <TabsTrigger value="bracket">Bracket</TabsTrigger>
+                    {controllerSupported && <TabsTrigger value="controller">Controller</TabsTrigger>}
+                </TabsList>
             </Tabs>
 
             {/* Scoreboard sub-tabs (only in scoreboard mode) */}
             {mode === 'scoreboard' && (
-                <Tabs value={activeScoreboardTab} onChange={setActiveScoreboardTab} variant="outline">
-                    <Tabs.List>
+                <Tabs value={activeScoreboardTab} onValueChange={setActiveScoreboardTab}>
+                    <TabsList>
                         {active.map(sbId => {
                             const src = sources[sbId] ?? sources[String(sbId)];
                             const srcType = src?.type ?? 'manual';
                             const alias = aliases[sbId] ?? aliases[String(sbId)] ?? '';
                             const label = alias || `Scoreboard ${sbId}`;
                             return (
-                                <Tabs.Tab key={sbId} value={String(sbId)} rightSection={
-                                    <Badge size="xs" variant="light" color={SOURCE_COLORS[srcType]}>
-                                        {srcType}
-                                    </Badge>
-                                }>
-                                    {label}
-                                </Tabs.Tab>
+                                <TabsTrigger key={sbId} value={String(sbId)}>
+                                    <span className="flex items-center gap-1.5">
+                                        {label}
+                                        <Badge className={cn('text-[10px] font-semibold uppercase tracking-wider', SOURCE_COLORS[srcType] || SOURCE_COLORS.manual)}>
+                                            {SOURCE_LABEL[srcType] || srcType}
+                                        </Badge>
+                                    </span>
+                                </TabsTrigger>
                             );
                         })}
-                    </Tabs.List>
+                    </TabsList>
                 </Tabs>
             )}
 
             {mode === 'design' ? (
                 <DesignTabBody baseUrl={baseUrl} />
             ) : (
-                <Grid gutter="md">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-12">
                     {/* Left panel: layout list */}
-                    <Grid.Col span={4}>
+                    <div className="md:col-span-4">
                         <Stack gap="xs">
-                            <Text size="xs" c="dimmed">
+                            <Text size="xs" dimmed>
                                 Select a layout to preview. Copy the URL into an OBS Browser Source.
                             </Text>
 
                             {mode === 'scoreboard' && (
                                 <>
-                                    <TextInput
-                                        placeholder="Search layouts..."
-                                        size="xs"
-                                        value={searchQuery}
-                                        onChange={(e) => setSearchQuery(e.currentTarget.value)}
-                                    />
-
-                                    {loading && <Loader size="sm" />}
-                                    {error && <Alert color="red" title="Error">{error}</Alert>}
-
-                                    <LayoutList
-                                        layouts={filteredLayouts}
-                                        selected={selected}
-                                        onSelect={setSelected}
-                                        activeTab={activeScoreboardTab}
-                                    />
+                                    <Input placeholder="Search layouts..." value={searchQuery} onChange={(e) => setSearchQuery(e.currentTarget.value)} />
+                                    {loading && <Loader size={18} />}
+                                    {error && <Alert variant="destructive"><AlertTitle>Error</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
+                                    <LayoutList layouts={filteredLayouts} selected={selected} onSelect={setSelected} activeTab={activeScoreboardTab} />
                                 </>
                             )}
 
                             {mode === 'scenes' && (
                                 <>
-                                    <TextInput
-                                        placeholder="Search scenes..."
-                                        size="xs"
-                                        value={searchQuery}
-                                        onChange={(e) => setSearchQuery(e.currentTarget.value)}
-                                    />
-                                    {loading && <Loader size="sm" />}
-                                    {error && <Alert color="red" title="Error">{error}</Alert>}
+                                    <Input placeholder="Search scenes..." value={searchQuery} onChange={(e) => setSearchQuery(e.currentTarget.value)} />
+                                    {loading && <Loader size={18} />}
+                                    {error && <Alert variant="destructive"><AlertTitle>Error</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
                                     {sceneLayouts.length === 0 && !loading && (
-                                        <Text size="sm" c="dimmed">No scene layouts found.</Text>
+                                        <Text size="sm" dimmed>No scene layouts found.</Text>
                                     )}
-                                    <Stack gap={4}>
+                                    <Stack gap="xs">
                                         {sceneLayouts.map(item => (
-                                            <LayoutItem
-                                                key={item.url}
-                                                item={item}
-                                                selected={selected}
-                                                onSelect={setSelected}
-                                                activeTab={activeScoreboardTab}
-                                            />
+                                            <LayoutItem key={item.url} item={item} selected={selected} onSelect={setSelected} activeTab={activeScoreboardTab} />
                                         ))}
                                     </Stack>
                                 </>
                             )}
 
                             {mode === 'bracket' && (
-                                <BracketLayoutList
-                                    selected={selected}
-                                    onSelect={setSelected}
-                                    baseUrl={baseUrl}
-                                />
+                                <BracketLayoutList selected={selected} onSelect={setSelected} baseUrl={baseUrl} />
                             )}
 
                             {mode === 'controller' && (
-                                <ControllerOverlayPanel
-                                    selected={selected}
-                                    onSelect={setSelected}
-                                />
+                                <ControllerOverlayPanel selected={selected} onSelect={setSelected} />
                             )}
                         </Stack>
-                    </Grid.Col>
+                    </div>
 
                     {/* Right panel: iframe preview + settings */}
-                    <Grid.Col span={8}>
-                        <Paper withBorder style={{ overflow: 'hidden' }}>
+                    <div className="md:col-span-8">
+                        <Panel className="overflow-hidden">
                             {selected && selectedUrl ? (
                                 <>
-                                    <Group p="xs" justify="space-between" wrap="nowrap" gap={4} style={{ borderBottom: '1px solid var(--mantine-color-gray-3)' }}>
-                                        <Text size="xs" c="dimmed" truncate style={{ flex: 1, minWidth: 0 }}>{selectedUrl}</Text>
-                                        <Group gap={4} wrap="nowrap">
-                                            <Tooltip label="Reload preview">
-                                                <ActionIcon
-                                                    variant="subtle"
-                                                    color="gray"
-                                                    size="sm"
-                                                    onClick={() => setPreviewRevision(r => r + 1)}
-                                                >
-                                                    {'\u21BB'}
-                                                </ActionIcon>
-                                            </Tooltip>
+                                    <div className="flex flex-nowrap items-center justify-between gap-1 border-b border-border p-2">
+                                        <Text size="xs" dimmed truncate className="min-w-0 flex-1">{selectedUrl}</Text>
+                                        <div className="flex flex-nowrap items-center gap-1">
+                                            <SimpleTooltip label="Reload preview">
+                                                <Button variant="ghost" size="icon-sm" onClick={() => setPreviewRevision(r => r + 1)}>
+                                                    <RotateCw size={14} />
+                                                </Button>
+                                            </SimpleTooltip>
                                             {showSettingsPanel && (
-                                                <Tooltip label={settingsOpen ? 'Close settings' : 'Layout settings'}>
-                                                    <ActionIcon
-                                                        variant={settingsOpen ? 'filled' : 'subtle'}
-                                                        color={settingsOpen ? 'blue' : 'gray'}
-                                                        size="sm"
-                                                        onClick={() => setSettingsOpen(o => !o)}
-                                                    >
-                                                        {'\u2699'}
-                                                    </ActionIcon>
-                                                </Tooltip>
+                                                <SimpleTooltip label={settingsOpen ? 'Close settings' : 'Layout settings'}>
+                                                    <Button variant={settingsOpen ? 'default' : 'ghost'} size="icon-sm" onClick={() => setSettingsOpen(o => !o)}>
+                                                        <SettingsIcon size={14} />
+                                                    </Button>
+                                                </SimpleTooltip>
                                             )}
                                             <CopyButton value={selectedUrl}>
                                                 {({ copied, copy }) => (
-                                                    <Tooltip label={copied ? 'Copied!' : 'Copy URL'}>
-                                                        <Button variant="subtle" size="compact-xs" color={copied ? 'teal' : 'gray'} onClick={copy}>
+                                                    <SimpleTooltip label={copied ? 'Copied!' : 'Copy URL'}>
+                                                        <Button variant="ghost" size="xs" className={copied ? 'text-[#14b8a6]' : ''} onClick={copy}>
                                                             {copied ? 'Copied' : 'Copy'}
                                                         </Button>
-                                                    </Tooltip>
+                                                    </SimpleTooltip>
                                                 )}
                                             </CopyButton>
-                                        </Group>
-                                    </Group>
+                                        </div>
+                                    </div>
                                     <ScaledIframe key={`${selectedUrl}-${previewRevision}`} src={selectedUrl} fallbackWidth={selected?.width} fallbackHeight={selected?.height} />
                                 </>
                             ) : (
-                                <Box
-                                    style={{
-                                        height: PREVIEW_HEIGHT,
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                    }}
-                                >
-                                    <Text c="dimmed">
+                                <div className="flex items-center justify-center" style={{ height: PREVIEW_HEIGHT }}>
+                                    <Text dimmed>
                                         {mode === 'bracket'
                                             ? 'Select a bracket phase to preview'
                                             : mode === 'controller'
                                             ? 'Start the controller overlay to preview'
                                             : 'Select a layout to preview'}
                                     </Text>
-                                </Box>
+                                </div>
                             )}
-                        </Paper>
+                        </Panel>
 
-                        {/* Per-layout settings: element-only controls + chip-style global overrides */}
                         {showSettingsPanel && (
-                            <Collapse in={settingsOpen}>
-                                <Paper withBorder p="sm" mt="xs">
-                                    <Text size="sm" fw={600} mb="xs" tt="capitalize">
-                                        {selectedType} Settings
-                                    </Text>
-                                    <LayoutSettingsPanel
-                                        layoutType={selectedType}
-                                        supportedSettings={supportedSettings}
-                                    />
-                                </Paper>
-                            </Collapse>
+                            <Collapsible open={settingsOpen}>
+                                <CollapsibleContent>
+                                    <Panel className="mt-2 p-3">
+                                        <Text size="sm" fw={600} className="mb-2 capitalize">
+                                            {selectedType} Settings
+                                        </Text>
+                                        <LayoutSettingsPanel layoutType={selectedType} supportedSettings={supportedSettings} />
+                                    </Panel>
+                                </CollapsibleContent>
+                            </Collapsible>
                         )}
-                    </Grid.Col>
-                </Grid>
+                    </div>
+                </div>
             )}
         </Stack>
     );

@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
-import {
-    TextInput, Stack, Paper, Text, Group
-} from '@mantine/core';
+import { Panel } from '../../components/ui/panel';
+import { TextField } from '../../components/ui/text-field';
+import { Stack, Title } from '../../components/ui/primitives';
 import { useStateStore } from '../../context/store';
 
 /**
@@ -21,39 +21,34 @@ function CommentatorSlot({ index }) {
     }, [basePath, setItem]);
 
     return (
-        <Paper withBorder p="sm">
-            <Text size="sm" fw={700} mb="xs">Commentator {index + 1}</Text>
-            <Group grow gap="xs">
-                <TextInput
+        <Panel glow={false} title={`Commentator ${index + 1}`}>
+            <div className="grid grid-cols-1 gap-3 p-3.5 sm:grid-cols-2 lg:grid-cols-4">
+                <TextField
                     label="Name"
                     placeholder="Tag"
-                    size="xs"
                     value={name}
                     onChange={e => set('name', e.currentTarget.value)}
                 />
-                <TextInput
+                <TextField
                     label="Real Name"
                     placeholder="Full name"
-                    size="xs"
                     value={realName}
                     onChange={e => set('real_name', e.currentTarget.value)}
                 />
-                <TextInput
+                <TextField
                     label="Twitter"
                     placeholder="@handle"
-                    size="xs"
                     value={twitter}
                     onChange={e => set('twitter', e.currentTarget.value)}
                 />
-                <TextInput
+                <TextField
                     label="Pronoun"
                     placeholder="He/Him"
-                    size="xs"
                     value={pronoun}
                     onChange={e => set('pronoun', e.currentTarget.value)}
                 />
-            </Group>
-        </Paper>
+            </div>
+        </Panel>
     );
 }
 
@@ -63,7 +58,7 @@ export default function Commentary() {
 
     return (
         <Stack gap="md">
-            <Text size="lg" fw={700}>Commentary</Text>
+            <Title order={3}>Commentary</Title>
             {slots.map(i => (
                 <CommentatorSlot key={i} index={i} />
             ))}

@@ -1,9 +1,17 @@
 import { useCallback, useEffect, useState, useRef } from 'react';
-import {
-    NumberInput, Select, Button, Group, Stack,
-    Paper, Text, TextInput, Divider, ActionIcon,
-    Popover, Badge, Loader, Tooltip, UnstyledButton, Collapse,
-} from '@mantine/core';
+import { Info, ChevronDown, ChevronUp } from 'lucide-react';
+import { Stack, Text, Divider, Loader } from '../ui/primitives';
+import { Panel } from '../ui/panel';
+import { NumberInput } from '../ui/number-input';
+import { TextField } from '../ui/text-field';
+import { SimpleSelect } from '../ui/simple-select';
+import { Combobox } from '../ui/combobox';
+import { Button } from '../ui/button';
+import { Badge } from '../ui/badge';
+import { Label } from '../ui/label';
+import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
+import { Collapsible, CollapsibleContent } from '../ui/collapsible';
+import { cn } from '../../lib/utils';
 import { useStateStore, useSettingsStore } from '../../context/store';
 import { useSocketSubscribe } from '../../context/socket';
 import { HALF_INNINGS } from '../../data/msb';
@@ -24,29 +32,30 @@ const sourceOptions = [
     { value: 'rotator',   label: 'Rotator' },
 ];
 
+// Count-dot colors keyed by the legacy Mantine color name.
+const DOT_COLORS = { green: '#22c55e', yellow: '#f5bb00', red: '#e60012' };
+
 function CountDots({ count, max, color, onChange }) {
+    const hex = DOT_COLORS[color] ?? '#22c55e';
     return (
-        <Group gap={5} align="center">
+        <div className="flex items-center gap-1.5">
             {Array.from({ length: max }, (_, i) => {
                 const filled = i < count;
                 return (
-                    <UnstyledButton
+                    <button
                         key={i}
+                        type="button"
                         onClick={() => onChange(filled && i === count - 1 ? count - 1 : i + 1)}
+                        className="size-3 shrink-0 rounded-full transition-all"
                         style={{
-                            width: 12,
-                            height: 12,
-                            borderRadius: '50%',
-                            backgroundColor: filled ? `var(--mantine-color-${color}-5)` : 'transparent',
-                            border: `2px solid var(--mantine-color-${color}-${filled ? '5' : '4'})`,
+                            backgroundColor: filled ? hex : 'transparent',
+                            border: `2px solid ${hex}`,
                             opacity: filled ? 1 : 0.3,
-                            transition: 'all 100ms',
-                            flexShrink: 0,
                         }}
                     />
                 );
             })}
-        </Group>
+        </div>
     );
 }
 
@@ -98,7 +107,7 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, sourc
         fetch('/api/v1/rio/game-modes')
             .then(r => r.json())
             .then(data => {
-                const opts = Object.entries(data).map(([name, id]) => ({
+                const opts = Object.entries(data).map(([name]) => ({
                     value: name,
                     label: name,
                 }));
@@ -240,194 +249,183 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, sourc
     }, [set]);
 
     return (
-        <Paper withBorder p="xs">
-            <Stack gap={6}>
+        <Panel glow={false} title="Game State">
+            <div className="p-3.5">
+            <Stack gap="md">
                 {/* ---- Data Source ---- */}
                 {onSetSource && (
-                    <Select
-                        label="Data Source"
-                        data={sourceOptions}
-                        value={sourceType}
-                        onChange={val => onSetSource(val)}
-                        size="xs"
-                    />
+                    <div className="flex flex-col gap-1.5">
+                        <Label className="field-label">Data Source</Label>
+                        <SimpleSelect
+                            data={sourceOptions}
+                            value={sourceType}
+                            onChange={val => onSetSource(val)}
+                        />
+                    </div>
                 )}
 
                 {/* ---- Game Mode ---- */}
-                <Group gap={4} align="flex-end">
-                    <Select
-                        label="Game Mode"
-                        placeholder="Select game mode"
-                        data={gameModes}
-                        value={statsTag || null}
-                        onChange={handleGameModeChange}
-                        size="xs"
-                        searchable
-                        clearable
-                        style={{ flex: 1 }}
-                    />
-                    <Popover opened={diagOpen && diagnostics != null} onChange={setDiagOpen} position="bottom-end" withArrow width={320}>
-                        <Popover.Target>
-                            <ActionIcon
-                                variant="subtle"
-                                size="sm"
-                                onClick={handleInspect}
-                                title="Inspect stats fetch"
-                            >
-                                {fetchingStats ? <Loader size={12} /> : <Text size="xs" lh={1}>&#8505;</Text>}
-                            </ActionIcon>
-                        </Popover.Target>
-                        <Popover.Dropdown>
+                <div className="flex items-end gap-1.5">
+                    <div className="flex flex-1 flex-col gap-1.5">
+                        <Label className="field-label">Game Mode</Label>
+                        <Combobox
+                            placeholder="Select game mode"
+                            data={gameModes}
+                            value={statsTag || null}
+                            onChange={handleGameModeChange}
+                            clearable
+                        />
+                    </div>
+                    <Popover open={diagOpen && diagnostics != null} onOpenChange={setDiagOpen}>
+                        <PopoverTrigger asChild>
+                            <Button variant="ghost" size="icon-sm" onClick={handleInspect} title="Inspect stats fetch">
+                                {fetchingStats ? <Loader size={12} /> : <Info size={14} />}
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent align="end" className="w-[320px]">
                             <Stack gap="xs">
                                 <Text size="xs" fw={600}>Stats Fetch Diagnostics</Text>
                                 {diagnostics?.fetched_at ? (
                                     <>
                                         {diagnostics.error && (
-                                            <Text size="xs" c="red">{diagnostics.error}</Text>
+                                            <Text size="xs" c="#ff5a5f">{diagnostics.error}</Text>
                                         )}
                                         {diagnostics.url && (
                                             <div>
-                                                <Text size="xs" c="dimmed">URL Pattern</Text>
-                                                <Text size="xs" style={{ wordBreak: 'break-all' }}>{diagnostics.url}</Text>
+                                                <Text size="xs" dimmed>URL Pattern</Text>
+                                                <Text size="xs" className="break-all">{diagnostics.url}</Text>
                                             </div>
                                         )}
                                         {diagnostics.tag && (
-                                            <Group gap={4}>
-                                                <Text size="xs" c="dimmed">Tag:</Text>
-                                                <Badge size="xs" variant="light">{diagnostics.tag}</Badge>
-                                            </Group>
+                                            <div className="flex items-center gap-1">
+                                                <Text size="xs" dimmed>Tag:</Text>
+                                                <Badge variant="secondary" className="text-[10px]">{diagnostics.tag}</Badge>
+                                            </div>
                                         )}
                                         {Object.keys(diagnostics.players).length > 0 && (
                                             <>
                                                 <Divider />
                                                 {Object.entries(diagnostics.players).map(([name, info]) => (
-                                                    <Group key={name} justify="space-between">
+                                                    <div key={name} className="flex items-center justify-between">
                                                         <Text size="xs">{name}</Text>
                                                         {info.status === 'loading' ? (
-                                                            <Group gap={4}>
+                                                            <div className="flex items-center gap-1">
                                                                 <Loader size={10} />
-                                                                <Text size="xs" c="dimmed">Loading...</Text>
-                                                            </Group>
+                                                                <Text size="xs" dimmed>Loading...</Text>
+                                                            </div>
                                                         ) : info.error ? (
-                                                            <Badge size="xs" color="red" variant="filled">Error</Badge>
+                                                            <Badge variant="destructive" className="text-[10px]">Error</Badge>
                                                         ) : (
                                                             <Badge
-                                                                size="xs"
-                                                                color={info.char_count > 0 ? 'green' : 'yellow'}
-                                                                variant="filled"
+                                                                className={cn('text-[10px] text-white',
+                                                                    info.char_count > 0 ? 'bg-[#22c55e]' : 'bg-[#f5bb00] text-black')}
                                                             >
                                                                 {info.char_count} chars
                                                             </Badge>
                                                         )}
-                                                    </Group>
+                                                    </div>
                                                 ))}
                                             </>
                                         )}
-                                        <Text size="xs" c="dimmed" ta="right">
+                                        <Text size="xs" dimmed ta="right">
                                             {new Date(diagnostics.fetched_at).toLocaleTimeString()}
                                         </Text>
                                     </>
                                 ) : (
-                                    <Text size="xs" c="dimmed">No stats have been fetched yet.</Text>
+                                    <Text size="xs" dimmed>No stats have been fetched yet.</Text>
                                 )}
                                 <Button
-                                    size="compact-xs"
-                                    variant="light"
-                                    fullWidth
+                                    size="sm"
+                                    variant="secondary"
+                                    className="w-full"
                                     onClick={handleRefreshStats}
-                                    loading={fetchingStats}
+                                    disabled={fetchingStats}
                                 >
+                                    {fetchingStats && <Loader size={12} />}
                                     Refresh Stats
                                 </Button>
                             </Stack>
-                        </Popover.Dropdown>
+                        </PopoverContent>
                     </Popover>
-                </Group>
+                </div>
 
                 {/* ---- Stadium Selector ---- */}
-                <Select
-                    label="Stadium"
-                    placeholder="Select stadium"
-                    data={STADIUM_OPTIONS}
-                    value={stadium || null}
-                    onChange={val => set('stadium', val ?? '')}
-                    size="xs"
-                    clearable
-                />
+                <div className="flex flex-col gap-1.5">
+                    <Label className="field-label">Stadium</Label>
+                    <Combobox
+                        placeholder="Select stadium"
+                        data={STADIUM_OPTIONS}
+                        value={stadium || null}
+                        onChange={val => set('stadium', val ?? '')}
+                        clearable
+                    />
+                </div>
 
                 {/* ---- Scores + Inning + Count Dots ---- */}
-                <Group gap="xs" align="stretch" wrap="nowrap">
+                <div className="flex items-stretch gap-2">
                     {/* Left: scores + inning stacked */}
-                    <Stack gap={6} style={{ flex: 1 }}>
-                        <Group justify="center" gap="xs" align="center" wrap="nowrap">
-                            <NumberInput
-                                value={scoreLeft}
-                                onChange={val => setNum('score_left', val)}
-                                min={0}
-                                size="xs"
-                                style={{ flex: 1 }}
-                                leftSection={<Text size={9} fw={700} c="dimmed" lh={1}>P1</Text>}
-                                leftSectionPointerEvents="none"
-                                styles={{ input: { textAlign: 'center', fontWeight: 700, fontSize: 18 } }}
-                            />
-                            <NumberInput
-                                value={scoreRight}
-                                onChange={val => setNum('score_right', val)}
-                                min={0}
-                                size="xs"
-                                style={{ flex: 1 }}
-                                leftSection={<Text size={9} fw={700} c="dimmed" lh={1}>P2</Text>}
-                                leftSectionPointerEvents="none"
-                                styles={{ input: { textAlign: 'center', fontWeight: 700, fontSize: 18 } }}
-                            />
-                        </Group>
-                        <Group gap="xs" align="center" wrap="nowrap">
-                            <Select
+                    <Stack gap="xs" className="flex-1">
+                        <div className="flex items-end justify-center gap-2">
+                            <div className="flex flex-1 flex-col items-center gap-0.5">
+                                <span className="label-display text-[10px] text-muted-foreground">P1</span>
+                                <NumberInput
+                                    value={scoreLeft}
+                                    onChange={val => setNum('score_left', val)}
+                                    min={0}
+                                    className="h-11 text-center text-2xl font-bold tabular-nums"
+                                />
+                            </div>
+                            <div className="flex flex-1 flex-col items-center gap-0.5">
+                                <span className="label-display text-[10px] text-muted-foreground">P2</span>
+                                <NumberInput
+                                    value={scoreRight}
+                                    onChange={val => setNum('score_right', val)}
+                                    min={0}
+                                    className="h-11 text-center text-2xl font-bold tabular-nums"
+                                />
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <SimpleSelect
                                 data={halfInningOptions}
                                 value={halfInning}
                                 onChange={val => { set('half_inning', val ?? 'Top'); clearAtBatState(); }}
-                                size="xs"
-                                style={{ flex: 4 }}
-                                styles={{ input: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }}
-                                comboboxProps={{ width: 'max-content' }}
+                                triggerClassName="flex-[4]"
                             />
                             <NumberInput
                                 value={inning}
                                 onChange={val => setNum('inning', val, 1)}
                                 min={1} max={99}
-                                size="xs"
-                                style={{ flex: 2 }}
+                                className="flex-[2]"
                             />
-                        </Group>
+                        </div>
                     </Stack>
 
                     {/* Right: B/S/O labeled dots spanning both rows */}
-                    <Stack gap={6} justify="center">
+                    <Stack gap="xs" justify="center">
                         {[
                             { label: 'B', count: balls,   max: 4, color: 'green',  field: 'balls' },
                             { label: 'S', count: strikes, max: 3, color: 'yellow', field: 'strikes' },
                             { label: 'O', count: outs,    max: 3, color: 'red',    field: 'outs' },
                         ].map(({ label, count, max, color, field }) => (
-                            <Group key={field} gap={4} align="center" wrap="nowrap">
-                                <Text size={12} fw={700} c="dimmed" style={{ width: 12, textAlign: 'center', lineHeight: 1 }}>{label}</Text>
+                            <div key={field} className="flex items-center gap-1">
+                                <span className="w-3 text-center text-[12px] font-bold leading-none text-muted-foreground">{label}</span>
                                 <CountDots
                                     count={count}
                                     max={max}
                                     color={color}
                                     onChange={val => setNum(field, val)}
                                 />
-                            </Group>
+                            </div>
                         ))}
                     </Stack>
-                </Group>
+                </div>
 
-
-
-                <Group gap="xs" grow>
-                    <Button size="xs" variant="outline" onClick={() => { onSwapTeams(); clearAtBatState(); }}>
+                <div className="grid grid-cols-2 gap-2">
+                    <Button variant="outline" size="sm" onClick={() => { onSwapTeams(); clearAtBatState(); }}>
                         Swap Teams
                     </Button>
-                    <Button size="xs" variant="light" onClick={() => {
+                    <Button variant="secondary" size="sm" onClick={() => {
                         const t1 = useStateStore.getState()?.score?.[scoreboardNumber]?.player?.[1] ?? {};
                         const t2 = useStateStore.getState()?.score?.[scoreboardNumber]?.player?.[2] ?? {};
                         const fields = ['name', 'team', 'full_name', 'country', 'state', 'pronoun'];
@@ -438,47 +436,49 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, sourc
                     }}>
                         Swap Tags
                     </Button>
-                </Group>
-                <Button size="xs" variant="light" color="red" onClick={resetBaseballState} fullWidth>
+                </div>
+                <Button variant="outline" size="sm" className="w-full border-destructive/40 text-destructive hover:bg-destructive/10" onClick={resetBaseballState}>
                     Reset Game State
                 </Button>
 
                 <Divider />
 
                 {/* ---- Match Info ---- */}
-                <UnstyledButton onClick={() => setMatchOpen(o => !o)}>
-                    <Group justify="space-between" align="center">
+                <button type="button" onClick={() => setMatchOpen(o => !o)}>
+                    <div className="flex items-center justify-between">
                         <Text size="sm" fw={700}>Bracket Match Info</Text>
-                        <Text size="xs" c="dimmed" lh={1}>{matchOpen ? '▲' : '▼'}</Text>
-                    </Group>
-                </UnstyledButton>
-                <Collapse in={matchOpen}>
-                    <Stack gap="xs">
-                        <NumberInput
-                            label="Best Of"
-                            value={bestOf}
-                            onChange={val => set('best_of', `Best Of ${val === '' ? 3 : Number(val)}`)}
-                            min={1} max={99} step={2}
-                            size="xs"
-                        />
-                        <TextInput
-                            label="Phase"
-                            value={phase}
-                            onChange={e => set('phase', e.currentTarget.value)}
-                            size="xs"
-                        />
-                        <TextInput
-                            label="Match"
-                            value={match}
-                            onChange={e => set('match', e.currentTarget.value)}
-                            size="xs"
-                        />
-                        <Button size="xs" variant="light" color="red" onClick={clearTournamentData} fullWidth>
-                            Clear Tags
-                        </Button>
-                    </Stack>
-                </Collapse>
+                        {matchOpen ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
+                    </div>
+                </button>
+                <Collapsible open={matchOpen}>
+                    <CollapsibleContent>
+                        <Stack gap="xs">
+                            <div className="flex flex-col gap-1.5">
+                                <Label className="field-label">Best Of</Label>
+                                <NumberInput
+                                    value={bestOf}
+                                    onChange={val => set('best_of', `Best Of ${val === '' ? 3 : Number(val)}`)}
+                                    min={1} max={99} step={2}
+                                />
+                            </div>
+                            <TextField
+                                label="Phase"
+                                value={phase}
+                                onChange={e => set('phase', e.currentTarget.value)}
+                            />
+                            <TextField
+                                label="Match"
+                                value={match}
+                                onChange={e => set('match', e.currentTarget.value)}
+                            />
+                            <Button variant="outline" size="sm" className="w-full border-destructive/40 text-destructive hover:bg-destructive/10" onClick={clearTournamentData}>
+                                Clear Tags
+                            </Button>
+                        </Stack>
+                    </CollapsibleContent>
+                </Collapsible>
             </Stack>
-        </Paper>
+            </div>
+        </Panel>
     );
 }

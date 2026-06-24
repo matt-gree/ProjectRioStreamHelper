@@ -1,17 +1,17 @@
 import { memo, useCallback, useMemo, useState } from 'react';
-import {
-    TextInput, Select, Group, Stack, Grid, Paper,
-    Text, Collapse, ActionIcon, UnstyledButton, Tooltip, Badge,
-} from '@mantine/core';
-import { useDisclosure } from '@mantine/hooks';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
+import { Stack, Text } from '../ui/primitives';
+import { TextField } from '../ui/text-field';
+import { Combobox } from '../ui/combobox';
+import { Collapsible, CollapsibleContent } from '../ui/collapsible';
+import { SimpleTooltip } from '../ui/simple-tooltip';
 import { useStateStore } from '../../context/store';
 import { useAssetUrls } from '../../lib/assets';
 import { MSB_CHARACTERS, MSB_TEAMS, ROSTER_SIZE } from '../../data/msb';
 import CharacterStatEditor from './CharacterStatEditor';
 
 const characterOptions = MSB_CHARACTERS.map(c => ({ value: c, label: c }));
-const teamOptions = MSB_TEAMS.map(t => ({ value: t, label: t }));
 
 function StarIcon({ active, superstarUrl }) {
     if (active) {
@@ -30,20 +30,6 @@ function StarIcon({ active, superstarUrl }) {
     );
 }
 
-const makeRenderCharOption = (charIconUrl) => ({ option }) => (
-    <Group gap="xs" wrap="nowrap">
-        <img src={charIconUrl(option.value)} alt="" width={20} height={20} style={{ objectFit: 'contain' }} />
-        <span>{option.label}</span>
-    </Group>
-);
-
-const makeRenderTeamOption = (teamIconUrl) => ({ option }) => (
-    <Group gap="xs" wrap="nowrap">
-        <img src={teamIconUrl(option.value)} alt="" width={20} height={20} style={{ objectFit: 'contain' }} />
-        <span>{option.label}</span>
-    </Group>
-);
-
 /**
  * A single player slot within a team panel.
  *
@@ -52,17 +38,20 @@ const makeRenderTeamOption = (teamIconUrl) => ({ option }) => (
  *   teamNumber: 1 | 2
  *   playerNumber: 1-based player index
  */
-export default memo(function PlayerSlot({ scoreboardNumber = 1, teamNumber, playerNumber, sourceType = 'manual', losers, isHome, onToggleLosers, onToggleHome }) {
+export default memo(function PlayerSlot({ scoreboardNumber = 1, teamNumber, playerNumber, sourceType = 'manual' }) {
     const basePath = `score.${scoreboardNumber}.player.${teamNumber}`;
-    const [detailsOpen, { toggle: toggleDetails }] = useDisclosure(false);
+    const [detailsOpen, setDetailsOpen] = useState(false);
     const [activeCharDetail, setActiveCharDetail] = useState(null);
 
     const urls = useAssetUrls();
     const charIconUrl = urls.charIcon;
     const teamIconUrl = urls.teamIcon;
     const superstarUrl = urls.gameIcon('superstar.png');
-    const renderCharOption = useMemo(() => makeRenderCharOption(charIconUrl), [charIconUrl]);
-    const renderTeamOption = useMemo(() => makeRenderTeamOption(teamIconUrl), [teamIconUrl]);
+    // Team options carry their logo so the selector + dropdown show sprites.
+    const teamOptions = useMemo(
+        () => MSB_TEAMS.map(t => ({ value: t, label: t, image: teamIconUrl(t) })),
+        [teamIconUrl]
+    );
 
     // Single shallow selector for the whole player object — Zustand's useShallow
     // does a shallow equality check so we only re-render when the player sub-tree
@@ -119,122 +108,71 @@ export default memo(function PlayerSlot({ scoreboardNumber = 1, teamNumber, play
     }, [basePath, setItem, rosterStarred]);
 
     return (
-        <Stack gap="xs">
+        <Stack gap="sm">
             {/* Main row: tag + prefix + Rio name */}
-            <Grid gutter="xs" align="stretch">
-                <Grid.Col span={4}>
-                    <TextInput
+            <div className="grid grid-cols-12 items-end gap-2.5">
+                <div className="col-span-4">
+                    <TextField
                         label={`Player ${playerNumber}`}
                         placeholder="Tag"
-                        size="xs"
                         value={name}
                         onChange={e => set('name', e.currentTarget.value)}
                     />
-                </Grid.Col>
-                <Grid.Col span={2}>
-                    <TextInput
+                </div>
+                <div className="col-span-3">
+                    <TextField
                         label="Prefix"
                         placeholder="Sponsor"
-                        size="xs"
                         value={teamPrefix}
                         onChange={e => set('team', e.currentTarget.value)}
                     />
-                </Grid.Col>
-                <Grid.Col span={4}>
-                    <TextInput
+                </div>
+                <div className="col-span-5">
+                    <TextField
                         label="Rio Name"
                         placeholder="Online ID"
-                        size="xs"
                         value={rioName}
                         onChange={e => set('rioName', e.currentTarget.value)}
                         leftSection={<img src="/game_assets/rio_logo.png" alt="Rio" width={16} height={16} style={{ objectFit: 'contain' }} />}
-                        leftSectionWidth={28}
-                        leftSectionPointerEvents="none"
                     />
-                </Grid.Col>
-                <Grid.Col span={2}>
-                    <Stack gap={3} align="flex-end" justify="space-between" style={{ height: '100%' }}>
-                        <Group gap={3} wrap="nowrap">
-                            <UnstyledButton onClick={onToggleLosers}>
-                                <Badge size="xs" color={losers ? 'red' : 'gray'} variant={losers ? 'filled' : 'light'}>L</Badge>
-                            </UnstyledButton>
-                            <UnstyledButton onClick={onToggleHome}>
-                                 <Badge size="xs" color={isHome ? 'blue' : 'gray'} variant={isHome ? 'filled' : 'light'} style={{ minWidth: 44 }}>
-                                    {isHome ? 'Home' : 'Away'}
-                                </Badge>
-                            </UnstyledButton>
-                        </Group>
-                        <ActionIcon
-                            variant="subtle"
-                            size="sm"
-                            onClick={toggleDetails}
-                            title={detailsOpen ? 'Hide details' : 'Show details'}
-                        >
-                            <Text size="xs">{detailsOpen ? '▲' : '▼'}</Text>
-                        </ActionIcon>
-                    </Stack>
-                </Grid.Col>
-            </Grid>
+                </div>
+            </div>
+
+            {/* Details toggle */}
+            <button
+                type="button"
+                onClick={() => setDetailsOpen(o => !o)}
+                className="flex items-center gap-1 self-start text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+            >
+                {detailsOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                {detailsOpen ? 'Hide details' : 'More details'}
+            </button>
 
             {/* Collapsible detail fields */}
-            <Collapse in={detailsOpen}>
-                <Grid gutter="xs" mt={0}>
-                    <Grid.Col span={4}>
-                        <TextInput
-                            label="Full Name"
-                            placeholder="First Last"
-                            size="xs"
-                            value={fullName}
-                            onChange={e => set('full_name', e.currentTarget.value)}
-                        />
-                    </Grid.Col>
-                    <Grid.Col span={2}>
-                        <TextInput
-                            label="State"
-                            placeholder="NY, CA..."
-                            size="xs"
-                            value={state}
-                            onChange={e => set('state', e.currentTarget.value)}
-                        />
-                    </Grid.Col>
-                    <Grid.Col span={3}>
-                        <TextInput
-                            label="Country"
-                            placeholder="US, CA..."
-                            size="xs"
-                            value={country}
-                            onChange={e => set('country', e.currentTarget.value)}
-                        />
-                    </Grid.Col>
-                    <Grid.Col span={3}>
-                        <TextInput
-                            label="Pronoun"
-                            placeholder="He/Him"
-                            size="xs"
-                            value={pronoun}
-                            onChange={e => set('pronoun', e.currentTarget.value)}
-                        />
-                    </Grid.Col>
-                    <Grid.Col span={6}>
-                        <TextInput
-                            label="YouTube"
-                            placeholder="@handle"
-                            size="xs"
-                            value={youtube}
-                            onChange={e => set('youtube', e.currentTarget.value)}
-                        />
-                    </Grid.Col>
-                    <Grid.Col span={6}>
-                        <TextInput
-                            label="Twitter"
-                            placeholder="@handle"
-                            size="xs"
-                            value={twitter}
-                            onChange={e => set('twitter', e.currentTarget.value)}
-                        />
-                    </Grid.Col>
-                </Grid>
-            </Collapse>
+            <Collapsible open={detailsOpen}>
+                <CollapsibleContent>
+                    <div className="grid grid-cols-12 gap-2">
+                        <div className="col-span-4">
+                            <TextField label="Full Name" placeholder="First Last" value={fullName} onChange={e => set('full_name', e.currentTarget.value)} />
+                        </div>
+                        <div className="col-span-2">
+                            <TextField label="State" placeholder="NY, CA..." value={state} onChange={e => set('state', e.currentTarget.value)} />
+                        </div>
+                        <div className="col-span-3">
+                            <TextField label="Country" placeholder="US, CA..." value={country} onChange={e => set('country', e.currentTarget.value)} />
+                        </div>
+                        <div className="col-span-3">
+                            <TextField label="Pronoun" placeholder="He/Him" value={pronoun} onChange={e => set('pronoun', e.currentTarget.value)} />
+                        </div>
+                        <div className="col-span-6">
+                            <TextField label="YouTube" placeholder="@handle" value={youtube} onChange={e => set('youtube', e.currentTarget.value)} />
+                        </div>
+                        <div className="col-span-6">
+                            <TextField label="Twitter" placeholder="@handle" value={twitter} onChange={e => set('twitter', e.currentTarget.value)} />
+                        </div>
+                    </div>
+                </CollapsibleContent>
+            </Collapsible>
 
             {/* Character roster / stat editor drill-in */}
             {activeCharDetail !== null ? (
@@ -254,87 +192,66 @@ export default memo(function PlayerSlot({ scoreboardNumber = 1, teamNumber, play
                 />
             ) : (
                 <>
-                    <Select
-                        placeholder="MSB Team"
-                        data={teamOptions}
-                        size="xs"
-                        searchable
-                        clearable
-                        value={msbTeam || null}
-                        onChange={val => set('msb_team', val ?? '')}
-                        renderOption={renderTeamOption}
-                        leftSection={msbTeam ? <img src={teamIconUrl(msbTeam)} alt="" width={16} height={16} style={{ objectFit: 'contain' }} /> : null}
-                        mt="xs"
-                    />
-                    <Grid gutter={4}>
+                    <div className="mt-2">
+                        <Combobox
+                            placeholder="MSB Team"
+                            data={teamOptions}
+                            clearable
+                            value={msbTeam || null}
+                            onChange={val => set('msb_team', val ?? '')}
+                        />
+                    </div>
+                    <div className="grid grid-cols-3 gap-1">
                         {roster.map((charName, i) => {
                             const isCaptain = captain === i;
                             const isSuperstar = rosterStarred[i];
                             return (
-                                <Grid.Col span={4} key={i}>
-                                    <Paper
-                                        withBorder
-                                        style={{
-                                            display: 'flex',
-                                            overflow: 'hidden',
-                                            borderColor: isCaptain ? 'var(--mantine-color-yellow-5)' : undefined,
-                                        }}
+                                <div
+                                    key={i}
+                                    className="flex overflow-hidden rounded-md border"
+                                    style={{ borderColor: isCaptain ? '#f5bb00' : undefined }}
+                                >
+                                    <button
+                                        type="button"
+                                        onClick={() => setActiveCharDetail(i)}
+                                        className="min-w-0 flex-1 px-1.5 py-1"
                                     >
-                                        <UnstyledButton
-                                            onClick={() => setActiveCharDetail(i)}
-                                            style={{ flex: 1, minWidth: 0, padding: '4px 6px' }}
+                                        <div className="flex flex-nowrap items-center gap-1">
+                                            {charName && (
+                                                <img src={charIconUrl(charName)} alt="" width={16} height={16} style={{ objectFit: 'contain', flexShrink: 0 }} />
+                                            )}
+                                            <Text size="xs" truncate dimmed={!charName} span>
+                                                {charName || `Slot ${i + 1}`}
+                                            </Text>
+                                        </div>
+                                    </button>
+                                    <SimpleTooltip label={isSuperstar ? 'Superstar' : 'Set superstar'}>
+                                        <button
+                                            type="button"
+                                            onClick={() => toggleSuperstar(i)}
+                                            className="flex w-[22px] shrink-0 items-center justify-center border-l transition-colors"
+                                            style={{ color: isSuperstar ? '#f59f00' : 'var(--color-muted-foreground)' }}
                                         >
-                                            <Group gap={4} wrap="nowrap">
-                                                {charName && (
-                                                    <img src={charIconUrl(charName)} alt="" width={16} height={16} style={{ objectFit: 'contain', flexShrink: 0 }} />
-                                                )}
-                                                <Text size="xs" truncate c={charName ? undefined : 'dimmed'}>
-                                                    {charName || `Slot ${i + 1}`}
-                                                </Text>
-                                            </Group>
-                                        </UnstyledButton>
-                                        <Tooltip label={isSuperstar ? 'Superstar' : 'Set superstar'} position="top" withArrow>
-                                            <UnstyledButton
-                                                onClick={() => toggleSuperstar(i)}
-                                                style={{
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    justifyContent: 'center',
-                                                    width: 22,
-                                                    flexShrink: 0,
-                                                    borderLeft: '1px solid var(--mantine-color-default-border)',
-                                                    color: isSuperstar ? '#f59f00' : 'var(--mantine-color-dimmed)',
-                                                    transition: 'color 150ms',
-                                                }}
-                                            >
-                                                <StarIcon active={isSuperstar} superstarUrl={superstarUrl} />
-                                            </UnstyledButton>
-                                        </Tooltip>
-                                        <Tooltip label="Set captain" position="top" withArrow>
-                                            <UnstyledButton
-                                                onClick={() => setCaptain(i)}
-                                                style={{
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    justifyContent: 'center',
-                                                    width: 22,
-                                                    flexShrink: 0,
-                                                    borderLeft: '1px solid var(--mantine-color-default-border)',
-                                                    backgroundColor: isCaptain ? 'var(--mantine-color-yellow-5)' : undefined,
-                                                    color: isCaptain ? 'var(--mantine-color-dark-9)' : 'var(--mantine-color-dimmed)',
-                                                    fontWeight: 700,
-                                                    fontSize: 11,
-                                                    transition: 'background-color 150ms, color 150ms',
-                                                }}
-                                            >
-                                                C
-                                            </UnstyledButton>
-                                        </Tooltip>
-                                    </Paper>
-                                </Grid.Col>
+                                            <StarIcon active={isSuperstar} superstarUrl={superstarUrl} />
+                                        </button>
+                                    </SimpleTooltip>
+                                    <SimpleTooltip label="Set captain">
+                                        <button
+                                            type="button"
+                                            onClick={() => setCaptain(i)}
+                                            className="flex w-[22px] shrink-0 items-center justify-center border-l text-[11px] font-bold transition-colors"
+                                            style={{
+                                                backgroundColor: isCaptain ? '#f5bb00' : undefined,
+                                                color: isCaptain ? '#0a0a0a' : 'var(--color-muted-foreground)',
+                                            }}
+                                        >
+                                            C
+                                        </button>
+                                    </SimpleTooltip>
+                                </div>
                             );
                         })}
-                    </Grid>
+                    </div>
                 </>
             )}
         </Stack>

@@ -1,8 +1,13 @@
 import { useState, useCallback } from 'react';
-import {
-    Tabs, Grid, Stack, ActionIcon, Group, Text, Badge, Tooltip, CloseButton,
-    TextInput, Popover, Box,
-} from '@mantine/core';
+import { Pencil, Check, X, Plus } from 'lucide-react';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../components/ui/tabs';
+import { Stack, Text } from '../../components/ui/primitives';
+import { Badge } from '../../components/ui/badge';
+import { Button } from '../../components/ui/button';
+import { Input } from '../../components/ui/input';
+import { Popover, PopoverContent, PopoverTrigger } from '../../components/ui/popover';
+import { SimpleTooltip } from '../../components/ui/simple-tooltip';
+import { cn } from '../../lib/utils';
 import { useSettingsStore, useStateStore } from '../../context/store';
 import TeamPanel from '../../components/scoreboard/TeamPanel';
 import ScoreControls from '../../components/scoreboard/ScoreControls';
@@ -69,8 +74,8 @@ function ScoreboardTab({ scoreboardNumber }) {
     }, [scoreboardNumber]);
 
     return (
-        <Grid gutter="md" align="flex-start" columns={10}>
-            <Grid.Col span={{ base: 10, md: 4 }}>
+        <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-10">
+            <div className="md:col-span-4">
                 <Stack gap="md">
                     <TeamPanel
                         scoreboardNumber={scoreboardNumber}
@@ -83,9 +88,9 @@ function ScoreboardTab({ scoreboardNumber }) {
                     )}
                     <ActiveMatchupStats scoreboardNumber={scoreboardNumber} />
                 </Stack>
-            </Grid.Col>
+            </div>
 
-            <Grid.Col span={{ base: 10, md: 2 }}>
+            <div className="md:col-span-2">
                 <Stack gap="md">
                     <ScoreControls
                         scoreboardNumber={scoreboardNumber}
@@ -95,9 +100,9 @@ function ScoreboardTab({ scoreboardNumber }) {
                     />
                     <DiamondPanel scoreboardNumber={scoreboardNumber} />
                 </Stack>
-            </Grid.Col>
+            </div>
 
-            <Grid.Col span={{ base: 10, md: 4 }}>
+            <div className="md:col-span-4">
                 <Stack gap="md">
                     <TeamPanel
                         scoreboardNumber={scoreboardNumber}
@@ -112,18 +117,19 @@ function ScoreboardTab({ scoreboardNumber }) {
                         <RotationControls scoreboardNumber={scoreboardNumber} />
                     )}
                 </Stack>
-            </Grid.Col>
-        </Grid>
+            </div>
+        </div>
     );
 }
 
+// Tinted-translucent chips per the Rio brand — never solid fills.
 const SOURCE_BADGE = {
-    hud:       { color: 'green',  label: 'HUD' },
-    live_game: { color: 'blue',   label: 'API' },
-    rotator:   { color: 'violet', label: 'Rotator' },
+    hud:       { color: 'bg-[#22c55e]/15 text-[#4ade80]', label: 'HUD' },
+    live_game: { color: 'bg-[#3b82f6]/15 text-[#60a5fa]', label: 'API' },
+    rotator:   { color: 'bg-[#a855f7]/15 text-[#c084fc]', label: 'Rotator' },
     // backward compat
-    ongoing_api:   { color: 'blue',   label: 'API' },
-    completed_api: { color: 'violet', label: 'Rotator' },
+    ongoing_api:   { color: 'bg-[#3b82f6]/15 text-[#60a5fa]', label: 'API' },
+    completed_api: { color: 'bg-[#a855f7]/15 text-[#c084fc]', label: 'Rotator' },
 };
 
 /**
@@ -147,41 +153,37 @@ function RenamePopover({ sbId, currentAlias }) {
     }, [handleSave]);
 
     return (
-        <Popover opened={opened} onChange={setOpened} position="bottom" withArrow>
-            <Popover.Target>
-                <Box
-                    component="span"
+        <Popover open={opened} onOpenChange={setOpened}>
+            <PopoverTrigger asChild>
+                <span
                     role="button"
                     tabIndex={0}
-                    style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center' }}
+                    className="inline-flex cursor-pointer items-center text-muted-foreground hover:text-foreground"
                     onClick={(e) => { e.stopPropagation(); setValue(currentAlias); setOpened(true); }}
                     onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); setValue(currentAlias); setOpened(true); } }}
                 >
-                    <Text size="xs" lh={1}>&#9998;</Text>
-                </Box>
-            </Popover.Target>
-            <Popover.Dropdown onClick={(e) => e.stopPropagation()}>
-                <TextInput
-                    size="xs"
-                    placeholder="Alias (optional)"
-                    value={value}
-                    onChange={(e) => setValue(e.currentTarget.value)}
-                    onKeyDown={handleKeyDown}
-                    autoFocus
-                    rightSection={
-                        <Box
-                            component="span"
-                            role="button"
-                            tabIndex={0}
-                            style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center' }}
-                            onClick={handleSave}
-                            onKeyDown={(e) => { if (e.key === 'Enter') handleSave(); }}
-                        >
-                            <Text size="xs" lh={1}>&#10003;</Text>
-                        </Box>
-                    }
-                />
-            </Popover.Dropdown>
+                    <Pencil size={12} />
+                </span>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-2" onClick={(e) => e.stopPropagation()}>
+                <div className="relative flex items-center">
+                    <Input
+                        placeholder="Alias (optional)"
+                        value={value}
+                        onChange={(e) => setValue(e.currentTarget.value)}
+                        onKeyDown={handleKeyDown}
+                        autoFocus
+                        className="pr-8"
+                    />
+                    <button
+                        type="button"
+                        className="absolute right-2 inline-flex items-center text-muted-foreground hover:text-foreground"
+                        onClick={handleSave}
+                    >
+                        <Check size={14} />
+                    </button>
+                </div>
+            </PopoverContent>
         </Popover>
     );
 }
@@ -217,49 +219,50 @@ export default function ScoreboardManager() {
     }, []);
 
     return (
-        <Tabs value={activeTab} onChange={setActiveTab} variant="outline">
-            <Group gap={0} align="center" mb="md">
-                <Tabs.List>
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <div className="mb-4 flex items-center gap-1">
+                <TabsList>
                     {active.map(sbId => {
                         const src = sources[sbId] ?? sources[String(sbId)];
                         const srcType = src?.type ?? 'manual';
                         const badge = SOURCE_BADGE[srcType];
                         const alias = aliases[sbId] ?? aliases[String(sbId)] ?? '';
                         return (
-                            <Tabs.Tab key={sbId} value={String(sbId)}>
-                                <Group gap={6} wrap="nowrap">
-                                    <Text size="sm">{tabLabel(sbId, alias)}</Text>
+                            <TabsTrigger key={sbId} value={String(sbId)}>
+                                <span className="flex flex-nowrap items-center gap-1.5">
+                                    <Text size="sm" span>{tabLabel(sbId, alias)}</Text>
                                     {badge && (
-                                        <Badge size="xs" color={badge.color} variant="filled">
+                                        <Badge className={cn('text-[10px] font-semibold uppercase tracking-wider', badge.color)}>
                                             {badge.label}
                                         </Badge>
                                     )}
                                     <RenamePopover sbId={sbId} currentAlias={alias} />
                                     {active.length > 1 && (
-                                        <CloseButton
-                                            component="div"
+                                        <span
                                             role="button"
-                                            size="xs"
-                                            variant="subtle"
+                                            tabIndex={0}
+                                            className="inline-flex cursor-pointer items-center text-muted-foreground hover:text-foreground"
                                             onClick={(e) => handleRemoveScoreboard(e, sbId)}
-                                        />
+                                        >
+                                            <X size={12} />
+                                        </span>
                                     )}
-                                </Group>
-                            </Tabs.Tab>
+                                </span>
+                            </TabsTrigger>
                         );
                     })}
-                </Tabs.List>
-                <Tooltip label="Add scoreboard">
-                    <ActionIcon variant="subtle" size="md" ml="xs" onClick={handleAddScoreboard}>
-                        <Text size="lg" lh={1}>+</Text>
-                    </ActionIcon>
-                </Tooltip>
-            </Group>
+                </TabsList>
+                <SimpleTooltip label="Add scoreboard">
+                    <Button variant="ghost" size="icon-sm" onClick={handleAddScoreboard}>
+                        <Plus size={18} />
+                    </Button>
+                </SimpleTooltip>
+            </div>
 
             {active.map(sbId => (
-                <Tabs.Panel key={sbId} value={String(sbId)}>
+                <TabsContent key={sbId} value={String(sbId)}>
                     <ScoreboardTab scoreboardNumber={sbId} />
-                </Tabs.Panel>
+                </TabsContent>
             ))}
         </Tabs>
     );

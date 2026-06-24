@@ -1,28 +1,28 @@
 import { useEffect, useRef } from 'react';
-import { notifications } from '@mantine/notifications';
-import { Anchor, Stack, Text } from '@mantine/core';
+import { toast } from 'sonner';
+import { Anchor, Stack, Text } from '../components/ui/primitives';
 import { useSocket, useSocketSubscribe } from './socket';
 
-const SEVERITY_COLORS = {
-    info: 'blue',
-    success: 'green',
-    warn: 'yellow',
-    warning: 'yellow',
-    error: 'red',
-    critical: 'red',
+// Maps a severity to the matching sonner toast variant.
+const SEVERITY_VARIANT = {
+    info: 'info',
+    success: 'success',
+    warn: 'warning',
+    warning: 'warning',
+    error: 'error',
+    critical: 'error',
 };
 
 function renderAnnouncement(item) {
     return (
-        <Stack gap={4}>
+        <Stack gap="xs">
             {item.body && <Text size="sm">{item.body}</Text>}
             {item.link_url && (
                 <Anchor
                     href={item.link_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    size="sm"
-                    fw={500}
+                    className="text-sm font-medium"
                 >
                     {item.link_text || 'Open link'} →
                 </Anchor>
@@ -39,16 +39,15 @@ export default function AnnouncementsListener() {
         for (const item of items) {
             if (!item?.id || shownRef.current.has(item.id)) continue;
             shownRef.current.add(item.id);
-            notifications.show({
+            const variant = SEVERITY_VARIANT[item.severity] || 'info';
+            // Closing the toast only hides it for this session. Announcements
+            // reappear on next app launch until the user clicks
+            // "Clear announcements" in Settings or they expire.
+            toast[variant](item.title, {
                 id: `announcement-${item.id}`,
-                title: item.title,
-                message: renderAnnouncement(item),
-                color: SEVERITY_COLORS[item.severity] || 'blue',
-                autoClose: false,
-                withCloseButton: true,
-                // Closing the toast only hides it for this session. Announcements
-                // reappear on next app launch until the user clicks
-                // "Clear announcements" in Settings or they expire.
+                description: renderAnnouncement(item),
+                duration: Infinity,
+                closeButton: true,
             });
         }
     };
@@ -60,7 +59,7 @@ export default function AnnouncementsListener() {
         const activeIds = new Set(items.map(i => i.id));
         for (const id of Array.from(shownRef.current)) {
             if (!activeIds.has(id)) {
-                notifications.hide(`announcement-${id}`);
+                toast.dismiss(`announcement-${id}`);
                 shownRef.current.delete(id);
             }
         }

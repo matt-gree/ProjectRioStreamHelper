@@ -1,6 +1,6 @@
-import {
-    Paper, Stack, Group, Text, Grid, Badge, useMantineColorScheme,
-} from '@mantine/core';
+import { Panel } from '../ui/panel';
+import { Stack, Text } from '../ui/primitives';
+import { Badge } from '../ui/badge';
 import { useStateStore } from '../../context/store';
 import { STADIUM_OPTIONS } from '../../data/stadiums';
 
@@ -21,89 +21,78 @@ export default function CompletedGameInfo({ scoreboardNumber = 1 }) {
     const winnerUser        = useStateStore(s => s?.score?.[scoreboardNumber]?.winner_user ?? '');
     const loserUser         = useStateStore(s => s?.score?.[scoreboardNumber]?.loser_user ?? '');
 
-    const { colorScheme } = useMantineColorScheme();
     if (!gameCompleted) return null;
 
-    const bg = colorScheme === 'dark'
-        ? 'var(--mantine-color-violet-9)'
-        : 'var(--mantine-color-violet-0)';
-
     return (
-        <Paper p="xs" withBorder style={{ backgroundColor: bg }}>
-            <Stack gap={4}>
-                <Group justify="space-between">
-                    <Text size="xs" fw={600} c="violet">Completed Game</Text>
+        <Panel glow={false} className="p-2" style={{ backgroundColor: 'rgba(76, 29, 149, 0.35)' }}>
+            <Stack gap="xs">
+                <div className="flex items-center justify-between">
+                    <Text size="xs" fw={600} c="#a78bfa">Completed Game</Text>
                     {gameId && (
-                        <Badge
-                            size="xs"
-                            variant={colorScheme === 'dark' ? 'white' : 'light'}
-                            color="violet"
-                        >
-                            #{gameId}
-                        </Badge>
+                        <Badge className="bg-[#a78bfa] px-1.5 text-[10px] text-[#1a1033]">#{gameId}</Badge>
                     )}
-                </Group>
+                </div>
                 {(winnerUser || loserUser) && (
-                    <Group gap="xs">
-                        <Text size="xs" fw={600} c="teal">{winnerUser}</Text>
-                        <Text size="xs" c="dimmed">def.</Text>
-                        <Text size="xs" fw={600} c="red">{loserUser}</Text>
-                    </Group>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <Text size="xs" fw={600} c="#2dd4bf">{winnerUser}</Text>
+                        <Text size="xs" dimmed>def.</Text>
+                        <Text size="xs" fw={600} c="#ff5a5f">{loserUser}</Text>
+                    </div>
                 )}
-                <Grid gutter={4}>
+                <div className="grid grid-cols-2 gap-1">
                     {stadium && (
-                        <Grid.Col span={6}>
-                            <Text size="xs" c="dimmed">Stadium</Text>
+                        <div>
+                            <Text size="xs" dimmed>Stadium</Text>
                             <Text size="xs">{STADIUM_LABELS[stadium] || stadium}</Text>
-                        </Grid.Col>
+                        </div>
                     )}
                     {gameMode && (
-                        <Grid.Col span={6}>
-                            <Text size="xs" c="dimmed">Mode</Text>
+                        <div>
+                            <Text size="xs" dimmed>Mode</Text>
                             <Text size="xs">{gameMode}</Text>
-                        </Grid.Col>
+                        </div>
                     )}
                     {inningsPlayed != null && (
-                        <Grid.Col span={6}>
-                            <Text size="xs" c="dimmed">Innings</Text>
+                        <div>
+                            <Text size="xs" dimmed>Innings</Text>
                             <Text size="xs">{inningsPlayed}/{inningsSelected ?? '?'}</Text>
-                        </Grid.Col>
+                        </div>
                     )}
                     {dateTimeEnd && (
-                        <Grid.Col span={6}>
-                            <Text size="xs" c="dimmed">Played</Text>
+                        <div>
+                            <Text size="xs" dimmed>Played</Text>
                             <Text size="xs">
                                 {(() => {
                                     try { return new Date(dateTimeEnd).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); }
                                     catch { return ''; }
                                 })()}
                             </Text>
-                        </Grid.Col>
+                        </div>
                     )}
-                </Grid>
+                </div>
                 {(winnerIncomingElo != null || loserIncomingElo != null) && (
-                    <Group gap="md">
+                    <div className="flex flex-wrap gap-4">
                         {winnerIncomingElo != null && (
                             <Text size="xs">
-                                <Text span c="dimmed">W ELO: </Text>
+                                <Text span dimmed>W ELO: </Text>
                                 {winnerIncomingElo} → {winnerResultElo}
                                 {winnerResultElo > winnerIncomingElo && (
-                                    <Text span c="teal" fw={600}> (+{winnerResultElo - winnerIncomingElo})</Text>
+                                    <Text span c="#2dd4bf" fw={600}> (+{winnerResultElo - winnerIncomingElo})</Text>
                                 )}
                             </Text>
                         )}
                         {loserIncomingElo != null && (
                             <Text size="xs">
-                                <Text span c="dimmed">L ELO: </Text>
+                                <Text span dimmed>L ELO: </Text>
                                 {loserIncomingElo} → {loserResultElo}
                                 {loserResultElo < loserIncomingElo && (
-                                    <Text span c="red" fw={600}> ({loserResultElo - loserIncomingElo})</Text>
+                                    <Text span c="#ff5a5f" fw={600}> ({loserResultElo - loserIncomingElo})</Text>
                                 )}
                             </Text>
                         )}
-                    </Group>
+                    </div>
                 )}
             </Stack>
-        </Paper>
+        </Panel>
     );
 }

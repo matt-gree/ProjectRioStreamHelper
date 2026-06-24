@@ -1,8 +1,13 @@
 import { useCallback, useState } from 'react';
+import { X } from 'lucide-react';
+import { Button } from '../../components/ui/button';
+import { Panel } from '../../components/ui/panel';
+import { TextField } from '../../components/ui/text-field';
+import { Combobox } from '../../components/ui/combobox';
+import { Title } from '../../components/ui/primitives';
 import {
-    TextInput, Select, Button, Group, Stack, Paper, Text, Table,
-    ActionIcon, ScrollArea
-} from '@mantine/core';
+    Table, TableHeader, TableBody, TableHead, TableRow, TableCell,
+} from '../../components/ui/table';
 import { useStateStore } from '../../context/store';
 import { MSB_CHARACTERS } from '../../data/msb';
 
@@ -23,65 +28,40 @@ function PlayerRow({ index, onDelete }) {
     }, [basePath, setItem]);
 
     return (
-        <Table.Tr>
-            <Table.Td>
-                <TextInput
-                    size="xs"
-                    placeholder="Tag"
-                    value={name}
-                    onChange={e => set('name', e.currentTarget.value)}
-                />
-            </Table.Td>
-            <Table.Td>
-                <TextInput
-                    size="xs"
-                    placeholder="@handle"
-                    value={twitter}
-                    onChange={e => set('twitter', e.currentTarget.value)}
-                />
-            </Table.Td>
-            <Table.Td>
-                <TextInput
-                    size="xs"
-                    placeholder="US"
-                    value={country}
-                    onChange={e => set('country', e.currentTarget.value)}
-                    w={60}
-                />
-            </Table.Td>
-            <Table.Td>
-                <TextInput
-                    size="xs"
-                    placeholder="He/Him"
-                    value={pronoun}
-                    onChange={e => set('pronoun', e.currentTarget.value)}
-                    w={80}
-                />
-            </Table.Td>
-            <Table.Td>
-                <Select
-                    size="xs"
+        <TableRow>
+            <TableCell>
+                <TextField placeholder="Tag" value={name} onChange={e => set('name', e.currentTarget.value)} />
+            </TableCell>
+            <TableCell>
+                <TextField placeholder="@handle" value={twitter} onChange={e => set('twitter', e.currentTarget.value)} />
+            </TableCell>
+            <TableCell>
+                <TextField placeholder="US" value={country} onChange={e => set('country', e.currentTarget.value)} inputClassName="w-[60px]" />
+            </TableCell>
+            <TableCell>
+                <TextField placeholder="He/Him" value={pronoun} onChange={e => set('pronoun', e.currentTarget.value)} inputClassName="w-[80px]" />
+            </TableCell>
+            <TableCell>
+                <Combobox
                     placeholder="Main"
                     data={characterOptions}
-                    searchable
                     clearable
                     value={mainChar || null}
                     onChange={val => set('main_character', val ?? '')}
-                    w={150}
+                    className="w-[150px]"
                 />
-            </Table.Td>
-            <Table.Td>
-                <ActionIcon variant="subtle" color="red" size="sm" onClick={() => onDelete(index)}>
-                    <Text size="xs">X</Text>
-                </ActionIcon>
-            </Table.Td>
-        </Table.Tr>
+            </TableCell>
+            <TableCell>
+                <Button variant="ghost" size="icon-sm" className="text-destructive" onClick={() => onDelete(index)}>
+                    <X size={14} />
+                </Button>
+            </TableCell>
+        </TableRow>
     );
 }
 
 export default function PlayerList() {
     const [slotCount, setSlotCount] = useState(8);
-    const setItem = useStateStore(s => s.setItem);
     const deleteItem = useStateStore(s => s.deleteItem);
 
     const addSlot = useCallback(() => {
@@ -101,33 +81,29 @@ export default function PlayerList() {
     }
 
     return (
-        <Stack gap="md">
-            <Group justify="space-between">
-                <Text size="lg" fw={700}>Player List</Text>
-                <Button size="xs" onClick={addSlot}>
-                    + Add Player
-                </Button>
-            </Group>
+        <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+                <Title order={3}>Player List</Title>
+                <Button size="sm" onClick={addSlot}>+ Add Player</Button>
+            </div>
 
-            <Paper withBorder>
-                <ScrollArea>
-                    <Table striped highlightOnHover>
-                        <Table.Thead>
-                            <Table.Tr>
-                                <Table.Th>Name</Table.Th>
-                                <Table.Th>Twitter</Table.Th>
-                                <Table.Th>Country</Table.Th>
-                                <Table.Th>Pronoun</Table.Th>
-                                <Table.Th>Main</Table.Th>
-                                <Table.Th w={40}></Table.Th>
-                            </Table.Tr>
-                        </Table.Thead>
-                        <Table.Tbody>
-                            {slots}
-                        </Table.Tbody>
-                    </Table>
-                </ScrollArea>
-            </Paper>
-        </Stack>
+            <Panel title="Players" className="overflow-x-auto">
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>Name</TableHead>
+                            <TableHead>Twitter</TableHead>
+                            <TableHead>Country</TableHead>
+                            <TableHead>Pronoun</TableHead>
+                            <TableHead>Main</TableHead>
+                            <TableHead className="w-10"></TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {slots}
+                    </TableBody>
+                </Table>
+            </Panel>
+        </div>
     );
 }

@@ -1,8 +1,18 @@
 import { useState, useCallback, useMemo, memo, useRef, useEffect } from 'react';
+import { Stack, Text, Loader } from '../ui/primitives';
+import { Panel } from '../ui/panel';
+import { Button } from '../ui/button';
+import { Badge } from '../ui/badge';
+import { Input } from '../ui/input';
+import { NumberInput } from '../ui/number-input';
+import { Combobox } from '../ui/combobox';
+import { Switch } from '../ui/switch';
+import { Label } from '../ui/label';
+import { SimpleTooltip } from '../ui/simple-tooltip';
 import {
-    Paper, Stack, Group, Text, Button, Badge, Loader,
-    Table, TextInput, Tooltip, Switch, NumberInput, Select,
-} from '@mantine/core';
+    Table, TableHeader, TableBody, TableHead, TableRow, TableCell,
+} from '../ui/table';
+import { cn } from '../../lib/utils';
 import { useStateStore, useSettingsStore } from '../../context/store';
 import { useSocketSubscribe } from '../../context/socket';
 
@@ -184,90 +194,88 @@ export default memo(function LiveGameSelector({ scoreboardNumber }) {
             : 'No games match filter.';
 
     return (
-        <Paper shadow="xs" p="sm" withBorder>
+        <Panel className="p-3">
             <Stack gap="xs">
-                <Group gap="xs" justify="space-between">
-                    <Group gap="xs">
+                <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
                         <Text fw={600} size="sm">Live API Game</Text>
                         {games.length > 0 && (
-                            <Badge size="xs" variant="light">{filteredGames.length}</Badge>
+                            <Badge variant="secondary" className="text-[10px]">{filteredGames.length}</Badge>
                         )}
-                    </Group>
-                    <Group gap="xs">
-                        <NumberInput
-                            size="xs"
-                            min={5}
-                            max={300}
-                            step={5}
-                            value={pollInterval}
-                            onChange={handleIntervalChange}
-                            suffix="s"
-                            w={70}
-                            disabled={!autoPolling}
-                        />
-                        <Switch
-                            size="xs"
-                            label="Auto-poll"
-                            checked={autoPolling}
-                            onChange={e => handleToggleAutoPoll(e.currentTarget.checked)}
-                        />
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <div className="flex items-center">
+                            <NumberInput
+                                min={5}
+                                max={300}
+                                step={5}
+                                value={pollInterval}
+                                onChange={handleIntervalChange}
+                                disabled={!autoPolling}
+                                className="w-[70px]"
+                            />
+                            <span className="ml-0.5 text-xs text-muted-foreground">s</span>
+                        </div>
+                        <Label className="flex items-center gap-1.5 text-xs">
+                            <Switch
+                                checked={autoPolling}
+                                onCheckedChange={handleToggleAutoPoll}
+                            />
+                            Auto-poll
+                        </Label>
                         {autoPolling && secondsRemaining != null && (
-                            <Text size="xs" c="dimmed" w={30} ta="right">{secondsRemaining}s</Text>
+                            <Text size="xs" dimmed className="w-[30px] text-right">{secondsRemaining}s</Text>
                         )}
-                    </Group>
-                </Group>
+                    </div>
+                </div>
 
-                <Group gap="xs">
-                    <TextInput
-                        size="xs"
+                <div className="flex items-center gap-2">
+                    <Input
                         placeholder="Username"
                         value={filterUsername}
                         onChange={(e) => setFilterUsername(e.currentTarget.value)}
                         onKeyDown={(e) => { if (e.key === 'Enter') fetchGames(); }}
-                        style={{ flex: 1 }}
+                        className="flex-1"
                     />
-                    <TextInput
-                        size="xs"
+                    <Input
                         placeholder="Vs Username"
                         value={filterVsUsername}
                         onChange={(e) => setFilterVsUsername(e.currentTarget.value)}
                         onKeyDown={(e) => { if (e.key === 'Enter') fetchGames(); }}
-                        style={{ flex: 1 }}
+                        className="flex-1"
                     />
-                    <Select
-                        size="xs"
+                    <Combobox
                         placeholder="Game Mode"
                         data={gameModeOptions}
                         value={filterGameMode || null}
                         onChange={val => setFilterGameMode(val ?? '')}
-                        searchable
                         clearable
-                        style={{ flex: 1 }}
+                        className="flex-1"
                     />
                     {loading ? (
-                        <Button size="xs" onClick={handleCancelFetch} color="red" variant="light"
-                            leftSection={<Loader size={10} color="red" />}>
+                        <Button size="sm" variant="outline" className="border-destructive/40 text-destructive" onClick={handleCancelFetch}>
+                            <Loader size={10} />
                             Cancel
                         </Button>
                     ) : (
-                        <Button size="xs" onClick={fetchGames}>
+                        <Button size="sm" onClick={fetchGames}>
                             Refresh
                         </Button>
                     )}
-                </Group>
+                </div>
 
                 {filteredGames.length > 0 ? (
-                    <Table striped highlightOnHover withTableBorder withColumnBorders fontSize="xs">
-                        <Table.Thead>
-                            <Table.Tr>
-                                <Table.Th>Away</Table.Th>
-                                <Table.Th w={54}>Score</Table.Th>
-                                <Table.Th>Home</Table.Th>
-                                <Table.Th>Mode</Table.Th>
-                                <Table.Th w={70} />
-                            </Table.Tr>
-                        </Table.Thead>
-                        <Table.Tbody>
+                    <Table className="text-xs">
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Away</TableHead>
+                                <TableHead className="w-[54px]">Score</TableHead>
+                                <TableHead>Home</TableHead>
+                                <TableHead>Mode</TableHead>
+                                <TableHead className="w-[70px]" />
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
                             {filteredGames.map((game) => {
                                 const gid = game.game_id;
                                 const awayUser = game.away_user ?? game.entrants?.[0]?.[0]?.rioName ?? '';
@@ -280,45 +288,45 @@ export default memo(function LiveGameSelector({ scoreboardNumber }) {
                                 const isLoaded = gid === currentGameId;
 
                                 return (
-                                    <Table.Tr
+                                    <TableRow
                                         key={gid}
-                                        bg={isLoaded ? 'var(--mantine-color-teal-light)' : undefined}
+                                        className={cn(isLoaded && 'bg-[#14b8a6]/15')}
                                     >
-                                        <Table.Td>
+                                        <TableCell>
                                             <Text size="xs" fw={500}>{awayUser}</Text>
-                                            {awayCaptain && <Text size="xs" c="dimmed">{awayCaptain}</Text>}
-                                        </Table.Td>
-                                        <Table.Td ta="center">
-                                            <Text size="xs" fw={600}>{awayScore}–{homeScore}</Text>
-                                        </Table.Td>
-                                        <Table.Td>
+                                            {awayCaptain && <Text size="xs" dimmed>{awayCaptain}</Text>}
+                                        </TableCell>
+                                        <TableCell className="text-center">
+                                            <Text size="xs" fw={600} className="tabular-nums">{awayScore}–{homeScore}</Text>
+                                        </TableCell>
+                                        <TableCell>
                                             <Text size="xs" fw={500}>{homeUser}</Text>
-                                            {homeCaptain && <Text size="xs" c="dimmed">{homeCaptain}</Text>}
-                                        </Table.Td>
-                                        <Table.Td>
-                                            <Text size="xs" c="dimmed">{gameMode}</Text>
-                                        </Table.Td>
-                                        <Table.Td>
-                                            <Tooltip label={isLoaded ? 'Currently loaded' : 'Load this game'}>
+                                            {homeCaptain && <Text size="xs" dimmed>{homeCaptain}</Text>}
+                                        </TableCell>
+                                        <TableCell>
+                                            <Text size="xs" dimmed>{gameMode}</Text>
+                                        </TableCell>
+                                        <TableCell>
+                                            <SimpleTooltip label={isLoaded ? 'Currently loaded' : 'Load this game'}>
                                                 <Button
-                                                    size="compact-xs"
-                                                    variant={isLoaded ? 'filled' : 'light'}
-                                                    color={isLoaded ? 'teal' : undefined}
+                                                    size="xs"
+                                                    variant={isLoaded ? 'default' : 'secondary'}
+                                                    className={cn(isLoaded && 'bg-[#14b8a6] hover:bg-[#14b8a6]/90')}
                                                     onClick={() => handleLoad(gid)}
                                                 >
                                                     {isLoaded ? 'Loaded' : 'Load'}
                                                 </Button>
-                                            </Tooltip>
-                                        </Table.Td>
-                                    </Table.Tr>
+                                            </SimpleTooltip>
+                                        </TableCell>
+                                    </TableRow>
                                 );
                             })}
-                        </Table.Tbody>
+                        </TableBody>
                     </Table>
                 ) : (
-                    <Text size="xs" c="dimmed">{emptyMessage}</Text>
+                    <Text size="xs" dimmed>{emptyMessage}</Text>
                 )}
             </Stack>
-        </Paper>
+        </Panel>
     );
 });

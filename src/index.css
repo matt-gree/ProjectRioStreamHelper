@@ -1,0 +1,185 @@
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+/* ------------------------------------------------------------------ *
+ * Project Rio Design System — night arena theme.
+ * The app is dark-only; both :root and .dark resolve to the night
+ * palette so the UI never flashes light even before the dark class is
+ * applied to <html>.
+ * ------------------------------------------------------------------ */
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root,
+.dark {
+  /* shadcn semantic tokens mapped onto the Rio night scale */
+  --background: #07070b;            /* night-950 — page */
+  --foreground: #f5f5f8;            /* fog-100 */
+  --card: #0b0b12;                  /* night-900 — panels */
+  --card-foreground: #f5f5f8;
+  --popover: #0e0e17;              /* night-850 */
+  --popover-foreground: #f5f5f8;
+  --primary: #e60012;              /* rio-500 — brand accent */
+  --primary-foreground: #ffffff;
+  --secondary: #1a1a2e;            /* night-700 */
+  --secondary-foreground: #f5f5f8;
+  --muted: #10101a;                /* night-800 */
+  --muted-foreground: #8f8fa3;     /* fog-500 */
+  --accent: rgb(230 0 18 / 0.10);  /* faint Rio-red wash — hover/active surfaces */
+  --accent-foreground: #f5f5f8;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #1a1a2e;               /* night-700 hairline */
+  --input: #1a1a2e;
+  --ring: #ff1a2a;                 /* rio-400 focus */
+  --radius: 12px;
+}
+
+@theme inline {
+  /* Map shadcn semantic vars into Tailwind's color space */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* Rio night scale (direct utilities: bg-night-900 etc.) */
+  --color-night-950: #07070b;
+  --color-night-900: #0b0b12;
+  --color-night-850: #0e0e17;
+  --color-night-800: #10101a;
+  --color-night-700: #1a1a2e;
+  --color-night-600: #24243d;
+
+  /* Brand accents */
+  --color-rio-400: #ff1a2a;
+  --color-rio-500: #e60012;
+  --color-rio-600: #cc0010;
+  --color-star-gold: #f5bb00;
+  --color-emerald-rio: #22c55e;
+
+  /* Fog (text) */
+  --color-fog-100: #f5f5f8;
+  --color-fog-300: #c9c9d6;
+  --color-fog-500: #8f8fa3;
+
+  /* Typography */
+  --font-display: 'Rajdhani', sans-serif;
+  --font-body: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* Radii */
+  --radius-card: 12px;
+  --radius-input: 8px;
+  --radius-badge: 4px;
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-body);
+  }
+  /* Arena-light wash — faint red bleed from the top, gold from bottom,
+     fixed so it reads as ambient lighting on the night stage rather than
+     scrolling content. The brand's "night arena" mood. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      radial-gradient(120% 70% at 50% -10%, rgb(230 0 18 / 0.06), transparent 60%),
+      radial-gradient(120% 60% at 50% 110%, rgb(245 187 0 / 0.03), transparent 55%);
+  }
+}
+
+/* Faint Rio-red row wash on hover — the brand's signature table interaction. */
+.row-hover-red:hover {
+  background-color: rgb(230 0 18 / 0.06);
+}
+
+/* ------------------------------------------------------------------ *
+ * Rio utility classes
+ * ------------------------------------------------------------------ */
+
+/* Panel glow — signature hover bloom in Rio red */
+.panel-glow {
+  transition: border-color 150ms ease-out, box-shadow 150ms ease-out;
+}
+.panel-glow:hover {
+  border-color: rgb(230 0 18 / 0.4);
+  box-shadow: 0 0 24px rgb(230 0 18 / 0.12);
+}
+
+/* Angled clip-path for primary buttons — 8px diagonal cut on two corners */
+.btn-clip {
+  clip-path: polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%);
+}
+
+/* Tabular numerals for scores/stats */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* Display labels — Rajdhani uppercase, scoreboard styling */
+.label-display {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Field label — the Rio "label" treatment for form controls: small,
+   uppercase, tracked, quiet. Gives dense forms a broadcast-tool identity
+   instead of generic sentence-case labels. */
+.field-label {
+  font-size: 0.6875rem;      /* 11px */
+  line-height: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+/* Section eyebrow — kicker above a group of controls. */
+.eyebrow {
+  font-size: 0.625rem;       /* 10px */
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+/* Pixel-art sprites must never be smoothly scaled */
+.pixelated {
+  image-rendering: pixelated;
+}
+
+/* Live-game ping — pulsing red dot */
+@keyframes rio-ping {
+  0% { transform: scale(1); opacity: 0.6; }
+  75%, 100% { transform: scale(2.2); opacity: 0; }
+}
+.rio-ping {
+  animation: rio-ping 1.4s cubic-bezier(0, 0, 0.2, 1) infinite;
+}

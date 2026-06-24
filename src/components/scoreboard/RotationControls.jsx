@@ -1,11 +1,32 @@
 import { useState, useCallback, useEffect, useMemo, useRef, memo } from 'react';
+import { ChevronLeft, ChevronRight, X, Plus, Minus } from 'lucide-react';
+import { Stack, Text, Loader } from '../ui/primitives';
+import { Panel } from '../ui/panel';
+import { Button } from '../ui/button';
+import { Badge } from '../ui/badge';
+import { Input } from '../ui/input';
+import { NumberInput } from '../ui/number-input';
+import { SimpleSelect } from '../ui/simple-select';
+import { Combobox } from '../ui/combobox';
+import { MultiSelect } from '../ui/multi-select';
+import { Switch } from '../ui/switch';
+import { Label } from '../ui/label';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '../ui/tabs';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
+import { ScrollArea } from '../ui/scroll-area';
+import { SimpleTooltip } from '../ui/simple-tooltip';
 import {
-    Paper, Tabs, Stack, Group, Text, Button, ActionIcon, Badge, Loader,
-    NumberInput, Switch, Table, TextInput, Select,
-    MultiSelect, Tooltip, Modal, ScrollArea, CloseButton, Grid,
-} from '@mantine/core';
+    Table, TableHeader, TableBody, TableHead, TableRow, TableCell,
+} from '../ui/table';
+import { cn } from '../../lib/utils';
 import { useSocketSubscribe } from '../../context/socket';
 import { useSettingsStore } from '../../context/store';
+
+// Tailwind tint per pool-action color name (legacy Mantine color).
+const ACTION_TINT = {
+    gray: 'bg-secondary text-secondary-foreground',
+    teal: 'bg-[#14b8a6] text-black',
+};
 
 let searchSetIdCounter = 0;
 
@@ -122,99 +143,93 @@ const PoolPanel = memo(function PoolPanel({ title, color, games, actionLabel, on
     const pageRows = processed.slice(pageStart, pageStart + PAGE_SIZE);
 
     return (
-        <Stack gap="xs" h="100%">
-            <Group gap="xs" justify="space-between">
-                <Group gap="xs">
+        <Stack gap="xs" className="h-full">
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
                     <Text size="sm" fw={600}>{title}</Text>
-                    <Badge size="xs" color={color} variant="filled">{processed.length}</Badge>
-                </Group>
+                    <Badge className={cn('text-[10px]', ACTION_TINT[color] || ACTION_TINT.gray)}>{processed.length}</Badge>
+                </div>
                 <Button
-                    size="compact-xs"
-                    variant="light"
-                    color={color}
+                    size="xs"
+                    variant="secondary"
                     disabled={processed.length === 0}
                     onClick={() => onActionAll(processed.map(g => g.game_id))}
                 >
                     {actionLabel} All{processed.length !== games.length ? ' (filtered)' : ''}
                 </Button>
-            </Group>
+            </div>
 
             {/* Filter bar */}
-            <Stack gap={4}>
-                <Group gap="xs" grow>
-                    <TextInput
-                        size="xs"
+            <Stack gap="xs">
+                <div className="flex gap-2">
+                    <Input
                         placeholder="Username"
                         value={username}
                         onChange={e => { setUsername(e.currentTarget.value); setPage(1); }}
+                        className="flex-1"
                     />
-                    <Select
-                        size="xs"
+                    <Combobox
                         placeholder="Stadium"
                         data={stadiumOptions}
                         value={stadiumFilter}
                         onChange={val => { setStadiumFilter(val); setPage(1); }}
                         clearable
-                        searchable
+                        className="flex-1"
                     />
-                    <Select
-                        size="xs"
+                    <Combobox
                         placeholder="Game Mode"
                         data={modeOptions}
                         value={modeFilter}
                         onChange={val => { setModeFilter(val); setPage(1); }}
                         clearable
-                        searchable
+                        className="flex-1"
                     />
-                </Group>
-                <Group gap="xs">
-                    <Text size="xs" c="dimmed" style={{ whiteSpace: 'nowrap', alignSelf: 'center' }}>Date:</Text>
-                    <TextInput
+                </div>
+                <div className="flex items-center gap-2">
+                    <Text size="xs" dimmed className="whitespace-nowrap">Date:</Text>
+                    <Input
                         type="date"
-                        size="xs"
-                        style={{ flex: 1 }}
+                        className="flex-1"
                         value={dateFrom}
                         onChange={e => { setDateFrom(e.currentTarget.value); setPage(1); }}
                     />
-                    <Text size="xs" c="dimmed" style={{ alignSelf: 'center' }}>–</Text>
-                    <TextInput
+                    <Text size="xs" dimmed>–</Text>
+                    <Input
                         type="date"
-                        size="xs"
-                        style={{ flex: 1 }}
+                        className="flex-1"
                         value={dateTo}
                         onChange={e => { setDateTo(e.currentTarget.value); setPage(1); }}
                     />
-                </Group>
+                </div>
             </Stack>
 
-            <ScrollArea h={560} style={{ flex: 1 }}>
-                <Table striped highlightOnHover withTableBorder withColumnBorders fontSize="xs" style={{ minWidth: 520 }}>
-                    <Table.Thead style={{ position: 'sticky', top: 0, zIndex: 1, background: 'var(--mantine-color-body)' }}>
-                        <Table.Tr>
+            <ScrollArea className="h-[560px] flex-1">
+                <Table className="min-w-[520px] text-xs">
+                    <TableHeader className="sticky top-0 z-[1] bg-night-900">
+                        <TableRow>
                             {COLS.map(({ key, label, sortable, w }) => (
-                                <Table.Th key={key} w={w}>
-                                    <Group
-                                        gap={4}
-                                        style={{ cursor: sortable ? 'pointer' : 'default', userSelect: 'none' }}
+                                <TableHead key={key} style={{ width: w }}>
+                                    <span
+                                        className={cn('flex select-none items-center gap-1', sortable && 'cursor-pointer')}
                                         onClick={() => sortable && toggleSort(key)}
                                     >
-                                        <Text size="xs" fw={600}>{label}</Text>
+                                        <Text size="xs" fw={600} span>{label}</Text>
                                         {sort.col === key && (
-                                            <Text size="xs" c="dimmed">{sort.dir === 'asc' ? '↑' : '↓'}</Text>
+                                            <Text size="xs" dimmed span>{sort.dir === 'asc' ? '↑' : '↓'}</Text>
                                         )}
-                                    </Group>
-                                </Table.Th>
+                                    </span>
+                                </TableHead>
                             ))}
-                            <Table.Th w={80} />
-                        </Table.Tr>
-                    </Table.Thead>
-                    <Table.Tbody>
+                            <TableHead className="w-20" />
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
                         {pageRows.length === 0 ? (
-                            <Table.Tr>
-                                <Table.Td colSpan={7}>
-                                    <Text size="xs" c="dimmed" ta="center" py="sm">No games</Text>
-                                </Table.Td>
-                            </Table.Tr>
+                            <TableRow>
+                                <TableCell colSpan={7}>
+                                    <Text size="xs" dimmed ta="center" className="py-3">No games</Text>
+                                </TableCell>
+                            </TableRow>
                         ) : pageRows.map((game) => {
                             const gid = game.game_id;
                             const awayUser = game.away_user ?? game.entrants?.[0]?.[0]?.rioName ?? '';
@@ -226,62 +241,61 @@ const PoolPanel = memo(function PoolPanel({ title, color, games, actionLabel, on
                             const mode = gameMode(game);
 
                             return (
-                                <Table.Tr key={gid}>
-                                    <Table.Td>
+                                <TableRow key={gid}>
+                                    <TableCell>
                                         <Text size="xs" fw={500}>{awayUser}</Text>
-                                        {awayCaptain && <Text size="xs" c="dimmed">{awayCaptain}</Text>}
-                                    </Table.Td>
-                                    <Table.Td ta="center">
-                                        <Text size="xs" fw={600}>{awayScore}–{homeScore}</Text>
-                                    </Table.Td>
-                                    <Table.Td>
+                                        {awayCaptain && <Text size="xs" dimmed>{awayCaptain}</Text>}
+                                    </TableCell>
+                                    <TableCell className="text-center">
+                                        <Text size="xs" fw={600} className="tabular-nums">{awayScore}–{homeScore}</Text>
+                                    </TableCell>
+                                    <TableCell>
                                         <Text size="xs" fw={500}>{homeUser}</Text>
-                                        {homeCaptain && <Text size="xs" c="dimmed">{homeCaptain}</Text>}
-                                    </Table.Td>
-                                    <Table.Td>
+                                        {homeCaptain && <Text size="xs" dimmed>{homeCaptain}</Text>}
+                                    </TableCell>
+                                    <TableCell>
                                         <Text size="xs">{formatTimestamp(game.date_time_end)}</Text>
-                                    </Table.Td>
-                                    <Table.Td>
+                                    </TableCell>
+                                    <TableCell>
                                         <Text size="xs">{game.stadium ?? ''}</Text>
-                                    </Table.Td>
-                                    <Table.Td>
+                                    </TableCell>
+                                    <TableCell>
                                         <Text size="xs">{mode}</Text>
-                                    </Table.Td>
-                                    <Table.Td>
-                                        <Group gap={4} wrap="nowrap">
-                                            <Tooltip label="Load to scoreboard">
-                                                <Button size="compact-xs" variant="subtle" onClick={() => onAssign(gid)}>
+                                    </TableCell>
+                                    <TableCell>
+                                        <div className="flex flex-nowrap items-center gap-1">
+                                            <SimpleTooltip label="Load to scoreboard">
+                                                <Button size="xs" variant="ghost" onClick={() => onAssign(gid)}>
                                                     Load
                                                 </Button>
-                                            </Tooltip>
-                                            <Tooltip label={actionLabel}>
-                                                <ActionIcon
-                                                    size="sm"
-                                                    variant="light"
-                                                    color={color}
+                                            </SimpleTooltip>
+                                            <SimpleTooltip label={actionLabel}>
+                                                <Button
+                                                    size="icon-sm"
+                                                    variant="secondary"
                                                     onClick={() => onAction(gid)}
                                                 >
-                                                    <Text size="xs" lh={1}>{actionLabel === 'Add' ? '+' : '−'}</Text>
-                                                </ActionIcon>
-                                            </Tooltip>
-                                        </Group>
-                                    </Table.Td>
-                                </Table.Tr>
+                                                    {actionLabel === 'Add' ? <Plus size={14} /> : <Minus size={14} />}
+                                                </Button>
+                                            </SimpleTooltip>
+                                        </div>
+                                    </TableCell>
+                                </TableRow>
                             );
                         })}
-                    </Table.Tbody>
+                    </TableBody>
                 </Table>
             </ScrollArea>
             {totalPages > 1 && (
-                <Group gap="xs" justify="center">
-                    <ActionIcon size="sm" variant="subtle" disabled={safePage === 1} onClick={() => setPage(p => p - 1)}>
-                        <Text size="xs" lh={1}>‹</Text>
-                    </ActionIcon>
-                    <Text size="xs" c="dimmed">{safePage} / {totalPages}</Text>
-                    <ActionIcon size="sm" variant="subtle" disabled={safePage === totalPages} onClick={() => setPage(p => p + 1)}>
-                        <Text size="xs" lh={1}>›</Text>
-                    </ActionIcon>
-                </Group>
+                <div className="flex items-center justify-center gap-2">
+                    <Button size="icon-sm" variant="ghost" disabled={safePage === 1} onClick={() => setPage(p => p - 1)}>
+                        <ChevronLeft size={14} />
+                    </Button>
+                    <Text size="xs" dimmed className="tabular-nums">{safePage} / {totalPages}</Text>
+                    <Button size="icon-sm" variant="ghost" disabled={safePage === totalPages} onClick={() => setPage(p => p + 1)}>
+                        <ChevronRight size={14} />
+                    </Button>
+                </div>
             )}
         </Stack>
     );
@@ -714,64 +728,55 @@ export default memo(function RotationControls({ scoreboardNumber }) {
     return (
         <>
             {/* ── Inline panel ── */}
-            <Paper shadow="xs" p="sm" withBorder>
+            <Panel className="p-3">
                 <Stack gap="xs">
-                    <Group gap="xs">
+                    <div className="flex items-center gap-2">
                         <Text fw={600} size="sm">Game Pool & Rotation</Text>
                         {rotationStatus.active && (
-                            <Badge size="xs" color="teal" variant="filled">
+                            <Badge className="bg-[#14b8a6] text-[10px] text-black">
                                 {rotationStatus.current_index + 1}/{rotationStatus.total_games}
                                 {secondsRemaining != null && ` · ${secondsRemaining}s`}
                             </Badge>
                         )}
-                    </Group>
+                    </div>
 
                     {/* Search filters */}
-                    <Stack gap={4}>
-                        <Group gap="xs">
-                            <TextInput
-                                size="xs"
+                    <Stack gap="xs">
+                        <div className="flex gap-2">
+                            <Input
                                 placeholder="Username"
                                 value={draftUsername}
                                 onChange={(e) => setDraftUsername(e.currentTarget.value)}
                                 onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }}
-                                style={{ flex: 1 }}
+                                className="flex-1"
                             />
-                            <TextInput
-                                size="xs"
+                            <Input
                                 placeholder="Vs Username"
                                 value={draftVsUsername}
                                 onChange={(e) => setDraftVsUsername(e.currentTarget.value)}
                                 onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }}
-                                style={{ flex: 1 }}
+                                className="flex-1"
                             />
-                        </Group>
-                        <Group gap="xs" align="flex-end">
+                        </div>
+                        <div className="flex items-end gap-2">
                             <MultiSelect
-                                size="xs"
                                 placeholder="Tags / game modes"
                                 data={tagOptions}
                                 value={draftTags}
                                 onChange={(val) => { setDraftTags(val); setDraftTagSearch(''); }}
-                                searchValue={draftTagSearch}
-                                onSearchChange={setDraftTagSearch}
-                                searchable
-                                clearable
-                                style={{ flex: 1 }}
-                                maxDropdownHeight={200}
+                                className="flex-1"
                             />
                             <NumberInput
-                                size="xs"
                                 placeholder="Limit"
                                 min={1}
                                 max={500}
                                 value={draftLimit}
                                 onChange={setDraftLimit}
-                                w={72}
+                                className="w-[72px]"
                             />
                             {loadingSearch ? (
-                                <Button size="xs" onClick={handleCancelSearch} color="red" variant="light"
-                                    leftSection={<Loader size={10} color="red" />}>
+                                <Button size="xs" variant="outline" className="border-destructive/40 text-destructive" onClick={handleCancelSearch}>
+                                    <Loader size={10} />
                                     Cancel
                                 </Button>
                             ) : (
@@ -779,158 +784,143 @@ export default memo(function RotationControls({ scoreboardNumber }) {
                                     Search
                                 </Button>
                             )}
-                        </Group>
+                        </div>
                     </Stack>
 
                     {/* Rotation settings + auto-poll */}
-                    <Group gap="sm" align="flex-end">
-                        <NumberInput
-                            label="Interval (sec)"
-                            size="xs"
-                            w={95}
-                            min={5}
-                            max={600}
-                            value={rotationConfig.interval}
-                            onChange={(val) => setRotationConfig(c => ({ ...c, interval: val || 30 }))}
-                        />
-                        <Select
-                            label="Pool"
-                            size="xs"
-                            w={110}
-                            data={[
-                                { value: 'both', label: 'Both' },
-                                { value: 'ongoing', label: 'Live Only' },
-                                { value: 'completed', label: 'Completed' },
-                            ]}
-                            value={rotationConfig.source_pool}
-                            onChange={(val) => setRotationConfig(c => ({ ...c, source_pool: val }))}
-                        />
-                        <Group gap="xs" align="flex-end" style={{ alignSelf: 'flex-end' }}>
-                            <Switch
-                                size="xs"
-                                label="Auto-poll"
-                                checked={autoPolling}
-                                onChange={(e) => handleSetAutoPoll(e.currentTarget.checked)}
-                                style={{ paddingBottom: 4 }}
+                    <div className="flex items-end gap-3">
+                        <div className="flex w-[95px] flex-col gap-1">
+                            <Label className="text-xs">Interval (sec)</Label>
+                            <NumberInput
+                                min={5}
+                                max={600}
+                                value={rotationConfig.interval}
+                                onChange={(val) => setRotationConfig(c => ({ ...c, interval: val || 30 }))}
                             />
+                        </div>
+                        <div className="flex w-[110px] flex-col gap-1">
+                            <Label className="text-xs">Pool</Label>
+                            <SimpleSelect
+                                data={[
+                                    { value: 'both', label: 'Both' },
+                                    { value: 'ongoing', label: 'Live Only' },
+                                    { value: 'completed', label: 'Completed' },
+                                ]}
+                                value={rotationConfig.source_pool}
+                                onChange={(val) => setRotationConfig(c => ({ ...c, source_pool: val }))}
+                            />
+                        </div>
+                        <div className="flex items-center gap-2 pb-1">
+                            <Label className="flex items-center gap-1.5 text-xs">
+                                <Switch checked={autoPolling} onCheckedChange={handleSetAutoPoll} />
+                                Auto-poll
+                            </Label>
                             {autoPolling && (
-                                <NumberInput
-                                    size="xs"
-                                    w={72}
-                                    min={10}
-                                    max={300}
-                                    value={autoPollInterval}
-                                    onChange={(val) => handleSetAutoPoll(true, val || 60)}
-                                    suffix="s"
-                                />
+                                <div className="flex items-center">
+                                    <NumberInput
+                                        min={10}
+                                        max={300}
+                                        value={autoPollInterval}
+                                        onChange={(val) => handleSetAutoPoll(true, val || 60)}
+                                        className="w-[72px]"
+                                    />
+                                    <span className="ml-0.5 text-xs text-muted-foreground">s</span>
+                                </div>
                             )}
-                        </Group>
-                    </Group>
+                        </div>
+                    </div>
 
-                    <Group gap="xs">
+                    <div className="flex items-center gap-2">
                         {!rotationStatus.active ? (
-                            <Button size="xs" color="teal" onClick={handleStartRotation}
+                            <Button size="xs" className="bg-[#14b8a6] text-black hover:bg-[#14b8a6]/90" onClick={handleStartRotation}
                                 disabled={selectedGameIds.size === 0}>
                                 Start ({selectedGameIds.size})
                             </Button>
                         ) : (
-                            <Button size="xs" color="red" variant="light" onClick={handleStopRotation}>
+                            <Button size="xs" variant="outline" className="border-destructive/40 text-destructive" onClick={handleStopRotation}>
                                 Stop
                             </Button>
                         )}
                         {rotationStatus.active && (
                             <>
-                                <ActionIcon size="sm" variant="light" onClick={handlePrevGame}>
-                                    <Text size="xs" lh={1}>&lt;</Text>
-                                </ActionIcon>
-                                <Text size="xs">
+                                <Button size="icon-sm" variant="secondary" onClick={handlePrevGame}>
+                                    <ChevronLeft size={14} />
+                                </Button>
+                                <Text size="xs" className="tabular-nums">
                                     {rotationStatus.current_index + 1}/{rotationStatus.total_games}
                                 </Text>
-                                <ActionIcon size="sm" variant="light" onClick={handleNextGame}>
-                                    <Text size="xs" lh={1}>&gt;</Text>
-                                </ActionIcon>
+                                <Button size="icon-sm" variant="secondary" onClick={handleNextGame}>
+                                    <ChevronRight size={14} />
+                                </Button>
                                 {secondsRemaining != null && (
-                                    <Text size="xs" c="dimmed">{secondsRemaining}s</Text>
+                                    <Text size="xs" dimmed>{secondsRemaining}s</Text>
                                 )}
                             </>
                         )}
-                    </Group>
+                    </div>
 
                     {searchCount > 0 && (
-                        <Group gap="xs" justify="space-between" align="center">
-                            <Text size="xs" c="dimmed">
+                        <div className="flex items-center justify-between">
+                            <Text size="xs" dimmed>
                                 {selectedGameIds.size} in rotation · {searchCount} search{searchCount !== 1 ? 'es' : ''}
                             </Text>
-                            <Button size="xs" variant="subtle" onClick={() => setModalOpen(true)}>
+                            <Button size="xs" variant="ghost" onClick={() => setModalOpen(true)}>
                                 Manage
                             </Button>
-                        </Group>
+                        </div>
                     )}
                 </Stack>
-            </Paper>
+            </Panel>
 
             {/* ── Game Pool Manager Modal ── */}
-            <Modal
-                opened={modalOpen}
-                onClose={() => setModalOpen(false)}
-                title={
-                    <Group gap="xs">
-                        <Text fw={600}>Game Pool Manager</Text>
-                        <Badge size="sm" color="teal" variant="light">
-                            {selectedGameIds.size} in rotation
-                        </Badge>
-                    </Group>
-                }
-                size="100%"
-                scrollAreaComponent={ScrollArea.Autosize}
-            >
-                <Tabs value={activeTab} onChange={setActiveTab} variant="pills" size="xs">
-                    <Tabs.List mb="md">
-                        <Tabs.Tab value="completed">
-                            Completed Games ({allPoolGames.length})
-                        </Tabs.Tab>
-                        <Tabs.Tab value="ongoing">
-                            Live Games ({ongoingGames.length})
-                        </Tabs.Tab>
-                    </Tabs.List>
+            <Dialog open={modalOpen} onOpenChange={(o) => { if (!o) setModalOpen(false); }}>
+                <DialogContent className="max-h-[90vh] max-w-[96vw] overflow-y-auto sm:max-w-[96vw]">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <span className="label-display">Game Pool Manager</span>
+                            <Badge className="bg-[#14b8a6]/20 text-[#5eead4]">
+                                {selectedGameIds.size} in rotation
+                            </Badge>
+                        </DialogTitle>
+                    </DialogHeader>
+                    <Tabs value={activeTab} onValueChange={setActiveTab}>
+                        <TabsList className="mb-4">
+                            <TabsTrigger value="completed">
+                                Completed Games ({allPoolGames.length})
+                            </TabsTrigger>
+                            <TabsTrigger value="ongoing">
+                                Live Games ({ongoingGames.length})
+                            </TabsTrigger>
+                        </TabsList>
 
-                    {/* ── Completed tab ── */}
-                    <Tabs.Panel value="completed">
-                        <Stack gap="sm">
-                            {/* Search set summary */}
-                            {searchSets.length > 0 && (
-                                <Group gap="xs" wrap="wrap">
-                                    <Text size="xs" c="dimmed" style={{ alignSelf: 'center' }}>Searches:</Text>
-                                    {searchSets.map(set => {
-                                        const inRotation = set.games.filter(g => selectedGameIds.has(g.game_id)).length;
-                                        return (
-                                            <Badge
-                                                key={set.id}
-                                                size="sm"
-                                                variant="light"
-                                                color={set.isAutoPoll ? 'blue' : 'gray'}
-                                                rightSection={
-                                                    <CloseButton
-                                                        size="xs"
-                                                        onClick={() => handleRemoveSearchSet(set.id)}
-                                                        style={{ marginLeft: 2 }}
-                                                    />
-                                                }
-                                            >
-                                                {set.label} · {inRotation}/{set.games.length}
-                                            </Badge>
-                                        );
-                                    })}
-                                </Group>
-                            )}
+                        {/* ── Completed tab ── */}
+                        <TabsContent value="completed">
+                            <Stack gap="sm">
+                                {/* Search set summary */}
+                                {searchSets.length > 0 && (
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <Text size="xs" dimmed>Searches:</Text>
+                                        {searchSets.map(set => {
+                                            const inRotation = set.games.filter(g => selectedGameIds.has(g.game_id)).length;
+                                            return (
+                                                <Badge
+                                                    key={set.id}
+                                                    className={cn('gap-1', set.isAutoPoll ? 'bg-[#339af0]/20 text-[#74c0fc]' : 'bg-secondary text-secondary-foreground')}
+                                                >
+                                                    {set.label} · {inRotation}/{set.games.length}
+                                                    <X className="size-3 cursor-pointer" onClick={() => handleRemoveSearchSet(set.id)} />
+                                                </Badge>
+                                            );
+                                        })}
+                                    </div>
+                                )}
 
-                            {allPoolGames.length === 0 ? (
-                                <Text size="sm" c="dimmed" ta="center" py="xl">
-                                    No searches yet. Use the search form to find games.
-                                </Text>
-                            ) : (
-                                <Grid gutter="md">
-                                    <Grid.Col span={6}>
+                                {allPoolGames.length === 0 ? (
+                                    <Text size="sm" dimmed ta="center" className="py-8">
+                                        No searches yet. Use the search form to find games.
+                                    </Text>
+                                ) : (
+                                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                                         <PoolPanel
                                             title="Available"
                                             color="gray"
@@ -940,8 +930,6 @@ export default memo(function RotationControls({ scoreboardNumber }) {
                                             onActionAll={addAllToRotation}
                                             onAssign={handleAssignGame}
                                         />
-                                    </Grid.Col>
-                                    <Grid.Col span={6}>
                                         <PoolPanel
                                             title="In Rotation"
                                             color="teal"
@@ -951,50 +939,47 @@ export default memo(function RotationControls({ scoreboardNumber }) {
                                             onActionAll={removeAllFromRotation}
                                             onAssign={handleAssignGame}
                                         />
-                                    </Grid.Col>
-                                </Grid>
-                            )}
-                        </Stack>
-                    </Tabs.Panel>
+                                    </div>
+                                )}
+                            </Stack>
+                        </TabsContent>
 
-                    {/* ── Live games tab ── */}
-                    <Tabs.Panel value="ongoing">
-                        <Stack gap="sm">
-                            <Group gap="sm" align="center">
-                                {loadingOngoing ? (
-                                    <Button size="xs" color="red" variant="light" onClick={handleCancelOngoing}
-                                        w="fit-content" leftSection={<Loader size={10} color="red" />}>
-                                        Cancel
-                                    </Button>
+                        {/* ── Live games tab ── */}
+                        <TabsContent value="ongoing">
+                            <Stack gap="sm">
+                                <div className="flex items-center gap-3">
+                                    {loadingOngoing ? (
+                                        <Button size="xs" variant="outline" className="border-destructive/40 text-destructive" onClick={handleCancelOngoing}>
+                                            <Loader size={10} />
+                                            Cancel
+                                        </Button>
+                                    ) : (
+                                        <Button size="xs" variant="secondary" onClick={fetchOngoing}>
+                                            Refresh Live Games
+                                        </Button>
+                                    )}
+                                    <Label className="flex items-center gap-1.5 text-xs">
+                                        <Switch checked={liveAutoPolling} onCheckedChange={handleSetLiveAutoPoll} />
+                                        Auto-poll
+                                    </Label>
+                                    {liveAutoPolling && (
+                                        <div className="flex items-center">
+                                            <NumberInput
+                                                min={5}
+                                                max={300}
+                                                step={5}
+                                                value={liveAutoPollInterval}
+                                                onChange={(val) => handleSetLiveAutoPoll(true, Number(val) || 10)}
+                                                className="w-[72px]"
+                                            />
+                                            <span className="ml-0.5 text-xs text-muted-foreground">s</span>
+                                        </div>
+                                    )}
+                                </div>
+                                {ongoingGames.length === 0 ? (
+                                    <Text size="xs" dimmed>No live games found. Click refresh to check.</Text>
                                 ) : (
-                                    <Button size="xs" variant="light" onClick={fetchOngoing} w="fit-content">
-                                        Refresh Live Games
-                                    </Button>
-                                )}
-                                <Switch
-                                    size="xs"
-                                    label="Auto-poll"
-                                    checked={liveAutoPolling}
-                                    onChange={(e) => handleSetLiveAutoPoll(e.currentTarget.checked)}
-                                />
-                                {liveAutoPolling && (
-                                    <NumberInput
-                                        size="xs"
-                                        w={72}
-                                        min={5}
-                                        max={300}
-                                        step={5}
-                                        value={liveAutoPollInterval}
-                                        onChange={(val) => handleSetLiveAutoPoll(true, Number(val) || 10)}
-                                        suffix="s"
-                                    />
-                                )}
-                            </Group>
-                            {ongoingGames.length === 0 ? (
-                                <Text size="xs" c="dimmed">No live games found. Click refresh to check.</Text>
-                            ) : (
-                                <Grid gutter="md">
-                                    <Grid.Col span={6}>
+                                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                                         <PoolPanel
                                             title="Available"
                                             color="gray"
@@ -1004,8 +989,6 @@ export default memo(function RotationControls({ scoreboardNumber }) {
                                             onActionAll={addAllLiveToRotation}
                                             onAssign={handleAssignGame}
                                         />
-                                    </Grid.Col>
-                                    <Grid.Col span={6}>
                                         <PoolPanel
                                             title="In Rotation"
                                             color="teal"
@@ -1015,13 +998,13 @@ export default memo(function RotationControls({ scoreboardNumber }) {
                                             onActionAll={removeAllLiveFromRotation}
                                             onAssign={handleAssignGame}
                                         />
-                                    </Grid.Col>
-                                </Grid>
-                            )}
-                        </Stack>
-                    </Tabs.Panel>
-                </Tabs>
-            </Modal>
+                                    </div>
+                                )}
+                            </Stack>
+                        </TabsContent>
+                    </Tabs>
+                </DialogContent>
+            </Dialog>
         </>
     );
 });

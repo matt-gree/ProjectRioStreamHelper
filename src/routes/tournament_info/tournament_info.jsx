@@ -1,9 +1,17 @@
 import { useCallback, useState, useEffect, useMemo } from 'react';
+import { Stack, Text, Title, Divider } from '../../components/ui/primitives';
+import { Panel } from '../../components/ui/panel';
+import { TextField } from '../../components/ui/text-field';
+import { Button } from '../../components/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '../../components/ui/popover';
+import { Alert, AlertDescription } from '../../components/ui/alert';
+import { ScrollArea } from '../../components/ui/scroll-area';
+import { SimplePagination } from '../../components/ui/simple-pagination';
 import {
-    TextInput, NumberInput, Stack, Paper, Text, Grid, Group, Divider, Button,
-    Popover, Alert, Table, Pagination, ScrollArea, UnstyledButton,
-} from '@mantine/core';
-import { notifications } from '@mantine/notifications';
+    Table, TableHeader, TableBody, TableHead, TableRow, TableCell,
+} from '../../components/ui/table';
+import { Loader } from '../../components/ui/primitives';
+import { notifications } from '../../lib/notify';
 import { FormattedMessage } from 'react-intl';
 import { useStateStore, useBracketStore } from '../../context/store';
 import useTournament from '../../hooks/useTournament';
@@ -140,228 +148,152 @@ export default function TournamentInfo() {
     }, [sggUrl, loadEvent]);
 
     return (
-        <Grid gutter="md">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-12">
             {/* Left column — Tournament form */}
-            <Grid.Col span={bracket_link ? 4 : 12}>
+            <div className={bracket_link ? 'md:col-span-4' : 'md:col-span-12'}>
                 <Stack gap="md">
-                    <Group justify="space-between">
-                        <Text size="lg" fw={700}>Competition Info</Text>
-                        <Popover opened={sggOpen} onChange={setSggOpen} width={400} position="bottom-end">
-                            <Popover.Target>
-                                <Button variant="outline" size="xs" onClick={() => setSggOpen(o => !o)}>
-                                    <FormattedMessage
-                                        id="tsh.set_tournament"
-                                        defaultMessage="Set Tournament"
-                                    />
+                    <div className="flex items-center justify-between">
+                        <Title order={3}>Competition Info</Title>
+                        <Popover open={sggOpen} onOpenChange={setSggOpen}>
+                            <PopoverTrigger asChild>
+                                <Button variant="outline" size="sm">
+                                    <FormattedMessage id="tsh.set_tournament" defaultMessage="Set Tournament" />
                                 </Button>
-                            </Popover.Target>
-                            <Popover.Dropdown>
+                            </PopoverTrigger>
+                            <PopoverContent align="end" className="w-[400px]">
                                 <Stack gap="xs">
-                                    <TextInput
+                                    <TextField
                                         label="Tournament URL"
                                         placeholder="https://start.gg/... or https://challonge.com/..."
-                                        size="sm"
                                         value={sggUrl}
                                         onChange={e => setSggUrl(e.currentTarget.value)}
                                         onKeyDown={e => e.key === 'Enter' && handleSetTournament()}
                                     />
                                     {sggError && (
-                                        <Alert variant="light" color="red" p="xs">
-                                            <Text size="xs">{sggError}</Text>
+                                        <Alert variant="destructive" className="p-2">
+                                            <AlertDescription className="text-xs">{sggError}</AlertDescription>
                                         </Alert>
                                     )}
-                                    <Button
-                                        size="xs"
-                                        onClick={handleSetTournament}
-                                        loading={sggLoading}
-                                        fullWidth
-                                    >
+                                    <Button size="sm" className="w-full" onClick={handleSetTournament} disabled={sggLoading}>
+                                        {sggLoading && <Loader size={12} />}
                                         Load Tournament
                                     </Button>
                                 </Stack>
-                            </Popover.Dropdown>
+                            </PopoverContent>
                         </Popover>
-                    </Group>
-                    <Paper withBorder p="md">
-                        <Stack gap="sm">
-                            <Grid gutter="sm">
-                                <Grid.Col span={8}>
-                                    <TextInput
-                                        label="Competition Name"
-                                        placeholder="Enter competition name"
-                                        size="sm"
-                                        value={name}
-                                        onChange={e => set('name', e.currentTarget.value)}
-                                    />
-                                </Grid.Col>
-                                <Grid.Col span={4}>
-                                    <TextInput
-                                        label="Abbreviation"
-                                        placeholder="Short name"
-                                        size="sm"
-                                        value={abbreviation}
-                                        onChange={e => set('abbreviation', e.currentTarget.value)}
-                                    />
-                                </Grid.Col>
-                            </Grid>
+                    </div>
+                    <Panel title="Details">
+                        <Stack gap="sm" className="p-4">
+                            <div className="grid grid-cols-12 gap-2">
+                                <div className="col-span-8">
+                                    <TextField label="Competition Name" placeholder="Enter competition name" value={name} onChange={e => set('name', e.currentTarget.value)} />
+                                </div>
+                                <div className="col-span-4">
+                                    <TextField label="Abbreviation" placeholder="Short name" value={abbreviation} onChange={e => set('abbreviation', e.currentTarget.value)} />
+                                </div>
+                            </div>
 
-                            <TextInput
-                                label="Competition Phase"
-                                placeholder="e.g. Season 9 Week 2, Top 8"
-                                size="sm"
-                                value={phase}
-                                onChange={e => set('phase', e.currentTarget.value)}
-                            />
+                            <TextField label="Competition Phase" placeholder="e.g. Season 9 Week 2, Top 8" value={phase} onChange={e => set('phase', e.currentTarget.value)} />
 
-                            <Grid gutter="sm">
-                                <Grid.Col span={8}>
-                                    <TextInput
-                                        label="Location"
-                                        placeholder="City, State"
-                                        size="sm"
-                                        value={location}
-                                        onChange={e => set('location', e.currentTarget.value)}
-                                    />
-                                </Grid.Col>
-                                <Grid.Col span={4}>
-                                    <TextInput
-                                        label="Date"
-                                        placeholder="YYYY-MM-DD"
-                                        size="sm"
-                                        value={date}
-                                        onChange={e => set('date', e.currentTarget.value)}
-                                    />
-                                </Grid.Col>
-                            </Grid>
+                            <div className="grid grid-cols-12 gap-2">
+                                <div className="col-span-8">
+                                    <TextField label="Location" placeholder="City, State" value={location} onChange={e => set('location', e.currentTarget.value)} />
+                                </div>
+                                <div className="col-span-4">
+                                    <TextField label="Date" placeholder="YYYY-MM-DD" value={date} onChange={e => set('date', e.currentTarget.value)} />
+                                </div>
+                            </div>
 
                             <Divider />
 
-                            <Grid gutter="sm">
-                                <Grid.Col span={4}>
-                                    <TextInput
-                                        label="Entrants"
-                                        placeholder="0"
-                                        size="sm"
-                                        value={String(entrants)}
-                                        onChange={e => set('entrants', e.currentTarget.value)}
-                                    />
-                                </Grid.Col>
-                                <Grid.Col span={8}>
-                                    <TextInput
-                                        label="Prize Pool"
-                                        placeholder="$0"
-                                        size="sm"
-                                        value={prize_pool}
-                                        onChange={e => set('prize_pool', e.currentTarget.value)}
-                                    />
-                                </Grid.Col>
-                            </Grid>
+                            <div className="grid grid-cols-12 gap-2">
+                                <div className="col-span-4">
+                                    <TextField label="Entrants" placeholder="0" value={String(entrants)} onChange={e => set('entrants', e.currentTarget.value)} />
+                                </div>
+                                <div className="col-span-8">
+                                    <TextField label="Prize Pool" placeholder="$0" value={prize_pool} onChange={e => set('prize_pool', e.currentTarget.value)} />
+                                </div>
+                            </div>
 
-                            <TextInput
-                                label="Bracket Link"
-                                placeholder="https://start.gg/... or https://challonge.com/..."
-                                size="sm"
-                                value={bracket_link}
-                                onChange={e => set('bracket_link', e.currentTarget.value)}
-                            />
+                            <TextField label="Bracket Link" placeholder="https://start.gg/... or https://challonge.com/..." value={bracket_link} onChange={e => set('bracket_link', e.currentTarget.value)} />
 
-                            <Divider label="Organizers" labelPosition="center" />
+                            <Divider label="Organizers" />
 
                             {orgFields.map((org, i) => (
-                                <Grid gutter="xs" key={i}>
-                                    <Grid.Col span={4}>
-                                        <TextInput
-                                            label={i === 0 ? "Organizer" : undefined}
-                                            placeholder={`Organizer ${i + 1}`}
-                                            size="xs"
-                                            value={org.name}
-                                            onChange={e => set(`organizer_${i}_name`, e.currentTarget.value)}
-                                        />
-                                    </Grid.Col>
-                                    <Grid.Col span={4}>
-                                        <TextInput
-                                            label={i === 0 ? "Twitter" : undefined}
-                                            placeholder="@handle"
-                                            size="xs"
-                                            value={org.twitter}
-                                            onChange={e => set(`organizer_${i}_twitter`, e.currentTarget.value)}
-                                        />
-                                    </Grid.Col>
-                                    <Grid.Col span={4}>
-                                        <TextInput
-                                            label={i === 0 ? "Pronoun" : undefined}
-                                            placeholder="Pronoun"
-                                            size="xs"
-                                            value={org.pronoun}
-                                            onChange={e => set(`organizer_${i}_pronoun`, e.currentTarget.value)}
-                                        />
-                                    </Grid.Col>
-                                </Grid>
+                                <div className="grid grid-cols-12 gap-2" key={i}>
+                                    <div className="col-span-4">
+                                        <TextField label={i === 0 ? "Organizer" : undefined} placeholder={`Organizer ${i + 1}`} value={org.name} onChange={e => set(`organizer_${i}_name`, e.currentTarget.value)} />
+                                    </div>
+                                    <div className="col-span-4">
+                                        <TextField label={i === 0 ? "Twitter" : undefined} placeholder="@handle" value={org.twitter} onChange={e => set(`organizer_${i}_twitter`, e.currentTarget.value)} />
+                                    </div>
+                                    <div className="col-span-4">
+                                        <TextField label={i === 0 ? "Pronoun" : undefined} placeholder="Pronoun" value={org.pronoun} onChange={e => set(`organizer_${i}_pronoun`, e.currentTarget.value)} />
+                                    </div>
+                                </div>
                             ))}
                         </Stack>
-                    </Paper>
+                    </Panel>
                 </Stack>
-            </Grid.Col>
+            </div>
 
             {/* Right column — Entrants list */}
             {bracket_link && (
-                <Grid.Col span={8}>
-                    <Paper withBorder p="md">
-                        <Stack gap="sm">
-                            <Text fw={600} size="sm">Entrants</Text>
-                            <ScrollArea h="calc(100vh - 200px)" offsetScrollbars>
+                <div className="md:col-span-8">
+                    <Panel title="Entrants">
+                        <Stack gap="sm" className="p-4">
+                            <ScrollArea style={{ height: 'calc(100vh - 200px)' }}>
                                 {entrantsList.length > 0 ? (
-                                    <Table striped highlightOnHover withTableBorder style={{ tableLayout: 'auto' }}>
-                                        <Table.Thead>
-                                            <Table.Tr>
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
                                                 {ENTRANT_COLUMNS.map(col => (
-                                                    <Table.Th key={col.field} style={{ whiteSpace: 'nowrap' }}>
-                                                        <UnstyledButton onClick={() => handleSort(col.field)}>
-                                                            <Group gap={4} wrap="nowrap">
-                                                                <Text size="xs" fw={600}>{col.label}</Text>
-                                                                <Text size="xs" c="dimmed">
-                                                                    {sortField === col.field ? (sortDir === 'asc' ? '\u25B2' : '\u25BC') : '\u25BC'}
+                                                    <TableHead key={col.field} className="whitespace-nowrap">
+                                                        <button type="button" onClick={() => handleSort(col.field)}>
+                                                            <span className="flex flex-nowrap items-center gap-1">
+                                                                <Text size="xs" fw={600} span>{col.label}</Text>
+                                                                <Text size="xs" dimmed span>
+                                                                    {sortField === col.field ? (sortDir === 'asc' ? '▲' : '▼') : '▼'}
                                                                 </Text>
-                                                            </Group>
-                                                        </UnstyledButton>
-                                                    </Table.Th>
+                                                            </span>
+                                                        </button>
+                                                    </TableHead>
                                                 ))}
-                                            </Table.Tr>
-                                        </Table.Thead>
-                                        <Table.Tbody>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
                                             {sortedEntrants.map(e => (
-                                                <Table.Tr key={e.id}>
+                                                <TableRow key={e.id}>
                                                     {ENTRANT_COLUMNS.map(col => (
-                                                        <Table.Td key={col.field}>
+                                                        <TableCell key={col.field}>
                                                             <Text size="xs" truncate>
                                                                 {getPlayerField(e, col.field) || '—'}
                                                             </Text>
-                                                        </Table.Td>
+                                                        </TableCell>
                                                     ))}
-                                                </Table.Tr>
+                                                </TableRow>
                                             ))}
-                                        </Table.Tbody>
+                                        </TableBody>
                                     </Table>
                                 ) : (
-                                    <Text size="sm" c="dimmed">
+                                    <Text size="sm" dimmed>
                                         {entrantsLoading ? 'Loading...' : 'No entrants found.'}
                                     </Text>
                                 )}
                             </ScrollArea>
                             {entrantsTotalPages > 1 && (
-                                <Group justify="center">
-                                    <Pagination
+                                <div className="flex justify-center">
+                                    <SimplePagination
                                         total={entrantsTotalPages}
                                         value={entrantsPage}
                                         onChange={(page) => handleFetchEntrants(page)}
-                                        size="sm"
                                     />
-                                </Group>
+                                </div>
                             )}
                         </Stack>
-                    </Paper>
-                </Grid.Col>
+                    </Panel>
+                </div>
             )}
-        </Grid>
+        </div>
     );
 }

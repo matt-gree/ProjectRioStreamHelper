@@ -1,17 +1,15 @@
 import { useCallback, useMemo, useState } from 'react';
-import {
-    NumberInput, Select, Stack, Grid, Paper, Text, Group, ActionIcon,
-    Divider, Tooltip, SegmentedControl, UnstyledButton,
-} from '@mantine/core';
+import { ArrowLeft } from 'lucide-react';
+import { Stack, Text, Divider } from '../ui/primitives';
+import { Panel } from '../ui/panel';
+import { NumberInput } from '../ui/number-input';
+import { Combobox } from '../ui/combobox';
+import { Button } from '../ui/button';
+import { SegmentedControl } from '../ui/segmented-control';
+import { SimpleTooltip } from '../ui/simple-tooltip';
+import { Label } from '../ui/label';
 import { useStateStore } from '../../context/store';
 import { useAssetUrls } from '../../lib/assets';
-
-const makeRenderCharOption = (charIconUrl) => ({ option }) => (
-    <Group gap="xs" wrap="nowrap">
-        <img src={charIconUrl(option.value)} alt="" width={20} height={20} style={{ objectFit: 'contain' }} />
-        <span>{option.label}</span>
-    </Group>
-);
 
 import {
     BATTING_RAW_KEYS, PITCHING_RAW_KEYS,
@@ -22,17 +20,6 @@ import {
 
 /**
  * Editable stat sheet for a single character, shown in place of the roster.
- *
- * Props:
- *   scoreboardNumber, teamNumber — scoreboard / team identifiers
- *   charIndex — 0-based roster index
- *   charName — display name of the character
- *   onBack — callback to return to roster view
- *   characterOptions — array of { value, label } for the character Select
- *   onCharacterChange — callback(val) to change which character is in this slot
- *   isCaptain — whether this character is currently the captain
- *   onSetCaptain — callback to set this character as captain
- *   sourceType — 'manual' | 'hud' | 'api_game'
  */
 function StarIcon({ active, superstarUrl }) {
     if (active) {
@@ -64,7 +51,11 @@ export default function CharacterStatEditor({
     const urls = useAssetUrls();
     const charIconUrl = urls.charIcon;
     const superstarUrl = urls.gameIcon('superstar.png');
-    const renderCharOption = useMemo(() => makeRenderCharOption(charIconUrl), [charIconUrl]);
+    // Carry each character's icon into the selector + dropdown.
+    const charOptionsWithIcons = useMemo(
+        () => (characterOptions ?? []).map(o => ({ ...o, image: charIconUrl(o.value) })),
+        [characterOptions, charIconUrl]
+    );
 
     // State path depends on which scope is active
     const statPath = scope === 'web' ? 'api' : 'current_game';
@@ -89,74 +80,54 @@ export default function CharacterStatEditor({
     const derivedPitching = useMemo(() => derivePitching(pitching), [pitching]);
 
     return (
-        <Stack gap="xs" mt="sm">
+        <Stack gap="xs" className="mt-3">
             {/* Header with back button, slot indicator + character selector */}
-            <Group gap="xs">
-                <ActionIcon variant="subtle" size="sm" onClick={onBack} title="Back to roster">
-                    <Text size="xs" lh={1}>&larr;</Text>
-                </ActionIcon>
-                <Text size="xs" c="dimmed" fw={600}>#{charIndex + 1}</Text>
+            <div className="flex items-center gap-2">
+                <Button variant="ghost" size="icon-sm" onClick={onBack} title="Back to roster">
+                    <ArrowLeft size={14} />
+                </Button>
+                <Text size="xs" dimmed fw={600}>#{charIndex + 1}</Text>
                 {characterOptions && onCharacterChange ? (
-                    <Select
-                        data={characterOptions}
-                        value={charName || null}
-                        onChange={onCharacterChange}
-                        placeholder={`Slot ${charIndex + 1}`}
-                        size="xs"
-                        searchable
-                        clearable
-                        style={{ flex: 1 }}
-                        renderOption={renderCharOption}
-                        leftSection={charName ? <img src={charIconUrl(charName)} alt="" width={16} height={16} style={{ objectFit: 'contain' }} /> : undefined}
-                        leftSectionPointerEvents="none"
-                    />
+                    <div className="flex-1">
+                        <Combobox
+                            data={charOptionsWithIcons}
+                            value={charName || null}
+                            onChange={onCharacterChange}
+                            placeholder={`Slot ${charIndex + 1}`}
+                            clearable
+                        />
+                    </div>
                 ) : (
                     <Text size="sm" fw={700}>{charName || `Slot ${charIndex + 1}`}</Text>
                 )}
                 {onToggleSuperstar && (
-                    <Tooltip label={isSuperstar ? 'Superstar' : 'Set superstar'} position="right" withArrow>
-                        <UnstyledButton
+                    <SimpleTooltip label={isSuperstar ? 'Superstar' : 'Set superstar'} side="right">
+                        <button
+                            type="button"
                             onClick={onToggleSuperstar}
-                            style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                width: 22,
-                                height: 22,
-                                borderRadius: 4,
-                                border: '1px solid var(--mantine-color-default-border)',
-                                color: isSuperstar ? '#f59f00' : 'var(--mantine-color-dimmed)',
-                                transition: 'color 150ms',
-                            }}
+                            className="flex size-[22px] items-center justify-center rounded-[4px] border transition-colors"
+                            style={{ color: isSuperstar ? '#f59f00' : 'var(--color-muted-foreground)' }}
                         >
                             <StarIcon active={isSuperstar} superstarUrl={superstarUrl} />
-                        </UnstyledButton>
-                    </Tooltip>
+                        </button>
+                    </SimpleTooltip>
                 )}
                 {onSetCaptain && (
-                    <Tooltip label={isCaptain ? 'Captain' : 'Set captain'} position="right" withArrow>
-                        <UnstyledButton
+                    <SimpleTooltip label={isCaptain ? 'Captain' : 'Set captain'} side="right">
+                        <button
+                            type="button"
                             onClick={onSetCaptain}
+                            className="flex size-[22px] items-center justify-center rounded-[4px] border text-[11px] font-bold transition-colors"
                             style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                width: 22,
-                                height: 22,
-                                borderRadius: 4,
-                                border: '1px solid var(--mantine-color-default-border)',
-                                backgroundColor: isCaptain ? 'var(--mantine-color-yellow-5)' : undefined,
-                                color: isCaptain ? 'var(--mantine-color-dark-9)' : 'var(--mantine-color-dimmed)',
-                                fontWeight: 700,
-                                fontSize: 11,
-                                transition: 'background-color 150ms, color 150ms',
+                                backgroundColor: isCaptain ? '#f5bb00' : undefined,
+                                color: isCaptain ? '#0a0a0a' : 'var(--color-muted-foreground)',
                             }}
                         >
                             C
-                        </UnstyledButton>
-                    </Tooltip>
+                        </button>
+                    </SimpleTooltip>
                 )}
-            </Group>
+            </div>
 
             {/* Scope toggle */}
             <SegmentedControl
@@ -170,66 +141,64 @@ export default function CharacterStatEditor({
             />
 
             {isReadOnly && (
-                <Text size="xs" c="dimmed" fs="italic">
+                <Text size="xs" dimmed className="italic">
                     Read-only during HUD game (stats update automatically)
                 </Text>
             )}
 
             {/* ---- Batting ---- */}
-            <Divider label="Batting" labelPosition="center" />
-            <Grid gutter={4}>
+            <Divider label="Batting" />
+            <div className="grid grid-cols-6 gap-1">
                 {BATTING_RAW_KEYS.map(key => (
-                    <Grid.Col span={2} key={key}>
+                    <div key={key} className="flex flex-col gap-0.5">
+                        <Label className="text-[10px] text-muted-foreground">{BATTING_LABELS[key]}</Label>
                         <NumberInput
-                            label={BATTING_LABELS[key]}
                             value={batting[key] ?? 0}
                             onChange={val => setBatting(key, val)}
                             min={0}
-                            size="xs"
                             disabled={isReadOnly}
-                            styles={{ label: { fontSize: 10 } }}
+                            className="h-7"
                         />
-                    </Grid.Col>
+                    </div>
                 ))}
-            </Grid>
+            </div>
 
             {/* Derived batting (read-only) */}
-            <Group gap="xs" wrap="wrap">
+            <div className="flex flex-wrap gap-2">
                 {Object.entries(DERIVED_BATTING_LABELS).map(([key, label]) => (
-                    <Paper key={key} withBorder px={6} py={2}>
-                        <Text size="xs" c="dimmed" lh={1}>{label}</Text>
-                        <Text size="xs" fw={600} lh={1.2}>{derivedBatting[key]}</Text>
-                    </Paper>
+                    <Panel key={key} glow={false} className="px-1.5 py-0.5">
+                        <Text size="xs" dimmed className="leading-none">{label}</Text>
+                        <Text size="xs" fw={600} className="leading-tight tabular-nums">{derivedBatting[key]}</Text>
+                    </Panel>
                 ))}
-            </Group>
+            </div>
 
             {/* ---- Pitching ---- */}
-            <Divider label="Pitching" labelPosition="center" />
-            <Grid gutter={4}>
+            <Divider label="Pitching" />
+            <div className="grid grid-cols-6 gap-1">
                 {PITCHING_RAW_KEYS.map(key => (
-                    <Grid.Col span={2} key={key}>
+                    <div key={key} className="flex flex-col gap-0.5">
+                        <Label className="text-[10px] text-muted-foreground">{PITCHING_LABELS[key]}</Label>
                         <NumberInput
-                            label={PITCHING_LABELS[key]}
                             value={pitching[key] ?? 0}
                             onChange={val => setPitching(key, val)}
                             min={0}
-                            size="xs"
                             disabled={isReadOnly}
-                            styles={{ label: { fontSize: 10 } }}
+                            className="h-7"
                         />
-                    </Grid.Col>
+                    </div>
                 ))}
-            </Grid>
+            </div>
 
             {/* Derived pitching (read-only) */}
-            <Group gap="xs" wrap="wrap">
+            <div className="flex flex-wrap gap-2">
                 {Object.entries(DERIVED_PITCHING_LABELS).map(([key, label]) => (
-                    <Paper key={key} withBorder px={6} py={2}>
-                        <Text size="xs" c="dimmed" lh={1}>{label}</Text>
-                        <Text size="xs" fw={600} lh={1.2}>{derivedPitching[key]}</Text>
-                    </Paper>
+                    <Panel key={key} glow={false} className="px-1.5 py-0.5">
+                        <Text size="xs" dimmed className="leading-none">{label}</Text>
+                        <Text size="xs" fw={600} className="leading-tight tabular-nums">{derivedPitching[key]}</Text>
+                    </Panel>
                 ))}
-            </Group>
+            </div>
         </Stack>
     );
 }
