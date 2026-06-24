@@ -37,15 +37,23 @@ const mapItem = (it) => ({
     isPrsh: false,
 });
 
-// A browser source is "fed by PRSH" when its URL points at the app's /layout/
-// mount. This holds across single- and dual-machine setups (the host/port can
-// be anything) and ignores cams, game capture, audio, and third-party browser
-// sources — the rail should only show PRSH's own overlay elements.
-function isPrshUrl(url) {
+// A browser source is "fed by PRSH" when it's one of the app's overlays:
+//   1. served from the app's /layout/ mount (host/port can be anything, so
+//      this holds in single- and dual-machine setups), OR
+//   2. the gc-overlay controller display — a PRSH-managed subprocess on its own
+//      port (controller_overlay.port). The Layouts → Controller tab hands out
+//      its direct URL (http://localhost:8069/?port=N), which has no /layout/
+//      path, so we match it by port instead.
+// Everything else (cams, game capture, audio, third-party browser sources) is
+// ignored — the rail should only show PRSH's own overlay elements.
+function isPrshUrl(url, gcPort) {
     if (!url) return false;
     try {
         const u = new URL(url);
-        return /^https?:$/.test(u.protocol) && u.pathname.startsWith('/layout/');
+        if (!/^https?:$/.test(u.protocol)) return false;
+        if (u.pathname.startsWith('/layout/')) return true;
+        if (gcPort && u.port === String(gcPort)) return true;
+        return false;
     } catch {
         return false;
     }
@@ -139,6 +147,7 @@ async function refreshScene(sceneName, gen) {
     if (!obs || !sceneName || gen !== generation) return;
     try {
         const { sceneItems } = await obs.call('GetSceneItemList', { sceneName });
+        const gcPort = Number(useSettingsStore.getState()?.controller_overlay?.port) || null;
         // Enrich browser sources with their URL so we can tell which are
         // fed by PRSH. Scenes are small, so the per-source call is cheap.
         const enriched = await Promise.all(sceneItems.map(async (it) => {
@@ -147,7 +156,7 @@ async function refreshScene(sceneName, gen) {
                 try {
                     const { inputSettings } = await obs.call('GetInputSettings', { inputName: it.sourceName });
                     base.url = inputSettings?.url || null;
-                    base.isPrsh = isPrshUrl(base.url);
+                    base.isPrsh = isPrshUrl(base.url, gcPort);
                 } catch {
                     // Input may have been removed between calls.
                 }
