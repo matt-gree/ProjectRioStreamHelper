@@ -204,7 +204,9 @@ bower_components
 .lock-wscript
 
 # Dependency directories
-node_modules/
+# No trailing slash so a `node_modules` symlink (used to share deps into a
+# git worktree) is ignored too, not just a real directory.
+node_modules
 jspm_packages/
 
 # Snowpack dependency directory (https://snowpack.dev/)
