@@ -98,6 +98,39 @@ export const useObsStore = create((set) => ({
         await obs.call('SetStudioModeEnabled', { studioModeEnabled: enabled });
     },
 
+    // Create a PRSH overlay as a browser source in OBS and drop it into a scene
+    // (the program scene by default). Input names are globally unique in OBS, so
+    // we suffix on collision rather than fail. The resulting SceneItemCreated
+    // event refreshes the scene mirror, so binding badges update on their own.
+    addBrowserSource: async ({ inputName, url, width, height, sceneName }) => {
+        if (!obs) throw new Error('Not connected to OBS');
+        const scene = sceneName || useObsStore.getState().programScene;
+        if (!scene) throw new Error('No active program scene in OBS');
+
+        const taken = new Set();
+        try {
+            const { inputs } = await obs.call('GetInputList');
+            for (const i of inputs) taken.add(i.inputName);
+        } catch { /* best-effort; CreateInput still guards uniqueness */ }
+
+        const base = (inputName || 'PRSH Overlay').trim();
+        let name = base;
+        for (let n = 2; taken.has(name); n++) name = `${base} ${n}`;
+
+        await obs.call('CreateInput', {
+            sceneName: scene,
+            inputName: name,
+            inputKind: 'browser_source',
+            inputSettings: {
+                url,
+                width: Math.round(width) || 1920,
+                height: Math.round(height) || 1080,
+            },
+            sceneItemEnabled: true,
+        });
+        return { inputName: name, sceneName: scene };
+    },
+
     connect: async () => {
         const s = useSettingsStore.getState();
         const host = s?.obs?.host || '127.0.0.1';

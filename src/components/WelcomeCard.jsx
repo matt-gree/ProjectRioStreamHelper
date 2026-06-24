@@ -185,7 +185,7 @@ export default function WelcomeCard() {
                                     : 'Not found yet. Open Settings → Project Rio to set the path.'}
                             </ChecklistRow>
                             <ChecklistRow done={false} title="Add OBS browser sources">
-                                Browse the <Anchor href="#/layouts" onClick={handleDismiss} style={{ color: '#ffb3b8' }}>Layouts tab</Anchor> to copy URLs for scoreboards, brackets, and more.
+                                Open the <Anchor href="#/layouts" onClick={handleDismiss} style={{ color: '#ffb3b8' }}>Setup tab</Anchor> to copy URLs — or add sources straight to OBS — for scoreboards, brackets, and more.
                             </ChecklistRow>
                             <ChecklistRow done={challongeConfigured} title="Tournament integration (optional)">
                                 Load a bracket from Start.gg (public) or Challonge (API key in Settings).

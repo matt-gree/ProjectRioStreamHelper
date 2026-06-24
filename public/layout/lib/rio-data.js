@@ -145,7 +145,30 @@
     const charIndex = (rosterIdx != null && rosterIdx >= 0)
       ? rosterIdx
       : findCharIndex(state, sb, team, charName);
-    if (charIndex < 0) return null;
+    return buildStatsLine(state, sb, team, charName, charIndex, role);
+  }
+
+  /**
+   * Stats for an explicitly chosen roster character — the producer "fed"
+   * content path. Unlike getStatsLine, this ignores who is currently
+   * batting/pitching; `team` + `charIndex` come from the producer's pick and
+   * `role` ('batting' | 'pitching') selects which stat set to show.
+   * Returns null if the slot is empty.
+   */
+  function getStatsLineForChar(state, sb, team, charIndex, role = 'batting') {
+    if (charIndex == null || charIndex < 0) return null;
+    const charName =
+      deepGet(state, `score.${sb}.player.${team}.character.${charIndex}.name`) ||
+      deepGet(state, `score.${sb}.stats.${team}.character.${charIndex}.name`) || '';
+    if (!charName) return null;
+    return buildStatsLine(state, sb, team, charName, charIndex, role);
+  }
+
+  // Shared builder for both the auto (current batter/pitcher) and fed
+  // (producer-chosen character) stats lines. `charName`/`charIndex`/`role`
+  // are already resolved by the caller.
+  function buildStatsLine(state, sb, team, charName, charIndex, role) {
+    if (!charName || charIndex == null || charIndex < 0) return null;
 
     const statsObj = deepGet(state, `score.${sb}.stats.${team}.character.${charIndex}`);
     const b = statsObj?.batting ?? {};
@@ -198,5 +221,6 @@
     findCharIndex,
     getRosterSlots,
     getStatsLine,
+    getStatsLineForChar,
   };
 })();

@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<!--
+  Shared stats overlay — the "fed content" target for the Production page's
+  Stats element. Unlike scoreboard1/stats.html (which auto-follows the current
+  batter), this renders the character the producer PICKS, read live from
+  `production.feed.stats` in State: { scoreboard, team, charIndex, role }.
+  When nothing is fed (no selection / different scoreboard) it renders empty.
+  Shares the 'stats' design settings so it themes identically to stats.html.
+-->
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="overlay-settings" content="accentColor, cardBg, borderRadius, borderColor, borderWidth, fontFamily, cardShadow, textShadow, statValueColor, subtextColor, transitionType" />
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+
+    body {
+      overflow: visible;
+      margin: 0;
+      width: 325px;
+      height: 120px;
+      background: transparent;
+      font-family: var(--font-family, 'Inter', sans-serif);
+      text-shadow: var(--text-shadow, none);
+    }
+
+    .stats-bar {
+      width: 325px;
+      transform-origin: top left;
+      box-sizing: border-box;
+      background: var(--card-bg, rgba(20, 20, 30, 0.92));
+      border: var(--border-width, 1px) solid var(--border-color, rgba(255, 255, 255, 0.08));
+      border-radius: var(--border-radius, 12px);
+      padding: 4px 6px;  /* ← adjust this to control top/bottom padding everywhere */
+      color: var(--text-primary, #fff);
+      box-shadow: var(--card-box-shadow, none);
+      opacity: 1;
+      transition: opacity 0.3s ease;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .top-row {
+      display: flex;
+      flex-direction: row;
+      align-items: flex-start;
+    }
+    .stats-inner {
+      display: flex;
+      flex-direction: column;
+    }
+    .stats-inner.content-out {
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+    @keyframes contentIn {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+    .stats-inner.content-in {
+      animation: contentIn 0.25s ease forwards;
+    }
+    @keyframes statValueFlash {
+      0%   { color: var(--stat-value-color, var(--text-primary, #fff)); }
+      35%  { color: var(--accent-color, #f59e0b); }
+      100% { color: var(--stat-value-color, var(--text-primary, #fff)); }
+    }
+    .stat-value.stat-changed {
+      animation: statValueFlash 0.6s ease forwards;
+    }
+
+    .hidden { display: none !important; }
+
+    /* Character icon — sized to match the stats row height */
+    .char-icon-wrap {
+      flex-shrink: 0;
+      display: flex;
+      align-items: flex-start;
+    }
+    .char-icon-wrap img {
+      height: 40px;
+      width: auto;
+      object-fit: contain;
+      border-radius: 4px;
+    }
+
+    /* Stats row takes remaining width in the top row */
+    .stats-content {
+      flex: 1;
+      min-width: 0;
+      padding-left: 12px;
+      padding-right: 8px;
+    }
+
+    .batting-line {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--stat-subtext-color, rgb(155, 155, 155));
+      white-space: nowrap;
+      overflow: visible;
+      text-align: center;
+      padding-top: 4px;
+      border-top: 2px solid var(--border-color, rgb(255, 255, 255));
+      margin-top: 4px;
+    }
+    .batting-line span {
+      color: var(--stat-subtext-color, rgb(155, 155, 155));
+    }
+
+    /* Stats row */
+    .stats-row {
+      display: flex;
+      justify-content: space-between;
+      width: 100%;
+    }
+    .stat {
+      display: flex;
+      flex-direction: column;
+      align-items: left;
+    }
+    .stat-value {
+      font-size: 20px;
+      font-weight: 700;
+      line-height: 1.2;
+      white-space: nowrap;
+      color: var(--stat-value-color, var(--text-primary, #fff));
+    }
+    .stat-label {
+      font-size: 12px;
+      font-weight: 400;
+      color: var(--stat-subtext-color, rgb(155, 155, 155));
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      line-height: 1.2;
+    }
+  </style>
+</head>
+<body>
+  <div id="scale-wrapper"><div class="stats-bar hidden" id="stats-bar"></div></div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="/layout/lib/overlay-base.js"></script>
+  <script src="/layout/lib/rio-data.js"></script>
+  <script>
+    const REF_W = 325, REF_H = 120;
+    document.body.dataset.refW = REF_W;
+    document.body.dataset.refH = REF_H;
+    function autoScale() {
+      const el = document.getElementById('scale-wrapper');
+      // In preview mode, the parent ScaledIframe owns scaling — keep native size.
+      if (OverlayBase.PREVIEW_MODE) {
+        document.body.style.width = REF_W + 'px';
+        document.body.style.height = REF_H + 'px';
+        el.style.transform = '';
+        return;
+      }
+      const needsScale = Math.abs(window.innerWidth - REF_W) > 2 || Math.abs(window.innerHeight - REF_H) > 2;
+      if (needsScale) {
+        const scale = Math.min(window.innerWidth / REF_W, window.innerHeight / REF_H);
+        document.body.style.width = window.innerWidth + 'px';
+        document.body.style.height = window.innerHeight + 'px';
+        el.style.transform = `scale(${scale})`;
+        el.style.transformOrigin = 'top left';
+      } else {
+        document.body.style.width = REF_W + 'px';
+        document.body.style.height = REF_H + 'px';
+        el.style.transform = '';
+      }
+    }
+    window.addEventListener('resize', autoScale);
+    autoScale();
+
+    const params = new URLSearchParams(window.location.search);
+    const SCOREBOARD = parseInt(params.get('scoreboard')) || 1;
+    // Team + character come from the producer's pick (production.feed.stats),
+    // not the URL — this is a fed shared source, not a per-team template.
+    const { deepGet, state, applyDesignSettings } = OverlayBase;
+
+    let prevCharName = '';
+    let prevStats = null;
+
+    // Compute the text-shadow value directly from settings.
+    // Reads live from OverlayBase.settings so it's always current.
+    function getTextShadow() {
+      const { deepGet: g, settings } = OverlayBase;
+      if (!g(settings, 'overlays.global.textShadowEnabled', false)) return '';
+      const blur  = g(settings, 'overlays.stats.textShadowBlur', null) ?? g(settings, 'overlays.global.textShadowBlur', 4);
+      const color = g(settings, 'overlays.global.textShadowColor', 'rgba(0,0,0,0.8)');
+      return `0px 0px ${blur}px ${color}`;
+    }
+
+    // Apply text-shadow directly on every text element after any DOM update.
+    // Direct DOM manipulation avoids all CSS inheritance / overflow:hidden issues.
+    function applyTextShadow() {
+      const shadow = getTextShadow();
+      document.querySelectorAll('.stat-value, .stat-label, .batting-line').forEach(el => {
+        el.style.textShadow = shadow;
+      });
+    }
+
+    function getStatsMap(bar) {
+      const map = {};
+      bar.querySelectorAll('.stat[data-label]').forEach(el => {
+        const valEl = el.querySelector('.stat-value');
+        if (valEl) map[el.dataset.label] = valEl.textContent;
+      });
+      return map;
+    }
+
+    function flashChangedStats(bar, oldStats) {
+      if (!oldStats) return;
+      bar.querySelectorAll('.stat[data-label]').forEach(el => {
+        const valEl = el.querySelector('.stat-value');
+        if (!valEl) return;
+        if (el.dataset.label in oldStats && oldStats[el.dataset.label] !== valEl.textContent) {
+          valEl.classList.remove('stat-changed');
+          void valEl.offsetWidth;
+          valEl.classList.add('stat-changed');
+        }
+      });
+    }
+
+    // Does the existing DOM match the shape of `info` closely enough that we
+    // can update text/values in place instead of rebuilding? Rebuilding mid-
+    // animation is what caused the card to "pop" after the batter-change
+    // dissolve — every subsequent HUD event was destroying the still-fading
+    // DOM and replacing it with a fresh, fully-opaque copy.
+    function canUpdateInPlace(bar, info) {
+      if (bar.classList.contains('hidden')) return false;
+      if (!bar.querySelector('.stats-inner')) return false;
+      const labels = Array.from(bar.querySelectorAll('.stat[data-label]'))
+        .map(el => el.dataset.label);
+      const newLabels = info.stats.map(s => s.label);
+      if (labels.length !== newLabels.length) return false;
+      for (let i = 0; i < labels.length; i++) {
+        if (labels[i] !== newLabels[i]) return false;
+      }
+      const hasLine = !!bar.querySelector('.batting-line');
+      const wantsLine = !!(info.gameLine || info.bottomLabel);
+      return hasLine === wantsLine;
+    }
+
+    // Update only the parts of the existing DOM whose values changed. Leaves
+    // every other node (and any in-progress CSS animation) untouched.
+    function updateStatsInPlace(bar, info) {
+      const img = bar.querySelector('.char-icon-wrap img');
+      if (img && !img.src.endsWith(info.charIconUrl)) {
+        img.src = info.charIconUrl;
+      }
+      bar.querySelectorAll('.stat[data-label]').forEach(el => {
+        const next = info.stats.find(s => s.label === el.dataset.label);
+        if (!next) return;
+        const valEl = el.querySelector('.stat-value');
+        const nextText = String(next.value);
+        if (valEl && valEl.textContent !== nextText) {
+          valEl.textContent = nextText;
+        }
+      });
+      const line = bar.querySelector('.batting-line');
+      if (line) {
+        if (info.gameLine) {
+          // Structure: <span>{label}: </span>{gameLine text}
+          let span = line.querySelector('span');
+          if (!span) {
+            line.textContent = '';
+            span = document.createElement('span');
+            line.appendChild(span);
+          }
+          const labelText = info.bottomLabel + ': ';
+          if (span.textContent !== labelText) span.textContent = labelText;
+          // Replace everything after the span with the new gameLine text
+          while (line.childNodes.length > 1) line.removeChild(line.lastChild);
+          line.appendChild(document.createTextNode(info.gameLine));
+        } else if (info.bottomLabel) {
+          if (line.textContent !== info.bottomLabel) line.textContent = info.bottomLabel;
+        }
+      }
+    }
+
+    function buildContent(info, animate = true) {
+      const statsHtml = info.stats.map(st =>
+        `<span class="stat" data-label="${st.label}"><span class="stat-value">${st.value}</span><span class="stat-label">${st.label}</span></span>`
+      ).join('');
+
+      let html = `<div class="stats-inner${animate ? ' content-in' : ''}">`;
+      html += `<div class="top-row">`;
+      html += `<div class="char-icon-wrap"><img src="${info.charIconUrl}" onerror="this.style.display='none'" /></div>`;
+      html += `<div class="stats-content"><div class="stats-row">${statsHtml}</div></div>`;
+      html += `</div>`;
+      if (info.gameLine) {
+        html += `<div class="batting-line"><span>${info.bottomLabel}: </span>${info.gameLine}</div>`;
+      } else if (info.bottomLabel) {
+        html += `<div class="batting-line">${info.bottomLabel}</div>`;
+      }
+      html += `</div>`;
+      return html;
+    }
+
+    function render() {
+      applyDesignSettings('stats');
+      const bar = document.getElementById('stats-bar');
+
+      // Read the producer's fed selection. Only render it if it targets this
+      // overlay's scoreboard (a missing scoreboard in the selection = "this one").
+      const sel = deepGet(state, 'production.feed.stats', null);
+      const info = (sel && (sel.scoreboard == null || Number(sel.scoreboard) === SCOREBOARD))
+        ? RioData.getStatsLineForChar(state, SCOREBOARD, Number(sel.team) || 1, Number(sel.charIndex), sel.role || 'batting')
+        : null;
+      if (!info) {
+        bar.classList.add('hidden');
+        prevCharName = '';
+        return;
+      }
+
+      const { deepGet: g, settings } = OverlayBase;
+      const useFade = (g(settings, 'overlays.stats.transitionType', 'fade') === 'fade');
+
+      const changed = info.charName !== prevCharName;
+      prevCharName = info.charName;
+
+      if (changed && useFade && !bar.classList.contains('hidden')) {
+        prevStats = null;
+        const inner = bar.querySelector('.stats-inner');
+        if (inner) {
+          inner.classList.remove('content-in');
+          inner.classList.add('content-out');
+          setTimeout(() => {
+            bar.innerHTML = buildContent(info);
+            applyTextShadow();
+            prevStats = getStatsMap(bar);
+          }, 200);
+        } else {
+          bar.innerHTML = buildContent(info);
+          applyTextShadow();
+          prevStats = getStatsMap(bar);
+        }
+      } else {
+        const oldStats = changed ? null : prevStats;
+        // In-place update path: do NOT rebuild innerHTML when the only thing
+        // changing is stat values. Rebuilding here used to destroy the DOM
+        // mid-fade-in from a recent batter change, producing a visible pop.
+        if (canUpdateInPlace(bar, info)) {
+          updateStatsInPlace(bar, info);
+          if (useFade) flashChangedStats(bar, oldStats);
+        } else {
+          bar.innerHTML = buildContent(info, false);
+          bar.classList.remove('hidden');
+          applyTextShadow();
+          if (useFade) flashChangedStats(bar, oldStats);
+        }
+        prevStats = getStatsMap(bar);
+      }
+    }
+
+    /* In preview mode, prime `state.score.${SCOREBOARD}` from the snapshot
+       and skip the live state fetches/socket so server state can't race in. */
+    async function boot() {
+      if (OverlayBase.PREVIEW_MODE) {
+        try {
+          const resp = await fetch(`${OverlayBase.BASE_URL}/layout/preview/scoreboard_sample.json`);
+          const data = resp.ok ? await resp.json() : null;
+          if (data) OverlayBase.deepSet(state, `score.${SCOREBOARD}`, data);
+        } catch { /* ignore */ }
+        // Prime a fed selection so preview shows a representative card.
+        OverlayBase.deepSet(state, 'production.feed.stats',
+          { scoreboard: SCOREBOARD, team: 1, charIndex: 0, role: 'batting' });
+      }
+      OverlayBase.init({
+        render,
+        fetchSettings: true,
+        shouldRenderSettings: (key) => key.startsWith('overlays.') || key.startsWith('scoreboards.sources.'),
+        skipState: OverlayBase.PREVIEW_MODE,
+      });
+    }
+    boot();
+  </script>
+</body>
+</html>

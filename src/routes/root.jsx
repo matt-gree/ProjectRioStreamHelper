@@ -17,7 +17,7 @@ const allTabs = [
   { name: "Competition Info", path: "/tournament_info" },
   { name: "Bracket", path: "/bracket" },
   { name: "Commentary", path: "/commentary" },
-  { name: "Layouts", path: "/layouts" },
+  { name: "Setup", path: "/layouts" },
 ];
 
 export default function Root() {

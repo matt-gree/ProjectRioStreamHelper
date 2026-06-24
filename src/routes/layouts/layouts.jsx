@@ -24,6 +24,8 @@ import {
 import { cn } from '../../lib/utils';
 import { notifications } from '../../lib/notify';
 import { useSettingsStore, useStateStore, useConfigStore } from '../../context/store';
+import { useObsStore } from '../../context/obs';
+import { bindingForUrl } from '../../lib/obs-binding';
 import { useShallow } from 'zustand/react/shallow';
 import useTournament from '../../hooks/useTournament';
 import {
@@ -192,6 +194,90 @@ function CopyIconButton({ value }) {
     );
 }
 
+// Live OBS binding for a layout URL — drives the status dot/badge and the
+// Add-to-OBS button. Recomputes as OBS scene state changes.
+function useLayoutBinding(url) {
+    const status = useObsStore(s => s.status);
+    const programScene = useObsStore(s => s.programScene);
+    const previewScene = useObsStore(s => s.previewScene);
+    const sceneItems = useObsStore(s => s.sceneItems);
+    return useMemo(() => {
+        if (status !== 'connected') return { state: 'offline', matches: [] };
+        if (!url) return { state: 'absent', matches: [] };
+        return bindingForUrl(url, { sceneItems, programScene, previewScene });
+    }, [status, url, sceneItems, programScene, previewScene]);
+}
+
+const BINDING_TONE = {
+    live: { dot: '#22c55e', badge: 'bg-[#22c55e]/15 text-[#4ade80]' },
+    preview: { dot: '#f59e0b', badge: 'bg-[#f59e0b]/15 text-[#fbbf24]' },
+    absent: { dot: '#3f3f46', badge: 'bg-muted text-muted-foreground' },
+};
+
+function bindingLabel(binding) {
+    switch (binding.state) {
+        case 'live': return `In OBS as “${binding.sourceName}” · program scene`;
+        case 'preview': return `In OBS as “${binding.sourceName}” · preview scene`;
+        case 'absent': return 'Not in OBS yet';
+        default: return '';
+    }
+}
+
+// Small glanceable dot for list rows. Hidden when OBS isn't connected.
+function BindingDot({ binding }) {
+    if (!binding || binding.state === 'offline') return null;
+    const tone = BINDING_TONE[binding.state] || BINDING_TONE.absent;
+    return (
+        <SimpleTooltip label={bindingLabel(binding)}>
+            <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: tone.dot }} />
+        </SimpleTooltip>
+    );
+}
+
+// Binding status + one-click "Add to OBS" for the previewed layout.
+function ObsBindingControls({ url, name, width, height }) {
+    const binding = useLayoutBinding(url);
+    const status = useObsStore(s => s.status);
+    const programScene = useObsStore(s => s.programScene);
+    const [adding, setAdding] = useState(false);
+
+    if (status !== 'connected') {
+        return (
+            <SimpleTooltip label="Connect OBS in Settings to wire sources automatically">
+                <Badge className="bg-muted text-[10px] text-muted-foreground">OBS offline</Badge>
+            </SimpleTooltip>
+        );
+    }
+
+    if (binding.state === 'live' || binding.state === 'preview') {
+        const tone = BINDING_TONE[binding.state];
+        return (
+            <SimpleTooltip label={bindingLabel(binding)}>
+                <Badge className={cn('text-[10px]', tone.badge)}>✓ {binding.sourceName}</Badge>
+            </SimpleTooltip>
+        );
+    }
+
+    const handleAdd = async () => {
+        setAdding(true);
+        try {
+            const res = await useObsStore.getState().addBrowserSource({ inputName: name, url, width, height });
+            notifications.show({ message: `Added “${res.inputName}” to ${res.sceneName}`, color: 'green' });
+        } catch (e) {
+            notifications.show({ message: e.message || 'Failed to add to OBS', color: 'red' });
+        }
+        setAdding(false);
+    };
+
+    return (
+        <SimpleTooltip label={programScene ? `Add to program scene “${programScene}”` : 'No program scene in OBS'}>
+            <Button variant="secondary" size="xs" onClick={handleAdd} disabled={adding || !programScene}>
+                {adding && <Loader size={10} />} Add to OBS
+            </Button>
+        </SimpleTooltip>
+    );
+}
+
 function LayoutItem({ item, selected, onSelect, activeTab }) {
     const copyUrl = useMemo(() => {
         try {
@@ -200,6 +286,8 @@ function LayoutItem({ item, selected, onSelect, activeTab }) {
             return u.toString();
         } catch { return item.url; }
     }, [item.url, activeTab]);
+
+    const binding = useLayoutBinding(copyUrl);
 
     return (
         <button type="button" onClick={() => onSelect(item)} className={itemClass(selected?.url === item.url)}>
@@ -214,6 +302,7 @@ function LayoutItem({ item, selected, onSelect, activeTab }) {
                         <Text size="xs" dimmed>{item.width} x {item.height}</Text>
                     )}
                 </div>
+                <BindingDot binding={binding} />
                 <CopyIconButton value={copyUrl} />
             </div>
         </button>
@@ -1644,9 +1733,22 @@ export default function LayoutBrowser() {
         });
     }, [allLayouts, searchQuery]);
 
+    // Shared "fed" sources (e.g. the stats-feed the producer feeds content to
+    // from the Production page). They live under public/layout/shared/.
+    const sharedLayouts = useMemo(() => {
+        const q = searchQuery.toLowerCase().trim();
+        return allLayouts.filter(l => {
+            if (l.group !== 'shared') return false;
+            if (q && !l.name.toLowerCase().includes(q)) return false;
+            return true;
+        });
+    }, [allLayouts, searchQuery]);
+
     useEffect(() => {
-        const activeLayouts = mode === 'scenes' ? sceneLayouts : filteredLayouts;
-        if (mode !== 'scoreboard' && mode !== 'scenes') return;
+        const activeLayouts = mode === 'scenes' ? sceneLayouts
+            : mode === 'shared' ? sharedLayouts
+            : filteredLayouts;
+        if (mode !== 'scoreboard' && mode !== 'scenes' && mode !== 'shared') return;
         if (activeLayouts.length > 0) {
             setSelected(prev => {
                 if (prev && activeLayouts.some(l => l.url === prev.url)) return prev;
@@ -1655,7 +1757,7 @@ export default function LayoutBrowser() {
         } else {
             setSelected(null);
         }
-    }, [filteredLayouts, sceneLayouts, mode]);
+    }, [filteredLayouts, sceneLayouts, sharedLayouts, mode]);
 
     useEffect(() => {
         setSearchQuery('');
@@ -1711,6 +1813,7 @@ export default function LayoutBrowser() {
                     <TabsTrigger value="design">Design Presets</TabsTrigger>
                     <TabsTrigger value="scoreboard">Scoreboards</TabsTrigger>
                     <TabsTrigger value="scenes">Scenes</TabsTrigger>
+                    <TabsTrigger value="shared">Shared</TabsTrigger>
                     <TabsTrigger value="bracket">Bracket</TabsTrigger>
                     {controllerSupported && <TabsTrigger value="controller">Controller</TabsTrigger>}
                 </TabsList>
@@ -1748,7 +1851,9 @@ export default function LayoutBrowser() {
                     <div className="md:col-span-4">
                         <Stack gap="xs">
                             <Text size="xs" dimmed>
-                                Select a layout to preview. Copy the URL into an OBS Browser Source.
+                                Select a layout to preview. Copy the URL into an OBS Browser Source, or
+                                — when OBS is connected — use Add to OBS. The dot shows whether each
+                                layout is already a source in your program (green) or preview (amber) scene.
                             </Text>
 
                             {mode === 'scoreboard' && (
@@ -1776,6 +1881,26 @@ export default function LayoutBrowser() {
                                 </>
                             )}
 
+                            {mode === 'shared' && (
+                                <>
+                                    <Text size="xs" dimmed>
+                                        Shared “fed” sources. Add one to OBS once, then choose what it
+                                        shows from the Production page (e.g. which player’s stats).
+                                    </Text>
+                                    <Input placeholder="Search shared sources..." value={searchQuery} onChange={(e) => setSearchQuery(e.currentTarget.value)} />
+                                    {loading && <Loader size={18} />}
+                                    {error && <Alert variant="destructive"><AlertTitle>Error</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
+                                    {sharedLayouts.length === 0 && !loading && (
+                                        <Text size="sm" dimmed>No shared sources found.</Text>
+                                    )}
+                                    <Stack gap="xs">
+                                        {sharedLayouts.map(item => (
+                                            <LayoutItem key={item.url} item={item} selected={selected} onSelect={setSelected} activeTab={activeScoreboardTab} />
+                                        ))}
+                                    </Stack>
+                                </>
+                            )}
+
                             {mode === 'bracket' && (
                                 <BracketLayoutList selected={selected} onSelect={setSelected} baseUrl={baseUrl} />
                             )}
@@ -1794,6 +1919,12 @@ export default function LayoutBrowser() {
                                     <div className="flex flex-nowrap items-center justify-between gap-1 border-b border-border p-2">
                                         <Text size="xs" dimmed truncate className="min-w-0 flex-1">{selectedUrl}</Text>
                                         <div className="flex flex-nowrap items-center gap-1">
+                                            <ObsBindingControls
+                                                url={selectedUrl}
+                                                name={selected?.name || selectedType || 'PRSH Overlay'}
+                                                width={selected?.width}
+                                                height={selected?.height}
+                                            />
                                             <SimpleTooltip label="Reload preview">
                                                 <Button variant="ghost" size="icon-sm" onClick={() => setPreviewRevision(r => r + 1)}>
                                                     <RotateCw size={14} />
