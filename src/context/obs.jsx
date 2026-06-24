@@ -32,7 +32,24 @@ const mapItem = (it) => ({
     enabled: it.sceneItemEnabled,
     inputKind: it.inputKind || null,
     isGroup: !!it.isGroup,
+    // Filled in for browser sources via GetInputSettings.
+    url: null,
+    isPrsh: false,
 });
+
+// A browser source is "fed by PRSH" when its URL points at the app's /layout/
+// mount. This holds across single- and dual-machine setups (the host/port can
+// be anything) and ignores cams, game capture, audio, and third-party browser
+// sources — the rail should only show PRSH's own overlay elements.
+function isPrshUrl(url) {
+    if (!url) return false;
+    try {
+        const u = new URL(url);
+        return /^https?:$/.test(u.protocol) && u.pathname.startsWith('/layout/');
+    } catch {
+        return false;
+    }
+}
 
 export const useObsStore = create((set) => ({
     // disconnected | connecting | connected | error
@@ -122,9 +139,24 @@ async function refreshScene(sceneName, gen) {
     if (!obs || !sceneName || gen !== generation) return;
     try {
         const { sceneItems } = await obs.call('GetSceneItemList', { sceneName });
+        // Enrich browser sources with their URL so we can tell which are
+        // fed by PRSH. Scenes are small, so the per-source call is cheap.
+        const enriched = await Promise.all(sceneItems.map(async (it) => {
+            const base = mapItem(it);
+            if (it.inputKind === 'browser_source' && !it.isGroup) {
+                try {
+                    const { inputSettings } = await obs.call('GetInputSettings', { inputName: it.sourceName });
+                    base.url = inputSettings?.url || null;
+                    base.isPrsh = isPrshUrl(base.url);
+                } catch {
+                    // Input may have been removed between calls.
+                }
+            }
+            return base;
+        }));
         if (gen !== generation) return;
         useObsStore.setState(state => ({
-            sceneItems: { ...state.sceneItems, [sceneName]: sceneItems.map(mapItem) },
+            sceneItems: { ...state.sceneItems, [sceneName]: enriched },
         }));
     } catch {
         // Scene may have been renamed/removed between the event and this call.

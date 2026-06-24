@@ -67,7 +67,6 @@ function ConnectionPill() {
 }
 
 const SourceRow = memo(function SourceRow({ item, selected, onSelect }) {
-    const isBrowser = item.inputKind === 'browser_source';
     const EyeIcon = item.enabled ? Eye : EyeOff;
     return (
         <button
@@ -80,19 +79,15 @@ const SourceRow = memo(function SourceRow({ item, selected, onSelect }) {
             )}
         >
             <EyeIcon size={14} className={item.enabled ? 'text-foreground' : 'text-muted-foreground'} />
-            {isBrowser && <Globe size={13} className="text-rio-400 shrink-0" />}
+            <Globe size={13} className="text-rio-400 shrink-0" />
             <Text size="sm" className="flex-1 truncate text-foreground">{item.sourceName}</Text>
-            {isBrowser && (
-                <Badge className="bg-rio-500/15 text-rio-300 text-[10px] uppercase tracking-wider">browser</Badge>
-            )}
-            {item.isGroup && (
-                <Badge className="bg-muted text-muted-foreground text-[10px] uppercase tracking-wider">group</Badge>
-            )}
         </button>
     );
 });
 
 const SceneGroup = memo(function SceneGroup({ icon: Icon, label, accent, sceneName, items, selectedId, onSelect }) {
+    // Only PRSH-fed overlay sources — not cams, capture, audio, etc.
+    const prshItems = (items ?? []).filter(it => it.isPrsh);
     return (
         <Stack gap="xs">
             <Group gap="xs" className="items-center px-1">
@@ -101,9 +96,9 @@ const SceneGroup = memo(function SceneGroup({ icon: Icon, label, accent, sceneNa
                 {sceneName && <Text size="xs" className="truncate text-foreground">{sceneName}</Text>}
             </Group>
             {sceneName ? (
-                (items && items.length > 0) ? (
+                (prshItems.length > 0) ? (
                     <Stack gap="none">
-                        {items.map(it => (
+                        {prshItems.map(it => (
                             <SourceRow
                                 key={it.id}
                                 item={it}
@@ -113,7 +108,7 @@ const SceneGroup = memo(function SceneGroup({ icon: Icon, label, accent, sceneNa
                         ))}
                     </Stack>
                 ) : (
-                    <Text size="xs" className="px-2 text-muted-foreground">No sources in this scene.</Text>
+                    <Text size="xs" className="px-2 text-muted-foreground">No PRSH overlays in this scene.</Text>
                 )
             ) : (
                 <Text size="xs" className="px-2 text-muted-foreground">—</Text>
@@ -210,24 +205,24 @@ function MainArea({ phase, selected }) {
         );
     }
 
-    const isBrowser = selected.inputKind === 'browser_source';
     return (
         <Panel title={`Control — ${selected.sourceName}`} className="h-full">
             <Stack gap="md" className="p-4">
                 <Group gap="xl">
                     <Stack gap="none">
-                        <Text size="xs" className="text-muted-foreground">Type</Text>
-                        <Text size="sm" className="text-foreground">{selected.inputKind || (selected.isGroup ? 'group' : 'unknown')}</Text>
-                    </Stack>
-                    <Stack gap="none">
                         <Text size="xs" className="text-muted-foreground">Visible</Text>
                         <Text size="sm" className="text-foreground">{selected.enabled ? 'Yes' : 'No'}</Text>
                     </Stack>
                 </Group>
+                {selected.url && (
+                    <Stack gap="none">
+                        <Text size="xs" className="text-muted-foreground">Overlay URL</Text>
+                        <Text size="sm" className="break-all text-foreground">{selected.url}</Text>
+                    </Stack>
+                )}
                 <Text size="sm" className="text-muted-foreground">
-                    {isBrowser
-                        ? 'Browser source. Firing and content control land in the next slice — the OBS WebSocket layer that powers this rail is what those build on.'
-                        : 'This is not a browser source, so PRSH can’t drive its content. It’s shown here for scene context.'}
+                    Firing and content control land in the next slice — the OBS WebSocket layer
+                    that powers this rail is what those build on.
                 </Text>
             </Stack>
         </Panel>
