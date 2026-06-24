@@ -107,8 +107,8 @@
     z-index: -1;
     pointer-events: none;
     background:
-      radial-gradient(120% 70% at 50% -10%, rgb(230 0 18 / 0.06), transparent 60%),
-      radial-gradient(120% 60% at 50% 110%, rgb(245 187 0 / 0.03), transparent 55%);
+      radial-gradient(120% 80% at 50% -10%, rgb(230 0 18 / 0.16), transparent 68%),
+      radial-gradient(120% 60% at 50% 110%, rgb(245 187 0 / 0.05), transparent 55%);
   }
 }
 
