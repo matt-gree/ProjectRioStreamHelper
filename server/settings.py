@@ -155,6 +155,13 @@ class Settings:
             "password": "",
             "auto_connect": True
         },
+        "production": {
+            # Producer page. Elements themselves are dev-defined in the
+            # frontend; this only persists per-streamer choices. `overrides`
+            # maps an element id -> the OBS source name the streamer picked as
+            # a fed element's target shared source (instead of the default).
+            "overrides": {}
+        },
         "announcements": {
             "dismissed_ids": [],
             "check_for_updates": True,

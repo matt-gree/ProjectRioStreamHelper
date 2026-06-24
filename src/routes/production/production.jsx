@@ -1,9 +1,10 @@
-import { memo, useCallback, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import {
-    Radio, Eye, EyeOff, Globe, PlugZap, MonitorPlay, Tv, ArrowLeftRight,
+    Radio, Eye, EyeOff, Globe, PlugZap, MonitorPlay, ArrowLeftRight,
 } from 'lucide-react';
 import { useObsStore } from '../../context/obs';
+import { useSettingsStore } from '../../context/store';
 import { Panel } from '../../components/ui/panel';
 import { Stack, Group, Text } from '../../components/ui/primitives';
 import { Badge } from '../../components/ui/badge';
@@ -13,6 +14,19 @@ import { SegmentedControl } from '../../components/ui/segmented-control';
 import { ScrollArea } from '../../components/ui/scroll-area';
 import { notifications } from '../../lib/notify';
 import { cn } from '../../lib/utils';
+import { PHASES, elementsForPhase } from './elements';
+
+/*
+ * Production page — the producer's broadcast control board.
+ *
+ * Top bar  : phase selector + scene control (program / studio + Take) + OBS pill.
+ * Left rail: OBS reality (read) — program + studio-preview scenes and their PRSH
+ *            overlay sources.
+ * Main area: the ELEMENTS for the selected phase (producer intent). Direct
+ *            elements show/hide their dedicated source; fed elements pick a
+ *            target shared source and feed it (v1 scaffolding = show/hide).
+ * See memory: production-page-v1-locked, production-elements-glossary.
+ */
 
 // Run an OBS control action, surfacing failures as a toast (e.g. transition
 // while one is mid-flight, or a scene removed under us).
@@ -24,28 +38,11 @@ async function runObs(fn) {
     }
 }
 
-/*
- * Production page — the producer's broadcast control board (Live phase).
- *
- * Left rail = OBS reality (read): the program + studio-preview scenes and their
- * PRSH overlay sources. Main area = producer intent (write): switch program
- * scene, set studio preview + transition, and show/hide the selected overlay.
- * Element authoring + content firing land in later slices. See memory:
- * production-page-v1-locked.
- */
-
-const PHASES = [
-    { label: 'Draft', value: 'draft' },
-    { label: 'Live', value: 'live' },
-    { label: 'Post-game', value: 'post' },
-    { label: 'Break', value: 'break' },
-];
-
 const STATUS_META = {
-    connected:    { dot: 'bg-emerald-500',        label: 'OBS connected' },
+    connected:    { dot: 'bg-emerald-500',             label: 'OBS connected' },
     connecting:   { dot: 'bg-amber-400 animate-pulse', label: 'Connecting to OBS…' },
-    error:        { dot: 'bg-destructive',         label: 'OBS connection error' },
-    disconnected: { dot: 'bg-muted-foreground/50', label: 'OBS not connected' },
+    error:        { dot: 'bg-destructive',             label: 'OBS connection error' },
+    disconnected: { dot: 'bg-muted-foreground/50',     label: 'OBS not connected' },
 };
 
 function ConnectionPill() {
@@ -79,26 +76,83 @@ function ConnectionPill() {
     );
 }
 
-const SourceRow = memo(function SourceRow({ item, sceneName, selected, onSelect }) {
+// Compact, labelled scene dropdown for the top bar.
+function SceneSelect({ label, value, scenes, onChange }) {
+    return (
+        <label className="flex items-center gap-1.5">
+            <Text size="xs" className="text-muted-foreground">{label}</Text>
+            <select
+                value={value || ''}
+                onChange={(e) => onChange(e.target.value)}
+                className="max-w-[180px] rounded-md border border-border bg-card px-2 py-1 text-sm text-foreground"
+            >
+                {!value && <option value="" disabled>—</option>}
+                {scenes.map((name) => <option key={name} value={name}>{name}</option>)}
+            </select>
+        </label>
+    );
+}
+
+// Scene switching + Studio Mode, in the top bar. Studio off: the Program
+// dropdown cuts live. Studio on: stage in Preview, then Take to Program.
+function TopBarSceneControls() {
+    const { status, scenes, programScene, previewScene, studioMode } = useObsStore(useShallow(s => ({
+        status: s.status,
+        scenes: s.scenes,
+        programScene: s.programScene,
+        previewScene: s.previewScene,
+        studioMode: s.studioMode,
+    })));
+    const setProgramScene = useObsStore(s => s.setProgramScene);
+    const setPreviewScene = useObsStore(s => s.setPreviewScene);
+    const setStudioMode = useObsStore(s => s.setStudioMode);
+    const triggerTransition = useObsStore(s => s.triggerTransition);
+
+    if (status !== 'connected') return null;
+
+    return (
+        <Group gap="sm" className="items-center">
+            <label className="flex items-center gap-1.5">
+                <Text size="xs" className="text-muted-foreground">Studio</Text>
+                <Switch checked={studioMode} onCheckedChange={(v) => runObs(() => setStudioMode(v))} />
+            </label>
+            {studioMode ? (
+                <>
+                    <SceneSelect
+                        label="Preview" value={previewScene} scenes={scenes}
+                        onChange={(name) => runObs(() => setPreviewScene(name))}
+                    />
+                    <Button size="sm" onClick={() => runObs(() => triggerTransition())} disabled={!previewScene}>
+                        <ArrowLeftRight size={14} className="mr-1" />
+                        Take
+                    </Button>
+                    <Text size="xs" className="text-muted-foreground">
+                        On air: <span className="text-emerald-300">{programScene || '—'}</span>
+                    </Text>
+                </>
+            ) : (
+                <SceneSelect
+                    label="Program" value={programScene} scenes={scenes}
+                    onChange={(name) => runObs(() => setProgramScene(name))}
+                />
+            )}
+        </Group>
+    );
+}
+
+// Rail row — display only (the rail is OBS truth; control happens via elements).
+const SourceRow = memo(function SourceRow({ item }) {
     const EyeIcon = item.enabled ? Eye : EyeOff;
     return (
-        <button
-            type="button"
-            onClick={() => onSelect(item, sceneName)}
-            className={cn(
-                'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors',
-                selected ? 'bg-rio-500/15 ring-1 ring-rio-500/40' : 'hover:bg-muted/50',
-                !item.enabled && 'opacity-50',
-            )}
-        >
+        <div className={cn('flex items-center gap-2 px-2 py-1.5', !item.enabled && 'opacity-50')}>
             <EyeIcon size={14} className={item.enabled ? 'text-foreground' : 'text-muted-foreground'} />
-            <Globe size={13} className="text-rio-400 shrink-0" />
+            <Globe size={13} className="shrink-0 text-rio-400" />
             <Text size="sm" className="flex-1 truncate text-foreground">{item.sourceName}</Text>
-        </button>
+        </div>
     );
 });
 
-const SceneGroup = memo(function SceneGroup({ icon: Icon, label, accent, sceneName, items, selectedKey, onSelect }) {
+const SceneGroup = memo(function SceneGroup({ icon: Icon, label, accent, sceneName, items }) {
     // Only PRSH-fed overlay sources — not cams, capture, audio, etc.
     const prshItems = (items ?? []).filter(it => it.isPrsh);
     return (
@@ -109,17 +163,9 @@ const SceneGroup = memo(function SceneGroup({ icon: Icon, label, accent, sceneNa
                 {sceneName && <Text size="xs" className="truncate text-foreground">{sceneName}</Text>}
             </Group>
             {sceneName ? (
-                (prshItems.length > 0) ? (
+                prshItems.length > 0 ? (
                     <Stack gap="none">
-                        {prshItems.map(it => (
-                            <SourceRow
-                                key={it.id}
-                                item={it}
-                                sceneName={sceneName}
-                                selected={selectedKey === `${sceneName}:${it.id}`}
-                                onSelect={onSelect}
-                            />
-                        ))}
+                        {prshItems.map(it => <SourceRow key={it.id} item={it} />)}
                     </Stack>
                 ) : (
                     <Text size="xs" className="px-2 text-muted-foreground">No PRSH overlays in this scene.</Text>
@@ -131,7 +177,7 @@ const SceneGroup = memo(function SceneGroup({ icon: Icon, label, accent, sceneNa
     );
 });
 
-function LeftRail({ selectedKey, onSelect }) {
+function LeftRail() {
     const { status, studioMode, programScene, previewScene, sceneItems } = useObsStore(useShallow(s => ({
         status: s.status,
         studioMode: s.studioMode,
@@ -168,13 +214,11 @@ function LeftRail({ selectedKey, onSelect }) {
                     <SceneGroup
                         icon={Radio} label="Program" accent="text-emerald-400"
                         sceneName={programScene} items={programItems}
-                        selectedKey={selectedKey} onSelect={onSelect}
                     />
                     {studioMode ? (
                         <SceneGroup
                             icon={MonitorPlay} label="Studio Preview" accent="text-sky-400"
                             sceneName={previewScene} items={previewItems}
-                            selectedKey={selectedKey} onSelect={onSelect}
                         />
                     ) : (
                         <Group gap="xs" className="items-center px-1">
@@ -188,199 +232,161 @@ function LeftRail({ selectedKey, onSelect }) {
     );
 }
 
-// Control for the selected overlay source — live show/hide. Reads the item
-// fresh from the store (not a snapshot) so the toggle reflects OBS reality.
-function SourceControls({ selection }) {
-    const item = useObsStore(s => (
-        selection ? (s.sceneItems[selection.sceneName] || []).find(i => i.id === selection.id) : null
-    ));
+const FLAVOR_BADGE = {
+    direct: 'bg-rio-500/15 text-rio-300',
+    fed:    'bg-sky-500/15 text-sky-300',
+};
+
+// One element card. Binds to the streamer's OBS source(s) by matching the
+// element's layout against source URLs, scoped to the current program scene.
+function ElementCard({ element }) {
+    const programScene = useObsStore(s => s.programScene);
+    const sceneItems = useObsStore(s => s.sceneItems);
     const setSceneItemEnabled = useObsStore(s => s.setSceneItemEnabled);
+    const overrideName = useSettingsStore(s => s?.production?.overrides?.[element.id]);
+    const setSetting = useSettingsStore(s => s.setItem);
 
-    if (!selection) {
-        return (
-            <Panel title="Source">
-                <Stack gap="xs" className="items-center justify-center p-8 text-center">
-                    <Tv size={24} className="text-muted-foreground" />
-                    <Text size="sm" className="text-muted-foreground">
-                        Select an overlay from the rail to show or hide it on the broadcast.
-                    </Text>
-                </Stack>
-            </Panel>
-        );
-    }
-    if (!item) {
-        return (
-            <Panel title="Source">
-                <Text size="sm" className="p-4 text-muted-foreground">
-                    That source is no longer in this scene.
-                </Text>
-            </Panel>
-        );
-    }
+    // PRSH overlay sources present in the current program scene.
+    const items = useMemo(
+        () => (programScene ? (sceneItems[programScene] || []).filter(i => i.isPrsh) : []),
+        [programScene, sceneItems],
+    );
 
-    return (
-        <Panel title={`Source — ${item.sourceName}`}>
-            <Stack gap="md" className="p-4">
-                <label className="flex items-center justify-between gap-3">
-                    <Stack gap="none">
-                        <Text size="sm" className="text-foreground">On the broadcast</Text>
-                        <Text size="xs" className="text-muted-foreground">
-                            Toggles this source in “{selection.sceneName}”.
+    const header = (
+        <Badge className={cn('text-[10px] uppercase tracking-wider', FLAVOR_BADGE[element.flavor])}>
+            {element.flavor}
+        </Badge>
+    );
+
+    if (element.flavor === 'direct') {
+        const match = items.find(it => element.match(it.url || ''));
+        return (
+            <Panel title={element.name} actions={header}>
+                <Stack gap="xs" className="p-4">
+                    {match ? (
+                        <label className="flex items-center justify-between gap-3">
+                            <Stack gap="none">
+                                <Text size="sm" className="text-foreground">On the broadcast</Text>
+                                <Text size="xs" className="text-muted-foreground">{match.sourceName} · {programScene}</Text>
+                            </Stack>
+                            <Switch
+                                checked={match.enabled}
+                                onCheckedChange={(v) => runObs(() => setSceneItemEnabled(programScene, match.id, v))}
+                            />
+                        </label>
+                    ) : (
+                        <Text size="sm" className="text-muted-foreground">
+                            No matching source in the current program scene ({programScene || 'none'}).
                         </Text>
-                    </Stack>
-                    <Switch
-                        checked={item.enabled}
-                        onCheckedChange={(v) => runObs(() => setSceneItemEnabled(selection.sceneName, item.id, v))}
-                    />
-                </label>
-                {item.url && (
-                    <Stack gap="none">
-                        <Text size="xs" className="text-muted-foreground">Overlay URL</Text>
-                        <Text size="sm" className="break-all text-foreground">{item.url}</Text>
-                    </Stack>
-                )}
-            </Stack>
-        </Panel>
-    );
-}
+                    )}
+                </Stack>
+            </Panel>
+        );
+    }
 
-// Scene switching + Studio Mode. In Studio Mode, clicking a scene stages it as
-// Preview and the producer hits Take to transition; otherwise clicking cuts it
-// straight to Program.
-function SceneControls() {
-    const { scenes, programScene, previewScene, studioMode } = useObsStore(useShallow(s => ({
-        scenes: s.scenes,
-        programScene: s.programScene,
-        previewScene: s.previewScene,
-        studioMode: s.studioMode,
-    })));
-    const setProgramScene = useObsStore(s => s.setProgramScene);
-    const setPreviewScene = useObsStore(s => s.setPreviewScene);
-    const setStudioMode = useObsStore(s => s.setStudioMode);
-    const triggerTransition = useObsStore(s => s.triggerTransition);
+    // Fed element: target = override, else default match, else unset.
+    const defaultName = items.find(it => element.match(it.url || ''))?.sourceName;
+    const targetName = overrideName || defaultName || '';
+    const targetItem = items.find(it => it.sourceName === targetName);
 
-    const onSceneClick = useCallback((name) => {
-        if (studioMode) runObs(() => setPreviewScene(name));
-        else runObs(() => setProgramScene(name));
-    }, [studioMode, setPreviewScene, setProgramScene]);
+    const setTarget = (name) => {
+        const cur = useSettingsStore.getState()?.production?.overrides || {};
+        setSetting('production.overrides', { ...cur, [element.id]: name });
+    };
 
     return (
-        <Panel
-            title="Scenes"
-            actions={
-                <label className="flex items-center gap-1.5">
-                    <Text size="xs" className="text-muted-foreground">Studio Mode</Text>
-                    <Switch
-                        checked={studioMode}
-                        onCheckedChange={(v) => runObs(() => setStudioMode(v))}
-                    />
-                </label>
-            }
-        >
-            <Stack gap="md" className="p-3">
-                {studioMode && (
-                    <Button
-                        className="w-full"
-                        onClick={() => runObs(() => triggerTransition())}
-                        disabled={!previewScene}
+        <Panel title={element.name} actions={header}>
+            <Stack gap="md" className="p-4">
+                <label className="flex flex-col gap-1">
+                    <Text size="xs" className="text-muted-foreground">Target shared source</Text>
+                    <select
+                        value={targetName}
+                        onChange={(e) => setTarget(e.target.value)}
+                        className="rounded-md border border-border bg-card px-2 py-1 text-sm text-foreground"
                     >
-                        <ArrowLeftRight size={15} className="mr-1.5" />
-                        Take {previewScene ? `“${previewScene}”` : 'Preview'} to Program
-                    </Button>
+                        <option value="" disabled>Choose a source…</option>
+                        {items.map(it => <option key={it.id} value={it.sourceName}>{it.sourceName}</option>)}
+                    </select>
+                </label>
+
+                {targetItem ? (
+                    <label className="flex items-center justify-between gap-3">
+                        <Stack gap="none">
+                            <Text size="sm" className="text-foreground">Feed to target</Text>
+                            <Text size="xs" className="text-muted-foreground">Shows {targetItem.sourceName} · {programScene}</Text>
+                        </Stack>
+                        <Switch
+                            checked={targetItem.enabled}
+                            onCheckedChange={(v) => runObs(() => setSceneItemEnabled(programScene, targetItem.id, v))}
+                        />
+                    </label>
+                ) : (
+                    <Text size="sm" className="text-muted-foreground">
+                        {targetName
+                            ? `“${targetName}” isn’t in the current program scene.`
+                            : 'Pick a target shared source to feed.'}
+                    </Text>
                 )}
-                <Stack gap="none">
-                    {scenes.length === 0 && (
-                        <Text size="sm" className="px-2 text-muted-foreground">No scenes.</Text>
-                    )}
-                    {scenes.map((name) => {
-                        const isProgram = name === programScene;
-                        const isPreview = studioMode && name === previewScene;
-                        return (
-                            <button
-                                key={name}
-                                type="button"
-                                onClick={() => onSceneClick(name)}
-                                className={cn(
-                                    'flex w-full items-center gap-2 rounded-md px-2 py-2 text-left transition-colors',
-                                    isProgram ? 'bg-emerald-500/10' : isPreview ? 'bg-sky-500/10' : 'hover:bg-muted/50',
-                                )}
-                            >
-                                <Text size="sm" className="flex-1 truncate text-foreground">{name}</Text>
-                                {isProgram && (
-                                    <Badge className="bg-emerald-500/15 text-emerald-300 text-[10px] uppercase tracking-wider">On Air</Badge>
-                                )}
-                                {isPreview && (
-                                    <Badge className="bg-sky-500/15 text-sky-300 text-[10px] uppercase tracking-wider">Preview</Badge>
-                                )}
-                            </button>
-                        );
-                    })}
-                </Stack>
-                <Text size="xs" className="px-1 text-muted-foreground">
-                    {studioMode
-                        ? 'Click a scene to stage it in Preview, then Take it to Program.'
-                        : 'Click a scene to cut it live to Program.'}
+
+                <Text size="xs" className="text-muted-foreground">
+                    Content selection (which stats to show) arrives in the next increment.
                 </Text>
             </Stack>
         </Panel>
     );
 }
 
-function MainArea({ phase, selection }) {
+function ElementsArea({ phase }) {
     const status = useObsStore(s => s.status);
-
-    if (phase !== 'live') {
-        const label = PHASES.find(p => p.value === phase)?.label ?? phase;
-        return (
-            <Panel title="Control" className="h-full">
-                <Stack gap="xs" className="items-center justify-center p-12 text-center">
-                    <Text className="text-foreground">{label} phase</Text>
-                    <Text size="sm" className="text-muted-foreground">
-                        v1 ships the Live phase. {label} comes once its elements are built.
-                    </Text>
-                </Stack>
-            </Panel>
-        );
-    }
+    const els = elementsForPhase(phase);
+    const phaseLabel = PHASES.find(p => p.value === phase)?.label ?? phase;
 
     if (status !== 'connected') {
         return (
-            <Panel title="Control" className="h-full">
+            <Panel title="Elements" className="h-full">
                 <Text size="sm" className="p-4 text-muted-foreground">
-                    Connect to OBS to control scenes and sources.
+                    Connect to OBS to control elements.
                 </Text>
+            </Panel>
+        );
+    }
+
+    if (els.length === 0) {
+        return (
+            <Panel title="Elements" className="h-full">
+                <Stack gap="xs" className="items-center justify-center p-12 text-center">
+                    <Text className="text-foreground">No elements in {phaseLabel} yet</Text>
+                    <Text size="sm" className="text-muted-foreground">
+                        This phase fills in as its elements ship.
+                    </Text>
+                </Stack>
             </Panel>
         );
     }
 
     return (
         <Stack gap="md">
-            <SourceControls selection={selection} />
-            <SceneControls />
+            {els.map(el => <ElementCard key={el.id} element={el} />)}
         </Stack>
     );
 }
 
 export default function Production() {
     const [phase, setPhase] = useState('live');
-    // Selection is a reference { sceneName, id } — the detail panel reads the
-    // live item from the store so its toggle reflects OBS reality.
-    const [selection, setSelection] = useState(null);
-    const onSelect = useCallback((item, sceneName) => setSelection({ sceneName, id: item.id }), []);
-    const selectedKey = selection ? `${selection.sceneName}:${selection.id}` : null;
 
     return (
         <Stack gap="md">
-            <Group className="items-center justify-between">
-                <Group gap="md" className="items-center">
-                    <SegmentedControl data={PHASES} value={phase} onChange={setPhase} />
+            <Group className="flex-wrap items-center justify-between gap-4">
+                <SegmentedControl data={PHASES} value={phase} onChange={setPhase} />
+                <Group gap="md" className="flex-wrap items-center">
+                    <TopBarSceneControls />
+                    <ConnectionPill />
                 </Group>
-                <ConnectionPill />
             </Group>
 
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[300px_1fr] items-start">
-                <LeftRail selectedKey={selectedKey} onSelect={onSelect} />
-                <MainArea phase={phase} selection={selection} />
+            <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[300px_1fr]">
+                <LeftRail />
+                <ElementsArea phase={phase} />
             </div>
         </Stack>
     );
