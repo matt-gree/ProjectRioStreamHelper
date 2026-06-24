@@ -12,9 +12,10 @@ import { useSettingsStore } from './store';
  * gaming PC) the browser is the one machine guaranteed to reach the OBS the
  * producer is sitting at.
  *
- * v1 is read-only: we mirror OBS's scene/source reality (program + studio
- * preview) into the left rail. Control (toggling visibility, switching
- * scenes) and authoring come in later slices.
+ * We mirror OBS's scene/source reality (program + studio preview + scene list)
+ * into the store, and expose control actions (toggle source visibility, switch
+ * program scene, set studio preview, transition). Element authoring + content
+ * firing come in later slices.
  */
 
 // Single shared client + reconnect bookkeeping, kept at module scope so the
@@ -67,8 +68,35 @@ export const useObsStore = create((set) => ({
     studioMode: false,
     programScene: null,
     previewScene: null,
-    // sceneName -> [{ id, sourceName, enabled, inputKind, isGroup }]
+    // sceneName -> [{ id, sourceName, enabled, inputKind, isGroup, url, isPrsh }]
     sceneItems: {},
+    // All scene names, in OBS list order (top first). Drives scene switching.
+    scenes: [],
+
+    // ---- Control (write) actions. Each throws on failure; callers toast. ----
+    // We don't optimistically mutate state — OBS echoes every change back via
+    // events (SceneItemEnableStateChanged, CurrentProgram/PreviewSceneChanged,
+    // StudioModeStateChanged), so the rail stays the single source of truth.
+    setSceneItemEnabled: async (sceneName, sceneItemId, enabled) => {
+        if (!obs) throw new Error('Not connected to OBS');
+        await obs.call('SetSceneItemEnabled', { sceneName, sceneItemId, sceneItemEnabled: enabled });
+    },
+    setProgramScene: async (sceneName) => {
+        if (!obs) throw new Error('Not connected to OBS');
+        await obs.call('SetCurrentProgramScene', { sceneName });
+    },
+    setPreviewScene: async (sceneName) => {
+        if (!obs) throw new Error('Not connected to OBS');
+        await obs.call('SetCurrentPreviewScene', { sceneName });
+    },
+    triggerTransition: async () => {
+        if (!obs) throw new Error('Not connected to OBS');
+        await obs.call('TriggerStudioModeTransition');
+    },
+    setStudioMode: async (enabled) => {
+        if (!obs) throw new Error('Not connected to OBS');
+        await obs.call('SetStudioModeEnabled', { studioModeEnabled: enabled });
+    },
 
     connect: async () => {
         const s = useSettingsStore.getState();
@@ -110,7 +138,7 @@ export const useObsStore = create((set) => ({
         obs = null;
         set({
             status: 'disconnected', error: null, obsVersion: null,
-            studioMode: false, programScene: null, previewScene: null, sceneItems: {},
+            studioMode: false, programScene: null, previewScene: null, sceneItems: {}, scenes: [],
         });
         if (client) { try { await client.disconnect(); } catch { /* ignore */ } }
     },
@@ -133,7 +161,8 @@ async function refreshAll(gen) {
         if (gen !== generation) return;
         const programScene = sceneList.currentProgramSceneName || null;
         const previewScene = sceneList.currentPreviewSceneName || null;
-        useObsStore.setState({ studioMode: studioModeEnabled, programScene, previewScene });
+        const scenes = (sceneList.scenes || []).map(sc => sc.sceneName);
+        useObsStore.setState({ studioMode: studioModeEnabled, programScene, previewScene, scenes });
 
         const wanted = [programScene];
         if (studioModeEnabled && previewScene) wanted.push(previewScene);
@@ -179,9 +208,14 @@ function wireEvents(client, gen) {
         if (!alive()) return;
         useObsStore.setState({
             status: 'disconnected', studioMode: false,
-            programScene: null, previewScene: null, sceneItems: {},
+            programScene: null, previewScene: null, sceneItems: {}, scenes: [],
         });
         scheduleReconnect();
+    });
+
+    client.on('SceneListChanged', ({ scenes }) => {
+        if (!alive()) return;
+        useObsStore.setState({ scenes: (scenes || []).map(sc => sc.sceneName) });
     });
 
     client.on('CurrentProgramSceneChanged', ({ sceneName }) => {
