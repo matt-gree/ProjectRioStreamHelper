@@ -149,7 +149,10 @@ async def assign_game(
     source_type = Settings.Get(
         f"scoreboards.sources.{scoreboard_number}.type"
     )
-    if source_type not in ("live_game", "rotator"):
+    # "manual" is assignable because a game feed attaches to a manual board (and
+    # its per-game "Load" button assigns through here); "live_game" for the live
+    # source. HUD boards are never pool-assignable.
+    if source_type not in ("live_game", "manual"):
         raise HTTPException(
             status_code=409,
             detail=f"scoreboard {scoreboard_number} source is {source_type!r}, not assignable",

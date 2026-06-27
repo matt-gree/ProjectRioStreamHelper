@@ -29,7 +29,6 @@ const sourceOptions = [
     { value: 'manual',    label: 'Manual' },
     { value: 'hud',       label: 'HUD' },
     { value: 'live_game', label: 'Live API Game' },
-    { value: 'rotator',   label: 'Rotator' },
 ];
 
 // Count-dot colors keyed by the legacy Mantine color name.

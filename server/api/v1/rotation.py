@@ -118,16 +118,15 @@ async def set_rotation_games(
     response_class=ORJSONResponse
 )
 async def start_rotation(sb_id: int, session_id: str | None = None) -> ORJSONResponse:
-    """Start rotation for a scoreboard."""
-    # Refuse to start a rotation on a scoreboard whose source isn't "rotator".
-    # _apply_current self-cancels, but writing enabled=True first leaves a stale
-    # flag that resume-on-startup has to clean up; rejecting here is symmetric
-    # with the assign_game guard and avoids the round-trip.
+    """Start a game feed for a scoreboard."""
+    # The feed attaches to a manual board (the neutral base with no competing
+    # live writer). Refuse to start on any other source so the feed can't fight
+    # a HUD/live-game writer for the same score keys.
     source_type = Settings.Get(f"scoreboards.sources.{sb_id}.type")
-    if source_type != "rotator":
+    if source_type != "manual":
         raise HTTPException(
             status_code=409,
-            detail=f"scoreboard {sb_id} source is {source_type!r}, not 'rotator'",
+            detail=f"scoreboard {sb_id} source is {source_type!r}, not 'manual'",
         )
     await RotationManager.start_rotation(sb_id)
     return ORJSONResponse({"success": True, **RotationManager.get_status(sb_id)})

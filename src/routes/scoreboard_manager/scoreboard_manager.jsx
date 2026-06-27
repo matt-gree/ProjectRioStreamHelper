@@ -1,10 +1,12 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Pencil, Check, X, Plus } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../components/ui/tabs';
 import { Stack, Text } from '../../components/ui/primitives';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
+import { Switch } from '../../components/ui/switch';
+import { Label } from '../../components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '../../components/ui/popover';
 import { SimpleTooltip } from '../../components/ui/simple-tooltip';
 import { cn } from '../../lib/utils';
@@ -28,6 +30,26 @@ function ScoreboardTab({ scoreboardNumber }) {
             ?? s?.scoreboards?.sources?.[String(scoreboardNumber)]?.type
             ?? 'manual'
     );
+
+    // The game feed is orthogonal to the source: it attaches to a manual board
+    // and, when running, drives it. `enabled` tracks a running feed (resume on
+    // startup flips it true); the local toggle just reveals/hides the controls.
+    const feedEnabled = useSettingsStore(
+        s => s?.scoreboards?.rotation?.[scoreboardNumber]?.enabled
+            ?? s?.scoreboards?.rotation?.[String(scoreboardNumber)]?.enabled
+            ?? false
+    );
+    const [feedOpen, setFeedOpen] = useState(feedEnabled);
+    // Reveal the panel if a feed starts/resumes out of band.
+    useEffect(() => { if (feedEnabled) setFeedOpen(true); }, [feedEnabled]);
+
+    const handleToggleFeed = useCallback(async (on) => {
+        setFeedOpen(on);
+        if (!on) {
+            await fetch(`/api/v1/rotation/${scoreboardNumber}/stop`, { method: 'POST' })
+                .catch(() => {});
+        }
+    }, [scoreboardNumber]);
 
     const handleSwapTeams = useCallback(async () => {
         const state = useStateStore.getState();
@@ -84,7 +106,7 @@ function ScoreboardTab({ scoreboardNumber }) {
                         playerCount={1}
                         sourceType={sourceType}
                     />
-                    {sourceType === 'rotator' && (
+                    {sourceType === 'manual' && feedOpen && (
                         <CompletedGameInfo scoreboardNumber={scoreboardNumber} />
                     )}
                     <ActiveMatchupStats scoreboardNumber={scoreboardNumber} />
@@ -99,6 +121,12 @@ function ScoreboardTab({ scoreboardNumber }) {
                         sourceType={sourceType}
                         onSetSource={handleSetSource}
                     />
+                    {sourceType === 'manual' && (
+                        <Label className="flex items-center gap-2 text-xs">
+                            <Switch checked={feedOpen} onCheckedChange={handleToggleFeed} />
+                            Game feed
+                        </Label>
+                    )}
                     <DiamondPanel scoreboardNumber={scoreboardNumber} />
                 </Stack>
             </div>
@@ -114,7 +142,7 @@ function ScoreboardTab({ scoreboardNumber }) {
                     {sourceType === 'live_game' && (
                         <LiveGameSelector scoreboardNumber={scoreboardNumber} />
                     )}
-                    {sourceType === 'rotator' && (
+                    {sourceType === 'manual' && feedOpen && (
                         <RotationControls scoreboardNumber={scoreboardNumber} />
                     )}
                 </Stack>
@@ -127,11 +155,13 @@ function ScoreboardTab({ scoreboardNumber }) {
 const SOURCE_BADGE = {
     hud:       { color: 'bg-[#22c55e]/15 text-[#4ade80]', label: 'HUD' },
     live_game: { color: 'bg-[#3b82f6]/15 text-[#60a5fa]', label: 'API' },
-    rotator:   { color: 'bg-[#a855f7]/15 text-[#c084fc]', label: 'Rotator' },
     // backward compat
     ongoing_api:   { color: 'bg-[#3b82f6]/15 text-[#60a5fa]', label: 'API' },
-    completed_api: { color: 'bg-[#a855f7]/15 text-[#c084fc]', label: 'Rotator' },
+    completed_api: { color: 'bg-[#a855f7]/15 text-[#c084fc]', label: 'Feed' },
 };
+
+// Shown alongside the source badge when a manual board has a game feed running.
+const FEED_BADGE = { color: 'bg-[#a855f7]/15 text-[#c084fc]', label: 'Feed' };
 
 /**
  * Inline rename popover for a scoreboard tab.
@@ -201,6 +231,7 @@ export default function ScoreboardManager() {
     const active = useSettingsStore(s => s?.scoreboards?.active ?? [1]);
     const sources = useSettingsStore(s => s?.scoreboards?.sources ?? {});
     const aliases = useSettingsStore(s => s?.scoreboards?.aliases ?? {});
+    const rotations = useSettingsStore(s => s?.scoreboards?.rotation ?? {});
     const [activeTab, setActiveTab] = useState(String(active[0] ?? 1));
 
     const handleAddScoreboard = useCallback(async () => {
@@ -229,6 +260,7 @@ export default function ScoreboardManager() {
                         const src = sources[sbId] ?? sources[String(sbId)];
                         const srcType = src?.type ?? 'manual';
                         const badge = SOURCE_BADGE[srcType];
+                        const feedOn = (rotations[sbId] ?? rotations[String(sbId)])?.enabled ?? false;
                         const alias = aliases[sbId] ?? aliases[String(sbId)] ?? '';
                         return (
                             <TabsTrigger key={sbId} value={String(sbId)}>
@@ -237,6 +269,11 @@ export default function ScoreboardManager() {
                                     {badge && (
                                         <Badge className={cn('text-[10px] font-semibold uppercase tracking-wider', badge.color)}>
                                             {badge.label}
+                                        </Badge>
+                                    )}
+                                    {feedOn && (
+                                        <Badge className={cn('text-[10px] font-semibold uppercase tracking-wider', FEED_BADGE.color)}>
+                                            {FEED_BADGE.label}
                                         </Badge>
                                     )}
                                     <RenamePopover sbId={sbId} currentAlias={alias} />

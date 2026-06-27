@@ -52,9 +52,17 @@ class RotationManager:
         sources = Settings.Get("scoreboards.sources", {})
         active = set(Settings.Get("scoreboards.active", [1]))
 
-        # Only resume rotations whose scoreboard still exists AND whose
-        # current source type is "rotator". Otherwise a stale rotation can
-        # keep writing into a scoreboard the user has reassigned.
+        # Migrate the legacy "rotator" source. The game feed is now orthogonal
+        # to the source type — it attaches to a manual board — so any board
+        # still typed "rotator" becomes "manual"; its feed survives via the
+        # rotation.enabled flag below.
+        for sb_id_str, src in list(sources.items()):
+            if isinstance(src, dict) and src.get("type") == "rotator":
+                await Settings.Set(f"scoreboards.sources.{sb_id_str}.type", "manual")
+
+        # Resume any feed that was running at shutdown, as long as its
+        # scoreboard still exists and it has games. The feed no longer depends
+        # on a source type; it's gated purely on its own enabled flag.
         to_resume = {}
         for sb_id_str, config in rotation_settings.items():
             try:
@@ -62,11 +70,6 @@ class RotationManager:
             except (TypeError, ValueError):
                 continue
             if sb_id not in active:
-                continue
-            if sources.get(sb_id_str, {}).get("type") != "rotator":
-                # Drop the stale enabled flag so we don't keep skipping it.
-                if config.get("enabled"):
-                    await Settings.Set(f"scoreboards.rotation.{sb_id}.enabled", False)
                 continue
             if config.get("enabled", False) and config.get("game_ids"):
                 to_resume[sb_id] = config
@@ -423,20 +426,15 @@ class RotationState:
         if not self.game_ids:
             return
 
-        # Self-cancel if the scoreboard's source is no longer "rotator".
-        # Catches lingering tasks left over from earlier code paths that
-        # didn't stop the rotation on source change. Without this, an
-        # orphaned task keeps writing into a scoreboard the user has
-        # reassigned (e.g. flipping a live_game scoreboard between two of
-        # the rotator's old games).
-        current_type = Settings.Get(f"scoreboards.sources.{self.sb_id}.type")
-        if current_type != "rotator":
+        # Self-cancel if this scoreboard's feed has been disabled out of band
+        # (e.g. its source was switched away from the manual board the feed was
+        # attached to). Without this, an orphaned task keeps writing into a
+        # scoreboard the user has reassigned.
+        if not Settings.Get(f"scoreboards.rotation.{self.sb_id}.enabled", False):
             logger.warning(
-                "[RotationState] sb {} source is {!r}, not 'rotator'; "
-                "self-cancelling lingering rotation task",
-                self.sb_id, current_type,
+                "[RotationState] sb {} feed disabled; self-cancelling lingering task",
+                self.sb_id,
             )
-            await Settings.Set(f"scoreboards.rotation.{self.sb_id}.enabled", False)
             await _mirror_to_state(self.sb_id, enabled=False)
             # Schedule cleanup outside this task — stop_rotation cancels
             # self.task, so calling it inline would cancel us mid-await.

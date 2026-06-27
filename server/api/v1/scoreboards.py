@@ -130,7 +130,7 @@ async def set_scoreboard_source(
     if sb_id not in active:
         raise HTTPException(status_code=404, detail="Scoreboard not found")
 
-    valid_types = ("manual", "hud", "live_game", "rotator")
+    valid_types = ("manual", "hud", "live_game")
     if source_type not in valid_types:
         raise HTTPException(status_code=400, detail=f"Invalid source type. Must be one of: {valid_types}")
 
@@ -141,10 +141,10 @@ async def set_scoreboard_source(
         await State.Set(f"score.{sb_id}", {})
         await State.Save()
 
-    # Stop any rotation when leaving the rotator source so it can't keep
-    # writing into a scoreboard the user has reassigned. Persist enabled=False
-    # so resume-on-startup also skips it.
-    if source_changed and old_source == "rotator":
+    # A running game feed attaches to a manual board; stop it on any source
+    # change so it can't keep writing into a scoreboard the user has reassigned.
+    # Persists enabled=False so resume-on-startup also skips it.
+    if source_changed:
         await RotationManager.stop_rotation(sb_id)
 
     # Update only the keys that this endpoint owns. Preserve sibling keys
