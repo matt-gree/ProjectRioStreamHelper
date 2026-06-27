@@ -160,7 +160,15 @@ class Settings:
             # frontend; this only persists per-streamer choices. `overrides`
             # maps an element id -> the OBS source name the streamer picked as
             # a fed element's target shared source (instead of the default).
-            "overrides": {}
+            "overrides": {},
+            # Hit-visualizer "spotlight": on Fire, cut to `scene`, play the
+            # animation, then cut back to the previous program scene. `holdMs`
+            # is extra time held on the landing before returning.
+            "spotlight": {
+                "enabled": False,
+                "scene": "",
+                "holdMs": 1500
+            }
         },
         "announcements": {
             "dismissed_ids": [],

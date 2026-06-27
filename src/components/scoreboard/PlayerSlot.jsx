@@ -9,6 +9,8 @@ import { SimpleTooltip } from '../ui/simple-tooltip';
 import { useStateStore } from '../../context/store';
 import { useAssetUrls } from '../../lib/assets';
 import { MSB_CHARACTERS, MSB_TEAMS, ROSTER_SIZE } from '../../data/msb';
+import { participantToScoreEntries } from '../../lib/participants';
+import ParticipantPicker from '../ParticipantPicker';
 import CharacterStatEditor from './CharacterStatEditor';
 
 const characterOptions = MSB_CHARACTERS.map(c => ({ value: c, label: c }));
@@ -72,10 +74,19 @@ export default memo(function PlayerSlot({ scoreboardNumber = 1, teamNumber, play
     const twitter    = player?.twitter ?? '';
 
     const setItem = useStateStore(s => s.setItem);
+    const setItems = useStateStore(s => s.setItems);
 
     const set = useCallback((field, value) => {
         setItem(`${basePath}.${field}`, value);
     }, [basePath, setItem]);
+
+    // Picking a person from the address book copies their enrichment into the
+    // player sub-tree in one batch (resolve-by-copy). Picking "use without
+    // saving" just sets the raw rioName, preserving the manual escape hatch.
+    const resolveParticipant = useCallback((row) => {
+        const entries = participantToScoreEntries(row, basePath);
+        if (entries.length) setItems(entries);
+    }, [basePath, setItems]);
 
     // Build roster array from character state, memoized to avoid re-creating on every render
     const rosterState = player?.character;
@@ -128,13 +139,16 @@ export default memo(function PlayerSlot({ scoreboardNumber = 1, teamNumber, play
                     />
                 </div>
                 <div className="col-span-5">
-                    <TextField
-                        label="Rio Name"
-                        placeholder="Online ID"
-                        value={rioName}
-                        onChange={e => set('rioName', e.currentTarget.value)}
-                        leftSection={<img src="/game_assets/rio_logo.png" alt="Rio" width={16} height={16} style={{ objectFit: 'contain' }} />}
-                    />
+                    <Stack gap={4}>
+                        <Text size="xs" dimmed span>Rio Name</Text>
+                        <ParticipantPicker
+                            value={rioName}
+                            placeholder="Online ID"
+                            onResolve={resolveParticipant}
+                            onRawValue={(text) => set('rioName', text)}
+                            leftSection={<img src="/game_assets/rio_logo.png" alt="Rio" width={16} height={16} style={{ objectFit: 'contain' }} />}
+                        />
+                    </Stack>
                 </div>
             </div>
 

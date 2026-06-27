@@ -15,6 +15,8 @@ from server.api.v1 import (
     announcements,
     logs,
     assets,
+    visualizer,
+    participants,
 )
 
 router_v1 = APIRouter(
@@ -37,3 +39,5 @@ router_v1.include_router(controller.router)
 router_v1.include_router(announcements.router)
 router_v1.include_router(logs.router)
 router_v1.include_router(assets.router)
+router_v1.include_router(visualizer.router)
+router_v1.include_router(participants.router)

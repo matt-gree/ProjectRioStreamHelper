@@ -164,6 +164,19 @@
         deepUnset(state, msg.key);
         if (shouldRender(msg.key)) render();
       });
+
+      // Batched unset — the mirror of set_batch. The store's deleteItems() emits
+      // this; without handling it, clears (e.g. clearing production.feed.split)
+      // never reach overlays and the old value lingers.
+      socket.on('v1.state.unset_batch', (msg) => {
+        if (msg.sid === socket.id) return;
+        let needs = false;
+        for (const item of msg.items) {
+          deepUnset(state, item.key);
+          if (shouldRender(item.key)) needs = true;
+        }
+        if (needs) render();
+      });
     }
 
     // Settings events (opt-in)

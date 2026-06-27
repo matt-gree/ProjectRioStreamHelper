@@ -948,6 +948,10 @@ class StartGGProvider:
                 }
 
                 if user:
+                    if user.get("id") is not None:
+                        player_data["userId"] = user["id"]
+                    if user.get("slug"):
+                        player_data["userSlug"] = user["slug"]
                     if user.get("name"):
                         player_data["full_name"] = user["name"]
                     if user.get("genderPronoun"):
@@ -991,6 +995,10 @@ class StartGGProvider:
                 "playerId": player.get("id"),
             }
             if user:
+                if user.get("id") is not None:
+                    pd["userId"] = user["id"]
+                if user.get("slug"):
+                    pd["userSlug"] = user["slug"]
                 if user.get("name"):
                     pd["full_name"] = user["name"]
                 if user.get("genderPronoun"):

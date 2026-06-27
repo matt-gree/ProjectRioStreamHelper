@@ -13,6 +13,7 @@ from loguru import logger
 from server import server, socketio
 from server.state import State
 from server.settings import Settings, Config as TSHConfig
+from server.participants import Participants
 from server.utils.uvilogger import setup_logger
 
 # Signals the tray (main thread on macOS) that the server is up and URL is set.
@@ -58,7 +59,8 @@ async def main() -> int:
 
     await asyncio.gather(
         TSHConfig.Load(),
-        Settings.Load()
+        Settings.Load(),
+        Participants.Load()
     )
 
     # TSH_DEV=1 is set by `npm run server` (via package.json).

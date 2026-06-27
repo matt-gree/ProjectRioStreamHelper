@@ -12,6 +12,7 @@ import { SimpleTooltip } from './ui/simple-tooltip';
 import { notifications } from '../lib/notify';
 import { cn } from '../lib/utils';
 import LogsViewer from './LogsViewer';
+import ParticipantPicker from './ParticipantPicker';
 import { useSettingsStore, useConfigStore } from '../context/store';
 import { useObsStore } from '../context/obs';
 import { useAssetsVersionStore } from '../lib/assets';
@@ -615,10 +616,11 @@ export default function SettingsModal({ opened, onClose }) {
                     <Text size="xs" dimmed>
                         Lock a Rio username to always appear on a specific side when a game is loaded.
                     </Text>
-                    <Input
+                    <ParticipantPicker
                         placeholder="Rio username"
                         value={pinnedPlayer}
-                        onChange={e => setPinnedPlayer(e.currentTarget.value)}
+                        onResolve={(row) => setPinnedPlayer(row.identities?.rioName || '')}
+                        onRawValue={(text) => setPinnedPlayer(text)}
                     />
                     <SegmentedControl
                         size="xs"

@@ -81,9 +81,11 @@ _DEFAULT_DIMS = {
 # (single-variant standalone layouts that aren't size or team variants).
 _STANDALONE_DISPLAY_NAMES = {
     "rotator/ticker": "Results Ticker",
-    # Shared "fed" sources: the producer feeds chosen content to these from the
-    # Production page (e.g. which roster character's stats to show).
-    "shared/stats-feed": "Stats (Fed)",
+    # Named shared containers: each is a generic, descriptively-sized target the
+    # producer can feed any supported element into (production.feed.container.*).
+    # Split-Screen sits beside the game (tall); Stats is a small bar.
+    "shared/split-screen": "Split-Screen",
+    "shared/stats-feed": "Stats",
 }
 
 

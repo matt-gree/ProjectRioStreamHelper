@@ -1,14 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Stack, Text, Title, Loader } from '../../components/ui/primitives';
 import { Panel } from '../../components/ui/panel';
-import { TextField } from '../../components/ui/text-field';
 import { Input } from '../../components/ui/input';
 import { Button } from '../../components/ui/button';
 import { SimpleSelect } from '../../components/ui/simple-select';
 import { Badge } from '../../components/ui/badge';
 import { Checkbox } from '../../components/ui/checkbox';
 import { Label } from '../../components/ui/label';
-import { Alert, AlertTitle, AlertDescription } from '../../components/ui/alert';
 import { SimpleTooltip } from '../../components/ui/simple-tooltip';
 import {
     Table, TableHeader, TableBody, TableHead, TableRow, TableCell,
@@ -43,15 +41,13 @@ export default function Bracket() {
     const bracketLink = useStateStore(s => s?.tournamentInfo?.bracket_link ?? '');
 
     const {
-        loading, error,
-        setSource, loadEvent, fetchPhases, fetchSets, fetchEntrants, loadSet, clearEvent,
+        loading,
+        setSource, fetchSets, loadSet,
     } = useTournament();
 
-    const [prefetching, setPrefetching] = useState(false);
-    const [statusText, setStatusText] = useState('');
-    const prefetchInflightRef = useRef(false);
-
-    // Pull all UI state from the persistent bracket store
+    // Pull all UI state from the persistent bracket store. Loading/clearing a
+    // tournament now lives in the shared TournamentLoader (above the section
+    // switch); this view only reads what the loader put in the store.
     const bs = useBracketStore();
     const {
         tournament, phases, selectedPhase, selectedPool,
@@ -59,160 +55,12 @@ export default function Bracket() {
         update,
     } = bs;
 
-    const url = bs.url ?? '';
-
-    // ── Background prefetch: cache sets for every phase ───────
-    // Fires after phases load. Keeps the Load button spinning (via
-    // `prefetching`) so the user knows work is still happening, but does
-    // NOT block the rest of the UI — phase selectors/tables remain
-    // interactive and the existing on-demand fetch handles cache misses.
-    const prefetchTournamentData = useCallback((phasesList, link) => {
-        // Guard against concurrent invocations (Strict Mode double-effects, or
-        // a manual Load that overlaps the auto-restore). Without this, two
-        // runs share the same setStatusText and the counter visibly interleaves.
-        if (prefetchInflightRef.current) return;
-
-        const phasesToFetch = (phasesList || []).filter(p => p?.id != null);
-
-        // Cache both completed-filter variants per phase so the "Include
-        // completed" toggle is instant either way.
-        const setJobs = phasesToFetch.flatMap(p => [
-            { kind: 'sets', phase: p, finished: false },
-            { kind: 'sets', phase: p, finished: true },
-        ]);
-        const entrantsAlreadyCached =
-            link && useBracketStore.getState().entrantsLoadedFor === link;
-        const jobs = entrantsAlreadyCached
-            ? setJobs
-            : [...setJobs, { kind: 'entrants' }];
-
-        if (jobs.length === 0) return;
-
-        prefetchInflightRef.current = true;
-        setPrefetching(true);
-        let done = 0;
-        const total = jobs.length;
-        setStatusText(`Caching tournament data (0/${total})…`);
-
-        const fetchSetsJob = async ({ phase, finished }) => {
-            const key = `${phase.id}|${null}|${finished}`;
-            const existing = useBracketStore.getState().setsByKey?.[key];
-            if (existing) return;
-            const opts = { phaseId: Number(phase.id), includeFinished: finished };
-            const first = await fetchSets(1, opts);
-            if (!first) return;
-            let collected = first.sets;
-            const totalPages = first.pageInfo?.totalPages || 1;
-            if (totalPages > 1) {
-                const rest = await Promise.all(
-                    Array.from({ length: totalPages - 1 }, (_, i) => fetchSets(i + 2, opts))
-                );
-                collected = collected.concat(...rest.filter(Boolean).map(r => r.sets));
-            }
-            update({
-                setsByKey: { ...(useBracketStore.getState().setsByKey || {}), [key]: collected },
-            });
-        };
-
-        const fetchEntrantsJob = async () => {
-            const first = await fetchEntrants(1);
-            if (!first) return;
-            let collected = first.entrants;
-            const totalPages = first.pageInfo?.totalPages || 1;
-            if (totalPages > 1) {
-                const rest = await Promise.all(
-                    Array.from({ length: totalPages - 1 }, (_, i) => fetchEntrants(i + 2))
-                );
-                collected = collected.concat(...rest.filter(Boolean).map(r => r.entrants));
-            }
-            update({
-                entrants: collected,
-                entrantsPage: 1,
-                entrantsTotalPages: 1,
-                entrantsLoadedFor: link,
-            });
-        };
-
-        Promise.all(jobs.map(j =>
-            (j.kind === 'entrants' ? fetchEntrantsJob() : fetchSetsJob(j))
-                .finally(() => {
-                    done += 1;
-                    setStatusText(`Caching tournament data (${done}/${total})…`);
-                })
-        )).finally(() => {
-            prefetchInflightRef.current = false;
-            setPrefetching(false);
-            setStatusText('');
-        });
-    }, [fetchSets, fetchEntrants, update]);
-
-    // Sync URL input from stored bracket_link on first render and auto-restore
+    // Restore this hook instance's source from the persisted link so fetchSets/
+    // loadSet hit the right provider (start.gg is the default; Challonge needs
+    // this). The loader owns the actual fetching.
     useEffect(() => {
-        // After Clear, we suppress auto-load until the server's bracket_link
-        // broadcast arrives (otherwise a stale bracketLink races a freshly
-        // null tournament and reloads the event we just cleared).
-        if (bs.suppressAutoLoad) {
-            if (!bracketLink) update({ suppressAutoLoad: false });
-            return;
-        }
-        // Skip if we already have tournament data in the store — switching tabs
-        // shouldn't refetch. Only auto-restore on a true first load.
-        if (tournament || !bracketLink) return;
-        update({ url: bracketLink });
-        setSource(bracketLink);
-        (async () => {
-            const result = await loadEvent(bracketLink);
-            if (!result || result.error) return;
-            const phaseUpdate = { tournament: result };
-            const phasesResult = await fetchPhases();
-            if (phasesResult) {
-                phaseUpdate.phases = phasesResult;
-                if (phasesResult.length === 1) {
-                    phaseUpdate.selectedPhase = String(phasesResult[0].id);
-                }
-            }
-            update(phaseUpdate);
-            if (phasesResult) prefetchTournamentData(phasesResult, bracketLink);
-        })();
-    }, [bracketLink, tournament, bs.suppressAutoLoad, update, setSource, loadEvent, fetchPhases, prefetchTournamentData]);
-
-    // ── Load event ────────────────────────────────────────────
-    const handleLoadEvent = useCallback(async () => {
-        if (!url.trim()) return;
-        setStatusText('Loading tournament…');
-        const result = await loadEvent(url.trim());
-        if (!result || result.error) {
-            setStatusText('');
-            notifications.show({ message: result?.error || 'Failed to load tournament', color: 'red' });
-            return;
-        }
-
-        notifications.show({ message: `Loaded: ${result.tournamentName}`, color: 'green' });
-
-        update({
-            tournament: result,
-            sets: [],
-            entrants: [],
-            selectedPhase: null,
-            selectedPool: null,
-            loadedSets: {},
-        });
-
-        // Fetch phases immediately
-        setStatusText('Fetching phases…');
-        const phasesResult = await fetchPhases();
-        if (phasesResult) {
-            const phaseUpdate = { phases: phasesResult };
-            // Auto-select first phase if only one
-            if (phasesResult.length === 1) {
-                phaseUpdate.selectedPhase = String(phasesResult[0].id);
-            }
-            update(phaseUpdate);
-            prefetchTournamentData(phasesResult, url.trim());
-        } else {
-            setStatusText('');
-        }
-    }, [url, loadEvent, fetchPhases, update, prefetchTournamentData]);
+        if (bracketLink) setSource(bracketLink);
+    }, [bracketLink, setSource]);
 
     // ── Fetch sets ────────────────────────────────────────────
     // Single fetch path: page 1 sequentially (to learn totalPages), then
@@ -249,34 +97,6 @@ export default function Bracket() {
             setSetsFetching(false);
         }
     }, [selectedPhase, selectedPool, includeFinished, fetchSets, update]);
-
-    const handleClear = useCallback(async () => {
-        update({ suppressAutoLoad: true });
-        setStatusText('');
-        await clearEvent();
-        update({
-            tournament: null,
-            phases: [],
-            selectedPhase: null,
-            selectedPool: null,
-            sets: [],
-            setsPage: 1,
-            setsTotalPages: 0,
-            includeFinished: false,
-            loadedSets: {},
-            entrants: [],
-            entrantsPage: 1,
-            entrantsTotalPages: 0,
-            entrantsLoadedFor: null,
-            url: '',
-            lastFetchedKey: null,
-            lastFetchedAt: null,
-            allSets: [],
-            allSetsLoadedFor: null,
-            setsByKey: {},
-        });
-        notifications.show({ message: 'Tournament cleared', color: 'gray' });
-    }, [clearEvent, update]);
 
     const [playerSearch, setPlayerSearch] = useState('');
     const allSets = bs.allSets ?? [];
@@ -335,66 +155,6 @@ export default function Bracket() {
     return (
         <Stack gap="md">
             <Title order={3}>Bracket</Title>
-
-            {/* URL Input */}
-            <Panel title="Load Tournament">
-                <Stack gap="xs" className="p-4">
-                    <div className="flex items-end gap-2">
-                        <TextField
-                            label="Tournament URL"
-                            placeholder="https://start.gg/tournament/.../event/... or https://challonge.com/..."
-                            description="Paste a start.gg event URL or Challonge tournament URL"
-                            className="flex-1"
-                            value={url}
-                            onChange={e => update({ url: e.currentTarget.value })}
-                            onKeyDown={e => e.key === 'Enter' && handleLoadEvent()}
-                        />
-                        <Button size="sm" onClick={handleLoadEvent} disabled={loading || prefetching}>
-                            {(loading || prefetching) && <Loader size={12} />}
-                            Load
-                        </Button>
-                        {tournament && (
-                            <Button size="sm" variant="outline" className="border-destructive/40 text-destructive" onClick={handleClear}>
-                                Clear
-                            </Button>
-                        )}
-                    </div>
-                    {statusText && (
-                        <div className="mt-1 flex items-center gap-2">
-                            <Loader size={12} />
-                            <Text size="xs" dimmed>{statusText}</Text>
-                        </div>
-                    )}
-                </Stack>
-            </Panel>
-
-            {error && (
-                <Alert variant="destructive">
-                    <AlertTitle>Error</AlertTitle>
-                    <AlertDescription>{error}</AlertDescription>
-                </Alert>
-            )}
-
-            {/* Tournament Summary */}
-            {tournament && (
-                <Panel glow={false} className="p-3">
-                    <div className="flex flex-wrap items-center gap-6">
-                        <Text fw={600}>{tournament.tournamentName}</Text>
-                        {tournament.eventName && (
-                            <Badge variant="secondary">{tournament.eventName}</Badge>
-                        )}
-                        <Text size="sm" dimmed>
-                            {tournament.numEntrants} entrants
-                        </Text>
-                        {tournament.address && (
-                            <Text size="sm" dimmed>{tournament.address}</Text>
-                        )}
-                        {tournament.isOnline && (
-                            <Badge className="bg-[#22b8cf] text-black">Online</Badge>
-                        )}
-                    </div>
-                </Panel>
-            )}
 
             {/* Phase / Pool Selectors + Fetch Sets */}
             {tournament && phases.length > 0 && (

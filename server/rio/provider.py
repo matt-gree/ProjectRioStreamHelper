@@ -5,10 +5,56 @@ from loguru import logger
 from server.rio.pyrio.lookup import LookupDicts
 from server.rio.pyrio.team_name_algo import team_name
 
+from server.rio import hit_visualizer
 from server.rio.hud_watcher import HudWatcher
 from server.rio.stats_tracker import StatsTracker
+from server.participants import Participants
 from server.settings import Settings
 from server.state import State
+
+
+# Address-book resurface: registry display.* field -> score.player.* field.
+# Mirrors the frontend resolver (src/lib/participants.js). mainCharacter has no
+# scoreboard target and is intentionally omitted.
+_RESURFACE_MAP = {
+    "tag": "name",
+    "prefix": "team",
+    "fullName": "full_name",
+    "pronoun": "pronoun",
+    "country": "country",
+    "state": "state",
+    "twitter": "twitter",
+    "youtube": "youtube",
+}
+
+
+def _apply_resurface(entries: list[tuple]) -> None:
+    """Enrich a pending SetBatch with saved address-book data, in place.
+
+    Scans `entries` for any `…player.{T}.rioName` write with a non-empty value,
+    matches it against the participant registry, and appends the resolved
+    enrichment fields to the SAME batch (so HUD, Live API, and Rotator games all
+    resurface a known player with no extra SocketIO events). Reads the in-memory
+    registry only — safe on the hot path. Never overwrites a key the game itself
+    already set, and only writes non-empty registry values.
+    """
+    existing = {k for k, _ in entries}
+    additions: list[tuple] = []
+    for key, value in entries:
+        if not key.endswith(".rioName") or not value:
+            continue
+        row = Participants.MatchByRioName(value)
+        if not row:
+            continue
+        prefix = key[: -len(".rioName")]
+        display = row.get("display") or {}
+        for src, dst in _RESURFACE_MAP.items():
+            dst_key = f"{prefix}.{dst}"
+            v = display.get(src)
+            if v and dst_key not in existing:
+                additions.append((dst_key, v))
+                existing.add(dst_key)
+    entries.extend(additions)
 
 
 # Map pyrio's human-readable stadium names to the slug values used by the
@@ -169,6 +215,7 @@ async def apply_parsed_game_to_state(parsed: dict, scoreboard_number: int, home_
             if char_idx < len(positions):
                 entries.append((f"{prefix}.character.{char_idx}.position", positions[char_idx]))
 
+    _apply_resurface(entries)
     await State.SetBatch(entries)
     await State.Save()
 
@@ -311,6 +358,7 @@ async def apply_completed_game_to_state(game: dict, scoreboard_number: int):
             entries.append((f"{prefix}.character.{char_idx}.position", ""))
             entries.append((f"{prefix}.character.{char_idx}.is_starred", False))
 
+    _apply_resurface(entries)
     await State.SetBatch(entries)
     await State.Save()
 
@@ -337,6 +385,11 @@ class RioGameDataProvider:
     _prev_inning: int | None = None
     _sides_swapped: bool = False
     _user_overridden: bool = False
+
+    # Hit visualizer: dedupe repeat HUD frames of the same contact, and a
+    # monotonic counter the overlay watches to retrigger its animation.
+    _last_hit_sig: tuple | None = None
+    _hit_counter: int = 0
 
     @classmethod
     async def Start(cls):
@@ -408,6 +461,7 @@ class RioGameDataProvider:
             parsed = cls._preserve_player_sides(parsed)
             cls.current_game = parsed
             await cls._apply_game_to_state(parsed)
+            await cls._maybe_apply_hit(game_json)
 
             for sb in cls._hud_targets:
                 await StatsTracker.push_stats_to_state(sb, cls._sides_swapped)
@@ -660,9 +714,38 @@ class RioGameDataProvider:
         for sb in cls._hud_targets:
             StatsTracker.set_sides_swapped(sb, cls._sides_swapped)
         await cls._apply_game_to_state(parsed)
+        await cls._maybe_apply_hit(game_json)
 
         for sb in cls._hud_targets:
             await StatsTracker.push_stats_to_state(sb, cls._sides_swapped)
+
+    @classmethod
+    async def _maybe_apply_hit(cls, game_json: dict):
+        """Compute and push the hit visualizer payload for a new contact.
+
+        Fires for every batted ball (fair/foul/out). Deduped by contact
+        signature so repeat HUD frames of the same contact don't re-push;
+        a fresh contact bumps ``hit.id`` so overlays re-animate. The producer
+        decides what to actually show.
+        """
+        if not cls._hud_targets:
+            return
+        hit = hit_visualizer.build_hit(game_json)
+        if hit is None:
+            return
+        sig = hit.pop("_sig", None)
+        if sig == cls._last_hit_sig:
+            return
+        cls._last_hit_sig = sig
+        cls._hit_counter += 1
+        hit["id"] = cls._hit_counter
+
+        entries = []
+        for sb in cls._hud_targets:
+            for key, value in hit.items():
+                entries.append((f"score.{sb}.hit.{key}", value))
+        await State.SetBatch(entries)
+        await State.Save()
 
     @classmethod
     async def _apply_hud_game_mode(cls, game_json: dict):

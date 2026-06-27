@@ -1,7 +1,8 @@
-import { memo, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import {
     Radio, Eye, EyeOff, Globe, PlugZap, MonitorPlay, ArrowLeftRight, ChevronDown,
+    RotateCcw, Sparkles, Columns2, Settings,
 } from 'lucide-react';
 import { useObsStore } from '../../context/obs';
 import { useSettingsStore, useStateStore } from '../../context/store';
@@ -288,14 +289,15 @@ function LeftRail() {
     );
 }
 
-// Content picker for a 'stats' fed element: choose WHICH roster character's
-// stats to put on the shared overlay. The pick is written to live State at
-// `production.feed.stats`; public/layout/shared/stats-feed.html renders it.
-// Scoreboard 1 for now (matches the default overlay binding); multi-scoreboard
-// is a later concern.
-function StatsFeedPicker({ scoreboard = 1 }) {
+// Content picker for the 'stats' fed element: choose WHICH roster character's
+// stats to put on the chosen shared container. Picking IS feeding — the pick is
+// written to `production.feed.container.<id>` = { element:'stats', … }, which the
+// container overlay renders. Scoreboard 1 for now; multi-scoreboard is later.
+function StatsFeedPicker({ element, scoreboard = 1 }) {
+    const { container } = useContainerTarget(element.id, 'stats-feed');
+    const feedKey = `production.feed.container.${container}`;
     const players = useStateStore(s => s?.score?.[scoreboard]?.player);
-    const selection = useStateStore(s => s?.production?.feed?.stats);
+    const selection = useStateStore(s => s?.production?.feed?.container?.[container]);
 
     // Build per-team option groups from the live roster (9 slots each).
     const teams = useMemo(() => {
@@ -314,19 +316,20 @@ function StatsFeedPicker({ scoreboard = 1 }) {
         return out;
     }, [players]);
 
-    const isThisSb = selection && (selection.scoreboard == null || selection.scoreboard === scoreboard);
-    const role = (isThisSb && selection.role) || 'batting';
-    const selValue = isThisSb ? `${selection.team}:${selection.charIndex}` : '';
+    const mine = selection && selection.element === 'stats'
+        && (selection.scoreboard == null || selection.scoreboard === scoreboard);
+    const role = (mine && selection.role) || 'batting';
+    const selValue = mine ? `${selection.team}:${selection.charIndex}` : '';
 
     // Write via the *batch* store actions: only set_batch / unset_batch have
     // server-side socket handlers (there's no v1.state.set handler), so a
     // single setItem/deleteItem would never reach the server or the overlay.
     const feed = (team, charIndex, r) =>
         useStateStore.getState().setItems([
-            { key: 'production.feed.stats', value: { scoreboard, team, charIndex, role: r } },
+            { key: feedKey, value: { element: 'stats', scoreboard, team, charIndex, role: r } },
         ]);
     const choose = (value) => {
-        if (!value) { useStateStore.getState().deleteItems(['production.feed.stats']); return; }
+        if (!value) { useStateStore.getState().deleteItems([feedKey]); return; }
         const [team, charIndex] = value.split(':').map(Number);
         feed(team, charIndex, role);
     };
@@ -393,6 +396,50 @@ function boundSource(element, items, overrideName) {
     return items.find(it => it.sourceName === targetName) || null;
 }
 
+// A named shared container's stable id = its layout filename stem (e.g.
+// '/layout/shared/split-screen.html' → 'split-screen'). The producer feeds an
+// element into a container by writing production.feed.container.<id>; the
+// matching shared overlay reads the same key.
+function containerId(url) {
+    return (url || '').replace(/^.*\/([^/]+)\.html?(?:\?.*)?$/, '$1');
+}
+
+// The named shared containers (public/layout/shared/*) an element can be fed
+// into — Split-Screen, Stats, and any the user adds later. Sourced from the
+// layout catalog, independent of OBS scene membership.
+function useSharedContainers() {
+    const [list, setList] = useState([]);
+    useEffect(() => {
+        let alive = true;
+        fetch('/api/v1/layouts')
+            .then(r => r.json())
+            .then(all => { if (alive) setList(all.filter(l => l.group === 'shared').map(l => ({ id: containerId(l.url), name: l.name }))); })
+            .catch(() => {});
+        return () => { alive = false; };
+    }, []);
+    return list;
+}
+
+// Which named container an element feeds, persisted per element at
+// settings.production.containers.<elementId>.
+function useContainerTarget(elementId, defaultId) {
+    const container = useSettingsStore(s => s?.production?.containers?.[elementId]) || defaultId;
+    const setSetting = useSettingsStore(s => s.setItem);
+    // Switching the target RELEASES this element from its old container first
+    // (only if it actually owns that container's feed), so it leaves that OBS
+    // source immediately; then re-points the setting.
+    const setContainer = (id) => {
+        if (id === container) return;
+        const oldFeed = useStateStore.getState()?.production?.feed?.container?.[container];
+        if (oldFeed && oldFeed.element === elementId) {
+            useStateStore.getState().deleteItems([`production.feed.container.${container}`]);
+        }
+        const cur = useSettingsStore.getState()?.production?.containers || {};
+        setSetting('production.containers', { ...cur, [elementId]: id });
+    };
+    return { container, setContainer };
+}
+
 // Show/hide an OBS source.
 function VisibilityRow({ label, sub, item, sceneName }) {
     const setSceneItemEnabled = useObsStore(s => s.setSceneItemEnabled);
@@ -410,119 +457,408 @@ function VisibilityRow({ label, sub, item, sceneName }) {
     );
 }
 
+// Lead time before the swing starts after we cut to the spotlight scene — lets
+// OBS's active transition settle so the contact isn't hidden behind a fade.
+const SPOTLIGHT_LEAD_MS = 350;
+// Module-scoped so the return-to-previous-scene still fires even if the chip
+// panel closes mid-spotlight. Also doubles as the single-flight guard.
+let _spotlightTimer = null;
+
+// Hit-visualizer behavior shared by its condensed face and its gear setup.
+// Three things the producer can do with a captured hit:
+//   - Replay it in place (bump score.{N}.hit.replay_nonce — no scene change).
+//   - Feed it into a generic shared container slot (production.feed.slot.<id>) so
+//     any shared/fed.html source assigned that slot renders it.
+//   - Spotlight it: cut to a chosen OBS scene, play the animation, cut back to
+//     the previous program scene (settings.production.spotlight).
+// Scoreboard 1 for now (matches the default overlay binding); multi-scoreboard
+// is a later concern.
+function useHitViz(scoreboard = 1) {
+    const hit = useStateStore(useShallow(s => s?.score?.[scoreboard]?.hit));
+    const hasHit = hit && Array.isArray(hit.path) && hit.path.length > 0;
+
+    const status = useObsStore(s => s.status);
+    const scenes = useObsStore(s => s.scenes);
+    const spotlight = useSettingsStore(s => s?.production?.spotlight) || {};
+    const setSetting = useSettingsStore(s => s.setItem);
+    const obsConnected = status === 'connected';
+
+    // Which named shared container this element feeds
+    // (production.feed.container.<id>). Persisted per element; defaults to the
+    // Split-Screen container.
+    const container = useSettingsStore(s => s?.production?.containers?.hitvisualizer) || 'split-screen';
+    const containerKey = `production.feed.container.${container}`;
+    const containerFeed = useStateStore(s => s?.production?.feed?.container?.[container]);
+    const fedHere = !!containerFeed && containerFeed.element === 'hitvisualizer'
+        && (Number(containerFeed.scoreboard) || 1) === scoreboard;
+
+    const mounted = useRef(true);
+    // Set true in the body, not just at init: under StrictMode the effect runs
+    // mount→unmount→remount, and a cleanup-only ref would stay false forever.
+    useEffect(() => {
+        mounted.current = true;
+        return () => { mounted.current = false; };
+    }, []);
+    const [firing, setFiring] = useState(false);
+
+    const replay = () => useStateStore.getState().setItems([
+        { key: `score.${scoreboard}.hit.replay_nonce`, value: Date.now() },
+    ]);
+
+    // Feed: assign this hit to the chosen named container. The matching shared
+    // overlay renders it, and plays it when made active in OBS.
+    const feedContainer = () => useStateStore.getState().setItems([
+        { key: containerKey, value: { element: 'hitvisualizer', scoreboard } },
+    ]);
+    const clearContainer = () => useStateStore.getState().deleteItems([containerKey]);
+    // Switching the target container RELEASES the element from its old container
+    // first (so it leaves that OBS source immediately and the toggle resets to
+    // off), then re-points the setting. The producer re-arms by clicking Feed on
+    // the newly selected container.
+    const setContainer = (id) => {
+        if (id === container) return;
+        if (fedHere) useStateStore.getState().deleteItems([containerKey]);
+        const cur = useSettingsStore.getState()?.production?.containers || {};
+        setSetting('production.containers', { ...cur, hitvisualizer: id });
+    };
+
+    const setSpot = (patch) => {
+        const cur = useSettingsStore.getState()?.production?.spotlight || {};
+        setSetting('production.spotlight', { ...cur, ...patch });
+    };
+
+    const canSpotlight = !!spotlight.enabled && !!spotlight.scene && hasHit && obsConnected;
+
+    const fireSpotlight = () => {
+        if (_spotlightTimer || !canSpotlight) return;
+        const prev = useObsStore.getState().programScene;
+        if (!prev) { notifications.show({ message: 'OBS: no current program scene', color: 'red' }); return; }
+        const frames = hit.path.length;
+        const animMs = (frames / 60) * 1000;
+        const holdMs = Number(spotlight.holdMs) || 1500;
+        setFiring(true);
+        runObs(() => useObsStore.getState().setProgramScene(spotlight.scene));
+        // Fire the swing once the cut-in has settled.
+        setTimeout(() => useStateStore.getState().setItems([
+            { key: `score.${scoreboard}.hit.replay_nonce`, value: Date.now() },
+        ]), SPOTLIGHT_LEAD_MS);
+        // Return to the previous program scene after the flight + a hold on the landing.
+        _spotlightTimer = setTimeout(() => {
+            _spotlightTimer = null;
+            runObs(() => useObsStore.getState().setProgramScene(prev));
+            if (mounted.current) setFiring(false);
+        }, SPOTLIGHT_LEAD_MS + animMs + holdMs);
+    };
+
+    return {
+        hit, hasHit, fedHere, scenes, spotlight, obsConnected, firing,
+        replay, feedContainer, clearContainer, setSpot, canSpotlight, fireSpotlight,
+        container, setContainer,
+    };
+}
+
+// Condensed face: the live actions only — Replay in place, Spotlight (cut to the
+// configured scene), and Split (toggle the split-screen feed). Setup lives in the
+// gear popover (HitVizSetup).
+function HitVizFace({ scoreboard = 1 }) {
+    const v = useHitViz(scoreboard);
+    return (
+        <Stack gap="xs">
+            <Text size="xs" className="truncate text-muted-foreground">
+                {v.hasHit
+                    ? `Latest: ${v.hit.batter || '—'}${v.hit.result ? ` · ${v.hit.result}` : ''}${v.hit.distance != null ? ` · ${v.hit.distance}m` : ''}`
+                    : 'No hit captured yet'}
+            </Text>
+            {v.hit && v.hit.valid === false && v.hit.warning && (
+                <Text size="xs" className="truncate text-amber-500" title={v.hit.warning}>⚠ Sim diverges</Text>
+            )}
+            <Button size="xs" variant="secondary" disabled={!v.hasHit} onClick={v.replay} className="w-full">
+                <RotateCcw size={13} className="mr-1" /> Replay
+            </Button>
+            <Group gap="xs" className="flex-nowrap">
+                <SimpleTooltip label={v.canSpotlight ? 'Cut to the spotlight scene and play' : 'Enable + pick a scene in ⚙'}>
+                    <Button size="xs" disabled={!v.canSpotlight || v.firing} onClick={v.fireSpotlight} className="min-w-0 flex-1">
+                        <Sparkles size={13} className="mr-1 shrink-0" />
+                        <span className="truncate">{v.firing ? 'On air…' : 'Spotlight'}</span>
+                    </Button>
+                </SimpleTooltip>
+                <SimpleTooltip
+                    label={v.fedHere ? 'Fed to a shared container — click to clear' : 'Feed to a shared container'}
+                >
+                    <Button
+                        size="xs"
+                        variant={v.fedHere ? 'default' : 'secondary'}
+                        disabled={!v.hasHit && !v.fedHere}
+                        onClick={v.fedHere ? v.clearContainer : v.feedContainer}
+                        className="shrink-0"
+                    >
+                        <Columns2 size={13} />
+                    </Button>
+                </SimpleTooltip>
+            </Group>
+        </Stack>
+    );
+}
+
+// Gear setup — all the config, slim. Overlay visibility on air, the spotlight
+// auto-cut (enable · scene · hold), and which container slot the Feed button uses.
+function HitVizSetup({ scoreboard = 1 }) {
+    const v = useHitViz(scoreboard);
+    const containers = useSharedContainers();
+    const items = usePrshItems();
+    const programScene = useObsStore(s => s.programScene);
+    const overrideName = useSettingsStore(s => s?.production?.overrides?.hitvisualizer);
+    const element = ELEMENTS.find(e => e.id === 'hitvisualizer');
+    const bound = element ? boundSource(element, items, overrideName) : null;
+
+    const fieldCls = 'h-7 rounded-md border border-border bg-card px-2 text-xs text-foreground';
+    const labelCls = 'w-20 shrink-0 text-muted-foreground';
+
+    return (
+        <Stack gap="sm">
+            {/* On-air visibility of the dedicated overlay. */}
+            {bound ? (
+                <label className="flex items-center justify-between gap-2">
+                    <Text size="xs" className="text-muted-foreground">On air</Text>
+                    <Switch
+                        size="sm"
+                        checked={bound.enabled}
+                        onCheckedChange={(c) => runObs(() => useObsStore.getState().setSceneItemEnabled(programScene, bound.id, c))}
+                    />
+                </label>
+            ) : (
+                <Text size="xs" className="text-muted-foreground">Overlay not in program scene.</Text>
+            )}
+
+            {/* Spotlight auto-cut. */}
+            <div className="border-t border-border pt-2">
+                <label className="flex items-center justify-between gap-2">
+                    <Text size="xs" className="text-muted-foreground">Spotlight auto-cut</Text>
+                    <Switch size="sm" checked={!!v.spotlight.enabled} onCheckedChange={(c) => v.setSpot({ enabled: c })} />
+                </label>
+                {v.spotlight.enabled && (
+                    <Stack gap="xs" className="mt-2">
+                        <div className="flex items-center gap-2">
+                            <Text size="xs" className={labelCls}>Scene</Text>
+                            <select
+                                value={v.spotlight.scene || ''}
+                                onChange={(e) => v.setSpot({ scene: e.target.value })}
+                                className={cn(fieldCls, 'min-w-0 flex-1')}
+                            >
+                                <option value="" disabled>{v.obsConnected ? 'Choose…' : 'Connect OBS'}</option>
+                                {v.scenes.map((s) => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <Text size="xs" className={labelCls}>Hold (ms)</Text>
+                            <input
+                                type="number" min="0" step="250"
+                                value={v.spotlight.holdMs ?? 1500}
+                                onChange={(e) => v.setSpot({ holdMs: Number(e.target.value) })}
+                                className={cn(fieldCls, 'w-20')}
+                            />
+                        </div>
+                    </Stack>
+                )}
+            </div>
+
+            {/* Named-container feed: which shared container the Feed button uses. */}
+            <div className="border-t border-border pt-2">
+                <div className="flex items-center gap-2">
+                    <Text size="xs" className={labelCls}>Feed into</Text>
+                    <select
+                        value={v.container}
+                        onChange={(e) => v.setContainer(e.target.value)}
+                        className={cn(fieldCls, 'min-w-0 flex-1')}
+                    >
+                        {containers.length === 0 && <option value={v.container}>Split-Screen</option>}
+                        {containers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                </div>
+                <Button size="xs" variant="ghost" disabled={!v.fedHere} onClick={v.clearContainer} className="mt-1 w-full">
+                    Clear feed
+                </Button>
+            </div>
+        </Stack>
+    );
+}
+
 // The shared option layer for an element — rendered both in the chip's
 // expanding panel (full) and in the rail source popover (content only, via
 // hideTarget/hideVisibility since the eye already toggles visibility there).
 // Newer, richer elements add their controls here and get both surfaces free.
 function ElementOptions({ element, hideTarget = false, hideVisibility = false }) {
     const programScene = useObsStore(s => s.programScene);
-    const overrideName = useSettingsStore(s => s?.production?.overrides?.[element.id]);
-    const setSetting = useSettingsStore(s => s.setItem);
     const items = usePrshItems();
 
     if (element.flavor === 'direct') {
         const match = items.find(it => element.match(it.url || ''));
+        const extra = element.id === 'hitvisualizer'
+            ? <Stack gap="md"><HitVizFace /><HitVizSetup /></Stack>
+            : null;
         if (!match) {
             return (
-                <Text size="sm" className="text-muted-foreground">
-                    No matching source in the current program scene ({programScene || 'none'}).
-                </Text>
+                <Stack gap="sm">
+                    <Text size="sm" className="text-muted-foreground">
+                        No matching source in the current program scene ({programScene || 'none'}).
+                    </Text>
+                    {extra}
+                </Stack>
             );
         }
         if (hideVisibility) {
-            return <Text size="xs" className="text-muted-foreground">On {match.sourceName}. No content options.</Text>;
+            return (
+                <Stack gap="sm">
+                    <Text size="xs" className="text-muted-foreground">On {match.sourceName}.</Text>
+                    {extra}
+                </Stack>
+            );
         }
-        return <VisibilityRow label="On the broadcast" sub={`${match.sourceName} · ${programScene}`} item={match} sceneName={programScene} />;
+        return (
+            <Stack gap="md">
+                <VisibilityRow label="On the broadcast" sub={`${match.sourceName} · ${programScene}`} item={match} sceneName={programScene} />
+                {extra}
+            </Stack>
+        );
     }
 
-    // Fed element.
-    const defaultName = items.find(it => element.match(it.url || ''))?.sourceName;
-    const targetName = overrideName || defaultName || '';
-    const targetItem = items.find(it => it.sourceName === targetName);
-    const setTarget = (name) => {
-        const cur = useSettingsStore.getState()?.production?.overrides || {};
-        setSetting('production.overrides', { ...cur, [element.id]: name });
-    };
-
+    // Fed element — content picker plus the named-container target (in the gear,
+    // suppressed here when hideTarget so the rail popover stays content-only).
     return (
         <Stack gap="md">
-            {!hideTarget && (
-                <label className="flex flex-col gap-1">
-                    <Text size="xs" className="text-muted-foreground">Target shared source</Text>
-                    <select
-                        value={targetName}
-                        onChange={(e) => setTarget(e.target.value)}
-                        className="rounded-md border border-border bg-card px-2 py-1 text-sm text-foreground"
-                    >
-                        <option value="" disabled>Choose a source…</option>
-                        {items.map(it => <option key={it.id} value={it.sourceName}>{it.sourceName}</option>)}
-                    </select>
-                </label>
-            )}
-
-            {!hideVisibility && (targetItem ? (
-                <VisibilityRow label="Feed to target" sub={`Shows ${targetItem.sourceName} · ${programScene}`} item={targetItem} sceneName={programScene} />
-            ) : (
-                <Text size="sm" className="text-muted-foreground">
-                    {targetName
-                        ? `“${targetName}” isn’t in the current program scene.`
-                        : 'Pick a target shared source to feed.'}
-                </Text>
-            ))}
-
-            {element.feed === 'stats' ? (
-                <StatsFeedPicker />
-            ) : (
-                <Text size="xs" className="text-muted-foreground">No content options for this element yet.</Text>
-            )}
+            {!hideTarget && <FedSetup element={element} />}
+            <FedFace element={element} />
         </Stack>
     );
 }
 
-// A compact element chip. Glows when its source is on air; dashed when no
-// source is bound. Clicking toggles the inline options panel below the row.
-function ElementChip({ element, open, onToggle }) {
+// Does this element have overflow config worth a gear popover? Rich direct
+// elements (hit visualizer) and every fed element (target picker) do; a plain
+// direct element (scoreboard) is just a visibility toggle, no gear.
+function elementHasSetup(element) {
+    return element.id === 'hitvisualizer' || element.flavor === 'fed';
+}
+
+// The condensed FACE of an element window — its live actions only.
+function ElementFace({ element }) {
+    if (element.id === 'hitvisualizer') return <HitVizFace />;
+    if (element.flavor === 'fed') return <FedFace element={element} />;
+    return <DirectFace element={element} />;
+}
+
+// The gear-popover SETUP for an element — its bulky config.
+function ElementSetup({ element }) {
+    if (element.id === 'hitvisualizer') return <HitVizSetup />;
+    if (element.flavor === 'fed') return <FedSetup element={element} />;
+    return null;
+}
+
+// Plain direct element (e.g. scoreboard): one live action — show/hide its
+// dedicated source in the current program scene.
+function DirectFace({ element }) {
+    const items = usePrshItems();
+    const programScene = useObsStore(s => s.programScene);
+    const match = items.find(it => element.match(it.url || ''));
+    if (!match) {
+        return (
+            <Text size="xs" className="text-muted-foreground">
+                Not in the program scene ({programScene || 'none'}).
+            </Text>
+        );
+    }
+    return <VisibilityRow label="Show on air" item={match} sceneName={programScene} />;
+}
+
+// Fed element face: the content picker (the live decision — what to feed). The
+// container it feeds is chosen in the gear; making that container's OBS source
+// active is what puts it on the broadcast.
+function FedFace({ element }) {
+    return element.feed === 'stats'
+        ? <StatsFeedPicker element={element} />
+        : <Text size="xs" className="text-muted-foreground">No content options yet.</Text>;
+}
+
+// Fed element setup: which named shared container the content is fed into.
+function FedSetup({ element }) {
+    const containers = useSharedContainers();
+    const { container, setContainer } = useContainerTarget(element.id, 'stats-feed');
+    return (
+        <label className="flex flex-col gap-1">
+            <Text size="xs" className="text-muted-foreground">Feed into</Text>
+            <select
+                value={container}
+                onChange={(e) => setContainer(e.target.value)}
+                className="rounded-md border border-border bg-card px-2 py-1 text-sm text-foreground"
+            >
+                {containers.length === 0 && <option value={container}>Stats</option>}
+                {containers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+        </label>
+    );
+}
+
+// Per-element grid width (out of 12). Literal class names so Tailwind keeps them.
+const SPAN_CLASS = {
+    2: 'md:col-span-2', 3: 'md:col-span-3', 4: 'md:col-span-4',
+    5: 'md:col-span-5', 6: 'md:col-span-6', 12: 'md:col-span-12',
+};
+
+// A self-contained element "window": header (live dot · name · gear) over the
+// element's own controls. Glows emerald when its source is on air; dashed when
+// no source is bound. The gear opens bulky setup; the face holds live actions.
+const ElementWindow = memo(function ElementWindow({ element }) {
     const overrideName = useSettingsStore(s => s?.production?.overrides?.[element.id]);
     const items = usePrshItems();
     const bound = boundSource(element, items, overrideName);
     const state = !bound ? 'unbound' : bound.enabled ? 'live' : 'idle';
-
-    const tone = state === 'live'
-        ? 'border-emerald-500/60 bg-emerald-500/10 text-foreground'
-        : state === 'idle'
-            ? 'border-border bg-card text-foreground hover:bg-accent'
-            : 'border-dashed border-border bg-card text-muted-foreground';
     const dot = state === 'live'
-        ? 'bg-emerald-400'
+        ? 'bg-emerald-400 shadow-[0_0_6px] shadow-emerald-400/70'
         : state === 'idle'
             ? 'bg-muted-foreground'
-            : 'border border-muted-foreground';
+            : 'border border-muted-foreground bg-transparent';
 
     return (
-        <button
-            type="button"
-            onClick={onToggle}
+        <div
             className={cn(
-                'flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors',
-                tone,
-                open && 'ring-2 ring-primary ring-offset-1 ring-offset-background',
+                'col-span-2 flex flex-col overflow-hidden rounded-lg border bg-card',
+                SPAN_CLASS[element.span] || 'md:col-span-3',
+                state === 'live' && 'border-emerald-500/50',
+                state === 'unbound' && 'border-dashed',
             )}
         >
-            <span className={cn('size-2 shrink-0 rounded-full', dot)} />
-            <span className="truncate">{element.name}</span>
-            <Badge className={cn('text-[9px] uppercase tracking-wider', FLAVOR_BADGE[element.flavor])}>
-                {element.flavor}
-            </Badge>
-            <ChevronDown size={13} className={cn('shrink-0 text-muted-foreground transition-transform', open && 'rotate-180')} />
-        </button>
+            <div className="flex items-center gap-2 border-b border-border/60 px-2.5 py-1.5">
+                <span className={cn('size-2 shrink-0 rounded-full', dot)} />
+                <SimpleTooltip label={element.name}>
+                    <Text size="sm" className="min-w-0 flex-1 truncate font-medium text-foreground">{element.name}</Text>
+                </SimpleTooltip>
+                {elementHasSetup(element) && (
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <button
+                                type="button"
+                                className="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
+                                aria-label={`${element.name} settings`}
+                            >
+                                <Settings size={14} />
+                            </button>
+                        </PopoverTrigger>
+                        <PopoverContent align="end" className="w-64">
+                            <ElementSetup element={element} />
+                        </PopoverContent>
+                    </Popover>
+                )}
+            </div>
+            <div className="p-2.5">
+                <ElementFace element={element} />
+            </div>
+        </div>
     );
-}
+});
 
 function ElementsArea({ phase }) {
     const status = useObsStore(s => s.status);
     const els = elementsForPhase(phase);
     const phaseLabel = PHASES.find(p => p.value === phase)?.label ?? phase;
-    const [openId, setOpenId] = useState(null);
 
     if (status !== 'connected') {
         return (
@@ -547,38 +883,12 @@ function ElementsArea({ phase }) {
         );
     }
 
-    const openEl = els.find(e => e.id === openId) || null;
-
     return (
-        <Stack gap="md">
-            <Panel title="Elements">
-                <div className="flex flex-wrap gap-2 p-4">
-                    {els.map(el => (
-                        <ElementChip
-                            key={el.id}
-                            element={el}
-                            open={openId === el.id}
-                            onToggle={() => setOpenId(id => (id === el.id ? null : el.id))}
-                        />
-                    ))}
-                </div>
-            </Panel>
-
-            {openEl && (
-                <Panel
-                    title={openEl.name}
-                    actions={
-                        <Badge className={cn('text-[10px] uppercase tracking-wider', FLAVOR_BADGE[openEl.flavor])}>
-                            {openEl.flavor}
-                        </Badge>
-                    }
-                >
-                    <div className="p-4">
-                        <ElementOptions element={openEl} />
-                    </div>
-                </Panel>
-            )}
-        </Stack>
+        <Panel title="Elements">
+            <div className="grid grid-cols-2 items-start gap-3 p-4 md:grid-cols-12">
+                {els.map(el => <ElementWindow key={el.id} element={el} />)}
+            </div>
+        </Panel>
     );
 }
 

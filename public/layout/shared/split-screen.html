@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<!--
+  Named shared container "Split-Screen" — a tall, half-screen container sized to
+  sit beside the live game. Like every shared container it hosts whatever element
+  the producer feeds it (production.feed.container.split-screen): the hit
+  visualizer, and any other supported element. Rendering lives in the reusable
+  element mounts (hit-mount.js / stats-mount.js); this file is the sized shell.
+-->
+<meta name="overlay-settings" content="" />
+<title>Split-Screen</title>
+<!-- three.js is vendored locally (offline); addons resolve bare 'three' via this map. -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "/layout/lib/three/three.module.js",
+    "three/addons/": "/layout/lib/three/addons/"
+  }
+}
+</script>
+<style>
+  html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+  /* Native half-screen size hint for the OBS browser source; the canvas fills
+     whatever size the source is actually set to (camera reframes per aspect). */
+  body { width: 960px; height: 1080px; }
+  #host { position: fixed; inset: 0; }
+  #host canvas { display: block; }
+  .lbl {
+    color: #fff; font-size: 12px; text-shadow: 0 0 4px #000, 0 0 4px #000;
+    white-space: pre; pointer-events: none;
+  }
+  .lbl.stream {
+    font: 600 13px/1.35 -apple-system, "Segoe UI", sans-serif;
+    background: rgba(10, 14, 22, 0.62); border-radius: 8px; padding: 3px 8px;
+    text-shadow: none; backdrop-filter: blur(2px);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+  }
+</style>
+</head>
+<body>
+<div id="host"></div>
+
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script src="/layout/lib/overlay-base.js"></script>
+<script src="/layout/lib/rio-data.js"></script>
+<script type="module">
+import { initFedContainer } from '/layout/lib/fed-container.js';
+const params = new URLSearchParams(window.location.search);
+initFedContainer({ host: document.getElementById('host'), perf: params.get('perf') === '1' });
+</script>
+</script>
+</body>
+</html>

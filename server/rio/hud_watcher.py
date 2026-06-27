@@ -110,6 +110,56 @@ class HudWatcher:
         return self._convert_hud_data_format(hud)
 
     @staticmethod
+    def _extract_contact(hud_json: dict) -> dict | None:
+        """Pull the last completed contact (inputs + measured outputs).
+
+        Lives at ``Previous Event -> Pitch -> Contact``; the batter is identified
+        by ``Runner Batter`` (roster loc) + the contact's own ``Pitcher Team Id``,
+        which is robust to the current at-bat having already advanced. Values are
+        left raw (HUD stores many numbers as strings); hit_visualizer coerces.
+        Returns None when there is no batted-ball contact.
+        """
+        pe = hud_json.get("Previous Event")
+        if not isinstance(pe, dict):
+            return None
+        pitch = pe.get("Pitch")
+        if not isinstance(pitch, dict):
+            return None
+        con = pitch.get("Contact")
+        if not isinstance(con, dict):
+            return None
+        if con.get("Ball Power") in (None, ""):
+            return None  # swing-and-miss / take / walk — no flight
+
+        rb = hud_json.get("Runner Batter") or {}
+        return {
+            "pitcher_team_id": pitch.get("Pitcher Team Id"),
+            "pitcher_char": pitch.get("Pitcher Char Id"),
+            "batter_roster_loc": rb.get("Runner Roster Loc"),
+            "batter_char": rb.get("Runner Char Id"),
+            "type_of_swing": pitch.get("Type of Swing"),
+            "ball_x": con.get("Ball Contact Pos - X"),
+            "ball_z": con.get("Ball Contact Pos - Z"),
+            "charge_up": con.get("Charge Power Up"),
+            "charge_down": con.get("Charge Power Down"),
+            "frame": con.get("Frame of Swing Upon Contact"),
+            "rng": [con.get("RNG1"), con.get("RNG2"), con.get("RNG3")],
+            "vert_angle": con.get("Vert Angle"),
+            "horiz_angle": con.get("Horiz Angle"),
+            "ball_power": con.get("Ball Power"),
+            "landing": [
+                con.get("Ball Landing Position - X"),
+                con.get("Ball Landing Position - Y"),
+                con.get("Ball Landing Position - Z"),
+            ],
+            "max_height": con.get("Ball Max Height"),
+            "hang_time": con.get("Ball Hang Time"),
+            "result_primary": con.get("Contact Result - Primary"),
+            "result_secondary": con.get("Contact Result - Secondary"),
+            "result_of_ab": pe.get("Result of AB"),
+        }
+
+    @staticmethod
     def _convert_hud_data_format(hud_data: HudObj) -> dict:
         """Convert HudObj into a flat game dict matching the Project Rio API format.
 
@@ -158,6 +208,8 @@ class HudWatcher:
             "balls": hud_data.balls(),
             "strikes": hud_data.strikes(),
             "event_num": hud_data.event_number,
+            # Last completed contact (for the hit visualizer), or None.
+            "contact": HudWatcher._extract_contact(hud_data.hud_json),
         }
 
         # Roster data using pyrio's RosterObj

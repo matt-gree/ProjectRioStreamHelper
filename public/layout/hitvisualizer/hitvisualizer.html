@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<!-- 3D canvas overlay; uses no global design CSS vars. -->
+<meta name="overlay-settings" content="" />
+<title>Hit Visualizer</title>
+<!-- three.js is vendored locally (offline); addons resolve bare 'three' via this map. -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "/layout/lib/three/three.module.js",
+    "three/addons/": "/layout/lib/three/addons/"
+  }
+}
+</script>
+<style>
+  html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+  /* Native size hint for the OBS browser source; the canvas fills whatever
+     size the source is actually set to (camera reframes per aspect ratio). */
+  body { width: 1280px; height: 720px; }
+  #viewport { position: fixed; inset: 0; }
+  #viewport canvas { display: block; }
+  #labels { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+  .lbl {
+    color: #fff; font-size: 12px; text-shadow: 0 0 4px #000, 0 0 4px #000;
+    white-space: pre; pointer-events: none;
+  }
+  .lbl.stream {
+    font: 600 13px/1.35 -apple-system, "Segoe UI", sans-serif;
+    background: rgba(10, 14, 22, 0.62); border-radius: 8px; padding: 3px 8px;
+    text-shadow: none; backdrop-filter: blur(2px);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+  }
+</style>
+</head>
+<body>
+<div id="viewport"><div id="labels"></div></div>
+
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script src="/layout/lib/overlay-base.js"></script>
+<script type="module">
+import { mountHit } from '/layout/lib/hit-mount.js';
+
+const params = new URLSearchParams(window.location.search);
+const SB = parseInt(params.get('scoreboard')) || 1;
+const PERF = params.get('perf') === '1'; // ?perf=1 logs long render frames
+
+const mount = mountHit({
+  viewport: document.getElementById('viewport'),
+  labels: document.getElementById('labels'),
+  perf: PERF,
+});
+
+OverlayBase.init({
+  render: () => mount.update(OverlayBase.state, SB),
+  shouldRender: (key) => key.startsWith(`score.${SB}.hit`),
+});
+
+// Auto-play when this OBS source/scene becomes active. OBS dispatches
+// `obsSourceActiveChanged` to browser sources when the source enters the program
+// output — whether the source itself was shown or its scene was cut to. Replays
+// the latest contact on cut-in; no-ops in a normal browser (event never fires).
+window.addEventListener('obsSourceActiveChanged', (e) => {
+  if (e.detail && e.detail.active) mount.replay();
+});
+</script>
+</body>
+</html>

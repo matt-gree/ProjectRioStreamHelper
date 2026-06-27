@@ -252,6 +252,7 @@ query EventEntrantsListQuery($eventSlug: String!, $page: Int!) {
                     }
                     user {
                         id
+                        slug
                         name
                         genderPronoun
                         location {
@@ -287,6 +288,7 @@ query EntrantQuery($id: ID!) {
             }
             user {
                 id
+                slug
                 name
                 genderPronoun
                 location {

@@ -214,6 +214,13 @@ async def layout_index(request: Request) -> HTMLResponse:
 if _layout_dir.is_dir():
     app.mount("/layout", StaticFiles(directory="./public/layout", html=True), name="layout")
 
+# RioVisualizer shared web assets (renderer.js core + themes) — served straight
+# from the submodule so the hit overlay and the standalone debug tool share one
+# source of truth. (Frozen builds bundle this dir; that's wired in PRSH.spec.)
+_rio_viz_web = Path("./rio-visualizer/web")
+if _rio_viz_web.is_dir():
+    app.mount("/rio-visualizer", StaticFiles(directory=str(_rio_viz_web)), name="rio_visualizer")
+
 # Tournament branding assets (logos) — served from user_data/branding/
 _branding_dir = user_data_dir() / "branding"
 _branding_dir.mkdir(parents=True, exist_ok=True)
