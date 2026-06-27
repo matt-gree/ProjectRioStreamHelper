@@ -9,6 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '../../components/ui/pop
 import { SimpleTooltip } from '../../components/ui/simple-tooltip';
 import { cn } from '../../lib/utils';
 import { useSettingsStore, useStateStore } from '../../context/store';
+import MatchPanel from './MatchPanel';
 import TeamPanel from '../../components/scoreboard/TeamPanel';
 import ScoreControls from '../../components/scoreboard/ScoreControls';
 import ActiveMatchupStats from '../../components/scoreboard/ActiveMatchupStats';
@@ -219,6 +220,8 @@ export default function ScoreboardManager() {
     }, []);
 
     return (
+        <>
+        <MatchPanel />
         <Tabs value={activeTab} onValueChange={setActiveTab}>
             <div className="mb-4 flex items-center gap-1">
                 <TabsList>
@@ -265,5 +268,6 @@ export default function ScoreboardManager() {
                 </TabsContent>
             ))}
         </Tabs>
+        </>
     );
 }

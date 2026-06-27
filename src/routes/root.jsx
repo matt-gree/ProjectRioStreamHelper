@@ -12,7 +12,7 @@ import LayoutBrowser from "./layouts/layouts";
 // Nav tabs. Rendered in the header row by TSHFields; routes wired below.
 const allTabs = [
   { name: "Production", path: "/" },
-  { name: "Scoreboard", path: "/scoreboard" },
+  { name: "Match", path: "/scoreboard" },
   { name: "Competition", path: "/competition" },
   { name: "Commentary", path: "/commentary" },
   { name: "Address Book", path: "/player_list" },

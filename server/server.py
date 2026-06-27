@@ -19,6 +19,8 @@ from server.startgg.provider import StartGGProvider
 from server.challonge.provider import ChallongeProvider
 from server.controller_overlay import ControllerOverlay
 from server.announcements import Announcements
+from server.participants import Participants
+from server.match import Match
 from server.state import State
 from server.utils import json
 
@@ -66,6 +68,10 @@ async def lifespan(app: FastAPI):
     ensure_game_data()
     consumer = asyncio.create_task(State.Consumer())
     await State.Load()
+    # Load the participant registry back into memory before anything that reads
+    # it (resurface, Match projection). Without this the address book starts
+    # empty every launch even though it persisted to participants.json.
+    await Participants.Load()
     await RioGameDataProvider.Start()
     await OngoingGamePool.Start()
     await CompletedGamePool.Start()
@@ -74,6 +80,9 @@ async def lifespan(app: FastAPI):
     await ChallongeProvider.Start()
     await ControllerOverlay.Start()
     await Announcements.Start()
+    # Re-apply every persisted match onto its bound board(s) (resume-on-startup
+    # spirit). Runs after State + registry are loaded.
+    await Match.project_all()
 
     # If stream labels are enabled but the output dir is missing, do a full
     # export so OBS Text (GDI+) sources don't point at missing files.

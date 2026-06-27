@@ -17,6 +17,7 @@ from server.api.v1 import (
     assets,
     visualizer,
     participants,
+    match,
 )
 
 router_v1 = APIRouter(
@@ -41,3 +42,5 @@ router_v1.include_router(logs.router)
 router_v1.include_router(assets.router)
 router_v1.include_router(visualizer.router)
 router_v1.include_router(participants.router)
+router_v1.include_router(match.router)
+router_v1.include_router(match.bind_router)

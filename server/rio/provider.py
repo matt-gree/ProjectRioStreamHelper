@@ -7,25 +7,11 @@ from server.rio.pyrio.team_name_algo import team_name
 
 from server.rio import hit_visualizer
 from server.rio.hud_watcher import HudWatcher
+from server.rio.resurface import RESURFACE_MAP as _RESURFACE_MAP
 from server.rio.stats_tracker import StatsTracker
 from server.participants import Participants
 from server.settings import Settings
 from server.state import State
-
-
-# Address-book resurface: registry display.* field -> score.player.* field.
-# Mirrors the frontend resolver (src/lib/participants.js). mainCharacter has no
-# scoreboard target and is intentionally omitted.
-_RESURFACE_MAP = {
-    "tag": "name",
-    "prefix": "team",
-    "fullName": "full_name",
-    "pronoun": "pronoun",
-    "country": "country",
-    "state": "state",
-    "twitter": "twitter",
-    "youtube": "youtube",
-}
 
 
 def _apply_resurface(entries: list[tuple]) -> None:
