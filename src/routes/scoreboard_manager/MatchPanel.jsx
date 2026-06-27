@@ -59,6 +59,7 @@ function SideColumn({ m, side, player }) {
             </Text>
             <ParticipantPicker
                 value={rioName}
+                selectedId={player?.participantId || null}
                 onResolve={onPick}
                 placeholder="Pick participant…"
             />

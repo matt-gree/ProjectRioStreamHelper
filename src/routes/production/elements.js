@@ -67,6 +67,25 @@ export const ELEMENTS = [
         match: (url) => /shared\/stats-feed/i.test(url) || /stats/i.test(url),
     },
     {
+        id: 'commentary',
+        name: 'Commentary',
+        // Registry-bound caster desk — relevant across the broadcast lifecycle,
+        // so it shows in every soft phase. `phase` may be a single value or an
+        // array (see elementsForPhase).
+        phase: ['draft', 'live', 'post'],
+        flavor: 'direct',
+        // The condensed face is per-caster on-air toggles + sub-field quick switch
+        // + sub-plate toggle; the in-depth roster authoring lives on the
+        // Commentary tab. Span 4 to fit up to four caster rows.
+        span: 4,
+        // Its own dedicated source: the caster strip. Slots are projected to
+        // commentary.{i}.* server-side from the authored commentary.slots.
+        url: '/layout/commentary/commentary.html',
+        width: 1280,
+        height: 200,
+        match: (url) => /\/layout\/commentary\//i.test(url) || /commentary\.html/i.test(url),
+    },
+    {
         id: 'hitvisualizer',
         name: 'Hit Visualizer',
         phase: 'live',
@@ -84,4 +103,6 @@ export const ELEMENTS = [
     },
 ];
 
-export const elementsForPhase = (phase) => ELEMENTS.filter((el) => el.phase === phase);
+// An element's `phase` is a single value or an array of phases it appears in.
+export const elementsForPhase = (phase) => ELEMENTS.filter((el) =>
+    Array.isArray(el.phase) ? el.phase.includes(phase) : el.phase === phase);

@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="overlay-settings" content="accentColor, cardBg, textColor, borderColor, borderRadius, borderWidth, fontFamily, cardShadow, textShadow, showShadow" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      width: 1280px;
+      height: 200px;
+      background: transparent;
+      font-family: var(--font-family, 'Inter', sans-serif);
+      overflow: hidden;
+    }
+    /* Casters sit in a centered row; the strip can be positioned anywhere in OBS. */
+    .casters {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      width: 100%;
+      height: 100%;
+      padding: 16px;
+    }
+    .caster {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+      padding: 14px 20px 14px 16px;
+      background: var(--card-bg, rgba(15, 15, 25, 0.88));
+      border: var(--border-width, 1px) solid var(--border-color, rgba(255, 255, 255, 0.08));
+      border-radius: var(--border-radius, 16px);
+      box-shadow: var(--card-box-shadow, 0 4px 16px rgba(0, 0, 0, 0.5));
+    }
+    /* Accent rail on the leading edge of each plate. */
+    .caster::before {
+      content: '';
+      width: 4px;
+      align-self: stretch;
+      border-radius: 4px;
+      background: var(--accent, #f59e0b);
+      box-shadow: 0 0 10px rgba(var(--accent-rgb, 245, 158, 11), 0.6);
+    }
+    .caster-text { display: flex; flex-direction: column; min-width: 0; }
+    .caster-name {
+      font-size: 30px;
+      font-weight: 800;
+      line-height: 1.1;
+      color: var(--text-primary, #ffffff);
+      text-shadow: var(--text-shadow, none);
+      white-space: nowrap;
+    }
+    .caster-sub {
+      display: flex;
+      align-items: baseline;
+      gap: 7px;
+      margin-top: 4px;
+      white-space: nowrap;
+    }
+    .sub-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+      color: var(--accent, #f59e0b);
+    }
+    .sub-value {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-primary, #ffffff);
+      opacity: 0.92;
+      text-shadow: var(--text-shadow, none);
+    }
+  </style>
+</head>
+<body>
+  <div class="casters" id="casters"></div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="/layout/lib/overlay-base.js"></script>
+  <script>
+    const { deepGet, state, applyDesignSettings } = OverlayBase;
+    const MAX_SLOTS = 4;
+
+    function esc(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function plate(i) {
+      const base = `commentary.${i}`;
+      const name = deepGet(state, `${base}.name`, '');
+      const visible = deepGet(state, `${base}.visible`, false);
+      // A slot only renders once a person is assigned AND it's toggled on.
+      if (!name || !visible) return '';
+
+      const subVisible = deepGet(state, `${base}.subVisible`, false);
+      const subLabel = deepGet(state, `${base}.subLabel`, '');
+      const subValue = deepGet(state, `${base}.subValue`, '');
+      const sub = (subVisible && subValue)
+        ? `<div class="caster-sub">
+             ${subLabel ? `<span class="sub-label">${esc(subLabel)}</span>` : ''}
+             <span class="sub-value">${esc(subValue)}</span>
+           </div>`
+        : '';
+
+      return `<div class="caster">
+          <div class="caster-text">
+            <span class="caster-name">${esc(name)}</span>
+            ${sub}
+          </div>
+        </div>`;
+    }
+
+    function render() {
+      applyDesignSettings('commentary');
+      let html = '';
+      for (let i = 0; i < MAX_SLOTS; i++) html += plate(i);
+      document.getElementById('casters').innerHTML = html;
+    }
+
+    OverlayBase.init({
+      render,
+      fetchSettings: true,
+      shouldRender: (key) => key.startsWith('commentary.'),
+      shouldRenderSettings: (key) => key.startsWith('overlays.'),
+    });
+  </script>
+</body>
+</html>

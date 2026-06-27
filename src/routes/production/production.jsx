@@ -2,10 +2,16 @@ import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import {
     Radio, Eye, EyeOff, Globe, PlugZap, MonitorPlay, ArrowLeftRight, ChevronDown,
-    RotateCcw, Sparkles, Columns2, Settings,
+    RotateCcw, Sparkles, Columns2, Settings, Captions, GripVertical, Plus, X,
 } from 'lucide-react';
 import { useObsStore } from '../../context/obs';
 import { useSettingsStore, useStateStore } from '../../context/store';
+import {
+    updateSlot as updateCommentarySlot, addSlot as addCommentarySlot,
+    removeSlot as removeCommentarySlot, reorderSlots as reorderCommentarySlots,
+    SUBFIELD_OPTIONS, MAX_COMMENTATORS,
+} from '../../context/commentary';
+import ParticipantPicker from '../../components/ParticipantPicker';
 import { Panel } from '../../components/ui/panel';
 import { Stack, Group, Text } from '../../components/ui/primitives';
 import { Badge } from '../../components/ui/badge';
@@ -683,6 +689,155 @@ function HitVizSetup({ scoreboard = 1 }) {
     );
 }
 
+// Condensed Commentary face — the same authoring footprint as the Commentary
+// tab, compacted: per caster the producer can pick the person, toggle on-air,
+// choose the sub-plate field + show/hide it, remove the slot, and drag to
+// reorder; plus add a commentator (capped at MAX_COMMENTATORS). Writes through
+// the commentary REST actions (the resolve-by-copy projector re-runs server-side).
+// Native HTML5 drag, armed only by the grip handle so the selects/picker stay
+// interactive.
+function CommentaryFace() {
+    const commentary = useStateStore(s => s.commentary);
+    const slots = Array.isArray(commentary?.slots) ? commentary.slots : [];
+    const [dragIndex, setDragIndex] = useState(null);
+    const [overIndex, setOverIndex] = useState(null);
+    const [dragArmed, setDragArmed] = useState(false);
+
+    const onDrop = (to) => {
+        if (dragIndex != null && dragIndex !== to) reorderCommentarySlots(dragIndex, to);
+        setDragIndex(null); setOverIndex(null); setDragArmed(false);
+    };
+
+    return (
+        <Stack gap="xs">
+            {slots.length === 0 && (
+                <Text size="xs" className="text-muted-foreground">No commentators yet — add one below.</Text>
+            )}
+
+            {slots.map((slot, i) => {
+                const name = commentary?.[i]?.name || commentary?.[String(i)]?.name || '';
+                const visible = slot.visible !== false;
+                const subVisible = slot.subVisible !== false;
+                return (
+                    <div
+                        key={i}
+                        draggable={dragArmed}
+                        onDragStart={() => setDragIndex(i)}
+                        onDragOver={(e) => { e.preventDefault(); if (overIndex !== i) setOverIndex(i); }}
+                        onDrop={() => onDrop(i)}
+                        onDragEnd={() => { setDragIndex(null); setOverIndex(null); setDragArmed(false); }}
+                        className={cn(
+                            'rounded-md border border-border/60 bg-background/40 p-1.5',
+                            dragIndex === i && 'opacity-50',
+                            overIndex === i && dragIndex !== i && 'border-rio-400',
+                        )}
+                    >
+                        <div className="flex items-center gap-1.5">
+                            <button
+                                type="button"
+                                onMouseDown={() => setDragArmed(true)}
+                                onMouseUp={() => setDragArmed(false)}
+                                className="shrink-0 cursor-grab text-muted-foreground hover:text-foreground active:cursor-grabbing"
+                                title="Drag to reorder"
+                            >
+                                <GripVertical size={14} />
+                            </button>
+                            <SimpleTooltip label={visible ? 'On air — click to hide' : 'Hidden — click to show'}>
+                                <button
+                                    type="button"
+                                    onClick={() => updateCommentarySlot(i, { visible: !visible })}
+                                    className={cn('shrink-0', visible ? 'text-foreground' : 'text-muted-foreground hover:text-foreground')}
+                                >
+                                    {visible ? <Eye size={14} /> : <EyeOff size={14} />}
+                                </button>
+                            </SimpleTooltip>
+                            <div className={cn('min-w-0 flex-1', !visible && 'opacity-50')}>
+                                <ParticipantPicker
+                                    value={name}
+                                    selectedId={slot.participantId || null}
+                                    onResolve={(picked) => updateCommentarySlot(i, { participantId: picked.id })}
+                                    placeholder="Pick person…"
+                                />
+                            </div>
+                            <SimpleTooltip label="Remove commentator">
+                                <button
+                                    type="button"
+                                    onClick={() => removeCommentarySlot(i)}
+                                    className="shrink-0 text-muted-foreground hover:text-destructive"
+                                >
+                                    <X size={14} />
+                                </button>
+                            </SimpleTooltip>
+                        </div>
+                        <div className="mt-1.5 flex items-center gap-1.5 pl-[22px]">
+                            <select
+                                value={slot.subField || ''}
+                                onChange={(e) => updateCommentarySlot(i, { subField: e.target.value })}
+                                className="h-6 min-w-0 flex-1 rounded border border-border bg-card px-1 text-xs text-foreground"
+                            >
+                                <option value="">No sub-plate</option>
+                                {SUBFIELD_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                            </select>
+                            <SimpleTooltip label={subVisible ? 'Sub-plate shown' : 'Sub-plate hidden'}>
+                                <button
+                                    type="button"
+                                    disabled={!slot.subField}
+                                    onClick={() => updateCommentarySlot(i, { subVisible: !subVisible })}
+                                    className={cn(
+                                        'shrink-0 disabled:opacity-30',
+                                        subVisible && slot.subField ? 'text-rio-300' : 'text-muted-foreground hover:text-foreground',
+                                    )}
+                                >
+                                    <Captions size={14} />
+                                </button>
+                            </SimpleTooltip>
+                        </div>
+                    </div>
+                );
+            })}
+
+            <Button
+                size="xs"
+                variant="secondary"
+                disabled={slots.length >= MAX_COMMENTATORS}
+                onClick={addCommentarySlot}
+                className="w-full"
+            >
+                <Plus size={13} className="mr-1" /> Add commentator
+            </Button>
+        </Stack>
+    );
+}
+
+// Gear setup for Commentary — show/hide the dedicated caster overlay on air. The
+// roster itself is authored on the Commentary tab.
+function CommentarySetup() {
+    const items = usePrshItems();
+    const programScene = useObsStore(s => s.programScene);
+    const element = ELEMENTS.find(e => e.id === 'commentary');
+    const match = element ? items.find(it => element.match(it.url || '')) : null;
+
+    return (
+        <Stack gap="sm">
+            {match ? (
+                <label className="flex items-center justify-between gap-2">
+                    <Text size="xs" className="text-muted-foreground">On air</Text>
+                    <Switch
+                        size="sm"
+                        checked={match.enabled}
+                        onCheckedChange={(c) => runObs(() => useObsStore.getState().setSceneItemEnabled(programScene, match.id, c))}
+                    />
+                </label>
+            ) : (
+                <Text size="xs" className="text-muted-foreground">Overlay not in program scene.</Text>
+            )}
+            <Text size="xs" className="border-t border-border pt-2 text-muted-foreground">
+                Assign commentators and edit details on the Commentary tab.
+            </Text>
+        </Stack>
+    );
+}
+
 // The shared option layer for an element — rendered both in the chip's
 // expanding panel (full) and in the rail source popover (content only, via
 // hideTarget/hideVisibility since the eye already toggles visibility there).
@@ -695,7 +850,9 @@ function ElementOptions({ element, hideTarget = false, hideVisibility = false })
         const match = items.find(it => element.match(it.url || ''));
         const extra = element.id === 'hitvisualizer'
             ? <Stack gap="md"><HitVizFace /><HitVizSetup /></Stack>
-            : null;
+            : element.id === 'commentary'
+                ? <Stack gap="md"><CommentaryFace /><CommentarySetup /></Stack>
+                : null;
         if (!match) {
             return (
                 <Stack gap="sm">
@@ -736,12 +893,13 @@ function ElementOptions({ element, hideTarget = false, hideVisibility = false })
 // elements (hit visualizer) and every fed element (target picker) do; a plain
 // direct element (scoreboard) is just a visibility toggle, no gear.
 function elementHasSetup(element) {
-    return element.id === 'hitvisualizer' || element.flavor === 'fed';
+    return element.id === 'hitvisualizer' || element.id === 'commentary' || element.flavor === 'fed';
 }
 
 // The condensed FACE of an element window — its live actions only.
 function ElementFace({ element }) {
     if (element.id === 'hitvisualizer') return <HitVizFace />;
+    if (element.id === 'commentary') return <CommentaryFace />;
     if (element.flavor === 'fed') return <FedFace element={element} />;
     return <DirectFace element={element} />;
 }
@@ -749,6 +907,7 @@ function ElementFace({ element }) {
 // The gear-popover SETUP for an element — its bulky config.
 function ElementSetup({ element }) {
     if (element.id === 'hitvisualizer') return <HitVizSetup />;
+    if (element.id === 'commentary') return <CommentarySetup />;
     if (element.flavor === 'fed') return <FedSetup element={element} />;
     return null;
 }

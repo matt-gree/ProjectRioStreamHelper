@@ -1744,11 +1744,23 @@ export default function LayoutBrowser() {
         });
     }, [allLayouts, searchQuery]);
 
+    // Talent — registry-bound person overlays: the commentary caster strip now,
+    // the player element soon. Both render people from the address book.
+    const talentLayouts = useMemo(() => {
+        const q = searchQuery.toLowerCase().trim();
+        return allLayouts.filter(l => {
+            if (l.group !== 'commentary' && l.group !== 'player') return false;
+            if (q && !l.name.toLowerCase().includes(q)) return false;
+            return true;
+        });
+    }, [allLayouts, searchQuery]);
+
     useEffect(() => {
         const activeLayouts = mode === 'scenes' ? sceneLayouts
             : mode === 'shared' ? sharedLayouts
+            : mode === 'talent' ? talentLayouts
             : filteredLayouts;
-        if (mode !== 'scoreboard' && mode !== 'scenes' && mode !== 'shared') return;
+        if (mode !== 'scoreboard' && mode !== 'scenes' && mode !== 'shared' && mode !== 'talent') return;
         if (activeLayouts.length > 0) {
             setSelected(prev => {
                 if (prev && activeLayouts.some(l => l.url === prev.url)) return prev;
@@ -1757,7 +1769,7 @@ export default function LayoutBrowser() {
         } else {
             setSelected(null);
         }
-    }, [filteredLayouts, sceneLayouts, sharedLayouts, mode]);
+    }, [filteredLayouts, sceneLayouts, sharedLayouts, talentLayouts, mode]);
 
     useEffect(() => {
         setSearchQuery('');
@@ -1813,6 +1825,7 @@ export default function LayoutBrowser() {
                     <TabsTrigger value="design">Design Presets</TabsTrigger>
                     <TabsTrigger value="scoreboard">Scoreboards</TabsTrigger>
                     <TabsTrigger value="scenes">Scenes</TabsTrigger>
+                    <TabsTrigger value="talent">Talent</TabsTrigger>
                     <TabsTrigger value="shared">Shared</TabsTrigger>
                     <TabsTrigger value="bracket">Bracket</TabsTrigger>
                     {controllerSupported && <TabsTrigger value="controller">Controller</TabsTrigger>}
@@ -1875,6 +1888,27 @@ export default function LayoutBrowser() {
                                     )}
                                     <Stack gap="xs">
                                         {sceneLayouts.map(item => (
+                                            <LayoutItem key={item.url} item={item} selected={selected} onSelect={setSelected} activeTab={activeScoreboardTab} />
+                                        ))}
+                                    </Stack>
+                                </>
+                            )}
+
+                            {mode === 'talent' && (
+                                <>
+                                    <Text size="xs" dimmed>
+                                        Person overlays driven by the address book — the commentary
+                                        caster strip now, the player element soon. Author who appears on
+                                        the Commentary tab; control them live from the Production page.
+                                    </Text>
+                                    <Input placeholder="Search talent overlays..." value={searchQuery} onChange={(e) => setSearchQuery(e.currentTarget.value)} />
+                                    {loading && <Loader size={18} />}
+                                    {error && <Alert variant="destructive"><AlertTitle>Error</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
+                                    {talentLayouts.length === 0 && !loading && (
+                                        <Text size="sm" dimmed>No talent overlays found.</Text>
+                                    )}
+                                    <Stack gap="xs">
+                                        {talentLayouts.map(item => (
                                             <LayoutItem key={item.url} item={item} selected={selected} onSelect={setSelected} activeTab={activeScoreboardTab} />
                                         ))}
                                     </Stack>

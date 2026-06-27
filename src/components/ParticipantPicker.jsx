@@ -18,6 +18,11 @@ import { useParticipantsStore } from "../context/participants";
  *
  * Props:
  *   value        current display string (e.g. the bound rioName)
+ *   selectedId   optional registry id of the current selection. When given, the
+ *                checkmark is keyed on row identity (p.id === selectedId) instead
+ *                of matching the display string against each row's rioName — the
+ *                latter mis-marks when the shown value is a display tag, or when
+ *                two people collide on a name.
  *   onResolve    (row) => void     — a registry row was chosen/created
  *   onRawValue   (text) => void    — optional; "Use 'X'" without saving.
  *                                    Omit to force registry-only selection.
@@ -32,6 +37,7 @@ const defaultBuildCreate = (q) => ({
 
 export default function ParticipantPicker({
     value = "",
+    selectedId = null,
     onResolve,
     onRawValue,
     buildCreate = defaultBuildCreate,
@@ -99,6 +105,12 @@ export default function ParticipantPicker({
         onRawValue?.(text);
     };
 
+    // Mark by identity when selectedId is supplied; else fall back to matching
+    // the display string against the row's rioName (legacy callers).
+    const isSelected = (p) => selectedId != null
+        ? p.id === selectedId
+        : (p.identities?.rioName || "") === value;
+
     const rowLabel = (p) => p.display?.tag || p.identities?.rioName || "(unnamed)";
     const rowSub = (p) => {
         const bits = [];
@@ -148,7 +160,7 @@ export default function ParticipantPicker({
                                     >
                                         <Check className={cn(
                                             "mr-1 size-4",
-                                            (p.identities?.rioName || "") === value ? "opacity-100" : "opacity-0"
+                                            isSelected(p) ? "opacity-100" : "opacity-0"
                                         )} />
                                         <span className="flex min-w-0 flex-col">
                                             <span className="truncate">{rowLabel(p)}</span>

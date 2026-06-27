@@ -21,6 +21,7 @@ from server.controller_overlay import ControllerOverlay
 from server.announcements import Announcements
 from server.participants import Participants
 from server.match import Match
+from server.commentary import Commentary
 from server.state import State
 from server.utils import json
 
@@ -83,6 +84,9 @@ async def lifespan(app: FastAPI):
     # Re-apply every persisted match onto its bound board(s) (resume-on-startup
     # spirit). Runs after State + registry are loaded.
     await Match.project_all()
+    # Re-resolve the persisted commentary desk against the current registry so a
+    # renamed/edited caster reflows on launch (resolve-by-copy, like Match).
+    await Commentary.project_all()
 
     # If stream labels are enabled but the output dir is missing, do a full
     # export so OBS Text (GDI+) sources don't point at missing files.

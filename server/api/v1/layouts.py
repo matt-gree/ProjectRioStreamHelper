@@ -86,6 +86,8 @@ _STANDALONE_DISPLAY_NAMES = {
     # Split-Screen sits beside the game (tall); Stats is a small bar.
     "shared/split-screen": "Split-Screen",
     "shared/stats-feed": "Stats",
+    # Talent — registry-bound person overlays (the player element joins later).
+    "commentary/commentary": "Commentary",
 }
 
 
