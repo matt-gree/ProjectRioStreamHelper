@@ -50,6 +50,17 @@ export const LAYOUT_SETTINGS = {
         { key: 'port2Color', type: 'color-override', label: 'Port 3 Color', description: 'Accent for a player on controller port 3' },
         { key: 'port3Color', type: 'color-override', label: 'Port 4 Color', description: 'Accent for a player on controller port 4' },
     ],
+    // Lower Third (Break) — a re-themable SVG band. The mount reads these under
+    // overlays.lowerthird.*; `theme` swaps the whole SVG (built-in or a drop-in
+    // under /layout/lowerthird/themes/<name>.svg), accentColor overrides the Rio
+    // brand red, and the port colours tint each player's side.
+    lowerthird: [
+        { key: 'theme', type: 'select', label: 'Theme', description: 'Built-in look, or a custom SVG dropped into /layout/lowerthird/themes/', options: [{ value: 'rio', label: 'Project Rio' }, { value: 'chalk', label: 'Chalk' }], defaultValue: 'rio' },
+        { key: 'port0Color', type: 'color-override', label: 'Port 1 Color', description: 'Side colour for a player on controller port 1' },
+        { key: 'port1Color', type: 'color-override', label: 'Port 2 Color', description: 'Side colour for a player on controller port 2' },
+        { key: 'port2Color', type: 'color-override', label: 'Port 3 Color', description: 'Side colour for a player on controller port 3' },
+        { key: 'port3Color', type: 'color-override', label: 'Port 4 Color', description: 'Side colour for a player on controller port 4' },
+    ],
 };
 
 // ── Global design keys eligible for per-layout override ──

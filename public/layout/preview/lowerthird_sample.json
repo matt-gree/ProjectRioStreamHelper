@@ -1,0 +1,20 @@
+{
+  "lowerthird": {
+    "theme": "rio",
+    "matchId": "1",
+    "role": "upnext",
+    "title": "Winners Final",
+    "subtitle": "Mario Superstar Baseball · NNL Season 7",
+    "clock": { "mode": "countdown", "durationSec": 300, "remainingMs": 272000, "running": false, "label": "BACK IN" }
+  },
+  "match": {
+    "1": {
+      "label": "Winners Final",
+      "stage": "draft",
+      "player": {
+        "1": { "rioName": "MattGree", "captain": "Mario", "port": 0 },
+        "2": { "rioName": "SteelyDad", "captain": "Bowser", "port": 1 }
+      }
+    }
+  }
+}

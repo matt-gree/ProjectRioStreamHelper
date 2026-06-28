@@ -1,0 +1,51 @@
+<svg viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMax meet" xmlns="http://www.w3.org/2000/svg">
+  <!--
+    "Chalk" — a second reference theme proving the drop-in contract: same
+    data-slot names as rio.svg, a deliberately different look (light broadcast
+    slate, square edges, gold top rule). Copy this + rename to make your own;
+    only the data-slot names are required. See ./README.md.
+  -->
+  <defs>
+    <clipPath id="ckBand"><rect x="48" y="800" width="1824" height="216"/></clipPath>
+  </defs>
+
+  <!-- light slate band, square -->
+  <rect x="48" y="800" width="1824" height="216" style="fill:#f5f1e6"/>
+  <g clip-path="url(#ckBand)">
+    <!-- gold top rule + accent foot -->
+    <rect x="48" y="800" width="1824" height="8" style="fill:var(--gold)"/>
+    <rect x="48" y="1008" width="1824" height="8" style="fill:var(--accent)"/>
+    <rect x="1474" y="836" width="2" height="144" fill="#1b1b22" opacity="0.15"/>
+
+    <!-- brand cap -->
+    <image data-slot="logo" x="84" y="838" width="140" height="140" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+    <g data-slot="logo-default" transform="translate(2,6)">
+      <path d="M86 905 C86 853 110 836 148 836 C186 836 210 853 210 905 Z" style="fill:var(--accent)"/>
+      <circle cx="120" cy="884" r="11" fill="#f5f1e6"/>
+      <circle cx="178" cy="888" r="8" fill="#f5f1e6"/>
+      <path d="M112 905 L184 905 L184 940 C184 958 168 968 148 968 C128 968 112 958 112 940 Z" fill="#1b1b22"/>
+    </g>
+
+    <!-- match -->
+    <rect x="262" y="816" width="172" height="32" style="fill:#1b1b22"/>
+    <text data-slot="status" x="348" y="839" text-anchor="middle" style="fill:#f5f1e6;font-family:var(--font-display)" font-size="18" font-weight="700" letter-spacing="2.5">UP NEXT</text>
+
+    <rect x="262" y="874" width="6" height="40" style="fill:var(--side1)"/>
+    <image data-slot="side1-sprite" x="280" y="870" width="48" height="48" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <text data-slot="side1-name" data-maxw="380" x="344" y="906" style="fill:#1b1b22;font-family:var(--font-display)" font-size="34" font-weight="700">Player One</text>
+    <text data-slot="side1-score" data-maxw="60" x="822" y="908" text-anchor="end" style="fill:#1b1b22;font-family:var(--font-display)" font-size="40" font-weight="700" font-variant-numeric="tabular-nums" opacity="0"></text>
+
+    <rect x="262" y="940" width="6" height="40" style="fill:var(--side2)"/>
+    <image data-slot="side2-sprite" x="280" y="936" width="48" height="48" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <text data-slot="side2-name" data-maxw="380" x="344" y="972" style="fill:#1b1b22;font-family:var(--font-display)" font-size="34" font-weight="700">Player Two</text>
+    <text data-slot="side2-score" data-maxw="60" x="822" y="974" text-anchor="end" style="fill:#1b1b22;font-family:var(--font-display)" font-size="40" font-weight="700" font-variant-numeric="tabular-nums" opacity="0"></text>
+
+    <!-- title / subtitle -->
+    <text data-slot="title" data-maxw="560" x="902" y="900" style="fill:#1b1b22;font-family:var(--font-display)" font-size="48" font-weight="700">Stream Title</text>
+    <text data-slot="subtitle" data-maxw="560" x="902" y="950" style="fill:#5a5a66;font-family:var(--font-body)" font-size="25" font-weight="500">Subtitle goes here</text>
+
+    <!-- clock -->
+    <text data-slot="clock-label" x="1844" y="872" text-anchor="end" style="fill:#5a5a66;font-family:var(--font-display)" font-size="21" font-weight="600" letter-spacing="3">BACK IN</text>
+    <text data-slot="clock" x="1846" y="958" text-anchor="end" style="fill:#1b1b22;font-family:var(--font-mono)" font-size="74" font-weight="700" font-variant-numeric="tabular-nums">5:00</text>
+  </g>
+</svg>

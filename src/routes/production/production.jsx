@@ -981,13 +981,15 @@ function ElementOptions({ element, hideTarget = false, hideVisibility = false })
 // elements (hit visualizer) and every fed element (target picker) do; a plain
 // direct element (scoreboard) is just a visibility toggle, no gear.
 function elementHasSetup(element) {
-    return element.id === 'hitvisualizer' || element.id === 'commentary' || element.flavor === 'fed';
+    return element.id === 'hitvisualizer' || element.id === 'commentary'
+        || element.id === 'lowerthird' || element.flavor === 'fed';
 }
 
 // The condensed FACE of an element window — its live actions only.
 function ElementFace({ element }) {
     if (element.id === 'hitvisualizer') return <HitVizFace />;
     if (element.id === 'commentary') return <CommentaryFace />;
+    if (element.id === 'lowerthird') return <LowerThirdFace element={element} />;
     if (element.flavor === 'fed') return <FedFace element={element} />;
     return <DirectFace element={element} />;
 }
@@ -996,6 +998,7 @@ function ElementFace({ element }) {
 function ElementSetup({ element }) {
     if (element.id === 'hitvisualizer') return <HitVizSetup />;
     if (element.id === 'commentary') return <CommentarySetup />;
+    if (element.id === 'lowerthird') return <LowerThirdSetup />;
     if (element.flavor === 'fed') return <FedSetup element={element} />;
     return null;
 }
@@ -1041,6 +1044,188 @@ function FedSetup({ element }) {
                 {containers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
         </label>
+    );
+}
+
+// ── Lower Third (Break) ───────────────────────────────────────────────────
+// A direct element with rich authoring: the producer composes the band's match,
+// title/subtitle and clock here; values are written to lowerthird.* state, which
+// the SVG overlay renders. Putting it on air is still the OBS source toggle.
+const LT_INPUT = 'w-full rounded-md border border-border bg-card px-2 py-1 text-sm text-foreground';
+
+// Re-render once per ~500ms so the live clock readout ticks.
+function useTick(ms = 500, on = true) {
+    const [, force] = useState(0);
+    useEffect(() => {
+        if (!on) return;
+        const id = setInterval(() => force(n => n + 1), ms);
+        return () => clearInterval(id);
+    }, [ms, on]);
+}
+
+function useLowerThird() {
+    const lt = useStateStore(useShallow(s => s?.lowerthird ?? {}));
+    const matches = useStateStore(useShallow(s => s?.match ?? {}));
+    const set = (entries) => useStateStore.getState().setItems(entries);
+    const setKey = (key, value) => set([{ key: `lowerthird.${key}`, value }]);
+    return { lt, matches, set, setKey };
+}
+
+function fmtRemaining(ms) {
+    const s = Math.max(0, Math.round(ms / 1000));
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60;
+    const p = (n) => String(n).padStart(2, '0');
+    return h > 0 ? `${h}:${p(m)}:${p(ss)}` : `${m}:${p(ss)}`;
+}
+
+function ClockControl() {
+    const { lt, set } = useLowerThird();
+    const c = lt.clock || {};
+    const mode = c.mode || 'off';
+    useTick(500, c.running || mode === 'clock');
+
+    const now = Date.now();
+    const remaining = c.running ? (c.endsAt || 0) - now : (c.remainingMs != null ? c.remainingMs : (c.durationSec || 300) * 1000);
+    const elapsed = c.running ? now - (c.startedAt || now) : (c.elapsedMs || 0);
+
+    const startCountdown = () => {
+        const rem = c.remainingMs != null ? c.remainingMs : (c.durationSec || 300) * 1000;
+        set([
+            { key: 'lowerthird.clock.endsAt', value: now + rem },
+            { key: 'lowerthird.clock.remainingMs', value: null },
+            { key: 'lowerthird.clock.running', value: true },
+        ]);
+    };
+    const pauseCountdown = () => set([
+        { key: 'lowerthird.clock.remainingMs', value: Math.max(0, (c.endsAt || 0) - now) },
+        { key: 'lowerthird.clock.running', value: false },
+    ]);
+    const resetCountdown = () => set([
+        { key: 'lowerthird.clock.remainingMs', value: null },
+        { key: 'lowerthird.clock.endsAt', value: null },
+        { key: 'lowerthird.clock.running', value: false },
+    ]);
+    const startCountup = () => set([
+        { key: 'lowerthird.clock.startedAt', value: now - (c.elapsedMs || 0) },
+        { key: 'lowerthird.clock.running', value: true },
+    ]);
+    const pauseCountup = () => set([
+        { key: 'lowerthird.clock.elapsedMs', value: Math.max(0, now - (c.startedAt || now)) },
+        { key: 'lowerthird.clock.running', value: false },
+    ]);
+    const resetCountup = () => set([
+        { key: 'lowerthird.clock.elapsedMs', value: 0 },
+        { key: 'lowerthird.clock.startedAt', value: null },
+        { key: 'lowerthird.clock.running', value: false },
+    ]);
+
+    if (mode === 'off') return null;
+    if (mode === 'clock') {
+        return <Text size="xs" className="text-muted-foreground">Showing time of day.</Text>;
+    }
+    const isDown = mode === 'countdown';
+    return (
+        <Group gap="xs" className="items-center">
+            <Text size="sm" className="min-w-[64px] font-mono tabular-nums text-foreground">
+                {fmtRemaining(isDown ? remaining : elapsed)}
+            </Text>
+            {c.running ? (
+                <Button size="sm" variant="secondary" onClick={isDown ? pauseCountdown : pauseCountup}>Pause</Button>
+            ) : (
+                <Button size="sm" onClick={isDown ? startCountdown : startCountup}>Start</Button>
+            )}
+            <Button size="sm" variant="ghost" onClick={isDown ? resetCountdown : resetCountup}>
+                <RotateCcw size={13} className="mr-1" /> Reset
+            </Button>
+        </Group>
+    );
+}
+
+function LowerThirdFace({ element }) {
+    const { lt, setKey } = useLowerThird();
+    const role = lt.role === 'current' ? 'current' : 'upnext';
+    return (
+        <Stack gap="sm">
+            <DirectFace element={element} />
+            <SegmentedControl
+                data={[{ label: 'Up Next', value: 'upnext' }, { label: 'Current', value: 'current' }]}
+                value={role}
+                onChange={(v) => setKey('role', v)}
+            />
+            <ClockControl />
+        </Stack>
+    );
+}
+
+function LowerThirdSetup() {
+    const { lt, matches, setKey } = useLowerThird();
+    const ov = lt.override || {};
+    const c = lt.clock || {};
+    const matchIds = Object.keys(matches || {});
+    const matchLabel = (id) => {
+        const m = matches[id] || {};
+        const names = [m?.player?.[1]?.rioName, m?.player?.[2]?.rioName].filter(Boolean).join(' vs ');
+        return m.label ? `${m.label}${names ? ` — ${names}` : ''}` : (names || `Match ${id}`);
+    };
+    const setClock = (key, value) => useStateStore.getState().setItems([{ key: `lowerthird.clock.${key}`, value }]);
+
+    return (
+        <Stack gap="sm">
+            <label className="flex flex-col gap-1">
+                <Text size="xs" className="text-muted-foreground">Theme</Text>
+                <select className={LT_INPUT} value={lt.theme || 'rio'} onChange={(e) => setKey('theme', e.target.value)}>
+                    <option value="rio">Project Rio</option>
+                    <option value="chalk">Chalk</option>
+                </select>
+            </label>
+
+            <label className="flex flex-col gap-1">
+                <Text size="xs" className="text-muted-foreground">Match</Text>
+                <select className={LT_INPUT} value={lt.matchId != null ? String(lt.matchId) : ''} onChange={(e) => setKey('matchId', e.target.value || null)}>
+                    <option value="">— None (manual) —</option>
+                    {matchIds.map(id => <option key={id} value={id}>{matchLabel(id)}</option>)}
+                </select>
+            </label>
+
+            <label className="flex flex-col gap-1">
+                <Text size="xs" className="text-muted-foreground">Title</Text>
+                <input className={LT_INPUT} value={lt.title || ''} placeholder="e.g. Winners Final" onChange={(e) => setKey('title', e.target.value)} />
+            </label>
+            <label className="flex flex-col gap-1">
+                <Text size="xs" className="text-muted-foreground">Subtitle</Text>
+                <input className={LT_INPUT} value={lt.subtitle || ''} placeholder="e.g. NNL Season 7" onChange={(e) => setKey('subtitle', e.target.value)} />
+            </label>
+
+            <Text size="xs" className="font-medium text-muted-foreground">Manual override (used when no match is selected)</Text>
+            <Group gap="xs" className="flex-nowrap">
+                <input className={LT_INPUT} value={ov.side1 || ''} placeholder="Side 1 name" onChange={(e) => setKey('override.side1', e.target.value)} />
+                <input className={LT_INPUT} value={ov.side2 || ''} placeholder="Side 2 name" onChange={(e) => setKey('override.side2', e.target.value)} />
+            </Group>
+            <input className={LT_INPUT} value={ov.status || ''} placeholder="Status override (e.g. LIVE)" onChange={(e) => setKey('override.status', e.target.value)} />
+
+            <label className="flex flex-col gap-1">
+                <Text size="xs" className="text-muted-foreground">Clock</Text>
+                <select className={LT_INPUT} value={c.mode || 'off'} onChange={(e) => setClock('mode', e.target.value)}>
+                    <option value="off">Off</option>
+                    <option value="countdown">Countdown</option>
+                    <option value="countup">Count up</option>
+                    <option value="clock">Time of day</option>
+                </select>
+            </label>
+            {c.mode === 'countdown' && (
+                <Group gap="xs" className="flex-nowrap items-center">
+                    <Text size="xs" className="text-muted-foreground">Minutes</Text>
+                    <input
+                        type="number" min={0} step={1} className={LT_INPUT}
+                        value={Math.round((c.durationSec || 300) / 60)}
+                        onChange={(e) => setClock('durationSec', Math.max(0, Number(e.target.value) || 0) * 60)}
+                    />
+                </Group>
+            )}
+            {(c.mode === 'countdown' || c.mode === 'clock') && (
+                <input className={LT_INPUT} value={c.label || ''} placeholder="Clock label (e.g. BACK IN)" onChange={(e) => setClock('label', e.target.value)} />
+            )}
+        </Stack>
     );
 }
 

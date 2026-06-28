@@ -1,0 +1,58 @@
+/* ============================================================
+   Project Rio — design tokens (imported from the claude.ai/design
+   "Project Rio Design System", token layer only).
+   The Rio look: red mushroom cap (#e60012) + star gold, on a dark
+   "night arena" scale, Rajdhani display caps + Inter body +
+   JetBrains Mono for tabular numerals.
+
+   This is the shared theming foundation for re-themable overlay
+   elements. An overlay <link>s this, then theme SVGs inherit the
+   vars below. The producer/mount can override the per-side and
+   accent vars at runtime (port colours, global accent).
+   ============================================================ */
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap');
+
+:root {
+	/* --- Rio red — the brand core (the mushroom cap) --- */
+	--rio-300: #ff6b78;
+	--rio-400: #ff3d4e;
+	--rio-500: #e60012; /* primary brand red */
+	--rio-600: #c4000f;
+
+	/* --- Star gold — ratings / highlights --- */
+	--star-400: #ffd23f;
+	--star-500: #f5bb00;
+
+	/* --- Night — the dark arena scale --- */
+	--night-950: #07070b;
+	--night-900: #0b0b12; /* panel surface */
+	--night-850: #10101a; /* raised surface */
+	--night-700: #1f1f30; /* panel borders */
+	--night-600: #2b2b40; /* strong dividers */
+
+	/* --- Fog — text on night --- */
+	--fog-100: #f5f5f8; /* primary text */
+	--fog-300: #c9c9d6; /* secondary text */
+	--fog-500: #8f8fa3; /* muted / captions */
+
+	--emerald-400: #34d399; /* win / positive */
+
+	/* --- Type --- */
+	--font-display: 'Rajdhani', 'Arial Narrow', sans-serif;
+	--font-body: 'Inter', system-ui, -apple-system, sans-serif;
+	--font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+
+	/* ============================================================
+	   Re-themable element aliases — theme SVGs paint with these.
+	   The mount overrides --accent / --side1 / --side2 at runtime.
+	   ============================================================ */
+	--accent: var(--rio-500);
+	--gold: var(--star-500);
+	--band: var(--night-900);
+	--band-2: var(--night-850);
+	--ink: var(--fog-100);
+	--ink-dim: var(--fog-500);
+	--border: var(--night-700);
+	--side1: var(--rio-500);
+	--side2: #1e88e5;
+}

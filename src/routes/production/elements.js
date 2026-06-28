@@ -104,6 +104,22 @@ export const ELEMENTS = [
         match: (url) => /callout-stage/i.test(url) || /callout/i.test(url),
     },
     {
+        id: 'lowerthird',
+        name: 'Lower Third',
+        // Break phase (also freely placeable mid-game). A re-themable SVG band:
+        // tournament logo · one match (current/upcoming) · title/subtitle · clock.
+        // Direct element (own dedicated source); the producer authors its content
+        // (match, title, clock) on the face/gear, written to lowerthird.* state,
+        // and shows/hides the source in OBS to put it on air. Native 1920×1080.
+        phase: 'break',
+        flavor: 'direct',
+        span: 6,
+        url: '/layout/lowerthird/lowerthird.html',
+        width: 1920,
+        height: 1080,
+        match: (url) => /lowerthird/i.test(url),
+    },
+    {
         id: 'hitvisualizer',
         name: 'Hit Visualizer',
         phase: 'live',

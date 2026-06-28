@@ -1755,12 +1755,24 @@ export default function LayoutBrowser() {
         });
     }, [allLayouts, searchQuery]);
 
+    // Break — broadcast-furniture overlays for breaks / mid-game cuts. The
+    // re-themable SVG lower-third now; more break graphics may join later.
+    const breakLayouts = useMemo(() => {
+        const q = searchQuery.toLowerCase().trim();
+        return allLayouts.filter(l => {
+            if (l.group !== 'lowerthird') return false;
+            if (q && !l.name.toLowerCase().includes(q)) return false;
+            return true;
+        });
+    }, [allLayouts, searchQuery]);
+
     useEffect(() => {
         const activeLayouts = mode === 'scenes' ? sceneLayouts
             : mode === 'shared' ? sharedLayouts
             : mode === 'talent' ? talentLayouts
+            : mode === 'break' ? breakLayouts
             : filteredLayouts;
-        if (mode !== 'scoreboard' && mode !== 'scenes' && mode !== 'shared' && mode !== 'talent') return;
+        if (mode !== 'scoreboard' && mode !== 'scenes' && mode !== 'shared' && mode !== 'talent' && mode !== 'break') return;
         if (activeLayouts.length > 0) {
             setSelected(prev => {
                 if (prev && activeLayouts.some(l => l.url === prev.url)) return prev;
@@ -1769,7 +1781,7 @@ export default function LayoutBrowser() {
         } else {
             setSelected(null);
         }
-    }, [filteredLayouts, sceneLayouts, sharedLayouts, talentLayouts, mode]);
+    }, [filteredLayouts, sceneLayouts, sharedLayouts, talentLayouts, breakLayouts, mode]);
 
     useEffect(() => {
         setSearchQuery('');
@@ -1826,6 +1838,7 @@ export default function LayoutBrowser() {
                     <TabsTrigger value="scoreboard">Scoreboards</TabsTrigger>
                     <TabsTrigger value="scenes">Scenes</TabsTrigger>
                     <TabsTrigger value="talent">Talent</TabsTrigger>
+                    <TabsTrigger value="break">Break</TabsTrigger>
                     <TabsTrigger value="shared">Shared</TabsTrigger>
                     <TabsTrigger value="bracket">Bracket</TabsTrigger>
                     {controllerSupported && <TabsTrigger value="controller">Controller</TabsTrigger>}
@@ -1909,6 +1922,27 @@ export default function LayoutBrowser() {
                                     )}
                                     <Stack gap="xs">
                                         {talentLayouts.map(item => (
+                                            <LayoutItem key={item.url} item={item} selected={selected} onSelect={setSelected} activeTab={activeScoreboardTab} />
+                                        ))}
+                                    </Stack>
+                                </>
+                            )}
+
+                            {mode === 'break' && (
+                                <>
+                                    <Text size="xs" dimmed>
+                                        Break graphics — the re-themable lower-third (logo · match ·
+                                        title · clock). Add it to OBS, pick a theme below, and author
+                                        the match/title/countdown live from the Production page → Break.
+                                    </Text>
+                                    <Input placeholder="Search break overlays..." value={searchQuery} onChange={(e) => setSearchQuery(e.currentTarget.value)} />
+                                    {loading && <Loader size={18} />}
+                                    {error && <Alert variant="destructive"><AlertTitle>Error</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
+                                    {breakLayouts.length === 0 && !loading && (
+                                        <Text size="sm" dimmed>No break overlays found.</Text>
+                                    )}
+                                    <Stack gap="xs">
+                                        {breakLayouts.map(item => (
                                             <LayoutItem key={item.url} item={item} selected={selected} onSelect={setSelected} activeTab={activeScoreboardTab} />
                                         ))}
                                     </Stack>

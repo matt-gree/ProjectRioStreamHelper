@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<!--
+  Lower Third — a re-themable SVG broadcast band (Break phase, also placeable
+  mid-game). Layout: tournament logo · one match · title/subtitle · clock.
+
+  This file is a thin shell: the look lives in a swappable THEME SVG under
+  /layout/lowerthird/themes/, and the rendering/data-binding lives in the
+  reusable mount (lowerthird-mount.js). Drop this in OBS as a full-canvas
+  (1920×1080) browser source; the band sits at the bottom. Author it on the
+  Production page → Break.
+-->
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Knobs resolve under overlays.lowerthird.* (theme swap + colour overrides).
+       The Setup-tab settings panel shows a LAYOUT_SETTINGS def / global override
+       only if its key appears in this whitelist. -->
+  <meta name="overlay-settings" content="theme, accentColor, port0Color, port1Color, port2Color, port3Color" />
+  <link rel="stylesheet" href="/layout/lib/rio-theme/tokens.css" />
+  <style>
+    html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+    /* Native full-canvas size hint; the SVG scales to whatever the OBS source is. */
+    body { width: 1920px; height: 1080px; }
+    #host { position: fixed; inset: 0; }
+  </style>
+</head>
+<body>
+  <div id="host"></div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="/layout/lib/overlay-base.js"></script>
+  <script src="/layout/lib/rio-data.js"></script>
+  <script type="module">
+    import { mountLowerThird } from '/layout/lib/lowerthird-mount.js';
+
+    const host = document.getElementById('host');
+    const lt = mountLowerThird({ host });
+
+    async function boot() {
+      if (OverlayBase.PREVIEW_MODE) {
+        // Layouts/Setup preview: prime a representative authored band.
+        try {
+          const r = await fetch(`${OverlayBase.BASE_URL}/layout/preview/lowerthird_sample.json`);
+          const data = r.ok ? await r.json() : null;
+          if (data) {
+            if (data.lowerthird) OverlayBase.deepSet(OverlayBase.state, 'lowerthird', data.lowerthird);
+            if (data.match) OverlayBase.deepSet(OverlayBase.state, 'match', data.match);
+          }
+        } catch { /* ignore */ }
+      }
+
+      OverlayBase.init({
+        render: () => lt.update(OverlayBase.state, OverlayBase.settings),
+        // Re-render when our own keys, the bound match, or branding change.
+        shouldRender: (key) => key.startsWith('lowerthird.') || key.startsWith('match.') || key.startsWith('branding'),
+        shouldRenderSettings: (key) => key.startsWith('overlays.lowerthird.') || key.startsWith('overlays.global.'),
+        fetchSettings: true,
+        skipState: OverlayBase.PREVIEW_MODE,
+      });
+
+      if (OverlayBase.PREVIEW_MODE) lt.update(OverlayBase.state, OverlayBase.settings);
+    }
+    boot();
+
+    // Auto-replay the reveal when this source/scene goes live in OBS.
+    window.addEventListener('obsSourceActiveChanged', (e) => { if (e.detail && e.detail.active) lt.replay(); });
+  </script>
+</body>
+</html>

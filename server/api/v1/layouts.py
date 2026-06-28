@@ -91,6 +91,8 @@ _STANDALONE_DISPLAY_NAMES = {
     "shared/callout-stage": "Callout Stage",
     # Talent — registry-bound person overlays (the player element joins later).
     "commentary/commentary": "Commentary",
+    # Break — re-themable SVG lower-third band (logo · match · title · clock).
+    "lowerthird/lowerthird": "Lower Third",
 }
 
 
