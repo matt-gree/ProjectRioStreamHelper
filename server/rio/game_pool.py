@@ -13,6 +13,7 @@ from server.rio.provider import (
 from server.rio import stats_api
 from server.rio.stats_api import get_last_completed_fetch_info
 from server.rio.pyrio.lookup import LookupDicts
+from server.match import Match
 from server.settings import Settings
 
 
@@ -54,6 +55,22 @@ def _pinned_swap_needed(player0: str, player1: str) -> bool | None:
     elif player1 == pinned_player:
         return pinned_index == 0
     return None
+
+
+def _orient_pin_match(left: str, right: str, sb: int) -> tuple[bool, str]:
+    """Side orientation for an API game as (swap, reason).
+
+    The API pools have no HUD manual-swap / back-to-back state machine, so the
+    cascade is just pin > match (matching the global precedence). `reason` names
+    the deciding layer (or "" for raw order) and is mirrored to side_reason.
+    """
+    pin = _pinned_swap_needed(left, right)
+    if pin is not None:
+        return pin, "pin"
+    mo = Match.orientation_for_sides(sb, left, right)
+    if mo is not None:
+        return mo, "match"
+    return False, ""
 
 
 class OngoingGamePool:
@@ -201,11 +218,11 @@ class OngoingGamePool:
         parsed = RioGameDataProvider.parse_game_data(game)
         parsed["game_id"] = game_id
 
-        # Check if pinned player requires a side swap
+        # Side orientation: pin > match (see _orient_pin_match).
         entrants = parsed.get("entrants", [[{}], [{}]])
         player0 = entrants[0][0].get("rioName", "") if entrants[0] else ""
         player1 = entrants[1][0].get("rioName", "") if entrants[1] else ""
-        swap = _pinned_swap_needed(player0, player1)
+        swap, reason = _orient_pin_match(player0, player1, scoreboard_number)
 
         if swap:
             parsed["entrants"] = list(reversed(parsed["entrants"]))
@@ -214,7 +231,9 @@ class OngoingGamePool:
         else:
             home_team = 2
 
-        await apply_parsed_game_to_state(parsed, scoreboard_number, home_team=home_team)
+        await apply_parsed_game_to_state(
+            parsed, scoreboard_number, home_team=home_team, side_reason=reason
+        )
 
         # Update the current api_game_id for this scoreboard. Leave `type`
         # alone — it was set by the user via the source dropdown, and a
@@ -242,7 +261,7 @@ async def apply_completed_game_dict(game: dict, scoreboard_number: int) -> bool:
 
     away_user = game.get("away_user", "")
     home_user = game.get("home_user", "")
-    swap = _pinned_swap_needed(away_user, home_user)
+    swap, reason = _orient_pin_match(away_user, home_user, scoreboard_number)
 
     if swap:
         game = dict(game)
@@ -250,7 +269,7 @@ async def apply_completed_game_dict(game: dict, scoreboard_number: int) -> bool:
         game["away_score"], game["home_score"] = game.get("home_score", 0), game.get("away_score", 0)
         game["away_captain"], game["home_captain"] = game.get("home_captain", ""), game.get("away_captain", "")
 
-    await apply_completed_game_to_state(game, scoreboard_number)
+    await apply_completed_game_to_state(game, scoreboard_number, side_reason=reason)
     await Settings.Set(
         f"scoreboards.sources.{scoreboard_number}.api_game_id", game.get("game_id")
     )

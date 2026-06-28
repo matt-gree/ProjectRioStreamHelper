@@ -170,3 +170,137 @@ class Match:
                 await cls.project_match(m)
             except Exception:
                 logger.exception("[Match] project_all failed for match {}", m)
+
+    # ----- Draft→Live reconciliation (Phase 5) -----------------------------
+    #
+    # The projector (above) seats fixture/identity onto a board *before* a game.
+    # Once a live feed (HUD / ongoing API) starts writing score.{N}.*, these
+    # helpers keep the producer's draft authoritative for the two things the feed
+    # gets wrong: which side each player sits on (Project Rio randomizes
+    # away/home) and the curated display identity. The feed stays authoritative
+    # for all live data (count, runners, roster, score, …). See provider.py /
+    # game_pool.py for the call sites.
+
+    @classmethod
+    def scoreboard_match(cls, sb) -> str | None:
+        """The match id bound to board ``sb`` (score.{sb}.match), or None."""
+        score = State.state.get("score", {}) or {}
+        sc = score.get(str(sb))
+        if not isinstance(sc, dict):
+            sc = score.get(sb) if isinstance(score.get(sb), dict) else {}
+        m = sc.get("match")
+        return m if m else None
+
+    @classmethod
+    def _participant_rioname(cls, player: dict | None) -> str:
+        """Resolve a match side's Rio name — the registry identity (the join
+        key) takes precedence over any rioName cached on the match itself."""
+        player = player or {}
+        pid = player.get("participantId")
+        if pid:
+            row = Participants.Get(pid)
+            if row:
+                rn = (row.get("identities") or {}).get("rioName") or ""
+                if rn:
+                    return rn
+        return player.get("rioName") or ""
+
+    @classmethod
+    def _bound_sides(cls, sb):
+        """(match_id, p1, p2) for a bound board, or None when unbound."""
+        m = cls.scoreboard_match(sb)
+        if not m:
+            return None
+        players = cls.get(m).get("player") or {}
+        p1 = players.get("1") or players.get(1) or {}
+        p2 = players.get("2") or players.get(2) or {}
+        return m, p1, p2
+
+    @classmethod
+    def orientation_for_sides(cls, sb, left_rio: str, right_rio: str) -> bool | None:
+        """Whether board ``sb``'s current sides need a swap to seat each match
+        participant on their authored side.
+
+        Returns True (swap), False (already correct), or None (not bound, or the
+        feed's players don't match the draft — leave the orientation alone).
+        Decided from whichever side resolves unambiguously by rioName.
+        """
+        bound = cls._bound_sides(sb)
+        if not bound:
+            return None
+        _m, p1, p2 = bound
+        s1 = cls._participant_rioname(p1).strip().casefold()
+        s2 = cls._participant_rioname(p2).strip().casefold()
+        if not s1 and not s2:
+            return None
+        left = (left_rio or "").strip().casefold()
+        right = (right_rio or "").strip().casefold()
+        if s1 and left == s1:
+            return False
+        if s2 and left == s2:
+            return True
+        if s1 and right == s1:
+            return True
+        if s2 and right == s2:
+            return False
+        return None
+
+    @classmethod
+    def orientation_for_parsed(cls, parsed: dict, sb) -> bool | None:
+        """``orientation_for_sides`` from a parsed game's entrant rioNames."""
+        entrants = parsed.get("entrants") or [[{}], [{}]]
+        left = entrants[0][0].get("rioName", "") if entrants[0] else ""
+        right = entrants[1][0].get("rioName", "") if entrants[1] else ""
+        return cls.orientation_for_sides(sb, left, right)
+
+    @classmethod
+    def identity_entries(cls, sb, left_rio: str, right_rio: str) -> list[tuple]:
+        """Display-identity overlay for a bound board.
+
+        Map each side's *live* rioName to the match's participant and write that
+        participant's curated ``display.*`` so the producer's authored identity
+        wins over a resurface-by-rioName guess (e.g. a name collision resolves to
+        the participant the producer actually drafted). rioName-keyed, so it is
+        correct regardless of which side the feed placed each player on. Only
+        non-empty values are written — enrich, never blank. Returns [] when the
+        board is unbound. Appended last in the SetBatch so it overrides the
+        feed/resurface writes for the same keys.
+        """
+        bound = cls._bound_sides(sb)
+        if not bound:
+            return []
+        _m, p1, p2 = bound
+        by_rio: dict[str, str] = {}
+        for p in (p1, p2):
+            rn = cls._participant_rioname(p).strip().casefold()
+            pid = p.get("participantId")
+            if rn and pid:
+                by_rio[rn] = pid
+        out: list[tuple] = []
+        for t, rio in ((1, left_rio), (2, right_rio)):
+            pid = by_rio.get((rio or "").strip().casefold())
+            row = Participants.Get(pid) if pid else None
+            if not row:
+                continue
+            display = row.get("display") or {}
+            base = f"score.{sb}.player.{t}"
+            for src, dst in RESURFACE_MAP.items():
+                v = display.get(src)
+                if v:
+                    out.append((f"{base}.{dst}", v))
+        return out
+
+    @classmethod
+    async def note_live(cls, sb) -> None:
+        """Advance a bound board's match from draft→live on first live feed.
+
+        Guarded on the current stage so it writes once per game (the hot path
+        calls this on every feed event). ``post`` is owned by the post-game
+        slice; this only ever promotes draft→live.
+        """
+        m = cls.scoreboard_match(sb)
+        if not m:
+            return
+        if cls.get(m).get("stage") == "draft":
+            await State.Set(f"match.{m}.stage", "live")
+            logger.info("[Match] {} → live (board {} feed started)", m, sb)

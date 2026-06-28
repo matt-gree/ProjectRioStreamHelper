@@ -9,6 +9,7 @@ from server.rio import hit_visualizer
 from server.rio.hud_watcher import HudWatcher
 from server.rio.resurface import RESURFACE_MAP as _RESURFACE_MAP
 from server.rio.stats_tracker import StatsTracker
+from server.match import Match
 from server.participants import Participants
 from server.settings import Settings
 from server.state import State
@@ -105,7 +106,7 @@ async def get_user_hud_path() -> Path | None:
     return None
 
 
-async def apply_parsed_game_to_state(parsed: dict, scoreboard_number: int, home_team: int = 2):
+async def apply_parsed_game_to_state(parsed: dict, scoreboard_number: int, home_team: int = 2, side_reason: str = ""):
     """Write parsed game data into State under score.{scoreboard_number}.
 
     Shared by RioGameDataProvider (HUD) and RioGamePool (API).
@@ -115,6 +116,9 @@ async def apply_parsed_game_to_state(parsed: dict, scoreboard_number: int, home_
         home_team: Which team number (1 or 2) is the home team. Default 2.
                    When sides are swapped, pass 1 so the React UI calculates
                    batting/fielding teams correctly.
+        side_reason: Why the sides are ordered as they are — one of
+                   manual|pin|match|back_to_back, or "" for raw feed order.
+                   Mirrored to score.{N}.side_reason for the UI/overlays.
     """
     sb = f"score.{scoreboard_number}"
 
@@ -165,6 +169,8 @@ async def apply_parsed_game_to_state(parsed: dict, scoreboard_number: int, home_
         (f"{sb}.stadium", _stadium_slug(parsed.get("stadium_id"))),
         (f"{sb}.innings_selected", parsed.get("innings_selected")),
         (f"{sb}.tag_set", parsed.get("tag_set")),
+        # Why the sides are ordered as they are (manual|pin|match|back_to_back|"").
+        (f"{sb}.side_reason", side_reason),
         # Live game — clear any completed-game framing left over on this slot.
         (f"{sb}.game_completed", False),
 
@@ -202,8 +208,21 @@ async def apply_parsed_game_to_state(parsed: dict, scoreboard_number: int, home_
                 entries.append((f"{prefix}.character.{char_idx}.position", positions[char_idx]))
 
     _apply_resurface(entries)
+
+    # Draft→Live reconciliation: for a board bound to a match, overlay the
+    # producer's authored participant identity (rioName-keyed, so it's correct
+    # regardless of which side the feed seated each player on) on top of the
+    # resurface guess, then promote the match draft→live. Appended last so these
+    # keys win over the feed/resurface writes; live data already in `entries`
+    # stays authoritative for everything else.
+    entries.extend(
+        Match.identity_entries(
+            scoreboard_number, left.get("rioName", ""), right.get("rioName", "")
+        )
+    )
     await State.SetBatch(entries)
     await State.Save()
+    await Match.note_live(scoreboard_number)
 
 
 def _linescore_side(linescore, side: int) -> list:
@@ -221,7 +240,7 @@ def _linescore_side(linescore, side: int) -> list:
     return linescore.get(str(side), [])
 
 
-async def apply_completed_game_to_state(game: dict, scoreboard_number: int):
+async def apply_completed_game_to_state(game: dict, scoreboard_number: int, side_reason: str = ""):
     """Write completed game data into State under score.{scoreboard_number}.
 
     Completed games from the /games API have limited data compared to HUD/ongoing:
@@ -258,6 +277,7 @@ async def apply_completed_game_to_state(game: dict, scoreboard_number: int):
         (f"{sb}.innings_selected", game.get("innings_selected", 0)),
         (f"{sb}.stadium", stadium_slug),
         (f"{sb}.game_mode", game.get("game_mode", "")),
+        (f"{sb}.side_reason", side_reason),
 
         # Linescore (per-inning runs, returned by API with include_linescore=1).
         # API returns {"0": [away innings...], "1": [home innings...]} but may
@@ -446,11 +466,11 @@ class RioGameDataProvider:
             parsed = cls.parse_game_data(game_json)
             parsed = cls._preserve_player_sides(parsed)
             cls.current_game = parsed
-            await cls._apply_game_to_state(parsed)
+            swaps = await cls._apply_game_to_state(parsed)
             await cls._maybe_apply_hit(game_json)
 
             for sb in cls._hud_targets:
-                await StatsTracker.push_stats_to_state(sb, cls._sides_swapped)
+                await StatsTracker.push_stats_to_state(sb, swaps.get(sb, cls._sides_swapped))
             return parsed
         return None
 
@@ -659,11 +679,52 @@ class RioGameDataProvider:
             StatsTracker.reset_scoreboard(sb)
 
     @classmethod
-    async def _apply_game_to_state(cls, parsed: dict):
-        """Push parsed game data to every HUD-target scoreboard."""
-        home_team = 1 if cls._sides_swapped else 2
+    def _orient_copy(cls, parsed: dict) -> dict:
+        """A side-swapped shallow copy of `parsed` (entrants reversed, scores
+        flipped) — same semantics as `_swap_entrants` but non-destructive, so
+        one board's match orientation can't disturb another's."""
+        p = dict(parsed)
+        p["entrants"] = list(reversed(parsed["entrants"]))
+        p["team1score"], p["team2score"] = (
+            parsed.get("team2score", 0),
+            parsed.get("team1score", 0),
+        )
+        return p
+
+    @classmethod
+    async def _apply_game_to_state(cls, parsed: dict) -> dict:
+        """Push parsed game data to every HUD-target scoreboard.
+
+        Side orientation is decided PER BOARD by the precedence cascade in
+        `_decide` (manual > pin > match > back-to-back), so a match-bound board
+        can seat the authored sides while an unbound board still follows
+        pin/back-to-back. Each board's `side_reason` is written to State so the
+        UI/overlays can show why the order is what it is. Returns a
+        {scoreboard: sides_swapped} map so the caller pushes stats with the same
+        per-board orientation.
+        """
+        entrants = parsed.get("entrants") or [[{}], [{}]]
+        raw_left = entrants[0][0].get("rioName", "") if entrants[0] else ""
+        raw_right = entrants[1][0].get("rioName", "") if entrants[1] else ""
+
+        swaps: dict[int, bool] = {}
         for sb in cls._hud_targets:
-            await apply_parsed_game_to_state(parsed, sb, home_team=home_team)
+            swapped, reason = cls._decide(raw_left, raw_right, sb=sb)
+            board = cls._orient_copy(parsed) if swapped else parsed
+            await apply_parsed_game_to_state(
+                board, sb, home_team=1 if swapped else 2, side_reason=reason,
+            )
+            swaps[sb] = swapped
+
+        # current_game + back-to-back tracking use the global (match-agnostic)
+        # orientation — the "streamer's side" reference that should be stable
+        # across games regardless of any per-board match binding.
+        g_swapped, _ = cls._decide(raw_left, raw_right, sb=None)
+        cls.current_game = cls._orient_copy(parsed) if g_swapped else parsed
+        gl, gr = (raw_right, raw_left) if g_swapped else (raw_left, raw_right)
+        cls._prev_player_sides = {gl: 0, gr: 1}
+        cls._prev_inning = parsed.get("inning", 1)
+        return swaps
 
     # --- Player side preservation (3-layer system) ---
 
@@ -695,15 +756,16 @@ class RioGameDataProvider:
         parsed = cls.parse_game_data(game_json)
         parsed = cls._preserve_player_sides(parsed)
         cls.current_game = parsed
-        # Mirror current swap state into each slot so background fetches push
-        # with the correct team mapping when they land.
+        swaps = await cls._apply_game_to_state(parsed)
+        # Mirror the PER-BOARD swap state into each slot so background fetches and
+        # the stats push use the same orientation as the live data just written —
+        # a match-bound board may differ from the global pin/back-to-back swap.
         for sb in cls._hud_targets:
-            StatsTracker.set_sides_swapped(sb, cls._sides_swapped)
-        await cls._apply_game_to_state(parsed)
+            StatsTracker.set_sides_swapped(sb, swaps.get(sb, cls._sides_swapped))
         await cls._maybe_apply_hit(game_json)
 
         for sb in cls._hud_targets:
-            await StatsTracker.push_stats_to_state(sb, cls._sides_swapped)
+            await StatsTracker.push_stats_to_state(sb, swaps.get(sb, cls._sides_swapped))
 
     @classmethod
     async def _maybe_apply_hit(cls, game_json: dict):
@@ -774,73 +836,101 @@ class RioGameDataProvider:
         cls._user_overridden = True
         logger.info(f"[RIO] Manual swap toggled, sides_swapped={cls._sides_swapped}, user override active")
 
-        # Re-apply current game with new swap state
+        # Re-apply current game with new swap state. A manual swap sets
+        # _user_overridden, so _apply_game_to_state skips match orientation and
+        # every board honors the user's flip (swaps == global state).
         if cls.hud_watcher and cls.hud_watcher.latest_game_data:
             parsed = cls.parse_game_data(cls.hud_watcher.latest_game_data)
             parsed = cls._preserve_player_sides(parsed)
             cls.current_game = parsed
-            await cls._apply_game_to_state(parsed)
+            swaps = await cls._apply_game_to_state(parsed)
 
             # Re-push stats with new swap state to every HUD target
             for sb in cls._hud_targets:
-                await StatsTracker.push_stats_to_state(sb, cls._sides_swapped)
+                await StatsTracker.push_stats_to_state(sb, swaps.get(sb, cls._sides_swapped))
+
+    @classmethod
+    def _pin_swap(cls, left: str, right: str) -> bool | None:
+        """Pinned-player ("player lock") orientation. True=swap, False=already
+        correct, None=pinned player not in this game / no pin set."""
+        pinned = Settings.Get("project_rio.pinned_player", "").strip()
+        if not pinned:
+            return None
+        side = Settings.Get("project_rio.pinned_side", "Team 1")
+        idx = 0 if side == "Team 1" else 1
+        if left == pinned:
+            return idx == 1
+        if right == pinned:
+            return idx == 0
+        return None
+
+    @classmethod
+    def _b2b_swap(cls, left: str, right: str) -> bool | None:
+        """Back-to-back ("repeated game") orientation: keep a returning player on
+        the side they were last on. True=swap, False=already correct, None=no
+        prior game / neither player returning."""
+        if not cls._prev_player_sides:
+            return None
+        ps_left = cls._prev_player_sides.get(left)
+        ps_right = cls._prev_player_sides.get(right)
+        if ps_left is None and ps_right is None:
+            return None
+        if ps_left == 1 or ps_right == 0:
+            return True
+        return False
+
+    @classmethod
+    def _decide(cls, left: str, right: str, sb=None, allow_manual: bool = True) -> tuple:
+        """Resolve side orientation for one board as (sides_swapped, reason).
+
+        Precedence (highest first): manual > pin > match > back_to_back > none.
+        `reason` names the deciding layer (or "" when nothing governs the order)
+        and is mirrored into score.{N}.side_reason. Pass `sb=None` for the global
+        (match-agnostic) orientation used for back-to-back tracking; pass
+        `allow_manual=False` to seed the manual base on a new game.
+        """
+        if allow_manual and cls._user_overridden:
+            return cls._sides_swapped, "manual"
+        pin = cls._pin_swap(left, right)
+        if pin is not None:
+            return pin, "pin"
+        if sb is not None:
+            mo = Match.orientation_for_sides(sb, left, right)
+            if mo is not None:
+                return mo, "match"
+        b2b = cls._b2b_swap(left, right)
+        if b2b is not None:
+            return b2b, "back_to_back"
+        return False, ""
 
     @classmethod
     def _preserve_player_sides(cls, parsed: dict) -> dict:
-        """Ensure consistent team sides across all HUD events in a game.
+        """PRE-step for the side cascade — runs once per HUD event.
 
-        On new game (inning decreased):
-          - Reset _user_overridden flag
-          - Pinned player or back-to-back detection determines initial sides
-          - Set _sides_swapped flag for the duration of this game
+        Updates only the manual-override state machine; it does NOT swap
+        `parsed` (per-board orientation, including pin/match/back-to-back, is
+        applied in `_apply_game_to_state` via `_decide`). Returns `parsed`
+        unchanged (raw away/home order).
 
-        On mid-game events:
-          - If user manually swapped (_user_overridden), respect their choice
-          - Otherwise apply _sides_swapped (which pin or auto-detect set)
+        - New game (inning decreased): clear the manual override and reseed the
+          manual base (`_sides_swapped`) from pin→back-to-back, so a later swap-
+          button click flips from the sensible default.
+        - Mid-game: if the user manually swapped back to the pinned orientation,
+          release the override so pin/match resume control.
         """
         current_inning = parsed.get("inning", 1)
-        player0 = parsed["entrants"][0][0].get("rioName", "")
-        player1 = parsed["entrants"][1][0].get("rioName", "")
-
-        pinned_player = Settings.Get("project_rio.pinned_player", "").strip()
-        pin_swap = None
-        if pinned_player:
-            pinned_side = Settings.Get("project_rio.pinned_side", "Team 1")
-            pinned_index = 0 if pinned_side == "Team 1" else 1
-            if player0 == pinned_player:
-                pin_swap = pinned_index == 1
-            elif player1 == pinned_player:
-                pin_swap = pinned_index == 0
+        entrants = parsed.get("entrants") or [[{}], [{}]]
+        left = entrants[0][0].get("rioName", "") if entrants[0] else ""
+        right = entrants[1][0].get("rioName", "") if entrants[1] else ""
 
         if cls._is_new_game(current_inning):
             cls._user_overridden = False
-            cls._sides_swapped = False
-
-            if pin_swap is not None:
-                if pin_swap:
-                    cls._sides_swapped = True
-                    logger.info("[RIO] New game: pinned player placed on configured side")
-            else:
-                if cls._prev_player_sides:
-                    prev_side_0 = cls._prev_player_sides.get(player0)
-                    prev_side_1 = cls._prev_player_sides.get(player1)
-                    if prev_side_0 == 1 or prev_side_1 == 0:
-                        cls._sides_swapped = True
-                        logger.info("[RIO] New game: auto-swapping sides to keep returning player in place")
-
-        elif cls._user_overridden and pin_swap is not None:
-            if cls._sides_swapped == pin_swap:
+            cls._sides_swapped, _ = cls._decide(left, right, sb=None, allow_manual=False)
+        elif cls._user_overridden:
+            pin = cls._pin_swap(left, right)
+            if pin is not None and cls._sides_swapped == pin:
                 cls._user_overridden = False
                 logger.info("[RIO] User swapped back to pinned position, clearing override")
-
-        if cls._sides_swapped:
-            parsed = cls._swap_entrants(parsed)
-
-        # Update tracking (re-read after potential swap)
-        player0 = parsed["entrants"][0][0].get("rioName", "")
-        player1 = parsed["entrants"][1][0].get("rioName", "")
-        cls._prev_player_sides = {player0: 0, player1: 1}
-        cls._prev_inning = current_inning
         return parsed
 
     @classmethod
