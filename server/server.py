@@ -157,9 +157,21 @@ async def msb_asset(file_path: str):
         requested.relative_to(base.resolve())  # path-traversal guard
     except ValueError:
         return HTMLResponse("Forbidden", status_code=403)
-    if not requested.is_file():
-        return HTMLResponse("Not Found", status_code=404)
-    return FileResponse(str(requested))
+    if requested.is_file():
+        return FileResponse(str(requested))
+    # Dev fallback: assets dropped into the repo's public/game_assets/msb/.
+    # This route is registered before the /game_assets static mount and would
+    # otherwise shadow it for every /msb/* path, so resolve it here. No-op in
+    # frozen builds (no public/ dir) where everything lives in user_data.
+    fallback_base = Path("./public/game_assets/msb").resolve()
+    fallback = (fallback_base / file_path).resolve()
+    try:
+        fallback.relative_to(fallback_base)  # path-traversal guard
+    except ValueError:
+        return HTMLResponse("Forbidden", status_code=403)
+    if fallback.is_file():
+        return FileResponse(str(fallback))
+    return HTMLResponse("Not Found", status_code=404)
 
 # game assets (non-MSB) — served from public/game_assets/
 if Path("./public/game_assets").is_dir():

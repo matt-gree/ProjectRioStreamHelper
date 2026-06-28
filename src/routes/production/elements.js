@@ -86,6 +86,24 @@ export const ELEMENTS = [
         match: (url) => /\/layout\/commentary\//i.test(url) || /commentary\.html/i.test(url),
     },
     {
+        id: 'postgamecallout',
+        name: 'Stat Callout',
+        // Post-game only: a full-screen, port-coloured reveal of one finished-game
+        // roster character's box-score line. Fed like Stats — the producer picks
+        // which side + roster slot; the pick is written to the chosen container's
+        // feed key (production.feed.container.<id> = { element:'postgamecallout',
+        // … }) and the callout-stage container renders it. Reads postgame.{N}.*
+        // (Phase 6 capture). Native full-canvas 1920×1080.
+        phase: 'post',
+        flavor: 'fed',
+        span: 4,
+        feed: 'postgamecallout',
+        url: '/layout/shared/callout-stage.html',
+        width: 1920,
+        height: 1080,
+        match: (url) => /callout-stage/i.test(url) || /callout/i.test(url),
+    },
+    {
         id: 'hitvisualizer',
         name: 'Hit Visualizer',
         phase: 'live',

@@ -15,6 +15,7 @@
 // and the host page's `three` importmap for the hit element.
 import { mountHit } from '/layout/lib/hit-mount.js';
 import { mountStats } from '/layout/lib/stats-mount.js';
+import { mountPostgameCallout } from '/layout/lib/postgame-callout-mount.js';
 
 export function initFedContainer({ host, perf = false, skipState = false }) {
   const CONTAINER_ID = window.location.pathname.replace(/^.*\/([^/]+)\.html?(?:\?.*)?$/, '$1');
@@ -51,6 +52,8 @@ export function initFedContainer({ host, perf = false, skipState = false }) {
       mount = mountHit({ viewport, labels, perf });
     } else if (element === 'stats') {
       mount = mountStats({ host });
+    } else if (element === 'postgamecallout') {
+      mount = mountPostgameCallout({ host });
     } else {
       return false; // element not wired for containers yet
     }
@@ -74,7 +77,7 @@ export function initFedContainer({ host, perf = false, skipState = false }) {
     skipState, // preview primes its own state and doesn't want live state racing in
     // This container's assignment, plus any score change (stats read across a
     // scoreboard; hit-mount.update no-ops unless the contact actually changed).
-    shouldRender: (key) => key.startsWith(FEED_KEY) || /^score\.\d+\./.test(key),
+    shouldRender: (key) => key.startsWith(FEED_KEY) || /^score\.\d+\./.test(key) || /^postgame\.\d+\./.test(key),
     shouldRenderSettings: (key) => key.startsWith('overlays.') || key.startsWith('scoreboards.sources.'),
   });
 

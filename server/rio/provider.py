@@ -650,6 +650,11 @@ class RioGameDataProvider:
             data["first_batting_team"] = game_json.get("first_batting_team")
             data["tag_set"] = game_json.get("tag_set")
             data["game_mode"] = game_json.get("tag_set", -1)
+            # Carry the GameID forward so score.{N}.game_id is populated on the
+            # HUD path (post-game capture matches the stat file by this id). The
+            # Live-API path sets game_id on its own game dict; the HUD parse
+            # otherwise drops it here.
+            data["game_id"] = game_json.get("game_id")
 
         except Exception as e:
             logger.error(f"[RioGameDataProvider] Failed to parse game data: {e}")

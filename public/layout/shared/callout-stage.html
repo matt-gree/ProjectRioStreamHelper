@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<!--
+  Named shared container "Callout Stage" — a full 1920×1080 container that hosts
+  whatever element the producer feeds it (production.feed.container.callout-stage).
+  Its first occupant is the post-game Stat Callout: a cinematic, port-coloured,
+  full-screen reveal of one finished-game roster character's box-score line.
+
+  Like every shared container this file is just the sized shell; the rendering
+  lives in the reusable element mounts (postgame-callout-mount.js, and the others
+  via fed-container.js). Drop this in OBS as a full-canvas browser source, show it
+  on air for the post-game phase, and feed a character from the Production page.
+-->
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Stat-callout knobs resolve under overlays.postgamecallout.* in the mount. -->
+  <meta name="overlay-settings" content="accentColor, fontFamily, theme" />
+  <!-- three.js importmap kept so the hit element can also be fed here if wanted. -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "/layout/lib/three/three.module.js",
+      "three/addons/": "/layout/lib/three/addons/"
+    }
+  }
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+    html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+    /* Native full-canvas size hint; the callout mount scales the 1920×1080 stage
+       to whatever size the OBS source is actually set to. */
+    body { width: 1920px; height: 1080px; }
+    #host { position: fixed; inset: 0; }
+  </style>
+</head>
+<body>
+  <div id="host"></div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="/layout/lib/overlay-base.js"></script>
+  <script src="/layout/lib/rio-data.js"></script>
+  <!-- GSAP vendored locally; the callout mount also lazy-loads it as a fallback. -->
+  <script src="/layout/lib/gsap/gsap.min.js"></script>
+  <script type="module">
+    import { initFedContainer } from '/layout/lib/fed-container.js';
+
+    const params = new URLSearchParams(window.location.search);
+    const host = document.getElementById('host');
+    const PERF = params.get('perf') === '1';
+
+    async function boot() {
+      // Preview (Layouts/Setup tab): prime a representative captured game +
+      // feed assignment, and skip live state so the server can't race in over it.
+      if (OverlayBase.PREVIEW_MODE) {
+        try {
+          const resp = await fetch(`${OverlayBase.BASE_URL}/layout/preview/postgame_sample.json`);
+          const data = resp.ok ? await resp.json() : null;
+          if (data) {
+            OverlayBase.deepSet(OverlayBase.state, 'postgame.1', data.postgame);
+            if (data.score) OverlayBase.deepSet(OverlayBase.state, 'score.1', data.score);
+          }
+        } catch { /* ignore */ }
+        OverlayBase.deepSet(OverlayBase.state, 'production.feed.container.callout-stage',
+          { element: 'postgamecallout', scoreboard: 1, team: 1, charIndex: 0 });
+      }
+      initFedContainer({ host, perf: PERF, skipState: OverlayBase.PREVIEW_MODE });
+    }
+    boot();
+  </script>
+</body>
+</html>

@@ -39,6 +39,17 @@ export const LAYOUT_SETTINGS = {
         { key: 'tickerSpeed', type: 'number-override', label: 'Scroll Speed', description: 'Horizontal scroll rate of the ticker (pixels per second)', defaultValue: 60, min: 10, max: 300, step: 10, suffix: 'px/s' },
         { key: 'tickerGap', type: 'number-override', label: 'Card Spacing', description: 'Space between game cards (px)', defaultValue: 16, min: 0, max: 80, step: 2, suffix: 'px' },
     ],
+    // Post-game full-screen Stat Callout (fed element). The mount reads these
+    // under overlays.postgamecallout.*; port colours default to the Smash/MK
+    // convention and `theme` swaps the backdrop SVG (built-in or a drop-in under
+    // /layout/postgame/themes/<name>.svg).
+    postgamecallout: [
+        { key: 'theme', type: 'select', label: 'Backdrop Theme', description: 'Built-in callout backdrop, or a custom SVG dropped into /layout/postgame/themes/', options: [{ value: 'default', label: 'Built-in' }], defaultValue: 'default' },
+        { key: 'port0Color', type: 'color-override', label: 'Port 1 Color', description: 'Accent for a player on controller port 1' },
+        { key: 'port1Color', type: 'color-override', label: 'Port 2 Color', description: 'Accent for a player on controller port 2' },
+        { key: 'port2Color', type: 'color-override', label: 'Port 3 Color', description: 'Accent for a player on controller port 3' },
+        { key: 'port3Color', type: 'color-override', label: 'Port 4 Color', description: 'Accent for a player on controller port 4' },
+    ],
 };
 
 // ── Global design keys eligible for per-layout override ──

@@ -19,6 +19,7 @@ from server.api.v1 import (
     participants,
     match,
     commentary,
+    postgame,
 )
 
 router_v1 = APIRouter(
@@ -46,3 +47,4 @@ router_v1.include_router(participants.router)
 router_v1.include_router(match.router)
 router_v1.include_router(match.bind_router)
 router_v1.include_router(commentary.router)
+router_v1.include_router(postgame.router)

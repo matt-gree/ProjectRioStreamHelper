@@ -1,0 +1,28 @@
+<svg viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+  <!-- Reference drop-in theme for the Stat Callout. Recolors to the live player
+       via --port-color / --port-2 / --accent. NOTE: var() only resolves through
+       inline style="" in SVG, never via fill="var(...)" attributes. -->
+  <defs>
+    <radialGradient id="auroraA" cx="20%" cy="20%" r="80%">
+      <stop offset="0" style="stop-color:var(--port-color);stop-opacity:0.55"/>
+      <stop offset="0.6" style="stop-color:var(--port-color);stop-opacity:0"/>
+    </radialGradient>
+    <radialGradient id="auroraB" cx="85%" cy="90%" r="70%">
+      <stop offset="0" style="stop-color:var(--port-2);stop-opacity:0.40"/>
+      <stop offset="0.7" style="stop-color:var(--port-2);stop-opacity:0"/>
+    </radialGradient>
+    <linearGradient id="auroraBase" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0a0e18"/>
+      <stop offset="1" stop-color="#05060b"/>
+    </linearGradient>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#auroraBase)"/>
+  <rect width="1920" height="1080" fill="url(#auroraA)"/>
+  <rect width="1920" height="1080" fill="url(#auroraB)"/>
+  <g opacity="0.6" fill="none" style="stroke:var(--port-color);stroke-opacity:0.18" stroke-width="2">
+    <path d="M-100 760 C 380 600, 760 900, 1180 700 S 2020 620, 2100 760"/>
+    <path d="M-100 840 C 420 700, 820 980, 1240 800 S 2020 740, 2100 860"/>
+    <path d="M-100 920 C 460 820, 880 1060, 1300 900 S 2020 860, 2100 960"/>
+  </g>
+  <rect x="0" y="0" width="1920" height="8" style="fill:var(--accent)" opacity="0.8"/>
+</svg>

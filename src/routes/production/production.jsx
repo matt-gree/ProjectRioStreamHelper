@@ -3,6 +3,7 @@ import { useShallow } from 'zustand/react/shallow';
 import {
     Radio, Eye, EyeOff, Globe, PlugZap, MonitorPlay, ArrowLeftRight, ChevronDown,
     RotateCcw, Sparkles, Columns2, Settings, Captions, GripVertical, Plus, X,
+    Trophy, Trash2,
 } from 'lucide-react';
 import { useObsStore } from '../../context/obs';
 import { useSettingsStore, useStateStore } from '../../context/store';
@@ -300,7 +301,7 @@ function LeftRail() {
 // written to `production.feed.container.<id>` = { element:'stats', … }, which the
 // container overlay renders. Scoreboard 1 for now; multi-scoreboard is later.
 function StatsFeedPicker({ element, scoreboard = 1 }) {
-    const { container } = useContainerTarget(element.id, 'stats-feed');
+    const { container } = useContainerTarget(element.id, defaultContainerFor(element));
     const feedKey = `production.feed.container.${container}`;
     const players = useStateStore(s => s?.score?.[scoreboard]?.player);
     const selection = useStateStore(s => s?.production?.feed?.container?.[container]);
@@ -383,6 +384,86 @@ function StatsFeedPicker({ element, scoreboard = 1 }) {
     );
 }
 
+// Content picker for the 'postgamecallout' fed element: choose WHICH finished-game
+// roster character gets the full-screen stat callout. Reads the Phase-6 capture at
+// postgame.{N}.player.{T}.characters[]; picking writes
+// production.feed.container.<id> = { element:'postgamecallout', scoreboard, team,
+// charIndex }, which the callout-stage container renders. Scoreboard 1 for now.
+function PostgameCalloutPicker({ element, scoreboard = 1 }) {
+    const { container } = useContainerTarget(element.id, defaultContainerFor(element));
+    const feedKey = `production.feed.container.${container}`;
+    const present = useStateStore(s => s?.postgame?.[scoreboard]?.present);
+    const players = useStateStore(useShallow(s => ({
+        1: s?.postgame?.[scoreboard]?.player?.[1],
+        2: s?.postgame?.[scoreboard]?.player?.[2],
+    })));
+    const selection = useStateStore(s => s?.production?.feed?.container?.[container]);
+
+    // Per-side option groups from the captured box score (9 roster slots each).
+    const teams = useMemo(() => {
+        const out = [];
+        for (const team of [1, 2]) {
+            const p = players?.[team];
+            const chars = Array.isArray(p?.characters) ? p.characters : [];
+            const opts = chars
+                .map((c, i) => ({ charIndex: i, name: c?.name, isPitcher: c?.wasPitcher }))
+                .filter(c => c.name);
+            if (opts.length) out.push({ team, label: p?.rioName || `Side ${team}`, chars: opts });
+        }
+        return out;
+    }, [players]);
+
+    const mine = selection && selection.element === 'postgamecallout'
+        && (selection.scoreboard == null || selection.scoreboard === scoreboard);
+    const selValue = mine ? `${selection.team}:${selection.charIndex}` : '';
+
+    const choose = (value) => {
+        if (!value) { useStateStore.getState().deleteItems([feedKey]); return; }
+        const [team, charIndex] = value.split(':').map(Number);
+        useStateStore.getState().setItems([
+            { key: feedKey, value: { element: 'postgamecallout', scoreboard, team, charIndex } },
+        ]);
+    };
+
+    if (!present || teams.length === 0) {
+        return (
+            <Text size="sm" className="text-muted-foreground">
+                No captured game on scoreboard {scoreboard} yet — capture a finished game first
+                (the callout reads its box score).
+            </Text>
+        );
+    }
+
+    return (
+        <Stack gap="xs">
+            <label className="flex flex-col gap-1">
+                <Text size="xs" className="text-muted-foreground">Content — whose callout to show</Text>
+                <select
+                    value={selValue}
+                    onChange={(e) => choose(e.target.value)}
+                    className="rounded-md border border-border bg-card px-2 py-1 text-sm text-foreground"
+                >
+                    <option value="">Nothing fed</option>
+                    {teams.map(t => (
+                        <optgroup key={t.team} label={t.label}>
+                            {t.chars.map(c => (
+                                <option key={c.charIndex} value={`${t.team}:${c.charIndex}`}>
+                                    {c.name}{c.isPitcher ? ' (P)' : ''}
+                                </option>
+                            ))}
+                        </optgroup>
+                    ))}
+                </select>
+            </label>
+            {selValue && (
+                <Text size="xs" className="text-muted-foreground">
+                    Show the callout-stage source on air; re-pick to swap the featured character.
+                </Text>
+            )}
+        </Stack>
+    );
+}
+
 // PRSH overlay sources in the current program scene.
 function usePrshItems() {
     const programScene = useObsStore(s => s.programScene);
@@ -408,6 +489,13 @@ function boundSource(element, items, overrideName) {
 // matching shared overlay reads the same key.
 function containerId(url) {
     return (url || '').replace(/^.*\/([^/]+)\.html?(?:\?.*)?$/, '$1');
+}
+
+// An element's default named container = the stem of its canonical layout URL
+// (Stats → 'stats-feed', Stat Callout → 'callout-stage'). The producer can still
+// re-point it to any other shared container in the gear.
+function defaultContainerFor(element) {
+    return containerId(element.url) || 'stats-feed';
 }
 
 // The named shared containers (public/layout/shared/*) an element can be fed
@@ -932,15 +1020,15 @@ function DirectFace({ element }) {
 // container it feeds is chosen in the gear; making that container's OBS source
 // active is what puts it on the broadcast.
 function FedFace({ element }) {
-    return element.feed === 'stats'
-        ? <StatsFeedPicker element={element} />
-        : <Text size="xs" className="text-muted-foreground">No content options yet.</Text>;
+    if (element.feed === 'stats') return <StatsFeedPicker element={element} />;
+    if (element.feed === 'postgamecallout') return <PostgameCalloutPicker element={element} />;
+    return <Text size="xs" className="text-muted-foreground">No content options yet.</Text>;
 }
 
 // Fed element setup: which named shared container the content is fed into.
 function FedSetup({ element }) {
     const containers = useSharedContainers();
-    const { container, setContainer } = useContainerTarget(element.id, 'stats-feed');
+    const { container, setContainer } = useContainerTarget(element.id, defaultContainerFor(element));
     return (
         <label className="flex flex-col gap-1">
             <Text size="xs" className="text-muted-foreground">Feed into</Text>
@@ -949,7 +1037,7 @@ function FedSetup({ element }) {
                 onChange={(e) => setContainer(e.target.value)}
                 className="rounded-md border border-border bg-card px-2 py-1 text-sm text-foreground"
             >
-                {containers.length === 0 && <option value={container}>Stats</option>}
+                {containers.length === 0 && <option value={container}>{container}</option>}
                 {containers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
         </label>
@@ -1051,6 +1139,102 @@ function ElementsArea({ phase }) {
     );
 }
 
+// Producer "Capture / Go to post-game" control. Shown in the Post-game phase; does
+// not require OBS. Hits POST /postgame/capture for the chosen scoreboard, which
+// matches the finished game's on-disk stat file (by game id + Loaded-from-HUD==0),
+// projects the box score to postgame.{N}.* (what the Stat Callout reads), and
+// advances a bound match to the post stage. Clear blanks it again.
+function PostGameBar() {
+    const activeRaw = useSettingsStore(s => s?.scoreboards?.active ?? [1]);
+    const aliases = useSettingsStore(s => s?.scoreboards?.aliases ?? {});
+    const active = Array.isArray(activeRaw) && activeRaw.length ? activeRaw : [1];
+    const [sb, setSb] = useState(active[0]);
+    const [busy, setBusy] = useState(false);
+    useEffect(() => { if (!active.includes(sb)) setSb(active[0]); }, [active, sb]);
+
+    const pg = useStateStore(useShallow(s => {
+        const p = s?.postgame?.[sb];
+        return {
+            present: p?.present, sourceFile: p?.sourceFile, winnerSide: p?.meta?.winnerSide,
+            n1: p?.player?.[1]?.rioName, s1: p?.player?.[1]?.score,
+            n2: p?.player?.[2]?.rioName, s2: p?.player?.[2]?.score,
+        };
+    }));
+    const gameId = useStateStore(s => s?.score?.[sb]?.game_id);
+    const label = (n) => aliases?.[n] || aliases?.[String(n)] || `Scoreboard ${n}`;
+
+    const capture = async () => {
+        setBusy(true);
+        try {
+            const r = await fetch(`/api/v1/postgame/capture?scoreboard=${sb}`, { method: 'POST' });
+            const data = await r.json().catch(() => ({}));
+            if (data?.success) {
+                notifications.show({ message: `Captured ${data.sourceFile} — match advanced to post-game.`, color: 'green' });
+            } else {
+                notifications.show({ message: `Capture failed: ${data?.reason || 'unknown error'}`, color: 'red' });
+            }
+        } catch (e) {
+            notifications.show({ message: `Capture error: ${e?.message || e}`, color: 'red' });
+        } finally { setBusy(false); }
+    };
+    const clear = async () => {
+        setBusy(true);
+        try { await fetch(`/api/v1/postgame/clear?scoreboard=${sb}`, { method: 'POST' }); }
+        catch (e) { notifications.show({ message: `Clear error: ${e?.message || e}`, color: 'red' }); }
+        finally { setBusy(false); }
+    };
+
+    return (
+        <Panel title="Post-game capture">
+            <Stack gap="sm" className="p-3">
+                <Text size="xs" className="text-muted-foreground">
+                    Reads the finished game's box score from Project Rio's on-disk stat file
+                    (matched by game id), projects it to <code>postgame.{sb}.*</code> for the Stat
+                    Callout, and advances a bound match to post-game. Capture once the game has ended.
+                </Text>
+                <Group gap="sm" className="flex-wrap items-center">
+                    {active.length > 1 && (
+                        <select
+                            value={sb}
+                            onChange={(e) => setSb(Number(e.target.value))}
+                            className="rounded-md border border-border bg-card px-2 py-1 text-sm text-foreground"
+                        >
+                            {active.map(n => <option key={n} value={n}>{label(n)}</option>)}
+                        </select>
+                    )}
+                    <Button size="sm" disabled={busy} onClick={capture}>
+                        <Trophy size={14} className="mr-1" /> {busy ? 'Capturing…' : 'Capture finished game'}
+                    </Button>
+                    {pg.present && (
+                        <Button size="sm" variant="ghost" disabled={busy} onClick={clear}>
+                            <Trash2 size={14} className="mr-1" /> Clear
+                        </Button>
+                    )}
+                </Group>
+                {pg.present ? (
+                    <Group gap="xs" className="flex-wrap items-center">
+                        <Badge className="bg-emerald-500/15 text-emerald-300 text-[10px]">Captured</Badge>
+                        <Text size="sm" className="text-foreground">
+                            <span className={cn(pg.winnerSide === 1 && 'font-bold')}>{pg.n1 || 'Side 1'}</span> {pg.s1 ?? 0}
+                            <span className="mx-1 text-muted-foreground">–</span>
+                            {pg.s2 ?? 0} <span className={cn(pg.winnerSide === 2 && 'font-bold')}>{pg.n2 || 'Side 2'}</span>
+                        </Text>
+                        {pg.sourceFile && (
+                            <Text size="xs" className="max-w-[26ch] truncate text-muted-foreground" title={pg.sourceFile}>
+                                {pg.sourceFile}
+                            </Text>
+                        )}
+                    </Group>
+                ) : (
+                    <Text size="xs" className="text-muted-foreground">
+                        {gameId ? `Nothing captured yet for game ${gameId}.` : 'No game id on this scoreboard yet — finish a game first.'}
+                    </Text>
+                )}
+            </Stack>
+        </Panel>
+    );
+}
+
 export default function Production() {
     const [phase, setPhase] = useState('live');
 
@@ -1066,7 +1250,10 @@ export default function Production() {
 
             <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[300px_1fr]">
                 <LeftRail />
-                <ElementsArea phase={phase} />
+                <Stack gap="md">
+                    {phase === 'post' && <PostGameBar />}
+                    <ElementsArea phase={phase} />
+                </Stack>
             </div>
         </Stack>
     );

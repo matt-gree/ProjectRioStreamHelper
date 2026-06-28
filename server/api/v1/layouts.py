@@ -86,6 +86,9 @@ _STANDALONE_DISPLAY_NAMES = {
     # Split-Screen sits beside the game (tall); Stats is a small bar.
     "shared/split-screen": "Split-Screen",
     "shared/stats-feed": "Stats",
+    # Callout Stage is a full 1920×1080 target; first occupant is the post-game
+    # Stat Callout.
+    "shared/callout-stage": "Callout Stage",
     # Talent — registry-bound person overlays (the player element joins later).
     "commentary/commentary": "Commentary",
 }
