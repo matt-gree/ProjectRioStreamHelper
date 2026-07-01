@@ -41,21 +41,20 @@ export const LAYOUT_SETTINGS = {
     ],
     // Post-game full-screen Stat Callout (fed element). The mount reads these
     // under overlays.postgamecallout.*; port colours default to the Smash/MK
-    // convention and `theme` swaps the backdrop SVG (built-in or a drop-in under
-    // /layout/postgame/themes/<name>.svg).
+    // convention. The backdrop SVG comes from the active Design Package
+    // (callout.svg — overlays.global.designPackage picks the package).
     postgamecallout: [
-        { key: 'theme', type: 'select', label: 'Backdrop Theme', description: 'Built-in callout backdrop, or a custom SVG dropped into /layout/postgame/themes/', options: [{ value: 'default', label: 'Built-in' }], defaultValue: 'default' },
         { key: 'port0Color', type: 'color-override', label: 'Port 1 Color', description: 'Accent for a player on controller port 1' },
         { key: 'port1Color', type: 'color-override', label: 'Port 2 Color', description: 'Accent for a player on controller port 2' },
         { key: 'port2Color', type: 'color-override', label: 'Port 3 Color', description: 'Accent for a player on controller port 3' },
         { key: 'port3Color', type: 'color-override', label: 'Port 4 Color', description: 'Accent for a player on controller port 4' },
     ],
     // Lower Third (Break) — a re-themable SVG band. The mount reads these under
-    // overlays.lowerthird.*; `theme` swaps the whole SVG (built-in or a drop-in
-    // under /layout/lowerthird/themes/<name>.svg), accentColor overrides the Rio
-    // brand red, and the port colours tint each player's side.
+    // overlays.lowerthird.*; the theme SVG comes from the active Design Package
+    // (lowerthird.svg — overlays.global.designPackage picks the package),
+    // accentColor pins a per-layout accent, and the port colours tint each
+    // player's side.
     lowerthird: [
-        { key: 'theme', type: 'select', label: 'Theme', description: 'Built-in look, or a custom SVG dropped into /layout/lowerthird/themes/', options: [{ value: 'rio', label: 'Project Rio' }, { value: 'chalk', label: 'Chalk' }], defaultValue: 'rio' },
         { key: 'port0Color', type: 'color-override', label: 'Port 1 Color', description: 'Side colour for a player on controller port 1' },
         { key: 'port1Color', type: 'color-override', label: 'Port 2 Color', description: 'Side colour for a player on controller port 2' },
         { key: 'port2Color', type: 'color-override', label: 'Port 3 Color', description: 'Side colour for a player on controller port 3' },
@@ -91,6 +90,9 @@ export const GLOBAL_DESIGN_KEYS = [
     'textShadowEnabled', 'textShadowBlur', 'textShadowColor',
     // Promoted from per-layout in v2:
     'showCaptains', 'showLogo', 'showBackdropBlur', 'finalBadgeColor',
+    // Design package selector — not a CSS knob, not per-layout overridable; read
+    // directly by element mounts (e.g. commentary-mount.js) to pick a theme.
+    'designPackage',
 ];
 
 export const GLOBAL_DESIGN_DEFAULTS = {
@@ -111,4 +113,5 @@ export const GLOBAL_DESIGN_DEFAULTS = {
     showLogo:          true,
     showBackdropBlur:  true,
     finalBadgeColor:   null,
+    designPackage:     'default',
 };

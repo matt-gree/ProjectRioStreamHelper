@@ -1172,14 +1172,6 @@ function LowerThirdSetup() {
     return (
         <Stack gap="sm">
             <label className="flex flex-col gap-1">
-                <Text size="xs" className="text-muted-foreground">Theme</Text>
-                <select className={LT_INPUT} value={lt.theme || 'rio'} onChange={(e) => setKey('theme', e.target.value)}>
-                    <option value="rio">Project Rio</option>
-                    <option value="chalk">Chalk</option>
-                </select>
-            </label>
-
-            <label className="flex flex-col gap-1">
                 <Text size="xs" className="text-muted-foreground">Match</Text>
                 <select className={LT_INPUT} value={lt.matchId != null ? String(lt.matchId) : ''} onChange={(e) => setKey('matchId', e.target.value || null)}>
                     <option value="">— None (manual) —</option>

@@ -1,14 +1,25 @@
-"""Player-side preservation — the pin / back-to-back / manual-swap state machine.
+"""Player-side orientation — the Phase-5 unified cascade + override state machine.
 
 This is the highest-risk logic in the app (CLAUDE.md § Player-Side Preservation).
-Each test maps to a row of the truth table in TESTING.md §5. Keep them in sync.
+Since the Draft→Live reconciliation (Phase 5) the responsibilities are split:
 
-_preserve_player_sides is synchronous; it reads Settings.Get and mutates class
-flags on RioGameDataProvider. The reset_singletons fixture clears those flags
-before every test, so each starts from (_prev_inning=None, both flags False).
+* ``_decide(left, right, sb, allow_manual)`` — the per-board cascade,
+  precedence **manual > pin > match > back_to_back > none**, returning
+  ``(sides_swapped, reason)``. The actual entrant swap happens later in
+  ``_apply_game_to_state`` per board; ``_preserve_player_sides`` no longer
+  mutates ``parsed``.
+* ``_preserve_player_sides(parsed)`` — the manual-override state machine only:
+  a new game (inning reset) clears the override and reseeds the manual base
+  from the non-manual cascade; mid-game it releases the override if the user
+  swapped back to the pinned orientation.
+
+_decide is synchronous; it reads Settings.Get and the class flags on
+RioGameDataProvider. The reset_singletons fixture clears those flags before
+every test, so each starts from (_prev_inning=None, both flags False).
 """
 import pytest
 
+from server.match import Match
 from server.rio.provider import RioGameDataProvider as P
 
 
@@ -30,91 +41,125 @@ def right(parsed):
     return parsed["entrants"][1][0]["rioName"]
 
 
-# --- Row 1: first game ever ---
+# --- Nothing governs: first game, no pin/match/history ---
 
-def test_first_game_no_swap_and_records_sides():
-    out = P._preserve_player_sides(make_parsed("A", "B", inning=1))
+def test_first_game_no_swap_no_reason():
+    assert P._decide("A", "B") == (False, "")
+    P._preserve_player_sides(make_parsed("A", "B", inning=1))
     assert P._sides_swapped is False
-    assert left(out) == "A" and right(out) == "B"
-    assert P._prev_player_sides == {"A": 0, "B": 1}
-    assert P._prev_inning == 1
+    assert P._user_overridden is False
+    # _prev_inning / _prev_player_sides now update in _apply_game_to_state,
+    # after the per-board orientation has been applied.
 
 
-# --- Rows 2-4: pinned player ---
+# --- Pinned player ---
 
 def test_pin_team1_player_already_left_no_swap(set_setting):
     set_setting("project_rio.pinned_player", "A")
     set_setting("project_rio.pinned_side", "Team 1")
-    P._prev_inning = 9  # so inning=1 reads as a new game
-    out = P._preserve_player_sides(make_parsed("A", "B", inning=1))
-    assert P._sides_swapped is False
-    assert left(out) == "A"
+    assert P._decide("A", "B") == (False, "pin")
 
 
 def test_pin_team2_player_on_left_swaps(set_setting):
     set_setting("project_rio.pinned_player", "A")
     set_setting("project_rio.pinned_side", "Team 2")
-    P._prev_inning = 9
-    out = P._preserve_player_sides(make_parsed("A", "B", inning=1))
-    assert P._sides_swapped is True
-    assert left(out) == "B"  # A pushed to the right (Team 2)
+    assert P._decide("A", "B") == (True, "pin")
 
 
 def test_pin_team1_player_on_right_swaps(set_setting):
     set_setting("project_rio.pinned_player", "A")
     set_setting("project_rio.pinned_side", "Team 1")
-    P._prev_inning = 9
-    out = P._preserve_player_sides(make_parsed("B", "A", inning=1))
-    assert P._sides_swapped is True
-    assert left(out) == "A"  # A pulled to the left (Team 1)
+    assert P._decide("B", "A") == (True, "pin")
 
 
-# --- Rows 5-6: back-to-back (no pin) ---
+def test_pin_absent_player_does_not_govern(set_setting):
+    set_setting("project_rio.pinned_player", "C")
+    set_setting("project_rio.pinned_side", "Team 1")
+    assert P._decide("A", "B") == (False, "")
+
+
+# --- Back-to-back (no pin) ---
 
 def test_back_to_back_keeps_returning_player_in_place():
-    # A was on the right (side 1) last game; this game Rio put A on the left.
+    # A was on the right (side index 1) last game; Rio now put A on the left.
     P._prev_player_sides = {"A": 1, "B": 0}
-    P._prev_inning = 9
-    out = P._preserve_player_sides(make_parsed("A", "B", inning=1))
-    assert P._sides_swapped is True
-    assert right(out) == "A"  # A restored to the right
+    assert P._decide("A", "B") == (True, "back_to_back")
 
 
 def test_back_to_back_same_order_no_swap():
     P._prev_player_sides = {"A": 0, "B": 1}
-    P._prev_inning = 9
-    out = P._preserve_player_sides(make_parsed("A", "B", inning=1))
-    assert P._sides_swapped is False
-    assert left(out) == "A"
+    assert P._decide("A", "B") == (False, "back_to_back")
 
 
-# --- Row 7: pin beats back-to-back ---
+def test_back_to_back_no_returning_player_does_not_govern():
+    P._prev_player_sides = {"C": 0, "D": 1}
+    assert P._decide("A", "B") == (False, "")
+
+
+# --- Precedence ---
 
 def test_pin_overrides_back_to_back(set_setting):
     # Back-to-back alone would swap (A was on the right), but the pin keeps A
-    # on Team 1 (left) and the back-to-back branch is never consulted.
+    # on Team 1 (left) and the back-to-back layer is never consulted.
     set_setting("project_rio.pinned_player", "A")
     set_setting("project_rio.pinned_side", "Team 1")
     P._prev_player_sides = {"A": 1, "B": 0}
-    P._prev_inning = 9
-    out = P._preserve_player_sides(make_parsed("A", "B", inning=1))
-    assert P._sides_swapped is False
-    assert left(out) == "A"
+    assert P._decide("A", "B") == (False, "pin")
 
 
-# --- Row 8: new game resets stale flags ---
+def test_manual_overrides_pin(set_setting):
+    set_setting("project_rio.pinned_player", "A")
+    set_setting("project_rio.pinned_side", "Team 1")
+    P._user_overridden = True
+    P._sides_swapped = True
+    assert P._decide("A", "B") == (True, "manual")
+    # allow_manual=False (the new-game reseed path) falls through to the pin.
+    assert P._decide("A", "B", allow_manual=False) == (False, "pin")
+
+
+def test_match_governs_between_pin_and_b2b(monkeypatch):
+    # A bound match wants A on side 2 (swap); back-to-back would say no-swap.
+    monkeypatch.setattr(Match, "orientation_for_sides", classmethod(lambda cls, sb, l, r: True))
+    P._prev_player_sides = {"A": 0, "B": 1}
+    assert P._decide("A", "B", sb=1) == (True, "match")
+    # Without a board there is no match layer: back-to-back decides.
+    assert P._decide("A", "B") == (False, "back_to_back")
+
+
+def test_pin_overrides_match(monkeypatch, set_setting):
+    set_setting("project_rio.pinned_player", "A")
+    set_setting("project_rio.pinned_side", "Team 1")
+    monkeypatch.setattr(Match, "orientation_for_sides", classmethod(lambda cls, sb, l, r: True))
+    assert P._decide("A", "B", sb=1) == (False, "pin")
+
+
+# --- New game resets the override state machine ---
 
 def test_new_game_resets_flags_from_previous_game():
     P._sides_swapped = True
     P._user_overridden = True
     P._prev_player_sides = {}
     P._prev_inning = 9
-    P._preserve_player_sides(make_parsed("A", "B", inning=1))
+    out = P._preserve_player_sides(make_parsed("A", "B", inning=1))
     assert P._sides_swapped is False
+    assert P._user_overridden is False
+    # The pre-step never mutates the parsed entrant order (per-board
+    # orientation is applied later in _apply_game_to_state).
+    assert left(out) == "A" and right(out) == "B"
+
+
+def test_new_game_reseeds_manual_base_from_pin(set_setting):
+    # The manual base (_sides_swapped) reseeds from the non-manual cascade so a
+    # later swap-button click flips from the sensible default.
+    set_setting("project_rio.pinned_player", "A")
+    set_setting("project_rio.pinned_side", "Team 2")
+    P._prev_inning = 9
+    P._preserve_player_sides(make_parsed("A", "B", inning=1))
+    assert P._sides_swapped is True
     assert P._user_overridden is False
 
 
-# --- Rows 9-10: mid-game (inning did not decrease) ---
+# --- Mid-game (inning did not decrease) ---
 
 def test_mid_game_user_swapped_back_to_pin_clears_override(set_setting):
     set_setting("project_rio.pinned_player", "A")
@@ -134,10 +179,11 @@ def test_mid_game_override_held_without_pin():
     out = P._preserve_player_sides(make_parsed("A", "B", inning=3))
     assert P._user_overridden is True   # no pin → nothing clears it
     assert P._sides_swapped is True
-    assert left(out) == "B"             # swap still applied
+    assert left(out) == "A"             # pre-step leaves parsed untouched
+    assert P._decide("A", "B") == (True, "manual")
 
 
-# --- Row 11: manual toggle ---
+# --- Manual toggle ---
 
 async def test_toggle_sets_swap_and_override_flags():
     P.hud_watcher = None  # no re-apply path

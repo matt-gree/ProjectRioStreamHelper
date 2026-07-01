@@ -1,0 +1,76 @@
+<svg viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMax meet" xmlns="http://www.w3.org/2000/svg" data-design-vars="app">
+  <!-- CLASSIC package - Commentary: a faithful SVG port of the original CSS
+       caster strip. data-design-vars="app" opts into the user's Design-tab CSS
+       variables (accent, card background, font, shadows), so this theme follows
+       the app's design knobs like the pre-2.0 overlays did. Full 1920x1080
+       canvas, row anchored near the bottom. Plates reflow (reposition + resize,
+       animated by the mount) based on how many casters are currently active,
+       1-4, per public/design/README.md's data-part / layout-data contract.
+       Initial markup below uses the 4-caster layout; the mount snaps to the
+       real count on first paint. -->
+
+  <g data-slot="slot0" opacity="0">
+    <rect data-part="main-rect" x="16" y="896" width="460" height="168" rx="16" style="fill:var(--card-bg);stroke:var(--border-color);stroke-width:var(--border-width);filter:var(--card-shadow-filter)" />
+    <rect data-part="rail" x="32" y="940" width="4" height="80" rx="2" style="fill:var(--accent)" />
+    <text data-slot="slot0-name" data-maxw="408" x="48" y="972" style="fill:var(--text-primary);font-family:var(--font-family);text-shadow:var(--text-shadow)" font-size="30" font-weight="800"></text>
+    <g data-slot="slot0-sub" style="opacity:0">
+      <text data-slot="slot0-sub-label" x="48" y="1002" style="fill:var(--accent);font-family:var(--font-family)" font-size="13" font-weight="700" letter-spacing="1"></text>
+      <text data-slot="slot0-sub-value" data-maxw="332" x="124" y="1002" style="fill:var(--text-primary);font-family:var(--font-family);text-shadow:var(--text-shadow)" font-size="18" font-weight="600" opacity="0.92"></text>
+    </g>
+  </g>
+
+  <g data-slot="slot1" opacity="0">
+    <rect data-part="main-rect" x="492" y="896" width="460" height="168" rx="16" style="fill:var(--card-bg);stroke:var(--border-color);stroke-width:var(--border-width);filter:var(--card-shadow-filter)" />
+    <rect data-part="rail" x="508" y="940" width="4" height="80" rx="2" style="fill:var(--accent)" />
+    <text data-slot="slot1-name" data-maxw="408" x="524" y="972" style="fill:var(--text-primary);font-family:var(--font-family);text-shadow:var(--text-shadow)" font-size="30" font-weight="800"></text>
+    <g data-slot="slot1-sub" style="opacity:0">
+      <text data-slot="slot1-sub-label" x="524" y="1002" style="fill:var(--accent);font-family:var(--font-family)" font-size="13" font-weight="700" letter-spacing="1"></text>
+      <text data-slot="slot1-sub-value" data-maxw="332" x="600" y="1002" style="fill:var(--text-primary);font-family:var(--font-family);text-shadow:var(--text-shadow)" font-size="18" font-weight="600" opacity="0.92"></text>
+    </g>
+  </g>
+
+  <g data-slot="slot2" opacity="0">
+    <rect data-part="main-rect" x="968" y="896" width="460" height="168" rx="16" style="fill:var(--card-bg);stroke:var(--border-color);stroke-width:var(--border-width);filter:var(--card-shadow-filter)" />
+    <rect data-part="rail" x="984" y="940" width="4" height="80" rx="2" style="fill:var(--accent)" />
+    <text data-slot="slot2-name" data-maxw="408" x="1000" y="972" style="fill:var(--text-primary);font-family:var(--font-family);text-shadow:var(--text-shadow)" font-size="30" font-weight="800"></text>
+    <g data-slot="slot2-sub" style="opacity:0">
+      <text data-slot="slot2-sub-label" x="1000" y="1002" style="fill:var(--accent);font-family:var(--font-family)" font-size="13" font-weight="700" letter-spacing="1"></text>
+      <text data-slot="slot2-sub-value" data-maxw="332" x="1076" y="1002" style="fill:var(--text-primary);font-family:var(--font-family);text-shadow:var(--text-shadow)" font-size="18" font-weight="600" opacity="0.92"></text>
+    </g>
+  </g>
+
+  <g data-slot="slot3" opacity="0">
+    <rect data-part="main-rect" x="1444" y="896" width="460" height="168" rx="16" style="fill:var(--card-bg);stroke:var(--border-color);stroke-width:var(--border-width);filter:var(--card-shadow-filter)" />
+    <rect data-part="rail" x="1460" y="940" width="4" height="80" rx="2" style="fill:var(--accent)" />
+    <text data-slot="slot3-name" data-maxw="408" x="1476" y="972" style="fill:var(--text-primary);font-family:var(--font-family);text-shadow:var(--text-shadow)" font-size="30" font-weight="800"></text>
+    <g data-slot="slot3-sub" style="opacity:0">
+      <text data-slot="slot3-sub-label" x="1476" y="1002" style="fill:var(--accent);font-family:var(--font-family)" font-size="13" font-weight="700" letter-spacing="1"></text>
+      <text data-slot="slot3-sub-value" data-maxw="332" x="1552" y="1002" style="fill:var(--text-primary);font-family:var(--font-family);text-shadow:var(--text-shadow)" font-size="18" font-weight="600" opacity="0.92"></text>
+    </g>
+  </g>
+
+  <script type="application/json" data-layouts="1">
+  {
+    "counts": {
+      "1": [
+        { "main": {"x":16,"width":1888}, "rail": {"x":32}, "name": {"x":48,"maxw":1836}, "subLabel": {"x":48}, "subValue": {"x":124,"maxw":1760} }
+      ],
+      "2": [
+        { "main": {"x":16,"width":936}, "rail": {"x":32}, "name": {"x":48,"maxw":884}, "subLabel": {"x":48}, "subValue": {"x":124,"maxw":808} },
+        { "main": {"x":968,"width":936}, "rail": {"x":984}, "name": {"x":1000,"maxw":884}, "subLabel": {"x":1000}, "subValue": {"x":1076,"maxw":808} }
+      ],
+      "3": [
+        { "main": {"x":16,"width":618.67}, "rail": {"x":32}, "name": {"x":48,"maxw":566.67}, "subLabel": {"x":48}, "subValue": {"x":124,"maxw":490.67} },
+        { "main": {"x":650.67,"width":618.67}, "rail": {"x":666.67}, "name": {"x":682.67,"maxw":566.67}, "subLabel": {"x":682.67}, "subValue": {"x":758.67,"maxw":490.67} },
+        { "main": {"x":1285.33,"width":618.67}, "rail": {"x":1301.33}, "name": {"x":1317.33,"maxw":566.67}, "subLabel": {"x":1317.33}, "subValue": {"x":1393.33,"maxw":490.67} }
+      ],
+      "4": [
+        { "main": {"x":16,"width":460}, "rail": {"x":32}, "name": {"x":48,"maxw":408}, "subLabel": {"x":48}, "subValue": {"x":124,"maxw":332} },
+        { "main": {"x":492,"width":460}, "rail": {"x":508}, "name": {"x":524,"maxw":408}, "subLabel": {"x":524}, "subValue": {"x":600,"maxw":332} },
+        { "main": {"x":968,"width":460}, "rail": {"x":984}, "name": {"x":1000,"maxw":408}, "subLabel": {"x":1000}, "subValue": {"x":1076,"maxw":332} },
+        { "main": {"x":1444,"width":460}, "rail": {"x":1460}, "name": {"x":1476,"maxw":408}, "subLabel": {"x":1476}, "subValue": {"x":1552,"maxw":332} }
+      ]
+    }
+  }
+  </script>
+</svg>

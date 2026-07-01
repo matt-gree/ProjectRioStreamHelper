@@ -1,9 +1,9 @@
 <svg viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMax meet" xmlns="http://www.w3.org/2000/svg">
   <!--
-    Project Rio lower-third — the flagship re-themable theme.
+    DEFAULT package - Lower Third: the Project Rio brand band.
     Layout: BRAND CAP · MATCH (one game) · TITLE/SUBTITLE · CLOCK.
 
-    SLOT CONTRACT (the mount binds by data-slot; see ./README.md):
+    SLOT CONTRACT (the mount binds by data-slot; see public/design/README.md):
       logo           <image>  tournament logo (/branding/); hidden if none
       logo-default   <g>      Rio mushroom shown when no logo is set
       status         <text>   CURRENT / UP NEXT badge
@@ -18,7 +18,7 @@
     COLOUR: CSS variables resolve in SVG ONLY through inline style="", never via
     presentation attributes. Every themed paint below uses style="". The accent
     and per-side colour vars are overridden by the mount at runtime; the rest
-    inherit from rio-theme/tokens.css. See ./README.md for the variable list.
+    inherit from rio-theme/tokens.css. See public/design/README.md for the list.
   -->
   <defs>
     <filter id="ltGlow" x="-20%" y="-50%" width="140%" height="200%">

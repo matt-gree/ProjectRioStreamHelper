@@ -1,0 +1,47 @@
+<svg viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+  <!-- DEFAULT package - Stat Callout backdrop: the Project Rio night arena.
+       Dark night-scale base with the featured player's PORT COLOUR washing the
+       scene (the callout's port colours are integral - the mount sets
+       - -port-color / - -port-2 on the stage) and a fixed Rio-red top rule.
+       NOTE: var() only resolves in SVG via inline style="", never through
+       presentation attributes. -->
+  <defs>
+    <linearGradient id="rioBase" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0b0b12"/>
+      <stop offset="1" stop-color="#07070b"/>
+    </linearGradient>
+    <radialGradient id="rioWashA" cx="18%" cy="28%" r="85%">
+      <stop offset="0" style="stop-color:var(--port-color);stop-opacity:0.50"/>
+      <stop offset="0.6" style="stop-color:var(--port-color);stop-opacity:0"/>
+    </radialGradient>
+    <radialGradient id="rioWashB" cx="86%" cy="86%" r="75%">
+      <stop offset="0" style="stop-color:var(--port-2);stop-opacity:0.34"/>
+      <stop offset="0.7" style="stop-color:var(--port-2);stop-opacity:0"/>
+    </radialGradient>
+    <linearGradient id="rioBeam" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" style="stop-color:var(--port-color);stop-opacity:0.45"/>
+      <stop offset="1" style="stop-color:var(--port-color);stop-opacity:0"/>
+    </linearGradient>
+    <pattern id="rioGrid" width="64" height="64" patternUnits="userSpaceOnUse">
+      <path d="M64 0 L0 0 0 64" fill="none" stroke="#f5f5f8" stroke-opacity="0.045" stroke-width="1.5"/>
+    </pattern>
+  </defs>
+
+  <rect width="1920" height="1080" fill="url(#rioBase)"/>
+  <rect width="1920" height="1080" fill="url(#rioGrid)"/>
+  <rect width="1920" height="1080" fill="url(#rioWashA)"/>
+  <rect width="1920" height="1080" fill="url(#rioWashB)"/>
+
+  <!-- angled arena beams in the featured player's colour -->
+  <g opacity="0.75">
+    <polygon points="0,1080 720,0 1010,0 290,1080" fill="url(#rioBeam)"/>
+    <polygon points="360,1080 1080,0 1180,0 460,1080" fill="url(#rioBeam)" opacity="0.5"/>
+  </g>
+
+  <!-- the Rio clip edge: a brand-red angled slash off the right shoulder -->
+  <polygon points="1580,0 1636,0 1436,1080 1380,1080" fill="#e60012" opacity="0.16"/>
+
+  <!-- fixed Rio-red top rule + port-coloured foot -->
+  <rect x="0" y="0" width="1920" height="8" fill="#e60012" opacity="0.92"/>
+  <rect x="0" y="1072" width="1920" height="8" style="fill:var(--port-2)" opacity="0.7"/>
+</svg>

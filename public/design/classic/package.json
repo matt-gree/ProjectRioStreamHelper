@@ -1,0 +1,7 @@
+{
+  "id": "classic",
+  "name": "Classic",
+  "version": "1.0.0",
+  "author": "Project Rio",
+  "description": "The original PRSH overlay look. Follows the Design-tab style knobs (accent, card background, font, shadows)."
+}

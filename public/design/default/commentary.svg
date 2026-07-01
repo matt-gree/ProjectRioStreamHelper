@@ -1,0 +1,86 @@
+<svg viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMax meet" xmlns="http://www.w3.org/2000/svg">
+  <!-- DEFAULT package - Commentary: the Project Rio brand look (night-arena
+       plates, Rio-red rail, Rajdhani display names, star-gold sub labels; from
+       the Project Rio design system token layer in rio-theme/tokens.css).
+       FIXED palette: no data-design-vars, so the user's Design-tab knobs never
+       repaint it - raw brand hexes throughout (with token-var fallbacks where
+       the shell links tokens.css). Full 1920x1080 canvas, row anchored near the
+       bottom. Plates reflow to the active caster count (1-4) per
+       public/design/README.md's data-part / layout-data contract; markup below
+       is the 4-caster arrangement and the mount snaps to the real count on
+       first paint. -->
+  <defs>
+    <filter id="cmShadow" x="-15%" y="-30%" width="130%" height="180%">
+      <feDropShadow dx="0" dy="6" stdDeviation="14" flood-color="#000000" flood-opacity="0.55"/>
+    </filter>
+  </defs>
+
+  <g data-slot="slot0" opacity="0">
+    <rect data-part="main-rect" x="16" y="896" width="460" height="168" rx="12" fill="#0b0b12" fill-opacity="0.97" stroke="#1f1f30" stroke-width="1.5" filter="url(#cmShadow)"/>
+    <rect data-part="rail" x="32" y="936" width="6" height="88" rx="2" fill="#e60012"/>
+    <text data-slot="slot0-name" data-maxw="408" x="52" y="972" fill="#f5f5f8" style="font-family:var(--font-display, 'Rajdhani', 'Arial Narrow', sans-serif)" font-size="33" font-weight="700" letter-spacing="0.5"></text>
+    <g data-slot="slot0-sub" style="opacity:0">
+      <rect data-part="sub-divider" x="52" y="982" width="396" height="2" rx="1" fill="#f5bb00" opacity="0.45"/>
+      <text data-slot="slot0-sub-label" x="52" y="1006" fill="#f5bb00" style="font-family:var(--font-display, 'Rajdhani', 'Arial Narrow', sans-serif)" font-size="14" font-weight="700" letter-spacing="2"></text>
+      <text data-slot="slot0-sub-value" data-maxw="326" x="130" y="1006" fill="#c9c9d6" style="font-family:var(--font-body, 'Inter', system-ui, sans-serif)" font-size="18" font-weight="600"></text>
+    </g>
+  </g>
+
+  <g data-slot="slot1" opacity="0">
+    <rect data-part="main-rect" x="492" y="896" width="460" height="168" rx="12" fill="#0b0b12" fill-opacity="0.97" stroke="#1f1f30" stroke-width="1.5" filter="url(#cmShadow)"/>
+    <rect data-part="rail" x="508" y="936" width="6" height="88" rx="2" fill="#e60012"/>
+    <text data-slot="slot1-name" data-maxw="408" x="528" y="972" fill="#f5f5f8" style="font-family:var(--font-display, 'Rajdhani', 'Arial Narrow', sans-serif)" font-size="33" font-weight="700" letter-spacing="0.5"></text>
+    <g data-slot="slot1-sub" style="opacity:0">
+      <rect data-part="sub-divider" x="528" y="982" width="396" height="2" rx="1" fill="#f5bb00" opacity="0.45"/>
+      <text data-slot="slot1-sub-label" x="528" y="1006" fill="#f5bb00" style="font-family:var(--font-display, 'Rajdhani', 'Arial Narrow', sans-serif)" font-size="14" font-weight="700" letter-spacing="2"></text>
+      <text data-slot="slot1-sub-value" data-maxw="326" x="606" y="1006" fill="#c9c9d6" style="font-family:var(--font-body, 'Inter', system-ui, sans-serif)" font-size="18" font-weight="600"></text>
+    </g>
+  </g>
+
+  <g data-slot="slot2" opacity="0">
+    <rect data-part="main-rect" x="968" y="896" width="460" height="168" rx="12" fill="#0b0b12" fill-opacity="0.97" stroke="#1f1f30" stroke-width="1.5" filter="url(#cmShadow)"/>
+    <rect data-part="rail" x="984" y="936" width="6" height="88" rx="2" fill="#e60012"/>
+    <text data-slot="slot2-name" data-maxw="408" x="1004" y="972" fill="#f5f5f8" style="font-family:var(--font-display, 'Rajdhani', 'Arial Narrow', sans-serif)" font-size="33" font-weight="700" letter-spacing="0.5"></text>
+    <g data-slot="slot2-sub" style="opacity:0">
+      <rect data-part="sub-divider" x="1004" y="982" width="396" height="2" rx="1" fill="#f5bb00" opacity="0.45"/>
+      <text data-slot="slot2-sub-label" x="1004" y="1006" fill="#f5bb00" style="font-family:var(--font-display, 'Rajdhani', 'Arial Narrow', sans-serif)" font-size="14" font-weight="700" letter-spacing="2"></text>
+      <text data-slot="slot2-sub-value" data-maxw="326" x="1082" y="1006" fill="#c9c9d6" style="font-family:var(--font-body, 'Inter', system-ui, sans-serif)" font-size="18" font-weight="600"></text>
+    </g>
+  </g>
+
+  <g data-slot="slot3" opacity="0">
+    <rect data-part="main-rect" x="1444" y="896" width="460" height="168" rx="12" fill="#0b0b12" fill-opacity="0.97" stroke="#1f1f30" stroke-width="1.5" filter="url(#cmShadow)"/>
+    <rect data-part="rail" x="1460" y="936" width="6" height="88" rx="2" fill="#e60012"/>
+    <text data-slot="slot3-name" data-maxw="408" x="1480" y="972" fill="#f5f5f8" style="font-family:var(--font-display, 'Rajdhani', 'Arial Narrow', sans-serif)" font-size="33" font-weight="700" letter-spacing="0.5"></text>
+    <g data-slot="slot3-sub" style="opacity:0">
+      <rect data-part="sub-divider" x="1480" y="982" width="396" height="2" rx="1" fill="#f5bb00" opacity="0.45"/>
+      <text data-slot="slot3-sub-label" x="1480" y="1006" fill="#f5bb00" style="font-family:var(--font-display, 'Rajdhani', 'Arial Narrow', sans-serif)" font-size="14" font-weight="700" letter-spacing="2"></text>
+      <text data-slot="slot3-sub-value" data-maxw="326" x="1558" y="1006" fill="#c9c9d6" style="font-family:var(--font-body, 'Inter', system-ui, sans-serif)" font-size="18" font-weight="600"></text>
+    </g>
+  </g>
+
+  <script type="application/json" data-layouts="1">
+  {
+    "counts": {
+      "1": [
+        { "main": {"x":16,"width":1888}, "rail": {"x":32}, "sub": {"x":52,"width":1816}, "name": {"x":52,"maxw":1832}, "subLabel": {"x":52}, "subValue": {"x":130,"maxw":1746} }
+      ],
+      "2": [
+        { "main": {"x":16,"width":936}, "rail": {"x":32}, "sub": {"x":52,"width":864}, "name": {"x":52,"maxw":880}, "subLabel": {"x":52}, "subValue": {"x":130,"maxw":794} },
+        { "main": {"x":968,"width":936}, "rail": {"x":984}, "sub": {"x":1004,"width":864}, "name": {"x":1004,"maxw":880}, "subLabel": {"x":1004}, "subValue": {"x":1082,"maxw":794} }
+      ],
+      "3": [
+        { "main": {"x":16,"width":618.67}, "rail": {"x":32}, "sub": {"x":52,"width":546.67}, "name": {"x":52,"maxw":562.67}, "subLabel": {"x":52}, "subValue": {"x":130,"maxw":476.67} },
+        { "main": {"x":650.67,"width":618.67}, "rail": {"x":666.67}, "sub": {"x":686.67,"width":546.67}, "name": {"x":686.67,"maxw":562.67}, "subLabel": {"x":686.67}, "subValue": {"x":764.67,"maxw":476.67} },
+        { "main": {"x":1285.33,"width":618.67}, "rail": {"x":1301.33}, "sub": {"x":1321.33,"width":546.67}, "name": {"x":1321.33,"maxw":562.67}, "subLabel": {"x":1321.33}, "subValue": {"x":1399.33,"maxw":476.67} }
+      ],
+      "4": [
+        { "main": {"x":16,"width":460}, "rail": {"x":32}, "sub": {"x":52,"width":388}, "name": {"x":52,"maxw":404}, "subLabel": {"x":52}, "subValue": {"x":130,"maxw":318} },
+        { "main": {"x":492,"width":460}, "rail": {"x":508}, "sub": {"x":528,"width":388}, "name": {"x":528,"maxw":404}, "subLabel": {"x":528}, "subValue": {"x":606,"maxw":318} },
+        { "main": {"x":968,"width":460}, "rail": {"x":984}, "sub": {"x":1004,"width":388}, "name": {"x":1004,"maxw":404}, "subLabel": {"x":1004}, "subValue": {"x":1082,"maxw":318} },
+        { "main": {"x":1444,"width":460}, "rail": {"x":1460}, "sub": {"x":1480,"width":388}, "name": {"x":1480,"maxw":404}, "subLabel": {"x":1480}, "subValue": {"x":1558,"maxw":318} }
+      ]
+    }
+  }
+  </script>
+</svg>

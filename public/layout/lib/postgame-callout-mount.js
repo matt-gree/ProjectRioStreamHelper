@@ -17,17 +17,19 @@
 // Design criteria (locked with the user):
 //   - PORT COLORS are integral: the player's controller port (0-3) drives the
 //     accent — rim glow, the chevron rail, stat-bar fills, hero stat numbers.
-//   - THEMED SVG: a strong built-in theme ships inline; users drop their own SVG
-//     into /layout/postgame/themes/<name>.svg and select it. Theme SVGs recolor
-//     to the live port via the CSS vars they inherit (--port-color, --port-2,
-//     --accent). Set overlays.postgamecallout.theme to switch.
+//   - THEMED SVG: the backdrop comes from the active design package
+//     (/design/{package}/callout.svg; overlays.global.designPackage picks the
+//     package). Theme SVGs recolor to the live port via the CSS vars they
+//     inherit (--port-color, --port-2, --accent). A minimal built-in backdrop
+//     ships inline as the last-resort fallback.
 //   - CHARACTER ART is the centerpiece: the full-body render from the new
 //     game_assets/msb/characters/ pack is the hero; the team captain emblem from
 //     captains/ rides alongside as the team identity.
 
+import { ensureGsap } from './gsap-loader.js';
+
 const REF_W = 1920, REF_H = 1080;
 const SETTINGS_TYPE = 'postgamecallout';
-const THEMES_BASE = '/layout/postgame/themes';
 
 // Smash/Mario-Kart player-colour convention, 0-indexed by controller port.
 // Overridable per port via overlays.postgamecallout.port{N}Color.
@@ -38,7 +40,6 @@ const NEUTRAL_ACCENT = '#f59e0b';
 // MSB's roster ("Monty") files under its full species name.
 const CHAR_ART_ALIAS = { Monty: 'montymole' };
 
-let _gsapPromise = null;
 let _cssInjected = false;
 
 // ── art URLs ────────────────────────────────────────────────────────────────
@@ -52,20 +53,6 @@ function charArtUrl(name) {
 function captainArtUrl(name) {
   if (!name) return '';
   return `${OverlayBase.BASE_URL}/game_assets/msb/captains/file_${encodeURIComponent(name.replace(/\s+/g, ''))}.png`;
-}
-
-// ── GSAP lazy load (vendored, offline-friendly) ─────────────────────────────
-function ensureGsap() {
-  if (window.gsap) return Promise.resolve(window.gsap);
-  if (_gsapPromise) return _gsapPromise;
-  _gsapPromise = new Promise((resolve) => {
-    const s = document.createElement('script');
-    s.src = `${OverlayBase.BASE_URL}/layout/lib/gsap/gsap.min.js`;
-    s.onload = () => resolve(window.gsap || null);
-    s.onerror = () => resolve(null); // fall back to snap-visible
-    document.head.appendChild(s);
-  });
-  return _gsapPromise;
 }
 
 // ── styles (scoped under .pc-root so it can live in any container) ───────────
@@ -219,9 +206,9 @@ function injectCss() {
   _cssInjected = true;
 }
 
-// ── built-in theme: a layered SVG that recolors to the port via currentColor /
-// CSS vars. Returned as an inline <svg> string. Users override by dropping a
-// file at /layout/postgame/themes/<name>.svg using the same var contract. ──
+// ── inline fallback backdrop: a layered SVG that recolors to the port via
+// CSS vars. Used only when the active design package (and the default package)
+// have no callout.svg — see public/design/README.md for the var contract. ──
 function builtinThemeSvg() {
   // NOTE: var() only resolves in SVG via inline `style`, never in presentation
   // attributes (fill="var(...)" / stop-color="var(...)" do NOT recolor). All
@@ -283,18 +270,23 @@ export function mountPostgameCallout({ host }) {
     return g(settings, 'overlays.global.accentColor', NEUTRAL_ACCENT);
   }
 
-  async function loadTheme(name) {
-    if (!name || name === 'default') return builtinThemeSvg();
-    if (themeCache[name] != null) return themeCache[name];
+  // The backdrop comes from the active design package:
+  // /design/{package}/callout.svg, falling back to the default package's file,
+  // then to the inline builtin above.
+  async function fetchThemeSvg(pkg) {
+    const r = await fetch(`${OverlayBase.BASE_URL}/design/${encodeURIComponent(pkg)}/callout.svg`);
+    return r.ok ? await r.text() : null;
+  }
+
+  async function loadTheme(pkg) {
+    if (themeCache[pkg] != null) return themeCache[pkg];
+    let svg = null;
     try {
-      const r = await fetch(`${OverlayBase.BASE_URL}${THEMES_BASE}/${encodeURIComponent(name)}.svg`);
-      const svg = r.ok ? await r.text() : builtinThemeSvg();
-      themeCache[name] = svg;
-      return svg;
-    } catch {
-      themeCache[name] = builtinThemeSvg();
-      return themeCache[name];
-    }
+      svg = await fetchThemeSvg(pkg);
+      if (svg == null && pkg !== 'default') svg = await fetchThemeSvg('default');
+    } catch { svg = null; }
+    themeCache[pkg] = svg != null ? svg : builtinThemeSvg();
+    return themeCache[pkg];
   }
 
   // Curated batting bars (label, value, formatter) — shown only when meaningful.
@@ -503,8 +495,8 @@ export function mountPostgameCallout({ host }) {
       themeSvg: builtinThemeSvg(),
     };
 
-    const themeName = g(OverlayBase.settings, `overlays.${SETTINGS_TYPE}.theme`, sel?.theme || 'default');
-    ctx.themeSvg = await loadTheme(themeName);
+    const themePkg = g(OverlayBase.settings, 'overlays.global.designPackage', null) || 'default';
+    ctx.themeSvg = await loadTheme(themePkg);
 
     root.style.display = '';
     buildDom(ctx);

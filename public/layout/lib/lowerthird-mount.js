@@ -3,8 +3,10 @@
 // A DIRECT element (its own OBS source). The producer authors the band on the
 // Production page (Break phase); this mount renders it. The visual is a THEME
 // SVG with named data slots — the mount binds live data into the slots and
-// recolours via CSS vars, so a streamer can drop their own SVG into
-// /layout/lowerthird/themes/<name>.svg without touching code.
+// recolours via CSS vars. The theme comes from the active DESIGN PACKAGE
+// (overlays.global.designPackage): /design/{package}/lowerthird.svg, falling
+// back element-by-element to the built-in `default` package. Users install
+// their own packages without touching code (see public/design/README.md).
 //
 //   const lt = mountLowerThird({ host });
 //   lt.update(OverlayBase.state, OverlayBase.settings);
@@ -17,12 +19,16 @@
 // Text slots may carry data-maxw="<svg-units>" to auto-fit (shrink) long values.
 //
 // Requires overlay-base.js (OverlayBase) + rio-data.js (RioData, for sprites).
-// This file is the reusable SVG-element engine; future SVG elements (stat cards,
-// scoreboards) can reuse loadThemeSvg + bindText/auto-fit + the colour seam.
+// The generic theme-fetch/slot-bind/auto-fit-text engine lives in
+// svg-theme-engine.js (shared with commentary-mount.js and future SVG
+// elements); this file keeps the lower-third-specific clock engine, colour
+// seam, match-side resolution, and reveal animation.
+
+import { createThemeEngine } from './svg-theme-engine.js';
 
 const SETTINGS_TYPE = 'lowerthird';
-const THEMES_BASE = '/layout/lowerthird/themes';
-const DEFAULT_THEME = 'rio';
+const ELEMENT = 'lowerthird';
+const DEFAULT_PACKAGE = 'default';
 
 // Controller-port → colour (0-indexed), used to tint each side. Overridable per
 // port via overlays.lowerthird.port{N}Color. Falls back to the token side colours
@@ -80,85 +86,10 @@ export function mountLowerThird({ host }) {
   injectCss();
   host.classList.add('lt-host');
 
-  let themeName = null;          // currently injected theme
-  let slots = {};                // data-slot -> element (rebuilt on theme swap)
-  let refitList = [];            // text slots with data-maxw to auto-fit
+  const engine = createThemeEngine({ host, element: ELEMENT, fallbackSvg: FALLBACK_SVG });
   let revealKey = '';            // identity of last reveal (avoid replay on clock ticks)
-  let themeCache = {};           // name -> svg text
   let clockTimer = null;
   let disposed = false;
-
-  // ── theme load / inject ───────────────────────────────────────────────────
-  async function loadThemeSvg(name) {
-    if (themeCache[name] != null) return themeCache[name];
-    try {
-      const r = await fetch(`${OverlayBase.BASE_URL}${THEMES_BASE}/${encodeURIComponent(name)}.svg`);
-      const svg = r.ok ? await r.text() : FALLBACK_SVG;
-      themeCache[name] = svg;
-      return svg;
-    } catch {
-      themeCache[name] = FALLBACK_SVG;
-      return FALLBACK_SVG;
-    }
-  }
-
-  async function ensureTheme(name) {
-    if (name === themeName) return;
-    const svg = await loadThemeSvg(name);
-    host.innerHTML = svg;
-    const el = host.querySelector('svg');
-    if (el) { el.removeAttribute('width'); el.removeAttribute('height'); }
-    slots = {};
-    refitList = [];
-    host.querySelectorAll('[data-slot]').forEach((node) => {
-      slots[node.getAttribute('data-slot')] = node;
-      if (node.tagName.toLowerCase() === 'text' && node.getAttribute('data-maxw')) refitList.push(node);
-    });
-    themeName = name;
-    revealKey = ''; // force a reveal after a theme change
-  }
-
-  // ── slot binding ──────────────────────────────────────────────────────────
-  function setText(slotName, value, { optional = false } = {}) {
-    const el = slots[slotName];
-    if (!el) return;
-    const v = value == null ? '' : String(value);
-    el.textContent = v;
-    if (optional) el.setAttribute('opacity', v ? '1' : '0');
-    else el.removeAttribute('opacity');
-  }
-
-  function setImage(slotName, url) {
-    const el = slots[slotName];
-    if (!el) return false;
-    if (url) {
-      el.setAttributeNS('http://www.w3.org/1999/xlink', 'href', url);
-      el.setAttribute('href', url);
-      el.setAttribute('opacity', '1');
-      return true;
-    }
-    el.removeAttribute('href');
-    el.setAttribute('opacity', '0');
-    return false;
-  }
-
-  // Auto-fit: squeeze a text slot to its data-maxw with spacingAndGlyphs so long
-  // names/titles never overflow. Runs after fonts are ready (measurement needs
-  // the real metrics).
-  function refitText() {
-    for (const el of refitList) {
-      el.removeAttribute('textLength');
-      el.removeAttribute('lengthAdjust');
-      const maxw = parseFloat(el.getAttribute('data-maxw'));
-      if (!maxw || !el.textContent) continue;
-      let len = 0;
-      try { len = el.getComputedTextLength(); } catch { len = 0; }
-      if (len > maxw) {
-        el.setAttribute('textLength', String(maxw));
-        el.setAttribute('lengthAdjust', 'spacingAndGlyphs');
-      }
-    }
-  }
 
   // ── colour seam (the only runtime-overridden vars) ────────────────────────
   function portColor(port, settings) {
@@ -209,8 +140,8 @@ export function mountLowerThird({ host }) {
     const g = OverlayBase.deepGet;
     const c = g(OverlayBase.state, 'lowerthird.clock', {}) || {};
     const mode = c.mode || 'off';
-    const labelEl = slots['clock-label'];
-    const clockEl = slots['clock'];
+    const labelEl = engine.slots['clock-label'];
+    const clockEl = engine.slots['clock'];
     if (!clockEl) return;
 
     if (mode === 'off') {
@@ -253,9 +184,16 @@ export function mountLowerThird({ host }) {
   async function update(state, settings) {
     const g = OverlayBase.deepGet;
     const lt = g(state, 'lowerthird', {}) || {};
-    const theme = g(settings, `overlays.${SETTINGS_TYPE}.theme`, null) || lt.theme || DEFAULT_THEME;
-    await ensureTheme(theme);
+    const theme = g(settings, 'overlays.global.designPackage', null) || DEFAULT_PACKAGE;
+    const themeChanged = await engine.ensureTheme(theme);
+    if (themeChanged) revealKey = ''; // force a reveal after a theme change
     if (disposed) return;
+
+    // Palette policy (see svg-theme-engine.js): an app-vars theme (e.g. the
+    // Classic package) is painted with the user's Design-tab variables; a
+    // fixed-palette theme (the Rio default) must never inherit them.
+    if (engine.usesAppVars) OverlayBase.applyDesignSettings(SETTINGS_TYPE);
+    else OverlayBase.clearDesignSettings();
 
     const matchId = lt.matchId != null ? String(lt.matchId) : '';
     const match = matchId ? g(state, `match.${matchId}`, null) : null;
@@ -275,30 +213,30 @@ export function mountLowerThird({ host }) {
 
     applyColours(settings, s1.port, s2.port);
 
-    setText('status', status);
-    setText('side1-name', s1.name || 'Player One');
-    setText('side2-name', s2.name || 'Player Two');
-    setText('side1-score', s1.score, { optional: true });
-    setText('side2-score', s2.score, { optional: true });
-    setImage('side1-sprite', spriteUrl(s1.captain));
-    setImage('side2-sprite', spriteUrl(s2.captain));
-    setText('title', title, { optional: true });
-    setText('subtitle', subtitle, { optional: true });
+    engine.setText('status', status);
+    engine.setText('side1-name', s1.name || 'Player One');
+    engine.setText('side2-name', s2.name || 'Player Two');
+    engine.setText('side1-score', s1.score, { optional: true });
+    engine.setText('side2-score', s2.score, { optional: true });
+    engine.setImage('side1-sprite', spriteUrl(s1.captain));
+    engine.setImage('side2-sprite', spriteUrl(s2.captain));
+    engine.setText('title', title, { optional: true });
+    engine.setText('subtitle', subtitle, { optional: true });
 
     // Logo: tournament branding if present, else the theme's default mark.
     const logoUrl = OverlayBase.brandingLogoUrl();
-    if (slots['logo']) {
+    if (engine.slots['logo']) {
       const img = new Image();
-      img.onload = () => { if (!disposed) { setImage('logo', logoUrl); if (slots['logo-default']) slots['logo-default'].setAttribute('opacity', '0'); } };
-      img.onerror = () => { if (!disposed) { setImage('logo', ''); if (slots['logo-default']) slots['logo-default'].setAttribute('opacity', '1'); } };
+      img.onload = () => { if (!disposed) { engine.setImage('logo', logoUrl); if (engine.slots['logo-default']) engine.slots['logo-default'].setAttribute('opacity', '0'); } };
+      img.onerror = () => { if (!disposed) { engine.setImage('logo', ''); if (engine.slots['logo-default']) engine.slots['logo-default'].setAttribute('opacity', '1'); } };
       img.src = logoUrl;
     }
 
     renderClock();
 
     // Auto-fit now and again once webfonts settle.
-    refitText();
-    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { if (!disposed) refitText(); });
+    engine.refitText();
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { if (!disposed) engine.refitText(); });
 
     // Reveal only when the identity changes (not on every clock tick / pause).
     const key = `${theme}|${matchId}|${s1.name}|${s2.name}|${title}|${subtitle}|${role}`;
@@ -312,14 +250,14 @@ export function mountLowerThird({ host }) {
   function dispose() {
     disposed = true;
     if (clockTimer) clearInterval(clockTimer);
-    window.removeEventListener('resize', refitText);
+    window.removeEventListener('resize', engine.refitText);
     host.classList.remove('lt-host', 'lt-reveal', 'lt-warn');
     host.innerHTML = '';
   }
 
   // Clock ticks independently of state updates so the countdown is smooth.
   clockTimer = setInterval(renderClock, 250);
-  window.addEventListener('resize', refitText);
+  window.addEventListener('resize', engine.refitText);
 
   return { update, replay, dispose };
 }

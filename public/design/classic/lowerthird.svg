@@ -1,0 +1,75 @@
+<svg viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMax meet" xmlns="http://www.w3.org/2000/svg" data-design-vars="app">
+  <!--
+    CLASSIC package - Lower Third: the same band geometry as the Default (Rio)
+    theme, painted with the user's Design-tab CSS variables instead of the Rio
+    brand palette. data-design-vars="app" opts in: the mount runs
+    applyDesignSettings, so accent / card background / text / border / font /
+    shadow all follow the app's design knobs like the pre-2.0 overlays did.
+
+    SLOT CONTRACT (the mount binds by data-slot; see public/design/README.md):
+      logo, logo-default, status, side1-name / side2-name,
+      side1-sprite / side2-sprite, side1-score / side2-score,
+      title, subtitle, clock-label, clock.
+
+    COLOUR: CSS variables resolve in SVG ONLY through inline style="", never
+    via presentation attributes. - -side1 / - -side2 are set by the mount from
+    the players' controller ports.
+  -->
+  <defs>
+    <clipPath id="clBand"><rect x="48" y="792" width="1824" height="232" rx="16"/></clipPath>
+  </defs>
+
+  <!-- band base: app card background + border + shadow -->
+  <rect x="48" y="792" width="1824" height="232" rx="16" style="fill:var(--card-bg, rgba(15,15,25,0.88));filter:var(--card-shadow-filter, none)"/>
+  <rect x="48" y="792" width="1824" height="232" rx="16" fill="none" style="stroke:var(--border-color, rgba(255,255,255,0.08));stroke-width:var(--border-width, 1px)"/>
+
+  <g clip-path="url(#clBand)">
+    <!-- accent rail + divider before the clock -->
+    <rect x="48" y="792" width="8" height="232" style="fill:var(--accent, #f59e0b)"/>
+    <rect x="1474" y="828" width="2" height="160" style="fill:var(--border-color, rgba(255,255,255,0.12))"/>
+
+    <!-- brand cap: tournament logo, else a plain accent monogram block -->
+    <image data-slot="logo" x="80" y="838" width="148" height="148" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+    <g data-slot="logo-default">
+      <rect x="86" y="844" width="136" height="136" rx="20" style="fill:var(--accent, #f59e0b)" opacity="0.16"/>
+      <rect x="86" y="844" width="136" height="136" rx="20" fill="none" style="stroke:var(--accent, #f59e0b)" stroke-width="2"/>
+      <text x="154" y="936" text-anchor="middle" style="fill:var(--accent, #f59e0b);font-family:var(--font-family, 'Inter', sans-serif)" font-size="56" font-weight="800">VS</text>
+    </g>
+
+    <!-- match block -->
+    <rect x="262" y="810" width="172" height="34" rx="8" style="fill:var(--accent, #f59e0b)"/>
+    <text data-slot="status" x="348" y="834" text-anchor="middle"
+          style="fill:#ffffff;font-family:var(--font-family, 'Inter', sans-serif)" font-size="17" font-weight="700"
+          letter-spacing="2">UP NEXT</text>
+
+    <rect x="262" y="872" width="6" height="42" rx="2" style="fill:var(--side1, var(--accent, #f59e0b))"/>
+    <image data-slot="side1-sprite" x="280" y="868" width="50" height="50" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <text data-slot="side1-name" data-maxw="380" x="344" y="906"
+          style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif);text-shadow:var(--text-shadow, none)" font-size="32" font-weight="800">Player One</text>
+    <text data-slot="side1-score" data-maxw="60" x="822" y="908" text-anchor="end"
+          style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" font-size="38" font-weight="800"
+          font-variant-numeric="tabular-nums" opacity="0"></text>
+
+    <rect x="262" y="940" width="6" height="42" rx="2" style="fill:var(--side2, var(--accent, #f59e0b))"/>
+    <image data-slot="side2-sprite" x="280" y="936" width="50" height="50" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <text data-slot="side2-name" data-maxw="380" x="344" y="974"
+          style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif);text-shadow:var(--text-shadow, none)" font-size="32" font-weight="800">Player Two</text>
+    <text data-slot="side2-score" data-maxw="60" x="822" y="976" text-anchor="end"
+          style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" font-size="38" font-weight="800"
+          font-variant-numeric="tabular-nums" opacity="0"></text>
+
+    <!-- title / subtitle -->
+    <text data-slot="title" data-maxw="568" x="902" y="902"
+          style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif);text-shadow:var(--text-shadow, none)" font-size="46" font-weight="800">Stream Title</text>
+    <text data-slot="subtitle" data-maxw="568" x="902" y="954"
+          style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" font-size="25" font-weight="500" opacity="0.65">Subtitle goes here</text>
+
+    <!-- clock -->
+    <text data-slot="clock-label" x="1844" y="870" text-anchor="end"
+          style="fill:var(--accent, #f59e0b);font-family:var(--font-family, 'Inter', sans-serif)" font-size="20" font-weight="700"
+          letter-spacing="3">BACK IN</text>
+    <text data-slot="clock" x="1846" y="958" text-anchor="end"
+          style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" font-size="72" font-weight="800"
+          font-variant-numeric="tabular-nums">5:00</text>
+  </g>
+</svg>

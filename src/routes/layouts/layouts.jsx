@@ -1166,6 +1166,103 @@ function DesignTabBody({ baseUrl }) {
     );
 }
 
+// ── Design Package selector (rendered at the top of the Design tab) ──
+// Packages are folders of per-element theme SVGs (see public/design/README.md):
+// `default` + `classic` ship built-in; anything else is user-installed under
+// user_data/design_packages/ via the zip upload here. The selection is the
+// normal settings key overlays.global.designPackage, read by every SVG-element
+// mount.
+function DesignPackageSection() {
+    const designPackage = useSettingsStore(s => s?.overlays?.global?.designPackage) ?? 'default';
+    const setItem = useSettingsStore(s => s.setItem);
+    const [packages, setPackages] = useState(null);   // null = loading
+    const [busy, setBusy] = useState(false);
+
+    const refresh = useCallback(async () => {
+        try {
+            const r = await fetch('/api/v1/design/packages');
+            setPackages(r.ok ? await r.json() : []);
+        } catch {
+            setPackages([]);
+        }
+    }, []);
+    useEffect(() => { refresh(); }, [refresh]);
+
+    const install = async (file) => {
+        if (!file) return;
+        setBusy(true);
+        try {
+            const form = new FormData();
+            form.append('file', file);
+            const r = await fetch('/api/v1/design/packages/install', { method: 'POST', body: form });
+            const data = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(data?.detail || `Install failed (${r.status})`);
+            notifications.show({ message: `Installed design package "${data.name}"`, color: 'green' });
+            await refresh();
+        } catch (e) {
+            notifications.show({ message: `Install failed: ${e?.message || e}`, color: 'red' });
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const uninstall = async (pkg) => {
+        setBusy(true);
+        try {
+            const r = await fetch(`/api/v1/design/packages/${encodeURIComponent(pkg.id)}`, { method: 'DELETE' });
+            const data = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(data?.detail || `Uninstall failed (${r.status})`);
+            notifications.show({ message: `Removed "${pkg.name}"`, color: 'green' });
+            if (designPackage === pkg.id) setItem('overlays.global.designPackage', 'default');
+            await refresh();
+        } catch (e) {
+            notifications.show({ message: `Uninstall failed: ${e?.message || e}`, color: 'red' });
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const list = packages ?? [];
+    const selected = list.find(p => p.id === designPackage) || null;
+    const selectData = list.map(p => ({ value: p.id, label: p.builtin ? p.name : `${p.name} (installed)` }));
+    // Keep an orphaned selection (package deleted on disk) visible so the user
+    // understands why overlays fell back to Default.
+    if (packages && !selected && designPackage) {
+        selectData.push({ value: designPackage, label: `${designPackage} (missing)` });
+    }
+
+    return (
+        <div>
+            <Text size="xs" fw={700} dimmed className="mb-2 uppercase tracking-wide">Design Package</Text>
+            <div className="flex flex-col gap-1 sm:max-w-md">
+                <div className="flex items-center gap-2">
+                    <SimpleSelect
+                        className="min-w-0 flex-1"
+                        value={designPackage}
+                        onChange={(val) => setItem('overlays.global.designPackage', val)}
+                        data={selectData.length ? selectData : [{ value: 'default', label: 'Default' }]}
+                    />
+                    <FileButton accept=".zip" onChange={install}>
+                        {(props) => (
+                            <Button size="sm" variant="secondary" disabled={busy} {...props}>Install…</Button>
+                        )}
+                    </FileButton>
+                    {selected && !selected.builtin && (
+                        <Button size="sm" variant="ghost" disabled={busy} onClick={() => uninstall(selected)}>
+                            <X size={14} className="mr-1" /> Remove
+                        </Button>
+                    )}
+                </div>
+                <Text size="xs" dimmed>
+                    {selected
+                        ? `${selected.description || 'No description.'}${selected.elements?.length ? ` Themes: ${selected.elements.join(', ')}.` : ''} Elements a package doesn't theme fall back to Default.`
+                        : 'Themes every SVG element (commentary, lower third, stat callout). Install a package as a .zip, or drop a folder into user_data/design_packages/.'}
+                </Text>
+            </div>
+        </div>
+    );
+}
+
 // ── Global Design Section (rendered inside the Design tab) ──
 function GlobalDesignSection() {
     const globalDesign = useSettingsStore(useShallow(s => s?.overlays?.global ?? {}));
@@ -1191,6 +1288,8 @@ function GlobalDesignSection() {
 
     return (
         <Stack gap="md">
+            <DesignPackageSection />
+
             <div>
                 <Text size="xs" fw={700} dimmed className="mb-2 uppercase tracking-wide">Color & Typography</Text>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -1834,7 +1933,7 @@ export default function LayoutBrowser() {
             {/* Top-level mode tabs */}
             <Tabs value={mode} onValueChange={setMode}>
                 <TabsList>
-                    <TabsTrigger value="design">Design Presets</TabsTrigger>
+                    <TabsTrigger value="design">Design</TabsTrigger>
                     <TabsTrigger value="scoreboard">Scoreboards</TabsTrigger>
                     <TabsTrigger value="scenes">Scenes</TabsTrigger>
                     <TabsTrigger value="talent">Talent</TabsTrigger>
@@ -1932,8 +2031,9 @@ export default function LayoutBrowser() {
                                 <>
                                     <Text size="xs" dimmed>
                                         Break graphics — the re-themable lower-third (logo · match ·
-                                        title · clock). Add it to OBS, pick a theme below, and author
-                                        the match/title/countdown live from the Production page → Break.
+                                        title · clock). Add it to OBS and author the match/title/countdown
+                                        live from the Production page → Break. Its look follows the
+                                        Design Package picked on the Design tab.
                                     </Text>
                                     <Input placeholder="Search break overlays..." value={searchQuery} onChange={(e) => setSearchQuery(e.currentTarget.value)} />
                                     {loading && <Loader size={18} />}

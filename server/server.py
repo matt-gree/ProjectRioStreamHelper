@@ -251,6 +251,20 @@ _branding_dir = user_data_dir() / "branding"
 _branding_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/branding", StaticFiles(directory=str(_branding_dir)), name="branding")
 
+# Design-package assets (element theme SVGs). A dynamic route rather than a
+# static mount because each request resolves across two roots: the built-in
+# packages in ./public/design/ and user-installed ones in
+# user_data/design_packages/. Validation lives in design_packages.resolve_asset.
+from server.design_packages import resolve_asset as _resolve_design_asset  # noqa: E402
+
+
+@app.get("/design/{package_id}/{filename}")
+async def design_asset(package_id: str, filename: str):
+    path = _resolve_design_asset(package_id, filename)
+    if path is None:
+        raise HTTPException(status_code=404, detail="No such design asset")
+    return FileResponse(path)
+
 # Favicon
 @app.get("/favicon.png")
 async def favicon():

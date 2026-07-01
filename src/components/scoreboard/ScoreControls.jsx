@@ -220,6 +220,7 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, sourc
         setItem(`${base}.innings_selected`, null);
         setItem(`${base}.stadium`, '');
         setItem(`${base}.tag_set`, null);
+        setItem(`${base}.side_reason`, '');
         setItem(`${base}.away_linescore`, []);
         setItem(`${base}.home_linescore`, []);
         for (const pos of ['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF']) {

@@ -247,6 +247,7 @@ def apply_reset(sb: int):
         f"{base}.innings_selected": None,
         f"{base}.stadium": "",
         f"{base}.tag_set": None,
+        f"{base}.side_reason": "",
         f"{base}.away_linescore": [],
         f"{base}.home_linescore": [],
     }

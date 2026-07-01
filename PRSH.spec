@@ -62,9 +62,10 @@ a = Analysis(
         *([('dist/vite_manifest.json', 'dist')] if _vite_staged.is_file() else []),
         ('dist/index.html', 'dist'),
 
-        # Public directory (game assets, layouts, favicon, tray logo)
+        # Public directory (game assets, layouts, design packages, favicon, tray logo)
         ('public/game_assets', 'public/game_assets'),
         ('public/layout', 'public/layout'),
+        ('public/design', 'public/design'),
         ('public/favicon.png', 'public'),
         ('public/logo.png', 'public'),
         ('public/logo.ico', 'public'),

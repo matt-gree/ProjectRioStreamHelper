@@ -327,6 +327,27 @@
     }
   }
 
+  // Every inline :root property applyDesignSettings may set. Kept adjacent so
+  // the two stay in sync.
+  const DESIGN_SETTING_PROPS = [
+    '--accent', '--accent-rgb', '--card-bg', '--text-primary', '--border-radius',
+    '--border-width', '--border-color', '--font-family', '--final-badge-color',
+    '--card-shadow-filter', '--card-box-shadow', '--text-shadow',
+    '--stat-value-color', '--stat-subtext-color', '--connector-color', '--active-color',
+  ];
+
+  /**
+   * Remove everything applyDesignSettings set on :root. Design-package themes
+   * that bring a fixed palette (no data-design-vars="app" on their root <svg>)
+   * call this via their mount so a leftover app-design accent from a previously
+   * active theme can never repaint them — stylesheet values (e.g. the Rio
+   * tokens.css brand vars) resolve again.
+   */
+  function clearDesignSettings() {
+    const root = document.documentElement.style;
+    for (const p of DESIGN_SETTING_PROPS) root.removeProperty(p);
+  }
+
   // ── Backward-compatible alias ──
   function applyAccentColor(layoutType, fallback) {
     applyDesignSettings(layoutType);
@@ -366,6 +387,7 @@
     logoImg,
     applyAccentColor,
     applyDesignSettings,
+    clearDesignSettings,
     brandingLogoUrl,
     readSetting,
     PREVIEW_MODE,

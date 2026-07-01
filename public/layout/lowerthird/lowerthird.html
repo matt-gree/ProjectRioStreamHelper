@@ -4,19 +4,21 @@
   Lower Third — a re-themable SVG broadcast band (Break phase, also placeable
   mid-game). Layout: tournament logo · one match · title/subtitle · clock.
 
-  This file is a thin shell: the look lives in a swappable THEME SVG under
-  /layout/lowerthird/themes/, and the rendering/data-binding lives in the
-  reusable mount (lowerthird-mount.js). Drop this in OBS as a full-canvas
-  (1920×1080) browser source; the band sits at the bottom. Author it on the
-  Production page → Break.
+  This file is a thin shell: the look lives in the active DESIGN PACKAGE's
+  theme SVG (/design/{package}/lowerthird.svg — picked by the global Design
+  Package selector), and the rendering/data-binding lives in the reusable mount
+  (lowerthird-mount.js). Drop this in OBS as a full-canvas (1920×1080) browser
+  source; the band sits at the bottom. Author it on the Production page → Break.
 -->
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <!-- Knobs resolve under overlays.lowerthird.* (theme swap + colour overrides).
-       The Setup-tab settings panel shows a LAYOUT_SETTINGS def / global override
-       only if its key appears in this whitelist. -->
-  <meta name="overlay-settings" content="theme, accentColor, port0Color, port1Color, port2Color, port3Color" />
+  <!-- Knobs resolve under overlays.lowerthird.* (colour overrides). The
+       Setup-tab settings panel shows a LAYOUT_SETTINGS def / global override
+       only if its key appears in this whitelist. The app-design knobs (cardBg,
+       fontFamily, …) apply only when the active package's theme opts into them
+       (data-design-vars="app" — e.g. the Classic package). -->
+  <meta name="overlay-settings" content="accentColor, cardBg, textColor, borderColor, borderRadius, borderWidth, fontFamily, cardShadow, textShadow, showShadow, port0Color, port1Color, port2Color, port3Color" />
   <link rel="stylesheet" href="/layout/lib/rio-theme/tokens.css" />
   <style>
     html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }

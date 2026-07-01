@@ -48,6 +48,7 @@ function AddressBookRow({ row, onPersist, onDelete }) {
     const [draft, setDraft] = useState(() => ({
         rioName: row.identities?.rioName ?? '',
         tag: row.display?.tag ?? '',
+        prefix: row.display?.prefix ?? '',
         fullName: row.display?.fullName ?? '',
         pronoun: row.display?.pronoun ?? '',
         country: row.display?.country ?? '',
@@ -62,6 +63,7 @@ function AddressBookRow({ row, onPersist, onDelete }) {
             identities: { rioName: draft.rioName },
             display: {
                 tag: draft.tag,
+                prefix: draft.prefix,
                 fullName: draft.fullName,
                 pronoun: draft.pronoun,
                 country: draft.country,
@@ -81,6 +83,9 @@ function AddressBookRow({ row, onPersist, onDelete }) {
         <TableRow>
             <TableCell>
                 <TextField placeholder="Tag" value={draft.tag} onChange={e => setField('tag', e.currentTarget.value)} onBlur={persist} />
+            </TableCell>
+            <TableCell>
+                <TextField placeholder="NP6" value={draft.prefix} onChange={e => setField('prefix', e.currentTarget.value)} onBlur={persist} inputClassName="w-[80px]" />
             </TableCell>
             <TableCell>
                 <TextField placeholder="Online ID" value={draft.rioName} onChange={e => setField('rioName', e.currentTarget.value)} onBlur={persist} />
@@ -123,6 +128,7 @@ function AddressBookRow({ row, onPersist, onDelete }) {
 function rowDisplay(draft) {
     return {
         tag: draft.tag,
+        prefix: draft.prefix,
         fullName: draft.fullName,
         pronoun: draft.pronoun,
         country: draft.country,
@@ -160,6 +166,7 @@ export default function PlayerList() {
                     <TableHeader>
                         <TableRow>
                             <TableHead>Tag</TableHead>
+                            <TableHead>Prefix</TableHead>
                             <TableHead>Rio Name</TableHead>
                             <TableHead>Full Name</TableHead>
                             <TableHead>Pronoun</TableHead>
