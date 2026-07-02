@@ -122,6 +122,22 @@ export const ELEMENTS = [
         match: (url) => /lowerthird/i.test(url),
     },
     {
+        id: 'matchuphistory',
+        name: 'Matchup History',
+        // Head-to-head band: all-time series summary + last-5 game cards for a
+        // match's two participants, fetched from the Project Rio API into the
+        // singleton matchup.* state (POST /matchup/fetch). Draft-phase hype and
+        // break filler both want it. Direct element; SVG themed via the active
+        // design package (/design/{pkg}/matchup.svg). Native 1920×1080.
+        phase: ['draft', 'break'],
+        flavor: 'direct',
+        span: 5,
+        url: '/layout/matchup/matchup.html',
+        width: 1920,
+        height: 1080,
+        match: (url) => /\/layout\/matchup\//i.test(url) || /matchup\.html/i.test(url),
+    },
+    {
         id: 'hitvisualizer',
         name: 'Hit Visualizer',
         phase: 'live',

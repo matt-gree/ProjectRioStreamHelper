@@ -55,3 +55,25 @@ export async function bindScoreboard(sb, m) {
         method: "PUT",
     });
 }
+
+/**
+ * Fill match `m` from a start.gg set: the server fetches the set with full
+ * player detail, upserts both players into the participant registry, seats
+ * them on sides 1/2, and stamps the round name as the label.
+ */
+export async function loadStartGGSet(m, setId) {
+    return req(`/match/${m}/startgg-set`, {
+        ...jsonBody({ setId }),
+        method: "POST",
+    });
+}
+
+/** Fetch + project the head-to-head record for match `m` (matchup.* state). */
+export async function fetchMatchup(m) {
+    return req(`/matchup/fetch?match=${m}`, { method: "POST" });
+}
+
+/** Blank the matchup band. */
+export async function clearMatchup() {
+    return req("/matchup/clear", { method: "POST" });
+}

@@ -358,14 +358,32 @@ class PostGame:
 
     @classmethod
     async def _promote_match(cls, sb: int) -> None:
-        """Advance a bound board's match → ``post``. Match owns the lifecycle;
-        ``note_live`` only ever promotes draft→live, so post-game owns this hop."""
+        """Advance a bound board's match → ``post`` and credit the series game.
+
+        Match owns the lifecycle; ``note_live`` only ever promotes draft→live,
+        so post-game owns this hop. The winner from the captured box score is
+        mapped to a match side by rioName (immune to board-side swaps) and
+        ``Match.award_game`` bumps ``match.{m}.series.{side}`` + re-projects.
+        The stage guard makes this once-per-game: re-capturing the same
+        finished game while already ``post`` never double-credits the series.
+        """
         m = Match.scoreboard_match(sb)
         if not m:
             return
         if Match.get(m).get("stage") != "post":
             await State.Set(f"match.{m}.stage", "post")
             logger.info("[PostGame] match {} → post (board {})", m, sb)
+
+            payload = cls._captured.get(sb) or {}
+            winner_side = (payload.get("meta") or {}).get("winnerSide")
+            winner_rio = ""
+            if winner_side in (1, 2):
+                winner_rio = ((payload.get("player") or {}).get(str(winner_side)) or {}).get("rioName", "")
+            if winner_rio:
+                await Match.award_game(m, winner_rio)
+            elif winner_side in (1, 2):
+                logger.warning("[PostGame] sb{}: winner side {} has no rioName — series not advanced",
+                               sb, winner_side)
 
     @classmethod
     async def clear(cls, sb: int) -> None:

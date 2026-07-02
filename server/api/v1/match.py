@@ -28,6 +28,7 @@ class MatchPayload(BaseModel):
     label: str | None = None
     stage: str | None = None
     format: dict[str, Any] | None = None
+    series: dict[str, Any] | None = None
     gameMode: str | None = None
     provider: dict[str, Any] | None = None
     player: dict[str, Any] | None = None
@@ -100,6 +101,55 @@ async def delete_match(m: int):
     await State.Unset(f"match.{m}")
     await State.Save()
     return {"success": True}
+
+
+class StartGGSetPayload(BaseModel):
+    """Load a start.gg set's players into a match's sides."""
+
+    setId: int
+
+
+@router.post("/{m}/startgg-set", response_class=ORJSONResponse)
+async def load_startgg_set(m: int, payload: StartGGSetPayload):
+    """Fill match ``m`` from a start.gg set.
+
+    Fetches the set with full player detail, upserts each player into the
+    participant registry (start.gg userId de-dupe — same path as the Competition
+    import), and seats slot 0/1 on sides 1/2 with the registry row's
+    participantId + rioName (rioName stays empty until the entrant is mapped;
+    the projection still resolves display identity from the row). Also stamps
+    the round name as the match label and records the set id, then re-projects.
+    """
+    from server.participants import Participants
+    from server.startgg.provider import StartGGProvider
+
+    if not Match.exists(m):
+        raise HTTPException(404, f"match {m!r} not found")
+
+    s = await StartGGProvider.GetSet(payload.setId)
+    if not s or s.get("error"):
+        raise HTTPException(400, (s or {}).get("error") or "Set not found")
+
+    entrants = s.get("entrants") or [[], []]
+    entries: list[tuple] = []
+    for side, players in ((1, entrants[0] if len(entrants) > 0 else []),
+                          (2, entrants[1] if len(entrants) > 1 else [])):
+        player = players[0] if players else None
+        if not player:
+            continue
+        row = await Participants.UpsertFromStartGG(player)
+        rio = (row.get("identities") or {}).get("rioName") or ""
+        entries.append((f"match.{m}.player.{side}.participantId", row["id"]))
+        entries.append((f"match.{m}.player.{side}.rioName", rio))
+
+    if s.get("round_name"):
+        entries.append((f"match.{m}.label", s["round_name"]))
+    entries.append((f"match.{m}.provider.startgg.setId", payload.setId))
+
+    await State.SetBatch(entries)
+    await State.Save()
+    await Match.project_match(m)
+    return Match.get(m)
 
 
 # Binding lives under /scoreboards/{N}/match but is owned here (it's match logic).

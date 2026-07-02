@@ -93,6 +93,9 @@ _STANDALONE_DISPLAY_NAMES = {
     "commentary/commentary": "Commentary",
     # Break — re-themable SVG lower-third band (logo · match · title · clock).
     "lowerthird/lowerthird": "Lower Third",
+    # Head-to-head band: all-time series summary + last-5 game cards for a
+    # match's two participants, fetched from the Project Rio API (matchup.*).
+    "matchup/matchup": "Matchup History",
 }
 
 

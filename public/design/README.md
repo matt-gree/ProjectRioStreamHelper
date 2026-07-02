@@ -10,6 +10,7 @@ and every SVG element renders its file from that package.
 ├── package.json      # { id, name, version, author, description } — all optional but recommended
 ├── commentary.svg    # the caster strip (1–4 reflowing plates)
 ├── lowerthird.svg    # the Break-phase broadcast band
+├── matchup.svg       # the head-to-head band (series summary + 5 game cards)
 ├── callout.svg       # the post-game Stat Callout backdrop
 └── sources/          # (optional) raw design exports, ignored by the app
 ```
@@ -137,6 +138,29 @@ gradients or use `objectBoundingBox` here.
 On first paint — and whenever the OBS source goes on air — the strip plays a
 staggered group reveal; the mount debounces OBS's on→off→on visibility bursts.
 A Design-Package swap resets to first-paint state, so the new theme cascades in.
+
+### `matchup.svg`
+
+Rendered by `public/layout/lib/matchup-mount.js`. The head-to-head band: an
+all-time series summary over up to five most-recent game cards, fetched from
+the Project Rio API for a match's two participants (`matchup.*` state — the
+Fetch control on the Production page's Matchup History element).
+
+| Slot | Element | Filled with |
+|------|---------|-------------|
+| `logo` | `<image>` | Tournament logo (`/branding/`). Hidden if none uploaded. |
+| `logo-default` | `<g>`/any | Your fallback brand mark — shown only when no logo is set. |
+| `subtitle` | `<text>` | The match label (e.g. `Winners Final`); hidden when empty. |
+| `side1-name` / `side2-name` | `<text>` | The two player names. |
+| `side1-sprite` / `side2-sprite` | `<image>` | The match's chosen captain headshot. Hidden if none. |
+| `side1-wins` / `side2-wins` | `<text>` | All-time series win counts. |
+| `total-games` | `<text>` | `ALL TIME · N GAMES` (or `FIRST MEETING`). |
+| `game{i}` (i=1..5) | `<g>` | One recent-game card, newest first. Hidden when there's no i-th game. |
+| `game{i}-side1-logo` / `-side2-logo` | `<image>` | That game's team logo (captain's default team), falling back to the captain icon. |
+| `game{i}-side1-score` / `-side2-score` | `<text>` | Final score; the loser's is dimmed by the mount. |
+| `game{i}-mode` / `game{i}-stadium` / `game{i}-date` | `<text>` | Game mode · stadium · short date; each hidden when empty. |
+
+Runtime colour seam: `--accent` (per-layout pin `overlays.matchup.accentColor`).
 
 ### `callout.svg`
 

@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<!--
+  Matchup History — a re-themable SVG head-to-head band (Draft/Break phases).
+  Layout: all-time series summary (names · win counts · total games) over the
+  five most recent games between the two players, each card with team logos,
+  score, game mode and stadium — fetched from the Project Rio API.
+
+  This file is a thin shell: the look lives in the active DESIGN PACKAGE's
+  theme SVG (/design/{package}/matchup.svg — picked by the global Design
+  Package selector), the rendering/data-binding in matchup-mount.js, and the
+  data in the singleton matchup.* state (POST /api/v1/matchup/fetch?match=M —
+  the Fetch button on the Production page). Drop this in OBS as a full-canvas
+  (1920×1080) browser source; the band sits at the bottom.
+-->
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Knobs resolve under overlays.matchup.*. The app-design knobs (cardBg,
+       fontFamily, …) apply only when the active package's theme opts into
+       them (data-design-vars="app" — e.g. the Classic package). -->
+  <meta name="overlay-settings" content="accentColor, cardBg, textColor, borderColor, borderRadius, borderWidth, fontFamily, cardShadow, textShadow, showShadow" />
+  <link rel="stylesheet" href="/layout/lib/rio-theme/tokens.css" />
+  <style>
+    html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+    /* Native full-canvas size hint; the SVG scales to whatever the OBS source is. */
+    body { width: 1920px; height: 1080px; }
+    #host { position: fixed; inset: 0; }
+  </style>
+</head>
+<body>
+  <div id="host"></div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="/layout/lib/overlay-base.js"></script>
+  <script src="/layout/lib/rio-data.js"></script>
+  <script type="module">
+    import { mountMatchup } from '/layout/lib/matchup-mount.js';
+
+    const host = document.getElementById('host');
+    const mu = mountMatchup({ host });
+
+    async function boot() {
+      if (OverlayBase.PREVIEW_MODE) {
+        // Layouts/Setup preview: prime a representative fetched head-to-head.
+        try {
+          const r = await fetch(`${OverlayBase.BASE_URL}/layout/preview/matchup_sample.json`);
+          const data = r.ok ? await r.json() : null;
+          if (data) {
+            if (data.matchup) OverlayBase.deepSet(OverlayBase.state, 'matchup', data.matchup);
+            if (data.match) OverlayBase.deepSet(OverlayBase.state, 'match', data.match);
+          }
+        } catch { /* ignore */ }
+      }
+
+      OverlayBase.init({
+        render: () => mu.update(OverlayBase.state, OverlayBase.settings),
+        // Re-render when our data, the bound match, or branding change.
+        shouldRender: (key) => key.startsWith('matchup') || key.startsWith('match.') || key.startsWith('branding'),
+        shouldRenderSettings: (key) => key.startsWith('overlays.matchup.') || key.startsWith('overlays.global.'),
+        fetchSettings: true,
+        skipState: OverlayBase.PREVIEW_MODE,
+      });
+
+      if (OverlayBase.PREVIEW_MODE) mu.update(OverlayBase.state, OverlayBase.settings);
+    }
+    boot();
+
+    // Auto-replay the reveal when this source/scene goes live in OBS.
+    window.addEventListener('obsSourceActiveChanged', (e) => { if (e.detail && e.detail.active) mu.replay(); });
+  </script>
+</body>
+</html>

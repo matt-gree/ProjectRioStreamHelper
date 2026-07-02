@@ -11,9 +11,14 @@ import {
     setCommentarySlots, SUBFIELD_OPTIONS, MAX_COMMENTATORS,
 } from '../../context/commentary';
 import {
+    createMatch, updateMatch, bindScoreboard, loadStartGGSet, fetchMatchup, clearMatchup,
+} from '../../context/match';
+import {
     useStagingStore, stageOrRun, usePending, commitPending, eventMatchesHotkey,
 } from '../../context/staging';
 import ParticipantPicker from '../../components/ParticipantPicker';
+import StartggSetPicker from '../../components/StartggSetPicker';
+import { MSB_CAPTAINS } from '../../data/msb';
 import { Panel } from '../../components/ui/panel';
 import { Stack, Group, Text } from '../../components/ui/primitives';
 import { Badge } from '../../components/ui/badge';
@@ -1162,7 +1167,8 @@ function ElementOptions({ element, hideTarget = false, hideVisibility = false })
 // direct element (scoreboard) is just a visibility toggle, no gear.
 function elementHasSetup(element) {
     return element.id === 'hitvisualizer' || element.id === 'commentary'
-        || element.id === 'lowerthird' || element.flavor === 'fed';
+        || element.id === 'lowerthird' || element.id === 'matchuphistory'
+        || element.flavor === 'fed';
 }
 
 // The condensed FACE of an element window — its live actions only.
@@ -1170,6 +1176,7 @@ function ElementFace({ element }) {
     if (element.id === 'hitvisualizer') return <HitVizFace />;
     if (element.id === 'commentary') return <CommentaryFace />;
     if (element.id === 'lowerthird') return <LowerThirdFace element={element} />;
+    if (element.id === 'matchuphistory') return <MatchupFace element={element} />;
     if (element.flavor === 'fed') return <FedFace element={element} />;
     return <DirectFace element={element} />;
 }
@@ -1179,6 +1186,7 @@ function ElementSetup({ element }) {
     if (element.id === 'hitvisualizer') return <HitVizSetup />;
     if (element.id === 'commentary') return <CommentarySetup />;
     if (element.id === 'lowerthird') return <LowerThirdSetup />;
+    if (element.id === 'matchuphistory') return <MatchupSetup />;
     if (element.flavor === 'fed') return <FedSetup element={element} />;
     return null;
 }
@@ -1254,6 +1262,14 @@ function FedSetup({ element }) {
 // momentary, always immediate — while the clock's CONFIG (mode, duration,
 // label) stages like other content.
 const LT_INPUT = 'w-full rounded-md border border-border bg-card px-2 py-1 text-sm text-foreground';
+
+// Human label for a match id in a select: "Label — A vs B", falling back to
+// names or "Match N". Shared by the lower third, the Draft bar and Matchup.
+function matchDisplayLabel(matches, id) {
+    const m = matches?.[id] || {};
+    const names = [m?.player?.[1]?.rioName, m?.player?.[2]?.rioName].filter(Boolean).join(' vs ');
+    return m.label ? `${m.label}${names ? ` — ${names}` : ''}` : (names || `Match ${id}`);
+}
 
 // Re-render once per ~500ms so the live clock readout ticks.
 function useTick(ms = 500, on = true) {
@@ -1381,11 +1397,7 @@ function LowerThirdSetup() {
     const ov = lt.override || {};
     const c = lt.clock || {};
     const matchIds = Object.keys(matches || {});
-    const matchLabel = (id) => {
-        const m = matches[id] || {};
-        const names = [m?.player?.[1]?.rioName, m?.player?.[2]?.rioName].filter(Boolean).join(' vs ');
-        return m.label ? `${m.label}${names ? ` — ${names}` : ''}` : (names || `Match ${id}`);
-    };
+    const matchLabel = (id) => matchDisplayLabel(matches, id);
 
     // Labelled field with the staged dot; keeps each control one-liner below.
     const FieldLabel = ({ k, children }) => (
@@ -1471,6 +1483,417 @@ function LowerThirdSetup() {
                     onChange={(e) => setKey('clock.label', e.target.value, 'Lower third: clock label')}
                 />
             )}
+        </Stack>
+    );
+}
+
+// ── Draft bar (match authoring) ─────────────────────────────────────────────
+// The condensed match-creation surface for the Draft phase (the full authoring
+// panel lives on the Match tab). A match projects onto its bound boards —
+// broadcast-visible — so every edit here routes through the staging gateway
+// (key `match:{m}:{path}`); the Match tab stays immediate like other full tabs.
+// Creating a match and lifecycle hops (Next game) are authoring/momentary and
+// run immediately.
+
+// 'player.1.captain' → { player: { 1: { captain: value } } } for the merge PUT.
+function nestPath(path, value) {
+    const out = {};
+    let cur = out;
+    const keys = path.split('.');
+    for (let i = 0; i < keys.length - 1; i++) cur = (cur[keys[i]] = {});
+    cur[keys[keys.length - 1]] = value;
+    return out;
+}
+
+// match.{m} with staged-value display, mirroring useLowerThird: `val(path,
+// live)` returns the pending value when one is staged; `setField` stages one
+// field write whose commit is the merge PUT.
+function useMatchDraft(m) {
+    const match = useStateStore(s => s?.match?.[m]);
+    const pendingMap = useStagingStore(s => s.pending);
+    const val = (path, live) => {
+        const p = pendingMap[`match:${m}:${path}`];
+        return p ? p.value : live;
+    };
+    const isStaged = (path) => !!pendingMap[`match:${m}:${path}`];
+    const setField = (path, value, label) => stageOrRun({
+        key: `match:${m}:${path}`,
+        label: label || `Match ${m}: ${path}`,
+        value,
+        run: () => updateMatch(m, nestPath(path, value)),
+    });
+    return { match, val, isStaged, setField };
+}
+
+const DB_FIELD = 'h-8 rounded-md border border-border bg-card px-2 text-sm text-foreground';
+
+// One side of the draft: participant pick + captain, one row. A staged pick
+// carries a client-only _name display tag (the projection hasn't resolved it
+// yet), stripped by the commit PUT which only sends participantId + rioName.
+function DraftSide({ m, side, draft }) {
+    const live = draft.match?.player?.[side] ?? draft.match?.player?.[String(side)] ?? {};
+    const pick = draft.val(`player.${side}.pick`, null);
+    const name = pick ? (pick._name || pick.rioName) : (live.rioName || '');
+    const selectedId = pick ? pick.participantId : (live.participantId || null);
+    const captain = draft.val(`player.${side}.captain`, live.captain || '');
+
+    const onPick = (row) => {
+        const rioName = row.identities?.rioName || '';
+        const display = row.display?.tag || rioName || 'participant';
+        stageOrRun({
+            key: `match:${m}:player.${side}.pick`,
+            label: `Match ${m} side ${side}: ${display}`,
+            value: { participantId: row.id, rioName, _name: display },
+            run: () => updateMatch(m, { player: { [side]: { participantId: row.id, rioName } } }),
+        });
+    };
+
+    return (
+        <Group gap="xs" className="min-w-0 flex-1 flex-nowrap items-center">
+            <Text size="xs" className="w-4 shrink-0 text-muted-foreground">{side}</Text>
+            <StagedDot show={draft.isStaged(`player.${side}.pick`)} />
+            <div className="min-w-0 flex-1">
+                <ParticipantPicker
+                    value={name}
+                    selectedId={selectedId}
+                    onResolve={onPick}
+                    placeholder="Pick participant…"
+                />
+            </div>
+            <StagedDot show={draft.isStaged(`player.${side}.captain`)} />
+            <select
+                value={captain || ''}
+                onChange={(e) => draft.setField(`player.${side}.captain`, e.target.value,
+                    `Match ${m} side ${side}: captain ${e.target.value || 'cleared'}`)}
+                title="Captain"
+                className={cn(DB_FIELD, 'w-[110px] shrink-0')}
+            >
+                <option value="">Captain…</option>
+                {MSB_CAPTAINS.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+        </Group>
+    );
+}
+
+// Series wins as "n – n" with per-side steppers (staged). Post-game capture
+// advances this automatically; the steppers are the producer's correction.
+function SeriesControl({ m, draft }) {
+    const series = draft.match?.series || {};
+    const bestOf = (draft.match?.format || {}).bestOf ?? 1;
+    const winsFor = (side) => {
+        const live = series[side] ?? series[String(side)] ?? 0;
+        return Number(draft.val(`series.${side}`, live)) || 0;
+    };
+    const bump = (side, delta) => {
+        const next = Math.max(0, winsFor(side) + delta);
+        draft.setField(`series.${side}`, next, `Match ${m}: side ${side} series → ${next}`);
+    };
+    const staged = draft.isStaged('series.1') || draft.isStaged('series.2');
+    const need = Math.floor(bestOf / 2) + 1;
+    const clinched = winsFor(1) >= need ? 1 : winsFor(2) >= need ? 2 : null;
+
+    const Step = ({ side, delta, children }) => (
+        <button
+            type="button"
+            onClick={() => bump(side, delta)}
+            className="px-1 text-muted-foreground hover:text-foreground"
+            aria-label={`Side ${side} ${delta > 0 ? '+1' : '-1'} game`}
+        >
+            {children}
+        </button>
+    );
+
+    return (
+        <Group gap="none" className="items-center rounded-md border border-border bg-card px-1.5 py-1">
+            <Text size="xs" className="mr-1 text-muted-foreground">Series</Text>
+            <Step side={1} delta={-1}>–</Step>
+            <Text size="sm" className="font-mono tabular-nums text-foreground">{winsFor(1)}</Text>
+            <Step side={1} delta={1}>+</Step>
+            <Text size="xs" className="mx-0.5 text-muted-foreground">:</Text>
+            <Step side={2} delta={-1}>–</Step>
+            <Text size="sm" className="font-mono tabular-nums text-foreground">{winsFor(2)}</Text>
+            <Step side={2} delta={1}>+</Step>
+            <StagedDot show={staged} />
+            {clinched && (
+                <Badge className="ml-1.5 bg-emerald-500/15 text-emerald-300 text-[10px] uppercase">
+                    Side {clinched} wins
+                </Badge>
+            )}
+        </Group>
+    );
+}
+
+const DRAFT_STAGE_BADGE = {
+    draft: 'bg-[#a855f7]/15 text-[#c084fc]',
+    live:  'bg-emerald-500/15 text-emerald-300',
+    post:  'bg-[#64748b]/15 text-[#94a3b8]',
+};
+
+function DraftBar() {
+    const matches = useStateStore(useShallow(s => s?.match ?? {}));
+    const activeRaw = useSettingsStore(s => s?.scoreboards?.active ?? [1]);
+    const active = Array.isArray(activeRaw) && activeRaw.length ? activeRaw : [1];
+    const boundMap = useStateStore(useShallow(s => {
+        const out = {};
+        for (const sb of active) out[sb] = s?.score?.[sb]?.match ?? s?.score?.[String(sb)]?.match ?? null;
+        return out;
+    }));
+    const [gameModes, setGameModes] = useState([]);
+    const [selRaw, setSelRaw] = useState(null);
+    const [creating, setCreating] = useState(false);
+
+    useEffect(() => {
+        fetch('/api/v1/rio/game-modes')
+            .then(r => r.json())
+            .then(data => setGameModes(Object.keys(data)))
+            .catch(() => {});
+    }, []);
+
+    const ids = useMemo(
+        () => Object.keys(matches).filter(k => /^\d+$/.test(k)).sort((a, b) => Number(a) - Number(b)),
+        [matches],
+    );
+    const sel = selRaw && matches[selRaw] ? selRaw : (ids[ids.length - 1] || null);
+    const draft = useMatchDraft(sel);
+    const m = sel;
+    const stage = draft.match?.stage || 'draft';
+
+    const onNew = async () => {
+        setCreating(true);
+        try {
+            const { id } = await createMatch();
+            setSelRaw(String(id));
+        } catch (e) {
+            notifications.show({ message: `New match: ${e?.message || e}`, color: 'red' });
+        } finally { setCreating(false); }
+    };
+
+    // Loading a set replaces both sides + the label — staged as ONE entry so
+    // the pending bar reads as a single decision.
+    const onPickSet = (s) => stageOrRun({
+        key: `match:${m}:startgg`,
+        label: `Load set: ${s.p1_name || 'TBD'} vs ${s.p2_name || 'TBD'}`,
+        value: s.id,
+        run: () => loadStartGGSet(Number(m), s.id),
+    });
+
+    // Lifecycle hop back to draft for the next game of the series — momentary,
+    // like the post-game capture that advances it the other way.
+    const onNextGame = () => {
+        updateMatch(Number(m), { stage: 'draft' })
+            .catch(e => notifications.show({ message: `Next game: ${e?.message || e}`, color: 'red' }));
+    };
+
+    const toggleBind = (sb) => {
+        const bound = String(boundMap[sb]) === String(m);
+        stageOrRun({
+            key: `bind:${sb}`,
+            label: bound ? `Unbind board ${sb}` : `Bind board ${sb} → match ${m}`,
+            value: bound ? null : Number(m),
+            liveValue: boundMap[sb] != null ? Number(boundMap[sb]) : null,
+            run: () => bindScoreboard(sb, bound ? null : Number(m)),
+        });
+    };
+    const gameMode = m ? draft.val('gameMode', draft.match?.gameMode || '') : '';
+    const bestOf = m ? draft.val('format.bestOf', (draft.match?.format || {}).bestOf ?? 1) : 1;
+
+    return (
+        <Panel title="Match draft">
+            <Stack gap="sm" className="p-3">
+                <Group gap="sm" className="flex-wrap items-center">
+                    <select
+                        value={m || ''}
+                        onChange={(e) => setSelRaw(e.target.value)}
+                        className={cn(DB_FIELD, 'max-w-[260px]')}
+                    >
+                        {ids.length === 0 && <option value="">No matches yet</option>}
+                        {ids.map(id => (
+                            <option key={id} value={id}>{matchDisplayLabel(matches, id)}</option>
+                        ))}
+                    </select>
+                    <Button size="sm" variant="outline" disabled={creating} onClick={onNew}>
+                        <Plus size={14} className="mr-1" /> New match
+                    </Button>
+                    {m && (
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <Button size="sm" variant="secondary">
+                                    <Trophy size={14} className="mr-1" /> Load from start.gg
+                                    <StagedDot show={draft.isStaged('startgg')} />
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent align="start" className="w-96">
+                                <StartggSetPicker onPick={onPickSet} pickLabel="Use" />
+                            </PopoverContent>
+                        </Popover>
+                    )}
+                    {m && (
+                        <Badge className={cn('text-[10px] font-semibold uppercase tracking-wider',
+                            DRAFT_STAGE_BADGE[stage] || DRAFT_STAGE_BADGE.draft)}>
+                            {stage}
+                        </Badge>
+                    )}
+                    {m && stage === 'post' && (
+                        <Button size="sm" variant="secondary" onClick={onNextGame}>
+                            Next game
+                        </Button>
+                    )}
+                </Group>
+
+                {m ? (
+                    <>
+                        <Group gap="md" className="flex-wrap items-center">
+                            <DraftSide m={m} side={1} draft={draft} />
+                            <Text size="xs" className="shrink-0 text-muted-foreground">vs</Text>
+                            <DraftSide m={m} side={2} draft={draft} />
+                        </Group>
+
+                        <Group gap="sm" className="flex-wrap items-center">
+                            <Group gap="xs" className="items-center">
+                                <StagedDot show={draft.isStaged('gameMode')} />
+                                <select
+                                    value={gameMode || ''}
+                                    onChange={(e) => draft.setField('gameMode', e.target.value,
+                                        `Match ${m}: mode ${e.target.value || 'cleared'}`)}
+                                    className={cn(DB_FIELD, 'max-w-[190px]')}
+                                >
+                                    <option value="">Game mode…</option>
+                                    {gameModes.map(g => <option key={g} value={g}>{g}</option>)}
+                                </select>
+                            </Group>
+                            <Group gap="xs" className="items-center">
+                                <StagedDot show={draft.isStaged('format.bestOf')} />
+                                <select
+                                    value={String(bestOf)}
+                                    onChange={(e) => draft.setField('format.bestOf', parseInt(e.target.value, 10),
+                                        `Match ${m}: Bo${e.target.value}`)}
+                                    className={cn(DB_FIELD, 'w-[76px]')}
+                                >
+                                    {[1, 3, 5, 7].map(n => <option key={n} value={n}>Bo{n}</option>)}
+                                </select>
+                            </Group>
+                            <SeriesControl m={m} draft={draft} />
+                            <Group gap="xs" className="items-center">
+                                <Text size="xs" className="text-muted-foreground">Boards</Text>
+                                {active.map(sb => {
+                                    const bound = String(boundMap[sb]) === String(m);
+                                    return (
+                                        <BindChip
+                                            key={sb} sb={sb} bound={bound}
+                                            onClick={() => toggleBind(sb)}
+                                        />
+                                    );
+                                })}
+                            </Group>
+                        </Group>
+                    </>
+                ) : (
+                    <Text size="sm" className="text-muted-foreground">
+                        Create a match to author the fixture — participants, captains, mode and
+                        format — then bind it to a board to project it onto the broadcast.
+                    </Text>
+                )}
+            </Stack>
+        </Panel>
+    );
+}
+
+// A board-bind toggle chip, staged-aware (amber ring while the bind is pending).
+function BindChip({ sb, bound, onClick }) {
+    const pending = usePending(`bind:${sb}`);
+    const displayBound = pending ? pending.value != null : bound;
+    return (
+        <Button
+            size="xs"
+            variant={displayBound ? 'default' : 'outline'}
+            onClick={onClick}
+            className={cn(pending && 'ring-1 ring-amber-400')}
+        >
+            Board {sb}
+        </Button>
+    );
+}
+
+// ── Matchup History ──────────────────────────────────────────────────────────
+// Direct element: the head-to-head band. The producer picks a match and hits
+// Fetch — the server pulls every completed game between its two participants
+// from the Project Rio API and projects the singleton matchup.* state that the
+// overlay renders. Fetching REPLACES broadcast-visible content, so it routes
+// through the staging gateway (one entry, key 'matchup:fetch').
+function MatchupFace({ element }) {
+    const mu = useStateStore(useShallow(s => s?.matchup ?? {}));
+    const matches = useStateStore(useShallow(s => s?.match ?? {}));
+    const pending = usePending('matchup:fetch');
+    const [selRaw, setSelRaw] = useState('');
+
+    const ids = useMemo(
+        () => Object.keys(matches).filter(k => /^\d+$/.test(k)).sort((a, b) => Number(a) - Number(b)),
+        [matches],
+    );
+    const sel = selRaw && matches[selRaw] ? selRaw
+        : (mu.matchId != null && matches[String(mu.matchId)] ? String(mu.matchId) : (ids[0] || ''));
+
+    const doFetch = () => stageOrRun({
+        key: 'matchup:fetch',
+        label: `Matchup: ${matchDisplayLabel(matches, sel)}`,
+        value: sel,
+        run: () => fetchMatchup(Number(sel)),
+    });
+
+    const fetchedFor = mu.matchId != null ? String(mu.matchId) : '';
+    const stale = mu.present && sel && fetchedFor !== sel;
+
+    return (
+        <Stack gap="xs">
+            <DirectFace element={element} />
+            <Group gap="xs" className="flex-nowrap items-center">
+                <select
+                    value={sel}
+                    onChange={(e) => setSelRaw(e.target.value)}
+                    className={cn(DB_FIELD, 'h-7 min-w-0 flex-1 text-xs')}
+                >
+                    {ids.length === 0 && <option value="">No matches yet</option>}
+                    {ids.map(id => <option key={id} value={id}>{matchDisplayLabel(matches, id)}</option>)}
+                </select>
+                <Button size="xs" disabled={!sel} onClick={doFetch} className={cn(pending && 'ring-1 ring-amber-400')}>
+                    Fetch
+                </Button>
+                <StagedDot show={!!pending} />
+            </Group>
+            {mu.present ? (
+                <Text size="xs" className={cn('truncate', stale ? 'text-amber-400' : 'text-muted-foreground')}>
+                    {mu.side1?.rioName} {mu.side1?.wins}–{mu.side2?.wins} {mu.side2?.rioName}
+                    {' · '}{mu.totalGames} game{mu.totalGames === 1 ? '' : 's'}
+                    {stale ? ' (other match)' : ''}
+                </Text>
+            ) : (
+                <Text size="xs" className="text-muted-foreground">
+                    Nothing fetched yet — both sides need Rio names.
+                </Text>
+            )}
+        </Stack>
+    );
+}
+
+// Gear: clear the band (staged — clearing live content is broadcast-visible).
+function MatchupSetup() {
+    const present = useStateStore(s => s?.matchup?.present);
+    const pending = usePending('matchup:fetch');
+    const doClear = () => stageOrRun({
+        key: 'matchup:fetch',
+        label: 'Clear matchup',
+        value: null,
+        run: () => clearMatchup(),
+    });
+    return (
+        <Stack gap="sm">
+            <Text size="xs" className="text-muted-foreground">
+                Head-to-head from the Project Rio API: all-time series + last five games
+                between the match's two participants. Fetch again after new games finish.
+            </Text>
+            <Button size="xs" variant="ghost" disabled={!present && !pending} onClick={doClear} className="w-full">
+                Clear matchup
+            </Button>
         </Stack>
     );
 }
@@ -1768,6 +2191,7 @@ export default function Production() {
             <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[300px_1fr]">
                 <LeftRail />
                 <Stack gap="md">
+                    {phase === 'draft' && <DraftBar />}
                     {phase === 'post' && <PostGameBar />}
                     <ElementsArea phase={phase} />
                 </Stack>

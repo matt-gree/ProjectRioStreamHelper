@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, Trophy } from 'lucide-react';
 import { useStateStore, useSettingsStore } from '../../context/store';
 import {
-    createMatch, deleteMatch, updateMatch, bindScoreboard,
+    createMatch, deleteMatch, updateMatch, bindScoreboard, loadStartGGSet,
 } from '../../context/match';
 import ParticipantPicker from '../../components/ParticipantPicker';
+import StartggSetPicker from '../../components/StartggSetPicker';
+import { Popover, PopoverTrigger, PopoverContent } from '../../components/ui/popover';
 import { SimpleSelect } from '../../components/ui/simple-select';
 import { Input } from '../../components/ui/input';
 import { Button } from '../../components/ui/button';
@@ -93,6 +95,12 @@ function MatchCard({ m, match, active, boundMap, gameModes }) {
     const stage = match?.stage || 'draft';
     const bestOf = match?.format?.bestOf ?? 1;
     const gameMode = match?.gameMode || '';
+    const series = match?.series || {};
+    const wins = (side) => Number(series[side] ?? series[String(side)] ?? 0) || 0;
+    const need = Math.floor(bestOf / 2) + 1;
+    const clinched = wins(1) >= need ? 1 : wins(2) >= need ? 2 : null;
+    const bumpSeries = (side, delta) =>
+        updateMatch(m, { series: { [side]: Math.max(0, wins(side) + delta) } });
 
     const commitLabel = useCallback(() => {
         const next = label.trim();
@@ -134,6 +142,19 @@ function MatchCard({ m, match, active, boundMap, gameModes }) {
                             onChange={(v) => updateMatch(m, { format: { bestOf: parseInt(v, 10) } })}
                         />
                     </div>
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <Button size="sm" variant="secondary">
+                                <Trophy size={14} className="mr-1" /> Load from start.gg
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent align="start" className="w-96">
+                            <StartggSetPicker
+                                pickLabel="Use"
+                                onPick={(s) => loadStartGGSet(m, s.id)}
+                            />
+                        </PopoverContent>
+                    </Popover>
                     <Button
                         variant="ghost"
                         size="icon-sm"
@@ -149,6 +170,33 @@ function MatchCard({ m, match, active, boundMap, gameModes }) {
                     <SideColumn m={m} side={1} player={players[1] ?? players['1']} />
                     <SideColumn m={m} side={2} player={players[2] ?? players['2']} />
                 </div>
+
+                {/* Series: game wins within the Bo format. Post-game capture credits
+                    the winner automatically; the steppers are the manual correction.
+                    "Next game" returns a finished (post) match to draft with the
+                    series intact, ready for the next game's fixture. */}
+                <Group gap="sm" className="flex-wrap items-center">
+                    <Text size="xs" dimmed span>Series</Text>
+                    <Group gap="none" className="items-center rounded-md border border-border bg-card px-1.5 py-1">
+                        <button type="button" className="px-1 text-muted-foreground hover:text-foreground" onClick={() => bumpSeries(1, -1)} aria-label="Side 1 -1 game">–</button>
+                        <span className="font-mono text-sm tabular-nums">{wins(1)}</span>
+                        <button type="button" className="px-1 text-muted-foreground hover:text-foreground" onClick={() => bumpSeries(1, 1)} aria-label="Side 1 +1 game">+</button>
+                        <span className="mx-1 text-xs text-muted-foreground">:</span>
+                        <button type="button" className="px-1 text-muted-foreground hover:text-foreground" onClick={() => bumpSeries(2, -1)} aria-label="Side 2 -1 game">–</button>
+                        <span className="font-mono text-sm tabular-nums">{wins(2)}</span>
+                        <button type="button" className="px-1 text-muted-foreground hover:text-foreground" onClick={() => bumpSeries(2, 1)} aria-label="Side 2 +1 game">+</button>
+                    </Group>
+                    {clinched && (
+                        <Badge className="bg-emerald-500/15 text-emerald-300 text-[10px] uppercase">
+                            Side {clinched} wins the series
+                        </Badge>
+                    )}
+                    {stage === 'post' && (
+                        <Button size="sm" variant="secondary" onClick={() => updateMatch(m, { stage: 'draft' })}>
+                            Next game
+                        </Button>
+                    )}
+                </Group>
 
                 <Stack gap="xs">
                     <Text size="xs" dimmed span>Bound scoreboards</Text>

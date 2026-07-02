@@ -33,16 +33,21 @@ _PLAYER_KEYS = [
 ]
 
 # Default shape of a freshly-created match. `captain` is a character name (the
-# chosen captain), not a roster slot. provider.startgg.setId is reserved for a
-# later set-load-through-match slice and stays unused here.
+# chosen captain), not a roster slot. provider.startgg.setId records which
+# start.gg set was loaded into this match (see the /match/{m}/startgg-set route).
 _DEFAULT_SIDE = {"participantId": None, "rioName": "", "captain": "", "port": None}
 
 
 def default_match() -> dict:
     return {
         "label": "",
-        "stage": "draft",          # draft | live | post — dormant this slice (badge only)
+        "stage": "draft",          # draft | live | post (see note_live / postgame)
         "format": {"bestOf": 1},
+        # The match owns the SERIES (games won per side within the Bo format);
+        # each board owns only its live game. Post-game capture credits the
+        # winner here (award_game); the projector mirrors it onto every bound
+        # board as score.{N}.player.{T}.series_wins for overlays to render.
+        "series": {"1": 0, "2": 0},
         "gameMode": "",
         "provider": {"startgg": {"setId": None}},
         "player": {"1": dict(_DEFAULT_SIDE), "2": dict(_DEFAULT_SIDE)},
@@ -140,6 +145,17 @@ class Match:
             entries.extend(cls._side_entries(sb, t, players.get(str(t))))
         game_mode = match.get("gameMode") or ""
         entries.append((f"score.{sb}.tag_set", game_mode))
+
+        # Series mirror: the match's game wins + format, so scoreboard overlays
+        # can render Bo-series pips. Written value-or-"" like the player keys —
+        # deterministic re-projection, and unbinding blanks them.
+        series = match.get("series") or {}
+        for t in (1, 2):
+            wins = series.get(str(t), series.get(t))
+            entries.append((f"score.{sb}.player.{t}.series_wins",
+                            int(wins) if isinstance(wins, (int, float)) else ""))
+        best_of = (match.get("format") or {}).get("bestOf")
+        entries.append((f"score.{sb}.best_of", int(best_of) if best_of else ""))
 
         await State.SetBatch(entries)
         await State.Save()
@@ -289,6 +305,45 @@ class Match:
                 if v:
                     out.append((f"{base}.{dst}", v))
         return out
+
+    # ----- series (match→score flow, Phase 10) -----------------------------
+
+    @classmethod
+    def side_for_rio(cls, m, rio_name: str) -> int | None:
+        """Which authored side (1|2) of match ``m`` a rioName sits on, or None.
+
+        rioName-keyed like identity_entries — correct regardless of which board
+        side the feed (or a manual swap) placed the player on.
+        """
+        needle = (rio_name or "").strip().casefold()
+        if not needle:
+            return None
+        players = cls.get(m).get("player") or {}
+        for t in (1, 2):
+            p = players.get(str(t)) or players.get(t) or {}
+            if cls._participant_rioname(p).strip().casefold() == needle:
+                return t
+        return None
+
+    @classmethod
+    async def award_game(cls, m, winner_rio: str) -> int | None:
+        """Credit one series game to the side ``winner_rio`` sits on, then
+        re-project so every bound board's series_wins update. Returns the
+        credited side, or None when the winner isn't on this match (name
+        mismatch — leave the series alone rather than guess)."""
+        side = cls.side_for_rio(m, winner_rio)
+        if side is None:
+            logger.warning("[Match] {}: winner {!r} not on this match — series not advanced",
+                           m, winner_rio)
+            return None
+        series = cls.get(m).get("series") or {}
+        wins = series.get(str(side), series.get(side)) or 0
+        await State.Set(f"match.{m}.series.{side}", int(wins) + 1)
+        await State.Save()
+        await cls.project_match(m)
+        logger.info("[Match] {}: game to side {} ({}) — series now {}",
+                    m, side, winner_rio, cls.get(m).get("series"))
+        return side
 
     @classmethod
     async def note_live(cls, sb) -> None:

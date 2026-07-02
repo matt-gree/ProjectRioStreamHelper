@@ -1,0 +1,143 @@
+<svg viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMax meet" xmlns="http://www.w3.org/2000/svg" data-design-vars="app">
+  <!--
+    CLASSIC package - Matchup History: the same band geometry as the Default
+    (Rio) theme, painted with the user's Design-tab CSS variables instead of
+    the Rio brand palette (data-design-vars="app" opts in - the mount runs
+    applyDesignSettings so accent / card background / text / border / font /
+    shadow all follow the app's design knobs).
+
+    SLOT CONTRACT (the mount binds by data-slot; see public/design/README.md):
+      logo           <image>  tournament logo (/branding/); hidden if none
+      logo-default   <g>      Rio mushroom shown when no logo is set
+      subtitle       <text>   the match label (e.g. Winners Final); optional
+      side1-name / side2-name <text>  player names (auto-fit to data-maxw)
+      side1-sprite / side2-sprite <image>  chosen captain headshot; hidden if none
+      side1-wins / side2-wins <text>  all-time series win counts
+      total-games    <text>   "ALL TIME · N GAMES" / "FIRST MEETING"
+      game{i} (i=1..5) <g>    one recent-game card; hidden when absent
+      game{i}-side1-logo / game{i}-side2-logo <image>  team logo (captain-icon fallback)
+      game{i}-side1-score / game{i}-side2-score <text> final score (loser dimmed)
+      game{i}-mode / game{i}-stadium / game{i}-date <text>
+
+    COLOUR: CSS variables resolve in SVG ONLY through inline style="", never
+    via presentation attributes.
+  -->
+  <defs>
+    <clipPath id="cmuBand"><rect x="48" y="632" width="1824" height="392" rx="16"/></clipPath>
+  </defs>
+
+  <!-- band base: app card background + border + shadow -->
+  <rect x="48" y="632" width="1824" height="392" rx="16" style="fill:var(--card-bg, rgba(15,15,25,0.88));filter:var(--card-shadow-filter, none)"/>
+  <rect x="48" y="632" width="1824" height="392" rx="16" fill="none" style="stroke:var(--border-color, rgba(255,255,255,0.08));stroke-width:var(--border-width, 1px)"/>
+
+  <g clip-path="url(#cmuBand)">
+    <!-- accent rail + top highlight -->
+    <rect x="48" y="632" width="10" height="392" style="fill:var(--accent, #f59e0b)"/>
+    <rect x="48" y="632" width="1824" height="2" fill="#ffffff" opacity="0.05"/>
+
+    <!-- ░░ BRAND CAP ░░ -->
+    <image data-slot="logo" x="84" y="664" width="110" height="110" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+    <g data-slot="logo-default">
+      <rect x="88" y="668" width="102" height="102" rx="16" style="fill:var(--accent, #f59e0b)" opacity="0.16"/>
+      <rect x="88" y="668" width="102" height="102" rx="16" fill="none" style="stroke:var(--accent, #f59e0b)" stroke-width="2"/>
+      <text x="139" y="736" text-anchor="middle" style="fill:var(--accent, #f59e0b);font-family:var(--font-family, 'Inter', sans-serif)" font-size="42" font-weight="800">VS</text>
+    </g>
+
+    <!-- ░░ SERIES SUMMARY ░░ -->
+    <rect x="228" y="656" width="220" height="34" rx="6" style="fill:var(--accent, #f59e0b)"/>
+    <text x="338" y="680" text-anchor="middle"
+          style="fill:#ffffff;font-family:var(--font-family, 'Inter', sans-serif)" font-size="18" font-weight="700"
+          letter-spacing="2.5">HEAD TO HEAD</text>
+    <text data-slot="total-games" x="228" y="768" style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" opacity="0.65"
+          font-size="21" font-weight="500" letter-spacing="1">ALL TIME</text>
+
+    <image data-slot="side1-sprite" x="488" y="660" width="72" height="72" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <text data-slot="side1-name" data-maxw="280" x="576" y="712"
+          style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif);text-shadow:var(--text-shadow, none)" font-size="40" font-weight="700">Player One</text>
+    <text data-slot="side1-wins" data-maxw="110" x="898" y="748" text-anchor="end"
+          style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" font-size="82" font-weight="700"
+          font-variant-numeric="tabular-nums">0</text>
+    <text x="960" y="740" text-anchor="middle" style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" opacity="0.65"
+          font-size="52" font-weight="600">–</text>
+    <text data-slot="side2-wins" data-maxw="110" x="1022" y="748" text-anchor="start"
+          style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" font-size="82" font-weight="700"
+          font-variant-numeric="tabular-nums">0</text>
+    <text data-slot="side2-name" data-maxw="280" x="1344" y="712" text-anchor="end"
+          style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif);text-shadow:var(--text-shadow, none)" font-size="40" font-weight="700">Player Two</text>
+    <image data-slot="side2-sprite" x="1360" y="660" width="72" height="72" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+
+    <text data-slot="subtitle" data-maxw="380" x="1836" y="700" text-anchor="end"
+          style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif);text-shadow:var(--text-shadow, none)" font-size="30" font-weight="700" opacity="0">Winners Final</text>
+    <text x="1836" y="740" text-anchor="end" style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" opacity="0.65"
+          font-size="20" font-weight="500" letter-spacing="2">LAST 5 GAMES</text>
+
+    <!-- divider between summary and cards -->
+    <rect x="64" y="798" width="1792" height="2" style="fill:var(--border-color, rgba(255,255,255,0.12))"/>
+
+    <!-- ░░ GAME CARDS (newest first) ░░ -->
+    <g data-slot="game1" opacity="0">
+      <rect x="72" y="816" width="344" height="188" rx="10" fill="#ffffff" opacity="0.04"/>
+      <rect x="72" y="816" width="344" height="188" rx="10" fill="none" style="stroke:var(--border-color, rgba(255,255,255,0.12))" stroke-width="1"/>
+      <text data-slot="game1-date" x="396" y="848" text-anchor="end" style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" opacity="0.65" font-size="17" font-weight="500">JUN 1</text>
+      <image data-slot="game1-side1-logo" x="96" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+      <text data-slot="game1-side1-score" data-maxw="72" x="196" y="896" text-anchor="middle" style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" font-size="46" font-weight="700" font-variant-numeric="tabular-nums">0</text>
+      <text x="244" y="892" text-anchor="middle" style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" opacity="0.65" font-size="28" font-weight="600">–</text>
+      <text data-slot="game1-side2-score" data-maxw="72" x="292" y="896" text-anchor="middle" style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" font-size="46" font-weight="700" font-variant-numeric="tabular-nums">0</text>
+      <image data-slot="game1-side2-logo" x="344" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+      <text data-slot="game1-mode" data-maxw="296" x="96" y="948" style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" opacity="0.65" font-size="19" font-weight="500">Game mode</text>
+      <text data-slot="game1-stadium" data-maxw="296" x="96" y="980" style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" opacity="0.65" font-size="19" font-weight="500">Stadium</text>
+    </g>
+
+    <g data-slot="game2" opacity="0">
+      <rect x="430" y="816" width="344" height="188" rx="10" fill="#ffffff" opacity="0.04"/>
+      <rect x="430" y="816" width="344" height="188" rx="10" fill="none" style="stroke:var(--border-color, rgba(255,255,255,0.12))" stroke-width="1"/>
+      <text data-slot="game2-date" x="754" y="848" text-anchor="end" style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" opacity="0.65" font-size="17" font-weight="500">JUN 1</text>
+      <image data-slot="game2-side1-logo" x="454" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+      <text data-slot="game2-side1-score" data-maxw="72" x="554" y="896" text-anchor="middle" style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" font-size="46" font-weight="700" font-variant-numeric="tabular-nums">0</text>
+      <text x="602" y="892" text-anchor="middle" style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" opacity="0.65" font-size="28" font-weight="600">–</text>
+      <text data-slot="game2-side2-score" data-maxw="72" x="650" y="896" text-anchor="middle" style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" font-size="46" font-weight="700" font-variant-numeric="tabular-nums">0</text>
+      <image data-slot="game2-side2-logo" x="702" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+      <text data-slot="game2-mode" data-maxw="296" x="454" y="948" style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" opacity="0.65" font-size="19" font-weight="500">Game mode</text>
+      <text data-slot="game2-stadium" data-maxw="296" x="454" y="980" style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" opacity="0.65" font-size="19" font-weight="500">Stadium</text>
+    </g>
+
+    <g data-slot="game3" opacity="0">
+      <rect x="788" y="816" width="344" height="188" rx="10" fill="#ffffff" opacity="0.04"/>
+      <rect x="788" y="816" width="344" height="188" rx="10" fill="none" style="stroke:var(--border-color, rgba(255,255,255,0.12))" stroke-width="1"/>
+      <text data-slot="game3-date" x="1112" y="848" text-anchor="end" style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" opacity="0.65" font-size="17" font-weight="500">JUN 1</text>
+      <image data-slot="game3-side1-logo" x="812" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+      <text data-slot="game3-side1-score" data-maxw="72" x="912" y="896" text-anchor="middle" style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" font-size="46" font-weight="700" font-variant-numeric="tabular-nums">0</text>
+      <text x="960" y="892" text-anchor="middle" style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" opacity="0.65" font-size="28" font-weight="600">–</text>
+      <text data-slot="game3-side2-score" data-maxw="72" x="1008" y="896" text-anchor="middle" style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" font-size="46" font-weight="700" font-variant-numeric="tabular-nums">0</text>
+      <image data-slot="game3-side2-logo" x="1060" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+      <text data-slot="game3-mode" data-maxw="296" x="812" y="948" style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" opacity="0.65" font-size="19" font-weight="500">Game mode</text>
+      <text data-slot="game3-stadium" data-maxw="296" x="812" y="980" style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" opacity="0.65" font-size="19" font-weight="500">Stadium</text>
+    </g>
+
+    <g data-slot="game4" opacity="0">
+      <rect x="1146" y="816" width="344" height="188" rx="10" fill="#ffffff" opacity="0.04"/>
+      <rect x="1146" y="816" width="344" height="188" rx="10" fill="none" style="stroke:var(--border-color, rgba(255,255,255,0.12))" stroke-width="1"/>
+      <text data-slot="game4-date" x="1470" y="848" text-anchor="end" style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" opacity="0.65" font-size="17" font-weight="500">JUN 1</text>
+      <image data-slot="game4-side1-logo" x="1170" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+      <text data-slot="game4-side1-score" data-maxw="72" x="1270" y="896" text-anchor="middle" style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" font-size="46" font-weight="700" font-variant-numeric="tabular-nums">0</text>
+      <text x="1318" y="892" text-anchor="middle" style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" opacity="0.65" font-size="28" font-weight="600">–</text>
+      <text data-slot="game4-side2-score" data-maxw="72" x="1366" y="896" text-anchor="middle" style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" font-size="46" font-weight="700" font-variant-numeric="tabular-nums">0</text>
+      <image data-slot="game4-side2-logo" x="1418" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+      <text data-slot="game4-mode" data-maxw="296" x="1170" y="948" style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" opacity="0.65" font-size="19" font-weight="500">Game mode</text>
+      <text data-slot="game4-stadium" data-maxw="296" x="1170" y="980" style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" opacity="0.65" font-size="19" font-weight="500">Stadium</text>
+    </g>
+
+    <g data-slot="game5" opacity="0">
+      <rect x="1504" y="816" width="344" height="188" rx="10" fill="#ffffff" opacity="0.04"/>
+      <rect x="1504" y="816" width="344" height="188" rx="10" fill="none" style="stroke:var(--border-color, rgba(255,255,255,0.12))" stroke-width="1"/>
+      <text data-slot="game5-date" x="1828" y="848" text-anchor="end" style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" opacity="0.65" font-size="17" font-weight="500">JUN 1</text>
+      <image data-slot="game5-side1-logo" x="1528" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+      <text data-slot="game5-side1-score" data-maxw="72" x="1628" y="896" text-anchor="middle" style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" font-size="46" font-weight="700" font-variant-numeric="tabular-nums">0</text>
+      <text x="1676" y="892" text-anchor="middle" style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" opacity="0.65" font-size="28" font-weight="600">–</text>
+      <text data-slot="game5-side2-score" data-maxw="72" x="1724" y="896" text-anchor="middle" style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" font-size="46" font-weight="700" font-variant-numeric="tabular-nums">0</text>
+      <image data-slot="game5-side2-logo" x="1776" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+      <text data-slot="game5-mode" data-maxw="296" x="1528" y="948" style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" opacity="0.65" font-size="19" font-weight="500">Game mode</text>
+      <text data-slot="game5-stadium" data-maxw="296" x="1528" y="980" style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" opacity="0.65" font-size="19" font-weight="500">Stadium</text>
+    </g>
+  </g>
+</svg>
