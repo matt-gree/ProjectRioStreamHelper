@@ -15,6 +15,7 @@ import LogsViewer from './LogsViewer';
 import ParticipantPicker from './ParticipantPicker';
 import { useSettingsStore, useConfigStore } from '../context/store';
 import { useObsStore } from '../context/obs';
+import { comboFromEvent } from '../context/staging';
 import { useAssetsVersionStore } from '../lib/assets';
 import { SupportLinks } from './SupportLinks';
 
@@ -30,6 +31,28 @@ const OBS_LABEL = {
     error: 'Connection error',
     disconnected: 'Not connected',
 };
+
+// Click-to-record hotkey field: focus it, press a combo, done. Esc cancels.
+function HotkeyInput({ value, onChange }) {
+    const [recording, setRecording] = useState(false);
+    return (
+        <Input
+            readOnly
+            value={recording ? 'Press a key…' : (value || '')}
+            placeholder="Click to set"
+            onFocus={() => setRecording(true)}
+            onBlur={() => setRecording(false)}
+            onKeyDown={(e) => {
+                if (!recording) return;
+                e.preventDefault();
+                if (e.key === 'Escape') { setRecording(false); e.currentTarget.blur(); return; }
+                const combo = comboFromEvent(e);
+                if (combo) { onChange(combo); setRecording(false); e.currentTarget.blur(); }
+            }}
+            className="w-44 cursor-pointer text-center"
+        />
+    );
+}
 
 /**
  * Settings modal with HUD path configuration and Challonge API key.
@@ -134,6 +157,16 @@ export default function SettingsModal({ opened, onClose }) {
         obsConnect();
         notifications.show({ message: 'OBS connection settings saved.', color: 'green' });
     }, [setSetting, obsHost, obsPort, obsPassword, obsConnect]);
+
+    // Production — confirm-to-live staging (see src/context/staging.js).
+    const confirmEnabled = useSettingsStore(state => state?.production?.confirm?.enabled) === true;
+    const confirmHotkey = useSettingsStore(state => state?.production?.confirm?.hotkey) || 'F9';
+    const handleConfirmEnabled = useCallback((value) => {
+        setSetting('production.confirm.enabled', !!value);
+    }, [setSetting]);
+    const handleConfirmHotkey = useCallback((combo) => {
+        setSetting('production.confirm.hotkey', combo);
+    }, [setSetting]);
 
     const fetchHudPath = useCallback(async () => {
         try {
@@ -755,6 +788,26 @@ export default function SettingsModal({ opened, onClose }) {
                             </Text>
                         </span>
                     </Label>
+
+                    <Divider label="Production" />
+
+                    <Label className="flex items-start gap-2">
+                        <Switch checked={confirmEnabled} onCheckedChange={handleConfirmEnabled} className="mt-0.5" />
+                        <span className="flex flex-col">
+                            <Text size="sm">Confirm changes before going live</Text>
+                            <Text size="xs" dimmed>
+                                Element changes on the Production page (source visibility, feeds, content) are staged
+                                and only pushed to OBS and the overlays when you press the Go Live hotkey or button.
+                                Scene switches, Take, and fire-now actions (replay, spotlight) stay immediate.
+                            </Text>
+                        </span>
+                    </Label>
+                    {confirmEnabled && (
+                        <div className="flex items-center justify-between gap-4">
+                            <Text size="sm">Go Live hotkey</Text>
+                            <HotkeyInput value={confirmHotkey} onChange={handleConfirmHotkey} />
+                        </div>
+                    )}
 
                     <Divider label="Stream Labels" />
 

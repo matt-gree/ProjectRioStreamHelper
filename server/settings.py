@@ -168,6 +168,14 @@ class Settings:
                 "enabled": False,
                 "scene": "",
                 "holdMs": 1500
+            },
+            # Confirm-to-live: element changes made on the Production page are
+            # staged in the browser and only pushed to live state / OBS when
+            # the producer commits (the hotkey or the Go Live button). Momentary
+            # actions (scene switches, Take, replay/spotlight) stay immediate.
+            "confirm": {
+                "enabled": False,
+                "hotkey": "F9"
             }
         },
         "announcements": {

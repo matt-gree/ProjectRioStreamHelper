@@ -19,9 +19,11 @@
  * scene, which is also where firing happens.
  *
  * Layout: each element renders as a self-contained "window" in a 12-column grid
- * on the Production page. `span` is how many of the 12 columns it occupies — the
- * face holds the live actions, with bulky setup tucked behind a gear popover so
- * a small element (e.g. Hit Visualizer at span 2) stays compact.
+ * on the Production page. `span` is the element's PREFERRED width out of 12
+ * columns — the page packs elements into rows and stretches every full row to
+ * exactly 12 (see packRows in production.jsx), so spans are a starting point,
+ * not a guarantee. The face holds the live actions, with bulky setup tucked
+ * behind a gear popover so a small element (e.g. Hit Visualizer) stays compact.
  */
 
 export const PHASES = [
@@ -53,7 +55,7 @@ export const ELEMENTS = [
         name: 'Stats',
         phase: 'live',
         flavor: 'fed',
-        span: 4,
+        span: 3,
         // `feed` names the content picker the card renders: 'stats' = pick which
         // roster character's stats to show. The pick is written to the chosen
         // named container's feed key (production.feed.container.<id> = { element:
@@ -140,3 +142,33 @@ export const ELEMENTS = [
 // An element's `phase` is a single value or an array of phases it appears in.
 export const elementsForPhase = (phase) => ELEMENTS.filter((el) =>
     Array.isArray(el.phase) ? el.phase.includes(phase) : el.phase === phase);
+
+export const GRID_COLS = 12;
+
+// Pack elements into rows of preferred spans, then stretch every row except
+// the last to exactly GRID_COLS — the elements tile the full width, row by
+// row, with only the final row allowed to run short. Extra columns are dealt
+// round-robin so growth is spread across the row.
+export function packRows(elements, cols = GRID_COLS) {
+    const rows = [];
+    let row = [];
+    let used = 0;
+    for (const el of elements) {
+        const span = Math.min(el.span || 3, cols);
+        if (used + span > cols && row.length) {
+            rows.push(row);
+            row = [];
+            used = 0;
+        }
+        row.push({ element: el, span });
+        used += span;
+    }
+    if (row.length) rows.push(row);
+
+    rows.forEach((r, idx) => {
+        if (idx === rows.length - 1) return; // the last row may run short
+        let deficit = cols - r.reduce((sum, e) => sum + e.span, 0);
+        for (let i = 0; deficit > 0; i = (i + 1) % r.length, deficit--) r[i].span += 1;
+    });
+    return rows;
+}

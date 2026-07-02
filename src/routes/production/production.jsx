@@ -3,15 +3,16 @@ import { useShallow } from 'zustand/react/shallow';
 import {
     Radio, Eye, EyeOff, Globe, PlugZap, MonitorPlay, ArrowLeftRight, ChevronDown,
     RotateCcw, Sparkles, Columns2, Settings, Captions, GripVertical, Plus, X,
-    Trophy, Trash2,
+    Trophy, Trash2, CircleDot,
 } from 'lucide-react';
 import { useObsStore } from '../../context/obs';
 import { useSettingsStore, useStateStore } from '../../context/store';
 import {
-    updateSlot as updateCommentarySlot, addSlot as addCommentarySlot,
-    removeSlot as removeCommentarySlot, reorderSlots as reorderCommentarySlots,
-    SUBFIELD_OPTIONS, MAX_COMMENTATORS,
+    setCommentarySlots, SUBFIELD_OPTIONS, MAX_COMMENTATORS,
 } from '../../context/commentary';
+import {
+    useStagingStore, stageOrRun, usePending, commitPending, eventMatchesHotkey,
+} from '../../context/staging';
 import ParticipantPicker from '../../components/ParticipantPicker';
 import { Panel } from '../../components/ui/panel';
 import { Stack, Group, Text } from '../../components/ui/primitives';
@@ -24,7 +25,7 @@ import { Popover, PopoverTrigger, PopoverContent } from '../../components/ui/pop
 import { SimpleTooltip } from '../../components/ui/simple-tooltip';
 import { notifications } from '../../lib/notify';
 import { cn } from '../../lib/utils';
-import { PHASES, ELEMENTS, elementsForPhase } from './elements';
+import { PHASES, ELEMENTS, elementsForPhase, packRows } from './elements';
 
 /*
  * Production page — the producer's broadcast control board.
@@ -32,10 +33,23 @@ import { PHASES, ELEMENTS, elementsForPhase } from './elements';
  * Top bar  : phase selector + scene control (program / studio + Take) + OBS pill.
  * Left rail: OBS reality (read) — program + studio-preview scenes and their PRSH
  *            overlay sources.
- * Main area: the ELEMENTS for the selected phase (producer intent). Direct
+ * Main area: the ELEMENTS for the selected phase (producer intent), packed into
+ *            rows that tile the full 12-column width (see packRows). Direct
  *            elements show/hide their dedicated source; fed elements pick a
  *            target shared source, choose content for it (e.g. which player's
  *            stats), and show/hide it.
+ *
+ * Confirm-to-live: when settings.production.confirm.enabled is on, element
+ * mutations here (visibility, feeds, content) are STAGED via stageOrRun()
+ * (src/context/staging.js) and only executed when the producer commits — the
+ * configured hotkey or the Go Live button on the pending bar. Momentary
+ * "fire now" actions (scene switches, Take, replay, spotlight, clock
+ * start/pause, post-game capture) always run immediately.
+ *
+ * Elements bind to OBS sources by URL match in the PROGRAM scene first, then
+ * the STUDIO PREVIEW scene — so an element staged in preview is still visible
+ * and controllable here (sky status dot) before it is ever taken to air.
+ *
  * See memory: production-page-v1-locked, production-elements-glossary.
  */
 
@@ -106,6 +120,8 @@ function SceneSelect({ label, value, scenes, onChange }) {
 
 // Scene switching + Studio Mode, in the top bar. Studio off: the Program
 // dropdown cuts live. Studio on: stage in Preview, then Take to Program.
+// Always immediate — scene transport is the producer's manual "fire" surface,
+// never staged.
 function TopBarSceneControls() {
     const { status, scenes, programScene, previewScene, studioMode } = useObsStore(useShallow(s => ({
         status: s.status,
@@ -151,6 +167,126 @@ function TopBarSceneControls() {
     );
 }
 
+// ── Staged mutation helpers ────────────────────────────────────────────────
+
+// Toggle an OBS source's visibility through the confirm-to-live buffer. The
+// pending key is the (scene, item) pair, so flipping the same switch twice
+// cancels out (liveValue match drops the entry).
+function setSourceVisibility(sceneName, item, enabled) {
+    stageOrRun({
+        key: `obs:${sceneName}:${item.id}`,
+        label: `${enabled ? 'Show' : 'Hide'} ${item.sourceName}`,
+        value: enabled,
+        liveValue: item.enabled,
+        run: () => useObsStore.getState().setSceneItemEnabled(sceneName, item.id, enabled),
+    });
+}
+
+// What a visibility control should DISPLAY for a source: the staged value if
+// one is pending, else OBS truth — plus the staged flag for amber styling.
+function useDisplayedEnabled(sceneName, item) {
+    const pending = usePending(item ? `obs:${sceneName}:${item.id}` : '∅');
+    if (!item) return { enabled: false, staged: false };
+    return { enabled: pending ? pending.value : item.enabled, staged: !!pending };
+}
+
+// Stage (or run) a single live-state write.
+function stageStateSet(stateKey, value, label) {
+    stageOrRun({
+        key: `state:${stateKey}`,
+        label: label || stateKey,
+        value,
+        run: () => useStateStore.getState().setItems([{ key: stateKey, value }]),
+    });
+}
+
+// Amber "staged, not live yet" marker rendered next to pending controls.
+function StagedDot({ show }) {
+    if (!show) return null;
+    return (
+        <SimpleTooltip label="Staged — goes live on confirm">
+            <span className="inline-block size-1.5 shrink-0 rounded-full bg-amber-400" />
+        </SimpleTooltip>
+    );
+}
+
+// Show/hide an OBS source (staging-aware).
+function VisibilityRow({ label, sub, item, sceneName }) {
+    const { enabled, staged } = useDisplayedEnabled(sceneName, item);
+    return (
+        <label className="flex items-center justify-between gap-3">
+            <Stack gap="none">
+                <Group gap="xs" className="items-center">
+                    <Text size="sm" className="text-foreground">{label}</Text>
+                    <StagedDot show={staged} />
+                </Group>
+                {sub && <Text size="xs" className="text-muted-foreground">{sub}</Text>}
+            </Stack>
+            <Switch
+                checked={enabled}
+                onCheckedChange={(v) => setSourceVisibility(sceneName, item, v)}
+            />
+        </label>
+    );
+}
+
+// ── OBS binding (program + studio preview) ─────────────────────────────────
+
+// The scenes an element may bind into, in priority order: program first, then
+// the studio-preview scene (when Studio Mode is on). Items are pre-filtered to
+// PRSH overlays.
+function useBindingScenes() {
+    const { studioMode, programScene, previewScene, sceneItems } = useObsStore(useShallow(s => ({
+        studioMode: s.studioMode,
+        programScene: s.programScene,
+        previewScene: s.previewScene,
+        sceneItems: s.sceneItems,
+    })));
+    return useMemo(() => {
+        const out = [];
+        if (programScene) {
+            out.push({
+                scene: programScene, where: 'program',
+                items: (sceneItems[programScene] || []).filter(i => i.isPrsh),
+            });
+        }
+        if (studioMode && previewScene && previewScene !== programScene) {
+            out.push({
+                scene: previewScene, where: 'preview',
+                items: (sceneItems[previewScene] || []).filter(i => i.isPrsh),
+            });
+        }
+        return out;
+    }, [studioMode, programScene, previewScene, sceneItems]);
+}
+
+// The OBS source an element drives within one scene's items, or null.
+// Direct: the URL match. Fed: the override target, else the default URL match.
+function boundIn(element, items, overrideName) {
+    if (element.flavor === 'direct') return items.find(it => element.match(it.url || '')) || null;
+    const defaultName = items.find(it => element.match(it.url || ''))?.sourceName;
+    const targetName = overrideName || defaultName || '';
+    return items.find(it => it.sourceName === targetName) || null;
+}
+
+// Where an element's source lives across program + preview. `primary` is the
+// binding its controls act on (program wins); program/preview expose per-scene
+// presence for the status dot.
+function useElementBindings(element) {
+    const overrideName = useSettingsStore(s => s?.production?.overrides?.[element.id]);
+    const scenes = useBindingScenes();
+    return useMemo(() => {
+        let program = null, preview = null;
+        for (const sc of scenes) {
+            const item = boundIn(element, sc.items, overrideName);
+            if (!item) continue;
+            const b = { item, scene: sc.scene, where: sc.where };
+            if (sc.where === 'program') program = b; else preview = b;
+        }
+        return { program, preview, primary: program || preview };
+    }, [scenes, element, overrideName]);
+}
+
 const FLAVOR_BADGE = {
     direct: 'bg-rio-500/15 text-rio-300',
     fed:    'bg-sky-500/15 text-sky-300',
@@ -168,24 +304,27 @@ function elementForSource(item, overrides) {
     return null;
 }
 
-// Rail row — the eye toggles visibility directly; clicking the name opens the
-// owning element's option layer (content picker, etc.). The rail is still OBS
-// truth, but now it's a control surface too.
+// Rail row — the eye toggles visibility (staged under confirm mode); clicking
+// the name opens the owning element's option layer (content picker, etc.). The
+// rail is still OBS truth, but now it's a control surface too.
 const SourceRow = memo(function SourceRow({ item, sceneName }) {
-    const setSceneItemEnabled = useObsStore(s => s.setSceneItemEnabled);
     const overrides = useSettingsStore(s => s?.production?.overrides);
     const element = useMemo(() => elementForSource(item, overrides), [item, overrides]);
-    const EyeIcon = item.enabled ? Eye : EyeOff;
+    const { enabled, staged } = useDisplayedEnabled(sceneName, item);
+    const EyeIcon = enabled ? Eye : EyeOff;
 
     const nameText = <Text size="sm" className="min-w-0 flex-1 truncate text-left text-foreground">{item.sourceName}</Text>;
 
     return (
-        <div className={cn('flex items-center gap-2 px-2 py-1.5', !item.enabled && 'opacity-50')}>
-            <SimpleTooltip label={item.enabled ? 'Hide source' : 'Show source'}>
+        <div className={cn('flex items-center gap-2 px-2 py-1.5', !enabled && 'opacity-50')}>
+            <SimpleTooltip label={staged ? 'Staged — goes live on confirm' : enabled ? 'Hide source' : 'Show source'}>
                 <button
                     type="button"
-                    onClick={() => runObs(() => setSceneItemEnabled(sceneName, item.id, !item.enabled))}
-                    className={cn('shrink-0', item.enabled ? 'text-foreground' : 'text-muted-foreground hover:text-foreground')}
+                    onClick={() => setSourceVisibility(sceneName, item, !enabled)}
+                    className={cn(
+                        'shrink-0',
+                        staged ? 'text-amber-400' : enabled ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
+                    )}
                 >
                     <EyeIcon size={14} />
                 </button>
@@ -296,192 +435,7 @@ function LeftRail() {
     );
 }
 
-// Content picker for the 'stats' fed element: choose WHICH roster character's
-// stats to put on the chosen shared container. Picking IS feeding — the pick is
-// written to `production.feed.container.<id>` = { element:'stats', … }, which the
-// container overlay renders. Scoreboard 1 for now; multi-scoreboard is later.
-function StatsFeedPicker({ element, scoreboard = 1 }) {
-    const { container } = useContainerTarget(element.id, defaultContainerFor(element));
-    const feedKey = `production.feed.container.${container}`;
-    const players = useStateStore(s => s?.score?.[scoreboard]?.player);
-    const selection = useStateStore(s => s?.production?.feed?.container?.[container]);
-
-    // Build per-team option groups from the live roster (9 slots each).
-    const teams = useMemo(() => {
-        const out = [];
-        for (const team of [1, 2]) {
-            const p = players?.[team];
-            const chars = [];
-            for (let i = 0; i < 9; i++) {
-                const name = p?.character?.[i]?.name;
-                if (name) chars.push({ charIndex: i, name });
-            }
-            if (chars.length) {
-                out.push({ team, label: p?.msb_team || p?.rioName || `Team ${team}`, chars });
-            }
-        }
-        return out;
-    }, [players]);
-
-    const mine = selection && selection.element === 'stats'
-        && (selection.scoreboard == null || selection.scoreboard === scoreboard);
-    const role = (mine && selection.role) || 'batting';
-    const selValue = mine ? `${selection.team}:${selection.charIndex}` : '';
-
-    // Write via the *batch* store actions: only set_batch / unset_batch have
-    // server-side socket handlers (there's no v1.state.set handler), so a
-    // single setItem/deleteItem would never reach the server or the overlay.
-    const feed = (team, charIndex, r) =>
-        useStateStore.getState().setItems([
-            { key: feedKey, value: { element: 'stats', scoreboard, team, charIndex, role: r } },
-        ]);
-    const choose = (value) => {
-        if (!value) { useStateStore.getState().deleteItems([feedKey]); return; }
-        const [team, charIndex] = value.split(':').map(Number);
-        feed(team, charIndex, role);
-    };
-    const setRole = (r) => {
-        if (!selValue) return;
-        const [team, charIndex] = selValue.split(':').map(Number);
-        feed(team, charIndex, r);
-    };
-
-    if (teams.length === 0) {
-        return (
-            <Text size="sm" className="text-muted-foreground">
-                No roster in live state yet — start or load a game on scoreboard {scoreboard}.
-            </Text>
-        );
-    }
-
-    return (
-        <Stack gap="xs">
-            <label className="flex flex-col gap-1">
-                <Text size="xs" className="text-muted-foreground">Content — whose stats to show</Text>
-                <select
-                    value={selValue}
-                    onChange={(e) => choose(e.target.value)}
-                    className="rounded-md border border-border bg-card px-2 py-1 text-sm text-foreground"
-                >
-                    <option value="">Nothing fed</option>
-                    {teams.map(t => (
-                        <optgroup key={t.team} label={t.label}>
-                            {t.chars.map(c => (
-                                <option key={c.charIndex} value={`${t.team}:${c.charIndex}`}>{c.name}</option>
-                            ))}
-                        </optgroup>
-                    ))}
-                </select>
-            </label>
-            {selValue && (
-                <SegmentedControl
-                    data={[{ label: 'Batting', value: 'batting' }, { label: 'Pitching', value: 'pitching' }]}
-                    value={role}
-                    onChange={setRole}
-                />
-            )}
-        </Stack>
-    );
-}
-
-// Content picker for the 'postgamecallout' fed element: choose WHICH finished-game
-// roster character gets the full-screen stat callout. Reads the Phase-6 capture at
-// postgame.{N}.player.{T}.characters[]; picking writes
-// production.feed.container.<id> = { element:'postgamecallout', scoreboard, team,
-// charIndex }, which the callout-stage container renders. Scoreboard 1 for now.
-function PostgameCalloutPicker({ element, scoreboard = 1 }) {
-    const { container } = useContainerTarget(element.id, defaultContainerFor(element));
-    const feedKey = `production.feed.container.${container}`;
-    const present = useStateStore(s => s?.postgame?.[scoreboard]?.present);
-    const players = useStateStore(useShallow(s => ({
-        1: s?.postgame?.[scoreboard]?.player?.[1],
-        2: s?.postgame?.[scoreboard]?.player?.[2],
-    })));
-    const selection = useStateStore(s => s?.production?.feed?.container?.[container]);
-
-    // Per-side option groups from the captured box score (9 roster slots each).
-    const teams = useMemo(() => {
-        const out = [];
-        for (const team of [1, 2]) {
-            const p = players?.[team];
-            const chars = Array.isArray(p?.characters) ? p.characters : [];
-            const opts = chars
-                .map((c, i) => ({ charIndex: i, name: c?.name, isPitcher: c?.wasPitcher }))
-                .filter(c => c.name);
-            if (opts.length) out.push({ team, label: p?.rioName || `Side ${team}`, chars: opts });
-        }
-        return out;
-    }, [players]);
-
-    const mine = selection && selection.element === 'postgamecallout'
-        && (selection.scoreboard == null || selection.scoreboard === scoreboard);
-    const selValue = mine ? `${selection.team}:${selection.charIndex}` : '';
-
-    const choose = (value) => {
-        if (!value) { useStateStore.getState().deleteItems([feedKey]); return; }
-        const [team, charIndex] = value.split(':').map(Number);
-        useStateStore.getState().setItems([
-            { key: feedKey, value: { element: 'postgamecallout', scoreboard, team, charIndex } },
-        ]);
-    };
-
-    if (!present || teams.length === 0) {
-        return (
-            <Text size="sm" className="text-muted-foreground">
-                No captured game on scoreboard {scoreboard} yet — capture a finished game first
-                (the callout reads its box score).
-            </Text>
-        );
-    }
-
-    return (
-        <Stack gap="xs">
-            <label className="flex flex-col gap-1">
-                <Text size="xs" className="text-muted-foreground">Content — whose callout to show</Text>
-                <select
-                    value={selValue}
-                    onChange={(e) => choose(e.target.value)}
-                    className="rounded-md border border-border bg-card px-2 py-1 text-sm text-foreground"
-                >
-                    <option value="">Nothing fed</option>
-                    {teams.map(t => (
-                        <optgroup key={t.team} label={t.label}>
-                            {t.chars.map(c => (
-                                <option key={c.charIndex} value={`${t.team}:${c.charIndex}`}>
-                                    {c.name}{c.isPitcher ? ' (P)' : ''}
-                                </option>
-                            ))}
-                        </optgroup>
-                    ))}
-                </select>
-            </label>
-            {selValue && (
-                <Text size="xs" className="text-muted-foreground">
-                    Show the callout-stage source on air; re-pick to swap the featured character.
-                </Text>
-            )}
-        </Stack>
-    );
-}
-
-// PRSH overlay sources in the current program scene.
-function usePrshItems() {
-    const programScene = useObsStore(s => s.programScene);
-    const sceneItems = useObsStore(s => s.sceneItems);
-    return useMemo(
-        () => (programScene ? (sceneItems[programScene] || []).filter(i => i.isPrsh) : []),
-        [programScene, sceneItems],
-    );
-}
-
-// The OBS source an element currently drives, or null. Direct: the URL match.
-// Fed: the override target, else the default URL match.
-function boundSource(element, items, overrideName) {
-    if (element.flavor === 'direct') return items.find(it => element.match(it.url || '')) || null;
-    const defaultName = items.find(it => element.match(it.url || ''))?.sourceName;
-    const targetName = overrideName || defaultName || '';
-    return items.find(it => it.sourceName === targetName) || null;
-}
+// ── Fed elements: containers + feeds ───────────────────────────────────────
 
 // A named shared container's stable id = its layout filename stem (e.g.
 // '/layout/shared/split-screen.html' → 'split-screen'). The producer feeds an
@@ -514,19 +468,43 @@ function useSharedContainers() {
     return list;
 }
 
+// One container's feed, staged. `value` is what controls display (the pending
+// pick if any, else the live feed — and a pending pick may legitimately be
+// null, i.e. a staged clear). setFeed(null) clears.
+function useFeedControl(container) {
+    const key = `feed:${container}`;
+    const feedKey = `production.feed.container.${container}`;
+    const live = useStateStore(s => s?.production?.feed?.container?.[container]);
+    const pending = usePending(key);
+    const setFeed = (feedObj, label) => stageOrRun({
+        key,
+        label: label || (feedObj ? `Feed ${container}` : `Clear ${container} feed`),
+        value: feedObj,
+        run: () => (feedObj
+            ? useStateStore.getState().setItems([{ key: feedKey, value: feedObj }])
+            : useStateStore.getState().deleteItems([feedKey])),
+    });
+    return { value: pending ? pending.value : live, staged: !!pending, setFeed };
+}
+
 // Which named container an element feeds, persisted per element at
-// settings.production.containers.<elementId>.
+// settings.production.containers.<elementId>. The target itself is gear config
+// (immediate), but releasing the old container's feed is broadcast-visible, so
+// that goes through the staging gateway.
 function useContainerTarget(elementId, defaultId) {
     const container = useSettingsStore(s => s?.production?.containers?.[elementId]) || defaultId;
     const setSetting = useSettingsStore(s => s.setItem);
-    // Switching the target RELEASES this element from its old container first
-    // (only if it actually owns that container's feed), so it leaves that OBS
-    // source immediately; then re-points the setting.
     const setContainer = (id) => {
         if (id === container) return;
+        const oldKey = `production.feed.container.${container}`;
         const oldFeed = useStateStore.getState()?.production?.feed?.container?.[container];
         if (oldFeed && oldFeed.element === elementId) {
-            useStateStore.getState().deleteItems([`production.feed.container.${container}`]);
+            stageOrRun({
+                key: `feed:${container}`,
+                label: `Clear ${container} feed`,
+                value: null,
+                run: () => useStateStore.getState().deleteItems([oldKey]),
+            });
         }
         const cur = useSettingsStore.getState()?.production?.containers || {};
         setSetting('production.containers', { ...cur, [elementId]: id });
@@ -534,22 +512,190 @@ function useContainerTarget(elementId, defaultId) {
     return { container, setContainer };
 }
 
-// Show/hide an OBS source.
-function VisibilityRow({ label, sub, item, sceneName }) {
-    const setSceneItemEnabled = useObsStore(s => s.setSceneItemEnabled);
+// The OBS source rendering a named container, if it's in program or preview.
+// Matched by the container id appearing in the source URL's filename.
+function useContainerBinding(container) {
+    const scenes = useBindingScenes();
+    return useMemo(() => {
+        const re = new RegExp(`/${container}\\.html`, 'i');
+        for (const sc of scenes) {
+            const item = sc.items.find(it => re.test(it.url || ''));
+            if (item) return { item, scene: sc.scene, where: sc.where };
+        }
+        return null;
+    }, [scenes, container]);
+}
+
+// Content picker for the 'stats' fed element: choose WHICH roster character's
+// stats to put on the chosen shared container. Picking IS feeding — the pick is
+// written (through the staging gateway) to `production.feed.container.<id>` =
+// { element:'stats', … }, which the container overlay renders. Scoreboard 1 for
+// now; multi-scoreboard is later.
+function StatsFeedPicker({ element, scoreboard = 1 }) {
+    const { container } = useContainerTarget(element.id, defaultContainerFor(element));
+    const { value: selection, staged, setFeed } = useFeedControl(container);
+    const players = useStateStore(s => s?.score?.[scoreboard]?.player);
+
+    // Build per-team option groups from the live roster (9 slots each).
+    const teams = useMemo(() => {
+        const out = [];
+        for (const team of [1, 2]) {
+            const p = players?.[team];
+            const chars = [];
+            for (let i = 0; i < 9; i++) {
+                const name = p?.character?.[i]?.name;
+                if (name) chars.push({ charIndex: i, name });
+            }
+            if (chars.length) {
+                out.push({ team, label: p?.msb_team || p?.rioName || `Team ${team}`, chars });
+            }
+        }
+        return out;
+    }, [players]);
+
+    const mine = selection && selection.element === 'stats'
+        && (selection.scoreboard == null || selection.scoreboard === scoreboard);
+    const role = (mine && selection.role) || 'batting';
+    const selValue = mine ? `${selection.team}:${selection.charIndex}` : '';
+
+    const nameOf = (team, charIndex) =>
+        teams.find(t => t.team === team)?.chars.find(c => c.charIndex === charIndex)?.name || 'stats';
+    const feed = (team, charIndex, r) =>
+        setFeed({ element: 'stats', scoreboard, team, charIndex, role: r }, `Feed stats: ${nameOf(team, charIndex)}`);
+    const choose = (value) => {
+        if (!value) { setFeed(null); return; }
+        const [team, charIndex] = value.split(':').map(Number);
+        feed(team, charIndex, role);
+    };
+    const setRole = (r) => {
+        if (!selValue) return;
+        const [team, charIndex] = selValue.split(':').map(Number);
+        feed(team, charIndex, r);
+    };
+
+    if (teams.length === 0) {
+        return (
+            <Text size="sm" className="text-muted-foreground">
+                No roster in live state yet — start or load a game on scoreboard {scoreboard}.
+            </Text>
+        );
+    }
+
     return (
-        <label className="flex items-center justify-between gap-3">
-            <Stack gap="none">
-                <Text size="sm" className="text-foreground">{label}</Text>
-                {sub && <Text size="xs" className="text-muted-foreground">{sub}</Text>}
-            </Stack>
-            <Switch
-                checked={item.enabled}
-                onCheckedChange={(v) => runObs(() => setSceneItemEnabled(sceneName, item.id, v))}
-            />
-        </label>
+        <Stack gap="xs">
+            <label className="flex flex-col gap-1">
+                <Group gap="xs" className="items-center">
+                    <Text size="xs" className="text-muted-foreground">Content — whose stats to show</Text>
+                    <StagedDot show={staged} />
+                </Group>
+                <select
+                    value={selValue}
+                    onChange={(e) => choose(e.target.value)}
+                    className="rounded-md border border-border bg-card px-2 py-1 text-sm text-foreground"
+                >
+                    <option value="">Nothing fed</option>
+                    {teams.map(t => (
+                        <optgroup key={t.team} label={t.label}>
+                            {t.chars.map(c => (
+                                <option key={c.charIndex} value={`${t.team}:${c.charIndex}`}>{c.name}</option>
+                            ))}
+                        </optgroup>
+                    ))}
+                </select>
+            </label>
+            {selValue && (
+                <SegmentedControl
+                    data={[{ label: 'Batting', value: 'batting' }, { label: 'Pitching', value: 'pitching' }]}
+                    value={role}
+                    onChange={setRole}
+                />
+            )}
+        </Stack>
     );
 }
+
+// Content picker for the 'postgamecallout' fed element: choose WHICH finished-game
+// roster character gets the full-screen stat callout. Reads the Phase-6 capture at
+// postgame.{N}.player.{T}.characters[]; picking writes (through the staging
+// gateway) production.feed.container.<id> = { element:'postgamecallout',
+// scoreboard, team, charIndex }, which the callout-stage container renders.
+function PostgameCalloutPicker({ element, scoreboard = 1 }) {
+    const { container } = useContainerTarget(element.id, defaultContainerFor(element));
+    const { value: selection, staged, setFeed } = useFeedControl(container);
+    const present = useStateStore(s => s?.postgame?.[scoreboard]?.present);
+    const players = useStateStore(useShallow(s => ({
+        1: s?.postgame?.[scoreboard]?.player?.[1],
+        2: s?.postgame?.[scoreboard]?.player?.[2],
+    })));
+
+    // Per-side option groups from the captured box score (9 roster slots each).
+    const teams = useMemo(() => {
+        const out = [];
+        for (const team of [1, 2]) {
+            const p = players?.[team];
+            const chars = Array.isArray(p?.characters) ? p.characters : [];
+            const opts = chars
+                .map((c, i) => ({ charIndex: i, name: c?.name, isPitcher: c?.wasPitcher }))
+                .filter(c => c.name);
+            if (opts.length) out.push({ team, label: p?.rioName || `Side ${team}`, chars: opts });
+        }
+        return out;
+    }, [players]);
+
+    const mine = selection && selection.element === 'postgamecallout'
+        && (selection.scoreboard == null || selection.scoreboard === scoreboard);
+    const selValue = mine ? `${selection.team}:${selection.charIndex}` : '';
+
+    const choose = (value) => {
+        if (!value) { setFeed(null); return; }
+        const [team, charIndex] = value.split(':').map(Number);
+        const name = teams.find(t => t.team === team)?.chars.find(c => c.charIndex === charIndex)?.name || 'callout';
+        setFeed({ element: 'postgamecallout', scoreboard, team, charIndex }, `Feed callout: ${name}`);
+    };
+
+    if (!present || teams.length === 0) {
+        return (
+            <Text size="sm" className="text-muted-foreground">
+                No captured game on scoreboard {scoreboard} yet — capture a finished game first
+                (the callout reads its box score).
+            </Text>
+        );
+    }
+
+    return (
+        <Stack gap="xs">
+            <label className="flex flex-col gap-1">
+                <Group gap="xs" className="items-center">
+                    <Text size="xs" className="text-muted-foreground">Content — whose callout to show</Text>
+                    <StagedDot show={staged} />
+                </Group>
+                <select
+                    value={selValue}
+                    onChange={(e) => choose(e.target.value)}
+                    className="rounded-md border border-border bg-card px-2 py-1 text-sm text-foreground"
+                >
+                    <option value="">Nothing fed</option>
+                    {teams.map(t => (
+                        <optgroup key={t.team} label={t.label}>
+                            {t.chars.map(c => (
+                                <option key={c.charIndex} value={`${t.team}:${c.charIndex}`}>
+                                    {c.name}{c.isPitcher ? ' (P)' : ''}
+                                </option>
+                            ))}
+                        </optgroup>
+                    ))}
+                </select>
+            </label>
+            {selValue && (
+                <Text size="xs" className="text-muted-foreground">
+                    Show the callout-stage source on air; re-pick to swap the featured character.
+                </Text>
+            )}
+        </Stack>
+    );
+}
+
+// ── Hit Visualizer ─────────────────────────────────────────────────────────
 
 // Lead time before the swing starts after we cut to the spotlight scene — lets
 // OBS's active transition settle so the contact isn't hidden behind a fade.
@@ -560,11 +706,12 @@ let _spotlightTimer = null;
 
 // Hit-visualizer behavior shared by its condensed face and its gear setup.
 // Three things the producer can do with a captured hit:
-//   - Replay it in place (bump score.{N}.hit.replay_nonce — no scene change).
-//   - Feed it into a generic shared container slot (production.feed.slot.<id>) so
-//     any shared/fed.html source assigned that slot renders it.
+//   - Replay it in place (bump score.{N}.hit.replay_nonce — momentary, never
+//     staged).
+//   - Feed it into a named shared container (production.feed.container.<id>) —
+//     staged under confirm mode like every other feed.
 //   - Spotlight it: cut to a chosen OBS scene, play the animation, cut back to
-//     the previous program scene (settings.production.spotlight).
+//     the previous program scene (settings.production.spotlight) — momentary.
 // Scoreboard 1 for now (matches the default overlay binding); multi-scoreboard
 // is a later concern.
 function useHitViz(scoreboard = 1) {
@@ -577,12 +724,8 @@ function useHitViz(scoreboard = 1) {
     const setSetting = useSettingsStore(s => s.setItem);
     const obsConnected = status === 'connected';
 
-    // Which named shared container this element feeds
-    // (production.feed.container.<id>). Persisted per element; defaults to the
-    // Split-Screen container.
-    const container = useSettingsStore(s => s?.production?.containers?.hitvisualizer) || 'split-screen';
-    const containerKey = `production.feed.container.${container}`;
-    const containerFeed = useStateStore(s => s?.production?.feed?.container?.[container]);
+    const { container, setContainer } = useContainerTarget('hitvisualizer', 'split-screen');
+    const { value: containerFeed, staged: feedStaged, setFeed } = useFeedControl(container);
     const fedHere = !!containerFeed && containerFeed.element === 'hitvisualizer'
         && (Number(containerFeed.scoreboard) || 1) === scoreboard;
 
@@ -601,20 +744,8 @@ function useHitViz(scoreboard = 1) {
 
     // Feed: assign this hit to the chosen named container. The matching shared
     // overlay renders it, and plays it when made active in OBS.
-    const feedContainer = () => useStateStore.getState().setItems([
-        { key: containerKey, value: { element: 'hitvisualizer', scoreboard } },
-    ]);
-    const clearContainer = () => useStateStore.getState().deleteItems([containerKey]);
-    // Switching the target container RELEASES the element from its old container
-    // first (so it leaves that OBS source immediately and the toggle resets to
-    // off), then re-points the setting. The producer re-arms by clicking Feed on
-    // the newly selected container.
-    const setContainer = (id) => {
-        if (id === container) return;
-        if (fedHere) useStateStore.getState().deleteItems([containerKey]);
-        const cur = useSettingsStore.getState()?.production?.containers || {};
-        setSetting('production.containers', { ...cur, hitvisualizer: id });
-    };
+    const feedContainer = () => setFeed({ element: 'hitvisualizer', scoreboard }, 'Feed hit to container');
+    const clearContainer = () => setFeed(null, 'Clear hit feed');
 
     const setSpot = (patch) => {
         const cur = useSettingsStore.getState()?.production?.spotlight || {};
@@ -645,7 +776,7 @@ function useHitViz(scoreboard = 1) {
     };
 
     return {
-        hit, hasHit, fedHere, scenes, spotlight, obsConnected, firing,
+        hit, hasHit, fedHere, feedStaged, scenes, spotlight, obsConnected, firing,
         replay, feedContainer, clearContainer, setSpot, canSpotlight, fireSpotlight,
         container, setContainer,
     };
@@ -677,14 +808,16 @@ function HitVizFace({ scoreboard = 1 }) {
                     </Button>
                 </SimpleTooltip>
                 <SimpleTooltip
-                    label={v.fedHere ? 'Fed to a shared container — click to clear' : 'Feed to a shared container'}
+                    label={v.feedStaged
+                        ? 'Staged — goes live on confirm'
+                        : v.fedHere ? 'Fed to a shared container — click to clear' : 'Feed to a shared container'}
                 >
                     <Button
                         size="xs"
                         variant={v.fedHere ? 'default' : 'secondary'}
                         disabled={!v.hasHit && !v.fedHere}
                         onClick={v.fedHere ? v.clearContainer : v.feedContainer}
-                        className="shrink-0"
+                        className={cn('shrink-0', v.feedStaged && 'ring-1 ring-amber-400')}
                     >
                         <Columns2 size={13} />
                     </Button>
@@ -699,11 +832,8 @@ function HitVizFace({ scoreboard = 1 }) {
 function HitVizSetup({ scoreboard = 1 }) {
     const v = useHitViz(scoreboard);
     const containers = useSharedContainers();
-    const items = usePrshItems();
-    const programScene = useObsStore(s => s.programScene);
-    const overrideName = useSettingsStore(s => s?.production?.overrides?.hitvisualizer);
     const element = ELEMENTS.find(e => e.id === 'hitvisualizer');
-    const bound = element ? boundSource(element, items, overrideName) : null;
+    const { primary } = useElementBindings(element);
 
     const fieldCls = 'h-7 rounded-md border border-border bg-card px-2 text-xs text-foreground';
     const labelCls = 'w-20 shrink-0 text-muted-foreground';
@@ -711,17 +841,13 @@ function HitVizSetup({ scoreboard = 1 }) {
     return (
         <Stack gap="sm">
             {/* On-air visibility of the dedicated overlay. */}
-            {bound ? (
-                <label className="flex items-center justify-between gap-2">
-                    <Text size="xs" className="text-muted-foreground">On air</Text>
-                    <Switch
-                        size="sm"
-                        checked={bound.enabled}
-                        onCheckedChange={(c) => runObs(() => useObsStore.getState().setSceneItemEnabled(programScene, bound.id, c))}
-                    />
-                </label>
+            {primary ? (
+                <VisibilityRow
+                    label={primary.where === 'preview' ? 'In preview' : 'On air'}
+                    item={primary.item} sceneName={primary.scene}
+                />
             ) : (
-                <Text size="xs" className="text-muted-foreground">Overlay not in program scene.</Text>
+                <Text size="xs" className="text-muted-foreground">Overlay not in program or preview scene.</Text>
             )}
 
             {/* Spotlight auto-cut. */}
@@ -777,33 +903,89 @@ function HitVizSetup({ scoreboard = 1 }) {
     );
 }
 
-// Condensed Commentary face — the same authoring footprint as the Commentary
-// tab, compacted: per caster the producer can pick the person, toggle on-air,
-// choose the sub-plate field + show/hide it, remove the slot, and drag to
-// reorder; plus add a commentator (capped at MAX_COMMENTATORS). Writes through
-// the commentary REST actions (the resolve-by-copy projector re-runs server-side).
-// Native HTML5 drag, armed only by the grip handle so the selects/picker stay
-// interactive.
-function CommentaryFace() {
+// ── Commentary ─────────────────────────────────────────────────────────────
+
+const blankCasterSlot = () => ({ participantId: null, subField: '', visible: true, subVisible: true });
+
+// The commentary desk as the Production page works with it: the staged draft
+// slots array when one is pending, else the live authored slots. Every edit
+// computes the whole next array and stages ONE entry (key 'commentary') whose
+// commit is the whole-array PUT — matching the server API, and keeping
+// add/remove/reorder/edit trivially stageable. `_name` is a client-only display
+// tag for staged picks (the projector hasn't resolved them yet) and is stripped
+// before the PUT.
+function useCommentaryDesk() {
     const commentary = useStateStore(s => s.commentary);
-    const slots = Array.isArray(commentary?.slots) ? commentary.slots : [];
+    const liveSlots = useMemo(
+        () => (Array.isArray(commentary?.slots) ? commentary.slots : []),
+        [commentary],
+    );
+    const pending = usePending('commentary');
+    const slots = pending ? pending.value : liveSlots;
+
+    // participantId → resolved display name, from the server-side projection of
+    // the LIVE slots (staged drafts may be reordered, so index lookups lie).
+    const nameById = useMemo(() => {
+        const out = {};
+        liveSlots.forEach((s, i) => {
+            const n = commentary?.[i]?.name ?? commentary?.[String(i)]?.name;
+            if (s?.participantId && n) out[s.participantId] = n;
+        });
+        return out;
+    }, [commentary, liveSlots]);
+    const nameFor = (slot) => slot?._name || (slot?.participantId && nameById[slot.participantId]) || '';
+
+    const setSlots = (next) => stageOrRun({
+        key: 'commentary',
+        label: 'Commentary desk',
+        value: next,
+        run: () => setCommentarySlots(next.map(({ _name, ...s }) => s)),
+    });
+
+    return {
+        slots, staged: !!pending, nameFor,
+        update: (i, patch) => setSlots(slots.map((s, j) => (j === i ? { ...s, ...patch } : s))),
+        add: () => { if (slots.length < MAX_COMMENTATORS) setSlots([...slots, blankCasterSlot()]); },
+        remove: (i) => setSlots(slots.filter((_, j) => j !== i)),
+        reorder: (from, to) => {
+            if (from === to || from < 0 || to < 0 || from >= slots.length || to >= slots.length) return;
+            const next = slots.slice();
+            const [moved] = next.splice(from, 1);
+            next.splice(to, 0, moved);
+            setSlots(next);
+        },
+    };
+}
+
+// Condensed Commentary face — ONE row per caster: grip (drag to reorder) ·
+// on-air eye · person picker · sub-plate field · sub-plate toggle · remove.
+// The in-depth roster authoring (contact fields, socials) lives on the
+// Commentary tab; this face covers the live decisions. Native HTML5 drag,
+// armed only by the grip handle so the selects/picker stay interactive.
+function CommentaryFace() {
+    const desk = useCommentaryDesk();
     const [dragIndex, setDragIndex] = useState(null);
     const [overIndex, setOverIndex] = useState(null);
     const [dragArmed, setDragArmed] = useState(false);
 
     const onDrop = (to) => {
-        if (dragIndex != null && dragIndex !== to) reorderCommentarySlots(dragIndex, to);
+        if (dragIndex != null && dragIndex !== to) desk.reorder(dragIndex, to);
         setDragIndex(null); setOverIndex(null); setDragArmed(false);
     };
 
     return (
         <Stack gap="xs">
-            {slots.length === 0 && (
+            {desk.staged && (
+                <Group gap="xs" className="items-center">
+                    <StagedDot show />
+                    <Text size="xs" className="text-amber-400">Desk changes staged</Text>
+                </Group>
+            )}
+            {desk.slots.length === 0 && (
                 <Text size="xs" className="text-muted-foreground">No commentators yet — add one below.</Text>
             )}
 
-            {slots.map((slot, i) => {
-                const name = commentary?.[i]?.name || commentary?.[String(i)]?.name || '';
+            {desk.slots.map((slot, i) => {
                 const visible = slot.visible !== false;
                 const subVisible = slot.subVisible !== false;
                 return (
@@ -815,71 +997,71 @@ function CommentaryFace() {
                         onDrop={() => onDrop(i)}
                         onDragEnd={() => { setDragIndex(null); setOverIndex(null); setDragArmed(false); }}
                         className={cn(
-                            'rounded-md border border-border/60 bg-background/40 p-1.5',
+                            'flex items-center gap-1.5 rounded-md border border-border/60 bg-background/40 px-1.5 py-1',
                             dragIndex === i && 'opacity-50',
                             overIndex === i && dragIndex !== i && 'border-rio-400',
                         )}
                     >
-                        <div className="flex items-center gap-1.5">
+                        <button
+                            type="button"
+                            onMouseDown={() => setDragArmed(true)}
+                            onMouseUp={() => setDragArmed(false)}
+                            className="shrink-0 cursor-grab text-muted-foreground hover:text-foreground active:cursor-grabbing"
+                            title="Drag to reorder"
+                        >
+                            <GripVertical size={14} />
+                        </button>
+                        <SimpleTooltip label={visible ? 'On air — click to hide' : 'Hidden — click to show'}>
                             <button
                                 type="button"
-                                onMouseDown={() => setDragArmed(true)}
-                                onMouseUp={() => setDragArmed(false)}
-                                className="shrink-0 cursor-grab text-muted-foreground hover:text-foreground active:cursor-grabbing"
-                                title="Drag to reorder"
+                                onClick={() => desk.update(i, { visible: !visible })}
+                                className={cn('shrink-0', visible ? 'text-foreground' : 'text-muted-foreground hover:text-foreground')}
                             >
-                                <GripVertical size={14} />
+                                {visible ? <Eye size={14} /> : <EyeOff size={14} />}
                             </button>
-                            <SimpleTooltip label={visible ? 'On air — click to hide' : 'Hidden — click to show'}>
-                                <button
-                                    type="button"
-                                    onClick={() => updateCommentarySlot(i, { visible: !visible })}
-                                    className={cn('shrink-0', visible ? 'text-foreground' : 'text-muted-foreground hover:text-foreground')}
-                                >
-                                    {visible ? <Eye size={14} /> : <EyeOff size={14} />}
-                                </button>
-                            </SimpleTooltip>
-                            <div className={cn('min-w-0 flex-1', !visible && 'opacity-50')}>
-                                <ParticipantPicker
-                                    value={name}
-                                    selectedId={slot.participantId || null}
-                                    onResolve={(picked) => updateCommentarySlot(i, { participantId: picked.id })}
-                                    placeholder="Pick person…"
-                                />
-                            </div>
-                            <SimpleTooltip label="Remove commentator">
-                                <button
-                                    type="button"
-                                    onClick={() => removeCommentarySlot(i)}
-                                    className="shrink-0 text-muted-foreground hover:text-destructive"
-                                >
-                                    <X size={14} />
-                                </button>
-                            </SimpleTooltip>
+                        </SimpleTooltip>
+                        <div className={cn('min-w-0 flex-1', !visible && 'opacity-50')}>
+                            <ParticipantPicker
+                                value={desk.nameFor(slot)}
+                                selectedId={slot.participantId || null}
+                                onResolve={(picked) => desk.update(i, {
+                                    participantId: picked.id,
+                                    _name: picked.display?.tag || picked.identities?.rioName || '',
+                                })}
+                                placeholder="Pick person…"
+                            />
                         </div>
-                        <div className="mt-1.5 flex items-center gap-1.5 pl-[22px]">
-                            <select
-                                value={slot.subField || ''}
-                                onChange={(e) => updateCommentarySlot(i, { subField: e.target.value })}
-                                className="h-6 min-w-0 flex-1 rounded border border-border bg-card px-1 text-xs text-foreground"
+                        <select
+                            value={slot.subField || ''}
+                            onChange={(e) => desk.update(i, { subField: e.target.value })}
+                            title="Sub-plate field"
+                            className="h-6 w-[88px] shrink-0 rounded border border-border bg-card px-1 text-xs text-foreground"
+                        >
+                            <option value="">No sub</option>
+                            {SUBFIELD_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                        </select>
+                        <SimpleTooltip label={subVisible ? 'Sub-plate shown' : 'Sub-plate hidden'}>
+                            <button
+                                type="button"
+                                disabled={!slot.subField}
+                                onClick={() => desk.update(i, { subVisible: !subVisible })}
+                                className={cn(
+                                    'shrink-0 disabled:opacity-30',
+                                    subVisible && slot.subField ? 'text-rio-300' : 'text-muted-foreground hover:text-foreground',
+                                )}
                             >
-                                <option value="">No sub-plate</option>
-                                {SUBFIELD_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                            </select>
-                            <SimpleTooltip label={subVisible ? 'Sub-plate shown' : 'Sub-plate hidden'}>
-                                <button
-                                    type="button"
-                                    disabled={!slot.subField}
-                                    onClick={() => updateCommentarySlot(i, { subVisible: !subVisible })}
-                                    className={cn(
-                                        'shrink-0 disabled:opacity-30',
-                                        subVisible && slot.subField ? 'text-rio-300' : 'text-muted-foreground hover:text-foreground',
-                                    )}
-                                >
-                                    <Captions size={14} />
-                                </button>
-                            </SimpleTooltip>
-                        </div>
+                                <Captions size={14} />
+                            </button>
+                        </SimpleTooltip>
+                        <SimpleTooltip label="Remove commentator">
+                            <button
+                                type="button"
+                                onClick={() => desk.remove(i)}
+                                className="shrink-0 text-muted-foreground hover:text-destructive"
+                            >
+                                <X size={14} />
+                            </button>
+                        </SimpleTooltip>
                     </div>
                 );
             })}
@@ -887,8 +1069,8 @@ function CommentaryFace() {
             <Button
                 size="xs"
                 variant="secondary"
-                disabled={slots.length >= MAX_COMMENTATORS}
-                onClick={addCommentarySlot}
+                disabled={desk.slots.length >= MAX_COMMENTATORS}
+                onClick={desk.add}
                 className="w-full"
             >
                 <Plus size={13} className="mr-1" /> Add commentator
@@ -897,27 +1079,21 @@ function CommentaryFace() {
     );
 }
 
-// Gear setup for Commentary — show/hide the dedicated caster overlay on air. The
+// Gear setup for Commentary — show/hide the dedicated caster overlay. The
 // roster itself is authored on the Commentary tab.
 function CommentarySetup() {
-    const items = usePrshItems();
-    const programScene = useObsStore(s => s.programScene);
     const element = ELEMENTS.find(e => e.id === 'commentary');
-    const match = element ? items.find(it => element.match(it.url || '')) : null;
+    const { primary } = useElementBindings(element);
 
     return (
         <Stack gap="sm">
-            {match ? (
-                <label className="flex items-center justify-between gap-2">
-                    <Text size="xs" className="text-muted-foreground">On air</Text>
-                    <Switch
-                        size="sm"
-                        checked={match.enabled}
-                        onCheckedChange={(c) => runObs(() => useObsStore.getState().setSceneItemEnabled(programScene, match.id, c))}
-                    />
-                </label>
+            {primary ? (
+                <VisibilityRow
+                    label={primary.where === 'preview' ? 'In preview' : 'On air'}
+                    item={primary.item} sceneName={primary.scene}
+                />
             ) : (
-                <Text size="xs" className="text-muted-foreground">Overlay not in program scene.</Text>
+                <Text size="xs" className="text-muted-foreground">Overlay not in program or preview scene.</Text>
             )}
             <Text size="xs" className="border-t border-border pt-2 text-muted-foreground">
                 Assign commentators and edit details on the Commentary tab.
@@ -926,26 +1102,26 @@ function CommentarySetup() {
     );
 }
 
+// ── Element option layer / faces / setups ──────────────────────────────────
+
 // The shared option layer for an element — rendered both in the chip's
 // expanding panel (full) and in the rail source popover (content only, via
 // hideTarget/hideVisibility since the eye already toggles visibility there).
 // Newer, richer elements add their controls here and get both surfaces free.
 function ElementOptions({ element, hideTarget = false, hideVisibility = false }) {
-    const programScene = useObsStore(s => s.programScene);
-    const items = usePrshItems();
+    const { primary } = useElementBindings(element);
 
     if (element.flavor === 'direct') {
-        const match = items.find(it => element.match(it.url || ''));
         const extra = element.id === 'hitvisualizer'
             ? <Stack gap="md"><HitVizFace /><HitVizSetup /></Stack>
             : element.id === 'commentary'
                 ? <Stack gap="md"><CommentaryFace /><CommentarySetup /></Stack>
                 : null;
-        if (!match) {
+        if (!primary) {
             return (
                 <Stack gap="sm">
                     <Text size="sm" className="text-muted-foreground">
-                        No matching source in the current program scene ({programScene || 'none'}).
+                        No matching source in the program or preview scene.
                     </Text>
                     {extra}
                 </Stack>
@@ -954,14 +1130,18 @@ function ElementOptions({ element, hideTarget = false, hideVisibility = false })
         if (hideVisibility) {
             return (
                 <Stack gap="sm">
-                    <Text size="xs" className="text-muted-foreground">On {match.sourceName}.</Text>
+                    <Text size="xs" className="text-muted-foreground">On {primary.item.sourceName}.</Text>
                     {extra}
                 </Stack>
             );
         }
         return (
             <Stack gap="md">
-                <VisibilityRow label="On the broadcast" sub={`${match.sourceName} · ${programScene}`} item={match} sceneName={programScene} />
+                <VisibilityRow
+                    label={primary.where === 'preview' ? 'In the preview scene' : 'On the broadcast'}
+                    sub={`${primary.item.sourceName} · ${primary.scene}`}
+                    item={primary.item} sceneName={primary.scene}
+                />
                 {extra}
             </Stack>
         );
@@ -1004,19 +1184,22 @@ function ElementSetup({ element }) {
 }
 
 // Plain direct element (e.g. scoreboard): one live action — show/hide its
-// dedicated source in the current program scene.
+// dedicated source in the program (or studio-preview) scene.
 function DirectFace({ element }) {
-    const items = usePrshItems();
-    const programScene = useObsStore(s => s.programScene);
-    const match = items.find(it => element.match(it.url || ''));
-    if (!match) {
+    const { primary } = useElementBindings(element);
+    if (!primary) {
         return (
             <Text size="xs" className="text-muted-foreground">
-                Not in the program scene ({programScene || 'none'}).
+                Not in the program or preview scene.
             </Text>
         );
     }
-    return <VisibilityRow label="Show on air" item={match} sceneName={programScene} />;
+    return (
+        <VisibilityRow
+            label={primary.where === 'preview' ? 'Show in preview' : 'Show on air'}
+            item={primary.item} sceneName={primary.scene}
+        />
+    );
 }
 
 // Fed element face: the content picker (the live decision — what to feed). The
@@ -1028,29 +1211,48 @@ function FedFace({ element }) {
     return <Text size="xs" className="text-muted-foreground">No content options yet.</Text>;
 }
 
-// Fed element setup: which named shared container the content is fed into.
+// Fed element setup: which named shared container the content is fed into,
+// plus that container source's own on-air toggle when it's in the program or
+// preview scene — so a shared source can be revealed from here too.
 function FedSetup({ element }) {
     const containers = useSharedContainers();
     const { container, setContainer } = useContainerTarget(element.id, defaultContainerFor(element));
+    const binding = useContainerBinding(container);
     return (
-        <label className="flex flex-col gap-1">
-            <Text size="xs" className="text-muted-foreground">Feed into</Text>
-            <select
-                value={container}
-                onChange={(e) => setContainer(e.target.value)}
-                className="rounded-md border border-border bg-card px-2 py-1 text-sm text-foreground"
-            >
-                {containers.length === 0 && <option value={container}>{container}</option>}
-                {containers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-        </label>
+        <Stack gap="sm">
+            <label className="flex flex-col gap-1">
+                <Text size="xs" className="text-muted-foreground">Feed into</Text>
+                <select
+                    value={container}
+                    onChange={(e) => setContainer(e.target.value)}
+                    className="rounded-md border border-border bg-card px-2 py-1 text-sm text-foreground"
+                >
+                    {containers.length === 0 && <option value={container}>{container}</option>}
+                    {containers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+            </label>
+            {binding ? (
+                <VisibilityRow
+                    label={binding.where === 'preview' ? 'Container in preview' : 'Container on air'}
+                    sub={`${binding.item.sourceName} · ${binding.scene}`}
+                    item={binding.item} sceneName={binding.scene}
+                />
+            ) : (
+                <Text size="xs" className="text-muted-foreground">
+                    Container source not in the program or preview scene.
+                </Text>
+            )}
+        </Stack>
     );
 }
 
 // ── Lower Third (Break) ───────────────────────────────────────────────────
 // A direct element with rich authoring: the producer composes the band's match,
-// title/subtitle and clock here; values are written to lowerthird.* state, which
-// the SVG overlay renders. Putting it on air is still the OBS source toggle.
+// title/subtitle and clock here; values are written (through the staging
+// gateway) to lowerthird.* state, which the SVG overlay renders. Putting it on
+// air is still the OBS source toggle. Clock START/PAUSE/RESET are transport —
+// momentary, always immediate — while the clock's CONFIG (mode, duration,
+// label) stages like other content.
 const LT_INPUT = 'w-full rounded-md border border-border bg-card px-2 py-1 text-sm text-foreground';
 
 // Re-render once per ~500ms so the live clock readout ticks.
@@ -1063,12 +1265,21 @@ function useTick(ms = 500, on = true) {
     }, [ms, on]);
 }
 
+// lowerthird.* with staged-value display: `val('title', live)` returns the
+// pending value when one is staged; `setKey` routes through the staging
+// gateway. One subscription to the pending map covers every field.
 function useLowerThird() {
     const lt = useStateStore(useShallow(s => s?.lowerthird ?? {}));
     const matches = useStateStore(useShallow(s => s?.match ?? {}));
-    const set = (entries) => useStateStore.getState().setItems(entries);
-    const setKey = (key, value) => set([{ key: `lowerthird.${key}`, value }]);
-    return { lt, matches, set, setKey };
+    const pendingMap = useStagingStore(s => s.pending);
+    const val = (key, live) => {
+        const p = pendingMap[`state:lowerthird.${key}`];
+        return p ? p.value : live;
+    };
+    const isStaged = (key) => !!pendingMap[`state:lowerthird.${key}`];
+    const setKey = (key, value, label) =>
+        stageStateSet(`lowerthird.${key}`, value, label || `Lower third: ${key}`);
+    return { lt, matches, val, isStaged, setKey };
 }
 
 function fmtRemaining(ms) {
@@ -1079,11 +1290,14 @@ function fmtRemaining(ms) {
 }
 
 function ClockControl() {
-    const { lt, set } = useLowerThird();
+    const { lt } = useLowerThird();
     const c = lt.clock || {};
+    // Transport acts on the LIVE clock — you can't run a countdown that isn't
+    // live yet, so a staged mode change doesn't surface here until committed.
     const mode = c.mode || 'off';
     useTick(500, c.running || mode === 'clock');
 
+    const set = (entries) => useStateStore.getState().setItems(entries);
     const now = Date.now();
     const remaining = c.running ? (c.endsAt || 0) - now : (c.remainingMs != null ? c.remainingMs : (c.durationSec || 300) * 1000);
     const elapsed = c.running ? now - (c.startedAt || now) : (c.elapsedMs || 0);
@@ -1142,23 +1356,28 @@ function ClockControl() {
 }
 
 function LowerThirdFace({ element }) {
-    const { lt, setKey } = useLowerThird();
-    const role = lt.role === 'current' ? 'current' : 'upnext';
+    const { lt, val, isStaged, setKey } = useLowerThird();
+    const role = val('role', lt.role) === 'current' ? 'current' : 'upnext';
     return (
         <Stack gap="sm">
             <DirectFace element={element} />
-            <SegmentedControl
-                data={[{ label: 'Up Next', value: 'upnext' }, { label: 'Current', value: 'current' }]}
-                value={role}
-                onChange={(v) => setKey('role', v)}
-            />
+            <Group gap="xs" className="items-center">
+                <div className="min-w-0 flex-1">
+                    <SegmentedControl
+                        data={[{ label: 'Up Next', value: 'upnext' }, { label: 'Current', value: 'current' }]}
+                        value={role}
+                        onChange={(v) => setKey('role', v, 'Lower third: role')}
+                    />
+                </div>
+                <StagedDot show={isStaged('role')} />
+            </Group>
             <ClockControl />
         </Stack>
     );
 }
 
 function LowerThirdSetup() {
-    const { lt, matches, setKey } = useLowerThird();
+    const { lt, matches, val, isStaged, setKey } = useLowerThird();
     const ov = lt.override || {};
     const c = lt.clock || {};
     const matchIds = Object.keys(matches || {});
@@ -1167,91 +1386,135 @@ function LowerThirdSetup() {
         const names = [m?.player?.[1]?.rioName, m?.player?.[2]?.rioName].filter(Boolean).join(' vs ');
         return m.label ? `${m.label}${names ? ` — ${names}` : ''}` : (names || `Match ${id}`);
     };
-    const setClock = (key, value) => useStateStore.getState().setItems([{ key: `lowerthird.clock.${key}`, value }]);
+
+    // Labelled field with the staged dot; keeps each control one-liner below.
+    const FieldLabel = ({ k, children }) => (
+        <Group gap="xs" className="items-center">
+            <Text size="xs" className="text-muted-foreground">{children}</Text>
+            <StagedDot show={isStaged(k)} />
+        </Group>
+    );
+
+    const liveMatchId = val('matchId', lt.matchId);
+    const clockMode = val('clock.mode', c.mode) || 'off';
 
     return (
         <Stack gap="sm">
             <label className="flex flex-col gap-1">
-                <Text size="xs" className="text-muted-foreground">Match</Text>
-                <select className={LT_INPUT} value={lt.matchId != null ? String(lt.matchId) : ''} onChange={(e) => setKey('matchId', e.target.value || null)}>
+                <FieldLabel k="matchId">Match</FieldLabel>
+                <select
+                    className={LT_INPUT}
+                    value={liveMatchId != null && liveMatchId !== '' ? String(liveMatchId) : ''}
+                    onChange={(e) => setKey('matchId', e.target.value || null, 'Lower third: match')}
+                >
                     <option value="">— None (manual) —</option>
                     {matchIds.map(id => <option key={id} value={id}>{matchLabel(id)}</option>)}
                 </select>
             </label>
 
             <label className="flex flex-col gap-1">
-                <Text size="xs" className="text-muted-foreground">Title</Text>
-                <input className={LT_INPUT} value={lt.title || ''} placeholder="e.g. Winners Final" onChange={(e) => setKey('title', e.target.value)} />
+                <FieldLabel k="title">Title</FieldLabel>
+                <input
+                    className={LT_INPUT} value={val('title', lt.title) || ''} placeholder="e.g. Winners Final"
+                    onChange={(e) => setKey('title', e.target.value, 'Lower third: title')}
+                />
             </label>
             <label className="flex flex-col gap-1">
-                <Text size="xs" className="text-muted-foreground">Subtitle</Text>
-                <input className={LT_INPUT} value={lt.subtitle || ''} placeholder="e.g. NNL Season 7" onChange={(e) => setKey('subtitle', e.target.value)} />
+                <FieldLabel k="subtitle">Subtitle</FieldLabel>
+                <input
+                    className={LT_INPUT} value={val('subtitle', lt.subtitle) || ''} placeholder="e.g. NNL Season 7"
+                    onChange={(e) => setKey('subtitle', e.target.value, 'Lower third: subtitle')}
+                />
             </label>
 
             <Text size="xs" className="font-medium text-muted-foreground">Manual override (used when no match is selected)</Text>
             <Group gap="xs" className="flex-nowrap">
-                <input className={LT_INPUT} value={ov.side1 || ''} placeholder="Side 1 name" onChange={(e) => setKey('override.side1', e.target.value)} />
-                <input className={LT_INPUT} value={ov.side2 || ''} placeholder="Side 2 name" onChange={(e) => setKey('override.side2', e.target.value)} />
+                <input
+                    className={LT_INPUT} value={val('override.side1', ov.side1) || ''} placeholder="Side 1 name"
+                    onChange={(e) => setKey('override.side1', e.target.value, 'Lower third: side 1')}
+                />
+                <input
+                    className={LT_INPUT} value={val('override.side2', ov.side2) || ''} placeholder="Side 2 name"
+                    onChange={(e) => setKey('override.side2', e.target.value, 'Lower third: side 2')}
+                />
             </Group>
-            <input className={LT_INPUT} value={ov.status || ''} placeholder="Status override (e.g. LIVE)" onChange={(e) => setKey('override.status', e.target.value)} />
+            <input
+                className={LT_INPUT} value={val('override.status', ov.status) || ''} placeholder="Status override (e.g. LIVE)"
+                onChange={(e) => setKey('override.status', e.target.value, 'Lower third: status')}
+            />
 
             <label className="flex flex-col gap-1">
-                <Text size="xs" className="text-muted-foreground">Clock</Text>
-                <select className={LT_INPUT} value={c.mode || 'off'} onChange={(e) => setClock('mode', e.target.value)}>
+                <FieldLabel k="clock.mode">Clock</FieldLabel>
+                <select
+                    className={LT_INPUT} value={clockMode}
+                    onChange={(e) => setKey('clock.mode', e.target.value, 'Lower third: clock mode')}
+                >
                     <option value="off">Off</option>
                     <option value="countdown">Countdown</option>
                     <option value="countup">Count up</option>
                     <option value="clock">Time of day</option>
                 </select>
             </label>
-            {c.mode === 'countdown' && (
+            {clockMode === 'countdown' && (
                 <Group gap="xs" className="flex-nowrap items-center">
-                    <Text size="xs" className="text-muted-foreground">Minutes</Text>
+                    <FieldLabel k="clock.durationSec">Minutes</FieldLabel>
                     <input
                         type="number" min={0} step={1} className={LT_INPUT}
-                        value={Math.round((c.durationSec || 300) / 60)}
-                        onChange={(e) => setClock('durationSec', Math.max(0, Number(e.target.value) || 0) * 60)}
+                        value={Math.round(((val('clock.durationSec', c.durationSec)) || 300) / 60)}
+                        onChange={(e) => setKey('clock.durationSec', Math.max(0, Number(e.target.value) || 0) * 60, 'Lower third: countdown length')}
                     />
                 </Group>
             )}
-            {(c.mode === 'countdown' || c.mode === 'clock') && (
-                <input className={LT_INPUT} value={c.label || ''} placeholder="Clock label (e.g. BACK IN)" onChange={(e) => setClock('label', e.target.value)} />
+            {(clockMode === 'countdown' || clockMode === 'clock') && (
+                <input
+                    className={LT_INPUT} value={val('clock.label', c.label) || ''} placeholder="Clock label (e.g. BACK IN)"
+                    onChange={(e) => setKey('clock.label', e.target.value, 'Lower third: clock label')}
+                />
             )}
         </Stack>
     );
 }
 
-// Per-element grid width (out of 12). Literal class names so Tailwind keeps them.
+// ── Element grid ───────────────────────────────────────────────────────────
+// Row packing lives in elements.js (packRows) — pure and unit-tested.
+
+// Literal class names per span so Tailwind keeps them.
 const SPAN_CLASS = {
-    2: 'md:col-span-2', 3: 'md:col-span-3', 4: 'md:col-span-4',
-    5: 'md:col-span-5', 6: 'md:col-span-6', 12: 'md:col-span-12',
+    1: 'md:col-span-1', 2: 'md:col-span-2', 3: 'md:col-span-3', 4: 'md:col-span-4',
+    5: 'md:col-span-5', 6: 'md:col-span-6', 7: 'md:col-span-7', 8: 'md:col-span-8',
+    9: 'md:col-span-9', 10: 'md:col-span-10', 11: 'md:col-span-11', 12: 'md:col-span-12',
 };
 
-// A self-contained element "window": header (live dot · name · gear) over the
-// element's own controls. Glows emerald when its source is on air; dashed when
-// no source is bound. The gear opens bulky setup; the face holds live actions.
-const ElementWindow = memo(function ElementWindow({ element }) {
-    const overrideName = useSettingsStore(s => s?.production?.overrides?.[element.id]);
-    const items = usePrshItems();
-    const bound = boundSource(element, items, overrideName);
-    const state = !bound ? 'unbound' : bound.enabled ? 'live' : 'idle';
-    const dot = state === 'live'
-        ? 'bg-emerald-400 shadow-[0_0_6px] shadow-emerald-400/70'
-        : state === 'idle'
-            ? 'bg-muted-foreground'
-            : 'border border-muted-foreground bg-transparent';
+const WINDOW_STATE = {
+    live:    { dot: 'bg-emerald-400 shadow-[0_0_6px] shadow-emerald-400/70', border: 'border-emerald-500/50', label: 'On air' },
+    preview: { dot: 'bg-sky-400 shadow-[0_0_6px] shadow-sky-400/70',         border: 'border-sky-500/50',     label: 'In studio preview' },
+    idle:    { dot: 'bg-muted-foreground',                                    border: '',                      label: 'Bound, hidden' },
+    unbound: { dot: 'border border-muted-foreground bg-transparent',          border: 'border-dashed',         label: 'No matching OBS source' },
+};
+
+// A self-contained element "window": header (status dot · name · gear) over the
+// element's own controls. Emerald = its source is enabled in the program scene;
+// sky = enabled in the studio-preview scene (staged in OBS, not yet taken);
+// gray = bound but hidden; dashed = no source bound anywhere we can see.
+const ElementWindow = memo(function ElementWindow({ element, span }) {
+    const { program, preview } = useElementBindings(element);
+    const state = program?.item.enabled ? 'live'
+        : preview?.item.enabled ? 'preview'
+            : (program || preview) ? 'idle' : 'unbound';
+    const meta = WINDOW_STATE[state];
 
     return (
         <div
             className={cn(
                 'col-span-2 flex flex-col overflow-hidden rounded-lg border bg-card',
-                SPAN_CLASS[element.span] || 'md:col-span-3',
-                state === 'live' && 'border-emerald-500/50',
-                state === 'unbound' && 'border-dashed',
+                SPAN_CLASS[span || element.span] || 'md:col-span-3',
+                meta.border,
             )}
         >
             <div className="flex items-center gap-2 border-b border-border/60 px-2.5 py-1.5">
-                <span className={cn('size-2 shrink-0 rounded-full', dot)} />
+                <SimpleTooltip label={meta.label}>
+                    <span className={cn('size-2 shrink-0 rounded-full', meta.dot)} />
+                </SimpleTooltip>
                 <SimpleTooltip label={element.name}>
                     <Text size="sm" className="min-w-0 flex-1 truncate font-medium text-foreground">{element.name}</Text>
                 </SimpleTooltip>
@@ -1272,7 +1535,7 @@ const ElementWindow = memo(function ElementWindow({ element }) {
                     </Popover>
                 )}
             </div>
-            <div className="p-2.5">
+            <div className="min-h-0 flex-1 p-2.5">
                 <ElementFace element={element} />
             </div>
         </div>
@@ -1282,6 +1545,7 @@ const ElementWindow = memo(function ElementWindow({ element }) {
 function ElementsArea({ phase }) {
     const status = useObsStore(s => s.status);
     const els = elementsForPhase(phase);
+    const rows = useMemo(() => packRows(els), [els]);
     const phaseLabel = PHASES.find(p => p.value === phase)?.label ?? phase;
 
     if (status !== 'connected') {
@@ -1307,20 +1571,27 @@ function ElementsArea({ phase }) {
         );
     }
 
+    // One CSS grid; packRows guarantees each visual row sums to 12 columns
+    // (except possibly the last), and grid rows give same-height cards per row.
     return (
         <Panel title="Elements">
-            <div className="grid grid-cols-2 items-start gap-3 p-4 md:grid-cols-12">
-                {els.map(el => <ElementWindow key={el.id} element={el} />)}
+            <div className="grid grid-cols-2 gap-3 p-4 md:grid-cols-12">
+                {rows.flatMap(row =>
+                    row.map(({ element, span }) =>
+                        <ElementWindow key={element.id} element={element} span={span} />))}
             </div>
         </Panel>
     );
 }
 
+// ── Post-game capture / pending bar / page ─────────────────────────────────
+
 // Producer "Capture / Go to post-game" control. Shown in the Post-game phase; does
 // not require OBS. Hits POST /postgame/capture for the chosen scoreboard, which
 // matches the finished game's on-disk stat file (by game id + Loaded-from-HUD==0),
 // projects the box score to postgame.{N}.* (what the Stat Callout reads), and
-// advances a bound match to the post stage. Clear blanks it again.
+// advances a bound match to the post stage. Clear blanks it again. Momentary —
+// never staged.
 function PostGameBar() {
     const activeRaw = useSettingsStore(s => s?.scoreboards?.active ?? [1]);
     const aliases = useSettingsStore(s => s?.scoreboards?.aliases ?? {});
@@ -1412,6 +1683,75 @@ function PostGameBar() {
     );
 }
 
+// The confirm-to-live surface: a sticky bar listing every staged change, with
+// Go Live (also bound to the configured hotkey while this page is mounted) and
+// Discard all. Hidden entirely when confirm mode is off — unless changes are
+// still pending from before it was turned off, so nothing staged can strand.
+function PendingBar() {
+    const enabled = useSettingsStore(s => s?.production?.confirm?.enabled) === true;
+    const hotkey = useSettingsStore(s => s?.production?.confirm?.hotkey) || 'F9';
+    const { pending, order } = useStagingStore(useShallow(s => ({ pending: s.pending, order: s.order })));
+    const discard = useStagingStore(s => s.discard);
+    const discardAll = useStagingStore(s => s.discardAll);
+    const count = order.length;
+
+    useEffect(() => {
+        if (!enabled) return undefined;
+        const onKey = (e) => {
+            if (eventMatchesHotkey(e, hotkey)) {
+                e.preventDefault();
+                commitPending();
+            }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [enabled, hotkey]);
+
+    if (!enabled && count === 0) return null;
+
+    return (
+        <div className={cn(
+            'sticky bottom-2 z-20 flex flex-wrap items-center gap-2 rounded-lg border bg-card/95 px-3 py-2 backdrop-blur',
+            count > 0 ? 'border-amber-500/50' : 'border-border',
+        )}>
+            <CircleDot size={14} className={count > 0 ? 'text-amber-400' : 'text-muted-foreground'} />
+            {count === 0 ? (
+                <Text size="xs" className="text-muted-foreground">
+                    Confirm mode on — element changes stage here until you go live ({hotkey}).
+                </Text>
+            ) : (
+                <>
+                    <Text size="sm" className="font-medium text-foreground">
+                        {count} staged change{count === 1 ? '' : 's'}
+                    </Text>
+                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+                        {order.map((key) => (
+                            <span
+                                key={key}
+                                className="flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-200"
+                            >
+                                <span className="max-w-[24ch] truncate">{pending[key]?.label || key}</span>
+                                <button
+                                    type="button"
+                                    onClick={() => discard(key)}
+                                    className="text-amber-300/70 hover:text-amber-100"
+                                    aria-label={`Discard ${pending[key]?.label || key}`}
+                                >
+                                    <X size={11} />
+                                </button>
+                            </span>
+                        ))}
+                    </div>
+                    <Button size="sm" variant="ghost" onClick={discardAll}>Discard all</Button>
+                    <Button size="sm" className="bg-emerald-600 text-white hover:bg-emerald-500" onClick={() => commitPending()}>
+                        <Radio size={14} className="mr-1" /> Go Live · {hotkey}
+                    </Button>
+                </>
+            )}
+        </div>
+    );
+}
+
 export default function Production() {
     const [phase, setPhase] = useState('live');
 
@@ -1432,6 +1772,8 @@ export default function Production() {
                     <ElementsArea phase={phase} />
                 </Stack>
             </div>
+
+            <PendingBar />
         </Stack>
     );
 }
