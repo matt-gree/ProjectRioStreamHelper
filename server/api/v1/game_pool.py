@@ -141,28 +141,23 @@ async def assign_game(
     session_id: str | None = None,
 ) -> ORJSONResponse:
     """Assign a game (ongoing or completed) to a scoreboard."""
-    # Authoritative server-side guard: only honor assigns when the
-    # scoreboard's current source can legitimately receive a pool game.
-    # Without this, a stale client (other tab, OBS browser source, in-flight
-    # poll fired before a source-change settings update arrived) can
-    # overwrite manual edits or a different source's data.
-    source_type = Settings.Get(
-        f"scoreboards.sources.{scoreboard_number}.type"
-    )
-    # "manual" is assignable because a game feed attaches to a manual board (and
-    # its per-game "Load" button assigns through here); "live_game" for the live
-    # source. HUD boards are never pool-assignable.
-    if source_type not in ("live_game", "manual"):
+    # Authoritative server-side guard: a HUD-transport board (board 1 with
+    # hud_enabled) has the local game as its exclusive writer and is never
+    # pool-assignable. Without this, a stale client (other tab, OBS browser
+    # source, in-flight poll) could overwrite the HUD-driven data. Every other
+    # board — single (live/completed picker) or set (feed) — is assignable.
+    from server.bindings import transport
+    if transport(scoreboard_number) == "hud":
         raise HTTPException(
             status_code=409,
-            detail=f"scoreboard {scoreboard_number} source is {source_type!r}, not assignable",
+            detail=f"scoreboard {scoreboard_number} is HUD-bound, not assignable",
         )
 
     # Detect whether this assignment is a *new* game for this scoreboard,
     # so live-game auto-poll re-applies (which fire on every poll cycle to
     # refresh score/state) don't trigger a stats refetch each tick.
     prev_game_id = Settings.Get(
-        f"scoreboards.sources.{scoreboard_number}.api_game_id"
+        f"scoreboards.binding.{scoreboard_number}.gameId"
     )
     is_new_game = prev_game_id != game_id
 
@@ -190,14 +185,23 @@ async def assign_game(
                 # stats_tag rather than leaving the previous game's tag in place
                 # — otherwise stats fetches run with the wrong tag for the game.
                 game_mode_name = game.get("game_mode_name", "")
+                if not game_mode_name or game_mode_name.startswith("ID:"):
+                    # The ongoing pool bakes game_mode_name from the game-modes
+                    # cache, which may have been cold when the pool was built —
+                    # re-resolve from the raw tag_set id now that a fetch has had
+                    # a chance to warm it.
+                    from server.rio import stats_api
+                    resolved = await stats_api.resolve_tag_set_name(game.get("tag_set"))
+                    if resolved:
+                        game_mode_name = resolved
                 if game_mode_name and not game_mode_name.startswith("ID:"):
                     await Settings.Set(
-                        f"scoreboards.sources.{scoreboard_number}.stats_tag",
+                        f"scoreboards.binding.{scoreboard_number}.stats_tag",
                         game_mode_name,
                     )
                 else:
                     await Settings.Set(
-                        f"scoreboards.sources.{scoreboard_number}.stats_tag",
+                        f"scoreboards.binding.{scoreboard_number}.stats_tag",
                         "",
                     )
 

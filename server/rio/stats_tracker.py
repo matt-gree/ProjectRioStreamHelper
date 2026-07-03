@@ -118,7 +118,7 @@ def _resolve_stats_tag(scoreboard_number: int) -> str | None:
     """Per-scoreboard stats tag. No global fallback — if a scoreboard has no
     tag configured we skip the API fetch entirely (caller decides what to do).
     """
-    return Settings.Get(f"scoreboards.sources.{scoreboard_number}.stats_tag", None)
+    return Settings.Get(f"scoreboards.binding.{scoreboard_number}.stats_tag", None)
 
 
 @dataclass
@@ -502,10 +502,9 @@ class StatsTracker:
         """Return current merged stats snapshot for a scoreboard."""
         if scoreboard_number is None:
             # Default to first HUD-target if any, else first active scoreboard.
-            sources = Settings.Get("scoreboards.sources", {})
+            from server.bindings import hud_target_scoreboards
             active = Settings.Get("scoreboards.active", [1])
-            hud_targets = [sb for sb in active
-                           if sources.get(str(sb), {}).get("type") == "hud"]
+            hud_targets = hud_target_scoreboards()
             scoreboard_number = hud_targets[0] if hud_targets else (active[0] if active else 1)
         slot = cls._slot(scoreboard_number)
         result = {"scoreboard": scoreboard_number, "api_ready": slot.api_ready}

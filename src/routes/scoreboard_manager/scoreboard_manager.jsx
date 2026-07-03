@@ -1,15 +1,14 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { Pencil, Check, X, Plus } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../components/ui/tabs';
 import { Stack, Text } from '../../components/ui/primitives';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
-import { Switch } from '../../components/ui/switch';
-import { Label } from '../../components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '../../components/ui/popover';
 import { SimpleTooltip } from '../../components/ui/simple-tooltip';
 import { cn } from '../../lib/utils';
+import { useShallow } from 'zustand/react/shallow';
 import { useSettingsStore, useStateStore } from '../../context/store';
 import MatchPanel from './MatchPanel';
 import TeamPanel from '../../components/scoreboard/TeamPanel';
@@ -25,30 +24,37 @@ import CompletedGameInfo from '../../components/scoreboard/CompletedGameInfo';
  */
 function ScoreboardTab({ scoreboardNumber }) {
     const setItems = useStateStore(s => s.setItems);
-    const sourceType = useSettingsStore(
-        s => s?.scoreboards?.sources?.[scoreboardNumber]?.type
-            ?? s?.scoreboards?.sources?.[String(scoreboardNumber)]?.type
-            ?? 'manual'
+
+    // Transport is derived, not selected: board 1 carries the local HUD when the
+    // global HUD toggle is on; every other board (and board 1 with HUD off) is
+    // API transport. See server/bindings.py.
+    const hudEnabled = useSettingsStore(s => s?.project_rio?.hud_enabled ?? true);
+    const transport = (scoreboardNumber === 1 && hudEnabled) ? 'hud' : 'api';
+
+    // Binding: kind (single | set) + the currently-followed gameId.
+    const kind = useSettingsStore(
+        s => s?.scoreboards?.binding?.[scoreboardNumber]?.kind
+            ?? s?.scoreboards?.binding?.[String(scoreboardNumber)]?.kind
+            ?? 'single'
+    );
+    const gameId = useSettingsStore(
+        s => s?.scoreboards?.binding?.[scoreboardNumber]?.gameId
+            ?? s?.scoreboards?.binding?.[String(scoreboardNumber)]?.gameId
+            ?? null
     );
 
-    // The game feed is orthogonal to the source: it attaches to a manual board
-    // and, when running, drives it. `enabled` tracks a running feed (resume on
-    // startup flips it true); the local toggle just reveals/hides the controls.
-    const feedEnabled = useSettingsStore(
-        s => s?.scoreboards?.rotation?.[scoreboardNumber]?.enabled
-            ?? s?.scoreboards?.rotation?.[String(scoreboardNumber)]?.enabled
-            ?? false
-    );
-    const [feedOpen, setFeedOpen] = useState(feedEnabled);
-    // Reveal the panel if a feed starts/resumes out of band.
-    useEffect(() => { if (feedEnabled) setFeedOpen(true); }, [feedEnabled]);
+    // Effective read-only mode for the editor components (they still key off a
+    // "sourceType" string): HUD and a loaded single game are read-only; an
+    // empty single board and a set/feed board stay editable.
+    const effectiveSourceType = transport === 'hud'
+        ? 'hud'
+        : (kind === 'single' && gameId != null ? 'live_game' : 'manual');
 
-    const handleToggleFeed = useCallback(async (on) => {
-        setFeedOpen(on);
-        if (!on) {
-            await fetch(`/api/v1/rotation/${scoreboardNumber}/stop`, { method: 'POST' })
-                .catch(() => {});
-        }
+    const handleSetKind = useCallback(async (newKind) => {
+        await fetch(
+            `/api/v1/scoreboards/${scoreboardNumber}/binding?kind=${newKind}`,
+            { method: 'PUT' },
+        ).catch(() => {});
     }, [scoreboardNumber]);
 
     const handleSwapTeams = useCallback(async () => {
@@ -58,7 +64,7 @@ function ScoreboardTab({ scoreboardNumber }) {
         const currentHome = Number(base?.home_team ?? 2);
         const newHome = currentHome === 1 ? 2 : 1;
 
-        if (sourceType === 'hud') {
+        if (transport === 'hud') {
             // Swap start.gg profile fields client-side (server only handles Rio game data)
             const t1 = base?.player?.[1] ?? {};
             const t2 = base?.player?.[2] ?? {};
@@ -88,13 +94,7 @@ function ScoreboardTab({ scoreboardNumber }) {
             { key: `${sb}.home_team`, value: newHome },
             { key: `${sb}.teamsSwapped`, value: !(base?.teamsSwapped ?? false) },
         ]);
-    }, [scoreboardNumber, setItems, sourceType]);
-
-    const handleSetSource = useCallback(async (newSource) => {
-        await fetch(`/api/v1/scoreboards/${scoreboardNumber}/source?source_type=${newSource}`, {
-            method: 'PUT',
-        });
-    }, [scoreboardNumber]);
+    }, [scoreboardNumber, setItems, transport]);
 
     return (
         <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-10">
@@ -104,9 +104,9 @@ function ScoreboardTab({ scoreboardNumber }) {
                         scoreboardNumber={scoreboardNumber}
                         teamNumber={1}
                         playerCount={1}
-                        sourceType={sourceType}
+                        sourceType={effectiveSourceType}
                     />
-                    {sourceType === 'manual' && feedOpen && (
+                    {kind === 'set' && (
                         <CompletedGameInfo scoreboardNumber={scoreboardNumber} />
                     )}
                     <ActiveMatchupStats scoreboardNumber={scoreboardNumber} />
@@ -118,15 +118,10 @@ function ScoreboardTab({ scoreboardNumber }) {
                     <ScoreControls
                         scoreboardNumber={scoreboardNumber}
                         onSwapTeams={handleSwapTeams}
-                        sourceType={sourceType}
-                        onSetSource={handleSetSource}
+                        transport={transport}
+                        kind={kind}
+                        onSetKind={handleSetKind}
                     />
-                    {sourceType === 'manual' && (
-                        <Label className="flex items-center gap-2 text-xs">
-                            <Switch checked={feedOpen} onCheckedChange={handleToggleFeed} />
-                            Game feed
-                        </Label>
-                    )}
                     <DiamondPanel scoreboardNumber={scoreboardNumber} />
                 </Stack>
             </div>
@@ -137,12 +132,12 @@ function ScoreboardTab({ scoreboardNumber }) {
                         scoreboardNumber={scoreboardNumber}
                         teamNumber={2}
                         playerCount={1}
-                        sourceType={sourceType}
+                        sourceType={effectiveSourceType}
                     />
-                    {sourceType === 'live_game' && (
+                    {transport !== 'hud' && kind === 'single' && (
                         <LiveGameSelector scoreboardNumber={scoreboardNumber} />
                     )}
-                    {sourceType === 'manual' && feedOpen && (
+                    {kind === 'set' && (
                         <RotationControls scoreboardNumber={scoreboardNumber} />
                     )}
                 </Stack>
@@ -152,16 +147,20 @@ function ScoreboardTab({ scoreboardNumber }) {
 }
 
 // Tinted-translucent chips per the Rio brand — never solid fills.
-const SOURCE_BADGE = {
-    hud:       { color: 'bg-[#22c55e]/15 text-[#4ade80]', label: 'HUD' },
-    live_game: { color: 'bg-[#3b82f6]/15 text-[#60a5fa]', label: 'API' },
-    // backward compat
-    ongoing_api:   { color: 'bg-[#3b82f6]/15 text-[#60a5fa]', label: 'API' },
-    completed_api: { color: 'bg-[#a855f7]/15 text-[#c084fc]', label: 'Feed' },
+const BADGES = {
+    hud:  { color: 'bg-[#22c55e]/15 text-[#4ade80]', label: 'HUD' },
+    api:  { color: 'bg-[#3b82f6]/15 text-[#60a5fa]', label: 'API' },
+    set:  { color: 'bg-[#a855f7]/15 text-[#c084fc]', label: 'Set' },
 };
 
-// Shown alongside the source badge when a manual board has a game feed running.
-const FEED_BADGE = { color: 'bg-[#a855f7]/15 text-[#c084fc]', label: 'Feed' };
+// Resolve the single tab badge from transport + binding. Empty single boards
+// (manual/editable) get no badge.
+function tabBadge({ transport, kind, gameId }) {
+    if (transport === 'hud') return BADGES.hud;
+    if (kind === 'set') return BADGES.set;
+    if (kind === 'single' && gameId != null) return BADGES.api;
+    return null;
+}
 
 /**
  * Inline rename popover for a scoreboard tab.
@@ -229,9 +228,17 @@ function tabLabel(sbId, alias) {
 
 export default function ScoreboardManager() {
     const active = useSettingsStore(s => s?.scoreboards?.active ?? [1]);
-    const sources = useSettingsStore(s => s?.scoreboards?.sources ?? {});
+    const bindings = useSettingsStore(s => s?.scoreboards?.binding ?? {});
     const aliases = useSettingsStore(s => s?.scoreboards?.aliases ?? {});
-    const rotations = useSettingsStore(s => s?.scoreboards?.rotation ?? {});
+    const hudEnabled = useSettingsStore(s => s?.project_rio?.hud_enabled ?? true);
+    // Live loaded game per board — the ground-truth "a game is on this board",
+    // independent of the settings-side binding.gameId. Shallow-compared so the
+    // tab list only re-renders when a game loads/clears, not on every pitch.
+    const loadedGameIds = useStateStore(useShallow(s => {
+        const out = {};
+        for (const id of active) out[id] = s?.score?.[id]?.game_id ?? null;
+        return out;
+    }));
     const [activeTab, setActiveTab] = useState(String(active[0] ?? 1));
 
     const handleAddScoreboard = useCallback(async () => {
@@ -257,10 +264,13 @@ export default function ScoreboardManager() {
             <div className="mb-4 flex items-center gap-1">
                 <TabsList>
                     {active.map(sbId => {
-                        const src = sources[sbId] ?? sources[String(sbId)];
-                        const srcType = src?.type ?? 'manual';
-                        const badge = SOURCE_BADGE[srcType];
-                        const feedOn = (rotations[sbId] ?? rotations[String(sbId)])?.enabled ?? false;
+                        const bind = bindings[sbId] ?? bindings[String(sbId)] ?? {};
+                        const transport = (sbId === 1 && hudEnabled) ? 'hud' : 'api';
+                        const badge = tabBadge({
+                            transport,
+                            kind: bind.kind ?? 'single',
+                            gameId: bind.gameId ?? loadedGameIds[sbId] ?? null,
+                        });
                         const alias = aliases[sbId] ?? aliases[String(sbId)] ?? '';
                         return (
                             <TabsTrigger key={sbId} value={String(sbId)}>
@@ -269,11 +279,6 @@ export default function ScoreboardManager() {
                                     {badge && (
                                         <Badge className={cn('text-[10px] font-semibold uppercase tracking-wider', badge.color)}>
                                             {badge.label}
-                                        </Badge>
-                                    )}
-                                    {feedOn && (
-                                        <Badge className={cn('text-[10px] font-semibold uppercase tracking-wider', FEED_BADGE.color)}>
-                                            {FEED_BADGE.label}
                                         </Badge>
                                     )}
                                     <RenamePopover sbId={sbId} currentAlias={alias} />

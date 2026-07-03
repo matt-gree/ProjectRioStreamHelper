@@ -1,6 +1,7 @@
 import { Routes, Route } from "react-router-dom";
 import TSHFields from '../components/fields';
 import WelcomeCard from '../components/WelcomeCard';
+import MatchConflictBanner from '../components/MatchConflictBanner';
 
 import Production from './production/production';
 import Competition from './competition/competition';
@@ -23,6 +24,7 @@ export default function Root() {
   return (
     <div className="min-h-screen">
       <TSHFields tabs={allTabs} />
+      <MatchConflictBanner />
       <WelcomeCard />
       <div className="p-5">
         <Routes>

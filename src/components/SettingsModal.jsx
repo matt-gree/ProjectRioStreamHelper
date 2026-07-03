@@ -67,6 +67,7 @@ export default function SettingsModal({ opened, onClose }) {
     const [hudPath, setHudPath] = useState('');
     const [resolvedPath, setResolvedPath] = useState(null);
     const [defaultPath, setDefaultPath] = useState('');
+    const [hudEnabled, setHudEnabled] = useState(true);
     const [browsingInProgress, setBrowsingInProgress] = useState(false);
     const [savingPath, setSavingPath] = useState(false);
     const [hudPathError, setHudPathError] = useState('');
@@ -176,6 +177,27 @@ export default function SettingsModal({ opened, onClose }) {
             setResolvedPath(data.resolved || null);
             setDefaultPath(data.default || '');
         } catch { /* ignore */ }
+        try {
+            const resp = await fetch('/api/v1/settings?key=project_rio.hud_enabled');
+            const data = await resp.json();
+            // Default true when unset; treat explicit false-ish as disabled.
+            setHudEnabled(!(data === false || data === 'false' || data === '0'));
+        } catch { /* ignore */ }
+    }, []);
+
+    const handleToggleHudEnabled = useCallback(async (enabled) => {
+        setHudEnabled(enabled);
+        try {
+            await fetch(`/api/v1/scoreboards/hud-enabled?enabled=${enabled}`, { method: 'PUT' });
+            notifications.show({
+                message: enabled
+                    ? 'HUD enabled — scoreboard 1 follows the local game'
+                    : 'HUD disabled — scoreboard 1 is a normal board',
+                color: 'green',
+            });
+        } catch {
+            notifications.show({ message: 'Failed to toggle HUD', color: 'red' });
+        }
     }, []);
 
     const fetchAssetsPath = useCallback(async () => {
@@ -570,6 +592,17 @@ export default function SettingsModal({ opened, onClose }) {
                     {hudPathError && (
                         <Text size="xs" c="#ff5a5f">{hudPathError}</Text>
                     )}
+
+                    {/* HUD enable — the single control for "is board 1 the HUD board" */}
+                    <div className="mt-2 flex items-start gap-3">
+                        <Switch checked={hudEnabled} onCheckedChange={handleToggleHudEnabled} className="mt-0.5" />
+                        <div className="flex flex-col">
+                            <Text size="sm" fw={500}>Follow local HUD on Scoreboard 1</Text>
+                            <Text size="xs" dimmed>
+                                When on, Scoreboard 1 auto-fills from the local Project Rio game. Turn off to use Scoreboard 1 as a normal single/set board (e.g. an API-only setup).
+                            </Text>
+                        </div>
+                    </div>
 
                     {/* MSB Image Assets */}
                     <Text size="sm" fw={500} className="mt-2">MSB Image Assets</Text>

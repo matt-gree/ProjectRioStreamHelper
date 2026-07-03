@@ -56,6 +56,27 @@ export async function bindScoreboard(sb, m) {
     });
 }
 
+/** Swap participant 1↔2 on a match (authoring flip); series wins follow. */
+export async function flipMatch(m) {
+    return req(`/match/${m}/flip`, { ...jsonBody({}), method: "POST" });
+}
+
+/** Producer override: force the series decided for `side` (null clears it). */
+export async function decideMatch(m, side) {
+    return req(`/match/${m}/decide`, {
+        ...jsonBody({ side: side ?? null }),
+        method: "POST",
+    });
+}
+
+/** Clear a board's match conflict, keeping the match bound ("ignore this game"). */
+export async function dismissMatchConflict(sb) {
+    return req(`/scoreboards/${sb}/match-conflict/dismiss`, {
+        ...jsonBody({}),
+        method: "POST",
+    });
+}
+
 /**
  * Fill match `m` from a start.gg set: the server fetches the set with full
  * player detail, upserts both players into the participant registry, seats

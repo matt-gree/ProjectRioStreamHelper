@@ -1,6 +1,8 @@
 from server.utils.router import method
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import ORJSONResponse
+from server.bindings import DEFAULT_BINDING, get_binding, transport
+from server.bindings import hud_target_scoreboards as _hud_target_scoreboards
 from server.rio.provider import RioGameDataProvider
 from server.rio.rotation import RotationManager
 from server.rio.stats_tracker import StatsTracker
@@ -20,15 +22,13 @@ def _lowest_available_id(active: list[int]) -> int:
 
 
 def hud_target_scoreboards() -> list[int]:
-    """Return all active scoreboards whose source type is 'hud'.
+    """Scoreboards that mirror the local HUD game — at most board 1.
 
-    HUD-target is derived from per-scoreboard source config rather than a
-    separate setting, so any number of scoreboards can mirror the local HUD
-    game simultaneously.
+    HUD is a global transport on board 1 (Settings `project_rio.hud_enabled`),
+    so this returns `[1]` when board 1 is active and enabled, else `[]`.
+    Kept as a re-export for existing importers (see server/bindings.py).
     """
-    active = Settings.Get("scoreboards.active", [1])
-    sources = Settings.Get("scoreboards.sources", {})
-    return [sb for sb in active if sources.get(str(sb), {}).get("type") == "hud"]
+    return _hud_target_scoreboards()
 
 
 @method(
@@ -37,20 +37,19 @@ def hud_target_scoreboards() -> list[int]:
     response_class=ORJSONResponse
 )
 async def list_scoreboards(session_id: str | None = None) -> ORJSONResponse:
-    """List all active scoreboards with their source metadata."""
+    """List all active scoreboards with their binding metadata."""
     active = Settings.Get("scoreboards.active", [1])
-    sources = Settings.Get("scoreboards.sources", {})
     aliases = Settings.Get("scoreboards.aliases", {})
 
     scoreboards = []
     for sb_id in active:
         key = str(sb_id)
-        source_cfg = sources.get(key, {"type": "manual", "api_game_id": None})
         scoreboards.append({
             "id": sb_id,
             "alias": aliases.get(key, ""),
-            "source": source_cfg,
-            "is_hud_target": source_cfg.get("type") == "hud",
+            "binding": get_binding(sb_id),
+            "transport": transport(sb_id),
+            "is_hud_target": transport(sb_id) == "hud",
         })
     return ORJSONResponse(scoreboards)
 
@@ -69,8 +68,7 @@ async def add_scoreboard(session_id: str | None = None) -> ORJSONResponse:
     active.sort()
 
     await Settings.Set("scoreboards.active", active)
-    await Settings.Set(f"scoreboards.sources.{new_id}",
-                       {"type": "manual", "api_game_id": None})
+    await Settings.Set(f"scoreboards.binding.{new_id}", dict(DEFAULT_BINDING))
 
     return ORJSONResponse({"success": True, "id": new_id})
 
@@ -92,7 +90,7 @@ async def remove_scoreboard(sb_id: int, session_id: str | None = None) -> ORJSON
     # Clear state for this scoreboard
     await State.Unset(f"score.{sb_id}")
 
-    old_source = Settings.Get(f"scoreboards.sources.{sb_id}.type")
+    was_hud = transport(sb_id) == "hud"
 
     # Tear down any background work owned by this scoreboard before its
     # settings are removed, so resume-on-startup can't pick it back up.
@@ -101,11 +99,11 @@ async def remove_scoreboard(sb_id: int, session_id: str | None = None) -> ORJSON
 
     active.remove(sb_id)
     await Settings.Set("scoreboards.active", active)
-    await Settings.Unset(f"scoreboards.sources.{sb_id}")
+    await Settings.Unset(f"scoreboards.binding.{sb_id}")
     await Settings.Unset(f"scoreboards.aliases.{sb_id}")
 
     StatsTracker.reset_scoreboard(sb_id)
-    if old_source == "hud":
+    if was_hud:
         RioGameDataProvider._reset_side_preservation()
     else:
         RioGameDataProvider.refresh_hud_targets()
@@ -115,73 +113,87 @@ async def remove_scoreboard(sb_id: int, session_id: str | None = None) -> ORJSON
 
 
 @method(
-    router.put, "/scoreboards/{sb_id}/source",
-    version="1", id="scoreboards.set_source",
+    router.put, "/scoreboards/{sb_id}/binding",
+    version="1", id="scoreboards.set_binding",
     response_class=ORJSONResponse
 )
-async def set_scoreboard_source(
+async def set_scoreboard_binding(
     sb_id: int,
-    source_type: str = "manual",
-    api_game_id: str | None = None,
+    kind: str = "single",
+    pool: str | None = None,
     session_id: str | None = None,
 ) -> ORJSONResponse:
-    """Set the data source for a scoreboard (manual, hud, or api)."""
+    """Set a scoreboard's binding kind (single | set) and optional pool.
+
+    Transport (HUD vs API) is derived, not set here — board 1 carries the HUD
+    when `project_rio.hud_enabled` (see server/bindings.py). A HUD-transport
+    board ignores its binding kind, but the write is still accepted so toggling
+    HUD off later reveals the stored kind.
+    """
     active = Settings.Get("scoreboards.active", [1])
     if sb_id not in active:
         raise HTTPException(status_code=404, detail="Scoreboard not found")
 
-    valid_types = ("manual", "hud", "live_game")
-    if source_type not in valid_types:
-        raise HTTPException(status_code=400, detail=f"Invalid source type. Must be one of: {valid_types}")
+    if kind not in ("single", "set"):
+        raise HTTPException(status_code=400, detail="kind must be 'single' or 'set'")
 
-    # Clear scoreboard state on source change, except HUD → Manual (preserve displayed data)
-    old_source = Settings.Get(f"scoreboards.sources.{sb_id}.type", "manual")
-    source_changed = old_source != source_type
-    if source_changed and not (old_source == "hud" and source_type == "manual"):
-        await State.Set(f"score.{sb_id}", {})
-        await State.Save()
+    old = get_binding(sb_id)
+    old_kind = old.get("kind", "single")
+    kind_changed = old_kind != kind
 
-    # A running game feed attaches to a manual board; stop it on any source
-    # change so it can't keep writing into a scoreboard the user has reassigned.
-    # Persists enabled=False so resume-on-startup also skips it.
-    if source_changed:
+    # Leaving set mode stops any running feed so it can't keep writing into a
+    # board the user has switched to single. Persists enabled=False for resume.
+    if old_kind == "set" and kind != "set":
         await RotationManager.stop_rotation(sb_id)
 
-    # Update only the keys that this endpoint owns. Preserve sibling keys
-    # (e.g. stats_tag) so a source-type change doesn't silently drop the
-    # user's per-scoreboard game-mode selection.
-    await Settings.Set(f"scoreboards.sources.{sb_id}.type", source_type)
-    await Settings.Set(f"scoreboards.sources.{sb_id}.api_game_id", api_game_id)
+    await Settings.Set(f"scoreboards.binding.{sb_id}.kind", kind)
+    if pool in ("both", "live", "completed"):
+        await Settings.Set(f"scoreboards.binding.{sb_id}.pool", pool)
 
-    # Drop this scoreboard's stats slot whenever the source actually changes —
-    # the previous source's cached players/rosters no longer apply.
-    if source_changed:
+    # On a real mode change, clear the stale frame + game reference + stats slot
+    # (the previous mode's game no longer applies). A HUD-transport board is left
+    # alone — the HUD writer owns it.
+    if kind_changed and transport(sb_id) != "hud":
+        await Settings.Set(f"scoreboards.binding.{sb_id}.gameId", None)
+        await State.Set(f"score.{sb_id}", {})
         StatsTracker.reset_scoreboard(sb_id)
+        await State.Save()
 
-    if source_type == "hud":
-        # Side preservation operates on the single HUD-derived game shared by
-        # all HUD targets, so resetting it on any HUD-target change is fine.
-        # _reset_side_preservation also refreshes the cached HUD-target list.
-        RioGameDataProvider._reset_side_preservation()
+    return ORJSONResponse({"success": True, "binding": get_binding(sb_id)})
 
-        # Re-apply current HUD data to all HUD targets (which now includes sb_id)
-        if RioGameDataProvider.hud_watcher and RioGameDataProvider.hud_watcher.latest_game_data:
-            parsed = RioGameDataProvider.parse_game_data(
-                RioGameDataProvider.hud_watcher.latest_game_data
-            )
-            parsed = RioGameDataProvider._preserve_player_sides(parsed)
-            RioGameDataProvider.current_game = parsed
-            await RioGameDataProvider._apply_game_to_state(parsed)
-    elif old_source == "hud":
-        # Demoted from HUD — wipe side-preservation state so leftover swap
-        # flags from this scoreboard's last game don't carry into the next
-        # scoreboard promoted to HUD. Also refreshes the cached target list.
-        RioGameDataProvider._reset_side_preservation()
 
-    # Flush any state changes accumulated during this handler (no-op if nothing changed)
+@method(
+    router.put, "/scoreboards/hud-enabled",
+    version="1", id="scoreboards.set_hud_enabled",
+    response_class=ORJSONResponse
+)
+async def set_hud_enabled(
+    enabled: bool = True,
+    session_id: str | None = None,
+) -> ORJSONResponse:
+    """Toggle the global HUD transport on board 1.
+
+    On → refresh HUD targets and re-apply the latest HUD game to board 1.
+    Off → refresh HUD targets (board 1 reverts to its own binding). The last
+    HUD frame is left on screen (like the old HUD→Manual behavior); it becomes
+    editable again.
+    """
+    await Settings.Set("project_rio.hud_enabled", bool(enabled))
+
+    # Side-preservation caches the HUD-target list; reset recomputes it.
+    RioGameDataProvider._reset_side_preservation()
+
+    if enabled and RioGameDataProvider.hud_watcher \
+            and RioGameDataProvider.hud_watcher.latest_game_data:
+        parsed = RioGameDataProvider.parse_game_data(
+            RioGameDataProvider.hud_watcher.latest_game_data
+        )
+        parsed = RioGameDataProvider._preserve_player_sides(parsed)
+        RioGameDataProvider.current_game = parsed
+        await RioGameDataProvider._apply_game_to_state(parsed)
+
     await State.Save()
-
-    return ORJSONResponse({"success": True})
+    return ORJSONResponse({"success": True, "hud_enabled": bool(enabled)})
 
 
 @method(

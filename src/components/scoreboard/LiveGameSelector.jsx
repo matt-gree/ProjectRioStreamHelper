@@ -48,15 +48,16 @@ export default memo(function LiveGameSelector({ scoreboardNumber }) {
     const currentGameIdRef = useRef(currentGameId);
     useEffect(() => { currentGameIdRef.current = currentGameId; }, [currentGameId]);
 
-    // Mirror the current source type into a ref so the socket callback can
-    // bail out if the user has switched this scoreboard away from live_game
-    // (the component may briefly remain mounted during the transition).
-    const sourceTypeSetting = useSettingsStore(
-        s => s?.scoreboards?.sources?.[scoreboardNumber]?.type
-            ?? s?.scoreboards?.sources?.[String(scoreboardNumber)]?.type,
+    // Mirror the binding kind into a ref so the socket callback can bail out if
+    // the user has switched this scoreboard to a set (the component may briefly
+    // remain mounted during the transition). Single-mode is the live picker.
+    const bindingKind = useSettingsStore(
+        s => s?.scoreboards?.binding?.[scoreboardNumber]?.kind
+            ?? s?.scoreboards?.binding?.[String(scoreboardNumber)]?.kind
+            ?? 'single',
     );
-    const sourceTypeRef = useRef(sourceTypeSetting);
-    useEffect(() => { sourceTypeRef.current = sourceTypeSetting; }, [sourceTypeSetting]);
+    const bindingKindRef = useRef(bindingKind);
+    useEffect(() => { bindingKindRef.current = bindingKind; }, [bindingKind]);
 
     // Countdown to next auto-poll refresh
     const [secondsRemaining, setSecondsRemaining] = useState(null);
@@ -125,9 +126,9 @@ export default memo(function LiveGameSelector({ scoreboardNumber }) {
         setGames(updated);
         resetCountdown();
 
-        // Skip the auto re-apply if this scoreboard is no longer a live_game
-        // source — otherwise we'd overwrite whatever the user just switched to.
-        if (sourceTypeRef.current !== 'live_game') return;
+        // Skip the auto re-apply if this scoreboard is no longer a single-game
+        // board — otherwise we'd overwrite whatever the user just switched to.
+        if (bindingKindRef.current !== 'single') return;
 
         const loadedId = currentGameIdRef.current;
         if (loadedId == null) return;

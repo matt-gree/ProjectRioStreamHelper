@@ -130,6 +130,11 @@ class Settings:
         },
         "project_rio": {
             "hud_path": "",
+            # When True, board 1 carries the local HUD transport (the local Rio
+            # game auto-fills scoreboard 1). When False, board 1 behaves like any
+            # API board. This is the single control for "is board 1 the HUD board"
+            # — there is no per-board source selector. Toggled beside the HUD path.
+            "hud_enabled": True,
             "pinned_player": "",
             "pinned_side": "Team 1",
             "pinned_hud_only": False
@@ -137,6 +142,10 @@ class Settings:
         "scoreboards": {
             "active": [1],
             "aliases": {},
+            # Per-scoreboard binding: kind (single|set) + gameId/pool/stats_tag.
+            # Created/migrated in Load(); see server/bindings.py for the model.
+            # `sources` is retained read-only for one release as a migration
+            # fallback and is no longer written.
             "sources": {
                 "1": {"type": "manual", "api_game_id": None}
             }
@@ -263,12 +272,14 @@ class Settings:
     @classmethod
     async def Load(cls) -> dict:
         loaded_server: dict = {}
+        file_existed = False
         try:
             async with cls._settings_out.open(mode='rb', encoding='utf-8') as f:
                 loaded = await asyncio.to_thread(
                     orjson.loads,
                     await f.read()
                 )
+                file_existed = isinstance(loaded, dict)
                 loaded_server = (loaded.get("server") or {}) if isinstance(loaded, dict) else {}
                 cls.settings = _deep_merge(cls.settings, loaded)
         except:
@@ -307,6 +318,58 @@ class Settings:
                     if key in promoted_to_global:
                         layout_dict.pop(key, None)
             overlays["schema_version"] = 2
+            await cls.Save()
+
+        # One-time binding migration: unify the per-scoreboard source-type enum
+        # (manual | hud | live_game) + orthogonal rotation feed into a single
+        # `scoreboards.binding.{N}` model. Presence of `binding` is the flag, so
+        # this runs exactly once. See server/bindings.py.
+        scoreboards = cls.settings.setdefault("scoreboards", {})
+        if "binding" not in scoreboards:
+            sources = scoreboards.get("sources", {}) or {}
+            rotation = scoreboards.get("rotation", {}) or {}
+            active = scoreboards.get("active", [1]) or [1]
+
+            binding: dict = {}
+            for sb in active:
+                key = str(sb)
+                src = sources.get(key) if isinstance(sources.get(key), dict) else {}
+                stype = src.get("type", "manual")
+                stats_tag = src.get("stats_tag")
+                rot = rotation.get(key) if isinstance(rotation.get(key), dict) else {}
+                rot_on = bool(rot.get("enabled")) and bool(rot.get("game_ids"))
+
+                if stype == "hud":
+                    # HUD folds to the global board-1 transport; the board's own
+                    # binding becomes a plain single/manual.
+                    binding[key] = {"kind": "single", "gameId": None,
+                                    "pool": "both", "stats_tag": stats_tag}
+                elif stype == "live_game":
+                    binding[key] = {"kind": "single", "gameId": src.get("api_game_id"),
+                                    "pool": "both", "stats_tag": stats_tag}
+                elif rot_on:
+                    # A manual board with a running feed becomes a set binding;
+                    # the rotation.{N} runtime (game_ids/cached_games) is left in
+                    # place for RotationManager to resume from.
+                    binding[key] = {"kind": "set", "gameId": None,
+                                    "pool": rot.get("source_pool", "both"),
+                                    "stats_tag": stats_tag}
+                else:
+                    binding[key] = {"kind": "single", "gameId": None,
+                                    "pool": "both", "stats_tag": stats_tag}
+
+            scoreboards["binding"] = binding
+
+            # HUD is now a global transport switch that defaults ON — board 1
+            # auto-fills from the local Project Rio game whenever one is present.
+            # An API-only / no-Rio user just sees an empty (editable) board 1, so
+            # defaulting on is harmless and matches the common case. Only write it
+            # when the user hasn't already made an explicit choice (key absent
+            # from their file) so a deliberate off survives upgrades.
+            pr = (loaded.get("project_rio") if file_existed and isinstance(loaded, dict) else {}) or {}
+            if "hud_enabled" not in pr:
+                cls.settings.setdefault("project_rio", {})["hud_enabled"] = True
+
             await cls.Save()
 
     @classmethod

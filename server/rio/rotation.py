@@ -49,20 +49,13 @@ class RotationManager:
     async def Start(cls):
         """Initialize rotation manager. Auto-resumes rotations that were active in the previous session."""
         rotation_settings = Settings.Get("scoreboards.rotation", {})
-        sources = Settings.Get("scoreboards.sources", {})
         active = set(Settings.Get("scoreboards.active", [1]))
 
-        # Migrate the legacy "rotator" source. The game feed is now orthogonal
-        # to the source type — it attaches to a manual board — so any board
-        # still typed "rotator" becomes "manual"; its feed survives via the
-        # rotation.enabled flag below.
-        for sb_id_str, src in list(sources.items()):
-            if isinstance(src, dict) and src.get("type") == "rotator":
-                await Settings.Set(f"scoreboards.sources.{sb_id_str}.type", "manual")
-
         # Resume any feed that was running at shutdown, as long as its
-        # scoreboard still exists and it has games. The feed no longer depends
-        # on a source type; it's gated purely on its own enabled flag.
+        # scoreboard still exists, is still bound as a set, and has games.
+        # A running feed == a set binding; a board switched back to single (or
+        # promoted to HUD) must not have a stale rotation restarted under it.
+        from server.bindings import is_set, transport
         to_resume = {}
         for sb_id_str, config in rotation_settings.items():
             try:
@@ -70,6 +63,8 @@ class RotationManager:
             except (TypeError, ValueError):
                 continue
             if sb_id not in active:
+                continue
+            if transport(sb_id) == "hud" or not is_set(sb_id):
                 continue
             if config.get("enabled", False) and config.get("game_ids"):
                 to_resume[sb_id] = config

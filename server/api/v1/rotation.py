@@ -118,16 +118,18 @@ async def set_rotation_games(
     response_class=ORJSONResponse
 )
 async def start_rotation(sb_id: int, session_id: str | None = None) -> ORJSONResponse:
-    """Start a game feed for a scoreboard."""
-    # The feed attaches to a manual board (the neutral base with no competing
-    # live writer). Refuse to start on any other source so the feed can't fight
-    # a HUD/live-game writer for the same score keys.
-    source_type = Settings.Get(f"scoreboards.sources.{sb_id}.type")
-    if source_type != "manual":
+    """Start a game feed (set binding) for a scoreboard."""
+    # A HUD-transport board (board 1 with hud_enabled) has the local game as its
+    # exclusive writer — refuse to start a feed there so it can't fight the HUD
+    # writer for the same score keys. Any other board can carry a set binding.
+    from server.bindings import transport
+    if transport(sb_id) == "hud":
         raise HTTPException(
             status_code=409,
-            detail=f"scoreboard {sb_id} source is {source_type!r}, not 'manual'",
+            detail=f"scoreboard {sb_id} is HUD-bound; cannot start a feed",
         )
+    # Starting a feed puts the board into a set binding.
+    await Settings.Set(f"scoreboards.binding.{sb_id}.kind", "set")
     await RotationManager.start_rotation(sb_id)
     return ORJSONResponse({"success": True, **RotationManager.get_status(sb_id)})
 

@@ -48,10 +48,23 @@ def default_match() -> dict:
         # winner here (award_game); the projector mirrors it onto every bound
         # board as score.{N}.player.{T}.series_wins for overlays to render.
         "series": {"1": 0, "2": 0},
+        # Series-decided winner side (1|2) once a side reaches ceil(bestOf/2)
+        # wins; None while the series is live. Set by award_game's arithmetic
+        # (or the producer's force-decide); drives auto-retire + the UI.
+        "decided": None,
         "gameMode": "",
         "provider": {"startgg": {"setId": None}},
         "player": {"1": dict(_DEFAULT_SIDE), "2": dict(_DEFAULT_SIDE)},
     }
+
+
+def _norm_side(v):
+    """Coerce a decided/side value to int 1|2, or None."""
+    if v in (1, 2):
+        return v
+    if v in ("1", "2"):
+        return int(v)
+    return None
 
 
 class Match:
@@ -156,6 +169,11 @@ class Match:
                             int(wins) if isinstance(wins, (int, float)) else ""))
         best_of = (match.get("format") or {}).get("bestOf")
         entries.append((f"score.{sb}.best_of", int(best_of) if best_of else ""))
+        # Series-decided winner side, so overlays can render a "wins the series"
+        # state. Blanked (value "") while live or unbound — deterministic like
+        # the other projected keys.
+        decided = _norm_side(match.get("decided"))
+        entries.append((f"score.{sb}.series_decided", decided if decided else ""))
 
         await State.SetBatch(entries)
         await State.Save()
@@ -164,7 +182,7 @@ class Match:
         # fetch (mirrors the HUD/Live path). Only write when we have a mode so an
         # empty/unbound match never wipes a manually-chosen tag.
         if game_mode:
-            await Settings.Set(f"scoreboards.sources.{sb}.stats_tag", game_mode)
+            await Settings.Set(f"scoreboards.binding.{sb}.stats_tag", game_mode)
 
     @classmethod
     async def project_match(cls, m) -> None:
@@ -326,24 +344,118 @@ class Match:
         return None
 
     @classmethod
+    def _need(cls, m) -> int:
+        """Wins required to take the series (``ceil(bestOf/2)``)."""
+        best_of = int((cls.get(m).get("format") or {}).get("bestOf") or 1)
+        return best_of // 2 + 1
+
+    @classmethod
     async def award_game(cls, m, winner_rio: str) -> int | None:
-        """Credit one series game to the side ``winner_rio`` sits on, then
-        re-project so every bound board's series_wins update. Returns the
-        credited side, or None when the winner isn't on this match (name
-        mismatch — leave the series alone rather than guess)."""
+        """Credit one series game to the side ``winner_rio`` sits on, mark the
+        series decided if that reaches ``ceil(bestOf/2)``, then re-project so
+        every bound board updates. Returns the credited side, or None when the
+        winner isn't on this match (name mismatch — leave the series alone
+        rather than guess)."""
         side = cls.side_for_rio(m, winner_rio)
         if side is None:
             logger.warning("[Match] {}: winner {!r} not on this match — series not advanced",
                            m, winner_rio)
             return None
         series = cls.get(m).get("series") or {}
-        wins = series.get(str(side), series.get(side)) or 0
-        await State.Set(f"match.{m}.series.{side}", int(wins) + 1)
+        wins = int(series.get(str(side), series.get(side)) or 0) + 1
+        entries = [(f"match.{m}.series.{side}", wins)]
+        # First side to clinch owns `decided`; a later dead-rubber game never
+        # flips it (arithmetic, not last-writer).
+        if wins >= cls._need(m) and _norm_side(cls.get(m).get("decided")) is None:
+            entries.append((f"match.{m}.decided", side))
+            logger.info("[Match] {}: side {} clinches the series (Bo{})",
+                        m, side, (cls.get(m).get("format") or {}).get("bestOf"))
+        await State.SetBatch(entries)
         await State.Save()
         await cls.project_match(m)
         logger.info("[Match] {}: game to side {} ({}) — series now {}",
                     m, side, winner_rio, cls.get(m).get("series"))
         return side
+
+    @classmethod
+    async def force_decide(cls, m, side) -> None:
+        """Producer override: mark the series decided for ``side`` (or clear the
+        decided flag when ``side`` is falsy). Does not touch the game counts."""
+        s = _norm_side(side)
+        await State.Set(f"match.{m}.decided", s if s else None)
+        await State.Save()
+        await cls.project_match(m)
+        logger.info("[Match] {}: force-decide → {}", m, s)
+
+    @classmethod
+    async def flip_sides(cls, m) -> None:
+        """Swap participant 1↔2 on the fixture (authoring), carrying each side's
+        series wins with them so the record stays with the player. Distinct from
+        the per-game orientation gate, which seats *live* players to the fixture.
+        Re-projects onto every bound board."""
+        match = cls.get(m)
+        players = match.get("player") or {}
+        p1 = players.get("1") or players.get(1) or {}
+        p2 = players.get("2") or players.get(2) or {}
+        series = match.get("series") or {}
+        w1 = int(series.get("1", series.get(1, 0)) or 0)
+        w2 = int(series.get("2", series.get(2, 0)) or 0)
+        entries = [
+            (f"match.{m}.player.1", dict(p2)),
+            (f"match.{m}.player.2", dict(p1)),
+            (f"match.{m}.series.1", w2),
+            (f"match.{m}.series.2", w1),
+        ]
+        decided = _norm_side(match.get("decided"))
+        if decided:
+            entries.append((f"match.{m}.decided", 2 if decided == 1 else 1))
+        await State.SetBatch(entries)
+        await State.Save()
+        await cls.project_match(m)
+        logger.info("[Match] {}: sides flipped", m)
+
+    # ----- per-game identity gate (Phase B) --------------------------------
+
+    @classmethod
+    def gate_state(cls, sb, left_rio: str, right_rio: str) -> dict:
+        """Evaluate the per-game identity gate for bound board ``sb``.
+
+        Fired on a new game (inning reset) to check the live players against the
+        bound match's participants. Returns a dict with ``status``:
+
+        - ``nogate``   — board unbound, or the fixture has no participants yet.
+        - ``ok``       — a participant resolves; ``swap`` gives the orientation.
+        - ``conflict`` — neither live player matches an *undecided* match. Do NOT
+                          clear; the producer resolves. Carries ``expected`` +
+                          ``feed`` for the notification.
+        - ``retire``   — neither matches but the match is already *decided*: the
+                          series is over and different players are on now, so the
+                          match auto-retires and the board runs unbound.
+        """
+        m = cls.scoreboard_match(sb)
+        if not m:
+            return {"status": "nogate"}
+        match = cls.get(m)
+        players = match.get("player") or {}
+        p1 = players.get("1") or players.get(1) or {}
+        p2 = players.get("2") or players.get(2) or {}
+        e1 = cls._participant_rioname(p1)
+        e2 = cls._participant_rioname(p2)
+        if not e1.strip() and not e2.strip():
+            return {"status": "nogate", "matchId": m}
+
+        orient = cls.orientation_for_sides(sb, left_rio, right_rio)
+        if orient is not None:
+            return {"status": "ok", "matchId": m, "swap": orient}
+
+        payload = {
+            "matchId": m,
+            "expected": {"1": e1, "2": e2},
+            "feed": {"left": left_rio or "", "right": right_rio or ""},
+        }
+        if _norm_side(match.get("decided")) is not None:
+            return {"status": "retire", **payload}
+        return {"status": "conflict", **payload}
 
     @classmethod
     async def note_live(cls, sb) -> None:

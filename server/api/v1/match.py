@@ -96,6 +96,7 @@ async def delete_match(m: int):
 
     for sb in Match.bound_scoreboards(m):
         await State.Unset(f"score.{sb}.match")
+        await State.Unset(f"score.{sb}.match_conflict")
         await Match.clear_scoreboard(sb)
 
     await State.Unset(f"match.{m}")
@@ -107,6 +108,30 @@ class StartGGSetPayload(BaseModel):
     """Load a start.gg set's players into a match's sides."""
 
     setId: int
+
+
+@router.post("/{m}/flip", response_class=ORJSONResponse)
+async def flip_match(m: int):
+    """Swap participant 1↔2 on the fixture (authoring), carrying series wins."""
+    if not Match.exists(m):
+        raise HTTPException(404, f"match {m!r} not found")
+    await Match.flip_sides(m)
+    return Match.get(m)
+
+
+class DecidePayload(BaseModel):
+    """Force-decide the series for a side (null clears the decided flag)."""
+
+    side: int | None = None
+
+
+@router.post("/{m}/decide", response_class=ORJSONResponse)
+async def decide_match(m: int, payload: DecidePayload):
+    """Producer override: force the series decided for ``side`` (or clear)."""
+    if not Match.exists(m):
+        raise HTTPException(404, f"match {m!r} not found")
+    await Match.force_decide(m, payload.side)
+    return Match.get(m)
 
 
 @router.post("/{m}/startgg-set", response_class=ORJSONResponse)
@@ -158,17 +183,40 @@ bind_router = APIRouter(prefix="/scoreboards", tags=["match"])
 
 @bind_router.put("/{sb}/match", response_class=ORJSONResponse)
 async def bind_scoreboard(sb: int, payload: BindPayload):
-    """Bind board ``sb`` to a match (or unbind + blank when ``match`` is null)."""
+    """Bind board ``sb`` to a match (or unbind + blank when ``match`` is null).
+
+    A match encodes both sides of a single fixture, so it only binds to a
+    ``single``-kind board (a HUD board is single by construction). Binding to a
+    ``set`` (rotating feed) board is rejected — a rotation has no fixed sides to
+    project onto.
+    """
     m = payload.match
     if m is not None and not Match.exists(m):
         raise HTTPException(404, f"match {m!r} not found")
 
     if m is None:
         await State.Unset(f"score.{sb}.match")
+        await State.Unset(f"score.{sb}.match_conflict")
         await State.Save()
         await Match.clear_scoreboard(sb)
     else:
+        from server.bindings import is_set
+        if is_set(sb):
+            raise HTTPException(
+                409,
+                f"scoreboard {sb} is a rotating set — bind a match to a single-game board",
+            )
         await State.Set(f"score.{sb}.match", m)
         await State.Save()
         await Match.project_scoreboard(sb, m)
     return {"success": True, "match": m}
+
+
+@bind_router.post("/{sb}/match-conflict/dismiss", response_class=ORJSONResponse)
+async def dismiss_match_conflict(sb: int):
+    """Producer override: clear a board's match conflict, keeping the match bound
+    (the "keep + ignore this game" resolution). The bound match stays put; the
+    live game runs as-is until the next new game re-evaluates the gate."""
+    await State.Set(f"score.{sb}.match_conflict", None)
+    await State.Save()
+    return {"success": True}

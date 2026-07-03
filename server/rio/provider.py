@@ -73,10 +73,13 @@ def _stadium_slug(val) -> str:
 
 
 def _read_hud_targets() -> list[int]:
-    """Active scoreboards whose source type is 'hud'."""
-    active = Settings.Get("scoreboards.active", [1])
-    sources = Settings.Get("scoreboards.sources", {})
-    return [sb for sb in active if sources.get(str(sb), {}).get("type") == "hud"]
+    """Scoreboards that mirror the local HUD game.
+
+    HUD is a global transport on board 1 (see server/bindings.py), so this is
+    `[1]` when board 1 is active and hud_enabled, else `[]`.
+    """
+    from server.bindings import hud_target_scoreboards
+    return hud_target_scoreboards()
 
 
 def get_default_hud_file_path() -> Path:
@@ -382,8 +385,9 @@ class RioGameDataProvider:
     current_game: dict | None = None
 
     # Cached HUD-target list — avoids re-scanning settings on every HUD event.
-    # Derived from per-scoreboard source.type == "hud"; refreshed in
-    # _reset_side_preservation (called whenever sources change).
+    # Derived transport: board 1 when project_rio.hud_enabled (see
+    # server/bindings.py); refreshed in _reset_side_preservation (called
+    # whenever the HUD toggle or active scoreboards change).
     _hud_targets: list[int] = []
 
     # Player side preservation state
@@ -731,6 +735,74 @@ class RioGameDataProvider:
         cls._prev_inning = parsed.get("inning", 1)
         return swaps
 
+    # --- Per-game match identity gate (Phase B) ---
+
+    @classmethod
+    def _conflict_active(cls, sb: int) -> bool:
+        """Whether board ``sb`` currently carries an active match conflict."""
+        score = State.state.get("score", {}) or {}
+        sc = score.get(str(sb)) or score.get(sb) or {}
+        mc = sc.get("match_conflict") if isinstance(sc, dict) else None
+        return bool(isinstance(mc, dict) and mc.get("active"))
+
+    @classmethod
+    async def _clear_conflict(cls, sb: int) -> None:
+        """Blank a board's match_conflict (only writes when one is set)."""
+        if cls._conflict_active(sb):
+            await State.Set(f"score.{sb}.match_conflict", None)
+            await State.Save()
+
+    @classmethod
+    async def _retire_match_from_board(cls, sb: int, m) -> None:
+        """Auto-retire a decided match off board ``sb`` when different players
+        start a game: unbind + blank the projection so the board follows the raw
+        feed, and stamp the match ``post``. The match object survives (its final
+        series is preserved) — retiring is a producer-visible outcome, not a
+        delete.
+
+        Adopting a queued "next" match is left to the producer (the Production
+        draft bar); there is no server-side match queue to auto-promote from.
+        """
+        logger.info("[Match] board {} auto-retiring decided match {} (new game, "
+                    "different players)", sb, m)
+        await State.Unset(f"score.{sb}.match")
+        await State.Set(f"match.{m}.stage", "post")
+        await State.Save()
+        await Match.clear_scoreboard(sb)
+        await cls._clear_conflict(sb)
+
+    @classmethod
+    async def _evaluate_match_gates(cls, parsed: dict) -> None:
+        """Run the identity gate for every bound HUD-target board on a new game.
+
+        Conflicts are written to score.{N}.match_conflict for the app-wide
+        notification; a clean resolve clears any stale conflict; a decided-match
+        mismatch auto-retires. Orientation itself is already handled per-board by
+        `_decide` (a mismatch falls through to pin/back-to-back), so this layer
+        only manages the conflict flag + retire, never the live data.
+        """
+        entrants = parsed.get("entrants") or [[{}], [{}]]
+        left = entrants[0][0].get("rioName", "") if entrants[0] else ""
+        right = entrants[1][0].get("rioName", "") if entrants[1] else ""
+
+        for sb in cls._hud_targets:
+            res = Match.gate_state(sb, left, right)
+            status = res.get("status")
+            if status == "conflict":
+                await State.Set(f"score.{sb}.match_conflict", {
+                    "active": True,
+                    "matchId": res["matchId"],
+                    "expected": res["expected"],
+                    "feed": res["feed"],
+                })
+                await State.Save()
+                logger.warning("[Match] board {} gate conflict: feed {} vs expected {}",
+                               sb, res["feed"], res["expected"])
+            elif status == "retire":
+                await cls._retire_match_from_board(sb, res["matchId"])
+            else:  # ok / nogate — the live players belong here; drop stale conflict
+                await cls._clear_conflict(sb)
+
     # --- Player side preservation (3-layer system) ---
 
     @classmethod
@@ -762,6 +834,12 @@ class RioGameDataProvider:
         parsed = cls._preserve_player_sides(parsed)
         cls.current_game = parsed
         swaps = await cls._apply_game_to_state(parsed)
+        # Per-game identity gate: on a new game, check the live players against
+        # each bound match's fixture — raise/clear conflicts, auto-retire a
+        # decided match when different players take the board. Match-agnostic
+        # boards short-circuit to nogate.
+        if is_new_game:
+            await cls._evaluate_match_gates(parsed)
         # Mirror the PER-BOARD swap state into each slot so background fetches and
         # the stats push use the same orientation as the live data just written —
         # a match-bound board may differ from the global pin/back-to-back swap.
@@ -805,7 +883,7 @@ class RioGameDataProvider:
         """Set each HUD-target scoreboard's game-mode tag from the HUD tag set.
 
         Resolves the HUD game's TagSetID to its game-mode name and writes it to
-        scoreboards.sources.{sb}.stats_tag. This drives the stats fetch and
+        scoreboards.binding.{sb}.stats_tag. This drives the stats fetch and
         updates the UI selectbox. If the id can't be resolved (unknown/inactive
         mode) the existing manual selection is left untouched.
         """
@@ -816,9 +894,9 @@ class RioGameDataProvider:
         if not name:
             return
         for sb in cls._hud_targets:
-            current = Settings.Get(f"scoreboards.sources.{sb}.stats_tag", None)
+            current = Settings.Get(f"scoreboards.binding.{sb}.stats_tag", None)
             if current != name:
-                await Settings.Set(f"scoreboards.sources.{sb}.stats_tag", name)
+                await Settings.Set(f"scoreboards.binding.{sb}.stats_tag", name)
 
     @classmethod
     def _is_new_game(cls, current_inning: int) -> bool:
@@ -888,21 +966,26 @@ class RioGameDataProvider:
     def _decide(cls, left: str, right: str, sb=None, allow_manual: bool = True) -> tuple:
         """Resolve side orientation for one board as (sides_swapped, reason).
 
-        Precedence (highest first): manual > pin > match > back_to_back > none.
-        `reason` names the deciding layer (or "" when nothing governs the order)
-        and is mirrored into score.{N}.side_reason. Pass `sb=None` for the global
-        (match-agnostic) orientation used for back-to-back tracking; pass
-        `allow_manual=False` to seed the manual base on a new game.
+        Precedence (highest first): manual > match > pin > back_to_back > none.
+        A bound match encodes *both* sides, so it strictly supersedes the pin on
+        that board (Phase B) — `orientation_for_sides` returns None for an
+        unbound board (or one whose live players don't match the fixture), so the
+        pin stays authoritative for every unbound HUD board and as the fallback
+        when a bound game's players don't resolve. `reason` names the deciding
+        layer (or "" when nothing governs the order) and is mirrored into
+        score.{N}.side_reason. Pass `sb=None` for the global (match-agnostic)
+        orientation used for back-to-back tracking; pass `allow_manual=False` to
+        seed the manual base on a new game.
         """
         if allow_manual and cls._user_overridden:
             return cls._sides_swapped, "manual"
-        pin = cls._pin_swap(left, right)
-        if pin is not None:
-            return pin, "pin"
         if sb is not None:
             mo = Match.orientation_for_sides(sb, left, right)
             if mo is not None:
                 return mo, "match"
+        pin = cls._pin_swap(left, right)
+        if pin is not None:
+            return pin, "pin"
         b2b = cls._b2b_swap(left, right)
         if b2b is not None:
             return b2b, "back_to_back"

@@ -166,14 +166,22 @@ function ScaledIframe({ src, fallbackWidth, fallbackHeight, height = PREVIEW_HEI
 // Tinted-translucent source chips, matching the brand.
 const SOURCE_COLORS = {
     hud: 'bg-[#22c55e]/15 text-[#4ade80]',
-    live_game: 'bg-[#3b82f6]/15 text-[#60a5fa]',
     api: 'bg-[#3b82f6]/15 text-[#60a5fa]',
-    rotator: 'bg-[#a855f7]/15 text-[#c084fc]',
+    set: 'bg-[#a855f7]/15 text-[#c084fc]',
     manual: 'bg-muted text-muted-foreground',
 };
 
 // Friendly source labels (matches the Scoreboard tab's vocabulary).
-const SOURCE_LABEL = { hud: 'HUD', live_game: 'API', rotator: 'Rotator', manual: 'Manual' };
+const SOURCE_LABEL = { hud: 'HUD', api: 'API', set: 'Set', manual: 'Manual' };
+
+// Derive the badge key from a scoreboard's transport + binding (mirrors the
+// Scoreboard tab). Empty single boards read as "manual".
+function bindingBadgeKey({ transport, kind, gameId }) {
+    if (transport === 'hud') return 'hud';
+    if (kind === 'set') return 'set';
+    if (kind === 'single' && gameId != null) return 'api';
+    return 'manual';
+}
 
 function CopyIconButton({ value }) {
     return (
@@ -1779,7 +1787,8 @@ function ControllerOverlayPanel({ selected, onSelect }) {
 
 export default function LayoutBrowser() {
     const active = useSettingsStore(s => s?.scoreboards?.active ?? [1]);
-    const sources = useSettingsStore(s => s?.scoreboards?.sources ?? {});
+    const bindings = useSettingsStore(s => s?.scoreboards?.binding ?? {});
+    const hudEnabled = useSettingsStore(s => s?.project_rio?.hud_enabled ?? true);
     const aliases = useSettingsStore(s => s?.scoreboards?.aliases ?? {});
     const controllerSupported = useConfigStore(s => s.controller_overlay_supported) !== false;
 
@@ -1949,8 +1958,13 @@ export default function LayoutBrowser() {
                 <Tabs value={activeScoreboardTab} onValueChange={setActiveScoreboardTab}>
                     <TabsList>
                         {active.map(sbId => {
-                            const src = sources[sbId] ?? sources[String(sbId)];
-                            const srcType = src?.type ?? 'manual';
+                            const bind = bindings[sbId] ?? bindings[String(sbId)] ?? {};
+                            const transport = (sbId === 1 && hudEnabled) ? 'hud' : 'api';
+                            const srcType = bindingBadgeKey({
+                                transport,
+                                kind: bind.kind ?? 'single',
+                                gameId: bind.gameId ?? null,
+                            });
                             const alias = aliases[sbId] ?? aliases[String(sbId)] ?? '';
                             const label = alias || `Scoreboard ${sbId}`;
                             return (

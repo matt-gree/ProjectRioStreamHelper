@@ -14,6 +14,7 @@ from server.rio import stats_api
 from server.rio.stats_api import get_last_completed_fetch_info
 from server.rio.pyrio.lookup import LookupDicts
 from server.match import Match
+from server.rio.game_end import GameEndWatcher
 from server.settings import Settings
 
 
@@ -92,6 +93,7 @@ class OngoingGamePool:
         cls._poll_interval = Settings.Get("ongoing_games.poll_interval", 10.0)
         # Always start with auto-poll off regardless of previous session state
         await Settings.Set("ongoing_games.auto_poll", False)
+        GameEndWatcher.reset()
         logger.info("[OngoingGamePool] Initialized (auto_poll=False)")
 
     @classmethod
@@ -196,7 +198,14 @@ class OngoingGamePool:
 
             new_games[game_id] = game
 
+        prev_games = cls.games
         cls.games = new_games
+        # Phase C: a followed match-game dropping out of ongoing is the signal to
+        # resolve its winner and credit the series (see server/rio/game_end.py).
+        try:
+            GameEndWatcher.on_ongoing_poll(prev_games, new_games)
+        except Exception:
+            logger.exception("[OngoingGamePool] game-end hook error")
         await socketio.emit("v1.game_pool.ongoing_update", cls.list_games())
 
     @classmethod
@@ -235,15 +244,14 @@ class OngoingGamePool:
             parsed, scoreboard_number, home_team=home_team, side_reason=reason
         )
 
-        # Update the current api_game_id for this scoreboard. Leave `type`
-        # alone — it was set by the user via the source dropdown, and a
-        # rotator tick must not overwrite it (would turn the scoreboard into
-        # a live_game source on every advance). Likewise, do NOT auto-set
-        # stats_tag from the game's mode: that would (a) override the user's
-        # selected game mode and (b) trigger a stats refetch on every poll
-        # via the frontend's tag-change effect.
+        # Record the game currently applied to this scoreboard (used for
+        # is-new-game detection on the next apply). Leave `kind` alone — a
+        # set-binding tick must not flip the board to single. Likewise, do NOT
+        # auto-set stats_tag from the game's mode here: that would (a) override
+        # the user's selected game mode and (b) trigger a stats refetch on every
+        # poll via the frontend's tag-change effect.
         await Settings.Set(
-            f"scoreboards.sources.{scoreboard_number}.api_game_id", game_id
+            f"scoreboards.binding.{scoreboard_number}.gameId", game_id
         )
 
         return True
@@ -254,7 +262,7 @@ async def apply_completed_game_dict(game: dict, scoreboard_number: int) -> bool:
 
     Used by both the manual browser (CompletedGamePool.apply_game_to_scoreboard)
     and rotations (RotationState, which holds its own per-rotation game cache).
-    Performs the pinned-player side swap and persists api_game_id.
+    Performs the pinned-player side swap and persists the applied gameId.
     """
     if not game:
         return False
@@ -271,7 +279,7 @@ async def apply_completed_game_dict(game: dict, scoreboard_number: int) -> bool:
 
     await apply_completed_game_to_state(game, scoreboard_number, side_reason=reason)
     await Settings.Set(
-        f"scoreboards.sources.{scoreboard_number}.api_game_id", game.get("game_id")
+        f"scoreboards.binding.{scoreboard_number}.gameId", game.get("game_id")
     )
     return True
 

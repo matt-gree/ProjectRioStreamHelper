@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { Plus, Trash2, Trophy } from 'lucide-react';
+import { Plus, Trash2, Trophy, ArrowLeftRight } from 'lucide-react';
 import { useStateStore, useSettingsStore } from '../../context/store';
 import {
     createMatch, deleteMatch, updateMatch, bindScoreboard, loadStartGGSet,
+    flipMatch, decideMatch,
 } from '../../context/match';
 import ParticipantPicker from '../../components/ParticipantPicker';
 import StartggSetPicker from '../../components/StartggSetPicker';
@@ -87,7 +88,7 @@ function SideColumn({ m, side, player }) {
     );
 }
 
-function MatchCard({ m, match, active, boundMap, gameModes }) {
+function MatchCard({ m, match, active, boundMap, bindableMap, gameModes }) {
     const [label, setLabel] = useState(match?.label || '');
     useEffect(() => { setLabel(match?.label || ''); }, [match?.label]);
 
@@ -99,6 +100,10 @@ function MatchCard({ m, match, active, boundMap, gameModes }) {
     const wins = (side) => Number(series[side] ?? series[String(side)] ?? 0) || 0;
     const need = Math.floor(bestOf / 2) + 1;
     const clinched = wins(1) >= need ? 1 : wins(2) >= need ? 2 : null;
+    // Server-authored series-decided winner (award arithmetic or force-decide).
+    const rawDecided = match?.decided;
+    const decided = rawDecided === 1 || rawDecided === '1' ? 1
+        : rawDecided === 2 || rawDecided === '2' ? 2 : null;
     const bumpSeries = (side, delta) =>
         updateMatch(m, { series: { [side]: Math.max(0, wins(side) + delta) } });
 
@@ -106,6 +111,13 @@ function MatchCard({ m, match, active, boundMap, gameModes }) {
         const next = label.trim();
         if (next !== (match?.label || '')) updateMatch(m, { label: next });
     }, [label, match?.label, m]);
+
+    // Retire = unbind every board currently bound to this match. The match
+    // object (and its final series) survives; the boards return to their feed.
+    const boundBoards = active.filter((sb) => String(boundMap[sb]) === String(m));
+    const retire = useCallback(() => {
+        boundBoards.forEach((sb) => bindScoreboard(sb, null));
+    }, [boundBoards]);
 
     return (
         <Panel
@@ -156,6 +168,14 @@ function MatchCard({ m, match, active, boundMap, gameModes }) {
                         </PopoverContent>
                     </Popover>
                     <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => flipMatch(m)}
+                        title="Swap Side 1 ⇄ Side 2 (series wins follow)"
+                    >
+                        <ArrowLeftRight size={14} className="mr-1" /> Flip sides
+                    </Button>
+                    <Button
                         variant="ghost"
                         size="icon-sm"
                         className="ml-auto text-muted-foreground hover:text-destructive"
@@ -186,11 +206,31 @@ function MatchCard({ m, match, active, boundMap, gameModes }) {
                         <span className="font-mono text-sm tabular-nums">{wins(2)}</span>
                         <button type="button" className="px-1 text-muted-foreground hover:text-foreground" onClick={() => bumpSeries(2, 1)} aria-label="Side 2 +1 game">+</button>
                     </Group>
-                    {clinched && (
-                        <Badge className="bg-emerald-500/15 text-emerald-300 text-[10px] uppercase">
-                            Side {clinched} wins the series
-                        </Badge>
-                    )}
+                    {decided ? (
+                        <>
+                            <Badge className="bg-emerald-500/15 text-emerald-300 text-[10px] uppercase">
+                                Side {decided} wins the series
+                            </Badge>
+                            <Button size="sm" variant="ghost" className="text-muted-foreground"
+                                onClick={() => decideMatch(m, null)} title="Reopen the series (undo decided)">
+                                Reopen
+                            </Button>
+                            {boundBoards.length > 0 && (
+                                <Button size="sm" variant="secondary" onClick={retire}
+                                    title="Unbind this match from its board(s)">
+                                    Retire
+                                </Button>
+                            )}
+                        </>
+                    ) : clinched ? (
+                        // Reached the win count but not yet server-decided (e.g. the
+                        // producer bumped it manually) — offer the explicit decide.
+                        <Button size="sm" variant="secondary"
+                            onClick={() => decideMatch(m, clinched)}
+                            title={`Mark Side ${clinched} the series winner`}>
+                            Decide: Side {clinched}
+                        </Button>
+                    ) : null}
                     {stage === 'post' && (
                         <Button size="sm" variant="secondary" onClick={() => updateMatch(m, { stage: 'draft' })}>
                             Next game
@@ -203,11 +243,16 @@ function MatchCard({ m, match, active, boundMap, gameModes }) {
                     <Group gap="xs" wrap>
                         {active.map((sb) => {
                             const bound = String(boundMap[sb]) === String(m);
+                            // A match binds only to a single-game board; a rotating
+                            // set has no fixed sides to project onto.
+                            const bindable = bound || bindableMap[sb];
                             return (
                                 <Button
                                     key={sb}
                                     size="sm"
                                     variant={bound ? 'default' : 'outline'}
+                                    disabled={!bindable}
+                                    title={bindable ? undefined : `Board ${sb} is a rotating set — matches bind to single-game boards`}
                                     onClick={() => bindScoreboard(sb, bound ? null : m)}
                                 >
                                     Board {sb}
@@ -225,7 +270,21 @@ export default function MatchPanel() {
     const matchObj = useStateStore((s) => s.match) || {};
     const scores = useStateStore((s) => s.score);
     const active = useSettingsStore((s) => s?.scoreboards?.active ?? [1]);
+    const bindings = useSettingsStore((s) => s?.scoreboards?.binding);
+    const hudEnabled = useSettingsStore((s) => s?.project_rio?.hud_enabled) ?? true;
     const [gameModes, setGameModes] = useState([]);
+
+    // A board accepts a match iff it's a single-game board — a HUD board (board
+    // 1 while HUD is on) is single by construction; otherwise its binding.kind.
+    const bindableMap = useMemo(() => {
+        const map = {};
+        for (const sb of active) {
+            const isHud = sb === 1 && hudEnabled;
+            const kind = bindings?.[sb]?.kind ?? bindings?.[String(sb)]?.kind ?? 'single';
+            map[sb] = isHud || kind !== 'set';
+        }
+        return map;
+    }, [active, bindings, hudEnabled]);
 
     useEffect(() => {
         fetch('/api/v1/rio/game-modes')
@@ -267,6 +326,7 @@ export default function MatchPanel() {
                             match={matchObj[m]}
                             active={active}
                             boundMap={boundMap}
+                            bindableMap={bindableMap}
                             gameModes={gameModes}
                         />
                     ))}

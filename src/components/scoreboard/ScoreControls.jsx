@@ -25,10 +25,9 @@ const num = (v, fallback = 0) => {
     return Number.isFinite(n) ? n : fallback;
 };
 
-const sourceOptions = [
-    { value: 'manual',    label: 'Manual' },
-    { value: 'hud',       label: 'HUD' },
-    { value: 'live_game', label: 'Live API Game' },
+const bindingOptions = [
+    { value: 'single', label: 'Single Game' },
+    { value: 'set',    label: 'Multiple Games' },
 ];
 
 // Count-dot colors keyed by the legacy Mantine color name.
@@ -61,7 +60,7 @@ function CountDots({ count, max, color, onChange }) {
 /**
  * Central score column: scores, baseball state, match info.
  */
-export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, sourceType = 'manual', onSetSource }) {
+export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, transport = 'api', kind = 'single', onSetKind }) {
     const base = `score.${scoreboardNumber}`;
     const setItem = useStateStore(s => s.setItem);
     const settingsSetItem = useSettingsStore(s => s.setItem);
@@ -93,7 +92,9 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, sourc
     // Game mode is per-scoreboard. No global fallback — empty means "don't
     // fetch stats for this scoreboard until the user picks a mode."
     const statsTag = useSettingsStore(s =>
-        s?.scoreboards?.sources?.[scoreboardNumber]?.stats_tag ?? ''
+        s?.scoreboards?.binding?.[scoreboardNumber]?.stats_tag
+            ?? s?.scoreboards?.binding?.[String(scoreboardNumber)]?.stats_tag
+            ?? ''
     );
     const [gameModes, setGameModes] = useState([]);
     const [diagOpen, setDiagOpen] = useState(false);
@@ -141,7 +142,7 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, sourc
     }, [statsTag, scoreboardNumber]);
 
     const handleGameModeChange = useCallback((val) => {
-        settingsSetItem(`scoreboards.sources.${scoreboardNumber}.stats_tag`, val ?? '');
+        settingsSetItem(`scoreboards.binding.${scoreboardNumber}.stats_tag`, val ?? '');
     }, [settingsSetItem, scoreboardNumber]);
 
     const handleInspect = useCallback(() => {
@@ -252,17 +253,24 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, sourc
         <Panel glow={false} title="Game State">
             <div className="p-3.5">
             <Stack gap="md">
-                {/* ---- Data Source ---- */}
-                {onSetSource && (
-                    <div className="flex flex-col gap-1.5">
-                        <Label className="field-label">Data Source</Label>
+                {/* ---- Binding ---- */}
+                <div className="flex flex-col gap-1.5">
+                    <Label className="field-label">Games</Label>
+                    {transport === 'hud' ? (
+                        <div className="flex items-center gap-2">
+                            <Badge className="bg-[#22c55e]/15 text-[#4ade80] text-[11px] font-semibold uppercase tracking-wider">
+                                HUD
+                            </Badge>
+                            <Text size="xs" dimmed>Local game — disable HUD in Settings to rebind.</Text>
+                        </div>
+                    ) : (
                         <SimpleSelect
-                            data={sourceOptions}
-                            value={sourceType}
-                            onChange={val => onSetSource(val)}
+                            data={bindingOptions}
+                            value={kind}
+                            onChange={val => onSetKind?.(val)}
                         />
-                    </div>
-                )}
+                    )}
+                </div>
 
                 {/* ---- Game Mode ---- */}
                 <div className="flex items-end gap-1.5">
