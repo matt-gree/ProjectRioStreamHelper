@@ -26,6 +26,12 @@
 //   message  : title, subtitle
 //   bracket  : label, title, subtitle
 //
+// SPACE is a structural slot, not a content type: it has no template and draws
+// nothing. It splits the band wherever it's placed — the continuous bed breaks
+// into one island per contiguous run of content slots, and the space expands to
+// fill the leftover band width (flex), pushing those islands toward the corners.
+// A fixed px width (lowerthird.slots.{i}.width) makes it a fixed gap instead.
+//
 // Per-slot data lives at lowerthird.slots.{i}.*:
 //   enabled, type, title, subtitle, matchId, role ('upnext'|'current'),
 //   status (override), scoreboard (N), image (merch file), clock {mode,...}
@@ -50,7 +56,7 @@ const SETTINGS_TYPE = 'lowerthird';
 const ELEMENT = 'lowerthird';
 const DEFAULT_PACKAGE = 'default';
 const SLOT_COUNT = 5;
-const SLOT_TYPES = ['logo', 'match', 'scorebox', 'merch', 'clock', 'message', 'bracket'];
+const SLOT_TYPES = ['logo', 'match', 'scorebox', 'merch', 'clock', 'message', 'bracket', 'space'];
 
 // Controller-port → colour (0-indexed), used to tint match/scorebox sides.
 // Overridable per port via overlays.lowerthird.port{N}Color. Falls back to the
@@ -165,6 +171,7 @@ export function mountLowerThird({ host }) {
   let revealKey = '';            // identity of last reveal (avoid replay on ticks)
   let structureKey = '';         // identity of the laid-out segment row
   let segs = [];                 // [{ i, type, node, slots: {name: el}, refit: [el] }]
+  let bedClones = [];            // per-group band-bg clones (space splits the bed)
   let clockTimer = null;
   let disposed = false;
 
@@ -243,16 +250,21 @@ export function mountLowerThird({ host }) {
   }
 
   // ── layout (the horizontal meld) ──────────────────────────────────────────
-  // Clone each active slot's template into the band group, accumulate x
-  // offsets, align the row, size the shared band-bg. If the picked segments
-  // overflow the band, the whole row scales down uniformly (vertically
+  // Clone each content slot's template into the band group, accumulate x
+  // offsets, align the row, and lay out the bed(s). SPACE slots carry no
+  // content: they either flex-fill the leftover band width (default — pushing
+  // content toward the corners) or hold a fixed px width, and they break the
+  // continuous bed into one island per contiguous run of content. If the fixed
+  // content overflows the band, the whole row scales down uniformly (vertically
   // centred) — authored proportions survive any slot combination. Only reruns
-  // when the active (slot, type) structure or theme changes — data binds
+  // when the active (slot, type/width) structure or theme changes — data binds
   // don't relayout.
   function rebuildStructure(active) {
     const svg = host.querySelector('svg');
     const band = svg ? svg.querySelector('[data-band]') : null;
     segs = [];
+    bedClones.forEach((n) => n.remove());
+    bedClones = [];
     if (!band) return;
     band.querySelectorAll('[data-row]').forEach((n) => n.remove());
 
@@ -262,19 +274,41 @@ export function mountLowerThird({ host }) {
     const gap = parseFloat(band.getAttribute('data-gap')) || 32;
     const align = band.getAttribute('data-align') || 'center';
 
-    const picked = [];
-    let total = 0;
+    // Classify: content items own a template + fixed width; space items are
+    // spacers with either a fixed width (>0) or flex fill (0 / blank).
+    const items = [];
     for (const slot of active) {
+      if (slot.type === 'space') {
+        items.push({ slot, isSpace: true, fixedW: Math.max(0, parseFloat(slot.width) || 0) });
+        continue;
+      }
       const tpl = svg.querySelector(`[data-tpl="${slot.type}"]`);
       if (!tpl) continue;
       const w = parseFloat(tpl.getAttribute('data-w')) || 300;
-      picked.push({ slot, tpl, w });
-      total += w;
+      items.push({ slot, tpl, w, isSpace: false });
     }
-    if (picked.length) total += gap * (picked.length - 1);
+    const contentItems = items.filter((it) => !it.isSpace);
+    if (!contentItems.length) return; // all-space / empty → nothing to draw
 
-    const scale = total > bandW ? bandW / total : 1;
-    const scaledTotal = total * scale;
+    // A gap applies only between two adjacent CONTENT items (a space is its own
+    // separator). Fixed budget = content widths + fixed-space widths + gaps.
+    let gapCount = 0;
+    for (let k = 1; k < items.length; k++) {
+      if (!items[k].isSpace && !items[k - 1].isSpace) gapCount++;
+    }
+    const flexSpaces = items.filter((it) => it.isSpace && it.fixedW <= 0);
+    const fixedTotal = items.reduce((a, it) => a + (it.isSpace ? it.fixedW : it.w), 0)
+      + gap * gapCount;
+
+    const scale = fixedTotal > bandW ? bandW / fixedTotal : 1;
+    const flex = (flexSpaces.length && fixedTotal < bandW)
+      ? (bandW - fixedTotal) / flexSpaces.length : 0;
+    for (const it of items) {
+      it.lw = it.isSpace ? (it.fixedW > 0 ? it.fixedW : flex) : it.w;
+    }
+
+    const laidTotal = items.reduce((a, it) => a + it.lw, 0) + gap * gapCount;
+    const scaledTotal = laidTotal * scale;
 
     let rowX = bandX;
     if (align === 'center') rowX = bandX + Math.max(0, (bandW - scaledTotal) / 2);
@@ -286,11 +320,19 @@ export function mountLowerThird({ host }) {
     row.setAttribute('transform', `translate(${rowX},${rowY}) scale(${scale})`);
     band.appendChild(row);
 
+    // Lay items left→right; record each content-run span (a "group") so the bed
+    // can be cloned per island. A space closes the current group.
+    const groups = [];
+    let group = null;
     let x = 0;
-    for (const { slot, tpl, w } of picked) {
-      const node = tpl.cloneNode(true);
+    let prev = null;
+    for (const it of items) {
+      if (!it.isSpace && prev && !prev.isSpace) x += gap; // gap: content↔content
+      if (it.isSpace) { group = null; x += it.lw; prev = it; continue; }
+      const startX = x;
+      const node = it.tpl.cloneNode(true);
       node.removeAttribute('data-tpl');
-      node.setAttribute('data-seg', String(slot.i));
+      node.setAttribute('data-seg', String(it.slot.i));
       node.setAttribute('transform', `translate(${x},0)`);
       node.classList.add('lt-seg-in');
       row.appendChild(node);
@@ -300,21 +342,31 @@ export function mountLowerThird({ host }) {
         slots[el.getAttribute('data-slot')] = el;
         if (el.tagName.toLowerCase() === 'text' && el.getAttribute('data-maxw')) refit.push(el);
       });
-      segs.push({ i: slot.i, type: slot.type, node, slots, refit });
-      x += w + gap;
+      segs.push({ i: it.slot.i, type: it.slot.type, node, slots, refit });
+      x += it.w;
+      if (!group) { group = { start: startX, end: x }; groups.push(group); }
+      else group.end = x;
+      prev = it;
     }
 
-    // Continuous bed under the row (optional in the theme).
+    // Bed(s): one band-bg per content group, positioned in absolute space under
+    // the scaled row (bed rects live outside the row's scale transform). With no
+    // space slot this is a single island == the old continuous bed.
     const bg = engine.slots['band-bg'];
     if (bg) {
+      bg.setAttribute('opacity', '0'); // original is the clone template only
       const padAttr = bg.getAttribute('data-pad');
-      const hasRow = picked.length > 0;
-      if (padAttr != null && hasRow) {
-        const p = parseFloat(padAttr) || 0;
-        bg.setAttribute('x', String(rowX - p));
-        bg.setAttribute('width', String(scaledTotal + p * 2));
+      const pad = padAttr != null ? (parseFloat(padAttr) || 0) : 0;
+      for (const gr of groups) {
+        const bed = bg.cloneNode(true);
+        bed.removeAttribute('data-slot');
+        bed.setAttribute('data-bed-clone', '1');
+        bed.setAttribute('x', String(rowX + gr.start * scale - pad));
+        bed.setAttribute('width', String((gr.end - gr.start) * scale + pad * 2));
+        bed.setAttribute('opacity', '1');
+        bg.parentNode.insertBefore(bed, bg.nextSibling);
+        bedClones.push(bed);
       }
-      bg.setAttribute('opacity', hasRow ? '1' : '0');
     }
   }
 
@@ -478,15 +530,17 @@ export function mountLowerThird({ host }) {
 
     const slots = readSlots(state);
     const active = slots.filter((s) => s.enabled && s.type);
+    const hasContent = active.some((s) => s.type !== 'space');
 
-    // Nothing authored → keep the source blank on air.
-    host.style.display = active.length ? '' : 'none';
-    if (!active.length) { revealKey = ''; structureKey = ''; return; }
+    // Nothing authored (or only spacers) → keep the source blank on air.
+    host.style.display = hasContent ? '' : 'none';
+    if (!hasContent) { revealKey = ''; structureKey = ''; return; }
 
     applyAccent(settings);
 
-    // Relayout only when the (slot, type) structure changes.
-    const sKey = `${theme}|` + active.map((s) => `${s.i}:${s.type}`).join(',');
+    // Relayout only when the (slot, type + space width) structure changes.
+    const sKey = `${theme}|` + active.map((s) =>
+      s.type === 'space' ? `${s.i}:space:${s.width || 0}` : `${s.i}:${s.type}`).join(',');
     if (sKey !== structureKey) { rebuildStructure(active); structureKey = sKey; }
 
     for (const seg of segs) {

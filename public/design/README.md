@@ -98,8 +98,8 @@ Structure the theme provides:
 | Marked with | Element | Notes |
 |-------------|---------|-------|
 | `data-band` + `data-x` / `data-w` / `data-h` / `data-gap` / `data-align` | `<g>` | The row container the clones go into. `data-align`: `center` (default) / `left` / `right`. If the picked segments overflow `data-w`, the whole row scales down uniformly (vertically centred within `data-h`). |
-| `data-slot="band-bg"` + `data-pad` | `<rect>` | Optional continuous bed. The mount sets `x`/`width` to the laid-out row (inset by `data-pad`); `y`/`height`/`rx`/paints are yours. Omit `data-pad` to keep it static. |
-| `data-tpl="{type}"` + `data-w` | `<g>` in `<defs>` | One template per content type, authored at a local `(0,0)` origin at band height. A missing template makes that type unavailable in this theme. |
+| `data-slot="band-bg"` + `data-pad` | `<rect>` | Optional bed. The mount clones it **once per content island** (a `space` slot splits the band into islands), sizing each clone's `x`/`width` to that island (inset by `data-pad`); `y`/`height`/`rx`/paints are yours. With no `space` slot there is one island == the whole row. |
+| `data-tpl="{type}"` + `data-w` | `<g>` in `<defs>` | One template per content type, authored at a local `(0,0)` origin at band height. A missing template makes that type unavailable in this theme. The `space` slot is structural (no template needed). |
 
 Content types and their sub-slots (inside the template; any may be omitted):
 
@@ -112,6 +112,7 @@ Content types and their sub-slots (inside the template; any may be omitted):
 | `clock` | `clock-label`, `clock` (countdown / count-up / time-of-day, tabular numerals) |
 | `message` | `title`, `subtitle` |
 | `bracket` | `label` (default `BRACKET`), `title` (loaded phase name), `subtitle` |
+| `space` | *(no template)* — a spacer that splits the band. Flex-fills the leftover width (pushing content to the corners), or holds a fixed px width via `lowerthird.slots.{i}.width`. |
 
 Runtime colour seams (resolve through inline `style`): `--accent` on the host
 (per-layout pin `overlays.lowerthird.accentColor`), and `--side1` / `--side2`

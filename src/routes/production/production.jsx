@@ -1489,6 +1489,7 @@ const LT_TYPE_OPTIONS = [
     { value: 'clock', label: 'Timer / Clock' },
     { value: 'message', label: 'Message' },
     { value: 'bracket', label: 'Bracket' },
+    { value: 'space', label: 'Space (split)' },
 ];
 const LT_TYPE_LABEL = Object.fromEntries(LT_TYPE_OPTIONS.map(o => [o.value, o.label]));
 
@@ -1614,6 +1615,7 @@ function ltSlotSummary(type, s, matches) {
         return m === 'off' ? 'Clock off' : (m === 'clock' ? 'Time of day' : (m === 'countdown' ? 'Countdown' : 'Count up'));
     }
     if (type === 'bracket') return s.title || 'Loaded bracket phase';
+    if (type === 'space') return Number(s.width) > 0 ? `Fixed gap ${Math.round(s.width)}px` : 'Split / fill';
     return s.title || '';
 }
 
@@ -1902,6 +1904,20 @@ function LowerThirdSlotEditor({ i }) {
                     {textField('subtitle', 'Subtitle (optional)', s.subtitle)}
                 </>
             )}
+
+            {type === 'space' && (
+                <label className="flex flex-col gap-1">
+                    {fieldLabel('width', 'Gap width in px (blank = fill / split to the corners)')}
+                    <input
+                        type="number" min={0} step={10} className={LT_INPUT} placeholder="Fill"
+                        value={val(p('width'), s.width) || ''}
+                        onChange={(e) => setKey(p('width'), e.target.value === '' ? 0 : Math.max(0, Number(e.target.value) || 0), `Lower third: slot ${i} gap width`)}
+                    />
+                    <Text size="xs" className="text-muted-foreground">
+                        Breaks the band into two cards — content before and after this slot separates into its own corner.
+                    </Text>
+                </label>
+            )}
         </Stack>
     );
 }
@@ -1910,7 +1926,8 @@ function LowerThirdSetup() {
     return (
         <Stack gap="xs" className="max-h-[440px] overflow-y-auto pr-1">
             <Text size="xs" className="text-muted-foreground">
-                Five band slots, left → right. Slot widths come from the active design package.
+                Five band slots, left → right. Slot widths come from the active design package. Use a
+                Space slot to split the band into separate cards and push content to the corners.
             </Text>
             {Array.from({ length: LT_SLOT_COUNT }, (_, k) => k + 1).map((i) => (
                 <LowerThirdSlotEditor key={i} i={i} />
