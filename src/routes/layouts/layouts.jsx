@@ -320,6 +320,13 @@ function LayoutItem({ item, selected, onSelect, activeTab }) {
 // Order in which team layouts appear in the two-column section
 const TEAM_LAYOUT_ORDER = ['roster', 'stats', 'teamlogo', 'playername'];
 
+// Layout types that play a reveal animation when their OBS source is shown.
+// Only these expose the "Intro animation" toggle (turning it off makes the
+// source resident instead of reloading on show — see obs.jsx desiredShutdown).
+const ANIMATED_TYPES = new Set([
+    'scoreboard', 'scorecard', 'lowerthird', 'matchup', 'commentary', 'playerplates', 'hitvisualizer',
+]);
+
 function LayoutList({ layouts, selected, onSelect, activeTab }) {
     const [expandedGroups, setExpandedGroups] = useState({});
 
@@ -1862,12 +1869,13 @@ export default function LayoutBrowser() {
         });
     }, [allLayouts, searchQuery]);
 
-    // Talent — registry-bound person overlays: the commentary caster strip now,
-    // the player element soon. Both render people from the address book.
+    // Talent — registry-bound person overlays: the commentary caster strip and
+    // the player-plates band. Both render people (fed from the address book /
+    // match, or typed manually).
     const talentLayouts = useMemo(() => {
         const q = searchQuery.toLowerCase().trim();
         return allLayouts.filter(l => {
-            if (l.group !== 'commentary' && l.group !== 'player') return false;
+            if (l.group !== 'commentary' && l.group !== 'playerplates') return false;
             if (q && !l.name.toLowerCase().includes(q)) return false;
             return true;
         });
@@ -1926,6 +1934,10 @@ export default function LayoutBrowser() {
     const hasAnySupportedSettings = supportedSettings === null || supportedSettings.length > 0;
     const showSettingsPanel = !!selectedType && hasAnySupportedSettings && mode !== 'design';
 
+    const setSetting = useSettingsStore(s => s.setItem);
+    const isAnimatedType = !!selectedType && ANIMATED_TYPES.has(selectedType);
+    const introDisabled = useSettingsStore(s => !!s?.overlays?.[selectedType]?.disableIntro);
+
     const selectedUrl = useMemo(() => {
         if (!selected?.url) return null;
         try {
@@ -1933,11 +1945,32 @@ export default function LayoutBrowser() {
             if (mode === 'scoreboard') {
                 u.searchParams.set('scoreboard', activeScoreboardTab);
             }
+            // Carry the intro opt-out into the copy/preview/Add-to-OBS URL so a
+            // newly-added source starts in the right state.
+            if (isAnimatedType && introDisabled) u.searchParams.set('intro', '0');
             return u.toString();
         } catch {
             return selected.url;
         }
-    }, [selected?.url, activeScoreboardTab, mode]);
+    }, [selected?.url, activeScoreboardTab, mode, isAnimatedType, introDisabled]);
+
+    // Turn the reveal animation on/off for this layout. Persists the preference
+    // (drives the copy/preview URL above) AND rewrites any already-added OBS
+    // sources of this layout in place, so bound sources update without re-copying.
+    const setIntroEnabled = useCallback(async (animOn) => {
+        if (!selectedType || !selected?.url) return;
+        const disabled = !animOn;
+        setSetting(`overlays.${selectedType}.disableIntro`, disabled);
+        setPreviewRevision(r => r + 1);
+        try {
+            const path = new URL(selected.url).pathname;
+            const n = await useObsStore.getState().setLayoutIntroDisabled(path, disabled);
+            if (n) notifications.show({
+                message: `Intro animation ${disabled ? 'off' : 'on'} — updated ${n} OBS source${n > 1 ? 's' : ''}`,
+                color: 'green',
+            });
+        } catch { /* OBS offline or source gone — the setting still persists */ }
+    }, [selectedType, selected?.url, setSetting]);
 
     const baseUrl = useMemo(() => {
         try {
@@ -2117,6 +2150,19 @@ export default function LayoutBrowser() {
                                                 width={selected?.width}
                                                 height={selected?.height}
                                             />
+                                            {isAnimatedType && (
+                                                <SimpleTooltip label={introDisabled
+                                                    ? 'Intro animation off — source stays resident (no reload on show)'
+                                                    : 'Intro animation on — source reloads on show for a clean reveal'}>
+                                                    <label className="flex items-center gap-1.5 whitespace-nowrap px-1">
+                                                        <Text size="xs" dimmed>Intro</Text>
+                                                        <Switch
+                                                            checked={!introDisabled}
+                                                            onCheckedChange={setIntroEnabled}
+                                                        />
+                                                    </label>
+                                                </SimpleTooltip>
+                                            )}
                                             <SimpleTooltip label="Reload preview">
                                                 <Button variant="ghost" size="icon-sm" onClick={() => setPreviewRevision(r => r + 1)}>
                                                     <RotateCw size={14} />

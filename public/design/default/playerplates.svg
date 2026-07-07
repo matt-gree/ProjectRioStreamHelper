@@ -1,0 +1,45 @@
+<svg viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMax meet" xmlns="http://www.w3.org/2000/svg">
+  <!-- DEFAULT package - Player Plates: the Project Rio brand look (night-arena
+       plates, Rio-red rail, Rajdhani display names, star-gold sub labels; from
+       the Project Rio design system token layer in rio-theme/tokens.css).
+       FIXED palette: no data-design-vars, so the user's Design-tab knobs never
+       repaint it. Full 1920x1080 canvas, row anchored near the bottom.
+
+       Two identical single-player plates, `side1` and `side2`, BOTH authored at
+       the LEFT anchor. The mount moves each plate to its resolved anchor with a
+       transform (data-layouts `anchors` gives each anchor's x offset from this
+       authored left position). See public/design/README.md for the contract. -->
+  <defs>
+    <filter id="ppShadow" x="-15%" y="-30%" width="130%" height="180%">
+      <feDropShadow dx="0" dy="6" stdDeviation="14" flood-color="#000000" flood-opacity="0.55"/>
+    </filter>
+  </defs>
+
+  <g data-slot="side1" opacity="0">
+    <rect data-part="main-rect" x="48" y="896" width="660" height="168" rx="12" fill="#0b0b12" fill-opacity="0.97" stroke="#1f1f30" stroke-width="1.5" filter="url(#ppShadow)"/>
+    <rect data-part="rail" x="64" y="936" width="6" height="88" rx="2" fill="#e60012"/>
+    <text data-slot="side1-name" data-maxw="572" x="84" y="972" fill="#f5f5f8" style="font-family:var(--font-display, 'Rajdhani', 'Arial Narrow', sans-serif)" font-size="36" font-weight="700" letter-spacing="0.5"></text>
+    <g data-slot="side1-sub" style="opacity:0">
+      <rect data-part="sub-divider" x="84" y="982" width="560" height="2" rx="1" fill="#f5bb00" opacity="0.45"/>
+      <text data-slot="side1-sub-label" x="84" y="1008" fill="#f5bb00" style="font-family:var(--font-display, 'Rajdhani', 'Arial Narrow', sans-serif)" font-size="14" font-weight="700" letter-spacing="2"></text>
+      <text data-slot="side1-sub-value" data-maxw="486" x="170" y="1008" fill="#c9c9d6" style="font-family:var(--font-body, 'Inter', system-ui, sans-serif)" font-size="18" font-weight="600"></text>
+    </g>
+  </g>
+
+  <g data-slot="side2" opacity="0">
+    <rect data-part="main-rect" x="48" y="896" width="660" height="168" rx="12" fill="#0b0b12" fill-opacity="0.97" stroke="#1f1f30" stroke-width="1.5" filter="url(#ppShadow)"/>
+    <rect data-part="rail" x="64" y="936" width="6" height="88" rx="2" fill="#e60012"/>
+    <text data-slot="side2-name" data-maxw="572" x="84" y="972" fill="#f5f5f8" style="font-family:var(--font-display, 'Rajdhani', 'Arial Narrow', sans-serif)" font-size="36" font-weight="700" letter-spacing="0.5"></text>
+    <g data-slot="side2-sub" style="opacity:0">
+      <rect data-part="sub-divider" x="84" y="982" width="560" height="2" rx="1" fill="#f5bb00" opacity="0.45"/>
+      <text data-slot="side2-sub-label" x="84" y="1008" fill="#f5bb00" style="font-family:var(--font-display, 'Rajdhani', 'Arial Narrow', sans-serif)" font-size="14" font-weight="700" letter-spacing="2"></text>
+      <text data-slot="side2-sub-value" data-maxw="486" x="170" y="1008" fill="#c9c9d6" style="font-family:var(--font-body, 'Inter', system-ui, sans-serif)" font-size="18" font-weight="600"></text>
+    </g>
+  </g>
+
+  <!-- Per-anchor X offset from the authored (left) plate position. left keeps a
+       48px margin; center is canvas-centred; right keeps a 48px right margin. -->
+  <script type="application/json" data-layouts="1">
+  { "anchors": { "left": 0, "center": 582, "right": 1164 } }
+  </script>
+</svg>

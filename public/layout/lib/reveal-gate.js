@@ -45,6 +45,19 @@
 //   .lt-host.lt-off { opacity: 0 !important; }
 
 export function createRevealGate({ host, offClass, play, settleMs = 120 }) {
+  // Per-source opt-out: `?intro=0` on the browser-source URL disables the reveal
+  // animation entirely. With no animation there is nothing to stutter — a
+  // retained full-alpha OBS texture on re-show is just the (correct) resting
+  // content — so the gate becomes a pass-through: never gate dark, never play.
+  // The app pairs this with `shutdown:false` on the OBS source (see obs.jsx) so
+  // the source stays resident instead of reloading, which is what a persistent
+  // overlay (e.g. an always-on scoreboard) wants. Content stays visible because
+  // the host's resting CSS is its shown state; the reveal only animates INTO it.
+  if (new URLSearchParams(window.location.search).get('intro') === '0') {
+    host.classList.remove(offClass);
+    return { requestReveal() {}, setShown() {}, dispose() { host.classList.remove(offClass); } };
+  }
+
   let wantShown = true;    // desired on-screen state; OBS events drive it
   let presented = false;   // a reveal has played and the element is showing
   let owed = false;        // a reveal must play at the next painted opportunity

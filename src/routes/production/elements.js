@@ -88,6 +88,24 @@ export const ELEMENTS = [
         match: (url) => /\/layout\/commentary\//i.test(url) || /commentary\.html/i.test(url),
     },
     {
+        id: 'playerplates',
+        name: 'Player Plates',
+        // Two-player name/sub-plate band — a sibling of Commentary. Three MODES:
+        // both (side 1 left / side 2 right), or a single player at a togglable
+        // left/center/right location. Each plate is fed from a match (participant
+        // → name + a chosen address-book field) or typed manually. Relevant
+        // pre-game/intro (draft), on the desk (live), and over breaks. Direct
+        // element (own dedicated source); the face is the mode + per-plate
+        // content, projected to playerplates.* server-side. Native 1920×1080.
+        phase: ['draft', 'live', 'break'],
+        flavor: 'direct',
+        span: 5,
+        url: '/layout/playerplates/playerplates.html',
+        width: 1920,
+        height: 1080,
+        match: (url) => /\/layout\/playerplates\//i.test(url) || /playerplates\.html/i.test(url),
+    },
+    {
         id: 'postgamecallout',
         name: 'Stat Callout',
         // Post-game only: a full-screen, port-coloured reveal of one finished-game

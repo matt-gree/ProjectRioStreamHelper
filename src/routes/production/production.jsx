@@ -11,6 +11,10 @@ import {
     setCommentarySlots, SUBFIELD_OPTIONS, MAX_COMMENTATORS,
 } from '../../context/commentary';
 import {
+    setPlayerPlatesConfig, normalizeConfig as normalizePlatesConfig,
+    PP_MODE_OPTIONS, PP_SOURCE_OPTIONS, PP_LOCATION_OPTIONS, PP_SUBFIELD_OPTIONS,
+} from '../../context/playerplates';
+import {
     createMatch, updateMatch, deleteMatch, bindScoreboard, loadStartGGSet, fetchMatchup, clearMatchup,
 } from '../../context/match';
 import {
@@ -1111,6 +1115,205 @@ function CommentarySetup() {
     );
 }
 
+// ── Player Plates ──────────────────────────────────────────────────────────
+// A sibling of Commentary: the two-player name/sub-plate band. The producer
+// picks a MODE (both L/R, or one player at a togglable location) and each
+// plate's content (fed from a match, or typed manually); the whole config
+// stages+PUTs as ONE key ('playerplates'), and the server projector resolves it
+// to playerplates.* for the overlay. Same plate + sub-plate convention as the
+// caster strip, reusing the shared address-book sub-field vocabulary.
+const PP_INPUT = 'h-7 w-full rounded-md border border-border bg-card px-2 text-xs text-foreground';
+
+function usePlayerPlates() {
+    const cfgRaw = useStateStore(useShallow(s => s?.playerplates?.config));
+    const live = useStateStore(useShallow(s => s?.playerplates ?? {}));
+    const matches = useStateStore(useShallow(s => s?.match ?? {}));
+    const pending = usePending('playerplates');
+    const config = pending ? pending.value : normalizePlatesConfig(cfgRaw);
+
+    const setConfig = (next) => stageOrRun({
+        key: 'playerplates',
+        label: 'Player plates',
+        value: next,
+        run: () => setPlayerPlatesConfig(next),
+    });
+    const patch = (partial) => setConfig({ ...config, ...partial });
+    const patchSide = (t, sp) => setConfig({
+        ...config,
+        sides: { ...config.sides, [t]: { ...(config.sides?.[t] || {}), ...sp } },
+    });
+    // Server-resolved display name per side (used to preview the match-fed name).
+    const resolvedName = (t) => live?.[t]?.name ?? live?.[String(t)]?.name ?? '';
+    return { config, staged: !!pending, matches, patch, patchSide, resolvedName };
+}
+
+// One player's row: eye · name (typed, or resolved read-only when match-fed) ·
+// sub-plate field/value · sub toggle · (single-mode) location.
+function PlayerPlateSide({ t, pp }) {
+    const { config } = pp;
+    const side = config.sides?.[t] || {};
+    const isMatch = config.source === 'match';
+    const visible = side.visible !== false;
+    const subVisible = side.subVisible !== false;
+    const hasSub = isMatch ? !!side.subField : !!(side.subValue || side.subLabel);
+
+    return (
+        <div className={cn('rounded-md border border-border/60 bg-background/40 px-2 py-1.5', !visible && 'opacity-60')}>
+            <Group gap="xs" className="flex-nowrap items-center">
+                <SimpleTooltip label={visible ? 'On air — click to hide' : 'Hidden — click to show'}>
+                    <button
+                        type="button"
+                        onClick={() => pp.patchSide(t, { visible: !visible })}
+                        className={cn('shrink-0', visible ? 'text-foreground' : 'text-muted-foreground hover:text-foreground')}
+                    >
+                        {visible ? <Eye size={14} /> : <EyeOff size={14} />}
+                    </button>
+                </SimpleTooltip>
+                <Text size="xs" className="w-12 shrink-0 font-medium text-muted-foreground">Player {t}</Text>
+                {isMatch ? (
+                    <Text size="xs" className="min-w-0 flex-1 truncate text-foreground">
+                        {pp.resolvedName(t) || <span className="text-muted-foreground">No name from match</span>}
+                    </Text>
+                ) : (
+                    <input
+                        value={side.name || ''}
+                        onChange={(e) => pp.patchSide(t, { name: e.target.value })}
+                        placeholder={`Player ${t} name…`}
+                        className={cn(PP_INPUT, 'min-w-0 flex-1')}
+                    />
+                )}
+                <SimpleTooltip label={subVisible ? 'Sub-plate shown' : 'Sub-plate hidden'}>
+                    <button
+                        type="button"
+                        disabled={!hasSub}
+                        onClick={() => pp.patchSide(t, { subVisible: !subVisible })}
+                        className={cn('shrink-0 disabled:opacity-30', subVisible && hasSub ? 'text-rio-300' : 'text-muted-foreground hover:text-foreground')}
+                    >
+                        <Captions size={14} />
+                    </button>
+                </SimpleTooltip>
+            </Group>
+
+            <Group gap="xs" className="mt-1 flex-nowrap items-center">
+                {isMatch ? (
+                    <select
+                        value={side.subField || ''}
+                        onChange={(e) => pp.patchSide(t, { subField: e.target.value })}
+                        title="Sub-plate field"
+                        className={cn(PP_INPUT, 'flex-1')}
+                    >
+                        <option value="">No sub-plate</option>
+                        {PP_SUBFIELD_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                ) : (
+                    <>
+                        <input
+                            value={side.subLabel || ''}
+                            onChange={(e) => pp.patchSide(t, { subLabel: e.target.value })}
+                            placeholder="Sub label"
+                            className={cn(PP_INPUT, 'w-[38%]')}
+                        />
+                        <input
+                            value={side.subValue || ''}
+                            onChange={(e) => pp.patchSide(t, { subValue: e.target.value })}
+                            placeholder="Sub value"
+                            className={cn(PP_INPUT, 'flex-1')}
+                        />
+                    </>
+                )}
+                {config.mode !== 'both' && (
+                    <SegmentedControl
+                        size="xs"
+                        value={side.location || (t === 1 ? 'left' : 'right')}
+                        onChange={(v) => pp.patchSide(t, { location: v })}
+                        data={PP_LOCATION_OPTIONS}
+                        className="shrink-0"
+                    />
+                )}
+            </Group>
+        </div>
+    );
+}
+
+// Condensed face: mode + source (+ match picker), then the editor(s) for the
+// side(s) the mode shows.
+function PlayerPlatesFace({ element }) {
+    const pp = usePlayerPlates();
+    const { config } = pp;
+    const ids = useMemo(
+        () => Object.keys(pp.matches).filter(k => /^\d+$/.test(k)).sort((a, b) => Number(a) - Number(b)),
+        [pp.matches],
+    );
+    const showSide = (t) => config.mode === 'both'
+        || (config.mode === 'p1' && t === 1) || (config.mode === 'p2' && t === 2);
+
+    return (
+        <Stack gap="xs">
+            <DirectFace element={element} />
+            {pp.staged && (
+                <Group gap="xs" className="items-center">
+                    <StagedDot show />
+                    <Text size="xs" className="text-amber-400">Plate changes staged</Text>
+                </Group>
+            )}
+
+            <Group gap="xs" className="flex-nowrap items-center">
+                <Text size="xs" className="w-12 shrink-0 text-muted-foreground">Show</Text>
+                <SegmentedControl
+                    size="xs" value={config.mode}
+                    onChange={(v) => pp.patch({ mode: v })}
+                    data={PP_MODE_OPTIONS} className="flex-1"
+                />
+            </Group>
+            <Group gap="xs" className="flex-nowrap items-center">
+                <Text size="xs" className="w-12 shrink-0 text-muted-foreground">From</Text>
+                <SegmentedControl
+                    size="xs" value={config.source}
+                    onChange={(v) => pp.patch({ source: v })}
+                    data={PP_SOURCE_OPTIONS} className="shrink-0"
+                />
+                {config.source === 'match' && (
+                    <select
+                        value={config.matchId != null && pp.matches[String(config.matchId)] ? String(config.matchId) : ''}
+                        onChange={(e) => pp.patch({ matchId: e.target.value ? Number(e.target.value) : null })}
+                        className={cn(PP_INPUT, 'min-w-0 flex-1')}
+                    >
+                        <option value="">{ids.length ? 'Pick match…' : 'No matches yet'}</option>
+                        {ids.map(id => <option key={id} value={id}>{matchDisplayLabel(pp.matches, id)}</option>)}
+                    </select>
+                )}
+            </Group>
+
+            {showSide(1) && <PlayerPlateSide t={1} pp={pp} />}
+            {showSide(2) && <PlayerPlateSide t={2} pp={pp} />}
+        </Stack>
+    );
+}
+
+// Gear setup: the dedicated overlay's on-air state + a one-line explainer.
+function PlayerPlatesSetup() {
+    const element = ELEMENTS.find(e => e.id === 'playerplates');
+    const { primary } = useElementBindings(element);
+    return (
+        <Stack gap="sm">
+            {primary ? (
+                <VisibilityRow
+                    label={primary.where === 'preview' ? 'In preview' : 'On air'}
+                    item={primary.item} sceneName={primary.scene}
+                />
+            ) : (
+                <Text size="xs" className="text-muted-foreground">Overlay not in program or preview scene.</Text>
+            )}
+            <Text size="xs" className="border-t border-border pt-2 text-muted-foreground">
+                Match-fed plates resolve names + the chosen field from the match's
+                participants; switch to Manual to type them. In Both mode the two
+                plates pin to left/right; single modes place the plate at the
+                chosen location.
+            </Text>
+        </Stack>
+    );
+}
+
 // ── Element option layer / faces / setups ──────────────────────────────────
 
 // The shared option layer for an element — rendered both in the chip's
@@ -1172,7 +1375,7 @@ function ElementOptions({ element, hideTarget = false, hideVisibility = false })
 function elementHasSetup(element) {
     return element.id === 'hitvisualizer' || element.id === 'commentary'
         || element.id === 'lowerthird' || element.id === 'matchuphistory'
-        || element.id === 'schedule'
+        || element.id === 'schedule' || element.id === 'playerplates'
         || element.flavor === 'fed';
 }
 
@@ -1180,6 +1383,7 @@ function elementHasSetup(element) {
 function ElementFace({ element }) {
     if (element.id === 'hitvisualizer') return <HitVizFace />;
     if (element.id === 'commentary') return <CommentaryFace />;
+    if (element.id === 'playerplates') return <PlayerPlatesFace element={element} />;
     if (element.id === 'lowerthird') return <LowerThirdFace element={element} />;
     if (element.id === 'schedule') return <ScheduleFace element={element} />;
     if (element.id === 'matchuphistory') return <MatchupFace element={element} />;
@@ -1191,6 +1395,7 @@ function ElementFace({ element }) {
 function ElementSetup({ element }) {
     if (element.id === 'hitvisualizer') return <HitVizSetup />;
     if (element.id === 'commentary') return <CommentarySetup />;
+    if (element.id === 'playerplates') return <PlayerPlatesSetup />;
     if (element.id === 'lowerthird') return <LowerThirdSetup />;
     if (element.id === 'schedule') return <ScheduleSetup />;
     if (element.id === 'matchuphistory') return <MatchupSetup />;

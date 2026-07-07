@@ -90,8 +90,11 @@ _STANDALONE_DISPLAY_NAMES = {
     # Callout Stage is a full 1920×1080 target; first occupant is the post-game
     # Stat Callout.
     "shared/callout-stage": "Callout Stage",
-    # Talent — registry-bound person overlays (the player element joins later).
+    # Talent — registry-bound person overlays.
     "commentary/commentary": "Commentary",
+    # Two-player name/sub-plate band (both L/R, or one player at left/center/
+    # right), fed from a match or manual names (playerplates.*).
+    "playerplates/playerplates": "Player Plates",
     # Break — re-themable SVG lower-third band: five producer-picked slots
     # (logo · match · scorebox · merch · clock · message · bracket).
     "lowerthird/lowerthird": "Lower Third",

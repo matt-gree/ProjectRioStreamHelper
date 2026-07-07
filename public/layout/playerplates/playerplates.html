@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<!--
+  Player Plates — a re-themable SVG two-player name band (Production page picks
+  the mode + each plate's content; this renders the resolved playerplates.* keys).
+
+  A thin shell, like the Commentary strip: the look lives in the active DESIGN
+  PACKAGE's theme SVG (/design/{package}/playerplates.svg — picked by the global
+  Design Package selector), and the rendering/data-binding lives in the reusable
+  mount (playerplates-mount.js). Drop this in OBS as a full-canvas (1920×1080)
+  browser source — the plate(s) sit near the bottom.
+-->
+<head>
+  <meta charset="utf-8" />
+  <!-- App-design knobs apply only when the active package's theme opts into them
+       (data-design-vars="app" — e.g. the Classic package); fixed-palette themes
+       (Default/Rio) ignore them. -->
+  <meta name="overlay-settings" content="accentColor, cardBg, textColor, borderColor, borderRadius, borderWidth, fontFamily, cardShadow, textShadow, showShadow" />
+  <!-- Rio design tokens: brand palette + display/mono webfonts used by
+       fixed-palette themes (the Default package's Rajdhani/JetBrains type). -->
+  <link rel="stylesheet" href="/layout/lib/rio-theme/tokens.css" />
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+    html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+    body { width: 1920px; height: 1080px; }
+    #host { position: fixed; inset: 0; }
+  </style>
+</head>
+<body>
+  <div id="host"></div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="/layout/lib/overlay-base.js"></script>
+  <script type="module">
+    import { mountPlayerPlates } from '/layout/lib/playerplates-mount.js';
+
+    const host = document.getElementById('host');
+    const pp = mountPlayerPlates({ host });
+
+    OverlayBase.init({
+      render: () => pp.update(OverlayBase.state, OverlayBase.settings),
+      fetchSettings: true,
+      shouldRender: (key) => key.startsWith('playerplates.'),
+      shouldRenderSettings: (key) => key.startsWith('overlays.'),
+    });
+
+    // Reveal / hide the band in step with OBS's combined on-screen signal (scene
+    // cuts + the source's eye icon), like the Commentary strip.
+    OverlayBase.onObsShown((shown) => pp.setActive(shown));
+  </script>
+</body>
+</html>

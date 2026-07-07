@@ -51,6 +51,7 @@ const SUB_RISE   = 16;   // svg units the sub slides in from / rests hidden at
 const SUB_TUCK   = 44;   // svg units the sub travels UP on retract (tucks behind main)
 const INTRO_STAGGER = 0.06; // s between adjacent plates on a whole-group reveal (first paint / OBS source activate) so they cascade in rather than pop as one block
 const REVEAL_SETTLE_MS = 120; // ms to let an OBS visibility toggle's on→off→on burst settle before revealing, so one toggle = one clean cascade (not a start/reset/start stutter)
+const INTRO = new URLSearchParams(location.search).get('intro') !== '0'; // `?intro=0` disables the reveal animation entirely: plates snap in with no cascade. Paired with shutdown:false on the OBS source (obs.jsx) for persistent, non-reloading sources.
 const SUB_DIVIDER_INSET = 22; // svg units the optional sub-divider is inset from each end of the sub width
 const DIVIDER_REF_WIDTH = 181; // sub-divider width whose draw speed is the reference (count-4); wider bars scale their duration up to keep px/s (and the feel) constant across counts
 const REFLOW_EASE  = 'power3.inOut';
@@ -535,8 +536,10 @@ export function mountCommentary({ host }) {
     for (let s = 0; s < MAX_SLOTS; s++) {
       const g = engine.slots[`slot${s}`];
       if (g) gsapInstance.killTweensOf(g);
-      if (prevSlotCaster[s] !== undefined) enterPlate(s, Math.max(0, prevLayoutPos[s]) * INTRO_STAGGER);
-      else snapPlate(s, false);
+      if (prevSlotCaster[s] !== undefined) {
+        if (INTRO) enterPlate(s, Math.max(0, prevLayoutPos[s]) * INTRO_STAGGER);
+        else snapPlate(s, true);   // intro disabled: snap shown, no cascade
+      } else snapPlate(s, false);
     }
     presented = true;
   }
@@ -584,6 +587,14 @@ export function mountCommentary({ host }) {
       return;
     }
     if (presented && settleTimer === null) return;  // already fully shown — leave it
+    if (!INTRO) {
+      // No intro animation: snap the strip in on the next painted frame, with no
+      // dark settle window (nothing to stutter, so no need to hold opacity 0).
+      if (settleTimer) { clearTimeout(settleTimer); settleTimer = null; }
+      if (revealRaf !== null) { cancelAnimationFrame(revealRaf); revealRaf = null; }
+      scheduleGroupReveal();
+      return;
+    }
     // Want to show but not revealed yet: guarantee opacity 0 RIGHT NOW (kills any
     // leftover shown/animating state), then (re)arm the settle timer. A burst
     // keeps re-hiding + rescheduling, so the strip stays dark until the flicker

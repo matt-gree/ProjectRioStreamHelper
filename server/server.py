@@ -22,6 +22,7 @@ from server.announcements import Announcements
 from server.participants import Participants
 from server.match import Match
 from server.commentary import Commentary
+from server.playerplates import PlayerPlates
 from server.state import State
 from server.utils import json
 
@@ -87,6 +88,9 @@ async def lifespan(app: FastAPI):
     # Re-resolve the persisted commentary desk against the current registry so a
     # renamed/edited caster reflows on launch (resolve-by-copy, like Match).
     await Commentary.project_all()
+    # Same for the player-plates band — re-resolve its config against the current
+    # registry/matches so a match-fed plate reflects the latest names on launch.
+    await PlayerPlates.project_all()
 
     # If stream labels are enabled but the output dir is missing, do a full
     # export so OBS Text (GDI+) sources don't point at missing files.

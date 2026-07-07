@@ -161,6 +161,41 @@ On first paint — and whenever the OBS source goes on air — the strip plays a
 staggered group reveal; the mount debounces OBS's on→off→on visibility bursts.
 A Design-Package swap resets to first-paint state, so the new theme cascades in.
 
+### `playerplates.svg`
+
+Rendered by `public/layout/lib/playerplates-mount.js`. A sibling of Commentary —
+the same plate + sub-plate convention — but a fixed **two-player** band. It shows
+one or both single-player plates and moves each to a named anchor
+(`left` | `center` | `right`); the producer's MODE (both / one player) is fully
+resolved server-side, so a theme only defines the plate look and the anchor
+offsets.
+
+Two position groups, `<g data-slot="side1">` and `<g data-slot="side2">`, are
+**both authored at the `left` anchor** (they overlap at rest; the mount moves and
+reveals them). Inside each `side{n}`:
+
+| Element | Marked with | Notes |
+|---------|-------------|-------|
+| Card background | `data-part="main-rect"` on a `<rect>` | Required. |
+| Accent rail (optional) | `data-part="rail"` on a `<rect>` | |
+| Divider bar (optional) | `data-part="sub-divider"` on a `<rect>` inside `side{n}-sub` | Extent auto-derived from its authored width, drawn middle-out on reveal. |
+| Player name | `data-slot="side{n}-name"` on a `<text>` | |
+| Sub-info wrapper | `data-slot="side{n}-sub"` on a `<g>` | Show/hide target. Start hidden (`style="opacity:0"`); the mount slides+fades it. No `clip-path`. |
+| Sub-info label / value | `data-slot="side{n}-sub-label"` / `-sub-value"` on `<text>` | |
+
+The layout JSON is a `<script type="application/json" data-layouts="1">` block
+mapping each anchor to an **X offset** (svg units) from the authored `left`
+position — the mount tweens the whole plate group's transform to it:
+
+```json
+{ "anchors": { "left": 0, "center": 582, "right": 1164 } }
+```
+
+In `both` mode the mount puts side 1 at `left` and side 2 at `right`; single
+modes place the shown plate at the producer-chosen anchor. Enter/exit (rise /
+drop) and the on-air group reveal reuse the Commentary motion + OBS-visibility
+debounce.
+
 ### `matchup.svg`
 
 Rendered by `public/layout/lib/matchup-mount.js`. The head-to-head band: an

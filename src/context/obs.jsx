@@ -47,6 +47,33 @@ const mapItem = (it) => ({
 //      path, so we match it by port instead.
 // Everything else (cams, game capture, audio, third-party browser sources) is
 // ignored — the rail should only show PRSH's own overlay elements.
+// A PRSH overlay's intro animation is disabled per-source via `?intro=0` on its
+// URL (see reveal-gate.js). That single flag also decides the OBS browser
+// source's "Shutdown source when not visible" property:
+//   • intro ON  (default) → shutdown TRUE: the source fully unloads on hide and
+//     gets a fresh, clean load on every show, so its reveal animation always
+//     plays from a blank frame — no retained full-alpha texture to flash (the
+//     eye-toggle stutter). This is the only page-independent cure for the
+//     OBS-native eye, which can't be intercepted the way the app's hide is.
+//   • intro OFF → shutdown FALSE: nothing animates, so a retained texture is
+//     harmless; keep the source resident (no reload flash) — what a persistent
+//     always-on overlay wants.
+function urlIntroDisabled(url) {
+    try { return new URL(url).searchParams.get('intro') === '0'; } catch { return false; }
+}
+// Only overlays that play a reveal on show are affected — static overlays
+// (stats, roster, team logo, bracket, ticker, scenes) have nothing to stutter,
+// so we leave their source resident (OBS default shutdown=false) and never
+// touch them. Matches the scoreboard BAND specifically (scoreboardN/scoreboard),
+// not the sibling stats/roster/teamlogo files in the same folder.
+const ANIMATED_LAYOUT = /\/layout\/(?:scoreboard\d*\/scoreboard|scorecard\/|lowerthird\/|matchup\/|commentary\/|playerplates\/|hitvisualizer\/)/i;
+function layoutAnimates(url) {
+    try { return ANIMATED_LAYOUT.test(new URL(url).pathname); } catch { return false; }
+}
+function desiredShutdown(url) {
+    return layoutAnimates(url) && !urlIntroDisabled(url);
+}
+
 function isPrshUrl(url, gcPort) {
     if (!url) return false;
     try {
@@ -150,10 +177,44 @@ export const useObsStore = create((set) => ({
                 url,
                 width: Math.round(width) || 1920,
                 height: Math.round(height) || 1080,
+                // Clean reveals: unload on hide, fresh load on show (see desiredShutdown).
+                shutdown: desiredShutdown(url),
             },
             sceneItemEnabled: true,
         });
         return { inputName: name, sceneName: scene };
+    },
+
+    // Flip the intro animation on every live PRSH browser source that serves a
+    // given layout (matched by URL path, so all size/team/scoreboard variants of
+    // it are covered). Rewrites each source's `?intro=` param AND its shutdown
+    // property in lockstep, so an already-added source updates without the user
+    // re-copying its URL. `pathname` is the layout's URL path (no query).
+    setLayoutIntroDisabled: async (pathname, disabled) => {
+        if (!obs || !pathname) return 0;
+        const scenes = useObsStore.getState().sceneItems;
+        const seen = new Set();
+        let changed = 0;
+        for (const items of Object.values(scenes)) {
+            for (const it of items) {
+                if (!it.isPrsh || !it.url || seen.has(it.sourceName)) continue;
+                let u;
+                try { u = new URL(it.url); } catch { continue; }
+                if (u.pathname !== pathname) continue;
+                seen.add(it.sourceName);
+                if (disabled) u.searchParams.set('intro', '0');
+                else u.searchParams.delete('intro');
+                try {
+                    await obs.call('SetInputSettings', {
+                        inputName: it.sourceName,
+                        inputSettings: { url: u.toString(), shutdown: !disabled },
+                        overlay: true,
+                    });
+                    changed++;
+                } catch { /* input may be gone */ }
+            }
+        }
+        return changed;
     },
 
     connect: async () => {
@@ -244,6 +305,21 @@ async function refreshScene(sceneName, gen) {
                     const { inputSettings } = await obs.call('GetInputSettings', { inputName: it.sourceName });
                     base.url = inputSettings?.url || null;
                     base.isPrsh = isPrshUrl(base.url, gcPort);
+                    // Auto-correct the "Shutdown source when not visible" property
+                    // for PRSH overlays so their reveals never flash a stale OBS
+                    // texture (see desiredShutdown). Idempotent: only writes when
+                    // the current value differs, so it settles after one pass and
+                    // can't loop on the InputSettingsChanged echo.
+                    if (base.isPrsh && (base.url || '').includes('/layout/')) {
+                        const want = desiredShutdown(base.url);
+                        if ((inputSettings?.shutdown === true) !== want) {
+                            obs.call('SetInputSettings', {
+                                inputName: it.sourceName,
+                                inputSettings: { shutdown: want },
+                                overlay: true,
+                            }).catch(() => { /* best-effort */ });
+                        }
+                    }
                 } catch {
                     // Input may have been removed between calls.
                 }
