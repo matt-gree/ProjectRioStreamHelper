@@ -1550,6 +1550,16 @@ function renderElementSetting(def, layoutType, overlaySettings, setItem) {
             </div>
         );
     }
+    if (def.type === 'text') {
+        const value = overlaySettings?.[def.key] ?? '';
+        return (
+            <div key={def.key} className="flex flex-col gap-1">
+                <Label className="field-label">{def.label}</Label>
+                {def.description && <Text size="xs" dimmed>{def.description}</Text>}
+                <Input value={value} placeholder={def.placeholder || ''} onChange={(e) => setItem(settingsKey, e.currentTarget.value)} />
+            </div>
+        );
+    }
     if (def.type === 'color-override') {
         const value = overlaySettings?.[def.key] ?? null;
         return (
@@ -1825,7 +1835,7 @@ export default function LayoutBrowser() {
         const q = searchQuery.toLowerCase().trim();
         return allLayouts.filter(l => {
             if (l.group === 'bracket') return false;
-            const isScoreboard = l.group.startsWith('scoreboard') || l.group === 'rotator';
+            const isScoreboard = l.group.startsWith('scoreboard') || l.group === 'scorecard' || l.group === 'rotator';
             if (!isScoreboard) return false;
             if (q && !l.name.toLowerCase().includes(q)) return false;
             return true;

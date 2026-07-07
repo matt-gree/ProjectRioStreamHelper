@@ -1,0 +1,56 @@
+<svg viewBox="0 0 1920 80" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+  <!--
+    DEFAULT package - Results Ticker (1920x80): the Rio marquee bar. A RESULTS
+    badge pins the left edge; ticker-mount.js clones the card-template once per
+    game into the track group and scrolls it. Template card width is declared
+    via data-w; the track's visible width via data-vw. Fixed Rio palette.
+  -->
+  <style>
+    .tk-ink  { fill: var(--ink); font-family: var(--font-display); }
+    .tk-dim  { fill: var(--ink-dim); font-family: var(--font-body); }
+    .tk-num  { fill: var(--ink); font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+  </style>
+  <defs>
+    <clipPath id="tk-clip"><rect x="150" y="5.5" width="1758" height="69"/></clipPath>
+    <linearGradient id="tk-fade-r" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" style="stop-color:var(--band)" stop-opacity="0"/>
+      <stop offset="1" style="stop-color:var(--band)" stop-opacity="1"/>
+    </linearGradient>
+  </defs>
+
+  <!-- bar shell -->
+  <rect x="0" y="4" width="1920" height="72" rx="12" style="fill:var(--band);stroke:var(--border);stroke-width:1.5"/>
+
+  <!-- scrolling cards (clipped to the bar) -->
+  <g clip-path="url(#tk-clip)">
+    <g data-slot="track" data-vw="1760" transform="translate(166,0)"></g>
+    <rect x="1830" y="5.5" width="78" height="69" style="fill:url(#tk-fade-r)"/>
+  </g>
+
+  <!-- RESULTS badge (drawn over the bar's left edge) -->
+  <rect x="0" y="4" width="150" height="72" rx="12" style="fill:var(--accent)"/>
+  <rect x="120" y="4" width="30" height="72" style="fill:var(--accent)"/>
+  <rect x="148" y="4" width="2" height="72" fill="rgba(0,0,0,0.3)"/>
+  <text x="75" y="47" text-anchor="middle" fill="#ffffff" font-family="var(--font-display)" font-size="18" font-weight="700" letter-spacing="2.5">RESULTS</text>
+
+  <!-- prototype game card (hidden; cloned + bound by the mount) -->
+  <g data-slot="card-template" data-w="340" opacity="0">
+    <rect data-part="card-bg" x="0" y="12" width="340" height="56" rx="10" style="fill:var(--band-2);stroke:var(--border);stroke-width:1"/>
+
+    <image data-part="away-cap" x="10" y="17" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <text data-part="away-name" data-maxw="98" x="44" y="39" class="tk-ink" font-size="17" font-weight="700">Away</text>
+
+    <g data-part="score-group">
+      <rect x="146" y="20" width="48" height="26" rx="6" fill="rgba(0,0,0,0.4)"/>
+      <text data-part="score-away" x="166" y="39" text-anchor="end" class="tk-num" font-size="16" font-weight="700">0</text>
+      <text x="170" y="38" text-anchor="middle" class="tk-dim" font-size="12">&#8211;</text>
+      <text data-part="score-home" x="174" y="39" text-anchor="start" class="tk-num" font-size="16" font-weight="700">0</text>
+    </g>
+    <text data-part="vs" x="170" y="38" text-anchor="middle" style="fill:var(--ink-dim)" font-family="var(--font-display)" font-size="12" font-weight="700" letter-spacing="1.5" opacity="0">VS</text>
+
+    <text data-part="home-name" data-maxw="98" x="296" y="39" text-anchor="end" class="tk-ink" font-size="17" font-weight="700">Home</text>
+    <image data-part="home-cap" x="302" y="17" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+
+    <text data-part="meta" data-maxw="310" x="170" y="62" text-anchor="middle" class="tk-dim" font-size="10.5" font-weight="600" letter-spacing="0.7">STADIUM &#183; DATE</text>
+  </g>
+</svg>

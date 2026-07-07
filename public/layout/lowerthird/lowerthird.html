@@ -65,8 +65,12 @@
     }
     boot();
 
-    // Auto-replay the reveal when this source/scene goes live in OBS.
-    window.addEventListener('obsSourceActiveChanged', (e) => { if (e.detail && e.detail.active) lt.replay(); });
+    // Follow OBS's on-screen signal (scene cuts AND the source's eye icon —
+    // both must be honoured, see OverlayBase.onObsShown): hide snaps the band
+    // dark so no stale frame can flash on the next show; show plays one clean
+    // reveal. Redundant activates (e.g. OBS's initial dispatch after load) are
+    // deduped inside the mount's reveal gate.
+    OverlayBase.onObsShown((shown) => lt.setShown(shown));
   </script>
 </body>
 </html>

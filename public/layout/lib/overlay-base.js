@@ -81,7 +81,7 @@
    */
   async function init(opts) {
     const {
-      render,
+      render: renderCb,
       shouldRender = () => true,
       shouldRenderSettings = () => false,
       fetchSettings = false,
@@ -90,6 +90,26 @@
       // sample JSON and don't want server state racing in over the top.
       skipState = false,
     } = opts;
+
+    // Serialize renders. Load alone fires render() up to three times in quick
+    // succession (REST fetch, socket state.get, socket settings.get), and most
+    // mounts' update() is async (theme SVG fetch, GSAP load) — letting those
+    // interleave double-injects themes and double-plays reveal animations (the
+    // on-load appear/vanish/reappear stutter). One render runs at a time; calls
+    // that arrive mid-render coalesce into a single follow-up pass (state is
+    // already mutated by the time render is called, so one pass catches up).
+    let rendering = false, renderAgain = false;
+    async function render() {
+      if (rendering) { renderAgain = true; return; }
+      rendering = true;
+      try {
+        do { renderAgain = false; await renderCb(); } while (renderAgain);
+      } catch (e) {
+        console.warn('[OverlayBase] render failed:', e);
+      } finally {
+        rendering = false;
+      }
+    }
 
     // Initial REST fetch
     try {
@@ -178,6 +198,19 @@
         if (needs) render();
       });
     }
+
+    // Universal action bus — ephemeral one-shot cues, never stored in state.
+    // overlay.conceal: the app is about to disable this browser source in OBS.
+    // Snap transparent NOW, while OBS is still compositing our frames, so the
+    // texture it retains for the hidden source holds a transparent frame (see
+    // onObsShown). Re-broadcast as a window event so consumers wired before
+    // this socket existed still hear it.
+    socket.on('v1.action', (msg) => {
+      if (!msg || !msg.action) return;
+      if (msg.action === 'overlay.conceal' && urlAddressesSelf(msg.payload && msg.payload.url)) {
+        window.dispatchEvent(new CustomEvent('prshConceal'));
+      }
+    });
 
     // Settings events (opt-in)
     if (fetchSettings) {
@@ -375,6 +408,70 @@
     return `${BASE_URL}/branding/tournament_logo.png`;
   }
 
+  /**
+   * Does `url` address THIS page? Host-agnostic (OBS may load us via
+   * localhost while the app knows us as 127.0.0.1 or a LAN address): compares
+   * path plus query, params order-insensitively.
+   */
+  function urlAddressesSelf(url) {
+    if (!url) return false;
+    try {
+      const u = new URL(url, window.location.href);
+      if (u.pathname !== window.location.pathname) return false;
+      const norm = (sp) => [...sp.entries()].sort().map(([k, v]) => `${k}=${v}`).join('&');
+      return norm(u.searchParams) === norm(new URLSearchParams(window.location.search));
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Combined OBS on-screen signal. Two independent OBS events decide whether a
+   * browser source is actually on screen: a scene cut fires
+   * `obsSourceActiveChanged`, toggling the source's own eye icon fires
+   * `obsSourceVisibleChanged`. Overlays that animate on show must honour BOTH —
+   * listening only to `active` is how an eye-toggle-off left stale full-alpha
+   * frames to flash on the next show. Each signal is tri-state (undefined until
+   * OBS first dispatches it); the source counts as shown unless a signal says
+   * otherwise, so a plain browser (no OBS, no events) stays shown.
+   *
+   * A third input is PRSH's own `overlay.conceal` cue (init's v1.action
+   * handler → the `prshConceal` window event): the app fires it right before
+   * disabling this browser source, because OBS stops the source's frame
+   * production the instant the eye goes off — a hide that waits for
+   * obsSourceVisibleChanged(false) never gets its dark frame painted, and the
+   * retained full-alpha texture flashes on the next show. Concealing counts as
+   * not-shown; the handshake ends at the next real visibleChanged dispatch,
+   * with a failsafe re-emit so a failed OBS call can't strand the overlay
+   * dark on air.
+   *
+   * cb(shown) fires on every dispatch, including redundant ones — consumers
+   * (reveal-gate.js, commentary's setActive) dedupe themselves.
+   */
+  function onObsShown(cb) {
+    let active, visible, concealed = false, concealTimer = null;
+    const emit = () => cb(!concealed && active !== false && visible !== false);
+    window.addEventListener('obsSourceActiveChanged', (e) => {
+      active = !!(e.detail && e.detail.active); emit();
+    });
+    window.addEventListener('obsSourceVisibleChanged', (e) => {
+      visible = !!(e.detail && e.detail.visible);
+      // The eye actually toggled — the conceal handshake (if any) is done.
+      concealed = false;
+      if (concealTimer) { clearTimeout(concealTimer); concealTimer = null; }
+      emit();
+    });
+    window.addEventListener('prshConceal', () => {
+      concealed = true;
+      emit();
+      if (concealTimer) clearTimeout(concealTimer);
+      concealTimer = setTimeout(() => {
+        concealTimer = null;
+        if (concealed) { concealed = false; emit(); }
+      }, 2000);
+    });
+  }
+
   // ── Export ──
   window.OverlayBase = {
     BASE_URL,
@@ -389,6 +486,7 @@
     applyDesignSettings,
     clearDesignSettings,
     brandingLogoUrl,
+    onObsShown,
     readSetting,
     PREVIEW_MODE,
     PREVIEW_GLOBALS_ONLY,

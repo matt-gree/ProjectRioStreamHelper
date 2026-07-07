@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<!--
+  Vertical Scorecard — a re-themable SVG tall scoreboard, bound to one
+  scoreboard via ?scoreboard=N (default 1). The eight design elements
+  (header · bracket phase · game mode · full score · condensed score · at-bat
+  lines · box score · stadium) are each independently toggled/animated by the
+  producer via overlays.scorecard.* switches on the Layouts tab.
+
+  Thin shell: the look lives in the active DESIGN PACKAGE's theme SVG
+  (/design/{package}/scorecard.svg), the binding/animation in
+  scorecard-mount.js, the live data in score.{N}.*. Drop into OBS as a
+  full-canvas (1920×1080) browser source; the card column sits on the left.
+-->
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Per-element toggles (overlays.scorecard.*) + app-design knobs (used only
+       when the active package's theme opts into them, e.g. Classic). -->
+  <meta name="overlay-settings" content="showHeader, titleText, showPhase, phaseText, showGameMode, mainMode, showRosters, showBases, showAtBat, showBoxScore, showStadium, accentColor, cardBg, textColor, borderColor, borderRadius, borderWidth, fontFamily, cardShadow, textShadow, showShadow" />
+  <link rel="stylesheet" href="/layout/lib/rio-theme/tokens.css" />
+  <style>
+    html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+    /* Native full-canvas size hint; the SVG scales to whatever the OBS source is. */
+    body { width: 1920px; height: 1080px; }
+    #host { position: fixed; inset: 0; }
+  </style>
+</head>
+<body>
+  <div id="host"></div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="/layout/lib/overlay-base.js"></script>
+  <script src="/layout/lib/rio-data.js"></script>
+  <script type="module">
+    import { mountScorecard } from '/layout/lib/scorecard-mount.js';
+
+    const params = new URLSearchParams(window.location.search);
+    const SB = parseInt(params.get('scoreboard')) || 1;
+
+    const host = document.getElementById('host');
+    const sc = mountScorecard({ host, sb: SB });
+
+    async function boot() {
+      if (OverlayBase.PREVIEW_MODE) {
+        // Layouts/Setup preview: prime a representative live game.
+        try {
+          const r = await fetch(`${OverlayBase.BASE_URL}/layout/preview/scoreboard_sample.json`);
+          const data = r.ok ? await r.json() : null;
+          if (data) OverlayBase.deepSet(OverlayBase.state, `score.${SB}`, data);
+        } catch { /* ignore */ }
+        // Sample game-mode + producer text so the phase/mode bars have content.
+        OverlayBase.deepSet(OverlayBase.settings, `scoreboards.binding.${SB}.stats_tag`, 'Superstar');
+        OverlayBase.deepSet(OverlayBase.settings, 'overlays.scorecard.phaseText', 'Winners Final');
+        OverlayBase.deepSet(OverlayBase.settings, 'overlays.scorecard.titleText', 'Project Rio Invitational');
+      }
+
+      OverlayBase.init({
+        render: () => sc.update(OverlayBase.state, OverlayBase.settings),
+        shouldRender: (key) => key.startsWith(`score.${SB}.`),
+        shouldRenderSettings: (key) =>
+          key.startsWith('overlays.scorecard.') ||
+          key.startsWith('overlays.global.') ||
+          key.startsWith(`scoreboards.binding.${SB}.`),
+        fetchSettings: true,
+        skipState: OverlayBase.PREVIEW_MODE,
+      });
+
+      if (OverlayBase.PREVIEW_MODE) sc.update(OverlayBase.state, OverlayBase.settings);
+    }
+    boot();
+
+    // Follow OBS's on-screen signal (scene cuts AND the source's eye icon):
+    // hide snaps the card dark, show plays one clean reveal, redundant
+    // activates are deduped in the mount's reveal gate.
+    OverlayBase.onObsShown((shown) => sc.setShown(shown));
+  </script>
+</body>
+</html>

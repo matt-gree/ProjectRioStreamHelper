@@ -39,14 +39,15 @@ def _parse_html_meta(path: Path) -> tuple[int | None, int | None, list[str] | No
 
 
 # Size variants for layouts that support ?size= param.
-# Each: (size_code, label, width, height)
+# Each: (size_code, label, width, height). Dims are the theme SVG's native
+# canvas (viewBox) — the recommended OBS browser-source size. The xl variant
+# was retired with the SVG conversion; the mount treats unknown/legacy sizes
+# (including ?size=xl sources that still exist in OBS) as "l".
 _SIZE_VARIANTS = {
     "scoreboard": [
-        ("xs", "Extra Small", 400, 50),
         ("s",  "Small",       500, 80),
         ("m",  "Medium",      600, 200),
-        ("l",  "Large",       800, 400),
-        ("xl", "Extra Large", 1000, 500),
+        ("l",  "Large",       800, 460),
     ],
 }
 
@@ -96,6 +97,9 @@ _STANDALONE_DISPLAY_NAMES = {
     # Head-to-head band: all-time series summary + last-5 game cards for a
     # match's two participants, fetched from the Project Rio API (matchup.*).
     "matchup/matchup": "Matchup History",
+    # Vertical Scorecard: a tall re-themable SVG scoreboard whose eight design
+    # elements each toggle/animate independently (overlays.scorecard.*).
+    "scorecard/scorecard": "Vertical Scorecard",
 }
 
 

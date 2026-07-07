@@ -128,8 +128,8 @@ export function mountCommentary({ host }) {
   let presented = false;        // whether the strip is currently revealed on screen (OBS active / first paint)
   let wantShown = true;         // desired shown-state; OBS visibility drives it, defaults shown for a plain browser
   let settleTimer = null;       // debounce handle: collapses OBS's on→off→on visibility burst into one reveal
+  let revealRaf = null;         // paint-clock handle: the reveal starts on a composited frame, never the wall clock
   let gsapInstance = null;
-  let gsapRequested = false;
   let disposed = false;
 
   function parseLayoutData() {
@@ -138,10 +138,11 @@ export function mountCommentary({ host }) {
     try { return JSON.parse(script.textContent); } catch { return null; }
   }
 
+  // ensureGsap dedupes in-flight loads itself, so a concurrent caller awaits
+  // the same script load instead of proceeding with null (which silently
+  // dropped animation on whichever interleaved update lost the race).
   async function getGsap() {
-    if (gsapInstance || gsapRequested) return gsapInstance;
-    gsapRequested = true;
-    gsapInstance = await ensureGsap();
+    if (!gsapInstance) gsapInstance = await ensureGsap();
     return gsapInstance;
   }
 
@@ -400,13 +401,22 @@ export function mountCommentary({ host }) {
       slotData[free] = active[r]; slotLayoutPos[free] = r; used[free] = true;
     }
 
+    // The strip may only paint visible plates while it's actually revealed on
+    // screen. While hidden (OBS eye off / settle window / loaded hidden),
+    // updates still bind text + record the lineup, but every plate stays at
+    // opacity 0 — the pending reveal cascades the CURRENT lineup in. Without
+    // this, a caster change while the source was hidden lit plates to full
+    // alpha, and that stale frame is what OBS composited first on the next
+    // show (the eye-toggle "appears, vanishes, cascades" stutter).
+    const live = presented && wantShown;
+
     for (let s = 0; s < MAX_SLOTS; s++) {
       const d = slotData[s];
       const isActive = !!d;
       const wasActive = !firstPaint && prevSlotCaster[s] !== undefined;
 
       if (!isActive) {
-        if (wasActive) exitPlate(s);             // drop + fade THIS slot's own leaver away
+        if (wasActive && live) exitPlate(s);     // drop + fade THIS slot's own leaver away
         else snapPlate(s, false);
         if (subTweens[s]) { subTweens[s].kill(); subTweens[s] = null; }
         prevSlotCaster[s] = undefined;
@@ -432,14 +442,16 @@ export function mountCommentary({ host }) {
         snapPlate(s, false);
       } else if (casterChanged) {
         applyLayout(s, entry, false);
-        if (wasActive) snapPlate(s, true);       // same-frame replacement: snap in place
+        if (!live) snapPlate(s, false);          // hidden: stage dark, reveal cascades it in
+        else if (wasActive) snapPlate(s, true);  // same-frame replacement: snap in place
         else enterPlate(s, ENTER_DELAY);         // brand-new plate: rise in after survivors clear
       } else {
         // Survivor: reflow if the row changed shape under it (count change) or it
         // moved rank (a same-count reorder). Wait out a departing plate on a
-        // shrink so a drop and a slide never cover the same ground.
+        // shrink so a drop and a slide never cover the same ground. Hidden:
+        // snap geometry — no point queueing glides nobody sees.
         const moved = countChanged || prevLayoutPos[s] !== layoutPos;
-        applyLayout(s, entry, moved, shrinking ? RESHUFFLE_DELAY : 0, prevSub[s]);
+        applyLayout(s, entry, live && moved, shrinking ? RESHUFFLE_DELAY : 0, prevSub[s]);
       }
 
       // Sub plate. On a snap (first paint / new plate / different caster) the
@@ -454,7 +466,12 @@ export function mountCommentary({ host }) {
         engine.setText(`slot${s}-sub-value`, d.subValue);
         snapSub(s, showSub);
       } else if (prevSub[s] !== showSub) {
-        if (showSub) {
+        if (!live) {
+          // Hidden: settle the sub's final state silently.
+          engine.setText(`slot${s}-sub-label`, showSub ? d.subLabel : '');
+          engine.setText(`slot${s}-sub-value`, showSub ? d.subValue : '');
+          snapSub(s, showSub);
+        } else if (showSub) {
           engine.setText(`slot${s}-sub-label`, d.subLabel);
           engine.setText(`slot${s}-sub-value`, d.subValue);
           animateSub(s, true);
@@ -477,10 +494,10 @@ export function mountCommentary({ host }) {
     prevN = N;
 
     if (firstPaint) {
-      // Reveal now if we're on-screen; if the source loaded hidden (rAF paused),
-      // hold and let the OBS activate event fire the reveal instead — animating
+      // Reveal at the next painted frame. If the source loaded hidden, the
+      // queued rAF simply waits until OBS composites us again — animating
       // while hidden would just leave a frozen tween to flash on the next show.
-      if (!document.hidden && wantShown) playGroupReveal();
+      if (wantShown) scheduleGroupReveal();
       else presented = false;
     }
 
@@ -498,9 +515,23 @@ export function mountCommentary({ host }) {
   // rapid hide→show can't leave an orphaned tween fighting the rise — that (plus
   // the frozen exit tweens below) was the "stutters / plays twice / animation
   // gone after a few toggles" bug.
+  // Queue the cascade on the PAINT clock. rAF callbacks only run while OBS is
+  // actually producing frames for this source (they hold while it's eye-off /
+  // WasHidden), so the cascade's t=0 always lands on a composited frame.
+  // Starting from the settle timer alone let GSAP's clock eat the cascade
+  // invisibly when frames hadn't resumed yet — "final position, no animation"
+  // after an eye-off → eye-on cycle.
+  function scheduleGroupReveal() {
+    if (revealRaf !== null) return;
+    revealRaf = requestAnimationFrame(() => {
+      revealRaf = null;
+      if (!disposed && wantShown) playGroupReveal();
+    });
+  }
+
   function playGroupReveal() {
     if (disposed) return;
-    if (!gsapInstance) { getGsap().then(() => { if (!disposed && wantShown) playGroupReveal(); }); return; }
+    if (!gsapInstance) { getGsap().then(() => { if (!disposed && wantShown) scheduleGroupReveal(); }); return; }
     for (let s = 0; s < MAX_SLOTS; s++) {
       const g = engine.slots[`slot${s}`];
       if (g) gsapInstance.killTweensOf(g);
@@ -548,6 +579,7 @@ export function mountCommentary({ host }) {
     wantShown = active;
     if (!active) {
       if (settleTimer) { clearTimeout(settleTimer); settleTimer = null; }
+      if (revealRaf !== null) { cancelAnimationFrame(revealRaf); revealRaf = null; }
       hideGroupNow();
       return;
     }
@@ -555,19 +587,29 @@ export function mountCommentary({ host }) {
     // Want to show but not revealed yet: guarantee opacity 0 RIGHT NOW (kills any
     // leftover shown/animating state), then (re)arm the settle timer. A burst
     // keeps re-hiding + rescheduling, so the strip stays dark until the flicker
-    // ends and then cascades in exactly once.
+    // ends and then cascades in exactly once — on the paint clock, so the
+    // cascade can't run down before OBS is compositing frames again.
     hideGroupNow();
     if (settleTimer) clearTimeout(settleTimer);
     settleTimer = setTimeout(() => {
       settleTimer = null;
-      if (!disposed && wantShown) playGroupReveal();
+      if (!disposed && wantShown) scheduleGroupReveal();
     }, REVEAL_SETTLE_MS);
   }
+
+  // Loaded while the page itself was hidden (OBS pauses hidden pages): the
+  // first-paint reveal deferred. Fire it once we're actually visible.
+  function onVisibility() {
+    if (!document.hidden && wantShown && !presented && settleTimer === null) scheduleGroupReveal();
+  }
+  document.addEventListener('visibilitychange', onVisibility);
 
   function dispose() {
     disposed = true;
     if (settleTimer) { clearTimeout(settleTimer); settleTimer = null; }
+    if (revealRaf !== null) { cancelAnimationFrame(revealRaf); revealRaf = null; }
     for (const t of subTweens) t?.kill();
+    document.removeEventListener('visibilitychange', onVisibility);
     window.removeEventListener('resize', engine.refitText);
     host.classList.remove('cm-host');
     host.innerHTML = '';

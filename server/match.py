@@ -159,6 +159,12 @@ class Match:
         game_mode = match.get("gameMode") or ""
         entries.append((f"score.{sb}.tag_set", game_mode))
 
+        # Bracket phase: the match's label (the start.gg round name, or a
+        # producer-typed phase like "Winners R2") drives the scoreboard's phase
+        # display. Projected value-or-"" like the other fixture keys, so
+        # re-projection is deterministic and unbinding blanks it.
+        entries.append((f"score.{sb}.phase", match.get("label") or ""))
+
         # Series mirror: the match's game wins + format, so scoreboard overlays
         # can render Bo-series pips. Written value-or-"" like the player keys —
         # deterministic re-projection, and unbinding blanks them.

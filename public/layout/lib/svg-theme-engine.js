@@ -27,32 +27,47 @@ export function createThemeEngine({ host, element, fallbackSvg }) {
   let themeName = null;          // currently injected package id
   let slots = {};                // data-slot -> element (rebuilt on theme swap)
   let refitList = [];            // text slots with data-maxw to auto-fit
-  let themeCache = {};           // package id -> svg text
+  let themeCache = {};           // package id -> Promise<svg text> (promise, so
+                                 // concurrent callers share one in-flight fetch)
   let usesAppVars = false;       // root <svg data-design-vars="app"> present
+  let ensureSeq = 0;             // last ensureTheme call wins on interleave
 
   async function fetchSvg(pkg) {
     const r = await fetch(`${OverlayBase.BASE_URL}/design/${encodeURIComponent(pkg)}/${encodeURIComponent(element)}.svg`);
     return r.ok ? await r.text() : null;
   }
 
-  async function loadThemeSvg(pkg) {
-    if (themeCache[pkg] != null) return themeCache[pkg];
-    let svg = null;
-    try {
-      svg = await fetchSvg(pkg);
-      // Element-by-element fallback: a package may theme only some elements.
-      if (svg == null && pkg !== 'default') svg = await fetchSvg('default');
-    } catch { svg = null; }
-    themeCache[pkg] = svg != null ? svg : fallbackSvg;
+  function loadThemeSvg(pkg) {
+    if (themeCache[pkg] == null) {
+      themeCache[pkg] = (async () => {
+        let svg = null;
+        try {
+          svg = await fetchSvg(pkg);
+          // Element-by-element fallback: a package may theme only some elements.
+          if (svg == null && pkg !== 'default') svg = await fetchSvg('default');
+        } catch { svg = null; }
+        return svg != null ? svg : fallbackSvg;
+      })();
+    }
     return themeCache[pkg];
   }
 
   // Returns true only when a different theme was actually injected, so
   // callers can reset their own identity/diff state on a real swap (and skip
   // that reset on a same-theme no-op call).
+  //
+  // Concurrency-safe: overlay-base fires several renders in quick succession
+  // on load (REST fetch, socket state.get, socket settings.get), and async
+  // updates interleave at this await. The re-check after the await means only
+  // the FIRST caller injects; the rest see a no-op instead of re-injecting and
+  // re-reporting a theme change (which double-played reveal animations — the
+  // on-load appear/vanish/reappear stutter).
   async function ensureTheme(name) {
     if (name === themeName) return false;
+    const seq = ++ensureSeq;
     const svg = await loadThemeSvg(name);
+    if (seq !== ensureSeq) return false;    // superseded by a newer call
+    if (name === themeName) return false;   // another interleaved call won
     host.innerHTML = svg;
     const el = host.querySelector('svg');
     if (el) { el.removeAttribute('width'); el.removeAttribute('height'); }

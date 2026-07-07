@@ -1,0 +1,160 @@
+<svg viewBox="0 0 800 460" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" data-design-vars="app">
+  <!--
+    CLASSIC package - Scoreboard L (800x460): the original full card - top row,
+    live game-state row (swaps for ELO/meta on completed games), both rosters
+    with the accent captain ring, and the linescore table. Painted with the
+    user's Design-tab CSS variables (data-design-vars="app"). Row-stack
+    contract in scoreboard-mount.js.
+  -->
+  <style>
+    .cl-name { fill: var(--text-primary, #ffffff); font-family: var(--font-family, 'Inter', sans-serif); text-shadow: var(--text-shadow, none); }
+    .cl-score { fill: var(--accent, #f59e0b); font-family: var(--font-family, 'Inter', sans-serif); }
+    .cl-dim  { fill: rgba(255,255,255,0.6); font-family: var(--font-family, 'Inter', sans-serif); }
+    .cl-dim2 { fill: rgba(255,255,255,0.4); font-family: var(--font-family, 'Inter', sans-serif); }
+    .cl-cell { fill: rgba(255,255,255,0.85); font-family: var(--font-family, 'Inter', sans-serif); }
+  </style>
+
+  <rect data-slot="card-bg" x="20" y="8" width="760" height="412" rx="16"
+        style="fill:var(--card-bg, rgba(15,15,25,0.88));filter:var(--card-shadow-filter, none)"/>
+  <rect x="20" y="8" width="760" height="412" rx="16" fill="none"
+        style="stroke:var(--border-color, rgba(255,255,255,0.08));stroke-width:var(--border-width, 1px)"/>
+
+  <!-- ░░ TOP ░░ -->
+  <g data-slot="row-top" data-h="80">
+    <image data-slot="s1-logo" x="36" y="20" width="40" height="40" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+    <text data-slot="s1-name" data-maxw="220" x="84" y="53" class="cl-name" font-size="18" font-weight="700">Player One</text>
+    <image data-slot="s2-logo" x="724" y="20" width="40" height="40" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+    <text data-slot="s2-name" data-maxw="220" x="716" y="53" text-anchor="end" class="cl-name" font-size="18" font-weight="700">Player Two</text>
+
+    <text data-slot="s1-score" data-maxw="64" x="356" y="60" text-anchor="end" class="cl-score" font-size="42" font-weight="800">0</text>
+    <text data-slot="s2-score" data-maxw="64" x="444" y="60" text-anchor="start" class="cl-score" font-size="42" font-weight="800">0</text>
+
+    <text data-slot="inn-half" x="400" y="34" text-anchor="middle" class="cl-dim" font-size="10" font-weight="700" letter-spacing="0.5">TOP</text>
+    <text data-slot="inn-num" x="400" y="60" text-anchor="middle" class="cl-name" font-size="20" font-weight="800">1</text>
+    <g data-slot="final-badge" opacity="0">
+      <rect x="368" y="32" width="64" height="24" rx="4" style="fill:var(--final-badge-color, #ef4444)"/>
+      <text x="400" y="49" text-anchor="middle" fill="#ffffff" font-family="var(--font-family, 'Inter', sans-serif)" font-size="12" font-weight="800" letter-spacing="1">FINAL</text>
+    </g>
+  </g>
+
+  <!-- ░░ LIVE ░░ -->
+  <g data-slot="row-live" data-h="100">
+    <image data-slot="bat-icon" x="36" y="28" width="36" height="36" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <text data-slot="bat-name" data-maxw="170" x="80" y="46" class="cl-name" font-size="14" font-weight="700">Batter</text>
+    <rect x="80" y="54" width="26" height="14" rx="3" fill="#d97706"/>
+    <text x="93" y="64.5" text-anchor="middle" fill="#ffffff" font-family="var(--font-family, 'Inter', sans-serif)" font-size="9" font-weight="700" letter-spacing="0.5">AB</text>
+
+    <text data-slot="pit-name" data-maxw="170" x="720" y="46" text-anchor="end" class="cl-name" font-size="14" font-weight="700">Pitcher</text>
+    <rect x="700" y="54" width="20" height="14" rx="3" fill="#2563eb"/>
+    <text x="710" y="64.5" text-anchor="middle" fill="#ffffff" font-family="var(--font-family, 'Inter', sans-serif)" font-size="9" font-weight="700">P</text>
+    <image data-slot="pit-icon" x="728" y="28" width="36" height="36" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+
+    <!-- count dots -->
+    <text x="332" y="38" text-anchor="end" class="cl-dim2" font-size="9" font-weight="600">B</text>
+    <circle data-slot="ball-0" cx="346" cy="35" r="5" style="fill:rgba(255,255,255,0.05);stroke:rgba(255,255,255,0.15);stroke-width:1"/>
+    <circle data-slot="ball-1" cx="362" cy="35" r="5" style="fill:rgba(255,255,255,0.05);stroke:rgba(255,255,255,0.15);stroke-width:1"/>
+    <circle data-slot="ball-2" cx="378" cy="35" r="5" style="fill:rgba(255,255,255,0.05);stroke:rgba(255,255,255,0.15);stroke-width:1"/>
+    <circle data-slot="ball-3" cx="394" cy="35" r="5" style="fill:rgba(255,255,255,0.05);stroke:rgba(255,255,255,0.15);stroke-width:1"/>
+    <text x="332" y="54" text-anchor="end" class="cl-dim2" font-size="9" font-weight="600">S</text>
+    <circle data-slot="strike-0" cx="346" cy="51" r="5" style="fill:rgba(255,255,255,0.05);stroke:rgba(255,255,255,0.15);stroke-width:1"/>
+    <circle data-slot="strike-1" cx="362" cy="51" r="5" style="fill:rgba(255,255,255,0.05);stroke:rgba(255,255,255,0.15);stroke-width:1"/>
+    <circle data-slot="strike-2" cx="378" cy="51" r="5" style="fill:rgba(255,255,255,0.05);stroke:rgba(255,255,255,0.15);stroke-width:1"/>
+    <text x="332" y="70" text-anchor="end" class="cl-dim2" font-size="9" font-weight="600">O</text>
+    <circle data-slot="out-0" cx="346" cy="67" r="5" style="fill:rgba(255,255,255,0.05);stroke:rgba(255,255,255,0.15);stroke-width:1"/>
+    <circle data-slot="out-1" cx="362" cy="67" r="5" style="fill:rgba(255,255,255,0.05);stroke:rgba(255,255,255,0.15);stroke-width:1"/>
+    <circle data-slot="out-2" cx="378" cy="67" r="5" style="fill:rgba(255,255,255,0.05);stroke:rgba(255,255,255,0.15);stroke-width:1"/>
+
+    <!-- diamond: rotated square outline, base corners (2B top / 1B right / 3B left) -->
+    <polygon points="500,16 534,50 500,84 466,50" fill="rgba(255,255,255,0.03)" style="stroke:rgba(255,255,255,0.15);stroke-width:1.5"/>
+    <circle data-slot="base-2" cx="500" cy="16" r="5" style="fill:rgba(255,255,255,0.1)"/>
+    <circle data-slot="base-1" cx="534" cy="50" r="5" style="fill:rgba(255,255,255,0.1)"/>
+    <circle data-slot="base-3" cx="466" cy="50" r="5" style="fill:rgba(255,255,255,0.1)"/>
+    <image data-slot="runner-2" x="488" y="4" width="24" height="24" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="runner-1" x="522" y="38" width="24" height="24" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="runner-3" x="454" y="38" width="24" height="24" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+  </g>
+
+  <!-- ░░ FINAL (ELO + meta) ░░ -->
+  <g data-slot="row-final" data-h="90">
+    <g data-slot="elo1-group">
+      <text data-slot="elo1-in" x="36" y="50" fill="rgba(255,255,255,0.45)" font-family="var(--font-family, 'Inter', sans-serif)" font-size="13" font-weight="600">1200</text>
+      <text x="72" y="50" class="cl-dim2" font-size="11">&#8594;</text>
+      <text data-slot="elo1-out" x="86" y="50" class="cl-name" font-size="13" font-weight="700">1215</text>
+      <text data-slot="elo1-delta" x="126" y="50" font-family="var(--font-family, 'Inter', sans-serif)" font-size="11" font-weight="800">+15</text>
+    </g>
+
+    <text data-slot="meta-main" data-maxw="260" x="400" y="44" text-anchor="middle" class="cl-dim2" font-size="12">Stadium</text>
+    <text data-slot="meta-date" x="400" y="62" text-anchor="middle" class="cl-dim2" font-size="10" opacity="0.65">Date</text>
+
+    <g data-slot="elo2-group">
+      <text data-slot="elo2-in" x="674" y="50" text-anchor="end" fill="rgba(255,255,255,0.45)" font-family="var(--font-family, 'Inter', sans-serif)" font-size="13" font-weight="600">1200</text>
+      <text x="686" y="50" class="cl-dim2" font-size="11">&#8594;</text>
+      <text data-slot="elo2-out" x="732" y="50" text-anchor="end" class="cl-name" font-size="13" font-weight="700">1215</text>
+      <text data-slot="elo2-delta" x="764" y="50" text-anchor="end" font-family="var(--font-family, 'Inter', sans-serif)" font-size="11" font-weight="800">-15</text>
+    </g>
+  </g>
+
+  <!-- ░░ ROSTERS ░░ -->
+  <g data-slot="row-roster" data-h="76">
+    <rect data-slot="s1-cap-ring" data-pad="2" x="34" y="20" width="32" height="32" rx="6" fill="none" style="stroke:var(--accent, #f59e0b);stroke-width:1.5" opacity="0"/>
+    <image data-slot="s1-char-0" x="36" y="22" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="s1-char-1" x="70" y="22" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="s1-char-2" x="104" y="22" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="s1-char-3" x="138" y="22" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="s1-char-4" x="172" y="22" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="s1-char-5" x="206" y="22" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="s1-char-6" x="240" y="22" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="s1-char-7" x="274" y="22" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="s1-char-8" x="308" y="22" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+
+    <rect data-slot="s2-cap-ring" data-pad="2" x="462" y="20" width="32" height="32" rx="6" fill="none" style="stroke:var(--accent, #f59e0b);stroke-width:1.5" opacity="0"/>
+    <image data-slot="s2-char-0" x="464" y="22" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="s2-char-1" x="498" y="22" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="s2-char-2" x="532" y="22" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="s2-char-3" x="566" y="22" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="s2-char-4" x="600" y="22" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="s2-char-5" x="634" y="22" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="s2-char-6" x="668" y="22" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="s2-char-7" x="702" y="22" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="s2-char-8" x="736" y="22" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+  </g>
+
+  <!-- ░░ LINESCORE ░░ -->
+  <g data-slot="row-box" data-h="106">
+    <g data-slot="box-col-1"><text data-slot="box-h-1" x="180" y="28" text-anchor="middle" class="cl-dim2" font-size="10" font-weight="700">1</text></g>
+    <g data-slot="box-col-2"><text data-slot="box-h-2" x="230" y="28" text-anchor="middle" class="cl-dim2" font-size="10" font-weight="700">2</text></g>
+    <g data-slot="box-col-3"><text data-slot="box-h-3" x="280" y="28" text-anchor="middle" class="cl-dim2" font-size="10" font-weight="700">3</text></g>
+    <g data-slot="box-col-4"><text data-slot="box-h-4" x="330" y="28" text-anchor="middle" class="cl-dim2" font-size="10" font-weight="700">4</text></g>
+    <g data-slot="box-col-5"><text data-slot="box-h-5" x="380" y="28" text-anchor="middle" class="cl-dim2" font-size="10" font-weight="700">5</text></g>
+    <g data-slot="box-col-6"><text data-slot="box-h-6" x="430" y="28" text-anchor="middle" class="cl-dim2" font-size="10" font-weight="700">6</text></g>
+    <g data-slot="box-col-7"><text data-slot="box-h-7" x="480" y="28" text-anchor="middle" class="cl-dim2" font-size="10" font-weight="700">7</text></g>
+    <g data-slot="box-col-8"><text data-slot="box-h-8" x="530" y="28" text-anchor="middle" class="cl-dim2" font-size="10" font-weight="700">8</text></g>
+    <g data-slot="box-col-9"><text data-slot="box-h-9" x="580" y="28" text-anchor="middle" class="cl-dim2" font-size="10" font-weight="700">9</text></g>
+    <rect x="614" y="14" width="1" height="82" fill="rgba(255,255,255,0.12)"/>
+    <text x="646" y="28" text-anchor="middle" class="cl-dim2" font-size="10" font-weight="700">R</text>
+
+    <text data-slot="box-away-name" data-maxw="110" x="40" y="56" fill="rgba(255,255,255,0.5)" font-family="var(--font-family, 'Inter', sans-serif)" font-size="11">Away</text>
+    <text data-slot="box-away-1" x="180" y="56" text-anchor="middle" class="cl-cell" font-size="12" font-weight="600">-</text>
+    <text data-slot="box-away-2" x="230" y="56" text-anchor="middle" class="cl-cell" font-size="12" font-weight="600">-</text>
+    <text data-slot="box-away-3" x="280" y="56" text-anchor="middle" class="cl-cell" font-size="12" font-weight="600">-</text>
+    <text data-slot="box-away-4" x="330" y="56" text-anchor="middle" class="cl-cell" font-size="12" font-weight="600">-</text>
+    <text data-slot="box-away-5" x="380" y="56" text-anchor="middle" class="cl-cell" font-size="12" font-weight="600">-</text>
+    <text data-slot="box-away-6" x="430" y="56" text-anchor="middle" class="cl-cell" font-size="12" font-weight="600">-</text>
+    <text data-slot="box-away-7" x="480" y="56" text-anchor="middle" class="cl-cell" font-size="12" font-weight="600">-</text>
+    <text data-slot="box-away-8" x="530" y="56" text-anchor="middle" class="cl-cell" font-size="12" font-weight="600">-</text>
+    <text data-slot="box-away-9" x="580" y="56" text-anchor="middle" class="cl-cell" font-size="12" font-weight="600">-</text>
+    <text data-slot="box-away-R" x="646" y="56" text-anchor="middle" class="cl-score" font-size="13" font-weight="800">0</text>
+
+    <text data-slot="box-home-name" data-maxw="110" x="40" y="82" fill="rgba(255,255,255,0.5)" font-family="var(--font-family, 'Inter', sans-serif)" font-size="11">Home</text>
+    <text data-slot="box-home-1" x="180" y="82" text-anchor="middle" class="cl-cell" font-size="12" font-weight="600">-</text>
+    <text data-slot="box-home-2" x="230" y="82" text-anchor="middle" class="cl-cell" font-size="12" font-weight="600">-</text>
+    <text data-slot="box-home-3" x="280" y="82" text-anchor="middle" class="cl-cell" font-size="12" font-weight="600">-</text>
+    <text data-slot="box-home-4" x="330" y="82" text-anchor="middle" class="cl-cell" font-size="12" font-weight="600">-</text>
+    <text data-slot="box-home-5" x="380" y="82" text-anchor="middle" class="cl-cell" font-size="12" font-weight="600">-</text>
+    <text data-slot="box-home-6" x="430" y="82" text-anchor="middle" class="cl-cell" font-size="12" font-weight="600">-</text>
+    <text data-slot="box-home-7" x="480" y="82" text-anchor="middle" class="cl-cell" font-size="12" font-weight="600">-</text>
+    <text data-slot="box-home-8" x="530" y="82" text-anchor="middle" class="cl-cell" font-size="12" font-weight="600">-</text>
+    <text data-slot="box-home-9" x="580" y="82" text-anchor="middle" class="cl-cell" font-size="12" font-weight="600">-</text>
+    <text data-slot="box-home-R" x="646" y="82" text-anchor="middle" class="cl-score" font-size="13" font-weight="800">0</text>
+  </g>
+</svg>

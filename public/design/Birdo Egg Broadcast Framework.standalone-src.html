@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<template id="__bundler_thumbnail" data-bg-color="#14131a">
+  <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+    <rect x="120" y="360" width="960" height="80" rx="20" fill="url(#trail)"/>
+    <g transform="translate(560,180)">
+      <ellipse cx="40" cy="52" rx="46" ry="54" fill="#ffffff" stroke="#FF00AE" stroke-width="14"/>
+      <circle cx="26" cy="42" r="12" fill="#FF00AE"/>
+      <circle cx="54" cy="34" r="9" fill="#FF00AE"/>
+      <circle cx="44" cy="70" r="14" fill="#FF00AE"/>
+    </g>
+    <defs>
+      <linearGradient id="trail" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#C5F70C"/>
+        <stop offset="0.5" stop-color="#F93F91"/>
+        <stop offset="1" stop-color="#57E0E7"/>
+      </linearGradient>
+    </defs>
+  </svg>
+</template>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    body { margin: 0; background: #14131a; }
+    * { box-sizing: border-box; }
+  </style>
+</helmet>
+
+<div style="width: 1600px; margin: 0 auto; padding: 88px 72px 140px; font-family: Inter, sans-serif; color: #ECEAF2; background: #14131a;">
+
+  <!-- ============ MASTHEAD ============ -->
+  <div style="display: flex; align-items: center; gap: 40px; margin-bottom: 24px;">
+    <div style="position: relative; width: 112px; height: 132px; flex-shrink: 0;">
+      <div style="position: absolute; inset: 0; background: #ffffff; border: 9px solid rgb(255,0,174); border-radius: 46% 46% 50% 50% / 60% 60% 42% 42%;"></div>
+      <div style="position: absolute; left: 20px; top: 34px; width: 26px; height: 34px; background: rgb(255,0,174); border-radius: 50%;"></div>
+      <div style="position: absolute; left: 54px; top: 24px; width: 22px; height: 28px; background: rgb(255,0,174); border-radius: 50%;"></div>
+      <div style="position: absolute; left: 38px; top: 72px; width: 34px; height: 40px; background: rgb(255,0,174); border-radius: 50%;"></div>
+    </div>
+    <div>
+      <div style="font-size: 14px; letter-spacing: 0.32em; text-transform: uppercase; color: rgb(249,63,145); font-weight: 700; margin-bottom: 10px;">Broadcast Design Framework</div>
+      <div style="font-size: 62px; font-weight: 900; line-height: 0.98; letter-spacing: -0.02em;">Birdo Egg — Slice 2026</div>
+    </div>
+  </div>
+  <p style="max-width: 980px; font-size: 19px; line-height: 1.6; color: #B6B2C4; font-weight: 400; margin: 0 0 12px;">
+    The tournament broadcast package for the <strong style="color:#ECEAF2; font-weight:600;">Slice 2026</strong> livestream. Every graphic derives from a single idea: the <strong style="color:#ECEAF2; font-weight:600;">Birdo Egg Trail</strong> — the rainbow left behind by the pink Birdo egg. This document defines the tokens, gradients, geometry and type that make an element belong to the package, then gives rules so new elements can be generated on-brand without a reference.
+  </p>
+  <div style="font-family: 'JetBrains Mono', monospace; font-size: 13px; color: #6E6A80;">v1 · canvas 1920×1080 · units in px, no grid-snapping</div>
+
+  <div style="height: 1px; background: linear-gradient(90deg, rgb(197,247,12), rgb(249,63,145), rgb(87,224,231)); margin: 44px 0 64px; opacity: 0.7;"></div>
+
+  <!-- ============ 01 · THE TRAIL (SIGNATURE GRADIENT) ============ -->
+  <div style="display:flex; align-items:baseline; gap:18px; margin-bottom:28px;">
+    <span style="font-family:'JetBrains Mono',monospace; font-size:15px; color:rgb(249,63,145);">01</span>
+    <h2 style="font-size:34px; font-weight:800; margin:0; letter-spacing:-0.01em;">The Trail — signature gradient</h2>
+  </div>
+  <p style="max-width:920px; font-size:17px; line-height:1.6; color:#B6B2C4; margin:0 0 28px;">
+    The hero gradient runs <strong style="color:#ECEAF2;font-weight:600;">lime → hot-pink → cyan</strong>, pink pinned to the exact centre (50.15%). It is the identity of the package: every full-frame element wears it. Angle changes with the element's proportions, the three stops never do.
+  </p>
+
+  <div style="height:220px; border-radius:20px; background:linear-gradient(60.642deg, rgb(197,247,12) 0%, rgb(249,63,145) 50.15%, rgb(87,224,231) 100%); position:relative; overflow:hidden; margin-bottom:14px;">
+    <div style="position:absolute; left:28px; bottom:22px; font-family:'JetBrains Mono',monospace; font-size:13px; color:rgba(20,19,26,0.85); background:rgba(255,255,255,0.55); padding:6px 12px; border-radius:8px;">linear-gradient(60.642deg, #C5F70C 0% · #F93F91 50.15% · #57E0E7 100%)</div>
+  </div>
+  <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:52px;">
+    <div style="border:1px solid #2A2833; border-radius:14px; padding:18px 20px;">
+      <div style="font-weight:700; font-size:15px; margin-bottom:6px;">Trail — Lime start</div>
+      <div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#8B8799;">used for FullScreen · SplitScreen · Gameplay top-left</div>
+    </div>
+    <div style="border:1px solid #2A2833; border-radius:14px; padding:18px 20px;">
+      <div style="font-weight:700; font-size:15px; margin-bottom:6px;">Warm variant</div>
+      <div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#8B8799;">gold → pink → mauve · lower-thirds, history</div>
+    </div>
+    <div style="border:1px solid #2A2833; border-radius:14px; padding:18px 20px;">
+      <div style="font-weight:700; font-size:15px; margin-bottom:6px;">Pair variant</div>
+      <div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#8B8799;">two-stop 90° bars · commentator bugs</div>
+    </div>
+  </div>
+
+  <!-- ============ 02 · PALETTE ============ -->
+  <div style="display:flex; align-items:baseline; gap:18px; margin-bottom:28px;">
+    <span style="font-family:'JetBrains Mono',monospace; font-size:15px; color:rgb(249,63,145);">02</span>
+    <h2 style="font-size:34px; font-weight:800; margin:0; letter-spacing:-0.01em;">Palette</h2>
+  </div>
+  <p style="max-width:920px; font-size:17px; line-height:1.6; color:#B6B2C4; margin:0 0 28px;">
+    Two families. <strong style="color:#ECEAF2;font-weight:600;">Trail hues</strong> are the pure rainbow anchors; <strong style="color:#ECEAF2;font-weight:600;">Warm hues</strong> are the muted sunset set used for name bars and info panels so white type stays legible over them.
+  </p>
+
+  <div style="font-family:'JetBrains Mono',monospace; font-size:12px; letter-spacing:0.1em; text-transform:uppercase; color:#6E6A80; margin-bottom:12px;">Trail hues</div>
+  <div style="display:grid; grid-template-columns:repeat(5,1fr); gap:12px; margin-bottom:28px;">
+    <div style="border-radius:14px; overflow:hidden; border:1px solid #2A2833;"><div style="height:96px; background:rgb(197,247,12);"></div><div style="padding:12px 14px;"><div style="font-weight:700; font-size:14px;">Lime</div><div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#8B8799;">#C5F70C</div></div></div>
+    <div style="border-radius:14px; overflow:hidden; border:1px solid #2A2833;"><div style="height:96px; background:rgb(249,63,145);"></div><div style="padding:12px 14px;"><div style="font-weight:700; font-size:14px;">Hot Pink</div><div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#8B8799;">#F93F91</div></div></div>
+    <div style="border-radius:14px; overflow:hidden; border:1px solid #2A2833;"><div style="height:96px; background:rgb(255,0,174);"></div><div style="padding:12px 14px;"><div style="font-weight:700; font-size:14px;">Egg Magenta</div><div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#8B8799;">#FF00AE</div></div></div>
+    <div style="border-radius:14px; overflow:hidden; border:1px solid #2A2833;"><div style="height:96px; background:rgb(87,224,231);"></div><div style="padding:12px 14px;"><div style="font-weight:700; font-size:14px;">Cyan</div><div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#8B8799;">#57E0E7</div></div></div>
+    <div style="border-radius:14px; overflow:hidden; border:1px solid #2A2833;"><div style="height:96px; background:#ffffff;"></div><div style="padding:12px 14px;"><div style="font-weight:700; font-size:14px;">White</div><div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#8B8799;">#FFFFFF · type</div></div></div>
+  </div>
+
+  <div style="font-family:'JetBrains Mono',monospace; font-size:12px; letter-spacing:0.1em; text-transform:uppercase; color:#6E6A80; margin-bottom:12px;">Warm hues</div>
+  <div style="display:grid; grid-template-columns:repeat(5,1fr); gap:12px; margin-bottom:52px;">
+    <div style="border-radius:14px; overflow:hidden; border:1px solid #2A2833;"><div style="height:96px; background:rgb(219,169,68);"></div><div style="padding:12px 14px;"><div style="font-weight:700; font-size:14px;">Gold</div><div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#8B8799;">#DBA944</div></div></div>
+    <div style="border-radius:14px; overflow:hidden; border:1px solid #2A2833;"><div style="height:96px; background:rgb(236,107,112);"></div><div style="padding:12px 14px;"><div style="font-weight:700; font-size:14px;">Coral</div><div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#8B8799;">#EC6B70</div></div></div>
+    <div style="border-radius:14px; overflow:hidden; border:1px solid #2A2833;"><div style="height:96px; background:rgb(232,80,154);"></div><div style="padding:12px 14px;"><div style="font-weight:700; font-size:14px;">Pink Mid</div><div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#8B8799;">#E8509A</div></div></div>
+    <div style="border-radius:14px; overflow:hidden; border:1px solid #2A2833;"><div style="height:96px; background:rgb(193,119,175);"></div><div style="padding:12px 14px;"><div style="font-weight:700; font-size:14px;">Mauve</div><div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#8B8799;">#C177AF</div></div></div>
+    <div style="border-radius:14px; overflow:hidden; border:1px solid #2A2833;"><div style="height:96px; background:#14131a; border-bottom:1px solid #2A2833;"></div><div style="padding:12px 14px;"><div style="font-weight:700; font-size:14px;">Stage Charcoal</div><div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#8B8799;">#14131A · doc only</div></div></div>
+  </div>
+
+  <!-- ============ 03 · TYPE ============ -->
+  <div style="display:flex; align-items:baseline; gap:18px; margin-bottom:28px;">
+    <span style="font-family:'JetBrains Mono',monospace; font-size:15px; color:rgb(249,63,145);">03</span>
+    <h2 style="font-size:34px; font-weight:800; margin:0; letter-spacing:-0.01em;">Type</h2>
+  </div>
+  <p style="max-width:920px; font-size:17px; line-height:1.6; color:#B6B2C4; margin:0 0 28px;">
+    One family — <strong style="color:#ECEAF2;font-weight:600;">Inter</strong> — set in white, always. Two roles only.
+  </p>
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:52px;">
+    <div style="border:1px solid #2A2833; border-radius:16px; padding:28px 30px; background:#1B1A22;">
+      <div style="font-weight:900; font-size:72px; line-height:1; color:#fff; letter-spacing:-0.02em;">Slice 2026</div>
+      <div style="font-family:'JetBrains Mono',monospace; font-size:13px; color:#8B8799; margin-top:16px;">Headline · Inter Black 900 · 72px · line-height 100%</div>
+    </div>
+    <div style="border:1px solid #2A2833; border-radius:16px; padding:28px 30px; background:#1B1A22;">
+      <div style="font-weight:600; font-size:48px; line-height:1; color:#fff;">Be right back</div>
+      <div style="font-family:'JetBrains Mono',monospace; font-size:13px; color:#8B8799; margin-top:16px;">Supporting · Inter Semi Bold 600 · 48px</div>
+    </div>
+  </div>
+
+  <!-- ============ 04 · GEOMETRY ============ -->
+  <div style="display:flex; align-items:baseline; gap:18px; margin-bottom:28px;">
+    <span style="font-family:'JetBrains Mono',monospace; font-size:15px; color:rgb(249,63,145);">04</span>
+    <h2 style="font-size:34px; font-weight:800; margin:0; letter-spacing:-0.01em;">Geometry &amp; depth</h2>
+  </div>
+  <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:52px;">
+    <div style="border:1px solid #2A2833; border-radius:16px; padding:26px;">
+      <div style="font-weight:700; font-size:17px; margin-bottom:8px;">Corner radius — 20px</div>
+      <div style="font-size:14px; line-height:1.55; color:#8B8799;">Every bar, panel and full-frame cutout uses a fixed <span style="font-family:'JetBrains Mono',monospace;">20px</span> radius. Never scales with element size.</div>
+    </div>
+    <div style="border:1px solid #2A2833; border-radius:16px; padding:26px;">
+      <div style="font-weight:700; font-size:17px; margin-bottom:8px;">Full-frame inset — 20px</div>
+      <div style="font-size:14px; line-height:1.55; color:#8B8799;">1920×1080 frames are a gradient border with a <span style="font-family:'JetBrains Mono',monospace;">20px</span> inset cutout, corners rounded 20px — a window onto the feed.</div>
+    </div>
+    <div style="border:1px solid #2A2833; border-radius:16px; padding:26px;">
+      <div style="font-weight:700; font-size:17px; margin-bottom:8px;">Glow — 37.5px</div>
+      <div style="font-size:14px; line-height:1.55; color:#8B8799;">Live gameplay windows lift off the feed with <span style="font-family:'JetBrains Mono',monospace;">0 0 37.5px rgba(0,0,0,.57)</span>.</div>
+    </div>
+  </div>
+
+  <div style="height:1px; background:#2A2833; margin:12px 0 64px;"></div>
+
+  <!-- ============ 05 · ELEMENT CATALOG ============ -->
+  <div style="display:flex; align-items:baseline; gap:18px; margin-bottom:12px;">
+    <span style="font-family:'JetBrains Mono',monospace; font-size:15px; color:rgb(249,63,145);">05</span>
+    <h2 style="font-size:34px; font-weight:800; margin:0; letter-spacing:-0.01em;">Current elements</h2>
+  </div>
+  <p style="max-width:920px; font-size:17px; line-height:1.6; color:#B6B2C4; margin:0 0 40px;">
+    Each element rendered at true proportion with its exact source values.
+  </p>
+
+  <!-- Lower Third -->
+  <div style="margin-bottom:56px;">
+    <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:16px;">
+      <div style="font-weight:800; font-size:22px;">Lower Third — nameplate</div>
+      <div style="font-family:'JetBrains Mono',monospace; font-size:13px; color:#8B8799;">1800×200 · warm trail 83.66°</div>
+    </div>
+    <div style="width:1440px; height:160px; border-radius:20px; background:linear-gradient(83.66deg, rgb(219,169,68) 0%, rgb(249,63,145) 50.15%, rgb(193,119,175) 100%); position:relative; display:flex; align-items:center; padding:0 56px 0 176px;">
+      <div style="position:absolute; left:20px; top:9px; width:121px; height:142px;">
+        <div style="position:absolute; inset:0; background:#fff; border:8px solid rgb(255,0,174); border-radius:46% 46% 50% 50% / 60% 60% 42% 42%;"></div>
+        <div style="position:absolute; left:22px; top:38px; width:26px; height:34px; background:rgb(255,0,174); border-radius:50%;"></div>
+        <div style="position:absolute; left:58px; top:28px; width:22px; height:28px; background:rgb(255,0,174); border-radius:50%;"></div>
+        <div style="position:absolute; left:42px; top:80px; width:34px; height:40px; background:rgb(255,0,174); border-radius:50%;"></div>
+      </div>
+      <div>
+        <div style="font-weight:900; font-size:44px; color:#fff; line-height:1;">Up Next</div>
+        <div style="font-weight:600; font-size:34px; color:#fff; line-height:1.15; margin-top:8px;">4. Melthrax &nbsp;·&nbsp; 5. MattGree</div>
+      </div>
+      <div style="margin-left:auto; font-weight:900; font-size:52px; color:#fff;">2:43</div>
+    </div>
+  </div>
+
+  <!-- Game History -->
+  <div style="margin-bottom:56px;">
+    <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:16px;">
+      <div style="font-weight:800; font-size:22px;">Game History — results panel</div>
+      <div style="font-family:'JetBrains Mono',monospace; font-size:13px; color:#8B8799;">1800×250 · warm trail 82.09°</div>
+    </div>
+    <div style="width:1440px; height:200px; border-radius:20px; background:linear-gradient(82.09deg, rgb(219,169,68) 0%, rgb(249,63,145) 50.15%, rgb(193,119,175) 100%); display:flex; align-items:center; padding:0 48px; gap:16px;">
+      <div style="font-weight:900; font-size:34px; color:#fff; margin-right:12px;">History</div>
+      <div style="display:flex; gap:12px; flex:1;">
+        <div style="flex:1; height:112px; border-radius:14px; background:rgba(255,255,255,0.16); display:flex; flex-direction:column; align-items:center; justify-content:center; color:#fff;"><div style="font-weight:900; font-size:30px;">G1</div><div style="font-weight:600; font-size:18px; opacity:.85;">Melthrax</div></div>
+        <div style="flex:1; height:112px; border-radius:14px; background:rgba(255,255,255,0.16); display:flex; flex-direction:column; align-items:center; justify-content:center; color:#fff;"><div style="font-weight:900; font-size:30px;">G2</div><div style="font-weight:600; font-size:18px; opacity:.85;">MattGree</div></div>
+        <div style="flex:1; height:112px; border-radius:14px; background:rgba(255,255,255,0.16); display:flex; flex-direction:column; align-items:center; justify-content:center; color:#fff;"><div style="font-weight:900; font-size:30px;">G3</div><div style="font-weight:600; font-size:18px; opacity:.85;">Melthrax</div></div>
+      </div>
+    </div>
+    <div style="font-size:13px; color:#6E6A80; margin-top:10px; font-family:'JetBrains Mono',monospace;">Base gradient is fixed; interior cells are white @ 16% — a reusable "well" pattern for any tabular readout.</div>
+  </div>
+
+  <!-- Commentator bugs -->
+  <div style="margin-bottom:56px;">
+    <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:16px;">
+      <div style="font-weight:800; font-size:22px;">Commentator bugs — 1 / 2 / 3 / 4 up</div>
+      <div style="font-family:'JetBrains Mono',monospace; font-size:13px; color:#8B8799;">stepped double-bar · 80px tall · 40px drop</div>
+    </div>
+    <p style="max-width:900px; font-size:15px; line-height:1.55; color:#8B8799; margin:0 0 22px;">A caster nameplate is two 80px bars, 20px radius, the second dropped 40px and inset — a stepped "step-and-repeat" ribbon. Each caster is a two-stop 90° pair from the palette. Scale by repeating the unit: 1-up 650px → 4-up 1775px.</p>
+    <div style="display:flex; flex-direction:column; gap:20px;">
+      <!-- 1 up -->
+      <div style="position:relative; width:520px; height:120px;">
+        <div style="position:absolute; left:0; top:0; width:520px; height:80px; border-radius:20px; background:linear-gradient(90deg, rgb(201,233,22), rgb(221,164,73)); display:flex; align-items:center; padding-left:28px; font-weight:900; font-size:34px; color:#fff;">Melthrax</div>
+        <div style="position:absolute; left:245px; top:40px; width:275px; height:80px; border-radius:20px; background:linear-gradient(90deg, rgb(201,233,22), rgb(221,164,73)); display:flex; align-items:center; padding-left:28px; font-weight:600; font-size:26px; color:#fff;">Player One</div>
+      </div>
+      <!-- 3 up pairs -->
+      <div style="display:flex; gap:18px;">
+        <div style="position:relative; width:380px; height:120px;">
+          <div style="position:absolute; left:0; top:0; width:380px; height:80px; border-radius:20px; background:linear-gradient(90deg, rgb(236,107,112), rgb(232,80,154)); display:flex; align-items:center; padding-left:24px; font-weight:900; font-size:30px; color:#fff;">MattGree</div>
+          <div style="position:absolute; left:179px; top:40px; width:201px; height:80px; border-radius:20px; background:linear-gradient(90deg, rgb(236,107,112), rgb(232,80,154)); display:flex; align-items:center; padding-left:24px; font-weight:600; font-size:22px; color:#fff;">Caster</div>
+        </div>
+        <div style="position:relative; width:380px; height:120px;">
+          <div style="position:absolute; left:0; top:0; width:380px; height:80px; border-radius:20px; background:linear-gradient(90deg, rgb(219,171,68), rgb(237,107,113)); display:flex; align-items:center; padding-left:24px; font-weight:900; font-size:30px; color:#fff;">Birdo</div>
+          <div style="position:absolute; left:179px; top:40px; width:201px; height:80px; border-radius:20px; background:linear-gradient(90deg, rgb(219,171,68), rgb(237,107,113)); display:flex; align-items:center; padding-left:24px; font-weight:600; font-size:22px; color:#fff;">Analyst</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Full frame + gameplay -->
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:24px; margin-bottom:24px;">
+    <div>
+      <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:16px;">
+        <div style="font-weight:800; font-size:22px;">FullScreen frame</div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:13px; color:#8B8799;">1920×1080 · 20px border</div>
+      </div>
+      <div style="width:100%; aspect-ratio:16/9; border-radius:14px; padding:11px; background:linear-gradient(60.642deg, rgb(197,247,12) 0%, rgb(249,63,145) 50.15%, rgb(87,224,231) 100%);">
+        <div style="width:100%; height:100%; border-radius:11px; background:#0e0d13; display:flex; align-items:center; justify-content:center; font-family:'JetBrains Mono',monospace; font-size:14px; color:#4a4757;">FEED</div>
+      </div>
+      <div style="font-size:13px; color:#6E6A80; margin-top:10px; font-family:'JetBrains Mono',monospace;">Trail border, feed shows through the 20px-inset cutout.</div>
+    </div>
+    <div>
+      <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:16px;">
+        <div style="font-weight:800; font-size:22px;">Gameplay frame</div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:13px; color:#8B8799;">center window + side rails · glow</div>
+      </div>
+      <div style="width:100%; aspect-ratio:16/9; border-radius:14px; background:linear-gradient(57.14deg, rgb(202,228,26) 11%, rgb(249,63,145) 49%, rgb(87,225,232) 87%); position:relative; display:flex; align-items:center; justify-content:center;">
+        <div style="width:68%; height:90%; border-radius:8px; background:#0e0d13; box-shadow:0 0 24px rgba(0,0,0,0.57); display:flex; align-items:center; justify-content:center; font-family:'JetBrains Mono',monospace; font-size:14px; color:#4a4757;">GAME</div>
+        <div style="position:absolute; left:0; top:28%; width:15%; height:44%; background:#0e0d13; border-radius:0 8px 8px 0;"></div>
+        <div style="position:absolute; right:0; top:28%; width:15%; height:44%; background:#0e0d13; border-radius:8px 0 0 8px;"></div>
+      </div>
+      <div style="font-size:13px; color:#6E6A80; margin-top:10px; font-family:'JetBrains Mono',monospace;">Center feed glows; side rails hold cams / stats.</div>
+    </div>
+  </div>
+
+  <div style="height:1px; background:#2A2833; margin:44px 0 64px;"></div>
+
+  <!-- ============ 06 · EXTENDING ============ -->
+  <div style="display:flex; align-items:baseline; gap:18px; margin-bottom:28px;">
+    <span style="font-family:'JetBrains Mono',monospace; font-size:15px; color:rgb(249,63,145);">06</span>
+    <h2 style="font-size:34px; font-weight:800; margin:0; letter-spacing:-0.01em;">Building new elements</h2>
+  </div>
+  <p style="max-width:920px; font-size:17px; line-height:1.6; color:#B6B2C4; margin:0 0 32px;">
+    Any new graphic — bracket, poll, sponsor bug, stat card, transition — is on-brand if it follows these six rules.
+  </p>
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+    <div style="border:1px solid #2A2833; border-radius:16px; padding:26px 28px;">
+      <div style="font-family:'JetBrains Mono',monospace; font-size:13px; color:rgb(249,63,145); margin-bottom:10px;">RULE 01 · SURFACE</div>
+      <div style="font-weight:700; font-size:18px; margin-bottom:8px;">Wear the trail</div>
+      <div style="font-size:15px; line-height:1.55; color:#8B8799;">Full-screen elements use the <strong style="color:#ECEAF2;">lime→pink→cyan</strong> trail; bars &amp; panels use the <strong style="color:#ECEAF2;">warm</strong> gold→pink→mauve variant so white type reads. Pink always sits at ~50%. Rotate the angle to suit the shape, never the stops.</div>
+    </div>
+    <div style="border:1px solid #2A2833; border-radius:16px; padding:26px 28px;">
+      <div style="font-family:'JetBrains Mono',monospace; font-size:13px; color:rgb(249,63,145); margin-bottom:10px;">RULE 02 · SHAPE</div>
+      <div style="font-weight:700; font-size:18px; margin-bottom:8px;">20px everything</div>
+      <div style="font-size:15px; line-height:1.55; color:#8B8799;">Fixed <strong style="color:#ECEAF2;">20px</strong> corner radius and, on full frames, a 20px gradient border cutout. Radius is constant — it does not scale with the element.</div>
+    </div>
+    <div style="border:1px solid #2A2833; border-radius:16px; padding:26px 28px;">
+      <div style="font-family:'JetBrains Mono',monospace; font-size:13px; color:rgb(249,63,145); margin-bottom:10px;">RULE 03 · TYPE</div>
+      <div style="font-weight:700; font-size:18px; margin-bottom:8px;">Inter, white, two weights</div>
+      <div style="font-size:15px; line-height:1.55; color:#8B8799;">Black 900 for the primary line, Semi Bold 600 for support. White only. Broadcast-scale — 72/48 on 1080p, never below 24px.</div>
+    </div>
+    <div style="border:1px solid #2A2833; border-radius:16px; padding:26px 28px;">
+      <div style="font-family:'JetBrains Mono',monospace; font-size:13px; color:rgb(249,63,145); margin-bottom:10px;">RULE 04 · CONTENT WELLS</div>
+      <div style="font-weight:700; font-size:18px; margin-bottom:8px;">White @ 16% for interiors</div>
+      <div style="font-size:15px; line-height:1.55; color:#8B8799;">Data cells, avatars and slots sit in <strong style="color:#ECEAF2;">rgba(255,255,255,.16)</strong> wells with 14px radius on top of the gradient — keeps panels legible without a second color.</div>
+    </div>
+    <div style="border:1px solid #2A2833; border-radius:16px; padding:26px 28px;">
+      <div style="font-family:'JetBrains Mono',monospace; font-size:13px; color:rgb(249,63,145); margin-bottom:10px;">RULE 05 · DEPTH</div>
+      <div style="font-weight:700; font-size:18px; margin-bottom:8px;">Glow the live layer</div>
+      <div style="font-size:15px; line-height:1.55; color:#8B8799;">The active feed/game window lifts with <strong style="color:#ECEAF2;">0 0 37.5px rgba(0,0,0,.57)</strong>. Overlays stay flat — only one glowing layer per screen.</div>
+    </div>
+    <div style="border:1px solid #2A2833; border-radius:16px; padding:26px 28px;">
+      <div style="font-family:'JetBrains Mono',monospace; font-size:13px; color:rgb(249,63,145); margin-bottom:10px;">RULE 06 · THE MARK</div>
+      <div style="font-weight:700; font-size:18px; margin-bottom:8px;">Egg anchors, top-left</div>
+      <div style="font-size:15px; line-height:1.55; color:#8B8799;">The pink Birdo egg is the identity mark — white body, magenta outline &amp; spots. Anchor it top-left of nameplates; keep clear space equal to the egg's spot size around it.</div>
+    </div>
+  </div>
+
+  <!-- step-and-repeat note -->
+  <div style="margin-top:36px; border-left:3px solid rgb(249,63,145); padding:6px 0 6px 24px; max-width:920px;">
+    <div style="font-weight:700; font-size:17px; margin-bottom:6px;">Scaling pattern — step &amp; repeat</div>
+    <div style="font-size:15px; line-height:1.6; color:#8B8799;">Multi-item elements (caster rows, brackets, standings) grow by repeating one unit rather than stretching. The commentator bug proves it: 1-up = 650px, each added caster tacks on its own stepped bar. Apply the same to any list-like graphic you build.</div>
+  </div>
+
+  <div style="margin-top:80px; padding-top:28px; border-top:1px solid #2A2833; display:flex; justify-content:space-between; font-family:'JetBrains Mono',monospace; font-size:12px; color:#4a4757;">
+    <span>BIRDO EGG · SLICE 2026 BROADCAST FRAMEWORK</span>
+    <span>lime → pink → cyan</span>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

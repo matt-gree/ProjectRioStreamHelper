@@ -79,6 +79,31 @@ export const useObsStore = create((set) => ({
     // StudioModeStateChanged), so the rail stays the single source of truth.
     setSceneItemEnabled: async (sceneName, sceneItemId, enabled) => {
         if (!obs) throw new Error('Not connected to OBS');
+        // Two-phase hide for PRSH overlays. OBS stops producing frames for a
+        // browser source the instant its scene item is disabled, keeping the
+        // last painted frame in the source's GPU texture — a full-alpha
+        // overlay. Re-enabling composites that stale frame for a beat before
+        // the page can react (the appear→vanish→replay stutter). Cueing the
+        // overlay to conceal itself first, while it's still painting, parks a
+        // transparent frame in that texture; the later re-enable then reveals
+        // cleanly from nothing. (gc-overlay has no /layout/ path and no
+        // overlay-base, so the cue correctly skips it.)
+        if (!enabled) {
+            const item = (useObsStore.getState().sceneItems[sceneName] || [])
+                .find(it => it.id === sceneItemId);
+            if (item?.isPrsh && (item.url || '').includes('/layout/')) {
+                try {
+                    await fetch('/api/v1/action', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'overlay.conceal', payload: { url: item.url } }),
+                    });
+                    // Let the cue reach the overlay and get composited
+                    // (socket hop + a couple of rendered frames).
+                    await new Promise(r => setTimeout(r, 250));
+                } catch { /* best-effort — worst case is the old stutter */ }
+            }
+        }
         await obs.call('SetSceneItemEnabled', { sceneName, sceneItemId, sceneItemEnabled: enabled });
     },
     setProgramScene: async (sceneName) => {

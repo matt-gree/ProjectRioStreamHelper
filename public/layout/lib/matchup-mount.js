@@ -9,7 +9,7 @@
 //
 //   const mu = mountMatchup({ host });
 //   mu.update(OverlayBase.state, OverlayBase.settings);
-//   mu.replay();    // re-run the reveal (e.g. OBS source made active)
+//   mu.setShown(bool);  // OBS on-screen signal (wire OverlayBase.onObsShown)
 //   mu.dispose();
 //
 // SLOT CONTRACT (elements carrying a data-slot attribute; missing = skipped):
@@ -28,6 +28,7 @@
 // derivation at fetch time; this mount only binds values.
 
 import { createThemeEngine } from './svg-theme-engine.js';
+import { createRevealGate } from './reveal-gate.js';
 
 const SETTINGS_TYPE = 'matchup';
 const ELEMENT = 'matchup';
@@ -52,6 +53,7 @@ const CSS = `
 .mu-host { position: fixed; inset: 0; }
 .mu-host svg { width: 100%; height: 100%; display: block; }
 .mu-host.mu-reveal { animation: mu-rise 0.55s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.mu-host.mu-off { opacity: 0 !important; }
 @keyframes mu-rise { from { opacity: 0; transform: translateY(36px); } to { opacity: 1; transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) { .mu-host.mu-reveal { animation: none; } }
 `;
@@ -146,6 +148,9 @@ export function mountMatchup({ host }) {
     void host.offsetWidth; // reflow so the animation restarts
     host.classList.add('mu-reveal');
   }
+  // Gate playReveal behind the OBS on-screen signal: dedupe redundant activates,
+  // snap dark on hide, one clean rise per show (see reveal-gate.js).
+  const gate = createRevealGate({ host, offClass: 'mu-off', play: playReveal });
 
   async function update(state, settings) {
     const g = OverlayBase.deepGet;
@@ -200,15 +205,14 @@ export function mountMatchup({ host }) {
 
     // Reveal only when the fetched identity changes, not on unrelated re-renders.
     const key = `${theme}|${matchId}|${name1}|${name2}|${mu.fetchedAt || ''}`;
-    if (key !== revealKey) { revealKey = key; playReveal(); }
+    if (key !== revealKey) { revealKey = key; gate.requestReveal(); }
   }
 
-  function replay() {
-    if (host.style.display !== 'none' && revealKey) playReveal();
-  }
+  function setShown(shown) { gate.setShown(shown); }
 
   function dispose() {
     disposed = true;
+    gate.dispose();
     window.removeEventListener('resize', engine.refitText);
     host.classList.remove('mu-host', 'mu-reveal');
     host.innerHTML = '';
@@ -216,5 +220,5 @@ export function mountMatchup({ host }) {
 
   window.addEventListener('resize', engine.refitText);
 
-  return { update, replay, dispose };
+  return { update, setShown, dispose };
 }

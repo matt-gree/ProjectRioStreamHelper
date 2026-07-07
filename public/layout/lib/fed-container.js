@@ -81,9 +81,14 @@ export function initFedContainer({ host, perf = false, skipState = false }) {
     shouldRenderSettings: (key) => key.startsWith('overlays.') || key.startsWith('scoreboards.sources.'),
   });
 
-  // Auto-play when this OBS source/scene becomes active (e.g. the producer cuts
-  // to the scene holding this container). Only the hit element acts on it.
-  window.addEventListener('obsSourceActiveChanged', (e) => {
-    if (e.detail && e.detail.active && mount && mount.replay) mount.replay();
+  // Auto-play when this OBS source/scene comes ON screen (scene cut or the
+  // source's eye icon). Only a real off→on transition replays: OBS also
+  // dispatches the current state right after page load, and replaying on that
+  // restarted an animation that had just played on data arrival (the on-load
+  // appear/vanish/replay stutter).
+  let wasShown;
+  OverlayBase.onObsShown((shown) => {
+    if (shown && wasShown === false && mount && mount.replay) mount.replay();
+    wasShown = shown;
   });
 }

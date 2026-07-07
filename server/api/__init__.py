@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 from server.api.v1 import (
     state,
+    action,
     settings,
     rio,
     scoreboards,
@@ -30,6 +31,7 @@ router_v1 = APIRouter(
 )
 
 router_v1.include_router(state.router)
+router_v1.include_router(action.router)
 router_v1.include_router(settings.router)
 router_v1.include_router(rio.router)
 router_v1.include_router(scoreboards.router)

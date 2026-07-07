@@ -7,12 +7,19 @@ and every SVG element renders its file from that package.
 
 ```
 <package>/
-├── package.json      # { id, name, version, author, description } — all optional but recommended
-├── commentary.svg    # the caster strip (1–4 reflowing plates)
-├── lowerthird.svg    # the Break-phase broadcast band
-├── matchup.svg       # the head-to-head band (series summary + 5 game cards)
-├── callout.svg       # the post-game Stat Callout backdrop
-└── sources/          # (optional) raw design exports, ignored by the app
+├── package.json         # { id, name, version, author, description } — all optional but recommended
+├── commentary.svg       # the caster strip (1–4 reflowing plates)
+├── lowerthird.svg       # the Break-phase broadcast band
+├── matchup.svg          # the head-to-head band (series summary + 5 game cards)
+├── callout.svg          # the post-game Stat Callout backdrop
+├── scorecard.svg        # the vertical Scorecard (stacked toggleable sections)
+├── scoreboard-xs.svg    # horizontal scoreboard, 400×50
+├── scoreboard-s.svg     # horizontal scoreboard, 500×80
+├── scoreboard-m.svg     # horizontal scoreboard, 600×200
+├── scoreboard-l.svg     # horizontal scoreboard, 800×460
+├── ticker.svg           # the Results Ticker marquee bar (1920×80)
+├── stats.svg            # the per-team batter/pitcher stat card (325×120)
+└── sources/             # (optional) raw design exports, ignored by the app
 ```
 
 Assets are served at `/design/{package}/{element}.svg`.
@@ -61,7 +68,9 @@ App-vars themes may use: `--accent`, `--card-bg`, `--text-primary`,
   authored notes and em-dashes.
 * Author at `viewBox="0 0 1920 1080"`. Bottom-anchored elements (commentary,
   lower third) use `preserveAspectRatio="xMidYMax meet"`; full-bleed backdrops
-  (callout) use `xMidYMid slice`.
+  (callout) use `xMidYMid slice`. Exception: the sized elements (scoreboard
+  variants, ticker, stats) are authored at their native OBS-source canvas
+  (e.g. `viewBox="0 0 800 460"`) with `xMidYMid meet`.
 
 The Rio token layer (`/layout/lib/rio-theme/tokens.css`) is linked by the
 element shells, so fixed-palette themes may also reference the brand token vars
@@ -175,6 +184,51 @@ No data slots — instead it recolors to the featured player via inherited vars:
 | `--accent` | The global design accent. |
 
 Keep important shapes away from the extreme edges (the reveal wipe clips it).
+
+### `scorecard.svg`
+
+The vertical Scorecard (`public/layout/lib/scorecard-mount.js`): eight
+independently toggleable sections melded into one continuous card. The full
+stack + slot contract is documented in the comment block at the top of
+`default/scorecard.svg` — copy that file as the working reference.
+
+### `scoreboard-{xs,s,m,l}.svg`
+
+The horizontal Scoreboard (`public/layout/lib/scoreboard-mount.js`), one file
+per size variant at its native canvas (400×50, 500×80, 600×200, 800×460).
+Each is a row-stack: groups `row-top` / `row-live` / `row-final` /
+`row-roster` / `row-box`, authored at a local y origin of 0 with `data-h`,
+melded by the mount into a card sized via `card-bg` (+ optional `card-rail`).
+A size implements whatever row subset fits (xs/s are `row-top` only). The
+full slot list is in the header comment of `scoreboard-mount.js`; runtime
+colour seams `--side1` / `--side2` carry each player's controller-port colour.
+
+### `ticker.svg`
+
+The Results Ticker (`public/layout/lib/ticker-mount.js`): the 1920×80 bar
+plus ONE prototype game card, `<g data-slot="card-template" data-w="…">`,
+whose inner parts are marked `data-part` (`away-name`, `home-name`,
+`away-cap`, `home-cap`, `score-group`, `score-away`, `score-home`, `vs`,
+`meta`). The mount clones the template per game into `<g data-slot="track">`
+(declare the visible width with `data-vw`) and scrolls it; clip the track
+region with a `<clipPath>` so cards don't escape the bar.
+
+### `stats.svg`
+
+The per-team stat card (`public/layout/lib/stats-card-mount.js`), 325×120:
+`char-icon`, `stat-{0..5}-value` / `stat-{0..5}-label` (four filled today),
+and a `line-group` bottom row (`line-label` + `line-text`) that hides when
+empty — declare `data-h-full` / `data-h-compact` on `card-bg` so the card
+shrinks with it. Wrap everything bindable in `<g data-slot="content">` (the
+batter-change dissolve target).
+
+### Bracket (no SVG)
+
+The bracket is generative — its geometry comes from the loaded bracket data —
+so it can't be themed with a package SVG. Instead it follows the package
+family: the `classic` package paints it with the Design-tab knobs; every
+other package gets the fixed Rio night palette baked into
+`public/layout/bracket/index.html` (`body.rio-package`).
 
 ---
 

@@ -6,7 +6,6 @@ import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { NumberInput } from '../ui/number-input';
-import { SimpleSelect } from '../ui/simple-select';
 import { Combobox } from '../ui/combobox';
 import { MultiSelect } from '../ui/multi-select';
 import { Switch } from '../ui/switch';
@@ -723,6 +722,31 @@ export default memo(function RotationControls({ scoreboardNumber }) {
         );
     }, [autoPollInterval, scoreboardNumber]);
 
+    // Pool split: "Completed" and "Live" are independent toggles that combine
+    // into rotationConfig.source_pool ('both' | 'completed' | 'ongoing').
+    // Each toggle also gates its own control surface (inline search row,
+    // modal tab) so an unchecked pool's controls don't linger visible.
+    const completedOn = rotationConfig.source_pool === 'both' || rotationConfig.source_pool === 'completed';
+    const liveOn = rotationConfig.source_pool === 'both' || rotationConfig.source_pool === 'ongoing';
+
+    const setPoolToggle = useCallback((which, on) => {
+        setRotationConfig(c => {
+            const curCompleted = c.source_pool === 'both' || c.source_pool === 'completed';
+            const curLive = c.source_pool === 'both' || c.source_pool === 'ongoing';
+            const nextCompleted = which === 'completed' ? on : curCompleted;
+            const nextLive = which === 'live' ? on : curLive;
+            if (!nextCompleted && !nextLive) return c; // at least one pool must stay enabled
+            const source_pool = nextCompleted && nextLive ? 'both' : (nextCompleted ? 'completed' : 'ongoing');
+            return { ...c, source_pool };
+        });
+    }, []);
+
+    // If the active modal tab's pool gets toggled off, hop to the other one.
+    useEffect(() => {
+        if (!completedOn && activeTab === 'completed' && liveOn) setActiveTab('ongoing');
+        else if (!liveOn && activeTab === 'ongoing' && completedOn) setActiveTab('completed');
+    }, [completedOn, liveOn, activeTab]);
+
     const searchCount = searchSets.length;
 
     return (
@@ -740,52 +764,87 @@ export default memo(function RotationControls({ scoreboardNumber }) {
                         )}
                     </div>
 
-                    {/* Search filters */}
-                    <Stack gap="xs">
-                        <div className="flex gap-2">
-                            <Input
-                                placeholder="Username"
-                                value={draftUsername}
-                                onChange={(e) => setDraftUsername(e.currentTarget.value)}
-                                onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }}
-                                className="flex-1"
-                            />
-                            <Input
-                                placeholder="Vs Username"
-                                value={draftVsUsername}
-                                onChange={(e) => setDraftVsUsername(e.currentTarget.value)}
-                                onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }}
-                                className="flex-1"
-                            />
-                        </div>
-                        <div className="flex items-end gap-2">
-                            <MultiSelect
-                                placeholder="Tags / game modes"
-                                data={tagOptions}
-                                value={draftTags}
-                                onChange={(val) => { setDraftTags(val); setDraftTagSearch(''); }}
-                                className="flex-1"
-                            />
-                            <NumberInput
-                                placeholder="Limit"
-                                min={1}
-                                max={500}
-                                value={draftLimit}
-                                onChange={setDraftLimit}
-                                className="w-[72px]"
-                            />
-                            {loadingSearch ? (
-                                <Button size="xs" variant="outline" className="border-destructive/40 text-destructive" onClick={handleCancelSearch}>
+                    {/* Search filters — completed-pool only */}
+                    {completedOn && (
+                        <Stack gap="xs">
+                            <div className="flex gap-2">
+                                <Input
+                                    placeholder="Username"
+                                    value={draftUsername}
+                                    onChange={(e) => setDraftUsername(e.currentTarget.value)}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }}
+                                    className="flex-1"
+                                />
+                                <Input
+                                    placeholder="Vs Username"
+                                    value={draftVsUsername}
+                                    onChange={(e) => setDraftVsUsername(e.currentTarget.value)}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }}
+                                    className="flex-1"
+                                />
+                            </div>
+                            <div className="flex items-end gap-2">
+                                <MultiSelect
+                                    placeholder="Tags / game modes"
+                                    data={tagOptions}
+                                    value={draftTags}
+                                    onChange={(val) => { setDraftTags(val); setDraftTagSearch(''); }}
+                                    className="flex-1"
+                                />
+                                <NumberInput
+                                    placeholder="Limit"
+                                    min={1}
+                                    max={500}
+                                    value={draftLimit}
+                                    onChange={setDraftLimit}
+                                    className="w-[72px]"
+                                />
+                                {loadingSearch ? (
+                                    <Button size="xs" variant="outline" className="border-destructive/40 text-destructive" onClick={handleCancelSearch}>
+                                        <Loader size={10} />
+                                        Cancel
+                                    </Button>
+                                ) : (
+                                    <Button size="xs" onClick={handleSearch}>
+                                        Search
+                                    </Button>
+                                )}
+                            </div>
+                        </Stack>
+                    )}
+
+                    {/* Live pool controls — live-pool only */}
+                    {liveOn && (
+                        <div className="flex items-center gap-3">
+                            {loadingOngoing ? (
+                                <Button size="xs" variant="outline" className="border-destructive/40 text-destructive" onClick={handleCancelOngoing}>
                                     <Loader size={10} />
                                     Cancel
                                 </Button>
                             ) : (
-                                <Button size="xs" onClick={handleSearch}>
-                                    Search
+                                <Button size="xs" variant="secondary" onClick={fetchOngoing}>
+                                    Refresh Live Games{ongoingGames.length > 0 ? ` (${ongoingGames.length})` : ''}
                                 </Button>
                             )}
+                            <Label className="flex items-center gap-1.5 text-xs">
+                                <Switch checked={liveAutoPolling} onCheckedChange={handleSetLiveAutoPoll} />
+                                Auto-poll
+                            </Label>
+                            {liveAutoPolling && (
+                                <div className="flex items-center">
+                                    <NumberInput
+                                        min={5}
+                                        max={300}
+                                        step={5}
+                                        value={liveAutoPollInterval}
+                                        onChange={(val) => handleSetLiveAutoPoll(true, Number(val) || 10)}
+                                        className="w-[72px]"
+                                    />
+                                    <span className="ml-0.5 text-xs text-muted-foreground">s</span>
+                                </div>
+                            )}
                         </div>
-                    </Stack>
+                    )}
 
                     {/* Rotation settings + auto-poll */}
                     <div className="flex items-end gap-3">
@@ -798,17 +857,18 @@ export default memo(function RotationControls({ scoreboardNumber }) {
                                 onChange={(val) => setRotationConfig(c => ({ ...c, interval: val || 30 }))}
                             />
                         </div>
-                        <div className="flex w-[110px] flex-col gap-1">
+                        <div className="flex flex-col gap-1">
                             <Label className="text-xs">Pool</Label>
-                            <SimpleSelect
-                                data={[
-                                    { value: 'both', label: 'Both' },
-                                    { value: 'ongoing', label: 'Live Only' },
-                                    { value: 'completed', label: 'Completed' },
-                                ]}
-                                value={rotationConfig.source_pool}
-                                onChange={(val) => setRotationConfig(c => ({ ...c, source_pool: val }))}
-                            />
+                            <div className="flex items-center gap-3 pb-1">
+                                <Label className="flex items-center gap-1.5 text-xs">
+                                    <Switch checked={completedOn} onCheckedChange={(on) => setPoolToggle('completed', on)} />
+                                    Completed
+                                </Label>
+                                <Label className="flex items-center gap-1.5 text-xs">
+                                    <Switch checked={liveOn} onCheckedChange={(on) => setPoolToggle('live', on)} />
+                                    Live
+                                </Label>
+                            </div>
                         </div>
                         <div className="flex items-center gap-2 pb-1">
                             <Label className="flex items-center gap-1.5 text-xs">
@@ -885,12 +945,16 @@ export default memo(function RotationControls({ scoreboardNumber }) {
                     </DialogHeader>
                     <Tabs value={activeTab} onValueChange={setActiveTab}>
                         <TabsList className="mb-4">
-                            <TabsTrigger value="completed">
-                                Completed Games ({allPoolGames.length})
-                            </TabsTrigger>
-                            <TabsTrigger value="ongoing">
-                                Live Games ({ongoingGames.length})
-                            </TabsTrigger>
+                            {completedOn && (
+                                <TabsTrigger value="completed">
+                                    Completed Games ({allPoolGames.length})
+                                </TabsTrigger>
+                            )}
+                            {liveOn && (
+                                <TabsTrigger value="ongoing">
+                                    Live Games ({ongoingGames.length})
+                                </TabsTrigger>
+                            )}
                         </TabsList>
 
                         {/* ── Completed tab ── */}

@@ -1,0 +1,52 @@
+<svg viewBox="0 0 500 80" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+  <!--
+    DEFAULT package - Scoreboard S (500x80): names + team logos + scores +
+    inning arrow. Single row-top band (row-stack contract in
+    scoreboard-mount.js). Fixed Rio palette; - -side1 / - -side2 come from the
+    players' controller ports at runtime.
+  -->
+  <style>
+    .sb-cardbg { fill: var(--band); stroke: var(--border); stroke-width: 1.5; }
+    .sb-rail   { fill: var(--accent); }
+    .sb-ink    { fill: var(--ink); font-family: var(--font-display); }
+    .sb-num    { fill: var(--ink); font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+  </style>
+  <defs>
+    <linearGradient id="sbs-w1" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" style="stop-color:var(--side1)" stop-opacity="0.20"/>
+      <stop offset="1" style="stop-color:var(--side1)" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="sbs-w2" x1="1" y1="0" x2="0" y2="0">
+      <stop offset="0" style="stop-color:var(--side2)" stop-opacity="0.20"/>
+      <stop offset="1" style="stop-color:var(--side2)" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <rect data-slot="card-rail" class="sb-rail" x="6" y="8" width="6" height="64" rx="3"/>
+  <rect data-slot="card-bg"  class="sb-cardbg" x="16" y="8" width="478" height="64" rx="11"/>
+
+  <g data-slot="row-top" data-h="64">
+    <!-- side washes + port chips -->
+    <rect x="24" y="16" width="170" height="48" rx="8" style="fill:url(#sbs-w1)"/>
+    <rect x="306" y="16" width="170" height="48" rx="8" style="fill:url(#sbs-w2)"/>
+    <rect x="24" y="16" width="4" height="48" rx="2" style="fill:var(--side1)" opacity="0.85"/>
+    <rect x="472" y="16" width="4" height="48" rx="2" style="fill:var(--side2)" opacity="0.85"/>
+
+    <image data-slot="s1-logo" x="36" y="21" width="38" height="38" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+    <text data-slot="s1-name" data-maxw="108" x="82" y="47" class="sb-ink" font-size="20" font-weight="700">Player One</text>
+    <image data-slot="s2-logo" x="426" y="21" width="38" height="38" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+    <text data-slot="s2-name" data-maxw="108" x="418" y="47" text-anchor="end" class="sb-ink" font-size="20" font-weight="700">Player Two</text>
+
+    <text data-slot="s1-score" data-maxw="44" x="226" y="51" text-anchor="end" class="sb-num" font-size="32" font-weight="700">0</text>
+    <text data-slot="s2-score" data-maxw="44" x="274" y="51" text-anchor="start" class="sb-num" font-size="32" font-weight="700">0</text>
+
+    <!-- inning marker between the scores -->
+    <g data-slot="inn-arrow-up"><polygon points="242,24 258,24 250,15 " style="fill:var(--accent)"/></g>
+    <g data-slot="inn-arrow-down" opacity="0"><polygon points="242,52 258,52 250,61" style="fill:var(--accent)"/></g>
+    <text data-slot="inn-num" x="250" y="47" text-anchor="middle" class="sb-num" font-size="19" font-weight="700">1</text>
+    <g data-slot="final-badge" opacity="0">
+      <rect x="221" y="27" width="58" height="26" rx="6" style="fill:var(--accent)"/>
+      <text x="250" y="45" text-anchor="middle" fill="#ffffff" font-family="var(--font-display)" font-size="14" font-weight="700" letter-spacing="1">FINAL</text>
+    </g>
+  </g>
+</svg>

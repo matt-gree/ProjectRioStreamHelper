@@ -58,12 +58,15 @@ OverlayBase.init({
   shouldRender: (key) => key.startsWith(`score.${SB}.hit`),
 });
 
-// Auto-play when this OBS source/scene becomes active. OBS dispatches
-// `obsSourceActiveChanged` to browser sources when the source enters the program
-// output — whether the source itself was shown or its scene was cut to. Replays
-// the latest contact on cut-in; no-ops in a normal browser (event never fires).
-window.addEventListener('obsSourceActiveChanged', (e) => {
-  if (e.detail && e.detail.active) mount.replay();
+// Auto-play the latest contact when this OBS source/scene comes ON screen
+// (scene cut or the source's eye icon — OverlayBase.onObsShown honours both).
+// Only a real off→on transition replays: OBS also dispatches the current
+// state right after page load, and replaying on that double-fired the
+// animation. No-ops in a normal browser (the events never fire).
+let wasShown;
+OverlayBase.onObsShown((shown) => {
+  if (shown && wasShown === false) mount.replay();
+  wasShown = shown;
 });
 </script>
 </body>

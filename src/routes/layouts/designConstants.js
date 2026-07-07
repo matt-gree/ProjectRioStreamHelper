@@ -60,6 +60,24 @@ export const LAYOUT_SETTINGS = {
         { key: 'port2Color', type: 'color-override', label: 'Port 3 Color', description: 'Side colour for a player on controller port 3' },
         { key: 'port3Color', type: 'color-override', label: 'Port 4 Color', description: 'Side colour for a player on controller port 4' },
     ],
+    // Vertical Scorecard — each numbered design element is an independent
+    // switch the producer flips live (broadcast over the settings socket); the
+    // mount (scorecard-mount.js) animates each group in/out. mainMode chooses
+    // the full score block, the condensed bar, or neither. The theme SVG comes
+    // from the active Design Package (scorecard.svg).
+    scorecard: [
+        { key: 'showHeader',   type: 'switch', label: 'Header Bar',    description: 'Branding logo + title bar (element 0)', defaultValue: true },
+        { key: 'titleText',    type: 'text',   label: 'Header Title',   description: 'Centered next to the logo. Blank uses the branding logo alone.', placeholder: 'Project Rio' },
+        { key: 'showPhase',    type: 'switch', label: 'Bracket Phase',  description: 'Bracket-phase bar (element 1)', defaultValue: true },
+        { key: 'phaseText',    type: 'text',   label: 'Phase Text',     description: 'The round/phase shown in the bracket-phase bar (hidden when blank)', placeholder: 'Winners Final' },
+        { key: 'showGameMode', type: 'switch', label: 'Game Mode',      description: 'Game-mode bar (element 2)', defaultValue: true },
+        { key: 'mainMode',     type: 'select', label: 'Score Block',    description: 'Full score block (3), condensed bar (3a), or neither', options: [{ value: 'full', label: 'Full' }, { value: 'condensed', label: 'Condensed' }, { value: 'off', label: 'Off' }], defaultValue: 'full' },
+        { key: 'showRosters',  type: 'switch', label: 'Rosters',        description: 'Both teams’ 9-character rosters in the full block', defaultValue: true },
+        { key: 'showBases',    type: 'switch', label: 'Bases / Diamond', description: 'The base diamond and on-base runners', defaultValue: true },
+        { key: 'showAtBat',    type: 'switch', label: 'At-Bat Lines',   description: 'Current batter + pitcher game lines (element 4)', defaultValue: true },
+        { key: 'showBoxScore', type: 'switch', label: 'Box Score',      description: 'Per-inning linescore (element 5)', defaultValue: true },
+        { key: 'showStadium',  type: 'switch', label: 'Stadium',        description: 'Stadium bar (element 6)', defaultValue: true },
+    ],
 };
 
 // ── Global design keys eligible for per-layout override ──

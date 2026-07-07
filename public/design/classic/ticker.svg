@@ -1,0 +1,59 @@
+<svg viewBox="0 0 1920 80" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" data-design-vars="app">
+  <!--
+    CLASSIC package - Results Ticker (1920x80): the original marquee bar -
+    accent RESULTS badge, translucent game cards, accent scores - painted with
+    the user's Design-tab CSS variables (data-design-vars="app").
+    ticker-mount.js clones card-template per game and scrolls the track.
+  -->
+  <style>
+    .ct-name { fill: var(--text-primary, #ffffff); font-family: var(--font-family, 'Inter', sans-serif); text-shadow: var(--text-shadow, none); }
+    .ct-num  { fill: var(--accent, #f59e0b); font-family: var(--font-family, 'Inter', sans-serif); }
+    .ct-dim  { fill: rgba(255,255,255,0.4); font-family: var(--font-family, 'Inter', sans-serif); }
+  </style>
+  <defs>
+    <clipPath id="ctk-clip"><rect x="140" y="1" width="1770" height="78"/></clipPath>
+    <linearGradient id="ctk-fade-r" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" style="stop-color:var(--card-bg, rgba(15,15,25,0.88))" stop-opacity="0"/>
+      <stop offset="1" style="stop-color:var(--card-bg, rgba(15,15,25,0.88))"/>
+    </linearGradient>
+  </defs>
+
+  <!-- bar shell -->
+  <rect x="0" y="0" width="1920" height="80" rx="12"
+        style="fill:var(--card-bg, rgba(15,15,25,0.88));filter:var(--card-shadow-filter, none)"/>
+  <rect x="0" y="0" width="1920" height="80" rx="12" fill="none"
+        style="stroke:var(--border-color, rgba(255,255,255,0.08));stroke-width:var(--border-width, 1px)"/>
+
+  <!-- scrolling cards (clipped to the bar) -->
+  <g clip-path="url(#ctk-clip)">
+    <g data-slot="track" data-vw="1780" transform="translate(156,0)"></g>
+    <rect x="1848" y="1" width="62" height="78" style="fill:url(#ctk-fade-r)"/>
+  </g>
+
+  <!-- RESULTS badge -->
+  <rect x="0" y="0" width="140" height="80" rx="12" style="fill:var(--accent, #f59e0b)"/>
+  <rect x="112" y="0" width="28" height="80" style="fill:var(--accent, #f59e0b)"/>
+  <rect x="139" y="0" width="1" height="80" fill="rgba(0,0,0,0.25)"/>
+  <text x="70" y="46" text-anchor="middle" fill="#ffffff" font-family="var(--font-family, 'Inter', sans-serif)" font-size="13" font-weight="800" letter-spacing="1.8">RESULTS</text>
+
+  <!-- prototype game card (hidden; cloned + bound by the mount) -->
+  <g data-slot="card-template" data-w="340" opacity="0">
+    <rect data-part="card-bg" x="0" y="8" width="340" height="64" rx="10" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
+
+    <image data-part="away-cap" x="12" y="16" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <text data-part="away-name" data-maxw="96" x="46" y="37" class="ct-name" font-size="14" font-weight="700">Away</text>
+
+    <g data-part="score-group">
+      <rect x="144" y="18" width="52" height="24" rx="6" fill="rgba(0,0,0,0.35)"/>
+      <text data-part="score-away" x="166" y="36" text-anchor="end" class="ct-num" font-size="16" font-weight="800">0</text>
+      <text x="170" y="35" text-anchor="middle" fill="rgba(255,255,255,0.3)" font-family="var(--font-family, 'Inter', sans-serif)" font-size="12" font-weight="300">&#8211;</text>
+      <text data-part="score-home" x="174" y="36" text-anchor="start" class="ct-num" font-size="16" font-weight="800">0</text>
+    </g>
+    <text data-part="vs" x="170" y="35" text-anchor="middle" class="ct-dim" font-size="10" font-weight="800" letter-spacing="1" opacity="0">VS</text>
+
+    <text data-part="home-name" data-maxw="96" x="294" y="37" text-anchor="end" class="ct-name" font-size="14" font-weight="700">Home</text>
+    <image data-part="home-cap" x="300" y="16" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+
+    <text data-part="meta" data-maxw="310" x="170" y="61" text-anchor="middle" fill="rgba(255,255,255,0.5)" font-family="var(--font-family, 'Inter', sans-serif)" font-size="9.5" font-weight="700" letter-spacing="0.7">STADIUM &#183; DATE</text>
+  </g>
+</svg>

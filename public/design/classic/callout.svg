@@ -1,6 +1,6 @@
 <svg viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
   <!-- Reference drop-in theme for the Stat Callout. Recolors to the live player
-       via --port-color / --port-2 / --accent. NOTE: var() only resolves through
+       via - -port-color / - -port-2 / - -accent. NOTE: var() only resolves through
        inline style="" in SVG, never via fill="var(...)" attributes. -->
   <defs>
     <radialGradient id="auroraA" cx="20%" cy="20%" r="80%">

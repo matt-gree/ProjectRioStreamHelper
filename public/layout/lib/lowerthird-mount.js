@@ -10,7 +10,7 @@
 //
 //   const lt = mountLowerThird({ host });
 //   lt.update(OverlayBase.state, OverlayBase.settings);
-//   lt.replay();    // re-run the reveal (e.g. OBS source made active)
+//   lt.setShown(bool);  // OBS on-screen signal (wire OverlayBase.onObsShown)
 //   lt.dispose();
 //
 // SLOT CONTRACT (elements carrying a data-slot attribute; missing = skipped):
@@ -25,6 +25,7 @@
 // seam, match-side resolution, and reveal animation.
 
 import { createThemeEngine } from './svg-theme-engine.js';
+import { createRevealGate } from './reveal-gate.js';
 
 const SETTINGS_TYPE = 'lowerthird';
 const ELEMENT = 'lowerthird';
@@ -50,6 +51,7 @@ const CSS = `
 .lt-host { position: fixed; inset: 0; }
 .lt-host svg { width: 100%; height: 100%; display: block; }
 .lt-host.lt-reveal { animation: lt-rise 0.55s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.lt-host.lt-off { opacity: 0 !important; }
 @keyframes lt-rise { from { opacity: 0; transform: translateY(36px); } to { opacity: 1; transform: translateY(0); } }
 .lt-host.lt-warn [data-slot="clock"] { animation: lt-pulse 1s ease-in-out infinite; }
 @keyframes lt-pulse { 50% { opacity: 0.4; } }
@@ -179,6 +181,10 @@ export function mountLowerThird({ host }) {
     void host.offsetWidth; // reflow so the animation restarts
     host.classList.add('lt-reveal');
   }
+  // The gate decides WHEN playReveal actually runs: it dedupes OBS's redundant
+  // activate dispatches, snaps the band dark on hide, and holds it dark through
+  // a visibility-toggle burst so one show = one clean rise (see reveal-gate.js).
+  const gate = createRevealGate({ host, offClass: 'lt-off', play: playReveal });
 
   // ── main update ───────────────────────────────────────────────────────────
   async function update(state, settings) {
@@ -240,16 +246,15 @@ export function mountLowerThird({ host }) {
 
     // Reveal only when the identity changes (not on every clock tick / pause).
     const key = `${theme}|${matchId}|${s1.name}|${s2.name}|${title}|${subtitle}|${role}`;
-    if (key !== revealKey) { revealKey = key; playReveal(); }
+    if (key !== revealKey) { revealKey = key; gate.requestReveal(); }
   }
 
-  function replay() {
-    if (host.style.display !== 'none' && revealKey) playReveal();
-  }
+  function setShown(shown) { gate.setShown(shown); }
 
   function dispose() {
     disposed = true;
     if (clockTimer) clearInterval(clockTimer);
+    gate.dispose();
     window.removeEventListener('resize', engine.refitText);
     host.classList.remove('lt-host', 'lt-reveal', 'lt-warn');
     host.innerHTML = '';
@@ -259,5 +264,5 @@ export function mountLowerThird({ host }) {
   clockTimer = setInterval(renderClock, 250);
   window.addEventListener('resize', engine.refitText);
 
-  return { update, replay, dispose };
+  return { update, setShown, dispose };
 }

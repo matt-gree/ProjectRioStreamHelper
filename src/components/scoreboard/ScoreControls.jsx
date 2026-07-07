@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, useRef } from 'react';
-import { Info, ChevronDown, ChevronUp } from 'lucide-react';
+import { Info, ChevronDown, ChevronUp, RotateCw } from 'lucide-react';
 import { Stack, Text, Divider, Loader } from '../ui/primitives';
 import { Panel } from '../ui/panel';
 import { NumberInput } from '../ui/number-input';
@@ -85,7 +85,6 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, trans
         }
         return num(raw, 3);
     });
-    const phase    = useStateStore(s => s?.score?.[scoreboardNumber]?.phase ?? '');
     const match    = useStateStore(s => s?.score?.[scoreboardNumber]?.match ?? '');
     const stadium  = useStateStore(s => s?.score?.[scoreboardNumber]?.stadium ?? '');
 
@@ -101,6 +100,7 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, trans
     const [diagnostics, setDiagnostics] = useState(null);
     const [matchOpen, setMatchOpen] = useState(false);
     const [fetchingStats, setFetchingStats] = useState(false);
+    const [refreshingHud, setRefreshingHud] = useState(false);
     const prevTagRef = useRef(statsTag);
 
     useEffect(() => {
@@ -163,6 +163,14 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, trans
         fetch(`/api/v1/rio/stats/refresh?scoreboard=${scoreboardNumber}`, { method: 'POST' })
             .catch(() => setFetchingStats(false));
     }, [scoreboardNumber]);
+
+    // Force a re-read of the HUD file — recovers the scoreboard after it's
+    // been cleared or hand-edited so it matches the HUD exactly again.
+    const handleRefreshHud = useCallback(() => {
+        setRefreshingHud(true);
+        fetch('/api/v1/rio/refresh', { method: 'POST' })
+            .finally(() => setRefreshingHud(false));
+    }, []);
 
     const set = useCallback((field, value) => {
         setItem(`${base}.${field}`, value);
@@ -261,6 +269,15 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, trans
                             <Badge className="bg-[#22c55e]/15 text-[#4ade80] text-[11px] font-semibold uppercase tracking-wider">
                                 HUD
                             </Badge>
+                            <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                onClick={handleRefreshHud}
+                                disabled={refreshingHud}
+                                title="Re-read HUD file and restore scoreboard to match it"
+                            >
+                                {refreshingHud ? <Loader size={12} /> : <RotateCw size={14} />}
+                            </Button>
                             <Text size="xs" dimmed>Local game — disable HUD in Settings to rebind.</Text>
                         </div>
                     ) : (
@@ -469,11 +486,6 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, trans
                                     min={1} max={99} step={2}
                                 />
                             </div>
-                            <TextField
-                                label="Phase"
-                                value={phase}
-                                onChange={e => set('phase', e.currentTarget.value)}
-                            />
                             <TextField
                                 label="Match"
                                 value={match}

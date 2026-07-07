@@ -1,0 +1,26 @@
+<svg viewBox="0 0 400 50" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" data-design-vars="app">
+  <!--
+    CLASSIC package - Scoreboard XS (400x50): the original PRSH strip - names
+    and scores with a plain dash, painted with the user's Design-tab CSS
+    variables (data-design-vars="app"). Row-stack contract in
+    scoreboard-mount.js. No inning marker at this size, matching the pre-SVG
+    layout.
+  -->
+  <style>
+    .cx-name { fill: var(--text-primary, #ffffff); font-family: var(--font-family, 'Inter', sans-serif); text-shadow: var(--text-shadow, none); }
+    .cx-score { fill: var(--accent, #f59e0b); font-family: var(--font-family, 'Inter', sans-serif); }
+  </style>
+
+  <rect data-slot="card-bg" x="20" y="5" width="360" height="40" rx="12"
+        style="fill:var(--card-bg, rgba(15,15,25,0.88));filter:var(--card-shadow-filter, none)"/>
+  <rect x="20" y="5" width="360" height="40" rx="12" fill="none"
+        style="stroke:var(--border-color, rgba(255,255,255,0.08));stroke-width:var(--border-width, 1px)"/>
+
+  <g data-slot="row-top" data-h="40">
+    <text data-slot="s1-name" data-maxw="120" x="34" y="30" class="cx-name" font-size="13" font-weight="700">Player One</text>
+    <text data-slot="s1-score" data-maxw="36" x="182" y="33" text-anchor="end" class="cx-score" font-size="22" font-weight="800">0</text>
+    <text x="200" y="31" text-anchor="middle" fill="rgba(255,255,255,0.25)" font-family="var(--font-family, 'Inter', sans-serif)" font-size="18" font-weight="300">&#8211;</text>
+    <text data-slot="s2-score" data-maxw="36" x="218" y="33" text-anchor="start" class="cx-score" font-size="22" font-weight="800">0</text>
+    <text data-slot="s2-name" data-maxw="120" x="366" y="30" text-anchor="end" class="cx-name" font-size="13" font-weight="700">Player Two</text>
+  </g>
+</svg>

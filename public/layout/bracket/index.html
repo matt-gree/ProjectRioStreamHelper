@@ -6,6 +6,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/layout/lib/rio-theme/tokens.css" />
   <style>
     :root {
       --accent: #f59e0b;
@@ -137,8 +138,46 @@
     }
 
     .set.active {
-      border-color: rgba(59, 130, 246, 0.5);
-      box-shadow: 0 0 8px rgba(59, 130, 246, 0.2);
+      border-color: var(--active-color, rgba(59, 130, 246, 0.5));
+      box-shadow: 0 0 8px var(--active-glow, rgba(59, 130, 246, 0.2));
+    }
+
+    /* ── Rio palette (any Design Package except `classic`) ──
+       The bracket is generative, so it can't be themed with a package SVG the
+       way the fixed-geometry elements are. Instead it follows the package
+       family: `classic` paints with the Design-tab knobs (applyDesignSettings,
+       below); every other package gets the fixed Project Rio night palette
+       from rio-theme/tokens.css via this body class. Explicit
+       overlays.bracket.connectorColor / activeColor overrides are re-applied
+       inline on <body> so they win over this block in either mode. */
+    body.rio-package {
+      --accent: var(--rio-500);
+      --accent-rgb: 230, 0, 18;
+      --bg-card: var(--night-900);
+      --bg-slot: rgba(255, 255, 255, 0.05);
+      --bg-slot-winner: rgba(230, 0, 18, 0.16);
+      --bg-slot-active: rgba(245, 187, 0, 0.13);
+      --connector-color: var(--night-600);
+      --border-color: var(--night-700);
+      --border-width: 1px;
+      --border-radius: 6px;
+      --text-primary: var(--fog-100);
+      --text-dimmed: var(--fog-500);
+      --active-color: rgba(245, 187, 0, 0.55);
+      --active-glow: rgba(245, 187, 0, 0.22);
+      --font-family: var(--font-body);
+      font-family: var(--font-body);
+    }
+    body.rio-package .phase-name,
+    body.rio-package .section-header,
+    body.rio-package .round-label,
+    body.rio-package .gf-label {
+      font-family: var(--font-display);
+      letter-spacing: 1.2px;
+    }
+    body.rio-package .slot-score {
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
     }
 
     /* ── Bye placeholder ──
@@ -541,15 +580,33 @@
     let lastBracketSig = null;
 
     function render() {
-      applyDesignSettings('bracket');
+      // Palette follows the active Design Package: `classic` paints with the
+      // Design-tab knobs like the pre-2.0 overlays; anything else gets the
+      // fixed Rio night palette (body.rio-package stylesheet block above).
+      const pkg = deepGet(settings, 'overlays.global.designPackage', 'default') || 'default';
+      const isClassic = pkg === 'classic';
+      document.body.classList.toggle('rio-package', !isClassic);
+      const bodySt = document.body.style;
+      bodySt.removeProperty('--connector-color');
+      bodySt.removeProperty('--active-color');
 
-      // Apply design variables to bracket-specific CSS vars
-      const root = document.documentElement.style;
-      const cardBg = getComputedStyle(document.documentElement).getPropertyValue('--card-bg').trim();
-      const borderColor = getComputedStyle(document.documentElement).getPropertyValue('--border-color').trim();
-      const borderRadius = getComputedStyle(document.documentElement).getPropertyValue('--border-radius').trim();
-      if (cardBg) root.setProperty('--bg-card', cardBg);
-      if (borderColor) root.setProperty('--border-color', borderColor);
+      if (isClassic) {
+        applyDesignSettings('bracket');
+        // Apply design variables to bracket-specific CSS vars
+        const root = document.documentElement.style;
+        const cardBg = getComputedStyle(document.documentElement).getPropertyValue('--card-bg').trim();
+        const borderColor = getComputedStyle(document.documentElement).getPropertyValue('--border-color').trim();
+        if (cardBg) root.setProperty('--bg-card', cardBg);
+        if (borderColor) root.setProperty('--border-color', borderColor);
+      } else {
+        OverlayBase.clearDesignSettings();
+        // Deliberate per-layout element settings still win over the Rio block
+        // (inline on <body> outranks the body.rio-package class rules).
+        const conn = deepGet(settings, 'overlays.bracket.connectorColor', null);
+        if (conn) bodySt.setProperty('--connector-color', conn);
+        const act = deepGet(settings, 'overlays.bracket.activeColor', null);
+        if (act) bodySt.setProperty('--active-color', act);
+      }
 
       const bracket = deepGet(state, 'bracket');
       const container = document.getElementById('bracket-container');

@@ -47,23 +47,12 @@
       shouldRenderSettings: (key) => key.startsWith('overlays.'),
     });
 
-    // Reveal / hide the strip in step with OBS. Two independent signals decide
-    // whether this source is actually on screen: a SCENE cut fires
-    // `obsSourceActiveChanged`, while toggling the source's own visibility (the
-    // eye icon) fires `obsSourceVisibleChanged`. We must honour BOTH — listening
-    // only to the active event is why an eye-toggle-off never hid the plates, so
-    // on the next show OBS composited their stale full-opacity frame before the
-    // reveal reset them (the "full alpha, then dissolve in" stutter). Combine
-    // them: on air only when neither signal says otherwise. The mount dedupes and
-    // snaps hidden, so redundant/again-true events don't double the reveal.
-    let obsActive, obsVisible;   // tri-state; undefined until OBS tells us
-    const reconcileObs = () => cm.setActive(obsActive !== false && obsVisible !== false);
-    window.addEventListener('obsSourceActiveChanged', (e) => {
-      obsActive = !!(e.detail && e.detail.active); reconcileObs();
-    });
-    window.addEventListener('obsSourceVisibleChanged', (e) => {
-      obsVisible = !!(e.detail && e.detail.visible); reconcileObs();
-    });
+    // Reveal / hide the strip in step with OBS's combined on-screen signal
+    // (scene cuts + the source's eye icon — OverlayBase.onObsShown honours
+    // both; listening only to `active` was the original eye-toggle stutter).
+    // The mount dedupes and snaps hidden, so redundant/again-true events
+    // don't double the reveal.
+    OverlayBase.onObsShown((shown) => cm.setActive(shown));
   </script>
 </body>
 </html>
