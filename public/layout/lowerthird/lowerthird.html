@@ -2,7 +2,9 @@
 <html lang="en">
 <!--
   Lower Third — a re-themable SVG broadcast band (Break phase, also placeable
-  mid-game). Layout: tournament logo · one match · title/subtitle · clock.
+  mid-game). FIVE independently toggleable SLOTS (lowerthird.slots.1..5), each
+  carrying one content type: logo · match · scorebox · merch · clock · message
+  · bracket. Slot widths are unequal — each type's width is owned by the theme.
 
   This file is a thin shell: the look lives in the active DESIGN PACKAGE's
   theme SVG (/design/{package}/lowerthird.svg — picked by the global Design
@@ -52,10 +54,20 @@
         } catch { /* ignore */ }
       }
 
+      // Whether any enabled slot carries this content type (gates the chatty
+      // score.* subscription to boards a Scorebox slot actually shows).
+      const slotTypeActive = (type) => {
+        const slots = OverlayBase.deepGet(OverlayBase.state, 'lowerthird.slots', {}) || {};
+        return Object.values(slots).some((s) => s && s.enabled && s.type === type);
+      };
+
       OverlayBase.init({
         render: () => lt.update(OverlayBase.state, OverlayBase.settings),
-        // Re-render when our own keys, the bound match, or branding change.
-        shouldRender: (key) => key.startsWith('lowerthird.') || key.startsWith('match.') || key.startsWith('branding'),
+        // Re-render when our own keys, a selected match, or branding change —
+        // plus live score/bracket keys while a slot of that type is enabled.
+        shouldRender: (key) => key.startsWith('lowerthird.') || key.startsWith('match.') || key.startsWith('branding')
+          || (key.startsWith('score.') && slotTypeActive('scorebox'))
+          || (key.startsWith('bracket') && slotTypeActive('bracket')),
         shouldRenderSettings: (key) => key.startsWith('overlays.lowerthird.') || key.startsWith('overlays.global.'),
         fetchSettings: true,
         skipState: OverlayBase.PREVIEW_MODE,

@@ -108,11 +108,12 @@ export const ELEMENTS = [
     {
         id: 'lowerthird',
         name: 'Lower Third',
-        // Break phase (also freely placeable mid-game). A re-themable SVG band:
-        // tournament logo · one match (current/upcoming) · title/subtitle · clock.
-        // Direct element (own dedicated source); the producer authors its content
-        // (match, title, clock) on the face/gear, written to lowerthird.* state,
-        // and shows/hides the source in OBS to put it on air. Native 1920×1080.
+        // Break phase (also freely placeable mid-game). A re-themable SVG band
+        // of FIVE independently toggleable slots (lowerthird.slots.1..5), each
+        // one content type: logo · match · scorebox · merch · clock · message ·
+        // bracket. Direct element (own dedicated source); the face is per-slot
+        // on/off + clock transport, the gear holds each slot's content editor.
+        // Slot widths/looks belong to the design package. Native 1920×1080.
         phase: 'break',
         flavor: 'direct',
         span: 6,
@@ -120,6 +121,22 @@ export const ELEMENTS = [
         width: 1920,
         height: 1080,
         match: (url) => /lowerthird/i.test(url),
+    },
+    {
+        id: 'schedule',
+        name: 'Upcoming Schedule',
+        // The producer's ordered match queue (schedule.queue, ids into
+        // match.{M}) rendered by the schedule overlay. Queue authoring lives on
+        // the face (add / reorder / remove, per-match display time); the title
+        // sits in the gear. Draft-phase prep and break filler both want it.
+        phase: ['draft', 'break'],
+        flavor: 'direct',
+        span: 4,
+        url: '/layout/schedule/schedule.html',
+        width: 1920,
+        height: 1080,
+        // Deliberately narrow: bracket/player_schedule.html must NOT bind here.
+        match: (url) => /\/layout\/schedule\//i.test(url),
     },
     {
         id: 'matchuphistory',

@@ -1,16 +1,20 @@
 {
   "lowerthird": {
-    "theme": "rio",
-    "matchId": "1",
-    "role": "upnext",
-    "title": "Winners Final",
-    "subtitle": "Mario Superstar Baseball · NNL Season 7",
-    "clock": { "mode": "countdown", "durationSec": 300, "remainingMs": 272000, "running": false, "label": "BACK IN" }
+    "slots": {
+      "1": { "enabled": true, "type": "logo", "title": "NNL Season 7" },
+      "2": { "enabled": true, "type": "match", "matchId": "1", "role": "upnext" },
+      "3": { "enabled": true, "type": "message", "title": "Winners Final", "subtitle": "Mario Superstar Baseball" },
+      "4": { "enabled": true, "type": "clock", "clock": { "mode": "countdown", "durationSec": 300, "remainingMs": 272000, "running": false, "label": "BACK IN" } },
+      "5": { "enabled": false, "type": "" }
+    }
   },
   "match": {
     "1": {
       "label": "Winners Final",
       "stage": "draft",
+      "scheduledAt": "6:30 PM",
+      "format": { "bestOf": 3 },
+      "series": { "1": 1, "2": 0 },
       "player": {
         "1": { "rioName": "MattGree", "captain": "Mario", "port": 0 },
         "2": { "rioName": "SteelyDad", "captain": "Bowser", "port": 1 }

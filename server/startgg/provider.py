@@ -56,7 +56,6 @@ class StartGGProvider:
     _event_slug: str | None = None
     _event_url: str | None = None
     _tournament_data: dict | None = None
-    _entrants_cache: dict | None = None  # {gamerTag_lower: parsed_player_dict}
     _bracket_cache: dict[int, dict] = {}  # phase_group_id -> parsed bracket dict
     _load_lock: asyncio.Lock = asyncio.Lock()
     _restore_task: asyncio.Task | None = None
@@ -117,7 +116,6 @@ class StartGGProvider:
         cls._event_slug = None
         cls._event_url = None
         cls._tournament_data = None
-        cls._entrants_cache = None
         cls._bracket_cache = {}
         await State.SetBatch([
             ("tournamentInfo.bracket_link", ""),
@@ -204,7 +202,6 @@ class StartGGProvider:
         canonical_url = f"https://www.start.gg/{slug}"
         # Only invalidate caches when the event actually changes.
         if cls._event_slug != slug:
-            cls._entrants_cache = None
             cls._bracket_cache = {}
         cls._event_slug = slug
         cls._event_url = canonical_url
@@ -539,108 +536,6 @@ class StartGGProvider:
             },
         }
 
-    @classmethod
-    async def _ensure_entrants_cache(cls):
-        """Build a lookup of all entrants by gamerTag (lowercase).
-
-        Fetches all pages from the entrants endpoint (which reliably returns
-        user profile data on the public API) and caches them for the duration
-        of the loaded event. Page 1 reveals total_pages; remaining pages
-        fan out via asyncio.gather.
-        """
-        if cls._entrants_cache is not None:
-            return
-
-        if not cls._event_slug:
-            cls._entrants_cache = {}
-            return
-
-        cache = {}
-        first = await cls.GetEntrants(1)
-        for entrant in first.get("entrants", []):
-            for p in entrant.get("players", []):
-                tag = (p.get("gamerTag") or "").lower()
-                if tag:
-                    cache[tag] = p
-
-        total_pages = first.get("pageInfo", {}).get("totalPages", 0) or 0
-        if total_pages > 1:
-            rest = await asyncio.gather(*[
-                cls.GetEntrants(p) for p in range(2, total_pages + 1)
-            ])
-            for result in rest:
-                for entrant in result.get("entrants", []):
-                    for p in entrant.get("players", []):
-                        tag = (p.get("gamerTag") or "").lower()
-                        if tag:
-                            cache[tag] = p
-
-        cls._entrants_cache = cache
-        logger.info("[startgg] entrants cache built: {} players", len(cache))
-
-    @classmethod
-    async def LoadSetIntoScoreboard(cls, set_id: int, scoreboard_number: int = 1) -> dict:
-        """Fetch a set and write player tags + scores into the scoreboard state.
-
-        Writes to name/team/profile fields — does NOT touch rioName, character,
-        or game state (inning, outs, etc.).
-        """
-        set_data = await cls.GetSet(set_id)
-        if "error" in set_data:
-            return set_data
-
-        # Build entrants cache so we can cross-reference profile data
-        await cls._ensure_entrants_cache()
-
-        sb = scoreboard_number
-        entrants = set_data.get("entrants", [[], []])
-
-        entries = []
-
-        # Player tags, prefixes, and profile data
-        for team_idx in range(2):
-            team_num = team_idx + 1
-            players = entrants[team_idx] if team_idx < len(entrants) else []
-            if players:
-                p = players[0]  # First (primary) player
-                tag = (p.get("gamerTag") or "").lower()
-
-                # Cross-reference with entrants cache for profile data
-                cached = cls._entrants_cache.get(tag) if cls._entrants_cache else None
-                if cached:
-                    for key in ("full_name", "pronoun", "country", "state", "city", "twitter"):
-                        if cached.get(key):
-                            p[key] = cached[key]
-
-                base = f"score.{sb}.player.{team_num}"
-                entries.append((f"{base}.name", p.get("gamerTag", "")))
-                entries.append((f"{base}.team", p.get("prefix", "") or ""))
-                entries.append((f"{base}.full_name", p.get("full_name", "")))
-                entries.append((f"{base}.country", p.get("country", "")))
-                entries.append((f"{base}.state", p.get("state", "")))
-                entries.append((f"{base}.pronoun", p.get("pronoun", "")))
-
-        # Scores — map W/L to 1/0 for the numeric scoreboard
-        t1s = set_data.get("team1score")
-        t2s = set_data.get("team2score")
-        if t1s == "W":
-            t1s, t2s = 1, 0
-        elif t2s == "W":
-            t1s, t2s = 0, 1
-        entries.append((f"score.{sb}.score_left", t1s if isinstance(t1s, (int, float)) else 0))
-        entries.append((f"score.{sb}.score_right", t2s if isinstance(t2s, (int, float)) else 0))
-
-        # Phase and round
-        if set_data.get("tournament_phase"):
-            entries.append((f"score.{sb}.phase", set_data["tournament_phase"]))
-        if set_data.get("round_name"):
-            entries.append((f"score.{sb}.match", set_data["round_name"]))
-
-        await State.SetBatch(entries)
-        await State.Save()
-
-        return {"success": True, "set": set_data}
-
     # ── bracket data ────────────────────────────────────────────
 
     @classmethod
@@ -922,6 +817,7 @@ class StartGGProvider:
             "team2score": team2score,
             "round_name": raw.get("fullRoundText", ""),
             "round": raw.get("round"),
+            "totalGames": raw.get("totalGames"),
             "tournament_phase": phase_name,
             "bracket_type": _deep(raw, "phaseGroup.phase.bracketType", ""),
         }

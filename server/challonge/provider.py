@@ -1,5 +1,11 @@
 """Challonge v2.1 API client and state provider.
 
+DEPRECATED (soft): the Challonge API isn't strong enough to keep parity with
+the start.gg integration, so this provider is kept working but unmaintained.
+It does NOT participate in the Match model — ``LoadSetIntoScoreboard`` still
+writes legacy score fields directly, unlike start.gg's match-first load path.
+New tournament features target start.gg only.
+
 Uses the Challonge v2.1 JSON:API with a v1 API key for auth.
 Community tournaments are accessed via the community permalink path.
 Mirrors the StartGGProvider interface so the frontend can treat
@@ -544,7 +550,12 @@ class ChallongeProvider:
 
     @classmethod
     async def LoadSetIntoScoreboard(cls, set_id: int, scoreboard_number: int = 1) -> dict:
-        """Fetch a match and write player data into the scoreboard state."""
+        """Fetch a match and write player data into the scoreboard state.
+
+        Legacy direct-to-score path (Challonge is soft-deprecated and does not
+        route through the Match model). Must never write ``score.{N}.match`` —
+        that key is the match binding (an int match id), not a round label.
+        """
         set_data = await cls.GetSet(set_id)
         if "error" in set_data:
             return set_data
@@ -576,10 +587,9 @@ class ChallongeProvider:
         entries.append((f"score.{sb}.score_left", t1s if isinstance(t1s, (int, float)) else 0))
         entries.append((f"score.{sb}.score_right", t2s if isinstance(t2s, (int, float)) else 0))
 
-        if set_data.get("tournament_phase"):
-            entries.append((f"score.{sb}.phase", set_data["tournament_phase"]))
-        if set_data.get("round_name"):
-            entries.append((f"score.{sb}.match", set_data["round_name"]))
+        phase = set_data.get("tournament_phase") or set_data.get("round_name")
+        if phase:
+            entries.append((f"score.{sb}.phase", phase))
 
         await State.SetBatch(entries)
         await State.Save()

@@ -42,6 +42,10 @@ def default_match() -> dict:
     return {
         "label": "",
         "stage": "draft",          # draft | live | post (see note_live / postgame)
+        # Producer-facing display time ("6:30 PM", "After break") for schedule
+        # surfaces (upcoming-schedule element, lower-third). Free text, never
+        # parsed — a broadcast label, not a trigger.
+        "scheduledAt": "",
         "format": {"bestOf": 1},
         # The match owns the SERIES (games won per side within the Bo format);
         # each board owns only its live game. Post-game capture credits the

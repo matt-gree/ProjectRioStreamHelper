@@ -20,6 +20,7 @@ from server.api.v1 import (
     participants,
     match,
     matchup,
+    schedule,
     commentary,
     postgame,
     design,
@@ -51,6 +52,7 @@ router_v1.include_router(participants.router)
 router_v1.include_router(match.router)
 router_v1.include_router(match.bind_router)
 router_v1.include_router(matchup.router)
+router_v1.include_router(schedule.router)
 router_v1.include_router(commentary.router)
 router_v1.include_router(postgame.router)
 router_v1.include_router(design.router)

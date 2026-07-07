@@ -15,7 +15,8 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import ORJSONResponse
 from pydantic import BaseModel
 
-from server.match import Match, default_match
+from server.match import Match, _norm_side, default_match
+from server.schedule import Schedule
 from server.state import State
 
 router = APIRouter(prefix="/match", tags=["match"])
@@ -27,6 +28,7 @@ class MatchPayload(BaseModel):
 
     label: str | None = None
     stage: str | None = None
+    scheduledAt: str | None = None
     format: dict[str, Any] | None = None
     series: dict[str, Any] | None = None
     gameMode: str | None = None
@@ -90,7 +92,8 @@ async def update_match(m: int, payload: MatchPayload):
 
 @router.delete("/{m}", response_class=ORJSONResponse)
 async def delete_match(m: int):
-    """Delete a match. Unbinds and blanks any boards bound to it first."""
+    """Delete a match. Unbinds and blanks any boards bound to it first, and
+    prunes it from the schedule queue."""
     if not Match.exists(m):
         raise HTTPException(404, f"match {m!r} not found")
 
@@ -101,6 +104,7 @@ async def delete_match(m: int):
 
     await State.Unset(f"match.{m}")
     await State.Save()
+    await Schedule.remove(m)
     return {"success": True}
 
 
@@ -134,26 +138,24 @@ async def decide_match(m: int, payload: DecidePayload):
     return Match.get(m)
 
 
-@router.post("/{m}/startgg-set", response_class=ORJSONResponse)
-async def load_startgg_set(m: int, payload: StartGGSetPayload):
-    """Fill match ``m`` from a start.gg set.
+def _game_count(v) -> int | None:
+    """A reported set score usable as a series game count: a non-negative int
+    (W/L strings carry no count; start.gg marks DQs with -1)."""
+    return v if isinstance(v, int) and not isinstance(v, bool) and v >= 0 else None
 
-    Fetches the set with full player detail, upserts each player into the
-    participant registry (start.gg userId de-dupe — same path as the Competition
-    import), and seats slot 0/1 on sides 1/2 with the registry row's
-    participantId + rioName (rioName stays empty until the entrant is mapped;
-    the projection still resolves display identity from the row). Also stamps
-    the round name as the match label and records the set id, then re-projects.
+
+async def apply_startgg_set(m, s: dict, set_id: int) -> None:
+    """Seat a fetched start.gg set (``GetSet`` result) onto match ``m``.
+
+    Upserts each slot-0 player into the participant registry (start.gg userId
+    de-dupe — same path as the Competition import) and seats them on sides 1/2
+    with the registry row's participantId + rioName (rioName stays empty until
+    the entrant is mapped; the projection still resolves display identity from
+    the row). Also stamps the round name as the match label, the bracket's
+    best-of (start.gg ``totalGames``), any already-reported numeric set score
+    into the series, and the set id — then re-projects bound boards.
     """
     from server.participants import Participants
-    from server.startgg.provider import StartGGProvider
-
-    if not Match.exists(m):
-        raise HTTPException(404, f"match {m!r} not found")
-
-    s = await StartGGProvider.GetSet(payload.setId)
-    if not s or s.get("error"):
-        raise HTTPException(400, (s or {}).get("error") or "Set not found")
 
     entrants = s.get("entrants") or [[], []]
     entries: list[tuple] = []
@@ -169,11 +171,49 @@ async def load_startgg_set(m: int, payload: StartGGSetPayload):
 
     if s.get("round_name"):
         entries.append((f"match.{m}.label", s["round_name"]))
-    entries.append((f"match.{m}.provider.startgg.setId", payload.setId))
+
+    # Bracket format → series format, so the decided arithmetic runs on the
+    # bracket's real best-of instead of a hand-typed one.
+    best_of = s.get("totalGames")
+    if isinstance(best_of, int) and best_of >= 1:
+        entries.append((f"match.{m}.format.bestOf", best_of))
+    else:
+        best_of = int((Match.get(m).get("format") or {}).get("bestOf") or 1)
+
+    # Seed the series from an already-reported set score (loading mid-set, or
+    # after a PRSH restart). W/L-only brackets carry no game counts — skip.
+    w1, w2 = _game_count(s.get("team1score")), _game_count(s.get("team2score"))
+    if w1 is not None and w2 is not None:
+        entries.append((f"match.{m}.series.1", w1))
+        entries.append((f"match.{m}.series.2", w2))
+        # Mirror award_game: first side at ceil(bestOf/2) owns `decided`; a
+        # producer's existing decided flag is never stomped.
+        if _norm_side(Match.get(m).get("decided")) is None:
+            need = best_of // 2 + 1
+            clinched = 1 if w1 >= need else 2 if w2 >= need else None
+            if clinched:
+                entries.append((f"match.{m}.decided", clinched))
+
+    entries.append((f"match.{m}.provider.startgg.setId", set_id))
 
     await State.SetBatch(entries)
     await State.Save()
     await Match.project_match(m)
+
+
+@router.post("/{m}/startgg-set", response_class=ORJSONResponse)
+async def load_startgg_set(m: int, payload: StartGGSetPayload):
+    """Fill match ``m`` from a start.gg set (see ``apply_startgg_set``)."""
+    from server.startgg.provider import StartGGProvider
+
+    if not Match.exists(m):
+        raise HTTPException(404, f"match {m!r} not found")
+
+    s = await StartGGProvider.GetSet(payload.setId)
+    if not s or s.get("error"):
+        raise HTTPException(400, (s or {}).get("error") or "Set not found")
+
+    await apply_startgg_set(m, s, payload.setId)
     return Match.get(m)
 
 

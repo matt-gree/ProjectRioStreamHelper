@@ -1,3 +1,8 @@
+"""Challonge routes.
+
+DEPRECATED (soft): kept working but unmaintained — see server/challonge/provider.py.
+These routes do not participate in the Match model; new work targets start.gg.
+"""
 from server.utils.router import method
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import ORJSONResponse

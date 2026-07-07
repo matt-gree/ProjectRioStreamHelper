@@ -88,13 +88,46 @@ async def startgg_load_set(
     scoreboard_number: int = 1,
     session_id: str | None = None,
 ) -> ORJSONResponse:
-    """Load a set's player tags and scores into a scoreboard."""
+    """Load a set into a Match and bind that match to a scoreboard.
+
+    Match-first: start.gg loads into the match, the match projects into score.
+    Reuses the match already holding this set (``provider.startgg.setId``) so
+    re-loading is idempotent; otherwise creates one. Replaces the legacy
+    direct-to-score path, whose ``score.{N}.match`` round-name write collided
+    with the match binding key.
+    """
+    from server.api.v1.match import apply_startgg_set
+    from server.bindings import is_set
+    from server.match import Match, default_match
+    from server.state import State
+
     if not set_id:
         raise HTTPException(status_code=400, detail="set_id is required")
-    result = await StartGGProvider.LoadSetIntoScoreboard(set_id, scoreboard_number)
-    if "error" in result:
-        raise HTTPException(status_code=400, detail=result["error"])
-    return ORJSONResponse(result)
+    if is_set(scoreboard_number):
+        raise HTTPException(
+            status_code=409,
+            detail=f"scoreboard {scoreboard_number} is a rotating set — load a set into a single-game board",
+        )
+
+    set_data = await StartGGProvider.GetSet(set_id)
+    if not set_data or set_data.get("error"):
+        raise HTTPException(status_code=400,
+                            detail=(set_data or {}).get("error") or "Set not found")
+
+    m = None
+    for k, v in (State.state.get("match", {}) or {}).items():
+        provider = (v.get("provider") or {}) if isinstance(v, dict) else {}
+        if (provider.get("startgg") or {}).get("setId") == set_id:
+            m = int(k)
+            break
+    if m is None:
+        m = Match.next_id()
+        await State.Set(f"match.{m}", default_match())
+
+    await State.Set(f"score.{scoreboard_number}.match", m)
+    await State.Save()
+    await apply_startgg_set(m, set_data, set_id)
+    return ORJSONResponse({"success": True, "match": m, "set": set_data})
 
 
 @method(

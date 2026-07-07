@@ -1,75 +1,107 @@
 <svg viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMax meet" xmlns="http://www.w3.org/2000/svg" data-design-vars="app">
   <!--
-    CLASSIC package - Lower Third: the same band geometry as the Default (Rio)
-    theme, painted with the user's Design-tab CSS variables instead of the Rio
-    brand palette. data-design-vars="app" opts in: the mount runs
+    CLASSIC package. Lower Third: the same slot-system geometry as the Default
+    (Rio) theme, painted with the user's Design-tab CSS variables instead of
+    the Rio brand palette. data-design-vars="app" opts in: the mount runs
     applyDesignSettings, so accent / card background / text / border / font /
     shadow all follow the app's design knobs like the pre-2.0 overlays did.
 
-    SLOT CONTRACT (the mount binds by data-slot; see public/design/README.md):
-      logo, logo-default, status, side1-name / side2-name,
-      side1-sprite / side2-sprite, side1-score / side2-score,
-      title, subtitle, clock-label, clock.
+    SLOT SYSTEM: the mount clones one data-tpl per enabled slot into the
+    data-band group and stretches data-slot="band-bg" to the row. See the
+    default package file / public/design/README.md for the template contract.
 
     COLOUR: CSS variables resolve in SVG ONLY through inline style="", never
-    via presentation attributes. - -side1 / - -side2 are set by the mount from
-    the players' controller ports.
+    via presentation attributes. side1/side2 are set per segment by the mount
+    from the players' controller ports.
   -->
+
+  <rect data-slot="band-bg" x="48" y="792" width="1824" height="232" rx="16" data-pad="28"
+        style="fill:var(--card-bg, rgba(15,15,25,0.88));stroke:var(--border-color, rgba(255,255,255,0.08));stroke-width:var(--border-width, 1px);filter:var(--card-shadow-filter, none)" opacity="0"/>
+
+  <g data-band="1" data-x="76" data-w="1768" data-h="232" data-gap="56" data-align="center" transform="translate(0,792)"></g>
+
   <defs>
-    <clipPath id="clBand"><rect x="48" y="792" width="1824" height="232" rx="16"/></clipPath>
-  </defs>
-
-  <!-- band base: app card background + border + shadow -->
-  <rect x="48" y="792" width="1824" height="232" rx="16" style="fill:var(--card-bg, rgba(15,15,25,0.88));filter:var(--card-shadow-filter, none)"/>
-  <rect x="48" y="792" width="1824" height="232" rx="16" fill="none" style="stroke:var(--border-color, rgba(255,255,255,0.08));stroke-width:var(--border-width, 1px)"/>
-
-  <g clip-path="url(#clBand)">
-    <!-- accent rail + divider before the clock -->
-    <rect x="48" y="792" width="8" height="232" style="fill:var(--accent, #f59e0b)"/>
-    <rect x="1474" y="828" width="2" height="160" style="fill:var(--border-color, rgba(255,255,255,0.12))"/>
-
-    <!-- brand cap: tournament logo, else a plain accent monogram block -->
-    <image data-slot="logo" x="80" y="838" width="148" height="148" preserveAspectRatio="xMidYMid meet" opacity="0"/>
-    <g data-slot="logo-default">
-      <rect x="86" y="844" width="136" height="136" rx="20" style="fill:var(--accent, #f59e0b)" opacity="0.16"/>
-      <rect x="86" y="844" width="136" height="136" rx="20" fill="none" style="stroke:var(--accent, #f59e0b)" stroke-width="2"/>
-      <text x="154" y="936" text-anchor="middle" style="fill:var(--accent, #f59e0b);font-family:var(--font-family, 'Inter', sans-serif)" font-size="56" font-weight="800">VS</text>
+    <g data-tpl="logo" data-w="240">
+      <image data-slot="logo" x="46" y="26" width="148" height="148" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+      <g data-slot="logo-default">
+        <rect x="52" y="32" width="136" height="136" rx="20" style="fill:var(--accent, #f59e0b)" opacity="0.16"/>
+        <rect x="52" y="32" width="136" height="136" rx="20" fill="none" style="stroke:var(--accent, #f59e0b)" stroke-width="2"/>
+        <text x="120" y="124" text-anchor="middle" style="fill:var(--accent, #f59e0b);font-family:var(--font-family, 'Inter', sans-serif)" font-size="56" font-weight="800">VS</text>
+      </g>
+      <text data-slot="title" data-maxw="220" x="120" y="212" text-anchor="middle"
+            style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" font-size="22" font-weight="600" opacity="0.75"></text>
     </g>
 
-    <!-- match block -->
-    <rect x="262" y="810" width="172" height="34" rx="8" style="fill:var(--accent, #f59e0b)"/>
-    <text data-slot="status" x="348" y="834" text-anchor="middle"
-          style="fill:#ffffff;font-family:var(--font-family, 'Inter', sans-serif)" font-size="17" font-weight="700"
-          letter-spacing="2">UP NEXT</text>
+    <g data-tpl="match" data-w="620">
+      <rect x="0" y="10" width="172" height="34" rx="8" style="fill:var(--accent, #f59e0b)"/>
+      <text data-slot="status" x="86" y="34" text-anchor="middle"
+            style="fill:#ffffff;font-family:var(--font-family, 'Inter', sans-serif)" font-size="17" font-weight="700" letter-spacing="2">UP NEXT</text>
+      <text data-slot="time" x="608" y="36" text-anchor="end"
+            style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" font-size="20" font-weight="600" opacity="0"></text>
 
-    <rect x="262" y="872" width="6" height="42" rx="2" style="fill:var(--side1, var(--accent, #f59e0b))"/>
-    <image data-slot="side1-sprite" x="280" y="868" width="50" height="50" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
-    <text data-slot="side1-name" data-maxw="380" x="344" y="906"
-          style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif);text-shadow:var(--text-shadow, none)" font-size="32" font-weight="800">Player One</text>
-    <text data-slot="side1-score" data-maxw="60" x="822" y="908" text-anchor="end"
-          style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" font-size="38" font-weight="800"
-          font-variant-numeric="tabular-nums" opacity="0"></text>
+      <rect x="0" y="62" width="6" height="42" rx="2" style="fill:var(--side1, var(--accent, #f59e0b))"/>
+      <image data-slot="side1-sprite" x="18" y="58" width="50" height="50" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+      <text data-slot="side1-name" data-maxw="440" x="82" y="96"
+            style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif);text-shadow:var(--text-shadow, none)" font-size="32" font-weight="800">Player One</text>
+      <text data-slot="side1-score" data-maxw="60" x="608" y="98" text-anchor="end"
+            style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" font-size="38" font-weight="800" opacity="0"></text>
 
-    <rect x="262" y="940" width="6" height="42" rx="2" style="fill:var(--side2, var(--accent, #f59e0b))"/>
-    <image data-slot="side2-sprite" x="280" y="936" width="50" height="50" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
-    <text data-slot="side2-name" data-maxw="380" x="344" y="974"
-          style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif);text-shadow:var(--text-shadow, none)" font-size="32" font-weight="800">Player Two</text>
-    <text data-slot="side2-score" data-maxw="60" x="822" y="976" text-anchor="end"
-          style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" font-size="38" font-weight="800"
-          font-variant-numeric="tabular-nums" opacity="0"></text>
+      <rect x="0" y="130" width="6" height="42" rx="2" style="fill:var(--side2, var(--accent, #f59e0b))"/>
+      <image data-slot="side2-sprite" x="18" y="126" width="50" height="50" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+      <text data-slot="side2-name" data-maxw="440" x="82" y="164"
+            style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif);text-shadow:var(--text-shadow, none)" font-size="32" font-weight="800">Player Two</text>
+      <text data-slot="side2-score" data-maxw="60" x="608" y="166" text-anchor="end"
+            style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" font-size="38" font-weight="800" opacity="0"></text>
+    </g>
 
-    <!-- title / subtitle -->
-    <text data-slot="title" data-maxw="568" x="902" y="902"
-          style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif);text-shadow:var(--text-shadow, none)" font-size="46" font-weight="800">Stream Title</text>
-    <text data-slot="subtitle" data-maxw="568" x="902" y="954"
-          style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" font-size="25" font-weight="500" opacity="0.65">Subtitle goes here</text>
+    <g data-tpl="scorebox" data-w="470">
+      <text data-slot="status" x="0" y="36"
+            style="fill:var(--accent, #f59e0b);font-family:var(--font-family, 'Inter', sans-serif)" font-size="20" font-weight="700" letter-spacing="2" opacity="0"></text>
 
-    <!-- clock -->
-    <text data-slot="clock-label" x="1844" y="870" text-anchor="end"
-          style="fill:var(--accent, #f59e0b);font-family:var(--font-family, 'Inter', sans-serif)" font-size="20" font-weight="700"
-          letter-spacing="3">BACK IN</text>
-    <text data-slot="clock" x="1846" y="958" text-anchor="end"
-          style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" font-size="72" font-weight="800"
-          font-variant-numeric="tabular-nums">5:00</text>
-  </g>
+      <rect x="0" y="62" width="6" height="42" rx="2" style="fill:var(--side1, var(--accent, #f59e0b))"/>
+      <text data-slot="side1-name" data-maxw="340" x="24" y="96"
+            style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" font-size="32" font-weight="800">Player One</text>
+      <text data-slot="side1-score" x="458" y="98" text-anchor="end"
+            style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" font-size="42" font-weight="800">0</text>
+
+      <rect x="0" y="130" width="6" height="42" rx="2" style="fill:var(--side2, var(--accent, #f59e0b))"/>
+      <text data-slot="side2-name" data-maxw="340" x="24" y="164"
+            style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" font-size="32" font-weight="800">Player Two</text>
+      <text data-slot="side2-score" x="458" y="166" text-anchor="end"
+            style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" font-size="42" font-weight="800">0</text>
+    </g>
+
+    <g data-tpl="merch" data-w="470">
+      <rect x="0" y="32" width="168" height="168" rx="14" style="fill:var(--accent, #f59e0b)" opacity="0.12"/>
+      <image data-slot="image" x="8" y="40" width="152" height="152" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+      <text data-slot="title" data-maxw="270" x="192" y="106"
+            style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" font-size="34" font-weight="800"></text>
+      <text data-slot="subtitle" data-maxw="270" x="192" y="148"
+            style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" font-size="22" font-weight="500" opacity="0"></text>
+    </g>
+
+    <g data-tpl="clock" data-w="330">
+      <text data-slot="clock-label" x="0" y="58"
+            style="fill:var(--accent, #f59e0b);font-family:var(--font-family, 'Inter', sans-serif)" font-size="20" font-weight="700" letter-spacing="3" opacity="0"></text>
+      <text data-slot="clock" x="0" y="150"
+            style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" font-size="72" font-weight="800"
+            font-variant-numeric="tabular-nums">5:00</text>
+    </g>
+
+    <g data-tpl="message" data-w="580">
+      <text data-slot="title" data-maxw="568" x="0" y="112"
+            style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif);text-shadow:var(--text-shadow, none)" font-size="46" font-weight="800">Stream Title</text>
+      <text data-slot="subtitle" data-maxw="568" x="0" y="164"
+            style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" font-size="24" font-weight="500" opacity="0"></text>
+    </g>
+
+    <g data-tpl="bracket" data-w="470">
+      <text data-slot="label" x="0" y="42"
+            style="fill:var(--accent, #f59e0b);font-family:var(--font-family, 'Inter', sans-serif)" font-size="20" font-weight="700" letter-spacing="3">BRACKET</text>
+      <text data-slot="title" data-maxw="460" x="0" y="112"
+            style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" font-size="40" font-weight="800"></text>
+      <text data-slot="subtitle" data-maxw="460" x="0" y="156"
+            style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" font-size="22" font-weight="500" opacity="0"></text>
+    </g>
+  </defs>
 </svg>

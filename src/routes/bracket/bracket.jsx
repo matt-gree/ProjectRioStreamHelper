@@ -126,7 +126,12 @@ export default function Bracket() {
         const result = await loadSet(setId, sbNum);
         if (result) {
             update({ loadedSets: { ...loadedSets, [sbNum]: setId } });
-            notifications.show({ message: `Set loaded into Scoreboard ${sbNum}`, color: 'green' });
+            // start.gg loads through the Match model (set → match → bound
+            // board); Challonge (deprecated) still loads score fields directly.
+            const message = result.match
+                ? `Set loaded into Match ${result.match} → Scoreboard ${sbNum}`
+                : `Set loaded into Scoreboard ${sbNum}`;
+            notifications.show({ message, color: 'green' });
         } else {
             notifications.show({ message: 'Failed to load set', color: 'red' });
         }

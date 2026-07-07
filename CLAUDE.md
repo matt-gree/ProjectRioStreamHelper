@@ -344,10 +344,12 @@ FastAPI + python-socketio.
 
 ## Tournament Brackets
 
-Both providers are thin pass-throughs that load remote bracket data and broadcast it to the in-app Bracket view and the `public/layout/bracket/` overlays. Recent work has been on the **rendering** side (Swiss/round-robin layouts, bye scaling, connector geometry, default size), not on the data layer.
+Both providers are thin pass-throughs that load remote bracket data and broadcast it to the in-app Bracket view and the `public/layout/bracket/` overlays.
 
-- **Start.gg** — GraphQL via `StartGGProvider`. Load by tournament slug.
-- **Challonge** — REST via `ChallongeProvider`. Requires API key + Admin membership in the Mario Superstar Baseball Netplay Events Challenge community. May be deprecated; layout accuracy is best-effort.
+- **Start.gg** — GraphQL via `StartGGProvider`. Load by tournament slug. **Match-first set loading:** a set loads into a `match.{M}` (participant-registry upsert, round name → label, `totalGames` → `format.bestOf`, reported numeric set score → `series` seed, setId recorded at `provider.startgg.setId`), and the match projects into `score.{N}.*` via binding. Both `/api/v1/match/{m}/startgg-set` and the bracket view's `/startgg/load-set` (create-or-reuse match by setId + bind) go through `apply_startgg_set` in `server/api/v1/match.py`. There is no direct start.gg→score path anymore.
+- **Challonge** — **DEPRECATED (soft):** kept working but unmaintained; the API isn't strong enough to justify parity. Does not participate in the Match model — its `LoadSetIntoScoreboard` still writes legacy score fields directly (and must never write `score.{N}.match`, which is the match binding key). New tournament features target start.gg only. REST via `ChallongeProvider`; requires API key + Admin membership in the MSB Netplay Events Challonge community.
+
+**`score.{N}.match` holds the bound match id (int), never a round-name string.** The round label projects into `score.{N}.phase` from the match's `label`.
 
 ---
 

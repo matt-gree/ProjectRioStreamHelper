@@ -92,8 +92,11 @@ _STANDALONE_DISPLAY_NAMES = {
     "shared/callout-stage": "Callout Stage",
     # Talent — registry-bound person overlays (the player element joins later).
     "commentary/commentary": "Commentary",
-    # Break — re-themable SVG lower-third band (logo · match · title · clock).
+    # Break — re-themable SVG lower-third band: five producer-picked slots
+    # (logo · match · scorebox · merch · clock · message · bracket).
     "lowerthird/lowerthird": "Lower Third",
+    # The producer's ordered match queue (schedule.queue → match.{M}).
+    "schedule/schedule": "Upcoming Schedule",
     # Head-to-head band: all-time series summary + last-5 game cards for a
     # match's two participants, fetched from the Project Rio API (matchup.*).
     "matchup/matchup": "Matchup History",

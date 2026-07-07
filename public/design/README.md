@@ -86,24 +86,37 @@ carry `data-maxw="<svg-units>"`: long values shrink uniformly to fit.
 
 ### `lowerthird.svg`
 
-Rendered by `public/layout/lib/lowerthird-mount.js`.
+Rendered by `public/layout/lib/lowerthird-mount.js`. The band is a **slot
+system**: up to five producer-picked segments (`lowerthird.slots.1..5`), each
+one content type. The theme supplies one **template per content type**; the
+mount clones a template per enabled slot, lays the clones out left→right, and
+stretches the shared bed to the row. Segment widths are unequal on purpose —
+each type's width belongs to the theme.
 
-| Slot | Element | Filled with |
-|------|---------|-------------|
-| `logo` | `<image>` | Tournament logo (`/branding/`). Hidden if none uploaded. |
-| `logo-default` | `<g>`/any | Your fallback brand mark — shown only when no logo is set. |
-| `status` | `<text>` | `CURRENT` / `UP NEXT` (or the producer's manual status). |
-| `side1-name` / `side2-name` | `<text>` | The two player names. |
-| `side1-sprite` / `side2-sprite` | `<image>` | Captain headshot. Hidden if none. |
-| `side1-score` / `side2-score` | `<text>` | Optional score; hidden when empty. |
-| `title` / `subtitle` | `<text>` | Free text. |
-| `clock-label` | `<text>` | e.g. `BACK IN` (hidden when empty). |
-| `clock` | `<text>` | Countdown / count-up / time-of-day (tabular numerals). |
+Structure the theme provides:
 
-Runtime colour seams (set on the host, resolve through inline `style`):
-`--side1` / `--side2` (each player's controller-port colour, overridable via
-`overlays.lowerthird.port{0..3}Color`) and `--accent` (per-layout pin
-`overlays.lowerthird.accentColor`).
+| Marked with | Element | Notes |
+|-------------|---------|-------|
+| `data-band` + `data-x` / `data-w` / `data-h` / `data-gap` / `data-align` | `<g>` | The row container the clones go into. `data-align`: `center` (default) / `left` / `right`. If the picked segments overflow `data-w`, the whole row scales down uniformly (vertically centred within `data-h`). |
+| `data-slot="band-bg"` + `data-pad` | `<rect>` | Optional continuous bed. The mount sets `x`/`width` to the laid-out row (inset by `data-pad`); `y`/`height`/`rx`/paints are yours. Omit `data-pad` to keep it static. |
+| `data-tpl="{type}"` + `data-w` | `<g>` in `<defs>` | One template per content type, authored at a local `(0,0)` origin at band height. A missing template makes that type unavailable in this theme. |
+
+Content types and their sub-slots (inside the template; any may be omitted):
+
+| `data-tpl` | Sub-slots |
+|------------|-----------|
+| `logo` | `logo` (`<image>`, tournament logo from `/branding/`), `logo-default` (fallback mark shown when no logo), `title` (optional caption) |
+| `match` | `status` (`CURRENT`/`UP NEXT`/override), `time` (the match's `scheduledAt`), `side1-name`/`side2-name`, `side1-sprite`/`side2-sprite` (captain headshots), `side1-score`/`side2-score` (series wins, hidden at Bo1) |
+| `scorebox` | `status` (`TOP 5` / `FINAL`), `side1-name`/`side2-name`, `side1-score`/`side2-score` (live runs, `score.{N}.score_left/right`) |
+| `merch` | `image` (`/branding/merch/…`), `title`, `subtitle` |
+| `clock` | `clock-label`, `clock` (countdown / count-up / time-of-day, tabular numerals) |
+| `message` | `title`, `subtitle` |
+| `bracket` | `label` (default `BRACKET`), `title` (loaded phase name), `subtitle` |
+
+Runtime colour seams (resolve through inline `style`): `--accent` on the host
+(per-layout pin `overlays.lowerthird.accentColor`), and `--side1` / `--side2`
+set **per match/scorebox segment** from that segment's controller ports
+(overridable via `overlays.lowerthird.port{0..3}Color`).
 
 ### `commentary.svg`
 

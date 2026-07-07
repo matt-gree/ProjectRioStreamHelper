@@ -1172,6 +1172,7 @@ function ElementOptions({ element, hideTarget = false, hideVisibility = false })
 function elementHasSetup(element) {
     return element.id === 'hitvisualizer' || element.id === 'commentary'
         || element.id === 'lowerthird' || element.id === 'matchuphistory'
+        || element.id === 'schedule'
         || element.flavor === 'fed';
 }
 
@@ -1180,6 +1181,7 @@ function ElementFace({ element }) {
     if (element.id === 'hitvisualizer') return <HitVizFace />;
     if (element.id === 'commentary') return <CommentaryFace />;
     if (element.id === 'lowerthird') return <LowerThirdFace element={element} />;
+    if (element.id === 'schedule') return <ScheduleFace element={element} />;
     if (element.id === 'matchuphistory') return <MatchupFace element={element} />;
     if (element.flavor === 'fed') return <FedFace element={element} />;
     return <DirectFace element={element} />;
@@ -1190,6 +1192,7 @@ function ElementSetup({ element }) {
     if (element.id === 'hitvisualizer') return <HitVizSetup />;
     if (element.id === 'commentary') return <CommentarySetup />;
     if (element.id === 'lowerthird') return <LowerThirdSetup />;
+    if (element.id === 'schedule') return <ScheduleSetup />;
     if (element.id === 'matchuphistory') return <MatchupSetup />;
     if (element.flavor === 'fed') return <FedSetup element={element} />;
     return null;
@@ -1259,13 +1262,30 @@ function FedSetup({ element }) {
 }
 
 // ── Lower Third (Break) ───────────────────────────────────────────────────
-// A direct element with rich authoring: the producer composes the band's match,
-// title/subtitle and clock here; values are written (through the staging
-// gateway) to lowerthird.* state, which the SVG overlay renders. Putting it on
-// air is still the OBS source toggle. Clock START/PAUSE/RESET are transport —
-// momentary, always immediate — while the clock's CONFIG (mode, duration,
-// label) stages like other content.
+// A direct element with rich authoring: the band is FIVE independently
+// toggleable SLOTS (lowerthird.slots.1..5, left→right), each carrying one
+// content type — logo · match · scorebox · merch · clock · message · bracket.
+// The face is the live surface (per-slot on/off + clock transport); the gear
+// holds each slot's content editor. Values are written (through the staging
+// gateway) to lowerthird.* state, which the SVG overlay renders; segment
+// widths/looks belong to the active design package's theme. Putting the band
+// on air is still the OBS source toggle. Clock START/PAUSE/RESET are
+// transport — momentary, always immediate — while slot content/config stages
+// like other content.
 const LT_INPUT = 'w-full rounded-md border border-border bg-card px-2 py-1 text-sm text-foreground';
+
+const LT_SLOT_COUNT = 5;
+const LT_TYPE_OPTIONS = [
+    { value: '', label: '— Empty —' },
+    { value: 'logo', label: 'Logo + Title' },
+    { value: 'match', label: 'Match' },
+    { value: 'scorebox', label: 'Scorebox' },
+    { value: 'merch', label: 'Merch / Ad' },
+    { value: 'clock', label: 'Timer / Clock' },
+    { value: 'message', label: 'Message' },
+    { value: 'bracket', label: 'Bracket' },
+];
+const LT_TYPE_LABEL = Object.fromEntries(LT_TYPE_OPTIONS.map(o => [o.value, o.label]));
 
 // Human label for a match id in a select: "Label — A vs B", falling back to
 // names or "Match N". Shared by the lower third, the Draft bar and Matchup.
@@ -1285,13 +1305,15 @@ function useTick(ms = 500, on = true) {
     }, [ms, on]);
 }
 
-// lowerthird.* with staged-value display: `val('title', live)` returns the
-// pending value when one is staged; `setKey` routes through the staging
-// gateway. One subscription to the pending map covers every field.
+// lowerthird.* with staged-value display: `val('slots.1.title', live)` returns
+// the pending value when one is staged; `setKey` routes through the staging
+// gateway. `slot(i)` reads one authored slot's live object. One subscription
+// to the pending map covers every field.
 function useLowerThird() {
     const lt = useStateStore(useShallow(s => s?.lowerthird ?? {}));
     const matches = useStateStore(useShallow(s => s?.match ?? {}));
     const pendingMap = useStagingStore(s => s.pending);
+    const slot = (i) => (lt.slots || {})[i] || (lt.slots || {})[String(i)] || {};
     const val = (key, live) => {
         const p = pendingMap[`state:lowerthird.${key}`];
         return p ? p.value : live;
@@ -1299,7 +1321,7 @@ function useLowerThird() {
     const isStaged = (key) => !!pendingMap[`state:lowerthird.${key}`];
     const setKey = (key, value, label) =>
         stageStateSet(`lowerthird.${key}`, value, label || `Lower third: ${key}`);
-    return { lt, matches, val, isStaged, setKey };
+    return { lt, matches, slot, val, isStaged, setKey };
 }
 
 function fmtRemaining(ms) {
@@ -1309,14 +1331,16 @@ function fmtRemaining(ms) {
     return h > 0 ? `${h}:${p(m)}:${p(ss)}` : `${m}:${p(ss)}`;
 }
 
-function ClockControl() {
-    const { lt } = useLowerThird();
-    const c = lt.clock || {};
-    // Transport acts on the LIVE clock — you can't run a countdown that isn't
-    // live yet, so a staged mode change doesn't surface here until committed.
+// Transport for slot i's clock (lowerthird.slots.{i}.clock.*). Transport acts
+// on the LIVE clock — you can't run a countdown that isn't live yet, so a
+// staged mode change doesn't surface here until committed.
+function ClockControl({ i }) {
+    const c = useStateStore(useShallow(s => s?.lowerthird?.slots?.[i]?.clock
+        ?? s?.lowerthird?.slots?.[String(i)]?.clock ?? {}));
     const mode = c.mode || 'off';
     useTick(500, c.running || mode === 'clock');
 
+    const base = `lowerthird.slots.${i}.clock`;
     const set = (entries) => useStateStore.getState().setItems(entries);
     const now = Date.now();
     const remaining = c.running ? (c.endsAt || 0) - now : (c.remainingMs != null ? c.remainingMs : (c.durationSec || 300) * 1000);
@@ -1325,32 +1349,32 @@ function ClockControl() {
     const startCountdown = () => {
         const rem = c.remainingMs != null ? c.remainingMs : (c.durationSec || 300) * 1000;
         set([
-            { key: 'lowerthird.clock.endsAt', value: now + rem },
-            { key: 'lowerthird.clock.remainingMs', value: null },
-            { key: 'lowerthird.clock.running', value: true },
+            { key: `${base}.endsAt`, value: now + rem },
+            { key: `${base}.remainingMs`, value: null },
+            { key: `${base}.running`, value: true },
         ]);
     };
     const pauseCountdown = () => set([
-        { key: 'lowerthird.clock.remainingMs', value: Math.max(0, (c.endsAt || 0) - now) },
-        { key: 'lowerthird.clock.running', value: false },
+        { key: `${base}.remainingMs`, value: Math.max(0, (c.endsAt || 0) - now) },
+        { key: `${base}.running`, value: false },
     ]);
     const resetCountdown = () => set([
-        { key: 'lowerthird.clock.remainingMs', value: null },
-        { key: 'lowerthird.clock.endsAt', value: null },
-        { key: 'lowerthird.clock.running', value: false },
+        { key: `${base}.remainingMs`, value: null },
+        { key: `${base}.endsAt`, value: null },
+        { key: `${base}.running`, value: false },
     ]);
     const startCountup = () => set([
-        { key: 'lowerthird.clock.startedAt', value: now - (c.elapsedMs || 0) },
-        { key: 'lowerthird.clock.running', value: true },
+        { key: `${base}.startedAt`, value: now - (c.elapsedMs || 0) },
+        { key: `${base}.running`, value: true },
     ]);
     const pauseCountup = () => set([
-        { key: 'lowerthird.clock.elapsedMs', value: Math.max(0, now - (c.startedAt || now)) },
-        { key: 'lowerthird.clock.running', value: false },
+        { key: `${base}.elapsedMs`, value: Math.max(0, now - (c.startedAt || now)) },
+        { key: `${base}.running`, value: false },
     ]);
     const resetCountup = () => set([
-        { key: 'lowerthird.clock.elapsedMs', value: 0 },
-        { key: 'lowerthird.clock.startedAt', value: null },
-        { key: 'lowerthird.clock.running', value: false },
+        { key: `${base}.elapsedMs`, value: 0 },
+        { key: `${base}.startedAt`, value: null },
+        { key: `${base}.running`, value: false },
     ]);
 
     if (mode === 'off') return null;
@@ -1375,119 +1399,448 @@ function ClockControl() {
     );
 }
 
+// One-line description of what a slot currently shows (for the face rows).
+function ltSlotSummary(type, s, matches) {
+    if (!type) return '';
+    if (type === 'match') return s.matchId ? matchDisplayLabel(matches, s.matchId) : 'No match picked';
+    if (type === 'scorebox') return `Scoreboard ${s.scoreboard || 1}`;
+    if (type === 'clock') {
+        const m = s.clock?.mode || 'off';
+        return m === 'off' ? 'Clock off' : (m === 'clock' ? 'Time of day' : (m === 'countdown' ? 'Countdown' : 'Count up'));
+    }
+    if (type === 'bracket') return s.title || 'Loaded bracket phase';
+    return s.title || '';
+}
+
 function LowerThirdFace({ element }) {
-    const { lt, val, isStaged, setKey } = useLowerThird();
-    const role = val('role', lt.role) === 'current' ? 'current' : 'upnext';
+    const { matches, slot, val, isStaged, setKey } = useLowerThird();
     return (
         <Stack gap="sm">
             <DirectFace element={element} />
+            <Stack gap="xs">
+                {Array.from({ length: LT_SLOT_COUNT }, (_, k) => k + 1).map((i) => {
+                    const s = slot(i);
+                    const type = val(`slots.${i}.type`, s.type) || '';
+                    const enabled = !!val(`slots.${i}.enabled`, s.enabled);
+                    const summary = ltSlotSummary(type, s, matches);
+                    return (
+                        <div key={i}>
+                            <Group gap="xs" className="items-center">
+                                <Text size="xs" className="w-4 shrink-0 text-muted-foreground">{i}</Text>
+                                <Stack gap="none" className="min-w-0 flex-1">
+                                    <Text size="sm" className={cn('truncate', type ? 'text-foreground' : 'text-muted-foreground')}>
+                                        {type ? LT_TYPE_LABEL[type] : 'Empty'}
+                                    </Text>
+                                    {summary && <Text size="xs" className="truncate text-muted-foreground">{summary}</Text>}
+                                </Stack>
+                                <StagedDot show={isStaged(`slots.${i}.enabled`) || isStaged(`slots.${i}.type`)} />
+                                <Switch
+                                    checked={enabled} disabled={!type}
+                                    onCheckedChange={(v) => setKey(`slots.${i}.enabled`, v, `Lower third: slot ${i} ${v ? 'on' : 'off'}`)}
+                                />
+                            </Group>
+                            {type === 'clock' && enabled && (
+                                <div className="mt-1 pl-6"><ClockControl i={i} /></div>
+                            )}
+                        </div>
+                    );
+                })}
+            </Stack>
+        </Stack>
+    );
+}
+
+// Merch image picker: choose from /branding/merch uploads, or upload a new one
+// (immediate — an upload is a library action, not a broadcast change; the pick
+// itself stages through the caller's onChange).
+function MerchImagePicker({ value, onChange }) {
+    const [images, setImages] = useState([]);
+    const fileRef = useRef(null);
+    useEffect(() => {
+        fetch('/api/v1/branding/merch')
+            .then(r => (r.ok ? r.json() : { images: [] }))
+            .then(d => setImages(d.images || []))
+            .catch(() => {});
+    }, []);
+    const upload = async (file) => {
+        const fd = new FormData();
+        fd.append('file', file);
+        try {
+            const r = await fetch('/api/v1/branding/merch', { method: 'POST', body: fd });
+            const d = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(d?.detail || `HTTP ${r.status}`);
+            setImages(d.images || []);
+            onChange(d.name);
+        } catch (e) {
+            notifications.show({ message: `Merch upload failed: ${e?.message || e}`, color: 'red' });
+        }
+    };
+    return (
+        <Group gap="xs" className="flex-nowrap items-center">
+            <select className={LT_INPUT} value={value || ''} onChange={(e) => onChange(e.target.value)}>
+                <option value="">— No image —</option>
+                {images.map(im => <option key={im.name} value={im.name}>{im.name}</option>)}
+            </select>
+            <input
+                ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(f); e.target.value = ''; }}
+            />
+            <Button size="sm" variant="secondary" onClick={() => fileRef.current?.click()}>Upload</Button>
+        </Group>
+    );
+}
+
+// Bracket phase-group picker for the Bracket slot: lists the loaded start.gg
+// event's phases and loads one into the shared bracket.* state. Loading is
+// momentary (like the Competition tab's own selector), not staged.
+function BracketPhasePicker() {
+    const [phases, setPhases] = useState(null);
+    const [busy, setBusy] = useState(false);
+    const phaseName = useStateStore(s => s?.bracket?.phaseName || '');
+    useEffect(() => {
+        fetch('/api/v1/startgg/phases')
+            .then(r => (r.ok ? r.json() : []))
+            .then(p => setPhases(Array.isArray(p) ? p : []))
+            .catch(() => setPhases([]));
+    }, []);
+    const options = (phases || []).flatMap(p => (p.phaseGroups || []).map(g => ({
+        value: String(g.id),
+        label: (p.phaseGroups || []).length > 1
+            ? `${p.name} — ${g.displayIdentifier || g.id}`
+            : (p.name || String(g.id)),
+    })));
+    const load = async (id) => {
+        if (!id) return;
+        setBusy(true);
+        try {
+            const r = await fetch(`/api/v1/startgg/load-bracket?phase_group_id=${id}`, { method: 'POST' });
+            if (!r.ok) {
+                const d = await r.json().catch(() => ({}));
+                throw new Error(d?.detail || `HTTP ${r.status}`);
+            }
+        } catch (e) {
+            notifications.show({ message: `Bracket load failed: ${e?.message || e}`, color: 'red' });
+        } finally { setBusy(false); }
+    };
+    if (phases !== null && options.length === 0) {
+        return (
+            <Text size="xs" className="text-muted-foreground">
+                No start.gg event loaded — load one on the Competition tab. The slot shows the loaded phase{phaseName ? ` (${phaseName})` : ''}.
+            </Text>
+        );
+    }
+    return (
+        <Stack gap="none">
+            <Text size="xs" className="text-muted-foreground">Load phase{phaseName ? ` (showing: ${phaseName})` : ''}</Text>
+            <select className={LT_INPUT} disabled={busy} value="" onChange={(e) => load(e.target.value)}>
+                <option value="">— Pick a phase to load —</option>
+                {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+        </Stack>
+    );
+}
+
+// One slot's content editor (inside the gear popover). Every field routes
+// through the staging gateway with the slot's key prefix.
+function LowerThirdSlotEditor({ i }) {
+    const { matches, slot, val, isStaged, setKey } = useLowerThird();
+    const activeRaw = useSettingsStore(s => s?.scoreboards?.active ?? [1]);
+    const aliases = useSettingsStore(s => s?.scoreboards?.aliases ?? {});
+    const active = Array.isArray(activeRaw) && activeRaw.length ? activeRaw : [1];
+    const sbLabel = (n) => aliases?.[n] || aliases?.[String(n)] || `Scoreboard ${n}`;
+
+    const s = slot(i);
+    const p = (k) => `slots.${i}.${k}`;
+    const type = val(p('type'), s.type) || '';
+    const enabled = !!val(p('enabled'), s.enabled);
+    const c = s.clock || {};
+    const clockMode = val(p('clock.mode'), c.mode) || 'off';
+
+    // Plain render helpers (NOT nested components): a component defined inside
+    // render gets a new identity every pass, which remounts the <input> and
+    // drops focus mid-keystroke. Function calls keep the element type stable.
+    const fieldLabel = (k, children) => (
+        <Group gap="xs" className="items-center">
+            <Text size="xs" className="text-muted-foreground">{children}</Text>
+            <StagedDot show={isStaged(p(k))} />
+        </Group>
+    );
+    const textField = (k, placeholder, live) => (
+        <input
+            className={LT_INPUT} value={val(p(k), live) || ''} placeholder={placeholder}
+            onChange={(e) => setKey(p(k), e.target.value, `Lower third: slot ${i} ${k}`)}
+        />
+    );
+
+    return (
+        <Stack gap="xs" className="rounded-md border border-border p-2">
             <Group gap="xs" className="items-center">
-                <div className="min-w-0 flex-1">
-                    <SegmentedControl
-                        data={[{ label: 'Up Next', value: 'upnext' }, { label: 'Current', value: 'current' }]}
-                        value={role}
-                        onChange={(v) => setKey('role', v, 'Lower third: role')}
-                    />
-                </div>
-                <StagedDot show={isStaged('role')} />
+                <Text size="xs" className="w-4 shrink-0 font-medium text-muted-foreground">{i}</Text>
+                <select
+                    className={LT_INPUT} value={type}
+                    onChange={(e) => setKey(p('type'), e.target.value, `Lower third: slot ${i} type`)}
+                >
+                    {LT_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+                <StagedDot show={isStaged(p('type')) || isStaged(p('enabled'))} />
+                <Switch
+                    checked={enabled} disabled={!type}
+                    onCheckedChange={(v) => setKey(p('enabled'), v, `Lower third: slot ${i} ${v ? 'on' : 'off'}`)}
+                />
             </Group>
-            <ClockControl />
+
+            {type === 'logo' && (
+                <label className="flex flex-col gap-1">
+                    {fieldLabel('title', 'Caption (optional; logo comes from Branding)')}
+                    {textField('title', 'e.g. NNL Season 7', s.title)}
+                </label>
+            )}
+
+            {type === 'match' && (
+                <>
+                    <label className="flex flex-col gap-1">
+                        {fieldLabel('matchId', 'Match')}
+                        <select
+                            className={LT_INPUT}
+                            value={val(p('matchId'), s.matchId) != null && val(p('matchId'), s.matchId) !== '' ? String(val(p('matchId'), s.matchId)) : ''}
+                            onChange={(e) => setKey(p('matchId'), e.target.value || null, `Lower third: slot ${i} match`)}
+                        >
+                            <option value="">— None —</option>
+                            {Object.keys(matches || {}).map(id => (
+                                <option key={id} value={id}>{matchDisplayLabel(matches, id)}</option>
+                            ))}
+                        </select>
+                    </label>
+                    <Group gap="xs" className="items-center">
+                        <div className="min-w-0 flex-1">
+                            <SegmentedControl
+                                data={[{ label: 'Up Next', value: 'upnext' }, { label: 'Current', value: 'current' }]}
+                                value={val(p('role'), s.role) === 'current' ? 'current' : 'upnext'}
+                                onChange={(v) => setKey(p('role'), v, `Lower third: slot ${i} role`)}
+                            />
+                        </div>
+                        <StagedDot show={isStaged(p('role'))} />
+                    </Group>
+                    {textField('status', 'Status override (e.g. LIVE)', s.status)}
+                </>
+            )}
+
+            {type === 'scorebox' && (
+                <label className="flex flex-col gap-1">
+                    {fieldLabel('scoreboard', 'Scoreboard')}
+                    <select
+                        className={LT_INPUT}
+                        value={String(val(p('scoreboard'), s.scoreboard) || active[0])}
+                        onChange={(e) => setKey(p('scoreboard'), parseInt(e.target.value) || 1, `Lower third: slot ${i} scoreboard`)}
+                    >
+                        {active.map(n => <option key={n} value={n}>{sbLabel(n)}</option>)}
+                    </select>
+                </label>
+            )}
+
+            {type === 'merch' && (
+                <>
+                    <Group gap="xs" className="items-center">
+                        <div className="min-w-0 flex-1">
+                            <MerchImagePicker
+                                value={val(p('image'), s.image) || ''}
+                                onChange={(name) => setKey(p('image'), name, `Lower third: slot ${i} merch image`)}
+                            />
+                        </div>
+                        <StagedDot show={isStaged(p('image'))} />
+                    </Group>
+                    {textField('title', 'Title (e.g. New tees in the shop)', s.title)}
+                    {textField('subtitle', 'Subtitle (e.g. shop.example.com)', s.subtitle)}
+                </>
+            )}
+
+            {type === 'clock' && (
+                <>
+                    <label className="flex flex-col gap-1">
+                        {fieldLabel('clock.mode', 'Clock')}
+                        <select
+                            className={LT_INPUT} value={clockMode}
+                            onChange={(e) => setKey(p('clock.mode'), e.target.value, `Lower third: slot ${i} clock mode`)}
+                        >
+                            <option value="off">Off</option>
+                            <option value="countdown">Countdown</option>
+                            <option value="countup">Count up</option>
+                            <option value="clock">Time of day</option>
+                        </select>
+                    </label>
+                    {clockMode === 'countdown' && (
+                        <Group gap="xs" className="flex-nowrap items-center">
+                            {fieldLabel('clock.durationSec', 'Minutes')}
+                            <input
+                                type="number" min={0} step={1} className={LT_INPUT}
+                                value={Math.round(((val(p('clock.durationSec'), c.durationSec)) || 300) / 60)}
+                                onChange={(e) => setKey(p('clock.durationSec'), Math.max(0, Number(e.target.value) || 0) * 60, `Lower third: slot ${i} countdown length`)}
+                            />
+                        </Group>
+                    )}
+                    {(clockMode === 'countdown' || clockMode === 'clock')
+                        && textField('clock.label', 'Clock label (e.g. BACK IN)', c.label)}
+                </>
+            )}
+
+            {type === 'message' && (
+                <>
+                    {textField('title', 'Title (e.g. Winners Final)', s.title)}
+                    {textField('subtitle', 'Subtitle (e.g. NNL Season 7)', s.subtitle)}
+                </>
+            )}
+
+            {type === 'bracket' && (
+                <>
+                    <BracketPhasePicker />
+                    {textField('title', 'Title override (defaults to phase name)', s.title)}
+                    {textField('subtitle', 'Subtitle (optional)', s.subtitle)}
+                </>
+            )}
         </Stack>
     );
 }
 
 function LowerThirdSetup() {
-    const { lt, matches, val, isStaged, setKey } = useLowerThird();
-    const ov = lt.override || {};
-    const c = lt.clock || {};
-    const matchIds = Object.keys(matches || {});
-    const matchLabel = (id) => matchDisplayLabel(matches, id);
-
-    // Labelled field with the staged dot; keeps each control one-liner below.
-    const FieldLabel = ({ k, children }) => (
-        <Group gap="xs" className="items-center">
-            <Text size="xs" className="text-muted-foreground">{children}</Text>
-            <StagedDot show={isStaged(k)} />
-        </Group>
+    return (
+        <Stack gap="xs" className="max-h-[440px] overflow-y-auto pr-1">
+            <Text size="xs" className="text-muted-foreground">
+                Five band slots, left → right. Slot widths come from the active design package.
+            </Text>
+            {Array.from({ length: LT_SLOT_COUNT }, (_, k) => k + 1).map((i) => (
+                <LowerThirdSlotEditor key={i} i={i} />
+            ))}
+        </Stack>
     );
+}
 
-    const liveMatchId = val('matchId', lt.matchId);
-    const clockMode = val('clock.mode', c.mode) || 'off';
+// ── Upcoming Schedule ────────────────────────────────────────────────────────
+// The producer's ordered match queue (schedule.queue → match.{M}), rendered by
+// the schedule overlay. Authoring is immediate (like the Match tab): the queue
+// is prep, and the overlay only shows once its OBS source is revealed — which
+// is the staged/live decision. Reorders send the whole list back (PUT
+// /schedule); per-match display time writes match.{m}.scheduledAt.
+
+async function putSchedule(body) {
+    try {
+        const r = await fetch('/api/v1/schedule', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        if (!r.ok) {
+            const d = await r.json().catch(() => ({}));
+            throw new Error(d?.detail || `HTTP ${r.status}`);
+        }
+    } catch (e) {
+        notifications.show({ message: `Schedule: ${e?.message || e}`, color: 'red' });
+    }
+}
+
+// Per-match display time ("6:30 PM", "After break"). Uncontrolled + commit on
+// blur/Enter so live state echoes don't fight the keystroke.
+function ScheduleTimeField({ m, initial }) {
+    const ref = useRef(null);
+    useEffect(() => { if (ref.current && document.activeElement !== ref.current) ref.current.value = initial || ''; }, [initial]);
+    const commit = () => {
+        const v = ref.current?.value ?? '';
+        if (v !== (initial || '')) updateMatch(m, { scheduledAt: v });
+    };
+    return (
+        <input
+            ref={ref} defaultValue={initial || ''} placeholder="Time"
+            className="h-7 w-24 shrink-0 rounded-md border border-border bg-card px-2 text-xs text-foreground"
+            onBlur={commit}
+            onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+        />
+    );
+}
+
+function ScheduleFace({ element }) {
+    const queueRaw = useStateStore(useShallow(s => s?.schedule?.queue ?? []));
+    const matches = useStateStore(useShallow(s => s?.match ?? {}));
+    const queue = (Array.isArray(queueRaw) ? queueRaw : []).filter(id => matches?.[String(id)]);
+
+    const move = (idx, dir) => {
+        const next = [...queue];
+        const j = idx + dir;
+        if (j < 0 || j >= next.length) return;
+        [next[idx], next[j]] = [next[j], next[idx]];
+        putSchedule({ queue: next });
+    };
+    const remove = (idx) => putSchedule({ queue: queue.filter((_, k) => k !== idx) });
+    const add = (id) => { if (id) putSchedule({ queue: [...queue, parseInt(id)] }); };
+
+    const available = Object.keys(matches || {}).filter(id => !queue.some(q => String(q) === id));
 
     return (
         <Stack gap="sm">
-            <label className="flex flex-col gap-1">
-                <FieldLabel k="matchId">Match</FieldLabel>
-                <select
-                    className={LT_INPUT}
-                    value={liveMatchId != null && liveMatchId !== '' ? String(liveMatchId) : ''}
-                    onChange={(e) => setKey('matchId', e.target.value || null, 'Lower third: match')}
-                >
-                    <option value="">— None (manual) —</option>
-                    {matchIds.map(id => <option key={id} value={id}>{matchLabel(id)}</option>)}
-                </select>
-            </label>
-
-            <label className="flex flex-col gap-1">
-                <FieldLabel k="title">Title</FieldLabel>
-                <input
-                    className={LT_INPUT} value={val('title', lt.title) || ''} placeholder="e.g. Winners Final"
-                    onChange={(e) => setKey('title', e.target.value, 'Lower third: title')}
-                />
-            </label>
-            <label className="flex flex-col gap-1">
-                <FieldLabel k="subtitle">Subtitle</FieldLabel>
-                <input
-                    className={LT_INPUT} value={val('subtitle', lt.subtitle) || ''} placeholder="e.g. NNL Season 7"
-                    onChange={(e) => setKey('subtitle', e.target.value, 'Lower third: subtitle')}
-                />
-            </label>
-
-            <Text size="xs" className="font-medium text-muted-foreground">Manual override (used when no match is selected)</Text>
-            <Group gap="xs" className="flex-nowrap">
-                <input
-                    className={LT_INPUT} value={val('override.side1', ov.side1) || ''} placeholder="Side 1 name"
-                    onChange={(e) => setKey('override.side1', e.target.value, 'Lower third: side 1')}
-                />
-                <input
-                    className={LT_INPUT} value={val('override.side2', ov.side2) || ''} placeholder="Side 2 name"
-                    onChange={(e) => setKey('override.side2', e.target.value, 'Lower third: side 2')}
-                />
-            </Group>
-            <input
-                className={LT_INPUT} value={val('override.status', ov.status) || ''} placeholder="Status override (e.g. LIVE)"
-                onChange={(e) => setKey('override.status', e.target.value, 'Lower third: status')}
-            />
-
-            <label className="flex flex-col gap-1">
-                <FieldLabel k="clock.mode">Clock</FieldLabel>
-                <select
-                    className={LT_INPUT} value={clockMode}
-                    onChange={(e) => setKey('clock.mode', e.target.value, 'Lower third: clock mode')}
-                >
-                    <option value="off">Off</option>
-                    <option value="countdown">Countdown</option>
-                    <option value="countup">Count up</option>
-                    <option value="clock">Time of day</option>
-                </select>
-            </label>
-            {clockMode === 'countdown' && (
-                <Group gap="xs" className="flex-nowrap items-center">
-                    <FieldLabel k="clock.durationSec">Minutes</FieldLabel>
-                    <input
-                        type="number" min={0} step={1} className={LT_INPUT}
-                        value={Math.round(((val('clock.durationSec', c.durationSec)) || 300) / 60)}
-                        onChange={(e) => setKey('clock.durationSec', Math.max(0, Number(e.target.value) || 0) * 60, 'Lower third: countdown length')}
-                    />
-                </Group>
+            <DirectFace element={element} />
+            {queue.length === 0 && (
+                <Text size="xs" className="text-muted-foreground">
+                    No matches queued. Create matches in the Draft bar or Match tab, then add them here.
+                </Text>
             )}
-            {(clockMode === 'countdown' || clockMode === 'clock') && (
-                <input
-                    className={LT_INPUT} value={val('clock.label', c.label) || ''} placeholder="Clock label (e.g. BACK IN)"
-                    onChange={(e) => setKey('clock.label', e.target.value, 'Lower third: clock label')}
-                />
+            <Stack gap="xs">
+                {queue.map((id, idx) => {
+                    const m = matches[String(id)] || {};
+                    const decided = m?.decided === 1 || m?.decided === 2 || m?.decided === '1' || m?.decided === '2';
+                    const live = !decided && m?.stage === 'live';
+                    return (
+                        <Group key={`${id}-${idx}`} gap="xs" className="flex-nowrap items-center">
+                            <Stack gap="none" className="shrink-0">
+                                <button
+                                    type="button" className="text-muted-foreground hover:text-foreground disabled:opacity-30"
+                                    disabled={idx === 0} onClick={() => move(idx, -1)} aria-label="Move up"
+                                >
+                                    <ChevronRight size={12} className="-rotate-90" />
+                                </button>
+                                <button
+                                    type="button" className="text-muted-foreground hover:text-foreground disabled:opacity-30"
+                                    disabled={idx === queue.length - 1} onClick={() => move(idx, 1)} aria-label="Move down"
+                                >
+                                    <ChevronRight size={12} className="rotate-90" />
+                                </button>
+                            </Stack>
+                            <Text size="sm" className={cn('min-w-0 flex-1 truncate', decided ? 'text-muted-foreground line-through' : 'text-foreground')}>
+                                {matchDisplayLabel(matches, String(id))}
+                            </Text>
+                            {live && <Badge variant="outline" className="shrink-0 border-emerald-500/50 text-emerald-500">LIVE</Badge>}
+                            <ScheduleTimeField m={id} initial={m?.scheduledAt || ''} />
+                            <Button size="icon-sm" variant="ghost" onClick={() => remove(idx)} aria-label="Remove">
+                                <X size={13} />
+                            </Button>
+                        </Group>
+                    );
+                })}
+            </Stack>
+            {available.length > 0 && (
+                <select
+                    className={LT_INPUT} value=""
+                    onChange={(e) => { add(e.target.value); }}
+                >
+                    <option value="">+ Add match to schedule…</option>
+                    {available.map(id => <option key={id} value={id}>{matchDisplayLabel(matches, id)}</option>)}
+                </select>
             )}
         </Stack>
+    );
+}
+
+// Gear: the overlay heading. Uncontrolled + commit-on-blur like the time field.
+function ScheduleSetup() {
+    const title = useStateStore(s => s?.schedule?.title ?? '');
+    const ref = useRef(null);
+    useEffect(() => { if (ref.current && document.activeElement !== ref.current) ref.current.value = title || ''; }, [title]);
+    return (
+        <label className="flex flex-col gap-1">
+            <Text size="xs" className="text-muted-foreground">Heading (overlay title)</Text>
+            <input
+                ref={ref} defaultValue={title || ''} placeholder="Upcoming Matches" className={LT_INPUT}
+                onBlur={() => { const v = ref.current?.value ?? ''; if (v !== (title || '')) putSchedule({ title: v }); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+            />
+        </label>
     );
 }
 

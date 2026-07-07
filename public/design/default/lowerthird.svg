@@ -1,98 +1,133 @@
 <svg viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMax meet" xmlns="http://www.w3.org/2000/svg">
   <!--
-    DEFAULT package - Lower Third: the Project Rio brand band.
-    Layout: BRAND CAP · MATCH (one game) · TITLE/SUBTITLE · CLOCK.
+    DEFAULT package. Lower Third: the Project Rio brand band, SLOT SYSTEM.
 
-    SLOT CONTRACT (the mount binds by data-slot; see public/design/README.md):
-      logo           <image>  tournament logo (/branding/); hidden if none
-      logo-default   <g>      Rio mushroom shown when no logo is set
-      status         <text>   CURRENT / UP NEXT badge
-      side1-name / side2-name <text>  player names (auto-fit to data-maxw)
-      side1-sprite / side2-sprite <image>  captain headshot; hidden if none
-      side1-score / side2-score <text>  optional; hidden when empty
-      title          <text>   free text (auto-fit)
-      subtitle       <text>   free text (auto-fit)
-      clock-label    <text>   e.g. BACK IN
-      clock          <text>   countdown / count-up / time-of-day (tabular)
+    The band is composed of up to five producer-picked segments. The mount
+    (lowerthird-mount.js) clones one template per enabled slot into the
+    data-band group, lays them out left to right, and stretches the shared
+    data-slot="band-bg" bed to the row. Templates are authored at a LOCAL
+    origin of (0,0) at band height (232) and declare their width via data-w.
 
-    COLOUR: CSS variables resolve in SVG ONLY through inline style="", never via
-    presentation attributes. Every themed paint below uses style="". The accent
-    and per-side colour vars are overridden by the mount at runtime; the rest
-    inherit from rio-theme/tokens.css. See public/design/README.md for the list.
+    TEMPLATE CONTRACT (data-tpl / sub data-slots, see public/design/README.md):
+      logo     : logo, logo-default, title
+      match    : status, time, side1-name/-sprite/-score, side2-...
+      scorebox : status, side1-name/-score, side2-name/-score
+      merch    : image, title, subtitle
+      clock    : clock-label, clock
+      message  : title, subtitle
+      bracket  : label, title, subtitle
+
+    COLOUR: CSS variables resolve in SVG ONLY through inline style="", never
+    via presentation attributes. The accent and per-side colour vars are
+    overridden by the mount at runtime (accent on the host, side1/side2 per
+    segment); the rest inherit from rio-theme/tokens.css.
   -->
+
+  <!-- shared bed: the mount sets x/width to the laid-out row (data-pad inset) -->
+  <rect data-slot="band-bg" x="48" y="792" width="1824" height="232" rx="18" data-pad="28"
+        style="fill:var(--band);stroke:var(--border);stroke-width:1.5;filter:drop-shadow(0 10px 44px rgba(230,0,18,0.22))" opacity="0"/>
+
+  <!-- segment row container (band-local y origin = 792) -->
+  <g data-band="1" data-x="76" data-w="1768" data-h="232" data-gap="56" data-align="center" transform="translate(0,792)"></g>
+
   <defs>
-    <filter id="ltGlow" x="-20%" y="-50%" width="140%" height="200%">
-      <feGaussianBlur stdDeviation="22"/>
-    </filter>
-    <clipPath id="ltBand"><rect x="48" y="792" width="1824" height="232" rx="18"/></clipPath>
-  </defs>
-
-  <!-- soft brand glow behind the band -->
-  <rect x="48" y="800" width="1824" height="232" rx="18" style="fill:var(--accent)" opacity="0.16" filter="url(#ltGlow)"/>
-
-  <!-- band base -->
-  <rect x="48" y="792" width="1824" height="232" rx="18" style="fill:var(--band)"/>
-  <rect x="48" y="792" width="1824" height="232" rx="18" fill="none" style="stroke:var(--border)" stroke-width="1.5"/>
-
-  <g clip-path="url(#ltBand)">
-    <!-- accent rail + top highlight -->
-    <rect x="48" y="792" width="10" height="232" style="fill:var(--accent)"/>
-    <rect x="48" y="792" width="1824" height="2" fill="#ffffff" opacity="0.05"/>
-    <!-- angled Rio divider after the match block (the brand "clip" edge) -->
-    <polygon points="852,808 870,808 856,1008 838,1008" style="fill:var(--accent)" opacity="0.45"/>
-    <!-- divider before the clock -->
-    <rect x="1474" y="828" width="2" height="160" style="fill:var(--border)"/>
-
-    <!-- ░░ BRAND CAP ░░ -->
-    <image data-slot="logo" x="80" y="838" width="148" height="148" preserveAspectRatio="xMidYMid meet" opacity="0"/>
-    <g data-slot="logo-default" transform="translate(6,0)">
-      <!-- Mario mushroom: red cap + spots, white stem + eyes -->
-      <path d="M86 905 C86 853 110 836 148 836 C186 836 210 853 210 905 Z" style="fill:var(--accent)"/>
-      <circle cx="120" cy="884" r="11" fill="#ffffff"/>
-      <circle cx="178" cy="888" r="8" fill="#ffffff"/>
-      <circle cx="150" cy="864" r="7" fill="#ffffff"/>
-      <path d="M112 905 L184 905 L184 940 C184 958 168 968 148 968 C128 968 112 958 112 940 Z" style="fill:var(--ink)"/>
-      <rect x="137" y="916" width="7" height="16" rx="2" style="fill:var(--band)"/>
-      <rect x="153" y="916" width="7" height="16" rx="2" style="fill:var(--band)"/>
+    <!-- .. LOGO + optional title .................................... -->
+    <g data-tpl="logo" data-w="240">
+      <image data-slot="logo" x="46" y="26" width="148" height="148" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+      <g data-slot="logo-default">
+        <!-- Mario mushroom: red cap + spots, white stem + eyes -->
+        <path d="M58 95 C58 43 82 26 120 26 C158 26 182 43 182 95 Z" style="fill:var(--accent)"/>
+        <circle cx="92" cy="74" r="11" fill="#ffffff"/>
+        <circle cx="150" cy="78" r="8" fill="#ffffff"/>
+        <circle cx="122" cy="54" r="7" fill="#ffffff"/>
+        <path d="M70 95 L170 95 C170 118 152 128 120 128 C88 128 70 118 70 95 Z" fill="#ffffff"/>
+        <rect x="101" y="102" width="7" height="16" rx="2" style="fill:var(--band)"/>
+        <rect x="125" y="102" width="7" height="16" rx="2" style="fill:var(--band)"/>
+      </g>
+      <text data-slot="title" data-maxw="220" x="120" y="212" text-anchor="middle"
+            style="fill:var(--ink-dim);font-family:var(--font-display)" font-size="24" font-weight="600" letter-spacing="1"></text>
     </g>
 
-    <!-- ░░ MATCH (one game) ░░ -->
-    <rect x="262" y="810" width="172" height="34" rx="6" style="fill:var(--accent)"/>
-    <text data-slot="status" x="348" y="834" text-anchor="middle"
-          style="fill:#ffffff;font-family:var(--font-display)" font-size="19" font-weight="700"
-          letter-spacing="2.5">UP NEXT</text>
+    <!-- .. MATCH (fixture, current or upcoming) ..................... -->
+    <g data-tpl="match" data-w="620">
+      <rect x="0" y="10" width="172" height="34" rx="6" style="fill:var(--accent)"/>
+      <text data-slot="status" x="86" y="34" text-anchor="middle"
+            style="fill:#ffffff;font-family:var(--font-display)" font-size="19" font-weight="700" letter-spacing="2.5">UP NEXT</text>
+      <text data-slot="time" x="608" y="36" text-anchor="end"
+            style="fill:var(--ink-dim);font-family:var(--font-display)" font-size="22" font-weight="600" letter-spacing="1" opacity="0"></text>
 
-    <!-- side 1 row -->
-    <rect x="262" y="872" width="6" height="42" style="fill:var(--side1)"/>
-    <image data-slot="side1-sprite" x="280" y="868" width="50" height="50" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
-    <text data-slot="side1-name" data-maxw="380" x="344" y="906"
-          style="fill:var(--ink);font-family:var(--font-display)" font-size="34" font-weight="700">Player One</text>
-    <text data-slot="side1-score" data-maxw="60" x="822" y="908" text-anchor="end"
-          style="fill:var(--ink);font-family:var(--font-display)" font-size="40" font-weight="700"
-          font-variant-numeric="tabular-nums" opacity="0"></text>
+      <rect x="0" y="62" width="6" height="42" style="fill:var(--side1)"/>
+      <image data-slot="side1-sprite" x="18" y="58" width="50" height="50" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+      <text data-slot="side1-name" data-maxw="440" x="82" y="96"
+            style="fill:var(--ink);font-family:var(--font-display)" font-size="34" font-weight="700">Player One</text>
+      <text data-slot="side1-score" data-maxw="60" x="608" y="98" text-anchor="end"
+            style="fill:var(--ink);font-family:var(--font-display)" font-size="40" font-weight="700"
+            font-variant-numeric="tabular-nums" opacity="0"></text>
 
-    <!-- side 2 row -->
-    <rect x="262" y="940" width="6" height="42" style="fill:var(--side2)"/>
-    <image data-slot="side2-sprite" x="280" y="936" width="50" height="50" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
-    <text data-slot="side2-name" data-maxw="380" x="344" y="974"
-          style="fill:var(--ink);font-family:var(--font-display)" font-size="34" font-weight="700">Player Two</text>
-    <text data-slot="side2-score" data-maxw="60" x="822" y="976" text-anchor="end"
-          style="fill:var(--ink);font-family:var(--font-display)" font-size="40" font-weight="700"
-          font-variant-numeric="tabular-nums" opacity="0"></text>
+      <rect x="0" y="130" width="6" height="42" style="fill:var(--side2)"/>
+      <image data-slot="side2-sprite" x="18" y="126" width="50" height="50" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+      <text data-slot="side2-name" data-maxw="440" x="82" y="164"
+            style="fill:var(--ink);font-family:var(--font-display)" font-size="34" font-weight="700">Player Two</text>
+      <text data-slot="side2-score" data-maxw="60" x="608" y="166" text-anchor="end"
+            style="fill:var(--ink);font-family:var(--font-display)" font-size="40" font-weight="700"
+            font-variant-numeric="tabular-nums" opacity="0"></text>
+    </g>
 
-    <!-- ░░ TITLE / SUBTITLE ░░ -->
-    <text data-slot="title" data-maxw="568" x="902" y="902"
-          style="fill:var(--ink);font-family:var(--font-display)" font-size="50" font-weight="700"
-          letter-spacing="0.5">Stream Title</text>
-    <text data-slot="subtitle" data-maxw="568" x="902" y="954"
-          style="fill:var(--ink-dim);font-family:var(--font-body)" font-size="26" font-weight="500">Subtitle goes here</text>
+    <!-- .. SCOREBOX (live board score) .............................. -->
+    <g data-tpl="scorebox" data-w="470">
+      <text data-slot="status" x="0" y="36"
+            style="fill:var(--accent);font-family:var(--font-display)" font-size="22" font-weight="700" letter-spacing="2.5" opacity="0"></text>
 
-    <!-- ░░ CLOCK ░░ -->
-    <text data-slot="clock-label" x="1844" y="870" text-anchor="end"
-          style="fill:var(--ink-dim);font-family:var(--font-display)" font-size="22" font-weight="600"
-          letter-spacing="3">BACK IN</text>
-    <text data-slot="clock" x="1846" y="958" text-anchor="end"
-          style="fill:var(--ink);font-family:var(--font-mono)" font-size="76" font-weight="700"
-          font-variant-numeric="tabular-nums">5:00</text>
-  </g>
+      <rect x="0" y="62" width="6" height="42" style="fill:var(--side1)"/>
+      <text data-slot="side1-name" data-maxw="340" x="24" y="96"
+            style="fill:var(--ink);font-family:var(--font-display)" font-size="34" font-weight="700">Player One</text>
+      <text data-slot="side1-score" x="458" y="98" text-anchor="end"
+            style="fill:var(--ink);font-family:var(--font-mono)" font-size="44" font-weight="700"
+            font-variant-numeric="tabular-nums">0</text>
+
+      <rect x="0" y="130" width="6" height="42" style="fill:var(--side2)"/>
+      <text data-slot="side2-name" data-maxw="340" x="24" y="164"
+            style="fill:var(--ink);font-family:var(--font-display)" font-size="34" font-weight="700">Player Two</text>
+      <text data-slot="side2-score" x="458" y="166" text-anchor="end"
+            style="fill:var(--ink);font-family:var(--font-mono)" font-size="44" font-weight="700"
+            font-variant-numeric="tabular-nums">0</text>
+    </g>
+
+    <!-- .. MERCH / advert ........................................... -->
+    <g data-tpl="merch" data-w="470">
+      <rect x="0" y="32" width="168" height="168" rx="12" style="fill:var(--accent)" opacity="0.10"/>
+      <image data-slot="image" x="8" y="40" width="152" height="152" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+      <text data-slot="title" data-maxw="270" x="192" y="106"
+            style="fill:var(--ink);font-family:var(--font-display)" font-size="36" font-weight="700"></text>
+      <text data-slot="subtitle" data-maxw="270" x="192" y="148"
+            style="fill:var(--ink-dim);font-family:var(--font-body)" font-size="24" font-weight="500" opacity="0"></text>
+    </g>
+
+    <!-- .. CLOCK .................................................... -->
+    <g data-tpl="clock" data-w="330">
+      <text data-slot="clock-label" x="0" y="58"
+            style="fill:var(--ink-dim);font-family:var(--font-display)" font-size="22" font-weight="600" letter-spacing="3" opacity="0"></text>
+      <text data-slot="clock" x="0" y="150"
+            style="fill:var(--ink);font-family:var(--font-mono)" font-size="76" font-weight="700"
+            font-variant-numeric="tabular-nums">5:00</text>
+    </g>
+
+    <!-- .. MESSAGE (title / subtitle) ............................... -->
+    <g data-tpl="message" data-w="580">
+      <text data-slot="title" data-maxw="568" x="0" y="112"
+            style="fill:var(--ink);font-family:var(--font-display)" font-size="50" font-weight="700" letter-spacing="0.5">Stream Title</text>
+      <text data-slot="subtitle" data-maxw="568" x="0" y="164"
+            style="fill:var(--ink-dim);font-family:var(--font-body)" font-size="26" font-weight="500" opacity="0"></text>
+    </g>
+
+    <!-- .. BRACKET (loaded phase) ................................... -->
+    <g data-tpl="bracket" data-w="470">
+      <text data-slot="label" x="0" y="42"
+            style="fill:var(--accent);font-family:var(--font-display)" font-size="22" font-weight="700" letter-spacing="3">BRACKET</text>
+      <text data-slot="title" data-maxw="460" x="0" y="112"
+            style="fill:var(--ink);font-family:var(--font-display)" font-size="42" font-weight="700"></text>
+      <text data-slot="subtitle" data-maxw="460" x="0" y="156"
+            style="fill:var(--ink-dim);font-family:var(--font-body)" font-size="24" font-weight="500" opacity="0"></text>
+    </g>
+  </defs>
 </svg>

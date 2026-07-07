@@ -208,7 +208,7 @@ export default function TournamentLoader() {
                         <TextField
                             label="Tournament URL"
                             placeholder="https://start.gg/tournament/.../event/... or https://challonge.com/..."
-                            description="Paste a start.gg event URL or Challonge tournament URL"
+                            description="Paste a start.gg event URL, or a Challonge tournament URL (deprecated — limited support)"
                             className="flex-1"
                             value={url}
                             onChange={e => update({ url: e.currentTarget.value })}

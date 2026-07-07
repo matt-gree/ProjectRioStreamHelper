@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<!--
+  Upcoming Schedule — renders the producer's match queue (schedule.queue, an
+  ordered list of match ids) with each match resolved live from match.{M}.*.
+  Queue authoring lives on the Production page (Schedule element).
+
+  PLACEHOLDER VISUAL: a plain centred card list, deliberately unthemed — the
+  design-package treatment (schedule.svg slot contract) is a follow-up. The
+  data flow is final: keep reading schedule.* + match.* when restyling.
+-->
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="overlay-settings" content="accentColor, cardBg, textColor, fontFamily" />
+  <link rel="stylesheet" href="/layout/lib/rio-theme/tokens.css" />
+  <style>
+    html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+    body { width: 1920px; height: 1080px; }
+    #host {
+      position: fixed; inset: 0; display: none;
+      flex-direction: column; align-items: center; justify-content: center;
+      font-family: var(--font-display, 'Rajdhani', system-ui, sans-serif);
+    }
+    #host.on { display: flex; }
+    .sched-title {
+      color: var(--ink, #fff); font-size: 52px; font-weight: 700;
+      letter-spacing: 2px; margin-bottom: 28px; text-transform: uppercase;
+    }
+    .sched-list { display: flex; flex-direction: column; gap: 14px; width: 900px; }
+    .sched-row {
+      display: flex; align-items: center; gap: 20px;
+      background: var(--band, rgba(10,10,18,0.92));
+      border: 1.5px solid var(--border, rgba(255,255,255,0.09));
+      border-left: 8px solid var(--accent, #e60012);
+      border-radius: 14px; padding: 18px 28px;
+    }
+    .sched-row.done { opacity: 0.45; }
+    .sched-row.live { border-left-color: #43a047; }
+    .sched-names { flex: 1; color: var(--ink, #fff); font-size: 34px; font-weight: 700; }
+    .sched-names .vs { color: var(--ink-dim, #9aa); font-size: 24px; margin: 0 12px; }
+    .sched-label { color: var(--ink-dim, #9aa); font-size: 22px; font-weight: 600; }
+    .sched-time { color: var(--accent, #e60012); font-size: 26px; font-weight: 700; min-width: 120px; text-align: right; }
+    .sched-live { color: #43a047; font-size: 22px; font-weight: 700; letter-spacing: 2px; }
+  </style>
+</head>
+<body>
+  <div id="host">
+    <div class="sched-title" id="title"></div>
+    <div class="sched-list" id="list"></div>
+  </div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="/layout/lib/overlay-base.js"></script>
+  <script>
+    const host = document.getElementById('host');
+    const titleEl = document.getElementById('title');
+    const listEl = document.getElementById('list');
+    const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+    function render() {
+      const g = OverlayBase.deepGet;
+      const queue = g(OverlayBase.state, 'schedule.queue', []) || [];
+      const matches = g(OverlayBase.state, 'match', {}) || {};
+      const rows = queue.map((id) => ({ id, m: matches[String(id)] })).filter((r) => r.m);
+      host.classList.toggle('on', rows.length > 0);
+      if (!rows.length) { listEl.innerHTML = ''; return; }
+
+      titleEl.textContent = g(OverlayBase.state, 'schedule.title', '') || 'Upcoming Matches';
+      listEl.innerHTML = rows.map(({ m }) => {
+        const p1 = m?.player?.['1']?.rioName || m?.player?.[1]?.rioName || 'TBD';
+        const p2 = m?.player?.['2']?.rioName || m?.player?.[2]?.rioName || 'TBD';
+        const decided = m?.decided === 1 || m?.decided === 2 || m?.decided === '1' || m?.decided === '2';
+        const live = !decided && m?.stage === 'live';
+        const cls = decided ? 'sched-row done' : (live ? 'sched-row live' : 'sched-row');
+        const right = live ? '<span class="sched-live">LIVE</span>'
+          : `<span class="sched-time">${esc(m?.scheduledAt || '')}</span>`;
+        return `<div class="${cls}">
+          <span class="sched-names">${esc(p1)}<span class="vs">vs</span>${esc(p2)}</span>
+          <span class="sched-label">${esc(m?.label || '')}</span>
+          ${right}
+        </div>`;
+      }).join('');
+    }
+
+    OverlayBase.init({
+      render,
+      shouldRender: (key) => key.startsWith('schedule.') || key.startsWith('match.'),
+      fetchSettings: true,
+    });
+  </script>
+</body>
+</html>
