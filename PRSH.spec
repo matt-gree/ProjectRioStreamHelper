@@ -76,6 +76,16 @@ a = Analysis(
         # pyrio submodule data
         ('server/rio/pyrio/CharNames.csv', 'server/rio/pyrio'),
 
+        # RioVisualizer submodule: pure-Python `rio_visualizer` package
+        # (server/rio/hit_visualizer.py imports rio_visualizer.api). Lives
+        # outside server/, so PyInstaller's import analysis never traces it —
+        # server/paths.py::ensure_rio_visualizer_on_path() instead adds
+        # sys._MEIPASS/rio-visualizer to sys.path at runtime and expects a
+        # plain `import rio_visualizer` to find it there, same as the
+        # dev-mode checkout layout. Bundled as loose source, not analyzed.
+        *([('rio-visualizer/rio_visualizer', 'rio-visualizer/rio_visualizer')]
+          if Path('rio-visualizer/rio_visualizer').is_dir() else []),
+
         # Bundled gc-overlay (frozen one-folder app, built above) — macOS
         # only. PRSH launches the nested binary as a managed subprocess. Lands
         # under the bundle root at gc-overlay/ — see controller_overlay.py.
