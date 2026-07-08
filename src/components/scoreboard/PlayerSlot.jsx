@@ -1,10 +1,8 @@
 import { memo, useCallback, useMemo, useState } from 'react';
-import { ChevronDown, ChevronUp } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import { Stack, Text } from '../ui/primitives';
 import { TextField } from '../ui/text-field';
 import { Combobox } from '../ui/combobox';
-import { Collapsible, CollapsibleContent } from '../ui/collapsible';
 import { SimpleTooltip } from '../ui/simple-tooltip';
 import { useStateStore } from '../../context/store';
 import { useAssetUrls } from '../../lib/assets';
@@ -42,7 +40,6 @@ function StarIcon({ active, superstarUrl }) {
  */
 export default memo(function PlayerSlot({ scoreboardNumber = 1, teamNumber, playerNumber, sourceType = 'manual' }) {
     const basePath = `score.${scoreboardNumber}.player.${teamNumber}`;
-    const [detailsOpen, setDetailsOpen] = useState(false);
     const [activeCharDetail, setActiveCharDetail] = useState(null);
 
     const urls = useAssetUrls();
@@ -62,16 +59,9 @@ export default memo(function PlayerSlot({ scoreboardNumber = 1, teamNumber, play
         s => s?.score?.[scoreboardNumber]?.player?.[teamNumber]
     ));
     const name       = player?.name ?? '';
-    const teamPrefix = player?.team ?? '';
     const rioName    = player?.rioName ?? '';
     const msbTeam    = player?.msb_team ?? '';
     const captain    = player?.rio_captainIndex ?? 0;
-    const fullName   = player?.full_name ?? '';
-    const country    = player?.country ?? '';
-    const state      = player?.state ?? '';
-    const pronoun    = player?.pronoun ?? '';
-    const youtube    = player?.youtube ?? '';
-    const twitter    = player?.twitter ?? '';
 
     const setItem = useStateStore(s => s.setItem);
     const setItems = useStateStore(s => s.setItems);
@@ -120,25 +110,17 @@ export default memo(function PlayerSlot({ scoreboardNumber = 1, teamNumber, play
 
     return (
         <Stack gap="sm">
-            {/* Main row: tag + prefix + Rio name */}
+            {/* Main row: tag + Rio name */}
             <div className="grid grid-cols-12 items-end gap-2.5">
-                <div className="col-span-4">
+                <div className="col-span-5">
                     <TextField
-                        label={`Player ${playerNumber}`}
+                        label={`Player ${teamNumber}`}
                         placeholder="Tag"
                         value={name}
                         onChange={e => set('name', e.currentTarget.value)}
                     />
                 </div>
-                <div className="col-span-3">
-                    <TextField
-                        label="Prefix"
-                        placeholder="Sponsor"
-                        value={teamPrefix}
-                        onChange={e => set('team', e.currentTarget.value)}
-                    />
-                </div>
-                <div className="col-span-5">
+                <div className="col-span-7">
                     <Stack gap={4}>
                         <Text size="xs" dimmed span>Rio Name</Text>
                         <ParticipantPicker
@@ -151,42 +133,6 @@ export default memo(function PlayerSlot({ scoreboardNumber = 1, teamNumber, play
                     </Stack>
                 </div>
             </div>
-
-            {/* Details toggle */}
-            <button
-                type="button"
-                onClick={() => setDetailsOpen(o => !o)}
-                className="flex items-center gap-1 self-start text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground"
-            >
-                {detailsOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                {detailsOpen ? 'Hide details' : 'More details'}
-            </button>
-
-            {/* Collapsible detail fields */}
-            <Collapsible open={detailsOpen}>
-                <CollapsibleContent>
-                    <div className="grid grid-cols-12 gap-2">
-                        <div className="col-span-4">
-                            <TextField label="Full Name" placeholder="First Last" value={fullName} onChange={e => set('full_name', e.currentTarget.value)} />
-                        </div>
-                        <div className="col-span-2">
-                            <TextField label="State" placeholder="NY, CA..." value={state} onChange={e => set('state', e.currentTarget.value)} />
-                        </div>
-                        <div className="col-span-3">
-                            <TextField label="Country" placeholder="US, CA..." value={country} onChange={e => set('country', e.currentTarget.value)} />
-                        </div>
-                        <div className="col-span-3">
-                            <TextField label="Pronoun" placeholder="He/Him" value={pronoun} onChange={e => set('pronoun', e.currentTarget.value)} />
-                        </div>
-                        <div className="col-span-6">
-                            <TextField label="YouTube" placeholder="@handle" value={youtube} onChange={e => set('youtube', e.currentTarget.value)} />
-                        </div>
-                        <div className="col-span-6">
-                            <TextField label="Twitter" placeholder="@handle" value={twitter} onChange={e => set('twitter', e.currentTarget.value)} />
-                        </div>
-                    </div>
-                </CollapsibleContent>
-            </Collapsible>
 
             {/* Character roster / stat editor drill-in */}
             {activeCharDetail !== null ? (
