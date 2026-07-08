@@ -35,7 +35,7 @@ _PLAYER_KEYS = [
 # Default shape of a freshly-created match. `captain` is a character name (the
 # chosen captain), not a roster slot. provider.startgg.setId records which
 # start.gg set was loaded into this match (see the /match/{m}/startgg-set route).
-_DEFAULT_SIDE = {"participantId": None, "rioName": "", "captain": "", "port": None}
+_DEFAULT_SIDE = {"participantId": None, "rioName": "", "captain": "", "port": None, "seed": None}
 
 
 def default_match() -> dict:

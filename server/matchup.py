@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from loguru import logger
 
 from server.match import Match
+from server.participants import Participants
 from server.rio import stats_api
 from server.rio.game_pool import _sanitize_row
 from server.rio.pyrio.lookup import Lookup
@@ -92,6 +93,7 @@ def build_matchup(games: list[dict], side1_rio: str, side2_rio: str,
                 "side1Score": side1_score,
                 "side2Score": side2_score,
                 "winnerSide": winner,
+                "awaySide": 1 if away_is_1 else 2,
                 "side1Captain": side1_captain,
                 "side2Captain": side2_captain,
                 "side1Team": default_team_name(side1_captain),
@@ -110,6 +112,16 @@ def build_matchup(games: list[dict], side1_rio: str, side2_rio: str,
     }
 
 
+def _display_tag(player: dict | None, rio: str) -> str:
+    """The participant's Address Book tag, or "" when none is set. Prefers the
+    match side's participantId join key, falling back to a rioName lookup."""
+    pid = (player or {}).get("participantId")
+    row = Participants.Get(pid) if pid else None
+    if not row and rio:
+        row = Participants.MatchByRioName(rio)
+    return ((row or {}).get("display") or {}).get("tag") or ""
+
+
 class Matchup:
     """Stateless singleton (mirrors Match): fetch + project ``matchup.*``."""
 
@@ -123,8 +135,10 @@ class Matchup:
         if not Match.exists(m):
             return {"error": f"match {m!r} not found"}
         players = Match.get(m).get("player") or {}
-        rio1 = Match._participant_rioname(players.get("1") or players.get(1))
-        rio2 = Match._participant_rioname(players.get("2") or players.get(2))
+        p1 = players.get("1") or players.get(1)
+        p2 = players.get("2") or players.get(2)
+        rio1 = Match._participant_rioname(p1)
+        rio2 = Match._participant_rioname(p2)
         if not rio1 or not rio2:
             return {"error": "Both sides need a participant with a Rio name before "
                              "a head-to-head can be fetched."}
@@ -133,6 +147,10 @@ class Matchup:
         games = [] if df.empty else [_sanitize_row(r.to_dict()) for _, r in df.iterrows()]
 
         payload = build_matchup(games, rio1, rio2, match_id=m)
+        # Address Book display tag per side (overlay prefers it over rioName); the
+        # match's participantId is the join key, rioName the fallback lookup.
+        payload["side1"]["tag"] = _display_tag(p1, rio1)
+        payload["side2"]["tag"] = _display_tag(p2, rio2)
         payload["fetchedAt"] = datetime.now(timezone.utc).isoformat()
 
         await State.Set("matchup", payload)

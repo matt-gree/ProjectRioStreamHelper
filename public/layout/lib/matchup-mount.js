@@ -13,14 +13,23 @@
 //   mu.dispose();
 //
 // SLOT CONTRACT (elements carrying a data-slot attribute; missing = skipped):
-//   logo, logo-default, subtitle (the match label),
-//   side1-name, side2-name, side1-sprite, side2-sprite,
+//   logo, logo-default,
+//   event-name (optional — start.gg event/tournament name), subtitle (round label),
+//   side1-name, side2-name  (Address Book tag, else rioName),
+//   side1-sprite, side2-sprite (chosen captain headshots),
+//   side1-seed, side2-seed  (optional — bracket seed, e.g. "#1 SEED"),
 //   side1-wins, side2-wins, total-games,
 //   and per card i ∈ 1..5:
 //     game{i}                (group — hidden when there's no i-th game)
 //     game{i}-side1-logo / game{i}-side2-logo   (team logo, falls back to captain icon)
 //     game{i}-side1-score / game{i}-side2-score (loser dimmed)
+//     game{i}-side1-name / game{i}-side2-name   (optional — the two player names,
+//                                                restated per card by intro themes)
+//     game{i}-away-name / game{i}-home-name      (optional — away/home-oriented
+//     game{i}-away-score / game{i}-home-score       per-game restatement of the two
+//     game{i}-away-logo / game{i}-home-logo         sides; awaySide comes from server)
 //     game{i}-mode, game{i}-stadium, game{i}-date
+//     game{i}-date-full     (optional — date WITH year, e.g. "JUN 1, 2026")
 // Text slots may carry data-maxw="<svg-units>" to auto-fit long values.
 //
 // Requires overlay-base.js (OverlayBase) + rio-data.js (RioData, for icons).
@@ -75,6 +84,14 @@ function fmtDate(iso) {
   if (Number.isNaN(d.getTime())) return '';
   return `${MONTHS[d.getMonth()]} ${d.getDate()}`;
 }
+// Same as fmtDate but with the year — for themes whose cards carry a
+// `game{i}-date-full` slot (e.g. the tournament-intro Slice26 band).
+function fmtDateFull(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+}
 
 export function mountMatchup({ host }) {
   injectCss();
@@ -120,11 +137,17 @@ export function mountMatchup({ host }) {
     else host.style.removeProperty('--accent');
   }
 
-  function bindCard(i, game) {
+  function bindCard(i, game, name1, name2) {
     const p = `game${i}`;
     const groupEl = engine.slots[p];
     if (groupEl) groupEl.setAttribute('opacity', game ? '1' : '0');
     if (!game) return;
+
+    // Per-card player names — constant across the head-to-head, but some themes
+    // (the Slice26 intro band) restate them on every card. Optional slots: no-op
+    // for themes whose cards don't carry them.
+    engine.setText(`${p}-side1-name`, name1 || '', { optional: true });
+    engine.setText(`${p}-side2-name`, name2 || '', { optional: true });
 
     engine.setText(`${p}-side1-score`, game.side1Score ?? '');
     engine.setText(`${p}-side2-score`, game.side2Score ?? '');
@@ -138,9 +161,31 @@ export function mountMatchup({ host }) {
     setImageFallback(`${p}-side1-logo`, [teamLogoUrl(game.side1Team), charIconUrl(game.side1Captain)]);
     setImageFallback(`${p}-side2-logo`, [teamLogoUrl(game.side2Team), charIconUrl(game.side2Captain)]);
 
+    // Away/home-oriented mirror of the two sides — for themes (the Slice26 intro
+    // band) that stack the AWAY team on top and HOME on the bottom, per game.
+    // Optional slots: no-op for side1/side2 themes. awaySide (1|2) comes from the
+    // server; default to side 1 when absent.
+    const sideName = (s) => (s === 1 ? name1 : name2) || '';
+    const sideScore = (s) => (s === 1 ? game.side1Score : game.side2Score) ?? '';
+    const sideTeam = (s) => (s === 1 ? game.side1Team : game.side2Team);
+    const sideCaptain = (s) => (s === 1 ? game.side1Captain : game.side2Captain);
+    const awaySide = game.awaySide === 2 ? 2 : 1;
+    for (const [role, side] of [['away', awaySide], ['home', awaySide === 1 ? 2 : 1]]) {
+      engine.setText(`${p}-${role}-name`, sideName(side), { optional: true });
+      engine.setText(`${p}-${role}-score`, sideScore(side), { optional: true });
+      // Dim the loser's whole row identity (name + score) so the winner reads.
+      const dim = winner && winner !== side ? LOSER_DIM : '1';
+      const sc = engine.slots[`${p}-${role}-score`];
+      if (sc) sc.setAttribute('opacity', dim);
+      const nm = engine.slots[`${p}-${role}-name`];
+      if (nm) nm.setAttribute('opacity', dim);
+      setImageFallback(`${p}-${role}-logo`, [teamLogoUrl(sideTeam(side)), charIconUrl(sideCaptain(side))]);
+    }
+
     engine.setText(`${p}-mode`, game.gameMode || '', { optional: true });
     engine.setText(`${p}-stadium`, game.stadium || '', { optional: true });
     engine.setText(`${p}-date`, fmtDate(game.date), { optional: true });
+    engine.setText(`${p}-date-full`, fmtDateFull(game.date), { optional: true });
   }
 
   function playReveal() {
@@ -163,8 +208,9 @@ export function mountMatchup({ host }) {
     if (engine.usesAppVars) OverlayBase.applyDesignSettings(SETTINGS_TYPE);
     else OverlayBase.clearDesignSettings();
 
-    const name1 = g(mu, 'side1.rioName', '');
-    const name2 = g(mu, 'side2.rioName', '');
+    // Prefer the Address Book display tag; fall back to the Rio name.
+    const name1 = g(mu, 'side1.tag', '') || g(mu, 'side1.rioName', '');
+    const name2 = g(mu, 'side2.tag', '') || g(mu, 'side2.rioName', '');
     const hasContent = mu.present && name1 && name2;
     host.style.display = hasContent ? '' : 'none';
     if (!hasContent) { revealKey = ''; return; }
@@ -183,10 +229,20 @@ export function mountMatchup({ host }) {
     const total = mu.totalGames || 0;
     engine.setText('total-games',
       total === 0 ? 'FIRST MEETING' : `ALL TIME · ${total} GAME${total === 1 ? '' : 'S'}`);
+    // Bracket phase text (two rows on the right): the start.gg event/tournament
+    // name above, the round label ("Winners Final") below.
+    engine.setText('event-name',
+      g(state, 'tournamentInfo.event_name', '') || g(state, 'tournamentInfo.name', ''),
+      { optional: true });
     engine.setText('subtitle', (match && match.label) || '', { optional: true });
 
     setImageFallback('side1-sprite', [charIconUrl(match && g(match, 'player.1.captain', ''))]);
     setImageFallback('side2-sprite', [charIconUrl(match && g(match, 'player.2.captain', ''))]);
+
+    // Bracket seeds (from the bound start.gg set) — hidden when unseeded.
+    const seedLabel = (n) => (n != null && n !== '') ? `#${n} SEED` : '';
+    engine.setText('side1-seed', seedLabel(match && g(match, 'player.1.seed', null)), { optional: true });
+    engine.setText('side2-seed', seedLabel(match && g(match, 'player.2.seed', null)), { optional: true });
 
     // Logo: tournament branding if present, else the theme's default mark.
     const logoUrl = OverlayBase.brandingLogoUrl();
@@ -198,7 +254,7 @@ export function mountMatchup({ host }) {
     }
 
     const games = Array.isArray(mu.games) ? mu.games : [];
-    for (let i = 1; i <= MAX_CARDS; i++) bindCard(i, games[i - 1] || null);
+    for (let i = 1; i <= MAX_CARDS; i++) bindCard(i, games[i - 1] || null, name1, name2);
 
     engine.refitText();
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { if (!disposed) engine.refitText(); });

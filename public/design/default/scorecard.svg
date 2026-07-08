@@ -71,11 +71,117 @@
     <g data-slot="header-logo" transform="translate(112,0)">
       <image data-slot="logo" x="0" y="13" width="40" height="40" preserveAspectRatio="xMidYMid meet" opacity="0"/>
       <g data-slot="logo-default">
-        <path d="M2 52 C2 22 15 12 21 12 C27 12 40 22 40 52 Z" style="fill:var(--accent)"/>
-        <circle cx="12" cy="40" r="5" fill="#ffffff"/>
-        <circle cx="30" cy="42" r="4" fill="#ffffff"/>
-        <circle cx="21" cy="28" r="3.5" fill="#ffffff"/>
-        <path d="M4 52 L38 52 L38 58 C38 63 31 65 21 65 C11 65 4 63 4 58 Z" style="fill:var(--ink)"/>
+        <!-- Project Rio pixel mark (public/game_assets/ProjectRio.svg), scaled into the 40x40 logo slot. -->
+        <g transform="translate(0,13) scale(2.5)" shape-rendering="crispEdges">
+          <rect x="5" y="0" width="6" height="1" fill="#000000"></rect>
+          <rect x="3" y="1" width="2" height="1" fill="#000000"></rect>
+          <rect x="5" y="1" width="1" height="1" fill="#ff0000"></rect>
+          <rect x="6" y="1" width="1" height="1" fill="#ffffff"></rect>
+          <rect x="7" y="1" width="1" height="1" fill="#ff0000"></rect>
+          <rect x="8" y="1" width="2" height="1" fill="#ffffff"></rect>
+          <rect x="10" y="1" width="1" height="1" fill="#ff0000"></rect>
+          <rect x="11" y="1" width="2" height="1" fill="#000000"></rect>
+          <rect x="2" y="2" width="1" height="1" fill="#000000"></rect>
+          <rect x="3" y="2" width="2" height="1" fill="#ff0000"></rect>
+          <rect x="5" y="2" width="2" height="1" fill="#ffffff"></rect>
+          <rect x="7" y="2" width="1" height="1" fill="#ff0000"></rect>
+          <rect x="8" y="2" width="3" height="1" fill="#ffffff"></rect>
+          <rect x="11" y="2" width="2" height="1" fill="#ff0000"></rect>
+          <rect x="13" y="2" width="1" height="1" fill="#000000"></rect>
+          <rect x="1" y="3" width="1" height="1" fill="#000000"></rect>
+          <rect x="2" y="3" width="2" height="1" fill="#ff0000"></rect>
+          <rect x="4" y="3" width="4" height="1" fill="#ffffff"></rect>
+          <rect x="8" y="3" width="1" height="1" fill="#ff0000"></rect>
+          <rect x="9" y="3" width="3" height="1" fill="#ffffff"></rect>
+          <rect x="12" y="3" width="2" height="1" fill="#ff0000"></rect>
+          <rect x="14" y="3" width="1" height="1" fill="#000000"></rect>
+          <rect x="1" y="4" width="1" height="1" fill="#000000"></rect>
+          <rect x="2" y="4" width="4" height="1" fill="#ff0000"></rect>
+          <rect x="6" y="4" width="3" height="1" fill="#ffffff"></rect>
+          <rect x="9" y="4" width="1" height="1" fill="#ff0000"></rect>
+          <rect x="10" y="4" width="2" height="1" fill="#ffffff"></rect>
+          <rect x="12" y="4" width="2" height="1" fill="#ff0000"></rect>
+          <rect x="14" y="4" width="1" height="1" fill="#000000"></rect>
+          <rect x="0" y="5" width="1" height="1" fill="#000000"></rect>
+          <rect x="1" y="5" width="1" height="1" fill="#ffffff"></rect>
+          <rect x="2" y="5" width="2" height="1" fill="#ff0000"></rect>
+          <rect x="4" y="5" width="2" height="1" fill="#ffffff"></rect>
+          <rect x="6" y="5" width="1" height="1" fill="#ff0000"></rect>
+          <rect x="7" y="5" width="3" height="1" fill="#ffffff"></rect>
+          <rect x="10" y="5" width="4" height="1" fill="#ff0000"></rect>
+          <rect x="14" y="5" width="1" height="1" fill="#ffffff"></rect>
+          <rect x="15" y="5" width="1" height="1" fill="#000000"></rect>
+          <rect x="0" y="6" width="1" height="1" fill="#000000"></rect>
+          <rect x="1" y="6" width="2" height="1" fill="#ffffff"></rect>
+          <rect x="3" y="6" width="1" height="1" fill="#ff0000"></rect>
+          <rect x="4" y="6" width="3" height="1" fill="#ffffff"></rect>
+          <rect x="7" y="6" width="1" height="1" fill="#ff0000"></rect>
+          <rect x="8" y="6" width="4" height="1" fill="#ffffff"></rect>
+          <rect x="12" y="6" width="1" height="1" fill="#ff0000"></rect>
+          <rect x="13" y="6" width="2" height="1" fill="#ffffff"></rect>
+          <rect x="15" y="6" width="1" height="1" fill="#000000"></rect>
+          <rect x="0" y="7" width="1" height="1" fill="#000000"></rect>
+          <rect x="1" y="7" width="2" height="1" fill="#ffffff"></rect>
+          <rect x="3" y="7" width="2" height="1" fill="#ff0000"></rect>
+          <rect x="5" y="7" width="3" height="1" fill="#ffffff"></rect>
+          <rect x="8" y="7" width="1" height="1" fill="#ff0000"></rect>
+          <rect x="9" y="7" width="2" height="1" fill="#ffffff"></rect>
+          <rect x="11" y="7" width="2" height="1" fill="#ff0000"></rect>
+          <rect x="13" y="7" width="2" height="1" fill="#ffffff"></rect>
+          <rect x="15" y="7" width="1" height="1" fill="#000000"></rect>
+          <rect x="0" y="8" width="1" height="1" fill="#000000"></rect>
+          <rect x="1" y="8" width="2" height="1" fill="#ffffff"></rect>
+          <rect x="3" y="8" width="3" height="1" fill="#ff0000"></rect>
+          <rect x="6" y="8" width="2" height="1" fill="#ffffff"></rect>
+          <rect x="8" y="8" width="1" height="1" fill="#ff0000"></rect>
+          <rect x="9" y="8" width="1" height="1" fill="#ffffff"></rect>
+          <rect x="10" y="8" width="3" height="1" fill="#ff0000"></rect>
+          <rect x="13" y="8" width="2" height="1" fill="#ffffff"></rect>
+          <rect x="15" y="8" width="1" height="1" fill="#000000"></rect>
+          <rect x="0" y="9" width="1" height="1" fill="#000000"></rect>
+          <rect x="1" y="9" width="1" height="1" fill="#ffffff"></rect>
+          <rect x="2" y="9" width="4" height="1" fill="#ff0000"></rect>
+          <rect x="6" y="9" width="4" height="1" fill="#000000"></rect>
+          <rect x="10" y="9" width="4" height="1" fill="#ff0000"></rect>
+          <rect x="14" y="9" width="1" height="1" fill="#ffffff"></rect>
+          <rect x="15" y="9" width="1" height="1" fill="#000000"></rect>
+          <rect x="0" y="10" width="1" height="1" fill="#000000"></rect>
+          <rect x="1" y="10" width="3" height="1" fill="#ff0000"></rect>
+          <rect x="4" y="10" width="2" height="1" fill="#000000"></rect>
+          <rect x="6" y="10" width="4" height="1" fill="#ffffff"></rect>
+          <rect x="10" y="10" width="2" height="1" fill="#000000"></rect>
+          <rect x="12" y="10" width="3" height="1" fill="#ff0000"></rect>
+          <rect x="15" y="10" width="1" height="1" fill="#000000"></rect>
+          <rect x="1" y="11" width="1" height="1" fill="#000000"></rect>
+          <rect x="2" y="11" width="1" height="1" fill="#ff0000"></rect>
+          <rect x="3" y="11" width="1" height="1" fill="#000000"></rect>
+          <rect x="4" y="11" width="2" height="1" fill="#ffffff"></rect>
+          <rect x="6" y="11" width="1" height="1" fill="#000000"></rect>
+          <rect x="7" y="11" width="2" height="1" fill="#ffffff"></rect>
+          <rect x="9" y="11" width="1" height="1" fill="#000000"></rect>
+          <rect x="10" y="11" width="2" height="1" fill="#ffffff"></rect>
+          <rect x="12" y="11" width="1" height="1" fill="#000000"></rect>
+          <rect x="13" y="11" width="1" height="1" fill="#ff0000"></rect>
+          <rect x="14" y="11" width="1" height="1" fill="#000000"></rect>
+          <rect x="2" y="12" width="2" height="1" fill="#000000"></rect>
+          <rect x="4" y="12" width="2" height="1" fill="#ffffff"></rect>
+          <rect x="6" y="12" width="1" height="1" fill="#000000"></rect>
+          <rect x="7" y="12" width="2" height="1" fill="#ffffff"></rect>
+          <rect x="9" y="12" width="1" height="1" fill="#000000"></rect>
+          <rect x="10" y="12" width="2" height="1" fill="#ffffff"></rect>
+          <rect x="12" y="12" width="2" height="1" fill="#000000"></rect>
+          <rect x="3" y="13" width="1" height="1" fill="#000000"></rect>
+          <rect x="4" y="13" width="2" height="1" fill="#ffffff"></rect>
+          <rect x="6" y="13" width="1" height="1" fill="#000000"></rect>
+          <rect x="7" y="13" width="2" height="1" fill="#ffffff"></rect>
+          <rect x="9" y="13" width="1" height="1" fill="#000000"></rect>
+          <rect x="10" y="13" width="2" height="1" fill="#ffffff"></rect>
+          <rect x="12" y="13" width="1" height="1" fill="#000000"></rect>
+          <rect x="4" y="14" width="1" height="1" fill="#000000"></rect>
+          <rect x="5" y="14" width="6" height="1" fill="#ffffff"></rect>
+          <rect x="11" y="14" width="1" height="1" fill="#000000"></rect>
+          <rect x="5" y="15" width="6" height="1" fill="#000000"></rect>
+        </g>
       </g>
     </g>
     <text data-slot="header-title" data-maxw="360" x="164" y="42" class="sc-ink" font-size="26" font-weight="700" letter-spacing="0.5">Project Rio</text>

@@ -241,6 +241,7 @@ class StartGGProvider:
         # Write to State (same keys tournament_info.jsx subscribes to)
         entries = [
             ("tournamentInfo.name", result["tournamentName"]),
+            ("tournamentInfo.event_name", result["eventName"]),
             ("tournamentInfo.location", result["address"] or ("Online" if result["isOnline"] else "")),
             ("tournamentInfo.date", date_str),
             ("tournamentInfo.entrants", str(result["numEntrants"])),
@@ -824,6 +825,7 @@ class StartGGProvider:
 
         entrant_ids = []
         entrants = [[], []]
+        seeds = [None, None]
         for i, slot in enumerate([p1, p2]):
             if i > 1:
                 break
@@ -831,6 +833,7 @@ class StartGGProvider:
             if not entrant:
                 entrant_ids.append(None)
                 continue
+            seeds[i] = entrant.get("initialSeedNum")
             entrant_ids.append(entrant.get("id"))
             participants = entrant.get("participants", []) or []
             for participant in participants:
@@ -869,6 +872,7 @@ class StartGGProvider:
 
         set_data["entrants"] = entrants
         set_data["entrant_ids"] = entrant_ids
+        set_data["seeds"] = seeds
         return set_data
 
     @staticmethod

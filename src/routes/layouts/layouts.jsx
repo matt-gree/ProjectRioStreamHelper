@@ -1869,13 +1869,13 @@ export default function LayoutBrowser() {
         });
     }, [allLayouts, searchQuery]);
 
-    // Talent — registry-bound person overlays: the commentary caster strip and
-    // the player-plates band. Both render people (fed from the address book /
-    // match, or typed manually).
+    // Talent — registry-bound person and matchup overlays: the commentary
+    // caster strip, the player-plates band, and the Matchup History card.
+    // All three render content fed from the address book / match.
     const talentLayouts = useMemo(() => {
         const q = searchQuery.toLowerCase().trim();
         return allLayouts.filter(l => {
-            if (l.group !== 'commentary' && l.group !== 'playerplates') return false;
+            if (l.group !== 'commentary' && l.group !== 'playerplates' && l.group !== 'matchup') return false;
             if (q && !l.name.toLowerCase().includes(q)) return false;
             return true;
         });
@@ -2066,9 +2066,10 @@ export default function LayoutBrowser() {
                             {mode === 'talent' && (
                                 <>
                                     <Text size="xs" dimmed>
-                                        Person overlays driven by the address book — the commentary
-                                        caster strip now, the player element soon. Author who appears on
-                                        the Commentary tab; control them live from the Production page.
+                                        Talent and matchup overlays — the commentary caster strip, the
+                                        player-plates band, and the Matchup History card. Author them on
+                                        the Commentary / Match tabs; control them live from the
+                                        Production page.
                                     </Text>
                                     <Input placeholder="Search talent overlays..." value={searchQuery} onChange={(e) => setSearchQuery(e.currentTarget.value)} />
                                     {loading && <Loader size={18} />}

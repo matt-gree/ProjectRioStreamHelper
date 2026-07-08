@@ -158,6 +158,7 @@ async def apply_startgg_set(m, s: dict, set_id: int) -> None:
     from server.participants import Participants
 
     entrants = s.get("entrants") or [[], []]
+    seeds = s.get("seeds") or [None, None]
     entries: list[tuple] = []
     for side, players in ((1, entrants[0] if len(entrants) > 0 else []),
                           (2, entrants[1] if len(entrants) > 1 else [])):
@@ -168,6 +169,8 @@ async def apply_startgg_set(m, s: dict, set_id: int) -> None:
         rio = (row.get("identities") or {}).get("rioName") or ""
         entries.append((f"match.{m}.player.{side}.participantId", row["id"]))
         entries.append((f"match.{m}.player.{side}.rioName", rio))
+        # Bracket seed → match side, for intro elements (the Matchup band).
+        entries.append((f"match.{m}.player.{side}.seed", seeds[side - 1] if side - 1 < len(seeds) else None))
 
     if s.get("round_name"):
         entries.append((f"match.{m}.label", s["round_name"]))
