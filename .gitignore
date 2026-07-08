@@ -300,3 +300,9 @@ user_data/
 
 # MSB game assets (Nintendo IP — distributed separately, not committed)
 public/game_assets/msb/
+
+# Slice26 design-package explorations — not approved to ship, keep local only
+/Slice26.fig
+/figma-exports/
+public/design/slice26*
+/slice26-wip/
