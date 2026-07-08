@@ -1,86 +1,85 @@
-"""RotationManager resume-on-startup gate.
+"""PoolManager resume-on-startup gate.
 
-Since the rotator was pulled out of the source enum (a rotation is now a
-per-board game FEED, orthogonal to the board's source type), the resume gate
-is: scoreboard still active + the feed's own ``enabled`` flag + non-empty
-``game_ids``. Startup also migrates any board still typed with the legacy
-``rotator`` source to ``manual`` (its feed survives via the enabled flag).
-_resume_rotations (which would hit the API) is mocked — we only assert which
-rotations the gate selects.
+Renamed from RotationManager as part of the pool+playback unification (see
+~/.claude/plans/pool-playback-unification.md). A running rotation is now
+`scoreboards.binding.{N}.playback.mode == "rotate"` with a non-empty pool
+(filters or pinned games) — resume no longer reads the legacy `sources`/
+`rotation.{N}.enabled` shape. `_resume_rotations` (which would hit the API) is
+mocked — we only assert which scoreboards the gate selects.
 """
 import asyncio
 from unittest.mock import AsyncMock
 
-from server.rio.rotation import RotationManager
+from server.rio.rotation import PoolManager
 from server.settings import Settings
 
 
-def _configure(set_setting, active, sources, rotation):
+def _configure(set_setting, active, binding):
     set_setting("scoreboards.active", active)
-    set_setting("scoreboards.sources", sources)
-    set_setting("scoreboards.rotation", rotation)
+    set_setting("scoreboards.binding", binding)
 
 
-async def test_resumes_qualifying_feeds_regardless_of_source(monkeypatch, set_setting):
+async def test_resumes_rotating_boards_with_a_populated_pool(monkeypatch, set_setting):
     resume = AsyncMock()
-    monkeypatch.setattr(RotationManager, "_resume_rotations", resume)
+    monkeypatch.setattr(PoolManager, "_resume_rotations", resume)
+    # Board 1 defaults to HUD transport (project_rio.hud_enabled defaults
+    # True) — disable it here so board 1's rotate binding is actually
+    # eligible; the HUD-vs-rotate interaction has its own dedicated test.
+    set_setting("project_rio.hud_enabled", False)
     _configure(
         set_setting,
         active=[1, 2, 3],
-        sources={
-            "1": {"type": "manual"},
-            "2": {"type": "hud"},       # source type no longer gates the feed
-            "3": {"type": "manual"},
-        },
-        rotation={
-            "1": {"enabled": True, "game_ids": [10, 20]},  # qualifies
-            "2": {"enabled": True, "game_ids": [30]},       # qualifies too
-            "3": {"enabled": False, "game_ids": [40]},      # disabled
+        binding={
+            "1": {"playback": {"mode": "rotate"}, "pool": {"filters": [{"id": 1, "tag": ["Ranked"]}]}},
+            "2": {"playback": {"mode": "rotate"}, "pool": {"pinned": [30]}},  # pinned-only also qualifies
+            "3": {"playback": {"mode": "single"}, "pool": {"filters": [{"id": 1, "tag": ["Ranked"]}]}},  # not rotating
         },
     )
-    await RotationManager.Start()
+    await PoolManager.Start()
     await asyncio.sleep(0)  # let the scheduled resume task settle
 
     resume.assert_called_once()
-    to_resume = resume.call_args.args[0]
-    assert set(to_resume.keys()) == {1, 2}
+    assert set(resume.call_args.args[0]) == {1, 2}
 
 
-async def test_legacy_rotator_source_migrates_to_manual(monkeypatch, set_setting):
-    monkeypatch.setattr(RotationManager, "_resume_rotations", AsyncMock())
-    _configure(
-        set_setting,
-        active=[1],
-        sources={"1": {"type": "rotator"}},
-        rotation={"1": {"enabled": True, "game_ids": [1]}},
-    )
-    await RotationManager.Start()
-    # The legacy source type is rewritten; the feed itself stays enabled.
-    assert Settings.Get("scoreboards.sources.1.type") == "manual"
-    assert Settings.Get("scoreboards.rotation.1.enabled") is True
-
-
-async def test_enabled_but_empty_game_ids_not_resumed(monkeypatch, set_setting):
+async def test_rotating_but_empty_pool_not_resumed(monkeypatch, set_setting):
     resume = AsyncMock()
-    monkeypatch.setattr(RotationManager, "_resume_rotations", resume)
+    monkeypatch.setattr(PoolManager, "_resume_rotations", resume)
     _configure(
         set_setting,
         active=[1],
-        sources={"1": {"type": "manual"}},
-        rotation={"1": {"enabled": True, "game_ids": []}},
+        binding={"1": {"playback": {"mode": "rotate"}, "pool": {"filters": [], "pinned": []}}},
     )
-    await RotationManager.Start()
+    await PoolManager.Start()
     resume.assert_not_called()
 
 
 async def test_inactive_scoreboard_not_resumed(monkeypatch, set_setting):
     resume = AsyncMock()
-    monkeypatch.setattr(RotationManager, "_resume_rotations", resume)
+    monkeypatch.setattr(PoolManager, "_resume_rotations", resume)
     _configure(
         set_setting,
         active=[1],
-        sources={"1": {"type": "manual"}, "2": {"type": "manual"}},
-        rotation={"2": {"enabled": True, "game_ids": [99]}},  # sb 2 not active
+        binding={
+            "1": {"playback": {"mode": "single"}},
+            "2": {"playback": {"mode": "rotate"}, "pool": {"pinned": [99]}},  # sb 2 not active
+        },
     )
-    await RotationManager.Start()
+    await PoolManager.Start()
+    resume.assert_not_called()
+
+
+async def test_hud_board_never_resumed_even_if_marked_rotating(monkeypatch, set_setting):
+    """Board 1 with HUD on is always HUD transport regardless of its stored
+    playback.mode — a stray "rotate" from before HUD was (re)enabled must not
+    fight the HUD writer for score.1.*."""
+    resume = AsyncMock()
+    monkeypatch.setattr(PoolManager, "_resume_rotations", resume)
+    set_setting("project_rio.hud_enabled", True)
+    _configure(
+        set_setting,
+        active=[1],
+        binding={"1": {"playback": {"mode": "rotate"}, "pool": {"pinned": [1]}}},
+    )
+    await PoolManager.Start()
     resume.assert_not_called()

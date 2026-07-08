@@ -245,13 +245,14 @@ class OngoingGamePool:
         )
 
         # Record the game currently applied to this scoreboard (used for
-        # is-new-game detection on the next apply). Leave `kind` alone — a
-        # set-binding tick must not flip the board to single. Likewise, do NOT
-        # auto-set stats_tag from the game's mode here: that would (a) override
-        # the user's selected game mode and (b) trigger a stats refetch on every
-        # poll via the frontend's tag-change effect.
+        # is-new-game detection on the next apply). Leave `playback.mode`
+        # alone — a rotating board ticking through its pool must not flip
+        # back to single. Likewise, do NOT auto-set stats_tag from the game's
+        # mode here: that would (a) override the user's selected game mode
+        # and (b) trigger a stats refetch on every poll via the frontend's
+        # tag-change effect.
         await Settings.Set(
-            f"scoreboards.binding.{scoreboard_number}.gameId", game_id
+            f"scoreboards.binding.{scoreboard_number}.playback.gameId", game_id
         )
 
         return True
@@ -261,7 +262,7 @@ async def apply_completed_game_dict(game: dict, scoreboard_number: int) -> bool:
     """Apply a completed-game dict to a scoreboard.
 
     Used by both the manual browser (CompletedGamePool.apply_game_to_scoreboard)
-    and rotations (RotationState, which holds its own per-rotation game cache).
+    and pool rotations (PoolState, which holds its own per-pool game cache).
     Performs the pinned-player side swap and persists the applied gameId.
     """
     if not game:
@@ -279,7 +280,7 @@ async def apply_completed_game_dict(game: dict, scoreboard_number: int) -> bool:
 
     await apply_completed_game_to_state(game, scoreboard_number, side_reason=reason)
     await Settings.Set(
-        f"scoreboards.binding.{scoreboard_number}.gameId", game.get("game_id")
+        f"scoreboards.binding.{scoreboard_number}.playback.gameId", game.get("game_id")
     )
     return True
 
@@ -287,8 +288,8 @@ async def apply_completed_game_dict(game: dict, scoreboard_number: int) -> bool:
 class CompletedGamePool:
     """One-shot completed-game search helper for the manual browser UI.
 
-    Rotations no longer use this — each RotationState holds its own filters
-    and game cache (server.rio.rotation.RotationState). What remains here is
+    Pool rotations no longer use this — each PoolState holds its own filters
+    and game cache (server.rio.rotation.PoolState). What remains here is
     a thin convenience layer for the Game Pool Manager modal: a single
     `fetch(filters)` call that runs a query, caches the latest result so
     `assign_game` can resolve it by id, and emits a SocketIO update for the

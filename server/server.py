@@ -12,7 +12,7 @@ from server.api import router_v1
 from server.api.v1.assets import get_msb_assets_path
 from server.paths import user_data_dir, ensure_game_data
 from server.rio.game_pool import OngoingGamePool, CompletedGamePool
-from server.rio.rotation import RotationManager
+from server.rio.rotation import PoolManager
 from server.rio.provider import RioGameDataProvider
 from server.settings import Settings, Config
 from server.startgg.provider import StartGGProvider
@@ -77,7 +77,7 @@ async def lifespan(app: FastAPI):
     await RioGameDataProvider.Start()
     await OngoingGamePool.Start()
     await CompletedGamePool.Start()
-    await RotationManager.Start()
+    await PoolManager.Start()
     await StartGGProvider.Start()
     await ChallongeProvider.Start()
     await ControllerOverlay.Start()
@@ -107,7 +107,7 @@ async def lifespan(app: FastAPI):
     await ControllerOverlay.Stop()
     await ChallongeProvider.Stop()
     await StartGGProvider.Stop()
-    await RotationManager.Stop()
+    await PoolManager.Stop()
     await CompletedGamePool.Stop()
     await OngoingGamePool.Stop()
     await RioGameDataProvider.Stop()

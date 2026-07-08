@@ -167,7 +167,7 @@ async def test_load_set_reuses_match_holding_the_set(monkeypatch):
 @pytest.mark.asyncio
 async def test_load_set_rejects_rotating_set_board(monkeypatch):
     import server.bindings
-    monkeypatch.setattr(server.bindings, "is_set", lambda sb: True)
+    monkeypatch.setattr(server.bindings, "is_rotating", lambda sb: True)
 
     with pytest.raises(HTTPException) as exc:
         await startgg_load_set(set_id=555, scoreboard_number=2)

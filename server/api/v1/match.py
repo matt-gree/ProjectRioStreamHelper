@@ -243,11 +243,11 @@ async def bind_scoreboard(sb: int, payload: BindPayload):
         await State.Save()
         await Match.clear_scoreboard(sb)
     else:
-        from server.bindings import is_set
-        if is_set(sb):
+        from server.bindings import is_rotating
+        if is_rotating(sb):
             raise HTTPException(
                 409,
-                f"scoreboard {sb} is a rotating set — bind a match to a single-game board",
+                f"scoreboard {sb} is rotating — bind a match to a single-game board",
             )
         await State.Set(f"score.{sb}.match", m)
         await State.Save()

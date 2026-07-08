@@ -57,14 +57,14 @@ class GameEndWatcher:
         """``(sb, match_id, away, home, start_time)`` if a followed **API-single**
         board bound to an **undecided** match was following ``game_id``, else
         None. HUD board 1 is excluded — its games credit via post-game capture."""
-        from server.bindings import get_binding, is_set, transport
+        from server.bindings import get_binding, is_rotating, transport
         from server.settings import Settings
 
         active = Settings.Get("scoreboards.active", [1]) or [1]
         for sb in active:
-            if transport(sb) != "api" or is_set(sb):
+            if transport(sb) != "api" or is_rotating(sb):
                 continue
-            if str(get_binding(sb).get("gameId")) != str(game_id):
+            if str(get_binding(sb)["playback"].get("gameId")) != str(game_id):
                 continue
             m = Match.scoreboard_match(sb)
             if not m or Match.get(m).get("decided"):

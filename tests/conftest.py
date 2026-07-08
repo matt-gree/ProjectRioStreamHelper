@@ -1,7 +1,7 @@
 """Shared pytest fixtures.
 
 The server is built on class-level singletons (State, Settings,
-RioGameDataProvider, StatsTracker, RotationManager) whose mutable class
+RioGameDataProvider, StatsTracker, PoolManager) whose mutable class
 variables would otherwise leak between tests. The autouse fixtures here give
 every test a clean baseline, redirect all disk writes into a temp dir, and a
 SocketIO emit that never touches a real server.
@@ -56,7 +56,7 @@ def reset_singletons():
     from server.settings import Settings
     from server.rio.provider import RioGameDataProvider as Provider
     from server.rio.stats_tracker import StatsTracker
-    from server.rio.rotation import RotationManager
+    from server.rio.rotation import PoolManager
 
     saved = {
         "state": copy.deepcopy(State.state),
@@ -70,7 +70,7 @@ def reset_singletons():
         "hud_targets": list(Provider._hud_targets),
         "hud_watcher": Provider.hud_watcher,
         "stats_slots": dict(StatsTracker._slots),
-        "rotations": dict(RotationManager._rotations),
+        "rotations": dict(PoolManager._rotations),
     }
 
     # Clean baseline for the test.
@@ -89,7 +89,7 @@ def reset_singletons():
     Provider.hud_watcher = None
 
     StatsTracker._slots = {}
-    RotationManager._rotations = {}
+    PoolManager._rotations = {}
 
     yield
 
@@ -104,7 +104,7 @@ def reset_singletons():
     Provider._hud_targets = saved["hud_targets"]
     Provider.hud_watcher = saved["hud_watcher"]
     StatsTracker._slots = saved["stats_slots"]
-    RotationManager._rotations = saved["rotations"]
+    PoolManager._rotations = saved["rotations"]
 
 
 @pytest.fixture

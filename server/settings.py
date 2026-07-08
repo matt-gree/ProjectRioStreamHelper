@@ -142,10 +142,12 @@ class Settings:
         "scoreboards": {
             "active": [1],
             "aliases": {},
-            # Per-scoreboard binding: kind (single|set) + gameId/pool/stats_tag.
-            # Created/migrated in Load(); see server/bindings.py for the model.
-            # `sources` is retained read-only for one release as a migration
-            # fallback and is no longer written.
+            # Per-scoreboard binding: pool (membership: filters/scope/pinned/
+            # excluded) + playback (mode/gameId/interval) + stats_tag.
+            # Created/migrated in Load(); see server/bindings.py for the model
+            # and ~/.claude/plans/pool-playback-unification.md for the design.
+            # `sources` and `rotation` are retained read-only for one release
+            # as migration fallbacks and are no longer written.
             "sources": {
                 "1": {"type": "manual", "api_game_id": None}
             }
@@ -370,6 +372,87 @@ class Settings:
             if "hud_enabled" not in pr:
                 cls.settings.setdefault("project_rio", {})["hud_enabled"] = True
 
+            await cls.Save()
+
+        # One-time pool+playback migration (schema v2, see
+        # ~/.claude/plans/pool-playback-unification.md): collapses each
+        # binding's flat `kind`/`gameId`/`pool` (single|set) into `pool`
+        # (filters/scope/pinned/excluded) + `playback` (mode/gameId/interval).
+        # Gated on `binding_schema` so it runs exactly once, whether the v1
+        # migration above just ran in this same Load() call or ran in a prior
+        # session. `scoreboards.rotation.{N}` is read here (for interval/
+        # current_index/game_ids/filters) and then left in place, unused, as a
+        # migration fallback for one release — same pattern as `sources`.
+        if scoreboards.get("binding_schema", 1) < 2:
+            binding = scoreboards.setdefault("binding", {})
+            rotation = scoreboards.get("rotation", {}) or {}
+
+            for key, b in list(binding.items()):
+                if not isinstance(b, dict) or "playback" in b:
+                    continue  # already v2-shaped (defensive; shouldn't happen)
+
+                kind = b.get("kind", "single")
+                stats_tag = b.get("stats_tag")
+                rot = rotation.get(key) if isinstance(rotation.get(key), dict) else {}
+
+                if kind == "set":
+                    # The old model was fundamentally manual-curation: whatever
+                    # the user had selected becomes `pinned` so nobody's
+                    # existing rotation silently starts growing/shrinking after
+                    # upgrade. The old filters (if any) carry over as a single
+                    # filter chip, but auto-poll's additive-only semantics do
+                    # NOT — the new pool recompute adds *and* removes, so
+                    # carrying old filters straight into continuous membership
+                    # would change what's on-screen without the user asking.
+                    # The chip is present but inert until the user re-saves it
+                    # (touches the pool via the new UI), which is an acceptable
+                    # one-time speed bump for a semantics change this size.
+                    rot_filters = rot.get("filters") or {}
+                    chip = {
+                        "id": 1,
+                        "tag": list(rot_filters.get("tag") or []),
+                        "username": list(rot_filters.get("username") or []),
+                        "vs_username": list(rot_filters.get("vs_username") or []),
+                        "limit_games": rot_filters.get("limit_games"),
+                    }
+                    pool = {
+                        "filters": [chip] if rot_filters else [],
+                        "scope": b.get("pool", "both"),
+                        "pinned": list(rot.get("game_ids") or []),
+                        "excluded": [],
+                        "pinned_cache": {
+                            str(g.get("game_id")): g
+                            for g in (rot.get("cached_games") or [])
+                            if g.get("game_id") is not None
+                        },
+                        # Static: old auto-poll was additive-only, this pool
+                        # model adds *and* removes — don't silently change
+                        # what's on-screen for an existing rotation.
+                        "refresh_interval": 0,
+                    }
+                    playback = {
+                        "mode": "rotate",
+                        "gameId": None,
+                        "interval": rot.get("interval", 30),
+                        "current_index": rot.get("current_index", 0),
+                        "interrupt": None,
+                    }
+                else:
+                    pool = {
+                        "filters": [], "scope": "both", "pinned": [], "excluded": [],
+                        "pinned_cache": {}, "refresh_interval": 60,
+                    }
+                    playback = {
+                        "mode": "single",
+                        "gameId": b.get("gameId"),
+                        "interval": 30,
+                        "current_index": 0,
+                        "interrupt": None,
+                    }
+
+                binding[key] = {"pool": pool, "playback": playback, "stats_tag": stats_tag}
+
+            scoreboards["binding_schema"] = 2
             await cls.Save()
 
     @classmethod

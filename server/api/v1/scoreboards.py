@@ -4,7 +4,7 @@ from fastapi.responses import ORJSONResponse
 from server.bindings import DEFAULT_BINDING, get_binding, transport
 from server.bindings import hud_target_scoreboards as _hud_target_scoreboards
 from server.rio.provider import RioGameDataProvider
-from server.rio.rotation import RotationManager
+from server.rio.rotation import PoolManager
 from server.rio.stats_tracker import StatsTracker
 from server.settings import Settings
 from server.state import State
@@ -94,7 +94,7 @@ async def remove_scoreboard(sb_id: int, session_id: str | None = None) -> ORJSON
 
     # Tear down any background work owned by this scoreboard before its
     # settings are removed, so resume-on-startup can't pick it back up.
-    await RotationManager.stop_rotation(sb_id)
+    await PoolManager.stop_rotation(sb_id, persist_disable=False)
     await Settings.Unset(f"scoreboards.rotation.{sb_id}")
 
     active.remove(sb_id)
@@ -123,38 +123,45 @@ async def set_scoreboard_binding(
     pool: str | None = None,
     session_id: str | None = None,
 ) -> ORJSONResponse:
-    """Set a scoreboard's binding kind (single | set) and optional pool.
+    """Set a scoreboard's playback mode and optional pool scope.
+
+    `kind` accepts "single" or "set"/"rotate" ("set" kept as an alias for
+    backward compatibility with pre-pool-unification callers) and maps onto
+    `playback.mode`. This endpoint only flips the mode metadata — it does not
+    itself start a rotation (see `POST /rotation/{sb}/start`), matching the
+    pre-existing split between "switch this board to rotate mode" (here) and
+    "start rotating the configured pool" (rotation.py).
 
     Transport (HUD vs API) is derived, not set here — board 1 carries the HUD
     when `project_rio.hud_enabled` (see server/bindings.py). A HUD-transport
-    board ignores its binding kind, but the write is still accepted so toggling
-    HUD off later reveals the stored kind.
+    board ignores its playback mode, but the write is still accepted so
+    toggling HUD off later reveals the stored mode.
     """
     active = Settings.Get("scoreboards.active", [1])
     if sb_id not in active:
         raise HTTPException(status_code=404, detail="Scoreboard not found")
 
-    if kind not in ("single", "set"):
-        raise HTTPException(status_code=400, detail="kind must be 'single' or 'set'")
+    if kind not in ("single", "set", "rotate"):
+        raise HTTPException(status_code=400, detail="kind must be 'single' or 'rotate'")
+    mode = "rotate" if kind in ("set", "rotate") else "single"
 
-    old = get_binding(sb_id)
-    old_kind = old.get("kind", "single")
-    kind_changed = old_kind != kind
+    old_mode = get_binding(sb_id)["playback"].get("mode", "single")
+    mode_changed = old_mode != mode
 
-    # Leaving set mode stops any running feed so it can't keep writing into a
-    # board the user has switched to single. Persists enabled=False for resume.
-    if old_kind == "set" and kind != "set":
-        await RotationManager.stop_rotation(sb_id)
+    # Leaving rotate mode stops any running pool task so it can't keep writing
+    # into a board the user has switched to single.
+    if old_mode == "rotate" and mode != "rotate":
+        await PoolManager.stop_rotation(sb_id, persist_disable=False)
 
-    await Settings.Set(f"scoreboards.binding.{sb_id}.kind", kind)
+    await Settings.Set(f"scoreboards.binding.{sb_id}.playback.mode", mode)
     if pool in ("both", "live", "completed"):
-        await Settings.Set(f"scoreboards.binding.{sb_id}.pool", pool)
+        await Settings.Set(f"scoreboards.binding.{sb_id}.pool.scope", pool)
 
     # On a real mode change, clear the stale frame + game reference + stats slot
     # (the previous mode's game no longer applies). A HUD-transport board is left
     # alone — the HUD writer owns it.
-    if kind_changed and transport(sb_id) != "hud":
-        await Settings.Set(f"scoreboards.binding.{sb_id}.gameId", None)
+    if mode_changed and transport(sb_id) != "hud":
+        await Settings.Set(f"scoreboards.binding.{sb_id}.playback.gameId", None)
         await State.Set(f"score.{sb_id}", {})
         StatsTracker.reset_scoreboard(sb_id)
         await State.Save()

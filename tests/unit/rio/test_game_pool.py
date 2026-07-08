@@ -99,7 +99,7 @@ async def test_apply_completed_dict_no_pin(mock_socket):
     assert ok is True
     assert s("score.1.player.1.rioName") == "Alice"
     assert s("score.1.score_left") == 2
-    assert Settings.Get("scoreboards.sources.1.api_game_id") == "C1"
+    assert Settings.Get("scoreboards.binding.1.playback.gameId") == "C1"
 
 
 async def test_apply_completed_dict_applies_pinned_swap(set_setting, mock_socket):

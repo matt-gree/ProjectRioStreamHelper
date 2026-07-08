@@ -157,7 +157,7 @@ async def assign_game(
     # so live-game auto-poll re-applies (which fire on every poll cycle to
     # refresh score/state) don't trigger a stats refetch each tick.
     prev_game_id = Settings.Get(
-        f"scoreboards.binding.{scoreboard_number}.gameId"
+        f"scoreboards.binding.{scoreboard_number}.playback.gameId"
     )
     is_new_game = prev_game_id != game_id
 
