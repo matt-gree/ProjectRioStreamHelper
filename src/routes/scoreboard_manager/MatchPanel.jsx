@@ -275,13 +275,14 @@ export default function MatchPanel() {
     const [gameModes, setGameModes] = useState([]);
 
     // A board accepts a match iff it's a single-game board — a HUD board (board
-    // 1 while HUD is on) is single by construction; otherwise its binding.kind.
+    // 1 while HUD is on) is single by construction; otherwise its binding's
+    // playback.mode (matches must never bind to a rotating board).
     const bindableMap = useMemo(() => {
         const map = {};
         for (const sb of active) {
             const isHud = sb === 1 && hudEnabled;
-            const kind = bindings?.[sb]?.kind ?? bindings?.[String(sb)]?.kind ?? 'single';
-            map[sb] = isHud || kind !== 'set';
+            const mode = bindings?.[sb]?.playback?.mode ?? bindings?.[String(sb)]?.playback?.mode ?? 'single';
+            map[sb] = isHud || mode !== 'rotate';
         }
         return map;
     }, [active, bindings, hudEnabled]);

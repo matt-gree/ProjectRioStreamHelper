@@ -176,10 +176,10 @@ const SOURCE_LABEL = { hud: 'HUD', api: 'API', set: 'Set', manual: 'Manual' };
 
 // Derive the badge key from a scoreboard's transport + binding (mirrors the
 // Scoreboard tab). Empty single boards read as "manual".
-function bindingBadgeKey({ transport, kind, gameId }) {
+function bindingBadgeKey({ transport, mode, gameId }) {
     if (transport === 'hud') return 'hud';
-    if (kind === 'set') return 'set';
-    if (kind === 'single' && gameId != null) return 'api';
+    if (mode === 'rotate') return 'set';
+    if (mode === 'single' && gameId != null) return 'api';
     return 'manual';
 }
 
@@ -2005,8 +2005,8 @@ export default function LayoutBrowser() {
                             const transport = (sbId === 1 && hudEnabled) ? 'hud' : 'api';
                             const srcType = bindingBadgeKey({
                                 transport,
-                                kind: bind.kind ?? 'single',
-                                gameId: bind.gameId ?? null,
+                                mode: bind.playback?.mode ?? 'single',
+                                gameId: bind.playback?.gameId ?? null,
                             });
                             const alias = aliases[sbId] ?? aliases[String(sbId)] ?? '';
                             const label = alias || `Scoreboard ${sbId}`;

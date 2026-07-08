@@ -15,9 +15,7 @@ import TeamPanel from '../../components/scoreboard/TeamPanel';
 import ScoreControls from '../../components/scoreboard/ScoreControls';
 import ActiveMatchupStats from '../../components/scoreboard/ActiveMatchupStats';
 import DiamondPanel from '../../components/scoreboard/DiamondPanel';
-import RotationControls from '../../components/scoreboard/RotationControls';
-import LiveGameSelector from '../../components/scoreboard/LiveGameSelector';
-import CompletedGameInfo from '../../components/scoreboard/CompletedGameInfo';
+import PoolBrowser from '../../components/scoreboard/PoolBrowser';
 
 /**
  * A single scoreboard instance (team panels + score controls).
@@ -31,28 +29,28 @@ function ScoreboardTab({ scoreboardNumber }) {
     const hudEnabled = useSettingsStore(s => s?.project_rio?.hud_enabled ?? true);
     const transport = (scoreboardNumber === 1 && hudEnabled) ? 'hud' : 'api';
 
-    // Binding: kind (single | set) + the currently-followed gameId.
-    const kind = useSettingsStore(
-        s => s?.scoreboards?.binding?.[scoreboardNumber]?.kind
-            ?? s?.scoreboards?.binding?.[String(scoreboardNumber)]?.kind
+    // Binding: playback.mode (single | rotate) + the currently-followed gameId.
+    const mode = useSettingsStore(
+        s => s?.scoreboards?.binding?.[scoreboardNumber]?.playback?.mode
+            ?? s?.scoreboards?.binding?.[String(scoreboardNumber)]?.playback?.mode
             ?? 'single'
     );
     const gameId = useSettingsStore(
-        s => s?.scoreboards?.binding?.[scoreboardNumber]?.gameId
-            ?? s?.scoreboards?.binding?.[String(scoreboardNumber)]?.gameId
+        s => s?.scoreboards?.binding?.[scoreboardNumber]?.playback?.gameId
+            ?? s?.scoreboards?.binding?.[String(scoreboardNumber)]?.playback?.gameId
             ?? null
     );
 
     // Effective read-only mode for the editor components (they still key off a
     // "sourceType" string): HUD and a loaded single game are read-only; an
-    // empty single board and a set/feed board stay editable.
+    // empty single board and a rotating pool stay editable.
     const effectiveSourceType = transport === 'hud'
         ? 'hud'
-        : (kind === 'single' && gameId != null ? 'live_game' : 'manual');
+        : (mode === 'single' && gameId != null ? 'live_game' : 'manual');
 
-    const handleSetKind = useCallback(async (newKind) => {
+    const handleSetMode = useCallback(async (newMode) => {
         await fetch(
-            `/api/v1/scoreboards/${scoreboardNumber}/binding?kind=${newKind}`,
+            `/api/v1/scoreboards/${scoreboardNumber}/binding?kind=${newMode}`,
             { method: 'PUT' },
         ).catch(() => {});
     }, [scoreboardNumber]);
@@ -106,9 +104,6 @@ function ScoreboardTab({ scoreboardNumber }) {
                         playerCount={1}
                         sourceType={effectiveSourceType}
                     />
-                    {kind === 'set' && (
-                        <CompletedGameInfo scoreboardNumber={scoreboardNumber} />
-                    )}
                     <ActiveMatchupStats scoreboardNumber={scoreboardNumber} />
                 </Stack>
             </div>
@@ -119,8 +114,8 @@ function ScoreboardTab({ scoreboardNumber }) {
                         scoreboardNumber={scoreboardNumber}
                         onSwapTeams={handleSwapTeams}
                         transport={transport}
-                        kind={kind}
-                        onSetKind={handleSetKind}
+                        mode={mode}
+                        onSetMode={handleSetMode}
                     />
                     <DiamondPanel scoreboardNumber={scoreboardNumber} />
                 </Stack>
@@ -134,11 +129,8 @@ function ScoreboardTab({ scoreboardNumber }) {
                         playerCount={1}
                         sourceType={effectiveSourceType}
                     />
-                    {transport !== 'hud' && kind === 'single' && (
-                        <LiveGameSelector scoreboardNumber={scoreboardNumber} />
-                    )}
-                    {kind === 'set' && (
-                        <RotationControls scoreboardNumber={scoreboardNumber} />
+                    {transport !== 'hud' && (
+                        <PoolBrowser scoreboardNumber={scoreboardNumber} />
                     )}
                 </Stack>
             </div>
@@ -148,17 +140,17 @@ function ScoreboardTab({ scoreboardNumber }) {
 
 // Tinted-translucent chips per the Rio brand — never solid fills.
 const BADGES = {
-    hud:  { color: 'bg-[#22c55e]/15 text-[#4ade80]', label: 'HUD' },
-    api:  { color: 'bg-[#3b82f6]/15 text-[#60a5fa]', label: 'API' },
-    set:  { color: 'bg-[#a855f7]/15 text-[#c084fc]', label: 'Set' },
+    hud:    { color: 'bg-[#22c55e]/15 text-[#4ade80]', label: 'HUD' },
+    api:    { color: 'bg-[#3b82f6]/15 text-[#60a5fa]', label: 'API' },
+    rotate: { color: 'bg-[#a855f7]/15 text-[#c084fc]', label: 'Rotator' },
 };
 
 // Resolve the single tab badge from transport + binding. Empty single boards
 // (manual/editable) get no badge.
-function tabBadge({ transport, kind, gameId }) {
+function tabBadge({ transport, mode, gameId }) {
     if (transport === 'hud') return BADGES.hud;
-    if (kind === 'set') return BADGES.set;
-    if (kind === 'single' && gameId != null) return BADGES.api;
+    if (mode === 'rotate') return BADGES.rotate;
+    if (mode === 'single' && gameId != null) return BADGES.api;
     return null;
 }
 
@@ -268,8 +260,8 @@ export default function ScoreboardManager() {
                         const transport = (sbId === 1 && hudEnabled) ? 'hud' : 'api';
                         const badge = tabBadge({
                             transport,
-                            kind: bind.kind ?? 'single',
-                            gameId: bind.gameId ?? loadedGameIds[sbId] ?? null,
+                            mode: bind.playback?.mode ?? 'single',
+                            gameId: bind.playback?.gameId ?? loadedGameIds[sbId] ?? null,
                         });
                         const alias = aliases[sbId] ?? aliases[String(sbId)] ?? '';
                         return (

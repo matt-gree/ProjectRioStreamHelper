@@ -27,7 +27,7 @@ const num = (v, fallback = 0) => {
 
 const bindingOptions = [
     { value: 'single', label: 'Single Game' },
-    { value: 'set',    label: 'Multiple Games' },
+    { value: 'rotate', label: 'Rotator' },
 ];
 
 // Count-dot colors keyed by the legacy Mantine color name.
@@ -60,7 +60,7 @@ function CountDots({ count, max, color, onChange }) {
 /**
  * Central score column: scores, baseball state, match info.
  */
-export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, transport = 'api', kind = 'single', onSetKind }) {
+export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, transport = 'api', mode = 'single', onSetMode }) {
     const base = `score.${scoreboardNumber}`;
     const setItem = useStateStore(s => s.setItem);
     const settingsSetItem = useSettingsStore(s => s.setItem);
@@ -284,8 +284,8 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, trans
                     ) : (
                         <SimpleSelect
                             data={bindingOptions}
-                            value={kind}
-                            onChange={val => onSetKind?.(val)}
+                            value={mode}
+                            onChange={val => onSetMode?.(val)}
                         />
                     )}
                 </div>
