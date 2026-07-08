@@ -36,23 +36,18 @@ const SETTINGS_TYPE = 'postgamecallout';
 const PORT_COLORS = ['#e53935', '#1e88e5', '#fdd835', '#43a047'];
 const NEUTRAL_ACCENT = '#f59e0b';
 
-// The new full-body character pack is lower-cased, space-stripped; one name in
-// MSB's roster ("Monty") files under its full species name.
-const CHAR_ART_ALIAS = { Monty: 'montymole' };
-
 let _cssInjected = false;
 
 // ── art URLs ────────────────────────────────────────────────────────────────
+// Character/captain art is keyed by the canonical HUD character id (see
+// OverlayBase.charId / server/rio/pyrio/assets.py), not by name.
 function charArtUrl(name) {
-  if (!name) return '';
-  const slug = CHAR_ART_ALIAS[name] || name.toLowerCase().replace(/\s+/g, '');
-  // encodeURIComponent leaves ( ) untouched, matching the on-disk filenames
-  // (e.g. "Dry Bones(Gy)" -> drybones(gy).png).
-  return `${OverlayBase.BASE_URL}/game_assets/msb/characters/${encodeURIComponent(slug)}.png`;
+  const id = OverlayBase.charId(name);
+  return id === undefined ? '' : `${OverlayBase.BASE_URL}/game_assets/msb/characters/${id}.png`;
 }
 function captainArtUrl(name) {
-  if (!name) return '';
-  return `${OverlayBase.BASE_URL}/game_assets/msb/captains/file_${encodeURIComponent(name.replace(/\s+/g, ''))}.png`;
+  const id = OverlayBase.charId(name);
+  return id === undefined ? '' : `${OverlayBase.BASE_URL}/game_assets/msb/captains/${id}.png`;
 }
 
 // ── styles (scoped under .pc-root so it can live in any container) ───────────
