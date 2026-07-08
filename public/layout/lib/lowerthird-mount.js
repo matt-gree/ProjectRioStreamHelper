@@ -372,9 +372,9 @@ export function mountLowerThird({ host }) {
 
   // ── per-type binders ──────────────────────────────────────────────────────
   function spriteUrl(captain) {
-    if (!captain) return '';
-    return (window.RioData && RioData.charIconUrl) ? RioData.charIconUrl(captain)
-      : `${OverlayBase.BASE_URL}/game_assets/msb/characterIcons/${encodeURIComponent(captain)}.png`;
+    if (window.RioData && RioData.charIconUrl) return RioData.charIconUrl(captain);
+    const id = OverlayBase.charId(captain);
+    return id === undefined ? '' : `${OverlayBase.BASE_URL}/game_assets/msb/characterIcons/${id}.png`;
   }
 
   function bindLogo(seg, slot) {

@@ -60,15 +60,16 @@
     // roster-derived team name (msb_team) when no banner is set.
     const LOGO_KEY = `score.${SCOREBOARD}.player.${TEAM_NUM}.logo`;
     const TEAM_KEY = `score.${SCOREBOARD}.player.${TEAM_NUM}.msb_team`;
-    const { deepGet, BASE_URL, state } = OverlayBase;
+    const { deepGet, teamId, BASE_URL, state } = OverlayBase;
 
     function render() {
       const container = document.getElementById('team-logo-container');
       container.innerHTML = '';
       const teamName = deepGet(state, LOGO_KEY) || deepGet(state, TEAM_KEY);
-      if (teamName) {
+      const id = teamId(teamName);
+      if (id !== undefined) {
         const img = document.createElement('img');
-        img.src = `${BASE_URL}/game_assets/msb/teamLogos/${encodeURIComponent(teamName)}.png`;
+        img.src = `${BASE_URL}/game_assets/msb/teamLogos/${id}.png`;
         img.className = 'team-logo';
         img.onerror = () => img.style.display = 'none';
         container.appendChild(img);

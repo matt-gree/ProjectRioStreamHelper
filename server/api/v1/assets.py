@@ -8,6 +8,7 @@ from fastapi.responses import ORJSONResponse
 
 from server.paths import default_msb_assets_dir
 from server.rio.pyrio.assets import (
+    required_captain_filenames,
     required_character_filenames,
     required_game_icon_filenames,
     required_team_filenames,
@@ -36,6 +37,8 @@ async def get_msb_assets_path() -> Path:
 # filenames. The callables are pyrio's authoritative source of truth.
 REQUIRED_CATEGORIES: dict[str, callable] = {
     "characterIcons": required_character_filenames,
+    "characters": required_character_filenames,
+    "captains": required_captain_filenames,
     "teamLogos": required_team_filenames,
     "gameIcons": required_game_icon_filenames,
 }

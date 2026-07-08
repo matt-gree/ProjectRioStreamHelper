@@ -20,8 +20,9 @@
 
   // ── URL helpers ──────────────────────────────────────────────────────────
   function charIconUrl(name) {
-    if (!name) return '';
-    return `${OverlayBase.BASE_URL}/game_assets/msb/characterIcons/${encodeURIComponent(name)}.png`;
+    const id = OverlayBase.charId(name);
+    if (id === undefined) return '';
+    return `${OverlayBase.BASE_URL}/game_assets/msb/characterIcons/${id}.png`;
   }
 
   function roleIconUrl(role) {
@@ -30,8 +31,9 @@
   }
 
   function teamLogoUrl(teamName) {
-    if (!teamName) return '';
-    return `${OverlayBase.BASE_URL}/game_assets/msb/teamLogos/${encodeURIComponent(teamName)}.png`;
+    const id = OverlayBase.teamId(teamName);
+    if (id === undefined) return '';
+    return `${OverlayBase.BASE_URL}/game_assets/msb/teamLogos/${id}.png`;
   }
 
   // ── Number formatting ────────────────────────────────────────────────────

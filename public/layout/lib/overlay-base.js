@@ -46,16 +46,58 @@
     if (cur != null && typeof cur === 'object') delete cur[keys[keys.length - 1]];
   }
 
+  // ── Character/team asset ids ──
+  // Character (and captain) art is keyed by the canonical HUD character id
+  // (0-53), not by name — mirrors pyrio's LookupDicts.CHAR_NAME. Team logos
+  // have no HUD-native id, so they're keyed by their own 0-47 enumeration —
+  // mirrors pyrio's in_game_team_names_list index order. See
+  // server/rio/pyrio/assets.py for the canonical source.
+  const CHAR_IDS = {
+    "Mario": 0, "Luigi": 1, "DK": 2, "Diddy": 3, "Peach": 4, "Daisy": 5,
+    "Yoshi": 6, "Baby Mario": 7, "Baby Luigi": 8, "Bowser": 9, "Wario": 10,
+    "Waluigi": 11, "Koopa(G)": 12, "Toad(R)": 13, "Boo": 14, "Toadette": 15,
+    "Shy Guy(R)": 16, "Birdo": 17, "Monty": 18, "Bowser Jr": 19,
+    "Paratroopa(R)": 20, "Pianta(B)": 21, "Pianta(R)": 22, "Pianta(Y)": 23,
+    "Noki(B)": 24, "Noki(R)": 25, "Noki(G)": 26, "Bro(H)": 27,
+    "Toadsworth": 28, "Toad(B)": 29, "Toad(Y)": 30, "Toad(G)": 31,
+    "Toad(P)": 32, "Magikoopa(B)": 33, "Magikoopa(R)": 34, "Magikoopa(G)": 35,
+    "Magikoopa(Y)": 36, "King Boo": 37, "Petey": 38, "Dixie": 39,
+    "Goomba": 40, "Paragoomba": 41, "Koopa(R)": 42, "Paratroopa(G)": 43,
+    "Shy Guy(B)": 44, "Shy Guy(Y)": 45, "Shy Guy(G)": 46, "Shy Guy(Bk)": 47,
+    "Dry Bones(Gy)": 48, "Dry Bones(G)": 49, "Dry Bones(R)": 50,
+    "Dry Bones(B)": 51, "Bro(F)": 52, "Bro(B)": 53,
+  };
+
+  const TEAM_IDS = {
+    "Mario Heroes": 0, "Mario Fireballs": 1, "Mario Sunshines": 2, "Mario All Stars": 3,
+    "Luigi Gentlemen": 4, "Luigi Vacuums": 5, "Luigi Mansioneers": 6, "Luigi Leapers": 7,
+    "Peach Roses": 8, "Peach Dynasties": 9, "Peach Monarchs": 10, "Peach Princesses": 11,
+    "Daisy Lillies": 12, "Daisy Cupids": 13, "Daisy Queen Bees": 14, "Daisy Petals": 15,
+    "Yoshi Eggs": 16, "Yoshi Speed Stars": 17, "Yoshi Islanders": 18, "Yoshi Flutters": 19,
+    "Birdo Beauties": 20, "Birdo Models": 21, "Birdo Bows": 22, "Birdo Fans": 23,
+    "Wario Garlics": 24, "Wario Steakheads": 25, "Wario Greats": 26, "Wario Beasts": 27,
+    "Waluigi Mystiques": 28, "Waluigi Smart Alecks": 29, "Waluigi Flankers": 30, "Waluigi Mashers": 31,
+    "DK Explorers": 32, "DK Wild Ones": 33, "DK Kongs": 34, "DK Animals": 35,
+    "Diddy Survivors": 36, "Diddy Ninjas": 37, "Diddy Tails": 38, "Diddy Red Caps": 39,
+    "Bowser Flames": 40, "Bowser Blue Shells": 41, "Bowser Monsters": 42, "Bowser Black Stars": 43,
+    "Jr Fangs": 44, "Jr Bombers": 45, "Jr Pixies": 46, "Jr Rookies": 47,
+  };
+
+  function charId(name) { return CHAR_IDS[name]; }
+  function teamId(teamName) { return TEAM_IDS[teamName]; }
+
   // ── Image helpers ──
   function charImg(name, cls, size) {
-    if (!name) return '';
+    const id = charId(name);
+    if (id === undefined) return '';
     const s = size ? `width:${size}px;height:${size}px;` : '';
-    return `<img class="${cls}" src="${BASE_URL}/game_assets/msb/characterIcons/${encodeURIComponent(name)}.png" style="${s}" onerror="this.style.display='none'" />`;
+    return `<img class="${cls}" src="${BASE_URL}/game_assets/msb/characterIcons/${id}.png" style="${s}" onerror="this.style.display='none'" />`;
   }
 
   function logoImg(teamName, cls) {
-    if (!teamName) return '';
-    return `<img class="${cls}" src="${BASE_URL}/game_assets/msb/teamLogos/${encodeURIComponent(teamName)}.png" onerror="this.style.display='none'" />`;
+    const id = teamId(teamName);
+    if (id === undefined) return '';
+    return `<img class="${cls}" src="${BASE_URL}/game_assets/msb/teamLogos/${id}.png" onerror="this.style.display='none'" />`;
   }
 
   // ── State & settings stores ──
@@ -480,6 +522,8 @@
     deepGet,
     deepSet,
     deepUnset,
+    charId,
+    teamId,
     charImg,
     logoImg,
     applyAccentColor,

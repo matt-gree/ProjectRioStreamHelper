@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { MSB_CHARACTER_IDS, MSB_TEAM_IDS } from '../data/msb';
 
 // Bumping `version` invalidates browser-cached MSB image URLs by changing
 // their `?v=` query string, so newly-dropped assets render without a hard
@@ -10,8 +11,14 @@ export const useAssetsVersionStore = create((set) => ({
 }));
 
 const buildPaths = (v) => ({
-    charIcon: (name) => `/game_assets/msb/characterIcons/${encodeURIComponent(name)}.png?v=${v}`,
-    teamIcon: (name) => `/game_assets/msb/teamLogos/${encodeURIComponent(name)}.png?v=${v}`,
+    charIcon: (name) => {
+        const id = MSB_CHARACTER_IDS[name];
+        return id === undefined ? undefined : `/game_assets/msb/characterIcons/${id}.png?v=${v}`;
+    },
+    teamIcon: (name) => {
+        const id = MSB_TEAM_IDS[name];
+        return id === undefined ? undefined : `/game_assets/msb/teamLogos/${id}.png?v=${v}`;
+    },
     gameIcon: (file) => `/game_assets/msb/gameIcons/${file}?v=${v}`,
 });
 

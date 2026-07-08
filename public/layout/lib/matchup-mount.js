@@ -85,14 +85,14 @@ export function mountMatchup({ host }) {
   let disposed = false;
 
   function charIconUrl(name) {
-    if (!name) return '';
-    return (window.RioData && RioData.charIconUrl) ? RioData.charIconUrl(name)
-      : `${OverlayBase.BASE_URL}/game_assets/msb/characterIcons/${encodeURIComponent(name)}.png`;
+    if (window.RioData && RioData.charIconUrl) return RioData.charIconUrl(name);
+    const id = OverlayBase.charId(name);
+    return id === undefined ? '' : `${OverlayBase.BASE_URL}/game_assets/msb/characterIcons/${id}.png`;
   }
   function teamLogoUrl(team) {
-    if (!team) return '';
-    return (window.RioData && RioData.teamLogoUrl) ? RioData.teamLogoUrl(team)
-      : `${OverlayBase.BASE_URL}/game_assets/msb/teamLogos/${encodeURIComponent(team)}.png`;
+    if (window.RioData && RioData.teamLogoUrl) return RioData.teamLogoUrl(team);
+    const id = OverlayBase.teamId(team);
+    return id === undefined ? '' : `${OverlayBase.BASE_URL}/game_assets/msb/teamLogos/${id}.png`;
   }
 
   // Try each candidate URL in order; bind the first that loads, else hide the
