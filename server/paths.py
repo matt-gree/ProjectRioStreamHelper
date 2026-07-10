@@ -84,6 +84,23 @@ def ensure_rio_visualizer_on_path() -> None:
         sys.path.insert(0, d)
 
 
+def ensure_pyrio_importable() -> None:
+    """Alias PRSH's vendored pyrio under the top-level name ``pyrio`` (idempotent).
+
+    pyrio lives at ``server/rio/pyrio`` and PRSH imports it as
+    ``server.rio.pyrio``. RioVisualizer (a standalone submodule) imports the hit
+    simulation engine as top-level ``pyrio`` (``from pyrio.hit_simulator...``).
+    Aliasing our single copy into ``sys.modules`` makes that import resolve to
+    the *same* package object instead of RioVisualizer pulling in its own nested
+    pyrio checkout — one canonical engine, no version drift. Must run before
+    ``rio_visualizer.api`` is first imported.
+    """
+    if "pyrio" in sys.modules:
+        return
+    import importlib
+    sys.modules["pyrio"] = importlib.import_module("server.rio.pyrio")
+
+
 def ensure_game_data():
     """Copy bundled game config files to the writable user_data on first run.
 
