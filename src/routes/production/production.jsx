@@ -3,7 +3,7 @@ import { useShallow } from 'zustand/react/shallow';
 import {
     Radio, Eye, EyeOff, Globe, PlugZap, MonitorPlay, ArrowLeftRight, ChevronDown,
     ChevronRight, ChevronsUpDown, Check, RotateCcw, Sparkles, Columns2, Settings,
-    Captions, GripVertical, Plus, X, Trophy, Trash2, CircleDot,
+    Captions, Plus, X, Trophy, Trash2, CircleDot,
 } from 'lucide-react';
 import { useObsStore } from '../../context/obs';
 import { useSettingsStore, useStateStore } from '../../context/store';
@@ -19,6 +19,7 @@ import {
 } from '../../context/match';
 import {
     useStagingStore, stageOrRun, usePending, commitPending, eventMatchesHotkey,
+    confirmModeEnabled,
 } from '../../context/staging';
 import ParticipantPicker from '../../components/ParticipantPicker';
 import StartggSetPicker from '../../components/StartggSetPicker';
@@ -211,6 +212,29 @@ function stageStateSet(stateKey, value, label) {
         value,
         run: () => useStateStore.getState().setItems([{ key: stateKey, value }]),
     });
+}
+
+// Stacked ▲/▼ — the reorder control shared by the list faces (commentary
+// desk, lower-third slots, schedule queue). Deliberately buttons, not drag:
+// native HTML5 drag needs a mouse pointer, and the Production page is also
+// driven from phones/tablets at the venue.
+function MoveButtons({ canUp, canDown, onUp, onDown, label }) {
+    return (
+        <Stack gap="none" className="shrink-0">
+            <button
+                type="button" disabled={!canUp} onClick={onUp} aria-label={`Move ${label} up`}
+                className="text-muted-foreground hover:text-foreground disabled:opacity-30"
+            >
+                <ChevronRight size={12} className="-rotate-90" />
+            </button>
+            <button
+                type="button" disabled={!canDown} onClick={onDown} aria-label={`Move ${label} down`}
+                className="text-muted-foreground hover:text-foreground disabled:opacity-30"
+            >
+                <ChevronRight size={12} className="rotate-90" />
+            </button>
+        </Stack>
+    );
 }
 
 // Amber "staged, not live yet" marker rendered next to pending controls.
@@ -1042,21 +1066,13 @@ function useCommentaryDesk() {
     };
 }
 
-// Condensed Commentary face — ONE row per caster: grip (drag to reorder) ·
+// Condensed Commentary face — ONE row per caster: move ▲/▼ (reorder) ·
 // on-air eye · person picker · sub-plate field · sub-plate toggle · remove.
 // The in-depth roster authoring (contact fields, socials) lives on the
-// Commentary tab; this face covers the live decisions. Native HTML5 drag,
-// armed only by the grip handle so the selects/picker stay interactive.
+// Commentary tab; this face covers the live decisions. Reorder is buttons,
+// not drag, so it works from a phone (see MoveButtons).
 function CommentaryFace() {
     const desk = useCommentaryDesk();
-    const [dragIndex, setDragIndex] = useState(null);
-    const [overIndex, setOverIndex] = useState(null);
-    const [dragArmed, setDragArmed] = useState(false);
-
-    const onDrop = (to) => {
-        if (dragIndex != null && dragIndex !== to) desk.reorder(dragIndex, to);
-        setDragIndex(null); setOverIndex(null); setDragArmed(false);
-    };
 
     return (
         <Stack gap="xs">
@@ -1076,26 +1092,14 @@ function CommentaryFace() {
                 return (
                     <div
                         key={i}
-                        draggable={dragArmed}
-                        onDragStart={() => setDragIndex(i)}
-                        onDragOver={(e) => { e.preventDefault(); if (overIndex !== i) setOverIndex(i); }}
-                        onDrop={() => onDrop(i)}
-                        onDragEnd={() => { setDragIndex(null); setOverIndex(null); setDragArmed(false); }}
-                        className={cn(
-                            'flex items-center gap-1.5 rounded-md border border-border/60 bg-background/40 px-1.5 py-1',
-                            dragIndex === i && 'opacity-50',
-                            overIndex === i && dragIndex !== i && 'border-rio-400',
-                        )}
+                        className="flex items-center gap-1.5 rounded-md border border-border/60 bg-background/40 px-1.5 py-1"
                     >
-                        <button
-                            type="button"
-                            onMouseDown={() => setDragArmed(true)}
-                            onMouseUp={() => setDragArmed(false)}
-                            className="shrink-0 cursor-grab text-muted-foreground hover:text-foreground active:cursor-grabbing"
-                            title="Drag to reorder"
-                        >
-                            <GripVertical size={14} />
-                        </button>
+                        <MoveButtons
+                            label={`caster ${i + 1}`}
+                            canUp={i > 0} canDown={i < desk.slots.length - 1}
+                            onUp={() => desk.reorder(i, i - 1)}
+                            onDown={() => desk.reorder(i, i + 1)}
+                        />
                         <SimpleTooltip label={visible ? 'On air — click to hide' : 'Hidden — click to show'}>
                             <button
                                 type="button"
@@ -1446,7 +1450,7 @@ function ElementOptions({ element, hideTarget = false, hideVisibility = false })
 // direct element (scoreboard) is just a visibility toggle, no gear.
 function elementHasSetup(element) {
     return element.id === 'hitvisualizer' || element.id === 'commentary'
-        || element.id === 'lowerthird' || element.id === 'matchuphistory'
+        || element.id === 'matchuphistory'
         || element.id === 'schedule' || element.id === 'playerplates'
         || element.flavor === 'fed';
 }
@@ -1468,7 +1472,6 @@ function ElementSetup({ element }) {
     if (element.id === 'hitvisualizer') return <HitVizSetup />;
     if (element.id === 'commentary') return <CommentarySetup />;
     if (element.id === 'playerplates') return <PlayerPlatesSetup />;
-    if (element.id === 'lowerthird') return <LowerThirdSetup />;
     if (element.id === 'schedule') return <ScheduleSetup />;
     if (element.id === 'matchuphistory') return <MatchupSetup />;
     if (element.flavor === 'fed') return <FedSetup element={element} />;
@@ -1543,13 +1546,14 @@ function FedSetup({ element }) {
 // A direct element with rich authoring: the band is FIVE independently
 // toggleable SLOTS (lowerthird.slots.1..5, left→right), each carrying one
 // content type — logo · match · scorebox · merch · clock · message · bracket.
-// The face is the live surface (per-slot on/off + clock transport); the gear
-// holds each slot's content editor. Values are written (through the staging
-// gateway) to lowerthird.* state, which the SVG overlay renders; segment
-// widths/looks belong to the active design package's theme. Putting the band
-// on air is still the OBS source toggle. Clock START/PAUSE/RESET are
-// transport — momentary, always immediate — while slot content/config stages
-// like other content.
+// EVERYTHING lives on the face (no gear): each slot row is a type picker +
+// on/off switch, and expands in place to that type's content editor — picking
+// a type auto-expands the row so authoring never hides behind a menu. Values
+// are written (through the staging gateway) to lowerthird.* state, which the
+// SVG overlay renders; segment widths/looks belong to the active design
+// package's theme. Putting the band on air is still the OBS source toggle.
+// Clock START/PAUSE/RESET are transport — momentary, always immediate —
+// while slot content/config stages like other content.
 const LT_INPUT = 'w-full rounded-md border border-border bg-card px-2 py-1 text-sm text-foreground';
 
 const LT_SLOT_COUNT = 5;
@@ -1586,13 +1590,20 @@ function useTick(ms = 500, on = true) {
 
 // lowerthird.* with staged-value display: `val('slots.1.title', live)` returns
 // the pending value when one is staged; `setKey` routes through the staging
-// gateway. `slot(i)` reads one authored slot's live object. One subscription
-// to the pending map covers every field.
+// gateway. `slot(i)` reads one authored slot's object — a staged whole-slot
+// value (a reorder swap) wins over live, so repeated moves compose before a
+// commit. One subscription to the pending map covers every field. `swap`
+// exchanges two positions wholesale (slot objects carry all their content, so
+// a move keeps titles/clock/etc. with the slot).
 function useLowerThird() {
     const lt = useStateStore(useShallow(s => s?.lowerthird ?? {}));
     const matches = useStateStore(useShallow(s => s?.match ?? {}));
     const pendingMap = useStagingStore(s => s.pending);
-    const slot = (i) => (lt.slots || {})[i] || (lt.slots || {})[String(i)] || {};
+    const slot = (i) => {
+        const p = pendingMap[`state:lowerthird.slots.${i}`];
+        if (p) return p.value || {};
+        return (lt.slots || {})[i] || (lt.slots || {})[String(i)] || {};
+    };
     const val = (key, live) => {
         const p = pendingMap[`state:lowerthird.${key}`];
         return p ? p.value : live;
@@ -1600,7 +1611,24 @@ function useLowerThird() {
     const isStaged = (key) => !!pendingMap[`state:lowerthird.${key}`];
     const setKey = (key, value, label) =>
         stageStateSet(`lowerthird.${key}`, value, label || `Lower third: ${key}`);
-    return { lt, matches, slot, val, isStaged, setKey };
+    const swap = (i, j) => {
+        if (j < 1 || j > LT_SLOT_COUNT || i === j) return;
+        const a = slot(i);
+        const b = slot(j);
+        // Live mode: one atomic batch — two sequential sets would flash a
+        // duplicated slot on an on-air band for a frame. Confirm mode: two
+        // staged whole-slot entries so both rows show/dot their pending value.
+        if (!confirmModeEnabled()) {
+            useStateStore.getState().setItems([
+                { key: `lowerthird.slots.${i}`, value: b },
+                { key: `lowerthird.slots.${j}`, value: a },
+            ]);
+            return;
+        }
+        setKey(`slots.${i}`, b, `Lower third: slot ${j} → ${i}`);
+        setKey(`slots.${j}`, a, `Lower third: slot ${i} → ${j}`);
+    };
+    return { lt, matches, slot, val, isStaged, setKey, swap };
 }
 
 function fmtRemaining(ms) {
@@ -1692,40 +1720,83 @@ function ltSlotSummary(type, s, matches) {
     return s.title || '';
 }
 
+// One face row = one band slot: move ▲/▼ (reorder, phone-friendly buttons) ·
+// chevron (expand editor) · type picker · staged dot · on/off. Collapsed rows
+// show a one-line summary of their content; picking a type auto-expands the
+// row's editor in place.
+function LowerThirdSlotRow({ i, expanded, setExpanded }) {
+    const { matches, slot, val, isStaged, setKey, swap } = useLowerThird();
+    const s = slot(i);
+    const type = val(`slots.${i}.type`, s.type) || '';
+    const enabled = !!val(`slots.${i}.enabled`, s.enabled);
+    const summary = ltSlotSummary(type, s, matches);
+    const open = expanded && !!type;
+    return (
+        <div className="rounded-md border border-border/60">
+            <Group gap="xs" className="items-center px-1.5 py-1">
+                <MoveButtons
+                    label={`slot ${i}`}
+                    canUp={i > 1} canDown={i < LT_SLOT_COUNT}
+                    onUp={() => swap(i, i - 1)}
+                    onDown={() => swap(i, i + 1)}
+                />
+                <button
+                    type="button" disabled={!type}
+                    onClick={() => setExpanded(!expanded)}
+                    aria-label={`Slot ${i}: ${open ? 'collapse' : 'expand'} editor`}
+                    className="shrink-0 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-30"
+                >
+                    <ChevronRight size={13} className={cn('transition-transform', open && 'rotate-90')} />
+                </button>
+                <select
+                    className={cn(LT_INPUT, 'h-7 min-w-0 flex-1 py-0 text-xs')} value={type}
+                    onChange={(e) => {
+                        setKey(`slots.${i}.type`, e.target.value, `Lower third: slot ${i} type`);
+                        setExpanded(!!e.target.value);
+                    }}
+                >
+                    {LT_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+                <StagedDot show={isStaged(`slots.${i}`) || isStaged(`slots.${i}.enabled`) || isStaged(`slots.${i}.type`)} />
+                <Switch
+                    checked={enabled} disabled={!type}
+                    onCheckedChange={(v) => setKey(`slots.${i}.enabled`, v, `Lower third: slot ${i} ${v ? 'on' : 'off'}`)}
+                />
+            </Group>
+            {!open && summary && (
+                <Text size="xs" className="truncate px-1.5 pb-1 pl-7 text-muted-foreground">{summary}</Text>
+            )}
+            {open && (
+                <div className="border-t border-border/60 p-2">
+                    <LowerThirdSlotFields i={i} />
+                </div>
+            )}
+            {type === 'clock' && enabled && !open && (
+                <div className="px-1.5 pb-1.5 pl-7"><ClockControl i={i} /></div>
+            )}
+        </div>
+    );
+}
+
 function LowerThirdFace({ element }) {
-    const { matches, slot, val, isStaged, setKey } = useLowerThird();
+    // Which slot editors are open. Rows auto-open on a type pick and can be
+    // collapsed back to a summary line; empty slots have nothing to expand.
+    const [open, setOpen] = useState({});
     return (
         <Stack gap="sm">
             <DirectFace element={element} />
             <Stack gap="xs">
-                {Array.from({ length: LT_SLOT_COUNT }, (_, k) => k + 1).map((i) => {
-                    const s = slot(i);
-                    const type = val(`slots.${i}.type`, s.type) || '';
-                    const enabled = !!val(`slots.${i}.enabled`, s.enabled);
-                    const summary = ltSlotSummary(type, s, matches);
-                    return (
-                        <div key={i}>
-                            <Group gap="xs" className="items-center">
-                                <Text size="xs" className="w-4 shrink-0 text-muted-foreground">{i}</Text>
-                                <Stack gap="none" className="min-w-0 flex-1">
-                                    <Text size="sm" className={cn('truncate', type ? 'text-foreground' : 'text-muted-foreground')}>
-                                        {type ? LT_TYPE_LABEL[type] : 'Empty'}
-                                    </Text>
-                                    {summary && <Text size="xs" className="truncate text-muted-foreground">{summary}</Text>}
-                                </Stack>
-                                <StagedDot show={isStaged(`slots.${i}.enabled`) || isStaged(`slots.${i}.type`)} />
-                                <Switch
-                                    checked={enabled} disabled={!type}
-                                    onCheckedChange={(v) => setKey(`slots.${i}.enabled`, v, `Lower third: slot ${i} ${v ? 'on' : 'off'}`)}
-                                />
-                            </Group>
-                            {type === 'clock' && enabled && (
-                                <div className="mt-1 pl-6"><ClockControl i={i} /></div>
-                            )}
-                        </div>
-                    );
-                })}
+                {Array.from({ length: LT_SLOT_COUNT }, (_, k) => k + 1).map((i) => (
+                    <LowerThirdSlotRow
+                        key={i} i={i} expanded={!!open[i]}
+                        setExpanded={(v) => setOpen(o => ({ ...o, [i]: v }))}
+                    />
+                ))}
             </Stack>
+            <Text size="xs" className="text-muted-foreground">
+                Slots render left → right; widths come from the design package. A Space
+                slot splits the band and pushes content to the corners.
+            </Text>
         </Stack>
     );
 }
@@ -1820,9 +1891,9 @@ function BracketPhasePicker() {
     );
 }
 
-// One slot's content editor (inside the gear popover). Every field routes
-// through the staging gateway with the slot's key prefix.
-function LowerThirdSlotEditor({ i }) {
+// One slot's content editor (expanded in place under the face row). Every
+// field routes through the staging gateway with the slot's key prefix.
+function LowerThirdSlotFields({ i }) {
     const { matches, slot, val, isStaged, setKey } = useLowerThird();
     const activeRaw = useSettingsStore(s => s?.scoreboards?.active ?? [1]);
     const aliases = useSettingsStore(s => s?.scoreboards?.aliases ?? {});
@@ -1853,22 +1924,7 @@ function LowerThirdSlotEditor({ i }) {
     );
 
     return (
-        <Stack gap="xs" className="rounded-md border border-border p-2">
-            <Group gap="xs" className="items-center">
-                <Text size="xs" className="w-4 shrink-0 font-medium text-muted-foreground">{i}</Text>
-                <select
-                    className={LT_INPUT} value={type}
-                    onChange={(e) => setKey(p('type'), e.target.value, `Lower third: slot ${i} type`)}
-                >
-                    {LT_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-                <StagedDot show={isStaged(p('type')) || isStaged(p('enabled'))} />
-                <Switch
-                    checked={enabled} disabled={!type}
-                    onCheckedChange={(v) => setKey(p('enabled'), v, `Lower third: slot ${i} ${v ? 'on' : 'off'}`)}
-                />
-            </Group>
-
+        <Stack gap="xs">
             {type === 'logo' && (
                 <label className="flex flex-col gap-1">
                     {fieldLabel('title', 'Caption (optional; logo comes from Branding)')}
@@ -1960,6 +2016,7 @@ function LowerThirdSlotEditor({ i }) {
                     )}
                     {(clockMode === 'countdown' || clockMode === 'clock')
                         && textField('clock.label', 'Clock label (e.g. BACK IN)', c.label)}
+                    {enabled && clockMode !== 'off' && <ClockControl i={i} />}
                 </>
             )}
 
@@ -1991,20 +2048,6 @@ function LowerThirdSlotEditor({ i }) {
                     </Text>
                 </label>
             )}
-        </Stack>
-    );
-}
-
-function LowerThirdSetup() {
-    return (
-        <Stack gap="xs" className="max-h-[440px] overflow-y-auto pr-1">
-            <Text size="xs" className="text-muted-foreground">
-                Five band slots, left → right. Slot widths come from the active design package. Use a
-                Space slot to split the band into separate cards and push content to the corners.
-            </Text>
-            {Array.from({ length: LT_SLOT_COUNT }, (_, k) => k + 1).map((i) => (
-                <LowerThirdSlotEditor key={i} i={i} />
-            ))}
         </Stack>
     );
 }
@@ -2083,20 +2126,11 @@ function ScheduleFace({ element }) {
                     const live = !decided && m?.stage === 'live';
                     return (
                         <Group key={`${id}-${idx}`} gap="xs" className="flex-nowrap items-center">
-                            <Stack gap="none" className="shrink-0">
-                                <button
-                                    type="button" className="text-muted-foreground hover:text-foreground disabled:opacity-30"
-                                    disabled={idx === 0} onClick={() => move(idx, -1)} aria-label="Move up"
-                                >
-                                    <ChevronRight size={12} className="-rotate-90" />
-                                </button>
-                                <button
-                                    type="button" className="text-muted-foreground hover:text-foreground disabled:opacity-30"
-                                    disabled={idx === queue.length - 1} onClick={() => move(idx, 1)} aria-label="Move down"
-                                >
-                                    <ChevronRight size={12} className="rotate-90" />
-                                </button>
-                            </Stack>
+                            <MoveButtons
+                                label={`queued match ${idx + 1}`}
+                                canUp={idx > 0} canDown={idx < queue.length - 1}
+                                onUp={() => move(idx, -1)} onDown={() => move(idx, 1)}
+                            />
                             <Text size="sm" className={cn('min-w-0 flex-1 truncate', decided ? 'text-muted-foreground line-through' : 'text-foreground')}>
                                 {matchDisplayLabel(matches, String(id))}
                             </Text>

@@ -148,9 +148,10 @@ export const ELEMENTS = [
         // Break phase (also freely placeable mid-game). A re-themable SVG band
         // of FIVE independently toggleable slots (lowerthird.slots.1..5), each
         // one content type: logo · match · scorebox · merch · clock · message ·
-        // bracket. Direct element (own dedicated source); the face is per-slot
-        // on/off + clock transport, the gear holds each slot's content editor.
-        // Slot widths/looks belong to the design package. Native 1920×1080.
+        // bracket. Direct element (own dedicated source); everything lives on
+        // the face — each slot row is a type picker + on/off that expands in
+        // place to that slot's content editor (no gear). Slot widths/looks
+        // belong to the design package. Native 1920×1080.
         phase: 'break',
         flavor: 'direct',
         span: 6,

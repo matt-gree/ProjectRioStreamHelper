@@ -21,7 +21,8 @@
 //   match    : status, time, side1-name, side2-name, side1-sprite,
 //              side2-sprite, side1-score, side2-score   (scores = series wins)
 //   scorebox : status, side1-name, side2-name, side1-score, side2-score
-//   merch    : image, title, subtitle
+//   merch    : image, image-default (theme-baked artwork shown while no
+//              image is picked, e.g. Slice26's product cluster), title, subtitle
 //   clock    : clock-label, clock
 //   message  : title, subtitle
 //   bracket  : label, title, subtitle
@@ -453,6 +454,9 @@ export function mountLowerThird({ host }) {
     segText(seg, 'subtitle', slot.subtitle || '', { optional: true });
     const url = slot.image ? `${OverlayBase.BASE_URL}/branding/merch/${encodeURIComponent(slot.image)}` : '';
     segImage(seg, 'image', url);
+    // Theme-baked default artwork (like logo-default): visible until a
+    // specific merch image is picked in Production.
+    if (seg.slots['image-default']) seg.slots['image-default'].setAttribute('opacity', url ? '0' : '1');
   }
 
   function bindMessage(seg, slot) {
