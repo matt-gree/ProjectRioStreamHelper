@@ -124,6 +124,25 @@ export const ELEMENTS = [
         match: (url) => /callout-stage/i.test(url) || /callout/i.test(url),
     },
     {
+        id: 'postgamevs',
+        name: 'Game Summary',
+        // Post-game only: the full-screen player-vs-player end-of-game callout —
+        // both captains with team logos, the match context (tournament · round ·
+        // series) top-center, and the side totals (runs / hits / homeruns /
+        // stars won / strikeouts pitched) unfolding from the center line. Fed
+        // into the same Callout Stage as the Stat Callout: pushing writes
+        // production.feed.container.<id> = { element:'postgamevs', scoreboard }.
+        // Reads postgame.{N}.player.{T}.totals (Phase 6 capture). 1920×1080.
+        phase: 'post',
+        flavor: 'fed',
+        span: 4,
+        feed: 'postgamevs',
+        url: '/layout/shared/callout-stage.html',
+        width: 1920,
+        height: 1080,
+        match: (url) => /callout-stage/i.test(url) || /callout/i.test(url),
+    },
+    {
         id: 'lowerthird',
         name: 'Lower Third',
         // Break phase (also freely placeable mid-game). A re-themable SVG band

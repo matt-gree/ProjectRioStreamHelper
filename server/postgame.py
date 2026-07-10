@@ -23,10 +23,18 @@ stage still flips to ``post`` when a match is bound)::
     postgame.{N}.meta           { startDate, endDate, stadium, tagSetId,
                                   inningsSelected, inningsPlayed, isMercy,
                                   wasQuit, quitter, version, winnerSide }
-    postgame.{N}.player.{T}      { rioName, score, isWinner, captain,
+    postgame.{N}.player.{T}      { rioName, score, isWinner, captain, teamName,
+                                   totals { runs, hits, homeruns, stars_won,
+                                            strikeouts_pitched },
                                    characters: [ {rosterIndex, name, isStarred,
                                      isCaptain, battingHand, fieldingHand,
                                      wasPitcher, batting{…}, pitching{…}|None } ] }
+
+``totals`` is the side-level aggregate the Game Summary (player-vs-player)
+callout reads. ``stars_won`` has no stat-file field — it is derived from
+resolved Star Chance at-bats (see ``_stars_won``). ``teamName`` is the
+roster-derived MSB team name (live state clears ``msb_team`` for completed
+games, so the capture derives its own).
 
 The per-event ``Events`` array (the hit-viz / by-character source) is **not**
 broadcast into State — it is large and only the producer-triggered hit-viz reads
@@ -54,6 +62,8 @@ from server.rio.pyrio.stat_formatters import (
 # Single source of truth for the Title-Case stat-file keys → formatter kwargs.
 # The stat file's per-character Offensive/Defensive dicts use the same Title-Case
 # keys as the HUD file, so the HUD maps apply verbatim.
+from server.rio.pyrio.lookup import LookupDicts
+from server.rio.pyrio.team_name_algo import team_name
 from server.rio.stats_tracker import _HUD_BATTING_MAP, _HUD_PITCHING_MAP
 from server.settings import Settings
 from server.state import State
@@ -182,8 +192,106 @@ class PostGame:
         block["line"] = format_pitching_line(**raw)
         return block
 
+    # Decoded "Result of AB" label → numeric final-result code. Captures read
+    # the decoded stat file, where the code has been replaced by its label.
+    _FINAL_RESULT_CODES = {v: k for k, v in LookupDicts.FINAL_RESULT.items()}
+
     @classmethod
-    def _side_block(cls, stat: StatObj, team_num: int) -> dict:
+    def _stars_won(cls, events: list) -> tuple[int, int]:
+        """Stars WON per raw team ``(away, home)``.
+
+        A star is won by resolving a Star Chance at-bat: the at-bat's final
+        ``Result of AB`` decides it — the BATTING team wins on anything that
+        puts the batter on (hits, codes >= 7, and walks, codes 2-3); an out
+        (codes 1, 4-6) gives the star to the FIELDING team. ``Half Inning``
+        0 = top (away bats), 1 = bottom (home bats). Empty/malformed
+        events → (0, 0).
+        """
+        away = home = 0
+        for ev in events or []:
+            if not isinstance(ev, dict) or not ev.get("Star Chance"):
+                continue
+            result = ev.get("Result of AB")
+            code = result if isinstance(result, int) \
+                else cls._FINAL_RESULT_CODES.get(result, 0)
+            if not isinstance(code, int) or code <= 0:
+                continue  # at-bat not resolved on this event
+            home_batting = ev.get("Half Inning") == 1
+            batter_won = code >= 7 or code in (2, 3)
+            if batter_won == home_batting:
+                home += 1
+            else:
+                away += 1
+        return away, home
+
+    @classmethod
+    def _linescore(cls, events: list, stat: StatObj) -> tuple[list, list]:
+        """Per-inning runs ``(away, home)`` reconstructed from each event's
+        running ``Away Score`` / ``Home Score``.
+
+        Lists span the innings actually played (5 on mercy, 10+ on extras).
+        The home entry for the final inning is ``None`` when its bottom half
+        was never played (the broadcast "X" cell). The last inning is
+        reconciled against the final box score so runs that land after the
+        final recorded event (e.g. a walk-off) aren't dropped.
+        """
+        ordered = sorted((e for e in events or [] if isinstance(e, dict)),
+                         key=lambda e: e.get("Event Num", 0))
+        cum_away: dict[int, int] = {}
+        cum_home: dict[int, int] = {}
+        halves_seen: set[tuple[int, int]] = set()
+        run_a = run_h = 0
+        for ev in ordered:
+            inn = ev.get("Inning")
+            if not isinstance(inn, int) or inn < 1:
+                continue
+            a, h = ev.get("Away Score"), ev.get("Home Score")
+            if isinstance(a, int):
+                run_a = max(run_a, a)
+            if isinstance(h, int):
+                run_h = max(run_h, h)
+            cum_away[inn] = run_a
+            cum_home[inn] = run_h
+            halves_seen.add((inn, ev.get("Half Inning")))
+        if not cum_away:
+            return [], []
+
+        n = max(cum_away)
+        away: list = []
+        home: list = []
+        prev_a = prev_h = 0
+        for i in range(1, n + 1):
+            ca, ch = cum_away.get(i, prev_a), cum_home.get(i, prev_h)
+            away.append(max(ca - prev_a, 0))
+            home.append(max(ch - prev_h, 0))
+            prev_a, prev_h = ca, ch
+
+        try:
+            fa, fh = stat.score(0), stat.score(1)
+            if isinstance(fa, int) and fa > prev_a:
+                away[-1] += fa - prev_a
+            if isinstance(fh, int) and fh > prev_h:
+                home[-1] += fh - prev_h
+        except Exception:
+            pass
+
+        if (n, 1) not in halves_seen:
+            home[-1] = None
+        return away, home
+
+    @classmethod
+    def _side_totals(cls, stat: StatObj, team_num: int, stars_won: int) -> dict:
+        """Side-level aggregate line for the Game Summary callout."""
+        return {
+            "runs": stat.score(team_num),  # baseball score IS runs scored
+            "hits": stat.hits(team_num),
+            "homeruns": stat.homeruns(team_num),
+            "stars_won": stars_won,
+            "strikeouts_pitched": stat.strikeoutsPitched(team_num),
+        }
+
+    @classmethod
+    def _side_block(cls, stat: StatObj, team_num: int, stars_won: int = 0) -> dict:
         """One team's full box score. ``team_num`` 0=away, 1=home (pyrio's own
         version correction is applied inside StatObj)."""
         characters = []
@@ -206,11 +314,19 @@ class PostGame:
                 "pitching": cls._pitching_block(deff) if was_pitcher else None,
             })
         winner = stat.winning_team()
+        captain = stat.captain(team_num)
+        try:
+            # Live state clears msb_team for completed games, so derive it here.
+            msb_team = team_name(list(names), captain) or ""
+        except Exception:
+            msb_team = ""
         return {
             "rioName": stat.player(team_num),
             "score": stat.score(team_num),
             "isWinner": winner == team_num,
-            "captain": stat.captain(team_num),
+            "captain": captain,
+            "teamName": msb_team,
+            "totals": cls._side_totals(stat, team_num, stars_won),
             "characters": characters,
         }
 
@@ -249,6 +365,11 @@ class PostGame:
         away_name, home_name = stat.player(0), stat.player(1)
         t1, t2 = cls._orient(sb, away_name, home_name)
 
+        # Stars won / per-inning runs per raw team, indexable by the corrected
+        # team_num (0=away, 1=home — same space _orient's t1/t2 live in).
+        stars = dict(zip((0, 1), cls._stars_won(data.get("Events") or [])))
+        lines = dict(zip((0, 1), cls._linescore(data.get("Events") or [], stat)))
+
         winner_team = stat.winning_team()  # 0/1, or -1 tie
         winner_side = 1 if winner_team == t1 else 2 if winner_team == t2 else 0
 
@@ -272,9 +393,11 @@ class PostGame:
             "sourceFile": src_name,
             "meta": meta,
             "player": {
-                "1": cls._side_block(stat, t1),
-                "2": cls._side_block(stat, t2),
+                "1": cls._side_block(stat, t1, stars[t1]),
+                "2": cls._side_block(stat, t2, stars[t2]),
             },
+            # Per-inning runs by side; None = half not played ("X" cell).
+            "linescore": {"1": lines[t1], "2": lines[t2]},
             # Heavy; kept out of State, served via REST.
             "events": data.get("Events", []),
         }
@@ -294,6 +417,7 @@ class PostGame:
                 (f"{base}.meta", {}),
                 (f"{base}.player.1", {}),
                 (f"{base}.player.2", {}),
+                (f"{base}.linescore", {}),
             ]
         return [
             (f"{base}.present", True),
@@ -303,6 +427,7 @@ class PostGame:
             (f"{base}.meta", payload["meta"]),
             (f"{base}.player.1", payload["player"]["1"]),
             (f"{base}.player.2", payload["player"]["2"]),
+            (f"{base}.linescore", payload.get("linescore", {})),
         ]
 
     # ----- public API ------------------------------------------------------

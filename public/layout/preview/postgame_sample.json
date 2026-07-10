@@ -310,7 +310,15 @@
             },
             "pitching": null
           }
-        ]
+        ],
+        "teamName": "",
+        "totals": {
+          "runs": 3,
+          "hits": 14,
+          "homeruns": 0,
+          "stars_won": 1,
+          "strikeouts_pitched": 4
+        }
       },
       "2": {
         "rioName": "SteelyDad",
@@ -604,8 +612,40 @@
               "line": "9.0, 14 H, 3 R, 3 ER, 4 BB, 5 K, 0 HR, 87 P"
             }
           }
-        ]
+        ],
+        "teamName": "",
+        "totals": {
+          "runs": 4,
+          "hits": 6,
+          "homeruns": 2,
+          "stars_won": 3,
+          "strikeouts_pitched": 5
+        }
       }
+    },
+    "linescore": {
+      "1": [
+        1,
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "2": [
+        0,
+        2,
+        1,
+        0,
+        0,
+        1,
+        0,
+        0,
+        null
+      ]
     }
   },
   "score": {

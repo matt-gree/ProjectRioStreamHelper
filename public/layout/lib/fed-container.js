@@ -16,6 +16,7 @@
 import { mountHit } from '/layout/lib/hit-mount.js';
 import { mountStats } from '/layout/lib/stats-mount.js';
 import { mountPostgameCallout } from '/layout/lib/postgame-callout-mount.js';
+import { mountPostgameVs } from '/layout/lib/postgame-vs-mount.js';
 
 export function initFedContainer({ host, perf = false, skipState = false }) {
   const CONTAINER_ID = window.location.pathname.replace(/^.*\/([^/]+)\.html?(?:\?.*)?$/, '$1');
@@ -54,6 +55,8 @@ export function initFedContainer({ host, perf = false, skipState = false }) {
       mount = mountStats({ host });
     } else if (element === 'postgamecallout') {
       mount = mountPostgameCallout({ host });
+    } else if (element === 'postgamevs') {
+      mount = mountPostgameVs({ host });
     } else {
       return false; // element not wired for containers yet
     }
@@ -77,7 +80,9 @@ export function initFedContainer({ host, perf = false, skipState = false }) {
     skipState, // preview primes its own state and doesn't want live state racing in
     // This container's assignment, plus any score change (stats read across a
     // scoreboard; hit-mount.update no-ops unless the contact actually changed).
-    shouldRender: (key) => key.startsWith(FEED_KEY) || /^score\.\d+\./.test(key) || /^postgame\.\d+\./.test(key),
+    // tournamentInfo feeds the Game Summary's top match strip.
+    shouldRender: (key) => key.startsWith(FEED_KEY) || /^score\.\d+\./.test(key)
+      || /^postgame\.\d+\./.test(key) || key.startsWith('tournamentInfo.'),
     shouldRenderSettings: (key) => key.startsWith('overlays.') || key.startsWith('scoreboards.sources.'),
   });
 

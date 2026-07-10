@@ -222,15 +222,28 @@ Runtime colour seam: `--accent` (per-layout pin `overlays.matchup.accentColor`).
 
 ### `callout.svg`
 
-The post-game Stat Callout's full-bleed **backdrop layer** (the box-score
-content renders on top of it; `public/layout/lib/postgame-callout-mount.js`).
-No data slots — instead it recolors to the featured player via inherited vars:
+The full-bleed **backdrop layer** shared by both post-game callouts — the
+single-character Stat Callout (`public/layout/lib/postgame-callout-mount.js`)
+and the player-vs-player Game Summary
+(`public/layout/lib/postgame-vs-mount.js`). The stat content renders on top of
+it. No data slots — instead it recolors via inherited vars:
 
 | Variable | Meaning |
 |----------|---------|
-| `--port-color` | The featured player's controller-port accent (1–4). |
-| `--port-2` | A complementary port colour (secondary wash). |
+| `--port-color` | Stat Callout: the featured player's controller-port accent. Game Summary: side 1's colour. |
+| `--port-2` | Stat Callout: a complementary port colour. Game Summary: side 2's colour. |
 | `--accent` | The global design accent. |
+
+A package may also **declare** its fixed palette in a `<style>` block on the
+SVG root (slice26 does); the Game Summary mount reads these off the injected
+`<svg>` via `getComputedStyle` and keys its rails, glass wells and numerals to
+them. When absent it falls back to live controller-port colours:
+
+| Declared variable | Meaning |
+|-------------------|---------|
+| `--side1` / `--side2` | Fixed side colours (side 1 = left, side 2 = right). |
+| `--well` | Glass-well tint for the shared data card (any CSS color). |
+| `--accent-neutral` | Neutral accent (FINAL badge, winner pill, footer dots). |
 
 Keep important shapes away from the extreme edges (the reveal wipe clips it).
 

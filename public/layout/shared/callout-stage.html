@@ -3,8 +3,9 @@
 <!--
   Named shared container "Callout Stage" — a full 1920×1080 container that hosts
   whatever element the producer feeds it (production.feed.container.callout-stage).
-  Its first occupant is the post-game Stat Callout: a cinematic, port-coloured,
-  full-screen reveal of one finished-game roster character's box-score line.
+  Its occupants are the post-game callouts: the Stat Callout (one finished-game
+  roster character's box-score line) and the Game Summary (player-vs-player side
+  totals with captain heroes and the match context).
 
   Like every shared container this file is just the sized shell; the rendering
   lives in the reusable element mounts (postgame-callout-mount.js, and the others
@@ -27,7 +28,7 @@
   }
   </script>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=Chivo+Mono:wght@600;700;800&display=swap');
     html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
     /* Native full-canvas size hint; the callout mount scales the 1920×1080 stage
        to whatever size the OBS source is actually set to. */

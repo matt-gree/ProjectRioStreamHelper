@@ -708,6 +708,78 @@ function PostgameCalloutPicker({ element, scoreboard = 1 }) {
     );
 }
 
+// Content control for the 'postgamevs' fed element (Game Summary): push the
+// whole captured game — both sides — onto the shared Callout Stage. There is
+// nothing to pick beyond the scoreboard: pushing writes (through the staging
+// gateway) production.feed.container.<id> = { element:'postgamevs', scoreboard }
+// and the callout-stage container renders the player-vs-player summary from
+// postgame.{N}.player.{T}.totals.
+function PostgameVsPicker({ element, scoreboard = 1 }) {
+    const { container } = useContainerTarget(element.id, defaultContainerFor(element));
+    const { value: selection, staged, setFeed } = useFeedControl(container);
+    const pg = useStateStore(useShallow(s => {
+        const p = s?.postgame?.[scoreboard];
+        return {
+            present: p?.present, winnerSide: p?.meta?.winnerSide,
+            n1: p?.player?.[1]?.rioName, s1: p?.player?.[1]?.score,
+            n2: p?.player?.[2]?.rioName, s2: p?.player?.[2]?.score,
+            hasTotals: !!p?.player?.[1]?.totals,
+        };
+    }));
+
+    const mine = selection && selection.element === 'postgamevs'
+        && (selection.scoreboard == null || selection.scoreboard === scoreboard);
+    const occupiedByOther = selection && !mine;
+
+    const push = () => setFeed(
+        { element: 'postgamevs', scoreboard },
+        `Feed game summary: ${pg.n1 || 'Side 1'} vs ${pg.n2 || 'Side 2'}`,
+    );
+    const clear = () => setFeed(null);
+
+    if (!pg.present) {
+        return (
+            <Text size="sm" className="text-muted-foreground">
+                No captured game on scoreboard {scoreboard} yet — capture a finished game first
+                (the summary reads its box score).
+            </Text>
+        );
+    }
+
+    return (
+        <Stack gap="xs">
+            <Group gap="xs" className="items-center">
+                <Text size="sm" className="text-foreground">
+                    <span className={cn(pg.winnerSide === 1 && 'font-bold')}>{pg.n1 || 'Side 1'}</span> {pg.s1 ?? 0}
+                    <span className="mx-1 text-muted-foreground">–</span>
+                    {pg.s2 ?? 0} <span className={cn(pg.winnerSide === 2 && 'font-bold')}>{pg.n2 || 'Side 2'}</span>
+                </Text>
+                <StagedDot show={staged} />
+            </Group>
+            <Group gap="xs" className="items-center">
+                {mine ? (
+                    <Button size="sm" variant="ghost" onClick={clear}>Clear from stage</Button>
+                ) : (
+                    <Button size="sm" onClick={push}>Push game summary</Button>
+                )}
+                {occupiedByOther && (
+                    <Text size="xs" className="text-muted-foreground">Replaces what the stage is showing.</Text>
+                )}
+            </Group>
+            {!pg.hasTotals && (
+                <Text size="xs" className="text-muted-foreground">
+                    Older capture without side totals — re-capture to include Stars Won.
+                </Text>
+            )}
+            {mine && (
+                <Text size="xs" className="text-muted-foreground">
+                    Show the callout-stage source on air; Clear hands the stage back.
+                </Text>
+            )}
+        </Stack>
+    );
+}
+
 // ── Hit Visualizer ─────────────────────────────────────────────────────────
 
 // Lead time before the swing starts after we cut to the spotlight scene — lets
@@ -1428,6 +1500,7 @@ function DirectFace({ element }) {
 function FedFace({ element }) {
     if (element.feed === 'stats') return <StatsFeedPicker element={element} />;
     if (element.feed === 'postgamecallout') return <PostgameCalloutPicker element={element} />;
+    if (element.feed === 'postgamevs') return <PostgameVsPicker element={element} />;
     return <Text size="xs" className="text-muted-foreground">No content options yet.</Text>;
 }
 
