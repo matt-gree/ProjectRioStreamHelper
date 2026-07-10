@@ -132,6 +132,19 @@ async def unexclude_game(sb_id: int, payload: GameIdPayload, session_id: str | N
 
 
 @method(
+    router.post, "/rotation/{sb_id}/preview",
+    version="1", id="rotation.preview",
+    response_class=ORJSONResponse
+)
+async def preview_pool(sb_id: int, session_id: str | None = None) -> ORJSONResponse:
+    """Recompute pool membership from the current filter/scope and mirror it
+    into State without starting the cycle — lets the UI show matched games
+    (and exclude some) before pressing Start."""
+    status = await PoolManager.preview_pool(sb_id)
+    return ORJSONResponse({"success": True, **status})
+
+
+@method(
     router.post, "/rotation/{sb_id}/start",
     version="1", id="rotation.start",
     response_class=ORJSONResponse

@@ -30,8 +30,8 @@ async def test_resumes_rotating_boards_with_a_populated_pool(monkeypatch, set_se
         set_setting,
         active=[1, 2, 3],
         binding={
-            "1": {"playback": {"mode": "rotate"}, "pool": {"filters": [{"id": 1, "tag": ["Ranked"]}]}},
-            "2": {"playback": {"mode": "rotate"}, "pool": {"pinned": [30]}},  # pinned-only also qualifies
+            "1": {"playback": {"mode": "rotate", "running": True}, "pool": {"filters": [{"id": 1, "tag": ["Ranked"]}]}},
+            "2": {"playback": {"mode": "rotate", "running": True}, "pool": {"pinned": [30]}},  # pinned-only also qualifies
             "3": {"playback": {"mode": "single"}, "pool": {"filters": [{"id": 1, "tag": ["Ranked"]}]}},  # not rotating
         },
     )
@@ -40,6 +40,24 @@ async def test_resumes_rotating_boards_with_a_populated_pool(monkeypatch, set_se
 
     resume.assert_called_once()
     assert set(resume.call_args.args[0]) == {1, 2}
+
+
+async def test_paused_rotator_not_resumed(monkeypatch, set_setting):
+    """A board left in rotate mode but with `running` cleared (a user Stop)
+    stays paused across a restart — it does not auto-resume."""
+    resume = AsyncMock()
+    monkeypatch.setattr(PoolManager, "_resume_rotations", resume)
+    set_setting("project_rio.hud_enabled", False)
+    _configure(
+        set_setting,
+        active=[1],
+        binding={
+            "1": {"playback": {"mode": "rotate", "running": False},
+                  "pool": {"filters": [{"id": 1, "tag": ["Ranked"]}]}},
+        },
+    )
+    await PoolManager.Start()
+    resume.assert_not_called()
 
 
 async def test_rotating_but_empty_pool_not_resumed(monkeypatch, set_setting):

@@ -112,7 +112,12 @@ class PoolManager:
                 continue
             if sb_id not in active or transport(sb_id) == "hud" or not is_rotating(sb_id):
                 continue
-            pool_cfg = get_binding(sb_id)["pool"]
+            binding = get_binding(sb_id)
+            # Only resume boards that were actively cycling at shutdown — a
+            # user Stop clears `running` while leaving the board in rotate mode.
+            if not binding["playback"].get("running"):
+                continue
+            pool_cfg = binding["pool"]
             if pool_cfg.get("filters") or pool_cfg.get("pinned"):
                 to_resume.append(sb_id)
 
@@ -155,7 +160,7 @@ class PoolManager:
 
         count = len(cls._rotations)
         for sb_id in list(cls._rotations.keys()):
-            await cls.stop_rotation(sb_id, persist_disable=False)
+            await cls.stop_rotation(sb_id, user_stop=False)
         logger.info("[PoolManager] Stopped ({} rotation(s))", count)
 
     @classmethod
@@ -232,12 +237,14 @@ class PoolManager:
         """Start rotating a scoreboard's pool. Puts the binding into
         playback.mode="rotate" if it wasn't already."""
         if sb_id in cls._rotations:
-            await cls.stop_rotation(sb_id)
+            await cls.stop_rotation(sb_id, user_stop=False)
 
         binding = get_binding(sb_id)
         if binding["playback"].get("mode") != "rotate":
             await Settings.Set(f"scoreboards.binding.{sb_id}.playback.mode", "rotate")
             binding["playback"]["mode"] = "rotate"
+        # Mark actively-cycling so a restart resumes it; a user Stop clears this.
+        await Settings.Set(f"scoreboards.binding.{sb_id}.playback.running", True)
 
         state = PoolState(
             sb_id=sb_id,
@@ -260,10 +267,15 @@ class PoolManager:
         )
 
     @classmethod
-    async def stop_rotation(cls, sb_id: int, persist_disable: bool = True):
-        """Stop rotation on a scoreboard. `persist_disable` flips
-        playback.mode back to "single" (an explicit user Stop); pass False
-        when stopping merely because the server is shutting down."""
+    async def stop_rotation(cls, sb_id: int, user_stop: bool = True):
+        """Stop the running rotation on a scoreboard.
+
+        `user_stop=True` (an explicit Stop press or a switch to single mode)
+        clears the persisted `running` flag so it won't resume on startup —
+        but leaves `playback.mode` as "rotate" so the UI stays on the Rotator
+        tab. Pass `user_stop=False` when merely pausing for shutdown or
+        orphan-cleanup, so resume-on-startup still picks it back up.
+        """
         state = cls._rotations.pop(sb_id, None)
         if state:
             if state.task and not state.task.done():
@@ -279,11 +291,37 @@ class PoolManager:
                 except asyncio.CancelledError:
                     pass
 
-        if persist_disable:
-            await Settings.Set(f"scoreboards.binding.{sb_id}.playback.mode", "single")
+        if user_stop:
+            await Settings.Set(f"scoreboards.binding.{sb_id}.playback.running", False)
         await _mirror_to_state(sb_id, game_ids=[], cached_games=[])
         await cls._emit_status(sb_id)
         logger.info("[PoolManager] Stopped rotation for scoreboard {}", sb_id)
+
+    @classmethod
+    async def preview_pool(cls, sb_id: int) -> dict:
+        """Recompute pool membership from the current config and mirror it into
+        State *without* starting the cycle — so the UI can show how many games
+        the filter matches (and let the user exclude some) before pressing
+        Start. If a rotation is already running, this just forces its refresh."""
+        state = cls._rotations.get(sb_id)
+        if state:
+            await state.refresh_now()
+            return cls.get_status(sb_id)
+
+        binding = get_binding(sb_id)
+        tmp = PoolState(
+            sb_id=sb_id,
+            pool_cfg=binding["pool"],
+            interval=binding["playback"].get("interval", 30),
+        )
+        members = await tmp._compute_members()
+        ids = list(members.keys())
+        await _mirror_to_state(
+            sb_id,
+            game_ids=ids,
+            cached_games=[members[gid] for gid in ids],
+        )
+        return {"active": False, "scoreboard": sb_id, "total_games": len(ids)}
 
     @classmethod
     async def next_game(cls, sb_id: int):
@@ -518,7 +556,7 @@ class PoolState:
                 "[PoolState] sb {} no longer rotating; self-cancelling lingering task",
                 self.sb_id,
             )
-            asyncio.create_task(PoolManager.stop_rotation(self.sb_id, persist_disable=False))
+            asyncio.create_task(PoolManager.stop_rotation(self.sb_id, user_stop=False))
             return
 
         game_id = self.game_ids[self.current_index]

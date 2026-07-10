@@ -59,6 +59,11 @@ DEFAULT_PLAYBACK = {
     "gameId": None,
     "interval": 30,
     "current_index": 0,
+    # Whether a "rotate" board is actively cycling. Distinct from `mode`:
+    # Stop pauses the cycle (running=False) but leaves the board in rotate
+    # mode so the UI stays on the Rotator tab. Resume-on-startup only restarts
+    # boards that were running at shutdown.
+    "running": False,
     "interrupt": None,
 }
 

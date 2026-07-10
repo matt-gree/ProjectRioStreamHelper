@@ -49,10 +49,16 @@ export function MultiSelect({
             {value.map((v) => (
               <Badge key={v} variant="secondary" className="gap-1">
                 {labelFor(v)}
-                <X
-                  className="size-3 cursor-pointer"
+                {/* Wrap in a span: Badge sets [&>svg]:pointer-events-none on
+                    direct svg children, which would eat the click otherwise. */}
+                <span
+                  role="button"
+                  aria-label={`Remove ${labelFor(v)}`}
+                  className="inline-flex cursor-pointer"
                   onClick={(e) => { e.stopPropagation(); toggle(v); }}
-                />
+                >
+                  <X className="size-3" />
+                </span>
               </Badge>
             ))}
           </span>

@@ -48,13 +48,6 @@ function ScoreboardTab({ scoreboardNumber }) {
         ? 'hud'
         : (mode === 'single' && gameId != null ? 'live_game' : 'manual');
 
-    const handleSetMode = useCallback(async (newMode) => {
-        await fetch(
-            `/api/v1/scoreboards/${scoreboardNumber}/binding?kind=${newMode}`,
-            { method: 'PUT' },
-        ).catch(() => {});
-    }, [scoreboardNumber]);
-
     const handleSwapTeams = useCallback(async () => {
         const state = useStateStore.getState();
         const base = state?.score?.[scoreboardNumber];
@@ -114,8 +107,6 @@ function ScoreboardTab({ scoreboardNumber }) {
                         scoreboardNumber={scoreboardNumber}
                         onSwapTeams={handleSwapTeams}
                         transport={transport}
-                        mode={mode}
-                        onSetMode={handleSetMode}
                     />
                     <DiamondPanel scoreboardNumber={scoreboardNumber} />
                 </Stack>

@@ -206,7 +206,46 @@ class OngoingGamePool:
             GameEndWatcher.on_ongoing_poll(prev_games, new_games)
         except Exception:
             logger.exception("[OngoingGamePool] game-end hook error")
+        # Keep single-mode boards that are following a live game fresh — without
+        # this, a loaded live game is a one-shot snapshot that never updates.
+        try:
+            await cls._reapply_single_live()
+        except Exception:
+            logger.exception("[OngoingGamePool] single-live re-apply error")
         await socketio.emit("v1.game_pool.ongoing_update", cls.list_games())
+
+    @classmethod
+    async def _reapply_single_live(cls):
+        """Re-push the current live game to every single-mode board following
+        one, so its score/state tracks the ongoing feed. Rotating boards drive
+        their own applies; HUD board 1 is owned by the HUD writer."""
+        from server.bindings import get_binding, transport
+        from server.rio.stats_tracker import StatsTracker
+
+        for sb_id in Settings.Get("scoreboards.active", [1]):
+            if transport(sb_id) == "hud":
+                continue
+            playback = get_binding(sb_id)["playback"]
+            if playback.get("mode") != "single":
+                continue
+            game_id = playback.get("gameId")
+            if game_id is None:
+                continue
+            game = cls.get_game(game_id)
+            if not game:
+                continue
+
+            await cls.apply_game_to_scoreboard(game_id, sb_id)
+
+            # Refresh the live per-character stats slot the same way the assign
+            # endpoint does on a same-game re-apply (no new-game re-init).
+            parsed = RioGameDataProvider.parse_game_data(game)
+            entrants = parsed.get("entrants", [[{}], [{}]])
+            p0 = entrants[0][0].get("rioName", "") if entrants[0] else ""
+            p1 = entrants[1][0].get("rioName", "") if entrants[1] else ""
+            sides_swapped = _pinned_swap_needed(p0, p1) is True
+            StatsTracker.on_live_game_update(game, sb_id)
+            await StatsTracker.push_stats_to_state(sb_id, sides_swapped)
 
     @classmethod
     def get_game(cls, game_id) -> dict | None:

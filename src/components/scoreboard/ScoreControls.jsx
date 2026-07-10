@@ -25,11 +25,6 @@ const num = (v, fallback = 0) => {
     return Number.isFinite(n) ? n : fallback;
 };
 
-const bindingOptions = [
-    { value: 'single', label: 'Single Game' },
-    { value: 'rotate', label: 'Rotator' },
-];
-
 // Count-dot colors keyed by the legacy Mantine color name.
 const DOT_COLORS = { green: '#22c55e', yellow: '#f5bb00', red: '#e60012' };
 
@@ -60,7 +55,7 @@ function CountDots({ count, max, color, onChange }) {
 /**
  * Central score column: scores, baseball state, match info.
  */
-export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, transport = 'api', mode = 'single', onSetMode }) {
+export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, transport = 'api' }) {
     const base = `score.${scoreboardNumber}`;
     const setItem = useStateStore(s => s.setItem);
     const settingsSetItem = useSettingsStore(s => s.setItem);
@@ -262,10 +257,13 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, trans
         <Panel glow={false} title="Game State">
             <div className="p-3.5">
             <Stack gap="md">
-                {/* ---- Binding ---- */}
-                <div className="flex flex-col gap-1.5">
-                    <Label className="field-label">Games</Label>
-                    {transport === 'hud' ? (
+                {/* ---- HUD binding ---- *
+                 * The single/rotate selector lives in the Game Pool & Playback
+                 * panel now; here we only surface the HUD badge + re-read for a
+                 * HUD-transport board (Game Pool & Playback is hidden for it). */}
+                {transport === 'hud' && (
+                    <div className="flex flex-col gap-1.5">
+                        <Label className="field-label">Games</Label>
                         <div className="flex items-center gap-2">
                             <Badge className="bg-[#22c55e]/15 text-[#4ade80] text-[11px] font-semibold uppercase tracking-wider">
                                 HUD
@@ -281,14 +279,8 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, trans
                             </Button>
                             <Text size="xs" dimmed>Local game — disable HUD in Settings to rebind.</Text>
                         </div>
-                    ) : (
-                        <SimpleSelect
-                            data={bindingOptions}
-                            value={mode}
-                            onChange={val => onSetMode?.(val)}
-                        />
-                    )}
-                </div>
+                    </div>
+                )}
 
                 {/* ---- Game Mode ---- */}
                 <div className="flex items-end gap-1.5">

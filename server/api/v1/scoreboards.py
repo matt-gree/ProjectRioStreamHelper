@@ -94,7 +94,7 @@ async def remove_scoreboard(sb_id: int, session_id: str | None = None) -> ORJSON
 
     # Tear down any background work owned by this scoreboard before its
     # settings are removed, so resume-on-startup can't pick it back up.
-    await PoolManager.stop_rotation(sb_id, persist_disable=False)
+    await PoolManager.stop_rotation(sb_id, user_stop=False)
     await Settings.Unset(f"scoreboards.rotation.{sb_id}")
 
     active.remove(sb_id)
@@ -151,7 +151,7 @@ async def set_scoreboard_binding(
     # Leaving rotate mode stops any running pool task so it can't keep writing
     # into a board the user has switched to single.
     if old_mode == "rotate" and mode != "rotate":
-        await PoolManager.stop_rotation(sb_id, persist_disable=False)
+        await PoolManager.stop_rotation(sb_id, user_stop=True)
 
     await Settings.Set(f"scoreboards.binding.{sb_id}.playback.mode", mode)
     if pool in ("both", "live", "completed"):
