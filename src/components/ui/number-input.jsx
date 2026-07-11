@@ -26,8 +26,12 @@ export const NumberInput = React.forwardRef(function NumberInput(
       onChange?.(raw === "" ? "" : raw);
       return;
     }
+    // Do NOT clamp while typing — clamping to `min` on every keystroke makes a
+    // field with a lower limit unusable (clear it, start typing "60" and it
+    // snaps to the min on the first digit). Clamp on blur instead, so partial
+    // entries below the minimum are allowed until the field loses focus.
     const parsed = allowDecimal ? parseFloat(raw) : parseInt(raw, 10);
-    if (!Number.isNaN(parsed)) onChange?.(clamp(parsed));
+    if (!Number.isNaN(parsed)) onChange?.(parsed);
   };
 
   const handleBlur = (e) => {

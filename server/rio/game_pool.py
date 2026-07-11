@@ -17,6 +17,10 @@ from server.match import Match
 from server.rio.game_end import GameEndWatcher
 from server.settings import Settings
 
+# Polls a followed live game may be absent from the ongoing feed before we treat
+# it as ended (~2 poll intervals of grace against a flickering feed).
+END_MISS_TOLERANCE = 2
+
 
 def _sanitize_row(d: dict) -> dict:
     """Convert pandas/numpy types to JSON-safe Python types."""
@@ -85,21 +89,33 @@ class OngoingGamePool:
     games: dict = {}  # game_id -> parsed game dict
     _poll_task: asyncio.Task | None = None
     _poll_interval: float = 10.0
-    _auto_poll: bool = False
+    # Per-board live-follow lifecycle. A single-mode board following a live game
+    # is a "live consumer" (keeps the ongoing poll running) only until that game
+    # leaves the feed. `_follow_misses` counts consecutive polls the followed
+    # game has been absent; once it crosses END_MISS_TOLERANCE, `_ended_follow`
+    # records {sb_id: game_id} so the poll loop stops fetching for a game that's
+    # over. Both are cleared when the followed game reappears or a new one loads.
+    _follow_misses: dict = {}
+    _ended_follow: dict = {}
 
     @classmethod
     async def Start(cls):
-        cls._auto_poll = False
         cls._poll_interval = Settings.Get("ongoing_games.poll_interval", 10.0)
-        # Always start with auto-poll off regardless of previous session state
-        await Settings.Set("ongoing_games.auto_poll", False)
         GameEndWatcher.reset()
-        logger.info("[OngoingGamePool] Initialized (auto_poll=False)")
+        # Polling is demand-driven: the loop always runs but only hits the API
+        # on ticks where a board actually needs live data (see
+        # _live_consumers_exist). This replaces the old user-facing on/off
+        # toggle, which was a process-wide setting disguised as a per-scoreboard
+        # control and left loaded live games silently frozen when off.
+        cls._start_polling()
+        logger.info("[OngoingGamePool] Initialized (demand-driven polling, interval={}s)", cls._poll_interval)
 
     @classmethod
     async def Stop(cls):
         cls._stop_polling()
         cls.games = {}
+        cls._follow_misses = {}
+        cls._ended_follow = {}
         logger.info("[OngoingGamePool] Stopped")
 
     @classmethod
@@ -116,25 +132,53 @@ class OngoingGamePool:
 
     @classmethod
     async def set_auto_poll(cls, enabled: bool, interval: float | None = None):
-        """Enable or disable auto-polling."""
-        cls._auto_poll = enabled
-        await Settings.Set("ongoing_games.auto_poll", enabled)
+        """Adjust the live-poll interval. Retained for the legacy
+        /game-pool/ongoing/auto-poll endpoint; the `enabled` flag is now a
+        no-op because polling is demand-driven (see _live_consumers_exist).
+        Only the interval is honored."""
         if interval is not None:
             cls._poll_interval = interval
             await Settings.Set("ongoing_games.poll_interval", interval)
+        cls._start_polling()
 
-        cls._stop_polling()
-        if enabled:
-            cls._start_polling()
-            logger.info("[OngoingGamePool] Auto-poll enabled (interval={}s)", cls._poll_interval)
-        else:
-            logger.info("[OngoingGamePool] Auto-poll disabled")
+    @classmethod
+    def _live_consumers_exist(cls) -> bool:
+        """True if any board needs the ongoing feed kept fresh: a single-mode
+        board currently following a live (not completed) game, or a running
+        rotation whose scope includes live games. HUD board 1 is excluded — the
+        local HUD writer owns it. Reads State/Settings directly (cheap) so the
+        poll loop can gate each tick without an API call when nothing needs it.
+        """
+        from server.bindings import transport, get_binding
+        from server.state import State
+        from server.utils.deep_dict import deep_get
+
+        for sb_id in Settings.Get("scoreboards.active", [1]):
+            if transport(sb_id) == "hud":
+                continue
+            binding = get_binding(sb_id)
+            playback = binding.get("playback", {})
+            if playback.get("mode") == "rotate":
+                if playback.get("running") and binding.get("pool", {}).get("scope", "both") in ("live", "both"):
+                    return True
+                continue
+            # single mode — is a live game loaded on this board?
+            game_id = playback.get("gameId")
+            if game_id is None:
+                continue
+            # A followed game that already left the feed is done — stop polling.
+            if cls._ended_follow.get(sb_id) == game_id:
+                continue
+            if deep_get(State.state, f"score.{sb_id}.game_completed", None) is False:
+                return True
+        return False
 
     @classmethod
     async def _poll_loop(cls):
         while True:
             try:
-                await cls._fetch_games()
+                if cls._live_consumers_exist():
+                    await cls._fetch_games()
             except asyncio.CancelledError:
                 raise
             except Exception:
@@ -233,7 +277,23 @@ class OngoingGamePool:
                 continue
             game = cls.get_game(game_id)
             if not game:
+                # The followed live game is no longer in the ongoing feed. Give
+                # it a couple of polls of grace (a flickering feed shouldn't end
+                # a live game), then mark the follow ended so
+                # _live_consumers_exist stops counting it — the app stops
+                # pinging for a game that's over. Cleared when a new game loads.
+                misses = cls._follow_misses.get(sb_id, 0) + 1
+                cls._follow_misses[sb_id] = misses
+                if misses >= END_MISS_TOLERANCE:
+                    cls._ended_follow[sb_id] = game_id
+                    cls._follow_misses.pop(sb_id, None)
+                    logger.info(
+                        "[OngoingGamePool] sb {} live game {} left the feed; "
+                        "stopping live polling for it", sb_id, game_id,
+                    )
                 continue
+            cls._follow_misses.pop(sb_id, None)
+            cls._ended_follow.pop(sb_id, None)
 
             await cls.apply_game_to_scoreboard(game_id, sb_id)
 

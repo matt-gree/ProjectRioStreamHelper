@@ -35,12 +35,20 @@ async def _mirror_to_state(sb_id: int, **fields):
 
 
 def _chip_kwargs(chip: dict) -> dict:
-    """A filter chip's non-empty fields, shaped for stats_api.fetch_completed_games."""
+    """A filter chip's non-empty fields, shaped for stats_api.fetch_completed_games.
+
+    `start_time`/`end_time` are Unix seconds (the Rio API's convention — see
+    RioWeb._process_games, which parses timestamps with unit="s"); they narrow
+    the completed search to a date window. Only completed games are date/limit
+    filtered — live games are "now", so `_chip_matches` ignores those fields.
+    """
     return {k: v for k, v in {
         "tag": chip.get("tag") or None,
         "username": chip.get("username") or None,
         "vs_username": chip.get("vs_username") or None,
         "limit_games": chip.get("limit_games"),
+        "start_time": chip.get("start_time"),
+        "end_time": chip.get("end_time"),
     }.items() if v}
 
 

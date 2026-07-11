@@ -1,13 +1,11 @@
-import { useState, useCallback, useEffect, useMemo, memo } from 'react';
-import { ChevronLeft, ChevronRight, X, Ban, RotateCw, Undo2, Search } from 'lucide-react';
+import { useState, useCallback, useEffect, useMemo, useRef, memo } from 'react';
+import { ChevronLeft, ChevronRight, X, Ban, RotateCw, Undo2, Search, CalendarDays } from 'lucide-react';
 import { Stack, Text, Loader } from '../ui/primitives';
 import { Panel } from '../ui/panel';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { NumberInput } from '../ui/number-input';
-import { Combobox } from '../ui/combobox';
 import { MultiSelect } from '../ui/multi-select';
-import { SimpleSelect } from '../ui/simple-select';
 import { SegmentedControl } from '../ui/segmented-control';
 import { Switch } from '../ui/switch';
 import { Label } from '../ui/label';
@@ -20,7 +18,6 @@ import {
 import { cn } from '../../lib/utils';
 import { useSocketSubscribe } from '../../context/socket';
 import { useSettingsStore, useStateStore } from '../../context/store';
-import { notifications } from '../../lib/notify';
 import ParticipantPicker from '../ParticipantPicker';
 
 /**
@@ -64,6 +61,47 @@ async function postJSON(url, body) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
     }).catch(() => {});
+}
+
+// ─── useAutoRefresh ───────────────────────────────────────────────────────────
+// Counts down to the next auto re-fetch and fires `onRefresh` at zero, returning
+// the seconds remaining so the caller can render a live countdown. `active`
+// gates the timer (e.g. only the visible tab); bumping `resetKey` restarts it
+// (e.g. after a manual refresh). `onRefresh` is read through a ref so a changing
+// callback identity doesn't restart the countdown.
+
+function useAutoRefresh(active, intervalSecs, onRefresh, resetKey = 0) {
+    const [remaining, setRemaining] = useState(intervalSecs);
+    const onRefreshRef = useRef(onRefresh);
+    onRefreshRef.current = onRefresh;
+    useEffect(() => {
+        if (!active || !intervalSecs) { setRemaining(intervalSecs); return; }
+        let next = Date.now() + intervalSecs * 1000;
+        setRemaining(intervalSecs);
+        const id = setInterval(() => {
+            const rem = Math.round((next - Date.now()) / 1000);
+            if (rem <= 0) {
+                onRefreshRef.current?.();
+                next = Date.now() + intervalSecs * 1000;
+                setRemaining(intervalSecs);
+            } else {
+                setRemaining(rem);
+            }
+        }, 250);
+        return () => clearInterval(id);
+    }, [active, intervalSecs, resetKey]);
+    return remaining;
+}
+
+function RefreshCountdown({ seconds, intervalSecs }) {
+    return (
+        <SimpleTooltip label={`This list re-fetches from the Project Rio API every ${intervalSecs}s.`}>
+            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground tabular-nums">
+                <RotateCw size={11} />
+                Refreshing in {seconds}s
+            </span>
+        </SimpleTooltip>
+    );
 }
 
 // ─── GameRows ───────────────────────────────────────────────────────────────
@@ -138,15 +176,125 @@ function NameChips({ values, onChange, placeholder }) {
     );
 }
 
-// A single-value Address Book search field (completed-game search inputs).
-function NameField({ value, onChange, placeholder }) {
+// ─── Date + refine fields ────────────────────────────────────────────────────
+// The Rio API dates completed games in Unix *seconds* (RioWeb._process_games
+// parses with unit="s"), so the chip stores seconds. A start date anchors to
+// local midnight; an end date anchors to the last second of that day, so a
+// single day picked as both bounds includes the whole day and round-trips back
+// to the same calendar date in the picker.
+
+const toDateInputValue = (unix) => {
+    if (unix == null) return '';
+    const d = new Date(unix * 1000);
+    const p = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+};
+
+function DateField({ value, onChange, kind = 'start' }) {
+    const commit = (v) => {
+        if (!v) { onChange(null); return; }
+        const [y, m, d] = v.split('-').map(Number);
+        const dt = kind === 'end'
+            ? new Date(y, m - 1, d, 23, 59, 59)
+            : new Date(y, m - 1, d, 0, 0, 0);
+        onChange(Math.floor(dt.getTime() / 1000));
+    };
     return (
-        <ParticipantPicker
-            value={value}
-            placeholder={placeholder}
-            onResolve={(row) => onChange(row.display?.tag || row.identities?.rioName || '')}
-            onRawValue={onChange}
+        <input
+            type="date"
+            value={toDateInputValue(value)}
+            onChange={(e) => commit(e.target.value)}
+            className="h-8 w-[138px] rounded-md border border-input bg-transparent px-2 text-xs text-foreground [color-scheme:dark]"
         />
+    );
+}
+
+// A labelled stack for the compact refine row (dates + limit).
+function Field({ label, children }) {
+    return (
+        <div className="flex flex-col gap-1">
+            <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{label}</Label>
+            {children}
+        </div>
+    );
+}
+
+// ─── CompletedFilters ─────────────────────────────────────────────────────────
+// The completed-game filter surface, shared verbatim by the Single-mode
+// Completed search and the Rotator so the two read identically. `value` is a
+// filter dict ({tag, username, vs_username, start_time, end_time, limit_games});
+// `onChange(patch)` merges a partial. Fields combine the way the Rio API does:
+// values within one field OR together, different fields AND. `showRefine=false`
+// hides the completed-only date/limit row (e.g. a live-only rotator scope).
+
+function CompletedFilters({ value, onChange, tagOptions, showRefine = true, trailing = null }) {
+    const v = value ?? {};
+    // The date range is opt-in: an always-visible empty date picker reads like
+    // an active filter. Collapsed by default; revealed on demand, or already
+    // open when a persisted filter carries dates.
+    const [dateOpen, setDateOpen] = useState(() => v.start_time != null || v.end_time != null);
+    const closeDates = () => {
+        setDateOpen(false);
+        onChange({ start_time: null, end_time: null });
+    };
+    return (
+        <Stack gap="sm">
+            <MultiSelect
+                placeholder="Game modes"
+                data={tagOptions}
+                value={v.tag ?? []}
+                onChange={(val) => onChange({ tag: val })}
+            />
+            <NameChips
+                values={v.username ?? []}
+                onChange={(val) => onChange({ username: val })}
+                placeholder="Filter by player"
+            />
+            <NameChips
+                values={v.vs_username ?? []}
+                onChange={(val) => onChange({ vs_username: val })}
+                placeholder="Filter by opponent"
+            />
+            {showRefine && (
+                <div className="flex flex-wrap items-end gap-3">
+                    <Field label="Limit">
+                        <NumberInput
+                            placeholder="All"
+                            min={1} max={500}
+                            value={v.limit_games ?? null}
+                            onChange={(val) => onChange({ limit_games: val || null })}
+                            className="w-[76px]"
+                        />
+                    </Field>
+                    {dateOpen ? (
+                        <>
+                            <Field label="From">
+                                <DateField value={v.start_time} kind="start" onChange={(t) => onChange({ start_time: t })} />
+                            </Field>
+                            <Field label="To">
+                                <DateField value={v.end_time} kind="end" onChange={(t) => onChange({ end_time: t })} />
+                            </Field>
+                            <button
+                                type="button"
+                                onClick={closeDates}
+                                className="inline-flex h-8 items-center gap-1 rounded-md px-1.5 text-xs text-muted-foreground hover:text-foreground"
+                            >
+                                <X className="size-3.5" /> Clear dates
+                            </button>
+                        </>
+                    ) : (
+                        <button
+                            type="button"
+                            onClick={() => setDateOpen(true)}
+                            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-dashed border-input px-2.5 text-xs text-muted-foreground hover:text-foreground hover:border-ring"
+                        >
+                            <CalendarDays className="size-3.5" /> Date range
+                        </button>
+                    )}
+                    {trailing}
+                </div>
+            )}
+        </Stack>
     );
 }
 
@@ -161,22 +309,21 @@ const searchTabs = [
 ];
 
 function InlineGameSearch({ tagOptions, onLoad, loadedGameId }) {
-    const autoPoll = useSettingsStore(s => s?.ongoing_games?.auto_poll ?? false);
-    const storedPollInterval = useSettingsStore(s => s?.ongoing_games?.poll_interval ?? 10);
-
+    const pollInterval = useSettingsStore(s => s?.ongoing_games?.poll_interval ?? 10);
     const [tab, setTab] = useState('live');
     const [liveGames, setLiveGames] = useState([]);
     const [loadingLive, setLoadingLive] = useState(false);
     const [completedGames, setCompletedGames] = useState([]);
     const [loadingCompleted, setLoadingCompleted] = useState(false);
     const [searched, setSearched] = useState(false);
-    const [pollInterval, setPollInterval] = useState(storedPollInterval);
-    const [username, setUsername] = useState('');
-    const [vsUsername, setVsUsername] = useState('');
-    const [tagFilter, setTagFilter] = useState(null);
-    const [limit, setLimit] = useState(null);
-
-    useEffect(() => { setPollInterval(storedPollInterval); }, [storedPollInterval]);
+    const [completedError, setCompletedError] = useState(null);
+    // One filter dict, same shape the Rotator persists, so the search surface
+    // below can be the shared CompletedFilters component.
+    const [filters, setFilters] = useState({});
+    const patchFilters = useCallback((patch) => setFilters(f => ({ ...f, ...patch })), []);
+    // Bumped on a manual refresh to restart that tab's auto-refresh countdown.
+    const [liveResetKey, setLiveResetKey] = useState(0);
+    const [completedResetKey, setCompletedResetKey] = useState(0);
 
     const fetchLive = useCallback(async () => {
         setLoadingLive(true);
@@ -187,31 +334,55 @@ function InlineGameSearch({ tagOptions, onLoad, loadedGameId }) {
         } catch { setLiveGames([]); } finally { setLoadingLive(false); }
     }, []);
 
-    const fetchCompleted = useCallback(async () => {
+    // Run a completed search from an explicit query string. Split out from the
+    // filter-reading path so the auto-refresh can replay the *last executed*
+    // query (kept in lastQueryRef) rather than whatever's been typed since —
+    // editing filters shouldn't silently re-query until Find games is pressed.
+    const lastQueryRef = useRef(null);
+    const runCompleted = useCallback(async (queryStr) => {
         setLoadingCompleted(true);
         setSearched(true);
-        const params = new URLSearchParams();
-        if (username.trim()) params.append('username', username.trim());
-        if (vsUsername.trim()) params.append('vs_username', vsUsername.trim());
-        if (tagFilter) params.append('tag', tagFilter);
-        params.append('limit_games', String(limit ?? 100));
+        setCompletedError(null);
         try {
-            await fetch(`/api/v1/game-pool/completed/refresh?${params}`, { method: 'POST' });
+            const resp = await fetch(`/api/v1/game-pool/completed/refresh?${queryStr}`, { method: 'POST' }).then(r => r.json());
+            if (resp && resp.success === false) {
+                setCompletedError(resp?.diagnostics?.error || 'Search failed. Check your Rio API key and connection.');
+                setCompletedGames([]);
+                return;
+            }
             const data = await fetch('/api/v1/game-pool/completed').then(r => r.json());
             setCompletedGames(Array.isArray(data) ? data : []);
-        } catch { setCompletedGames([]); } finally { setLoadingCompleted(false); }
-    }, [username, vsUsername, tagFilter, limit]);
+        } catch {
+            setCompletedError('Search failed. Check your connection and try again.');
+            setCompletedGames([]);
+        } finally { setLoadingCompleted(false); }
+    }, []);
 
-    const toggleAutoPoll = useCallback((enabled) => {
-        const params = new URLSearchParams({ enabled: String(enabled), interval: String(pollInterval || 10) });
-        fetch(`/api/v1/game-pool/ongoing/auto-poll?${params}`, { method: 'POST' }).catch(() => {});
-    }, [pollInterval]);
+    const buildCompletedQuery = useCallback(() => {
+        const params = new URLSearchParams();
+        (filters.tag ?? []).forEach(t => params.append('tag', t));
+        (filters.username ?? []).forEach(u => params.append('username', u));
+        (filters.vs_username ?? []).forEach(u => params.append('vs_username', u));
+        if (filters.start_time != null) params.append('start_time', String(filters.start_time));
+        if (filters.end_time != null) params.append('end_time', String(filters.end_time));
+        params.append('limit_games', String(filters.limit_games ?? 100));
+        return params.toString();
+    }, [filters]);
 
-    const commitInterval = useCallback((val) => {
-        const next = Math.max(5, val || 10);
-        setPollInterval(next);
-        if (autoPoll) toggleAutoPoll(true);
-    }, [autoPoll, toggleAutoPoll]);
+    const fetchCompleted = useCallback(() => {
+        const q = buildCompletedQuery();
+        lastQueryRef.current = q;
+        return runCompleted(q);
+    }, [buildCompletedQuery, runCompleted]);
+
+    // Auto-refresh replays the last executed query (no-op until first search).
+    const refetchCompleted = useCallback(() => {
+        if (lastQueryRef.current != null) return runCompleted(lastQueryRef.current);
+    }, [runCompleted]);
+
+    // Manual refresh handlers restart the corresponding countdown.
+    const manualFetchLive = useCallback(() => { setLiveResetKey(k => k + 1); fetchLive(); }, [fetchLive]);
+    const manualFetchCompleted = useCallback(() => { setCompletedResetKey(k => k + 1); fetchCompleted(); }, [fetchCompleted]);
 
     useEffect(() => { fetchLive(); }, [fetchLive]);
 
@@ -219,58 +390,48 @@ function InlineGameSearch({ tagOptions, onLoad, loadedGameId }) {
     const games = isLive ? liveGames : completedGames;
     const loading = isLive ? loadingLive : loadingCompleted;
 
+    // Each tab re-fetches its list from the API on the live poll cadence while
+    // it's the visible tab; completed only once a search has been run.
+    const liveCountdown = useAutoRefresh(isLive, pollInterval, fetchLive, liveResetKey);
+    const completedCountdown = useAutoRefresh(!isLive && searched, pollInterval, refetchCompleted, completedResetKey);
+
     return (
         <Stack gap="sm">
-            <SegmentedControl fullWidth data={searchTabs} value={tab} onChange={setTab} />
+            <SegmentedControl fullWidth size="xs" data={searchTabs} value={tab} onChange={setTab} />
 
             {isLive ? (
                 <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
-                        <Button size="xs" variant="secondary" onClick={fetchLive} disabled={loadingLive}>
+                        <Button size="xs" variant="secondary" onClick={manualFetchLive} disabled={loadingLive}>
                             {loadingLive ? <Loader size={12} /> : <RotateCw size={12} />}
                             Refresh
                         </Button>
                         <Text size="xs" dimmed>{liveGames.length} live game{liveGames.length !== 1 ? 's' : ''}</Text>
                     </div>
-                    <SimpleTooltip label="Keep the loaded live game's score updating automatically.">
-                        <div className="flex items-center gap-1.5">
-                            <Switch size="sm" checked={autoPoll} onCheckedChange={toggleAutoPoll} />
-                            <Text size="xs">Auto-refresh</Text>
-                            <NumberInput
-                                min={5} max={120}
-                                value={pollInterval}
-                                onChange={commitInterval}
-                                disabled={!autoPoll}
-                                className="w-[58px]"
-                            />
-                            <Text size="xs" dimmed>s</Text>
-                        </div>
-                    </SimpleTooltip>
+                    <RefreshCountdown seconds={liveCountdown} intervalSecs={pollInterval} />
                 </div>
             ) : (
-                <div className="grid grid-cols-2 gap-2">
-                    <NameField value={username} onChange={setUsername} placeholder="Player" />
-                    <NameField value={vsUsername} onChange={setVsUsername} placeholder="Opponent" />
-                    <Combobox
-                        placeholder="Game mode"
-                        data={tagOptions}
-                        value={tagFilter}
-                        onChange={setTagFilter}
-                        clearable
+                <Stack gap="sm">
+                    <CompletedFilters
+                        value={filters}
+                        onChange={patchFilters}
+                        tagOptions={tagOptions}
+                        trailing={
+                            <Button size="xs" variant="secondary" onClick={manualFetchCompleted} disabled={loadingCompleted}>
+                                {loadingCompleted ? <Loader size={12} /> : <Search size={13} />}
+                                Find games
+                            </Button>
+                        }
                     />
-                    <div className="flex gap-2">
-                        <NumberInput
-                            placeholder="Limit"
-                            min={1} max={500}
-                            value={limit}
-                            onChange={setLimit}
-                            className="w-[72px]"
-                        />
-                        <Button size="sm" className="flex-1" onClick={fetchCompleted} disabled={loadingCompleted}>
-                            {loadingCompleted ? <Loader size={12} /> : <><Search size={13} /> Search</>}
-                        </Button>
-                    </div>
-                </div>
+                    {searched && (
+                        <div className="flex items-center justify-between gap-2">
+                            <Text size="xs" dimmed>
+                                {completedGames.length} result{completedGames.length !== 1 ? 's' : ''}
+                            </Text>
+                            <RefreshCountdown seconds={completedCountdown} intervalSecs={pollInterval} />
+                        </div>
+                    )}
+                </Stack>
             )}
 
             <ScrollArea className="h-[300px]">
@@ -291,7 +452,7 @@ function InlineGameSearch({ tagOptions, onLoad, loadedGameId }) {
                             activeId={loadedGameId}
                             emptyLabel={isLive
                                 ? 'No live games right now.'
-                                : (searched ? 'No games found.' : 'Search for completed games above.')}
+                                : (completedError || (searched ? 'No games found.' : 'Search for completed games above.'))}
                             action={(game, isActive) => (
                                 <Button
                                     size="xs"
@@ -409,7 +570,7 @@ const scopeOptions = [
     { value: 'completed', label: 'Completed Only' },
 ];
 
-const EMPTY_FILTER = { tag: [], username: [], vs_username: [], limit_games: null };
+const EMPTY_FILTER = { tag: [], username: [], vs_username: [], limit_games: null, start_time: null, end_time: null };
 
 // Stable fallback references for the store selectors below. Zustand v5's
 // `useStore` uses the RAW `useSyncExternalStore` (no built-in selector
@@ -438,7 +599,16 @@ export default memo(function PoolBrowser({ scoreboardNumber: sb }) {
         ?? s?.scoreboards?.binding?.[String(sb)]?.pool
         ?? DEFAULT_POOL);
 
-    const mode = playback.mode ?? 'single';
+    // `mode` is server-backed (settings round-trip), so a click has to wait for
+    // the PUT to echo back before the control moves — which reads as a "locked"
+    // segmented while the server is busy fetching. Echo the click locally and
+    // reconcile once the persisted value catches up.
+    const serverMode = playback.mode ?? 'single';
+    const [modeOverride, setModeOverride] = useState(null);
+    const mode = modeOverride ?? serverMode;
+    useEffect(() => {
+        if (modeOverride && serverMode === modeOverride) setModeOverride(null);
+    }, [serverMode, modeOverride]);
     const loadedGameId = useStateStore(s => s?.score?.[sb]?.game_id ?? null);
 
     const [status, setStatus] = useState({ active: false });
@@ -446,6 +616,13 @@ export default memo(function PoolBrowser({ scoreboardNumber: sb }) {
     const [gameModeOptions, setGameModeOptions] = useState([]);
     const [poolModalOpen, setPoolModalOpen] = useState(false);
     const [finding, setFinding] = useState(false);
+    // Transient "couldn't reach the pool" error from the last Find — the only
+    // status the live `members` count can't express on its own.
+    const [searchError, setSearchError] = useState(null);
+    // The filter/scope has been edited since the last Find, so the pool below is
+    // stale. Only meaningful while stopped — a running rotation recomputes on
+    // every pool edit, so we never mark it dirty then (and clear on Start).
+    const [dirty, setDirty] = useState(false);
     // Preserve the chosen refresh cadence while the toggle is off (0 = off).
     const [refreshSecs, setRefreshSecs] = useState(() => (pool.refresh_interval > 0 ? pool.refresh_interval : 60));
     // Client-side cache of excluded game dicts so the modal can label them —
@@ -488,6 +665,7 @@ export default memo(function PoolBrowser({ scoreboardNumber: sb }) {
     }, [gameIds, cachedGames]);
 
     const setMode = useCallback((newMode) => {
+        setModeOverride(newMode);
         fetch(`/api/v1/scoreboards/${sb}/binding?kind=${newMode}`, { method: 'PUT' }).catch(() => {});
     }, [sb]);
 
@@ -498,10 +676,14 @@ export default memo(function PoolBrowser({ scoreboardNumber: sb }) {
     // already accepts a list. Persisted as a one-element `filters` array.
     const filter = pool.filters?.[0] ?? EMPTY_FILTER;
     const updateFilter = useCallback((patch) => {
+        if (!status.active) setDirty(true);
         updatePool({ filters: [{ ...(pool.filters?.[0] ?? EMPTY_FILTER), ...patch }] });
-    }, [pool.filters, updatePool]);
+    }, [pool.filters, updatePool, status.active]);
 
-    const setScope = useCallback((scope) => updatePool({ scope }), [updatePool]);
+    const setScope = useCallback((scope) => {
+        if (!status.active) setDirty(true);
+        updatePool({ scope });
+    }, [updatePool, status.active]);
 
     const excludedIds = pool.excluded ?? [];
     const excludedList = useMemo(() => excludedIds.map(id => {
@@ -510,39 +692,42 @@ export default memo(function PoolBrowser({ scoreboardNumber: sb }) {
     }), [excludedIds, excludedCache]);
 
     const filterIsEmpty = !(filter.tag?.length || filter.username?.length || filter.vs_username?.length);
-    const scope = pool.scope ?? 'both';
 
     const findGames = useCallback(async () => {
         setFinding(true);
+        setSearchError(null);
         try {
             const data = await fetch(`/api/v1/rotation/${sb}/preview`, { method: 'POST' })
                 .then(r => r.json())
                 .catch(() => null);
-            const count = data?.total_games ?? 0;
-            if (count > 0) {
-                notifications.show({
-                    message: `Found ${count} game${count === 1 ? '' : 's'} for the pool.`,
-                    color: 'green',
-                });
-            } else if (filterIsEmpty) {
-                notifications.show({
-                    title: 'No games found',
-                    message: 'Add a game mode, player, or opponent above — the rotator needs at least one filter to match games.',
-                    color: 'yellow',
-                    autoClose: false,
-                });
+            // The live pool count comes from `members` (mirrored into state by
+            // preview), so the status strip reflects the result on its own. The
+            // only thing we can't derive there is a failed request.
+            if (data == null) {
+                setSearchError('Could not reach the game pool. Check your Rio API key and connection.');
             } else {
-                const scopeWord = scope === 'live' ? 'live'
-                    : scope === 'completed' ? 'completed'
-                    : 'live or completed';
-                notifications.show({
-                    title: 'No games found',
-                    message: `No ${scopeWord} games match this filter right now.`,
-                    color: 'yellow',
-                });
+                setDirty(false);
             }
         } finally { setFinding(false); }
-    }, [sb, filterIsEmpty, scope]);
+    }, [sb]);
+
+    // A running rotation recomputes its pool on every edit, so it's never stale.
+    useEffect(() => { if (status.active) setDirty(false); }, [status.active]);
+
+    // The filter changed since the last Find and we're stopped, so the pool
+    // below no longer reflects the controls.
+    const showDirty = dirty && !status.active;
+
+    // Persistent, non-floating pool status shown in the transport inset.
+    const poolStatus = useMemo(() => {
+        if (finding) return { dot: 'bg-muted-foreground', text: 'Finding games…', cls: 'text-muted-foreground' };
+        if (searchError) return { dot: 'bg-destructive', text: searchError, cls: 'text-destructive' };
+        if (showDirty) return { dot: 'bg-amber-400', text: 'Filters changed — Find games to refresh the pool', cls: 'text-amber-400' };
+        const n = members.length;
+        if (n > 0) return { dot: 'bg-[#14b8a6]', text: `${n} game${n === 1 ? '' : 's'} in the pool`, cls: 'text-foreground' };
+        if (filterIsEmpty) return { dot: 'bg-muted-foreground', text: 'Add a game mode, player, or opponent to match games', cls: 'text-muted-foreground' };
+        return { dot: 'bg-muted-foreground', text: 'No games match yet — press Find games', cls: 'text-muted-foreground' };
+    }, [finding, searchError, showDirty, members.length, filterIsEmpty]);
 
     const openPoolModal = useCallback(() => {
         setPoolModalOpen(true);
@@ -589,10 +774,14 @@ export default memo(function PoolBrowser({ scoreboardNumber: sb }) {
                     <div className="flex items-center justify-between gap-2">
                         <Text fw={600} size="sm">Game Pool & Playback</Text>
                         {status.active && (
-                            <Badge className="bg-[#14b8a6] text-[10px] text-black">
-                                {status.current_index + 1}/{status.total_games}
-                                {secondsRemaining != null && ` · ${secondsRemaining}s`}
-                            </Badge>
+                            status.total_games > 0 ? (
+                                <Badge className="bg-[#14b8a6] text-[10px] text-black">
+                                    {status.current_index + 1}/{status.total_games}
+                                    {secondsRemaining != null && ` · ${secondsRemaining}s`}
+                                </Badge>
+                            ) : (
+                                <Badge variant="secondary" className="text-[10px]">No games in pool</Badge>
+                            )
                         )}
                     </div>
 
@@ -606,49 +795,47 @@ export default memo(function PoolBrowser({ scoreboardNumber: sb }) {
                         />
                     ) : (
                         <Stack gap="sm">
-                            {/* ---- Filter ---- */}
-                            <MultiSelect
-                                placeholder="Game modes"
-                                data={gameModeOptions}
-                                value={filter.tag ?? []}
-                                onChange={(val) => updateFilter({ tag: val })}
-                            />
-                            <NameChips
-                                values={filter.username ?? []}
-                                onChange={(v) => updateFilter({ username: v })}
-                                placeholder="Filter by player"
-                            />
-                            <NameChips
-                                values={filter.vs_username ?? []}
-                                onChange={(v) => updateFilter({ vs_username: v })}
-                                placeholder="Filter by opponent"
+                            {/* Source scope — subordinate segmented, mirrors the
+                                Single-mode Live/Completed selector for a consistent
+                                mode → source rhythm across both playback modes. */}
+                            <SegmentedControl
+                                fullWidth size="xs"
+                                data={scopeOptions}
+                                value={pool.scope ?? 'both'}
+                                onChange={setScope}
                             />
 
-                            {/* ---- Scope / timing ---- */}
-                            <div className="flex items-end gap-3">
-                                <div className="flex flex-1 flex-col gap-1">
-                                    <Label className="text-xs">Show games from</Label>
-                                    <SimpleSelect data={scopeOptions} value={pool.scope ?? 'both'} onChange={setScope} />
-                                </div>
-                                <div className="flex w-[130px] flex-col gap-1">
-                                    <Label className="text-xs">Time on each game</Label>
+                            {/* Filters — the same surface as the Single-mode
+                                Completed search. Date/limit are completed-only,
+                                so they're hidden when the scope is live-only. */}
+                            <CompletedFilters
+                                value={filter}
+                                onChange={updateFilter}
+                                tagOptions={gameModeOptions}
+                                showRefine={(pool.scope ?? 'both') !== 'live'}
+                            />
+
+                            {/* Timing */}
+                            <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+                                <div className="flex items-center gap-2">
+                                    <Label className="whitespace-nowrap text-xs">Seconds per game</Label>
                                     <NumberInput
                                         min={5} max={600}
                                         value={playback.interval ?? 30}
                                         onChange={(val) => updatePlayback({ interval: val || 30 })}
+                                        className="w-[72px]"
                                         suffix="s"
                                     />
                                 </div>
-                            </div>
-
-                            <SimpleTooltip label="Automatically pick up newly-started and finished games while rotating. Off = the pool only changes when you press Find games.">
                                 <div className="flex items-center gap-2">
                                     <Switch
                                         size="sm"
                                         checked={(pool.refresh_interval ?? 0) > 0}
                                         onCheckedChange={(on) => updatePool({ refresh_interval: on ? refreshSecs : 0 })}
                                     />
-                                    <Text size="xs">Keep pool up to date, every</Text>
+                                    <SimpleTooltip label="Automatically pick up newly-started and finished games while rotating. Off = the pool only changes when you press Find games.">
+                                        <Label className="whitespace-nowrap text-xs">Keep pool current</Label>
+                                    </SimpleTooltip>
                                     <NumberInput
                                         min={10} max={600}
                                         value={refreshSecs}
@@ -658,49 +845,72 @@ export default memo(function PoolBrowser({ scoreboardNumber: sb }) {
                                             setRefreshSecs(next);
                                             if ((pool.refresh_interval ?? 0) > 0) updatePool({ refresh_interval: next });
                                         }}
-                                        className="w-[64px]"
+                                        className="w-[72px]"
                                         suffix="s"
                                     />
                                 </div>
-                            </SimpleTooltip>
+                            </div>
 
-                            {/* ---- Transport ---- */}
-                            <div className="flex flex-wrap items-center gap-2">
-                                {!status.active ? (
-                                    <Button size="sm" className="bg-[#14b8a6] text-black hover:bg-[#14b8a6]/90" onClick={handleStart}>
-                                        Start
-                                    </Button>
-                                ) : (
-                                    <Button size="sm" variant="outline" className="border-destructive/40 text-destructive" onClick={handleStop}>
-                                        Stop
-                                    </Button>
-                                )}
-                                {status.active && (
-                                    <>
-                                        <Button size="icon-sm" variant="secondary" onClick={handlePrev}>
-                                            <ChevronLeft size={14} />
+                            {/* Pool status + transport — one contained inset so
+                                the status never reads as floating text. The pool
+                                actions sit left, the transport right on the same
+                                row; the status reads beneath the two. */}
+                            <div className="space-y-2.5 rounded-md border border-border bg-muted/30 p-2.5">
+                                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+                                    <div className="flex items-center gap-1.5">
+                                        <Button
+                                            size="xs" variant="secondary"
+                                            className={cn(showDirty && 'ring-1 ring-amber-400')}
+                                            onClick={findGames} disabled={finding}
+                                        >
+                                            {finding ? <Loader size={12} /> : <Search size={13} />}
+                                            Find games
                                         </Button>
-                                        <Text size="xs" className="tabular-nums">
-                                            {status.current_index + 1}/{status.total_games}
-                                        </Text>
-                                        <Button size="icon-sm" variant="secondary" onClick={handleNext}>
-                                            <ChevronRight size={14} />
+                                        <Button size="xs" variant="outline" onClick={openPoolModal}>
+                                            Pool games
+                                            {(members.length > 0 || excludedIds.length > 0) && (
+                                                <Badge variant="secondary" className="ml-1 text-[10px]">
+                                                    {members.length}{excludedIds.length > 0 && ` · ${excludedIds.length} off`}
+                                                </Badge>
+                                            )}
                                         </Button>
-                                        {secondsRemaining != null && <Text size="xs" dimmed>{secondsRemaining}s</Text>}
-                                    </>
-                                )}
-                                <Button size="sm" variant="secondary" className="ml-auto" onClick={findGames} disabled={finding}>
-                                    {finding ? <Loader size={12} /> : <Search size={13} />}
-                                    Find games
-                                </Button>
-                                <Button size="sm" variant="ghost" onClick={openPoolModal}>
-                                    Pool games
-                                    {(members.length > 0 || excludedIds.length > 0) && (
-                                        <Badge variant="secondary" className="ml-1 text-[10px]">
-                                            {members.length}{excludedIds.length > 0 && ` · ${excludedIds.length} off`}
-                                        </Badge>
-                                    )}
-                                </Button>
+                                    </div>
+
+                                    <div className="flex items-center gap-2">
+                                        {!status.active ? (
+                                            <Button size="sm" className="bg-[#14b8a6] text-black hover:bg-[#14b8a6]/90" onClick={handleStart}>
+                                                Start rotating
+                                            </Button>
+                                        ) : (
+                                            <>
+                                                <Button size="sm" variant="outline" className="border-destructive/40 text-destructive" onClick={handleStop}>
+                                                    Stop
+                                                </Button>
+                                                {status.total_games > 0 && (
+                                                    <div className="flex items-center gap-1.5">
+                                                        <Button size="icon-sm" variant="secondary" onClick={handlePrev}>
+                                                            <ChevronLeft size={14} />
+                                                        </Button>
+                                                        <Text size="xs" className="tabular-nums">
+                                                            {status.current_index + 1}/{status.total_games}
+                                                        </Text>
+                                                        <Button size="icon-sm" variant="secondary" onClick={handleNext}>
+                                                            <ChevronRight size={14} />
+                                                        </Button>
+                                                        {secondsRemaining != null && (
+                                                            <Text size="xs" dimmed className="tabular-nums">{secondsRemaining}s</Text>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="flex min-w-0 items-center gap-2">
+                                    <span className={cn('size-1.5 shrink-0 rounded-full', poolStatus.dot)} />
+                                    <Text size="xs" className={cn('truncate', poolStatus.cls)}>{poolStatus.text}</Text>
+                                </div>
                             </div>
                         </Stack>
                     )}
