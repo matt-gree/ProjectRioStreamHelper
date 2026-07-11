@@ -416,11 +416,14 @@ const CSS = `
 /* result row: big abbreviation left, the play detail (TO LF / ON 0-2 /
    168FT · 1 RBI) right-anchored beside it at its usual small size */
 .cs-abchip .res { margin-top: 5px; display: flex; align-items: baseline;
-  justify-content: space-between; gap: 10px; }
+  justify-content: space-between; gap: 8px; }
 .cs-abchip .res .abbr { font-family: var(--mono); font-size: 31px; font-weight: 800;
   line-height: 1; color: rgba(255,255,255,0.85); white-space: nowrap; }
-.cs-abchip .res .dtxt { font-family: var(--mono); font-size: 14.5px; font-weight: 700;
-  letter-spacing: 1px; color: rgba(255,255,255,0.6); text-transform: uppercase;
+/* sized so "346FT · 3 RBI" fits beside "HR" at standard chip widths —
+   tighter tracking than the old stand-alone detail row (ellipsis is the
+   last resort for extreme PA counts, not the norm) */
+.cs-abchip .res .dtxt { font-family: var(--mono); font-size: 13px; font-weight: 700;
+  letter-spacing: 0.5px; color: rgba(255,255,255,0.6); text-transform: uppercase;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; text-align: right; }
 .cs-abchip.hit .dtxt, .cs-abchip.hr .dtxt { color: rgba(255,255,255,0.85); }
 /* detail line beneath: contact quality fills the freed left slot; the row
