@@ -12,10 +12,11 @@
 //     which claims whatever vertical room the stat cards don't use (no
 //     reserved gaps — pitchers get a taller hero shot than position players)
 //   · the AB THEATER: an embedded RioVisualizer (three.js) viewport that
-//     replays every resolved plate appearance — real recorded flight
-//     (follow cam normally, hero cam for home runs / deep flies), result
-//     stamp (swing info, distance in feet, Star Chance outcome), runner
-//     movement on a live diamond, score odometers
+//     replays every resolved plate appearance — real recorded flight (the
+//     hero crane for home runs / deep flies, the same crane at infield
+//     scale for every other ball in play), result stamp (swing info,
+//     distance in feet, Star Chance outcome), runner movement on a live
+//     diamond, score odometers
 //   · the game-state bar: a live scoreboard strip that MORPHS into a big
 //     "9TH INNING · 2 OUTS" transition card that ESTABLISHES each new at-bat
 //     (the theater resets under it), then morphs back — and retires into a
@@ -114,6 +115,16 @@ const CSS = `
 }
 .cs-backdrop { position: absolute; inset: 0; }
 .cs-theme-svg, .cs-theme-svg svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+/* team logo — a full-frame-height BACKGROUND graphic anchoring the left
+   side of the scene: over the theme backdrop, under every card, ghosted
+   enough to reinforce team identity without competing with the content.
+   The band is inset to the theme's 28px rainbow-border stage window and the
+   clip-path cuts the logo at the border on the LEFT/top/bottom only — a
+   wide logo bleeds freely to the right, living behind the frame content. */
+.cs-bglogo { position: absolute; top: 28px; bottom: 28px; left: 28px; width: 684px;
+  clip-path: inset(0 -400px 0 0 round 26px 0 0 26px);
+  display: flex; align-items: center; justify-content: center; pointer-events: none; }
+.cs-bglogo img { height: 90%; width: auto; opacity: 0.2; filter: saturate(0.9); }
 .cs-vignette { position: absolute; inset: 0; box-shadow: inset 0 0 300px rgba(0,0,0,0.55); pointer-events: none; }
 
 /* Shared glass-well surface + the moving trail-gradient rim (same vocabulary
@@ -146,8 +157,8 @@ const CSS = `
   display: flex; flex-direction: column; gap: 18px; z-index: 3;
 }
 
-/* identity plate — names + event/bracket context; no team badge (identity
-   lives in the backdrop + the ghosted logo behind the hero). Slice 26
+/* identity plate — names + event/bracket context; team identity lives in
+   the full-height background logo behind the left column. Slice 26
    vocabulary: tracked uppercase text on the plate itself, no pill chips —
    statuses live as a bare right-aligned column. */
 .cs-plate { position: relative; flex: 0 0 auto; box-sizing: border-box;
@@ -234,16 +245,6 @@ const CSS = `
   background: radial-gradient(circle, rgba(var(--side-rgb), 0.45) 0%, transparent 62%);
   filter: blur(22px); z-index: -1;
 }
-/* ghosted team logo — a true BACKGROUND graphic: oversized past the hero
-   well (uncropped — no overflow clipping), vertically centered behind the
-   render, strong enough to stay recognizable behind the character without
-   competing for attention */
-.cs-hero .cs-logo {
-  position: absolute; inset: -9% -6%; z-index: -2;
-  display: flex; align-items: center; justify-content: center; pointer-events: none;
-}
-.cs-hero .cs-logo img { width: 100%; height: 100%; object-fit: contain; opacity: 0.3;
-  filter: saturate(0.9); }
 
 /* ── AB theater ── */
 .cs-theater { left: 720px; top: 52px; width: 1160px; height: 624px; overflow: hidden; z-index: 3; }
@@ -412,30 +413,36 @@ const CSS = `
 .cs-abchip .top { display: flex; justify-content: space-between; gap: 8px;
   font-size: 14px; font-weight: 700; letter-spacing: 1.4px;
   color: rgba(255,255,255,0.55); text-transform: uppercase; white-space: nowrap; }
-.cs-abchip .res { margin-top: 5px; font-family: var(--mono); font-size: 31px; font-weight: 800;
+/* result row: big abbreviation left, the play detail (TO LF / ON 0-2 /
+   168FT · 1 RBI) right-anchored beside it at its usual small size */
+.cs-abchip .res { margin-top: 5px; display: flex; align-items: baseline;
+  justify-content: space-between; gap: 10px; }
+.cs-abchip .res .abbr { font-family: var(--mono); font-size: 31px; font-weight: 800;
   line-height: 1; color: rgba(255,255,255,0.85); white-space: nowrap; }
-.cs-abchip .det { margin-top: 6px; font-family: var(--mono); font-size: 14.5px; font-weight: 700;
+.cs-abchip .res .dtxt { font-family: var(--mono); font-size: 14.5px; font-weight: 700;
   letter-spacing: 1px; color: rgba(255,255,255,0.6); text-transform: uppercase;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 17px; }
-.cs-abchip.hit .det, .cs-abchip.hr .det { color: rgba(255,255,255,0.85); }
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; text-align: right; }
+.cs-abchip.hit .dtxt, .cs-abchip.hr .dtxt { color: rgba(255,255,255,0.85); }
+/* detail line beneath: contact quality fills the freed left slot; the row
+   only exists when there was contact — no reserved space on a strikeout */
+.cs-abchip .det { margin-top: 6px; display: flex; align-items: baseline; }
 .cs-abchip .info { margin-top: 5px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .cs-abchip .swingtag { font-family: var(--mono); font-size: 11.5px; font-weight: 800; letter-spacing: 1.2px;
   color: rgba(255,255,255,0.75); white-space: nowrap; border-left: 3px solid rgba(255,255,255,0.35);
   padding-left: 6px; line-height: 1.1; }
-/* contact quality — the same vocabulary as the stamp chips: Perfect is the
+/* contact quality — owns the detail line's left slot: Perfect is the
    marquee tier, Nice reads brighter than Sour */
-.cs-abchip .ctag { font-family: var(--mono); font-size: 11.5px; font-weight: 800; letter-spacing: 1.2px;
-  white-space: nowrap; border-left: 3px solid rgba(255,255,255,0.35);
-  padding-left: 6px; line-height: 1.1; color: rgba(255,255,255,0.55); }
+.cs-abchip .ctag { flex: 0 0 auto; font-family: var(--mono); font-size: 13px; font-weight: 800;
+  letter-spacing: 1.4px; white-space: nowrap; color: rgba(255,255,255,0.55); }
 .cs-abchip .ctag.nice { color: rgba(255,255,255,0.8); }
-.cs-abchip .ctag.perf { color: #fff; border-color: var(--side); }
+.cs-abchip .ctag.perf { color: var(--side); }
 .cs-abchip .starsused { font-size: 13px; letter-spacing: 2px; line-height: 1; color: var(--accent);
   text-shadow: 0 0 8px rgba(var(--accent-rgb), 0.7); }
 .cs-abchip.hit { background: rgba(var(--side-rgb), 0.22); border-color: rgba(var(--side-rgb), 0.7); }
-.cs-abchip.hit .res { color: var(--side); }
+.cs-abchip.hit .res .abbr { color: var(--side); }
 .cs-abchip.hr { background: rgba(var(--accent-rgb), 0.24); border-color: var(--accent);
   box-shadow: 0 0 24px rgba(var(--accent-rgb), 0.45); }
-.cs-abchip.hr .res { color: #fff; }
+.cs-abchip.hr .res .abbr { color: #fff; }
 .cs-abchip.live { border-color: transparent; }
 .cs-abchip.live::before {
   content: ''; position: absolute; inset: 0; border-radius: inherit; padding: 2.5px;
@@ -529,16 +536,14 @@ function chipMarkup(ab, i) {
   // additively (fieldersChoice) rather than a separate resultCode.
   const abbr = ab.fieldersChoice ? 'FC' : meta.abbr;
   const tag = swingTag(ab);
-  // contact quality gives every ball in play its context — same three-tier
-  // vocabulary as the stamp (recorded side suffix dropped, see stampFor)
-  const ctype = String((ab.contact && ab.contact.typeName) || '');
-  const quality = ctype === 'Perfect' ? ['perf', 'PERFECT']
-    : ctype.startsWith('Nice') ? ['nice', 'NICE']
-    : ctype.startsWith('Sour') ? ['', 'SOUR'] : null;
+  // contact quality gives every ball in play its context — it owns the
+  // detail line's left slot (the play detail moved up beside the result);
+  // same three-tier vocabulary as the stamp. No contact (K/BB/HBP) = the
+  // row simply doesn't render; no space is reserved for it.
+  const quality = contactQuality(ab);
   const starsBits = ab.starsUsed > 0 ? '★'.repeat(Math.min(ab.starsUsed, 6)) : '';
-  const info = (tag || quality || starsBits) ? `<div class="info">
+  const info = (tag || starsBits) ? `<div class="info">
       ${tag ? `<span class="swingtag">${escapeHtml(tag)}</span>` : ''}
-      ${quality ? `<span class="ctag ${quality[0]}">${quality[1]}</span>` : ''}
       ${starsBits ? `<span class="starsused">${starsBits}</span>` : ''}
     </div>` : '';
   return `<div class="cs-abchip" id="cs-ab-${i}">
@@ -546,10 +551,24 @@ function chipMarkup(ab, i) {
       <span>${ab.halfInning ? '▼' : '▲'}${ORDINALS[ab.inning] || ab.inning}</span>
       <span>${ab.before.outs} OUT</span>
     </div>
-    <div class="res">${abbr}</div>
-    <div class="det">${escapeHtml(chipDetail(ab))}</div>
+    <div class="res">
+      <span class="abbr">${abbr}</span>
+      <span class="dtxt">${escapeHtml(chipDetail(ab))}</span>
+    </div>
+    ${quality ? `<div class="det"><span class="ctag ${quality[0]}">${quality[1]}</span></div>` : ''}
     ${info}
   </div>`;
+}
+
+// Contact quality from the recorded contact-type name. The stat files label
+// it inconsistently across games — "Nice - Left", "Right Nice", "Perfect" —
+// so match the keyword anywhere rather than a fixed prefix.
+function contactQuality(ab) {
+  const ctype = String((ab.contact && ab.contact.typeName) || '');
+  if (/perfect/i.test(ctype)) return ['perf', 'PERFECT'];
+  if (/nice/i.test(ctype)) return ['nice', 'NICE'];
+  if (/sour/i.test(ctype)) return ['', 'SOUR'];
+  return null;
 }
 
 export function mountPostgameCallout({ host }) {
@@ -719,6 +738,7 @@ export function mountPostgameCallout({ host }) {
     stage.innerHTML = `
       <div class="cs-backdrop">
         <div class="cs-theme-svg">${ctx.themeSvg}</div>
+        ${logo ? `<div class="cs-bglogo"><img src="${logo}" onerror="this.parentNode.style.display='none'" alt="" /></div>` : ''}
         <div class="cs-vignette"></div>
       </div>
       <div class="cs-leftcol">
@@ -751,7 +771,6 @@ export function mountPostgameCallout({ host }) {
         </div>
         <div class="cs-hero">
           <div class="bloom"></div>
-          <div class="cs-logo">${logo ? `<img src="${logo}" onerror="this.parentNode.style.display='none'" alt="" />` : ''}</div>
           <img src="${charArtUrl(char.name)}" onerror="this.style.opacity=0" alt="" />
         </div>
       </div>
@@ -864,7 +883,12 @@ export function mountPostgameCallout({ host }) {
       || (Number(ab.contact.maxHeight) || 0) >= DEEP_FLY_HEIGHT_M;
   }
   function cameraFor(ab) {
-    return (ab.resultCode === HR_CODE || isDeepFly(ab)) ? 'hero' : 'follow';
+    // home runs / deep flies get the full hero crane; EVERY other ball in
+    // play gets the same crane at infield scale ('gentle') — the camera
+    // always travels onto the field with the play. The pan-only follow cam
+    // is never used here: mid-range hits on it read as "just a rotate from
+    // behind home" against the hero treatment.
+    return (ab.resultCode === HR_CODE || isDeepFly(ab)) ? 'hero' : 'gentle';
   }
   const abPath = (ab) => ({
     points: ab.contact.path,
@@ -1034,12 +1058,11 @@ export function mountPostgameCallout({ host }) {
     if (f.bobble && f.bobble !== 'None') subs.push(['', 'BOBBLE']);
     // contact quality reads on every ball in play, one vocabulary: Perfect
     // keeps its white marquee chip, Nice/Sour take the standard chip (the
-    // recorded names carry a side suffix — "Nice - Left" — that says nothing
-    // on broadcast, so it's dropped)
-    const ctype = String((ab.contact && ab.contact.typeName) || '');
-    if (ctype === 'Perfect') subs.push(['perf', 'PERFECT CONTACT']);
-    else if (ctype.startsWith('Nice')) subs.push(['', 'NICE CONTACT']);
-    else if (ctype.startsWith('Sour')) subs.push(['', 'SOUR CONTACT']);
+    // recorded names carry a side word — "Nice - Left" / "Right Nice",
+    // format varies by game — that says nothing on broadcast, so only the
+    // quality keyword survives; see contactQuality)
+    const quality = contactQuality(ab);
+    if (quality) subs.push([quality[0] === 'perf' ? 'perf' : '', `${quality[1]} CONTACT`]);
     if (ab.contact && meta.hit) subs.push(['', `${Math.round(ab.contact.distance * 3.28084)}ft`]);
     if (ab.swing === 'Star') {
       subs.push(['rob', ab.contact && ab.contact.fiveStar ? '5★ STAR SWING' : 'STAR SWING']);
@@ -1099,7 +1122,6 @@ export function mountPostgameCallout({ host }) {
       t.fromTo(box, { y: 28, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.42 }, i === 0 ? '-=0.2' : '<+=0.09');
     });
     t.fromTo(q('.cs-hero'), { y: 40, autoAlpha: 0, scale: 1.04 }, { y: 0, autoAlpha: 1, scale: 1, duration: 0.7, ease: 'power2.out' }, '-=0.25');
-    t.fromTo(q('.cs-hero .cs-logo img'), { autoAlpha: 0, scale: 1.25, rotate: -6 }, { autoAlpha: 0.3, scale: 1, rotate: 0, duration: 1.0 }, '<');
     t.fromTo(q('.cs-theater'), { scaleX: 0.001, autoAlpha: 0, transformOrigin: ctx.side === 1 ? 'left center' : 'right center' },
       { scaleX: 1, autoAlpha: 1, duration: 0.6, ease: 'power4.out' }, '-=0.5');
     t.fromTo(q('.cs-situation'), { y: 30, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.45 }, '-=0.3');
@@ -1133,20 +1155,12 @@ export function mountPostgameCallout({ host }) {
     const rates = stage.querySelectorAll('.cs-batcard .rate');
     if (!rates.length) return;
     if (!gsap) {
-      rates.forEach((el) => { el.style.maxWidth = 'none'; el.style.opacity = '1'; });
+      rates.forEach((el) => { el.style.maxWidth = 'none'; el.style.opacity = '1'; el.style.padding = '0 8px'; });
       return;
     }
-    gsap.to(rates, { maxWidth: 96, opacity: 1, duration: 0.65, ease: 'power2.inOut', stagger: 0.12 });
-  }
-
-  // The gentle short-hit camera eases from wherever the previous shot left
-  // the camera — resetting the pose first would defeat it. Mirrors the
-  // renderer's own auto-resolution threshold.
-  const SHORT_HIT_M = Number(HitRenderer.SHORT_HIT_DISTANCE_M) || 45;
-  function willBeGentle(ab) {
-    const land = ab.contact && ab.contact.landing;
-    if (!land) return false;
-    return Math.hypot(land[0], land[2]) < SHORT_HIT_M;
+    // max-width 130 leaves room for a four-digit SLG (1.000) at full size;
+    // the padding animates in with it so the spacing matches the other minis
+    gsap.to(rates, { maxWidth: 130, opacity: 1, paddingLeft: 8, paddingRight: 8, duration: 0.65, ease: 'power2.inOut', stagger: 0.12 });
   }
 
   async function playAb(gsap, ab, i, ctx, my) {
@@ -1154,14 +1168,16 @@ export function mountPostgameCallout({ host }) {
     const q = (s) => stage.querySelector(s);
     const meta = RESULT_META[ab.resultCode] || {};
 
+    // the previous chip's rainbow emphasis retires the moment the next
+    // at-bat begins — only the current AB ever carries the live ring
+    stage.querySelectorAll('.cs-abchip.live').forEach((el) => el.classList.remove('live'));
     // the inning transition card establishes the new at-bat FIRST — the bar
-    // morphs into it, the situation updates underneath while hidden, and the
-    // theater resets under its cover: non-batted-ball ABs clear the previous
-    // flight entirely; batted balls headed for a camera move snap back to
-    // the broadcast pose now, so the viewer never watches the reset. Short
-    // hits keep the previous pose — the gentle cam eases from it.
+    // morphs into it and the situation updates underneath while hidden. The
+    // theater empties now and the camera GLIDES back to the broadcast pose
+    // (clearHit's animated return), so the reset reads as part of the replay
+    // sequence rather than a technical snap.
     beatTl = showTransitionCard(gsap, ab);
-    if (renderer && !willBeGentle(ab)) renderer.clearHit();
+    if (renderer) renderer.clearHit({ animate: true });
     // a lingering strikeout dim also lifts under the card when a flight is coming
     if (ab.contact) gsap.to(q('#cs-dim'), { opacity: 0, duration: 0.35 });
     await sleep((BEAT.transIn + BEAT.transHold) * 1000);
@@ -1188,7 +1204,7 @@ export function mountPostgameCallout({ host }) {
           gsap.to(el, { scale: 2.2, opacity: 0, transformOrigin: 'center', duration: 0.6, delay: s * 0.12, ease: 'power2.out', onComplete: () => { el.classList.remove('on'); el.style.cssText = ''; } });
         }
       }
-      if (ab.contact.typeName === 'Perfect') {
+      if (/perfect/i.test(String(ab.contact.typeName || ''))) {
         gsap.fromTo(q('#cs-flash'), { opacity: 0.85, scale: 0.85 }, { opacity: 0, scale: 1.25, duration: 0.55, ease: 'power2.out' });
       }
       await sleep(flightMs);
@@ -1203,7 +1219,6 @@ export function mountPostgameCallout({ host }) {
 
     // the result is now known — the AB chip lands in the ticker with it
     // (synchronized with the ball landing / the play concluding)
-    stage.querySelectorAll('.cs-abchip.live').forEach((el) => el.classList.remove('live'));
     q('#cs-ticker').insertAdjacentHTML('beforeend', chipMarkup(ab, i));
     const chip = q(`#cs-ab-${i}`);
     if (chip) {
