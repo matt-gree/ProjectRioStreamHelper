@@ -73,8 +73,14 @@ a = Analysis(
         ('public/logo_tray.png', 'public'),
         ('public/logo_tray.icns', 'public'),
 
-        # pyrio submodule data
+        # pyrio submodule data. The hit simulator (Character Spotlight per-AB
+        # trajectories) reads these off disk via __file__-relative paths, so
+        # they must be copied into the bundle — PyInstaller only bundles .py
+        # modules by default. Missing them makes simulate_contacts raise
+        # FileNotFoundError, which postgame.py swallows into an empty spotlight.
         ('server/rio/pyrio/CharNames.csv', 'server/rio/pyrio'),
+        ('server/rio/pyrio/constants/character_attributes.csv', 'server/rio/pyrio/constants'),
+        ('server/rio/pyrio/constants/stadiums', 'server/rio/pyrio/constants/stadiums'),
 
         # RioVisualizer submodule: pure-Python `rio_visualizer` package
         # (server/rio/hit_visualizer.py imports rio_visualizer.api). Lives
