@@ -90,6 +90,9 @@ export default function SettingsModal({ opened, onClose }) {
     const [pinnedSide, setPinnedSide] = useState('Team 1');
     const [pinnedSaving, setPinnedSaving] = useState(false);
 
+    // Game data (game modes, tags, users) manual refresh
+    const [gameDataRefreshing, setGameDataRefreshing] = useState(false);
+
     // Controller overlay state
     const [controllerStatus, setControllerStatus] = useState(null);
     const [controllerPath, setControllerPath] = useState('');
@@ -251,6 +254,21 @@ export default function SettingsModal({ opened, onClose }) {
         }
         setPinnedSaving(false);
     }, [pinnedPlayer, pinnedSide]);
+
+    const handleRefreshGameData = useCallback(async () => {
+        setGameDataRefreshing(true);
+        try {
+            const resp = await fetch('/api/v1/rio/game-modes/refresh', { method: 'POST' });
+            const data = await resp.json();
+            notifications.show({
+                message: `Refreshed game data — ${data.count ?? 0} active game modes`,
+                color: 'green',
+            });
+        } catch {
+            notifications.show({ message: 'Failed to refresh game data', color: 'red' });
+        }
+        setGameDataRefreshing(false);
+    }, []);
 
     const fetchStreamLabels = useCallback(async () => {
         try {
@@ -697,6 +715,17 @@ export default function SettingsModal({ opened, onClose }) {
                     <Button size="xs" variant="outline" onClick={handleSavePinnedPlayer} disabled={pinnedSaving}>
                         {pinnedSaving && <Loader size={12} />}
                         {pinnedPlayer.trim() ? 'Save Lock' : 'Clear Lock'}
+                    </Button>
+
+                    {/* Game Data */}
+                    <Text size="sm" fw={500} className="mt-2">Game Data</Text>
+                    <Text size="xs" dimmed>
+                        Game modes, tags, and users from the Project Rio API are refreshed automatically each time
+                        the app launches. Use this if a game mode was just added and you don't want to restart.
+                    </Text>
+                    <Button size="xs" variant="outline" onClick={handleRefreshGameData} disabled={gameDataRefreshing} className="w-fit">
+                        {gameDataRefreshing && <Loader size={12} />}
+                        Refresh Game Data Now
                     </Button>
 
                     <Divider label="Challonge" />

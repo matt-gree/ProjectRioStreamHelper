@@ -335,6 +335,13 @@ async def fetch_game_modes(force: bool = False) -> dict[str, int]:
 
     Returns: {game_mode_name: tag_set_id}
     Caches the result; pass force=True to re-fetch.
+
+    force=True also refreshes pyrio's disk-persisted CompleterCache (tags,
+    users, game modes — cache.pkl under user_data/cache/), which otherwise
+    trusts a timestamp that can survive up to a day across app restarts.
+    That cache backs the game-mode-name resolution used when displaying
+    completed games (RioWeb._process_games), so a stale pickle can hide a
+    just-added game mode there even after fetch_game_modes() itself refreshes.
     """
     global _game_modes
     if _game_modes and not force:
@@ -346,6 +353,11 @@ async def fetch_game_modes(force: bool = False) -> dict[str, int]:
             return _game_modes
 
         client = _get_client()
+        if force:
+            try:
+                await asyncio.to_thread(client.cache.refresh_cache)
+            except Exception as e:
+                logger.warning(f"[StatsAPI] Failed to refresh completer cache: {e}")
         try:
             raw = await asyncio.to_thread(client.list_game_modes, active=True)
             tag_sets = raw.get("Tag Sets", [])
