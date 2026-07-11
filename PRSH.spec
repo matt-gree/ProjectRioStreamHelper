@@ -92,6 +92,14 @@ a = Analysis(
         *([('rio-visualizer/rio_visualizer', 'rio-visualizer/rio_visualizer')]
           if Path('rio-visualizer/rio_visualizer').is_dir() else []),
 
+        # RioVisualizer's web assets (renderer.js, themes.js, etc.) — served
+        # at /rio-visualizer by server/server.py for the Character Spotlight
+        # fed element on the Callout Stage. Same submodule, separate subtree
+        # from the Python package above; PyInstaller has no reason to trace
+        # static JS, so it must be listed explicitly too.
+        *([('rio-visualizer/web', 'rio-visualizer/web')]
+          if Path('rio-visualizer/web').is_dir() else []),
+
         # Bundled gc-overlay (frozen one-folder app, built above) — macOS
         # only. PRSH launches the nested binary as a managed subprocess. Lands
         # under the bundle root at gc-overlay/ — see controller_overlay.py.

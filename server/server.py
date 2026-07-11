@@ -10,7 +10,7 @@ from loguru import logger
 
 from server.api import router_v1
 from server.api.v1.assets import get_msb_assets_path
-from server.paths import user_data_dir, ensure_game_data
+from server.paths import user_data_dir, ensure_game_data, rio_visualizer_dir
 from server.rio.game_pool import OngoingGamePool, CompletedGamePool
 from server.rio.rotation import PoolManager
 from server.rio.provider import RioGameDataProvider
@@ -246,7 +246,7 @@ if _layout_dir.is_dir():
 # RioVisualizer shared web assets (renderer.js core + themes) — served straight
 # from the submodule so the hit overlay and the standalone debug tool share one
 # source of truth. (Frozen builds bundle this dir; that's wired in PRSH.spec.)
-_rio_viz_web = Path("./rio-visualizer/web")
+_rio_viz_web = rio_visualizer_dir() / "web"
 if _rio_viz_web.is_dir():
     app.mount("/rio-visualizer", StaticFiles(directory=str(_rio_viz_web)), name="rio_visualizer")
 
