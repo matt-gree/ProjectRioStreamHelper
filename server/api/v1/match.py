@@ -27,6 +27,7 @@ class MatchPayload(BaseModel):
     dicts are flattened into ``match.{M}.<dotpath>`` leaf writes."""
 
     label: str | None = None
+    phase: str | None = None
     stage: str | None = None
     scheduledAt: str | None = None
     format: dict[str, Any] | None = None
@@ -109,9 +110,12 @@ async def delete_match(m: int):
 
 
 class StartGGSetPayload(BaseModel):
-    """Load a start.gg set's players into a match's sides."""
+    """Load a start.gg set's players into a match's sides.
 
-    setId: int
+    ``setId`` is ``int | str`` because an *unseeded* phase hands out synthetic
+    ``preview_<phaseGroupId>_<round>_<idx>`` string ids, not numeric ones."""
+
+    setId: int | str
 
 
 @router.post("/{m}/flip", response_class=ORJSONResponse)
@@ -175,6 +179,20 @@ async def apply_startgg_set(m, s: dict, set_id: int) -> None:
     if s.get("round_name"):
         entries.append((f"match.{m}.label", s["round_name"]))
 
+    # Competition phase (start.gg phase name, e.g. "Swiss Qualifier" / "Top Cut")
+    # + bracket type. The phase name is exactly the "where in the competition are
+    # we" descriptor the global Competition Phase field wants, so populate it from
+    # the loaded set; also stamp it on the match for per-fixture Bracket/Phase/
+    # Round surfaces. Only write when present so a detail-less set never blanks a
+    # producer's manual phase text.
+    phase = (s.get("tournament_phase") or "").strip()
+    if phase:
+        entries.append(("tournamentInfo.phase", phase))
+        entries.append((f"match.{m}.phase", phase))
+    bracket_type = s.get("bracket_type") or ""
+    if bracket_type:
+        entries.append((f"match.{m}.bracketType", bracket_type))
+
     # Bracket format → series format, so the decided arithmetic runs on the
     # bracket's real best-of instead of a hand-typed one.
     best_of = s.get("totalGames")
@@ -218,6 +236,44 @@ async def load_startgg_set(m: int, payload: StartGGSetPayload):
 
     await apply_startgg_set(m, s, payload.setId)
     return Match.get(m)
+
+
+def _match_for_setid(set_id) -> int | None:
+    """The existing match already holding this start.gg set id, or None."""
+    for k, v in (State.state.get("match", {}) or {}).items():
+        if not isinstance(v, dict):
+            continue
+        provider = v.get("provider") or {}
+        if (provider.get("startgg") or {}).get("setId") == set_id:
+            try:
+                return int(k)
+            except (TypeError, ValueError):
+                continue
+    return None
+
+
+@router.post("/from-startgg", response_class=ORJSONResponse)
+async def match_from_startgg(payload: StartGGSetPayload):
+    """Create (or reuse) a match seeded from a start.gg set — without binding any
+    board. This is the bracket page's "make a match for this set" path: sets load
+    into a match, and the producer binds that match to a board on the Match tab.
+    Reusing the match that already holds this set id keeps re-loading idempotent.
+    """
+    from server.startgg.provider import StartGGProvider
+
+    s = await StartGGProvider.GetSet(payload.setId)
+    if not s or s.get("error"):
+        raise HTTPException(400, (s or {}).get("error") or "Set not found")
+
+    m = _match_for_setid(payload.setId)
+    created = m is None
+    if created:
+        m = Match.next_id()
+        await State.Set(f"match.{m}", default_match())
+        await State.Save()
+
+    await apply_startgg_set(m, s, payload.setId)
+    return {"id": m, "created": created, "match": Match.get(m)}
 
 
 # Binding lives under /scoreboards/{N}/match but is owned here (it's match logic).

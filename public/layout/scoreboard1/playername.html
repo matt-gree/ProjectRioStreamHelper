@@ -2,10 +2,10 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <meta name="overlay-settings" content="textColor, fontFamily, textShadow" />
+  <meta name="overlay-settings" content="textColor, accentColor, fontFamily, textShadow" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap" rel="stylesheet" />
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -16,16 +16,32 @@
     }
     .name-container {
       display: flex;
-      align-items: center;
+      flex-direction: column;
       justify-content: center;
       width: 100%;
       height: 100%;
       padding: 16px;
       transform-origin: top left;
+      gap: 2px;
     }
+    /* Side 1 hugs the left edge, Side 2 hugs the right edge. */
+    body[data-team="1"] .name-container { align-items: flex-start; text-align: left; }
+    body[data-team="2"] .name-container { align-items: flex-end;   text-align: right; }
+    .player-tag {
+      font-size: 18px;
+      font-weight: 800;
+      line-height: 1;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--accent, #f59f00);
+      text-shadow: var(--text-shadow, none);
+      white-space: nowrap;
+    }
+    .player-tag:empty { display: none; }
     .player-name {
       font-size: 36px;
       font-weight: 700;
+      line-height: 1.05;
       color: var(--text-primary, #ffffff);
       text-shadow: var(--text-shadow, none);
       white-space: nowrap;
@@ -34,6 +50,7 @@
 </head>
 <body>
   <div class="name-container" id="name-container">
+    <span class="player-tag" id="tag-text"></span>
     <span class="player-name" id="name-text"></span>
   </div>
 
@@ -65,19 +82,23 @@
     const params = new URLSearchParams(window.location.search);
     const SCOREBOARD = parseInt(params.get('scoreboard')) || 1;
     const TEAM_NUM = parseInt(params.get('team')) || 1;
+    document.body.dataset.team = TEAM_NUM;
+
     const NAME_KEY = `score.${SCOREBOARD}.player.${TEAM_NUM}.rioName`;
+    // Address-book prefix (sponsor/tag) projects to score.player.{T}.team.
+    const TAG_KEY  = `score.${SCOREBOARD}.player.${TEAM_NUM}.team`;
     const { deepGet, state, applyDesignSettings } = OverlayBase;
 
     function render() {
       applyDesignSettings('playername');
-      const name = deepGet(state, NAME_KEY, '');
-      document.getElementById('name-text').textContent = name;
+      document.getElementById('name-text').textContent = deepGet(state, NAME_KEY, '');
+      document.getElementById('tag-text').textContent = deepGet(state, TAG_KEY, '');
     }
 
     OverlayBase.init({
       render,
       fetchSettings: true,
-      shouldRender: (key) => key === NAME_KEY,
+      shouldRender: (key) => key === NAME_KEY || key === TAG_KEY,
       shouldRenderSettings: (key) => key.startsWith('overlays.'),
     });
   </script>

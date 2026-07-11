@@ -18,41 +18,8 @@
         drop-shadow(0 1px 5px rgba(0, 0, 0, 0.12))
         drop-shadow(0 -1px 2px rgba(0, 0, 0, 0.1));
     }
-    .roster-container {
-      display: inline-grid;
-      padding: 8px;
-    }
-    .captain-container {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      position: relative;
-      overflow: visible;
-    }
-    .captain-container img:not(.superstar-badge) { width: var(--captain-size, 104px); height: auto; object-fit: contain; }
-    .role-container, .team-logo-container {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .role-container img { width: var(--trailing-size, 104px); height: auto; object-fit: contain; }
-    .team-logo-container img { width: var(--trailing-size, 104px); height: auto; object-fit: contain; }
-    .character-container { display: flex; align-items: center; justify-content: center; position: relative; overflow: visible; }
-    .character-container img:not(.superstar-badge) { width: var(--char-size, 52px); height: auto; object-fit: contain; }
-    .superstar-badge {
-      position: absolute;
-      bottom: -4px;
-      right: -4px;
-      width: 24px;
-      height: 24px;
-      object-fit: contain;
-      filter: drop-shadow(0 0 3px rgba(245,159,0,0.9));
-      pointer-events: none;
-    }
-    .superstar-badge--captain {
-      width: 36px;
-      height: 36px;
-    }
+    /* Grid CSS lives in roster-mount.js (injected) so it stays identical here
+       and in the combined Roster + Stats source. */
   </style>
 </head>
 <body>
@@ -61,7 +28,9 @@
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <script src="/layout/lib/overlay-base.js"></script>
   <script src="/layout/lib/rio-data.js"></script>
-  <script>
+  <script type="module">
+    import { renderRoster } from '/layout/lib/roster-mount.js';
+
     const REF_W = 452, REF_H = 140;
     document.body.dataset.refW = REF_W;
     document.body.dataset.refH = REF_H;
@@ -95,95 +64,12 @@
     const params = new URLSearchParams(window.location.search);
     const SCOREBOARD = parseInt(params.get('scoreboard')) || 1;
     const TEAM_NUM = parseInt(params.get('team')) || 1;
-    const { state } = OverlayBase;
-
-    const SLOT_CLASS = {
-      captain: 'captain-container',
-      char: 'character-container',
-      role: 'role-container',
-      teamLogo: 'team-logo-container',
-    };
-
-    const { settings, deepGet } = OverlayBase;
-
-    // Reference roster icon sizes — trailing icons match captain, all scale uniformly to fit.
-    const CHAR_SIZE = 52;
-    const CAPTAIN_SIZE = 104;
-    const ROW_H = 60;
-    const GAP = 4;
-    const PAD = 8;
-
-    // Uniform fit-scale: shrink everything proportionally if the natural grid overflows the frame.
-    function rosterFitScale(trailingCount) {
-      const cols = 5 + trailingCount;
-      const naturalGridW = CAPTAIN_SIZE + 4 * CHAR_SIZE + trailingCount * CAPTAIN_SIZE + (cols - 1) * GAP;
-      const naturalGridH = 2 * ROW_H + GAP;
-      const availW = REF_W - 2 * PAD;
-      const availH = REF_H - 2 * PAD;
-      return Math.min(1, availW / naturalGridW, availH / naturalGridH);
-    }
+    const { state, settings } = OverlayBase;
 
     function render() {
       const container = document.getElementById('roster-container');
-      container.innerHTML = '';
-
-      const showSuperstars = deepGet(settings, 'overlays.roster.showSuperstars', true) !== false;
-      const showRole = deepGet(settings, 'overlays.roster.showRoleIcon', true) !== false;
-      const showTeamLogo = deepGet(settings, 'overlays.roster.showTeamLogo', true) !== false;
-
-      const slots = RioData.getRosterSlots(state, SCOREBOARD, TEAM_NUM, {
-        includeRole: showRole,
-        includeTeamLogo: showTeamLogo,
-      });
-
-      const hasLogo = slots.some(s => s.kind === 'teamLogo');
-      const trailingCount = (showRole ? 1 : 0) + (hasLogo ? 1 : 0);
-      const s = rosterFitScale(trailingCount);
-      const charSize = CHAR_SIZE * s;
-      const captainSize = CAPTAIN_SIZE * s;
-      const gap = GAP * s;
-      const rowH = ROW_H * s;
-
-      container.style.setProperty('--char-size', charSize + 'px');
-      container.style.setProperty('--captain-size', captainSize + 'px');
-      container.style.setProperty('--trailing-size', captainSize + 'px');
-      container.style.columnGap = gap + 'px';
-      container.style.rowGap = gap + 'px';
-      container.style.gridTemplateRows = `${rowH}px ${rowH}px`;
-
-      let cols = `${captainSize}px repeat(4, ${charSize}px)`;
-      if (showRole)  cols += ` ${captainSize}px`;
-      if (hasLogo)   cols += ` ${captainSize}px`;
-      container.style.gridTemplateColumns = cols;
+      renderRoster(container, { state, settings, sb: SCOREBOARD, team: TEAM_NUM });
       applyOuterScale(container);
-
-      // Assign explicit grid positions to row-spanning items.
-      let trailingCol = 5;
-      for (const slot of slots) {
-        const div = document.createElement('div');
-        div.className = SLOT_CLASS[slot.kind];
-        if (slot.kind === 'captain') {
-          div.style.gridColumn = '1';
-          div.style.gridRow = '1 / 3';
-        } else if (slot.kind === 'role' || slot.kind === 'teamLogo') {
-          trailingCol++;
-          div.style.gridColumn = String(trailingCol);
-          div.style.gridRow = '1 / 3';
-        }
-        const img = document.createElement('img');
-        img.src = slot.imgUrl;
-        img.onerror = () => img.style.display = 'none';
-        div.appendChild(img);
-        if (showSuperstars && slot.isStarred) {
-          const badge = document.createElement('img');
-          badge.src = `${OverlayBase.BASE_URL}/game_assets/msb/gameIcons/superstar.png`;
-          badge.className = slot.kind === 'captain'
-            ? 'superstar-badge superstar-badge--captain'
-            : 'superstar-badge';
-          div.appendChild(badge);
-        }
-        container.appendChild(div);
-      }
     }
 
     OverlayBase.init({

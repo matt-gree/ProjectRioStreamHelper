@@ -52,6 +52,11 @@
             style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif);text-shadow:var(--text-shadow, none)" font-size="32" font-weight="800">Player Two</text>
       <text data-slot="side2-score" data-maxw="60" x="608" y="166" text-anchor="end"
             style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" font-size="38" font-weight="800" opacity="0"></text>
+
+      <!-- auto Competition Phase · Round from the bound match (blanks collapse);
+           dim via fill-opacity so the mount's opacity toggle still hides it -->
+      <text data-slot="meta" data-maxw="600" x="608" y="214" text-anchor="end" fill-opacity="0.68"
+            style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" font-size="20" font-weight="600" opacity="0"></text>
     </g>
 
     <g data-tpl="scorebox" data-w="470">

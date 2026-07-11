@@ -56,6 +56,7 @@ _SIZE_VARIANTS = {
 _TEAM_VARIANTS = {
     "stats":       [(1, "Team 1"), (2, "Team 2")],
     "roster":      [(1, "Team 1"), (2, "Team 2")],
+    "rosterstats": [(1, "Team 1"), (2, "Team 2")],
     "teamlogo":    [(1, "Team 1"), (2, "Team 2")],
     "controller":  [(1, "Team 1"), (2, "Team 2")],
     "playername":  [(1, "Team 1"), (2, "Team 2")],
@@ -65,6 +66,7 @@ _TEAM_VARIANTS = {
 _DISPLAY_NAMES = {
     "stats":       "Stats",
     "roster":      "Roster",
+    "rosterstats": "Roster + Stats",
     "teamlogo":    "Team Logo",
     "controller":  "Controller",
     "playername":  "Player Name",
@@ -106,6 +108,11 @@ _STANDALONE_DISPLAY_NAMES = {
     # Vertical Scorecard: a tall re-themable SVG scoreboard whose eight design
     # elements each toggle/animate independently (overlays.scorecard.*).
     "scorecard/scorecard": "Vertical Scorecard",
+    # Event Header: a centered two-row tournament banner (1263px). Top row =
+    # Event / Location / Dates from tournamentInfo; bottom row = Message /
+    # Bracket / Phase / Round, the latter three from the bound match. Blank
+    # fields drop out and the rest re-center.
+    "eventheader/eventheader": "Event Header",
 }
 
 

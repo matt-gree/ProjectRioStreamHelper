@@ -410,15 +410,32 @@ const scopeOptions = [
 
 const EMPTY_FILTER = { tag: [], username: [], vs_username: [], limit_games: null };
 
+// Stable fallback references for the store selectors below. Zustand v5's
+// `useStore` uses the RAW `useSyncExternalStore` (no built-in selector
+// memoization), so a selector that mints a fresh object/array on each call —
+// e.g. an inline `?? { ... }` — makes getSnapshot return a new reference every
+// time React reads it. React then loops ("The result of getSnapshot should be
+// cached to avoid an infinite loop" → "Maximum update depth exceeded", thrown
+// from the deepest setState in the subtree, which happens to be Radix
+// SelectItemText's ref callback). This bites right after a board is added or
+// removed: `scoreboards.active` and `scoreboards.binding.{id}` broadcast as two
+// separate settings updates, so there's a render window where the new board's
+// tab is mounted but its binding hasn't arrived — the fallback branch fires.
+// Hoisting the fallbacks to module scope keeps getSnapshot cacheable in that
+// window (same reference every call) until the real binding lands.
+const DEFAULT_PLAYBACK = { mode: 'single', gameId: null, interval: 30 };
+const DEFAULT_POOL = { filters: [], scope: 'both', excluded: [], refresh_interval: 60 };
+const EMPTY_LIST = [];
+
 export default memo(function PoolBrowser({ scoreboardNumber: sb }) {
     const playback = useSettingsStore(s =>
         s?.scoreboards?.binding?.[sb]?.playback
         ?? s?.scoreboards?.binding?.[String(sb)]?.playback
-        ?? { mode: 'single', gameId: null, interval: 30 });
+        ?? DEFAULT_PLAYBACK);
     const pool = useSettingsStore(s =>
         s?.scoreboards?.binding?.[sb]?.pool
         ?? s?.scoreboards?.binding?.[String(sb)]?.pool
-        ?? { filters: [], scope: 'both', excluded: [], refresh_interval: 60 });
+        ?? DEFAULT_POOL);
 
     const mode = playback.mode ?? 'single';
     const loadedGameId = useStateStore(s => s?.score?.[sb]?.game_id ?? null);
@@ -462,8 +479,8 @@ export default memo(function PoolBrowser({ scoreboardNumber: sb }) {
     // Live pool membership — mirrored by the server into
     // scoreboards.rotation.{sb}.* on Start and on Find games (see
     // server/rio/rotation.py _mirror_to_state).
-    const gameIds = useStateStore(s => s?.scoreboards?.rotation?.[sb]?.game_ids ?? []);
-    const cachedGames = useStateStore(s => s?.scoreboards?.rotation?.[sb]?.cached_games ?? []);
+    const gameIds = useStateStore(s => s?.scoreboards?.rotation?.[sb]?.game_ids ?? EMPTY_LIST);
+    const cachedGames = useStateStore(s => s?.scoreboards?.rotation?.[sb]?.cached_games ?? EMPTY_LIST);
     const members = useMemo(() => {
         const byId = new Map(cachedGames.map(g => [g.game_id, g]));
         return gameIds.map(gid => byId.get(gid)).filter(Boolean);

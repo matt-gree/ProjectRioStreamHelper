@@ -40,7 +40,8 @@ _DEFAULT_SIDE = {"participantId": None, "rioName": "", "captain": "", "port": No
 
 def default_match() -> dict:
     return {
-        "label": "",
+        "label": "",               # round name (start.gg roundName, or typed "Winners R2")
+        "phase": "",               # competition phase (start.gg phase name, e.g. "Top Cut")
         "stage": "draft",          # draft | live | post (see note_live / postgame)
         # Producer-facing display time ("6:30 PM", "After break") for schedule
         # surfaces (upcoming-schedule element, lower-third). Free text, never

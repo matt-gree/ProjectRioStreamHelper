@@ -15,6 +15,7 @@ import { cn } from '../../lib/utils';
 import { notifications } from '../../lib/notify';
 import { useStateStore, useSettingsStore, useBracketStore } from '../../context/store';
 import useTournament, { detectSource } from '../../hooks/useTournament';
+import { loadStartGGSetToMatch } from '../../context/match';
 
 // Tinted-translucent chips per set state, matching the brand.
 const STATE_BADGE = {
@@ -121,17 +122,32 @@ export default function Bracket() {
         return () => clearInterval(id);
     }, [bs.lastFetchedAt]);
 
-    // ── Load set into scoreboard ──────────────────────────────
+    // start.gg is match-first: a set loads into a Match (created or reused), and
+    // the producer binds that match to a board on the Match tab. Challonge
+    // (deprecated, no Match model) keeps the legacy direct-to-scoreboard path.
+    const isStartGG = detectSource(bracketLink) === 'startgg';
+
+    // ── Load set into a match (start.gg) ──────────────────────
+    const [loadedMatches, setLoadedMatches] = useState({}); // setId -> matchId
+    const handleLoadToMatch = useCallback(async (s) => {
+        try {
+            const result = await loadStartGGSetToMatch(s.id);
+            setLoadedMatches(prev => ({ ...prev, [s.id]: result.id }));
+            notifications.show({
+                message: `${result.created ? 'Created' : 'Updated'} Match ${result.id} — bind it to a board on the Match tab`,
+                color: 'green',
+            });
+        } catch (e) {
+            notifications.show({ message: e?.message || 'Failed to load set', color: 'red' });
+        }
+    }, []);
+
+    // ── Load set into scoreboard (Challonge legacy) ───────────
     const handleLoadSet = useCallback(async (setId, sbNum) => {
         const result = await loadSet(setId, sbNum);
         if (result) {
             update({ loadedSets: { ...loadedSets, [sbNum]: setId } });
-            // start.gg loads through the Match model (set → match → bound
-            // board); Challonge (deprecated) still loads score fields directly.
-            const message = result.match
-                ? `Set loaded into Match ${result.match} → Scoreboard ${sbNum}`
-                : `Set loaded into Scoreboard ${sbNum}`;
-            notifications.show({ message, color: 'green' });
+            notifications.show({ message: `Set loaded into Scoreboard ${sbNum}`, color: 'green' });
         } else {
             notifications.show({ message: 'Failed to load set', color: 'red' });
         }
@@ -268,7 +284,7 @@ export default function Bracket() {
                                     <TableHead className="text-center">Score</TableHead>
                                     <TableHead>Player 2</TableHead>
                                     <TableHead>Status</TableHead>
-                                    <TableHead>Load</TableHead>
+                                    <TableHead>{isStartGG ? 'Match' : 'Load'}</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -303,24 +319,38 @@ export default function Bracket() {
                                             </Badge>
                                         </TableCell>
                                         <TableCell>
-                                            <div className="flex gap-1">
-                                                {activeScoreboards.map(sb => {
-                                                    const isLoaded = loadedSets?.[sb] === s.id;
-                                                    return (
-                                                        <SimpleTooltip key={sb} label={`Load into Scoreboard ${sb}`}>
-                                                            <Button
-                                                                size="xs"
-                                                                variant={isLoaded ? 'default' : 'secondary'}
-                                                                className={cn(isLoaded && 'bg-[#22c55e] text-black hover:bg-[#22c55e]/90')}
-                                                                onClick={() => handleLoadSet(s.id, sb)}
-                                                                disabled={loading}
-                                                            >
-                                                                {activeScoreboards.length > 1 ? `SB${sb}` : 'Load'}
-                                                            </Button>
-                                                        </SimpleTooltip>
-                                                    );
-                                                })}
-                                            </div>
+                                            {isStartGG ? (
+                                                <SimpleTooltip label="Load this set into a match — bind it to a board on the Match tab">
+                                                    <Button
+                                                        size="xs"
+                                                        variant={loadedMatches[s.id] ? 'default' : 'secondary'}
+                                                        className={cn(loadedMatches[s.id] && 'bg-[#22c55e] text-black hover:bg-[#22c55e]/90')}
+                                                        onClick={() => handleLoadToMatch(s)}
+                                                        disabled={loading || !s.p1_name || !s.p2_name}
+                                                    >
+                                                        {loadedMatches[s.id] ? `Match ${loadedMatches[s.id]}` : 'Load to Match'}
+                                                    </Button>
+                                                </SimpleTooltip>
+                                            ) : (
+                                                <div className="flex gap-1">
+                                                    {activeScoreboards.map(sb => {
+                                                        const isLoaded = loadedSets?.[sb] === s.id;
+                                                        return (
+                                                            <SimpleTooltip key={sb} label={`Load into Scoreboard ${sb}`}>
+                                                                <Button
+                                                                    size="xs"
+                                                                    variant={isLoaded ? 'default' : 'secondary'}
+                                                                    className={cn(isLoaded && 'bg-[#22c55e] text-black hover:bg-[#22c55e]/90')}
+                                                                    onClick={() => handleLoadSet(s.id, sb)}
+                                                                    disabled={loading}
+                                                                >
+                                                                    {activeScoreboards.length > 1 ? `SB${sb}` : 'Load'}
+                                                                </Button>
+                                                            </SimpleTooltip>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
                                         </TableCell>
                                     </TableRow>
                                 ))}

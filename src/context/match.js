@@ -89,6 +89,18 @@ export async function loadStartGGSet(m, setId) {
     });
 }
 
+/**
+ * Create (or reuse) a match seeded from a start.gg set, without binding a board.
+ * The bracket page's "load into a match" path — the producer binds the returned
+ * match to a scoreboard afterwards on the Match tab. Returns { id, created, match }.
+ */
+export async function loadStartGGSetToMatch(setId) {
+    return req("/match/from-startgg", {
+        ...jsonBody({ setId }),
+        method: "POST",
+    });
+}
+
 /** Fetch + project the head-to-head record for match `m` (matchup.* state). */
 export async function fetchMatchup(m) {
     return req(`/matchup/fetch?match=${m}`, { method: "POST" });

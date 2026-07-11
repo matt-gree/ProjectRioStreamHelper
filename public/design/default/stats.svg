@@ -1,8 +1,10 @@
-<svg viewBox="0 0 325 120" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+<svg viewBox="0 0 452 118" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
   <!--
-    DEFAULT package - Stats bar (325x120): the per-team batter/pitcher stat
-    card (stats-card-mount.js). card-bg swaps between data-h-full and
-    data-h-compact when the bottom game-line row is empty. Fixed Rio palette.
+    DEFAULT package - Stats bar (452x118): the per-team batter/pitcher stat
+    card (stats-card-mount.js). Full roster width so the four numerals get room
+    and never overlap; each value auto-fits via data-maxw. card-bg swaps between
+    data-h-full and data-h-compact when the bottom line row is hidden. Fixed Rio
+    palette.
   -->
   <style>
     .st-ink  { fill: var(--ink); font-family: var(--font-display); }
@@ -10,26 +12,26 @@
     .st-num  { fill: var(--ink); font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
   </style>
 
-  <rect data-slot="card-bg" x="2" y="2" width="321" height="116" rx="12" data-h-full="116" data-h-compact="78" style="fill:var(--band);stroke:var(--border);stroke-width:1.5"/>
+  <rect data-slot="card-bg" x="2" y="2" width="448" height="114" rx="12" data-h-full="114" data-h-compact="76" style="fill:var(--band);stroke:var(--border);stroke-width:1.5"/>
 
   <g data-slot="content">
-    <rect x="10" y="11" width="56" height="56" rx="10" fill="rgba(255,255,255,0.045)"/>
-    <rect x="10" y="11" width="3" height="56" rx="1.5" style="fill:var(--accent)"/>
-    <image data-slot="char-icon" x="16" y="15" width="46" height="46" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <rect x="10" y="14" width="50" height="50" rx="10" fill="rgba(255,255,255,0.045)"/>
+    <rect x="10" y="14" width="3" height="50" rx="1.5" style="fill:var(--accent)"/>
+    <image data-slot="char-icon" x="13" y="17" width="44" height="44" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
 
-    <text data-slot="stat-0-value" x="84" y="42" class="st-num" font-size="21" font-weight="700">0</text>
-    <text data-slot="stat-0-label" x="84" y="60" class="st-dim" font-size="11" font-weight="600" letter-spacing="0.8">AB</text>
-    <text data-slot="stat-1-value" x="144" y="42" class="st-num" font-size="21" font-weight="700">.000</text>
-    <text data-slot="stat-1-label" x="144" y="60" class="st-dim" font-size="11" font-weight="600" letter-spacing="0.8">AVG</text>
-    <text data-slot="stat-2-value" x="204" y="42" class="st-num" font-size="21" font-weight="700">.000</text>
-    <text data-slot="stat-2-label" x="204" y="60" class="st-dim" font-size="11" font-weight="600" letter-spacing="0.8">SLG</text>
-    <text data-slot="stat-3-value" x="264" y="42" class="st-num" font-size="21" font-weight="700">0%</text>
-    <text data-slot="stat-3-label" x="264" y="60" class="st-dim" font-size="11" font-weight="600" letter-spacing="0.8">SO%</text>
+    <text data-slot="stat-0-value" data-maxw="86" x="114" y="43" text-anchor="middle" class="st-num" font-size="24" font-weight="700">0</text>
+    <text data-slot="stat-0-label" x="114" y="61" text-anchor="middle" class="st-dim" font-size="12" font-weight="600" letter-spacing="0.8">AB</text>
+    <text data-slot="stat-1-value" data-maxw="86" x="209" y="43" text-anchor="middle" class="st-num" font-size="24" font-weight="700">.000</text>
+    <text data-slot="stat-1-label" x="209" y="61" text-anchor="middle" class="st-dim" font-size="12" font-weight="600" letter-spacing="0.8">AVG</text>
+    <text data-slot="stat-2-value" data-maxw="86" x="304" y="43" text-anchor="middle" class="st-num" font-size="24" font-weight="700">.000</text>
+    <text data-slot="stat-2-label" x="304" y="61" text-anchor="middle" class="st-dim" font-size="12" font-weight="600" letter-spacing="0.8">SLG</text>
+    <text data-slot="stat-3-value" data-maxw="86" x="399" y="43" text-anchor="middle" class="st-num" font-size="24" font-weight="700">0%</text>
+    <text data-slot="stat-3-label" x="399" y="61" text-anchor="middle" class="st-dim" font-size="12" font-weight="600" letter-spacing="0.8">SO%</text>
 
     <g data-slot="line-group">
-      <rect x="14" y="76" width="297" height="1.5" style="fill:var(--border)"/>
+      <rect x="14" y="76" width="424" height="1.5" style="fill:var(--border)"/>
       <text data-slot="line-label" x="16" y="101" class="st-dim" font-size="13" font-weight="700"></text>
-      <text data-slot="line-text" data-maxw="220" x="176" y="101" text-anchor="middle" class="st-num" font-size="13.5"></text>
+      <text data-slot="line-text" data-maxw="330" x="226" y="101" text-anchor="middle" class="st-num" font-size="13.5"></text>
     </g>
   </g>
 </svg>

@@ -92,7 +92,9 @@ export default function TournamentInfo() {
 
     // Subscribe to individual fields to avoid referential equality issues
     const name         = useStateStore(s => s?.tournamentInfo?.name ?? '');
+    const event_name   = useStateStore(s => s?.tournamentInfo?.event_name ?? '');
     const phase        = useStateStore(s => s?.tournamentInfo?.phase ?? '');
+    const message      = useStateStore(s => s?.tournamentInfo?.message ?? '');
     const abbreviation = useStateStore(s => s?.tournamentInfo?.abbreviation ?? '');
     const location     = useStateStore(s => s?.tournamentInfo?.location ?? '');
     const date         = useStateStore(s => s?.tournamentInfo?.date ?? '');
@@ -265,7 +267,11 @@ export default function TournamentInfo() {
                                 </div>
                             </div>
 
+                            <TextField label="Event Name" placeholder="e.g. Stars Off (start.gg event under the competition)" value={event_name} onChange={e => set('event_name', e.currentTarget.value)} />
+
                             <TextField label="Competition Phase" placeholder="e.g. Season 9 Week 2, Top 8" value={phase} onChange={e => set('phase', e.currentTarget.value)} />
+
+                            <TextField label="Message" placeholder="Free-text banner line (e.g. Grand Finals, Welcome!)" value={message} onChange={e => set('message', e.currentTarget.value)} />
 
                             <div className="grid grid-cols-12 gap-2">
                                 <div className="col-span-8">

@@ -17,6 +17,16 @@ import ActiveMatchupStats from '../../components/scoreboard/ActiveMatchupStats';
 import DiamondPanel from '../../components/scoreboard/DiamondPanel';
 import PoolBrowser from '../../components/scoreboard/PoolBrowser';
 
+// Stable fallback references. Zustand v5's useStore uses the raw
+// useSyncExternalStore (no selector memoization), so an inline `?? []`/`?? {}`
+// fallback returns a new reference every getSnapshot call and loops React
+// ("getSnapshot should be cached" → "Maximum update depth exceeded"). Only a
+// hazard when the underlying key is momentarily absent (e.g. a fresh profile
+// with no aliases, or the split active/binding broadcasts during add/remove),
+// but cheap to make bulletproof.
+const DEFAULT_ACTIVE = [1];
+const EMPTY_OBJ = {};
+
 /**
  * A single scoreboard instance (team panels + score controls).
  */
@@ -210,9 +220,9 @@ function tabLabel(sbId, alias) {
 }
 
 export default function ScoreboardManager() {
-    const active = useSettingsStore(s => s?.scoreboards?.active ?? [1]);
-    const bindings = useSettingsStore(s => s?.scoreboards?.binding ?? {});
-    const aliases = useSettingsStore(s => s?.scoreboards?.aliases ?? {});
+    const active = useSettingsStore(s => s?.scoreboards?.active ?? DEFAULT_ACTIVE);
+    const bindings = useSettingsStore(s => s?.scoreboards?.binding ?? EMPTY_OBJ);
+    const aliases = useSettingsStore(s => s?.scoreboards?.aliases ?? EMPTY_OBJ);
     const hudEnabled = useSettingsStore(s => s?.project_rio?.hud_enabled ?? true);
     // Live loaded game per board — the ground-truth "a game is on this board",
     // independent of the settings-side binding.gameId. Shallow-compared so the

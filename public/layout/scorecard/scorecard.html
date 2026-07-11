@@ -51,8 +51,8 @@
         } catch { /* ignore */ }
         // Sample game-mode + producer text so the phase/mode bars have content.
         OverlayBase.deepSet(OverlayBase.settings, `scoreboards.binding.${SB}.stats_tag`, 'Superstar');
-        OverlayBase.deepSet(OverlayBase.settings, 'overlays.scorecard.phaseText', 'Winners Final');
-        OverlayBase.deepSet(OverlayBase.settings, 'overlays.scorecard.titleText', 'Project Rio Invitational');
+        OverlayBase.deepSet(OverlayBase.settings, `overlays.scorecard.${SB}.phaseText`, 'Winners Final');
+        OverlayBase.deepSet(OverlayBase.settings, `overlays.scorecard.${SB}.titleText`, 'Project Rio Invitational');
       }
 
       OverlayBase.init({

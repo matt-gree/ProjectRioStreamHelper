@@ -101,9 +101,20 @@ export function mountScorecard({ host, sb }) {
 
   const g = OverlayBase.deepGet;
 
+  // Per-scoreboard settings namespace. Each scorecard source keeps its own
+  // config under overlays.scorecard.{N}.*; a plain overlays.scorecard.* leaf is
+  // the legacy (pre-per-scoreboard) global, used as a non-destructive fallback
+  // so scoreboards that were never individually edited keep their old look.
+  const NS = `${SETTINGS_TYPE}.${SB}`;
+  function scGet(settings, k, def) {
+    const perSb = g(settings, `overlays.${SETTINGS_TYPE}.${SB}.${k}`, undefined);
+    if (perSb !== undefined) return perSb;
+    return g(settings, `overlays.${SETTINGS_TYPE}.${k}`, def);
+  }
+
   // ── settings / toggles ──────────────────────────────────────────────────────
   function readToggles(settings) {
-    const t = k => g(settings, `overlays.${SETTINGS_TYPE}.${k}`, null);
+    const t = k => scGet(settings, k, null);
     const bool = (k, d) => { const v = t(k); return v == null ? d : v !== false; };
     return {
       showHeader:   bool('showHeader', true),
@@ -127,13 +138,13 @@ export function mountScorecard({ host, sb }) {
   function portColor(port, settings, fallbackIdx) {
     const idx = Number.isInteger(port) ? port : (fallbackIdx == null ? -1 : fallbackIdx);
     if (idx < 0) return null;
-    const ov = g(settings, `overlays.${SETTINGS_TYPE}.port${idx}Color`, null);
+    const ov = scGet(settings, `port${idx}Color`, null);
     if (ov) return ov;
     return idx < PORT_COLORS.length ? PORT_COLORS[idx] : null;
   }
 
   function applyColours(settings, p1Port, p2Port) {
-    const accent = g(settings, `overlays.${SETTINGS_TYPE}.accentColor`, null);
+    const accent = scGet(settings, 'accentColor', null);
     if (accent) host.style.setProperty('--accent', accent); else host.style.removeProperty('--accent');
     const c1 = portColor(p1Port, settings, 0);
     const c2 = portColor(p2Port, settings, 1);
@@ -356,7 +367,7 @@ export function mountScorecard({ host, sb }) {
     if (themeChanged) { revealKey = ''; laidOut = {}; baseState = [false, false, false]; }
     if (disposed) return;
 
-    if (engine.usesAppVars) OverlayBase.applyDesignSettings(SETTINGS_TYPE);
+    if (engine.usesAppVars) OverlayBase.applyDesignSettings(SETTINGS_TYPE, NS);
     else OverlayBase.clearDesignSettings();
 
     const p1 = g(state, `score.${SB}.player.1.rioName`, '');
@@ -400,6 +411,13 @@ export function mountScorecard({ host, sb }) {
       home: g(state, `score.${SB}.home_linescore`, []) || [],
       batTeam, pitTeam,
     };
+
+    // Phase resolves from the assigned match (score.{N}.phase, projected from
+    // the match's round label). A producer-typed phaseText overrides it; when
+    // neither is set the field stays blank and the stack closes the gap.
+    const matchPhase = (g(state, `score.${SB}.phase`, '') || '').trim();
+    const manualPhase = (vis.phaseText || '').trim();
+    vis.phaseText = manualPhase || matchPhase;
 
     vis.isFinal = isFinal;
     vis.hasPhase = !!vis.phaseText;

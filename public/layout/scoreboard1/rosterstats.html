@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<!--
+  Roster + Stats — a per-team combined overlay (?scoreboard=N&team=T). Shows the
+  full 9-character roster in steady state and, on every new batter, cross-fades to
+  a stat card for a few seconds (overlays.rosterstats.dwellSeconds, default 7)
+  before returning to the roster. The batting side flashes the batter; the
+  pitching side flashes the pitcher (getStatsLine picks per side). Roster look
+  comes from overlays.roster.*, the card from overlays.stats.* + the active Design
+  Package — matching the standalone Roster and Stats sources. Native size 452×140.
+-->
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="overlay-settings" content="accentColor, showSuperstars, showRoleIcon, showTeamLogo, transitionType, subLine, subLineText, statValueColor, subtextColor, cardBg, borderColor, borderWidth, fontFamily, cardShadow, textShadow, dwellSeconds" />
+  <link rel="stylesheet" href="/layout/lib/rio-theme/tokens.css" />
+  <style>
+    html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+    body {
+      width: 452px; height: 140px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    #host { position: relative; }
+  </style>
+</head>
+<body>
+  <div id="host"></div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="/layout/lib/overlay-base.js"></script>
+  <script src="/layout/lib/rio-data.js"></script>
+  <script type="module">
+    import { mountRosterStats } from '/layout/lib/rosterstats-mount.js';
+
+    const params = new URLSearchParams(window.location.search);
+    const SB = parseInt(params.get('scoreboard')) || 1;
+    const TEAM = parseInt(params.get('team')) || 1;
+
+    const REF_W = 452, REF_H = 140;
+    document.body.dataset.refW = REF_W;
+    document.body.dataset.refH = REF_H;
+
+    const host = document.getElementById('host');
+    const card = mountRosterStats({ host, sb: SB, team: TEAM });
+
+    // Scale the 452×140 stage to whatever size the OBS source is set to.
+    function autoScale() {
+      const stage = host.querySelector('.rs-stage');
+      if (!stage) return;
+      const needsScale = Math.abs(window.innerWidth - REF_W) > 2 || Math.abs(window.innerHeight - REF_H) > 2;
+      if (needsScale) {
+        const s = Math.min(window.innerWidth / REF_W, window.innerHeight / REF_H);
+        stage.style.transform = `scale(${s})`;
+        stage.style.transformOrigin = 'center center';
+      } else {
+        stage.style.transform = '';
+      }
+    }
+    window.addEventListener('resize', autoScale);
+    autoScale();
+
+    async function boot() {
+      if (OverlayBase.PREVIEW_MODE) {
+        try {
+          const resp = await fetch(`${OverlayBase.BASE_URL}/layout/preview/scoreboard_sample.json`);
+          const data = resp.ok ? await resp.json() : null;
+          if (data) OverlayBase.deepSet(OverlayBase.state, `score.${SB}`, data);
+        } catch { /* ignore */ }
+      }
+
+      OverlayBase.init({
+        render: () => { card.update(OverlayBase.state, OverlayBase.settings); autoScale(); },
+        shouldRender: (key) => key.startsWith(`score.${SB}.`),
+        shouldRenderSettings: (key) =>
+          key.startsWith('overlays.') || key.startsWith('scoreboards.'),
+        fetchSettings: true,
+        skipState: OverlayBase.PREVIEW_MODE,
+      });
+
+      if (OverlayBase.PREVIEW_MODE) { card.update(OverlayBase.state, OverlayBase.settings); autoScale(); }
+    }
+    boot();
+  </script>
+</body>
+</html>

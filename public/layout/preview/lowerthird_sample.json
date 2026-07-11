@@ -11,6 +11,7 @@
   "match": {
     "1": {
       "label": "Winners Final",
+      "phase": "Top Cut",
       "stage": "draft",
       "scheduledAt": "6:30 PM",
       "format": { "bestOf": 3 },

@@ -1,36 +1,36 @@
-<svg viewBox="0 0 325 120" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" data-design-vars="app">
+<svg viewBox="0 0 452 118" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" data-design-vars="app">
   <!--
-    CLASSIC package - Stats bar (325x120): the original per-team batter/pitcher
+    CLASSIC package - Stats bar (452x118): the original per-team batter/pitcher
     stat card, painted with the user's Design-tab CSS variables
-    (data-design-vars="app"). statValueColor / subtextColor keep working via
-    - -stat-value-color / - -stat-subtext-color. card-bg swaps between
-    data-h-full and data-h-compact when the game-line row is empty
-    (stats-card-mount.js).
+    (data-design-vars="app"). The statValueColor / subtextColor overrides keep
+    working via the app stat-value / stat-subtext CSS vars. Full roster width;
+    values auto-fit via data-maxw. card-bg swaps between data-h-full and
+    data-h-compact when the bottom line row is hidden (stats-card-mount.js).
   -->
   <style>
     .cst-val { fill: var(--stat-value-color, var(--text-primary, #ffffff)); font-family: var(--font-family, 'Inter', sans-serif); text-shadow: var(--text-shadow, none); }
     .cst-sub { fill: var(--stat-subtext-color, rgb(155,155,155)); font-family: var(--font-family, 'Inter', sans-serif); text-shadow: var(--text-shadow, none); }
   </style>
 
-  <rect data-slot="card-bg" x="1" y="1" width="323" height="112" rx="12" data-h-full="112" data-h-compact="70"
+  <rect data-slot="card-bg" x="1" y="1" width="450" height="114" rx="12" data-h-full="114" data-h-compact="74"
         style="fill:var(--card-bg, rgba(20,20,30,0.92));stroke:var(--border-color, rgba(255,255,255,0.08));stroke-width:var(--border-width, 1px);filter:var(--card-shadow-filter, none)"/>
 
   <g data-slot="content">
-    <image data-slot="char-icon" x="9" y="9" width="40" height="40" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+    <image data-slot="char-icon" x="11" y="15" width="46" height="46" preserveAspectRatio="xMidYMid meet" opacity="0"/>
 
-    <text data-slot="stat-0-value" x="62" y="32" class="cst-val" font-size="20" font-weight="700">0</text>
-    <text data-slot="stat-0-label" x="62" y="49" class="cst-sub" font-size="12" letter-spacing="0.3">AB</text>
-    <text data-slot="stat-1-value" x="130" y="32" class="cst-val" font-size="20" font-weight="700">.000</text>
-    <text data-slot="stat-1-label" x="130" y="49" class="cst-sub" font-size="12" letter-spacing="0.3">AVG</text>
-    <text data-slot="stat-2-value" x="198" y="32" class="cst-val" font-size="20" font-weight="700">.000</text>
-    <text data-slot="stat-2-label" x="198" y="49" class="cst-sub" font-size="12" letter-spacing="0.3">SLG</text>
-    <text data-slot="stat-3-value" x="266" y="32" class="cst-val" font-size="20" font-weight="700">0%</text>
-    <text data-slot="stat-3-label" x="266" y="49" class="cst-sub" font-size="12" letter-spacing="0.3">SO%</text>
+    <text data-slot="stat-0-value" data-maxw="86" x="114" y="40" text-anchor="middle" class="cst-val" font-size="23" font-weight="700">0</text>
+    <text data-slot="stat-0-label" x="114" y="58" text-anchor="middle" class="cst-sub" font-size="12.5" letter-spacing="0.3">AB</text>
+    <text data-slot="stat-1-value" data-maxw="86" x="209" y="40" text-anchor="middle" class="cst-val" font-size="23" font-weight="700">.000</text>
+    <text data-slot="stat-1-label" x="209" y="58" text-anchor="middle" class="cst-sub" font-size="12.5" letter-spacing="0.3">AVG</text>
+    <text data-slot="stat-2-value" data-maxw="86" x="304" y="40" text-anchor="middle" class="cst-val" font-size="23" font-weight="700">.000</text>
+    <text data-slot="stat-2-label" x="304" y="58" text-anchor="middle" class="cst-sub" font-size="12.5" letter-spacing="0.3">SLG</text>
+    <text data-slot="stat-3-value" data-maxw="86" x="399" y="40" text-anchor="middle" class="cst-val" font-size="23" font-weight="700">0%</text>
+    <text data-slot="stat-3-label" x="399" y="58" text-anchor="middle" class="cst-sub" font-size="12.5" letter-spacing="0.3">SO%</text>
 
     <g data-slot="line-group">
-      <rect x="8" y="60" width="309" height="2" style="fill:var(--border-color, rgb(255,255,255))"/>
-      <text data-slot="line-label" x="12" y="90" class="cst-sub" font-size="13" font-weight="600"></text>
-      <text data-slot="line-text" data-maxw="210" x="170" y="90" text-anchor="middle" class="cst-sub" font-size="13" font-weight="600"></text>
+      <rect x="8" y="74" width="436" height="2" style="fill:var(--border-color, rgb(255,255,255))"/>
+      <text data-slot="line-label" x="12" y="101" class="cst-sub" font-size="13" font-weight="600"></text>
+      <text data-slot="line-text" data-maxw="320" x="226" y="101" text-anchor="middle" class="cst-sub" font-size="13" font-weight="600"></text>
     </g>
   </g>
 </svg>

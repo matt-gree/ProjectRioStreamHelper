@@ -14,11 +14,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <!-- Element knobs + the app-design knobs honored when the active package's
        theme opts into them (e.g. Classic). -->
-  <meta name="overlay-settings" content="transitionType, statValueColor, subtextColor, accentColor, cardBg, borderColor, borderWidth, fontFamily, cardShadow, textShadow" />
+  <meta name="overlay-settings" content="transitionType, subLine, subLineText, statValueColor, subtextColor, accentColor, cardBg, borderColor, borderWidth, fontFamily, cardShadow, textShadow" />
   <link rel="stylesheet" href="/layout/lib/rio-theme/tokens.css" />
   <style>
     html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
-    body { width: 325px; height: 120px; }
+    body { width: 452px; height: 118px; }
     #host { position: fixed; inset: 0; }
   </style>
 </head>
@@ -35,8 +35,8 @@
     const SB = parseInt(params.get('scoreboard')) || 1;
     const TEAM = parseInt(params.get('team')) || 1;
 
-    document.body.dataset.refW = 325;
-    document.body.dataset.refH = 120;
+    document.body.dataset.refW = 452;
+    document.body.dataset.refH = 118;
 
     const host = document.getElementById('host');
     const card = mountStatsCard({ host, sb: SB, team: TEAM });

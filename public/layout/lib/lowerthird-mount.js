@@ -18,8 +18,10 @@
 // CONTENT TYPES + sub-slots (data-slot inside the template; missing = skipped;
 // text slots may carry data-maxw to auto-fit):
 //   logo     : logo, logo-default, title
-//   match    : status, time, side1-name, side2-name, side1-sprite,
-//              side2-sprite, side1-score, side2-score   (scores = series wins)
+//   match    : status, time, meta, meta-card, side1-name, side2-name,
+//              side1-sprite, side2-sprite, side1-score, side2-score
+//              (scores = series wins; meta = auto Competition Phase · Round from
+//              the bound match; meta-card = optional backing plate for meta)
 //   scorebox : status, side1-name, side2-name, side1-score, side2-score
 //   merch    : image, image-default (theme-baked artwork shown while no
 //              image is picked, e.g. Slice26's product cluster), title, subtitle
@@ -82,6 +84,7 @@ const FALLBACK_SVG = `
       <text data-slot="side2-name" data-maxw="420" x="0" y="126" style="fill:var(--ink,#fff)" font-size="32" font-weight="700">Player Two</text>
       <text data-slot="side1-score" x="500" y="80" text-anchor="end" style="fill:var(--ink,#fff)" font-size="32" font-weight="700"></text>
       <text data-slot="side2-score" x="500" y="126" text-anchor="end" style="fill:var(--ink,#fff)" font-size="32" font-weight="700"></text>
+      <text data-slot="meta" data-maxw="500" x="500" y="150" text-anchor="end" style="fill:var(--ink-dim,#aaa)" font-size="16" opacity="0"></text>
     </g>
     <g data-tpl="scorebox" data-w="420">
       <text data-slot="status" x="0" y="36" style="fill:var(--accent,#e60012)" font-size="20" font-weight="700"></text>
@@ -227,6 +230,25 @@ export function mountLowerThird({ host }) {
       el.removeAttribute('href');
       el.setAttribute('opacity', '0');
     }
+  }
+
+  // Slide a side's name left into its sprite's slot when no captain icon shows,
+  // so a name-only row is flush with the accent bar instead of leaving a gap.
+  // The name's authored (with-sprite) x is captured once as data-basex; the
+  // no-sprite x is the sprite's own x. data-maxw auto-fit is unaffected (it
+  // measures text length, not position). A theme whose match row has no sprite
+  // element keeps the authored x untouched.
+  function reflowSideName(seg, nameKey, spriteKey, hasSprite) {
+    const nameEl = seg.slots[nameKey];
+    if (!nameEl) return;
+    if (!nameEl.hasAttribute('data-basex')) {
+      nameEl.setAttribute('data-basex', nameEl.getAttribute('x') || '0');
+    }
+    const spriteEl = seg.slots[spriteKey];
+    const targetX = (hasSprite || !spriteEl)
+      ? nameEl.getAttribute('data-basex')
+      : (spriteEl.getAttribute('x') || nameEl.getAttribute('data-basex'));
+    if (nameEl.getAttribute('x') !== targetX) nameEl.setAttribute('x', targetX);
   }
 
   // Uniform auto-fit for a segment's data-maxw text slots (same policy as
@@ -409,8 +431,16 @@ export function mountLowerThird({ host }) {
     segText(seg, 'time', (match && match.scheduledAt) || '', { optional: true });
     segText(seg, 'side1-name', p1.rioName || 'Player One');
     segText(seg, 'side2-name', p2.rioName || 'Player Two');
-    segImage(seg, 'side1-sprite', spriteUrl(p1.captain));
-    segImage(seg, 'side2-sprite', spriteUrl(p2.captain));
+
+    // Captain headshots, when a captain is selected. When one isn't, slide the
+    // name over into the sprite's reserved space so the row has no empty gap
+    // (name-only, left-flush) instead of a hole where the icon would be.
+    const s1url = spriteUrl(p1.captain);
+    const s2url = spriteUrl(p2.captain);
+    segImage(seg, 'side1-sprite', s1url);
+    segImage(seg, 'side2-sprite', s2url);
+    reflowSideName(seg, 'side1-name', 'side1-sprite', !!s1url);
+    reflowSideName(seg, 'side2-name', 'side2-sprite', !!s2url);
 
     // Series wins as the per-side score, only meaningful past Bo1.
     const bestOf = match ? Number(g(match, 'format.bestOf', 1)) || 1 : 1;
@@ -418,6 +448,23 @@ export function mountLowerThird({ host }) {
     const showSeries = bestOf > 1;
     segText(seg, 'side1-score', showSeries ? String(series['1'] ?? series[1] ?? 0) : '', { optional: true });
     segText(seg, 'side2-score', showSeries ? String(series['2'] ?? series[2] ?? 0) : '', { optional: true });
+
+    // Auto-included match metadata: Competition Phase · Round, sourced from the
+    // bound match (phase / label). The competition phase falls back to the
+    // tournament-wide phase (tournamentInfo.phase) when the match doesn't carry
+    // its own, so a manually-set phase still surfaces. One joined line, so each
+    // part shows only when present and missing parts collapse with no empty
+    // space; the whole line (and its backing card) hides when the match carries
+    // none. Bound to the theme's `meta` sub-slot + optional `meta-card` backing
+    // plate; a theme without them omits the row.
+    const compPhase = (match ? g(match, 'phase', '') : '') || (match ? g(state, 'tournamentInfo.phase', '') : '');
+    const metaParts = [
+      compPhase,
+      match ? g(match, 'label', '') : '',
+    ].map((v) => (v == null ? '' : String(v).trim())).filter(Boolean);
+    const metaText = metaParts.join('   ·   ');
+    segText(seg, 'meta', metaText, { optional: true });
+    if (seg.slots['meta-card']) seg.slots['meta-card'].setAttribute('opacity', metaText ? '1' : '0');
 
     applySideColours(seg,
       Number.isInteger(p1.port) ? p1.port : null,

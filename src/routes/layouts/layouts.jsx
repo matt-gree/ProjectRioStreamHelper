@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Copy, Check, RotateCw, Settings as SettingsIcon, X } from 'lucide-react';
+import { Copy, Check, RotateCw, RotateCcw, Settings as SettingsIcon, X } from 'lucide-react';
 import { Stack, Text, Loader, Divider } from '../../components/ui/primitives';
 import { Panel } from '../../components/ui/panel';
 import { Button } from '../../components/ui/button';
@@ -318,7 +318,7 @@ function LayoutItem({ item, selected, onSelect, activeTab }) {
 }
 
 // Order in which team layouts appear in the two-column section
-const TEAM_LAYOUT_ORDER = ['roster', 'stats', 'teamlogo', 'playername'];
+const TEAM_LAYOUT_ORDER = ['roster', 'stats', 'rosterstats', 'teamlogo', 'playername'];
 
 // Layout types that play a reveal animation when their OBS source is shown.
 // Only these expose the "Intro animation" toggle (turning it off makes the
@@ -1447,14 +1447,29 @@ function DebouncedColorInput({ value, onChange, ...props }) {
 }
 
 // ── Per-layout settings panel ──
-function LayoutSettingsPanel({ layoutType, supportedSettings }) {
+// The Scorecard stores its config per scoreboard (overlays.scorecard.{N}.*) so
+// two scorecard sources can be toggled independently; a plain overlays.scorecard.*
+// leaf is the legacy global, merged underneath as a non-destructive fallback.
+// All other layout types stay global (overlays.{type}.*).
+function LayoutSettingsPanel({ layoutType, supportedSettings, scoreboardId }) {
     const allDefs = LAYOUT_SETTINGS[layoutType] ?? [];
     const settingsDefs = supportedSettings
         ? allDefs.filter(def => supportedSettings.includes(def.key))
         : allDefs;
-    const overlaySettings = useSettingsStore(useShallow(s => s?.overlays?.[layoutType] ?? {}));
+    const perScoreboard = layoutType === 'scorecard' && scoreboardId != null;
+    const writeNs = perScoreboard ? `${layoutType}.${scoreboardId}` : layoutType;
+
+    const typeSettings = useSettingsStore(useShallow(s => s?.overlays?.[layoutType] ?? {}));
     const globalSettings = useSettingsStore(useShallow(s => s?.overlays?.global ?? {}));
     const setItem = useSettingsStore(s => s.setItem);
+    const deleteItem = useSettingsStore(s => s.deleteItem);
+
+    // Effective values: per-scoreboard overrides win over the legacy global leaves.
+    const overlaySettings = useMemo(() => {
+        if (!perScoreboard) return typeSettings;
+        const perSb = typeSettings?.[scoreboardId] ?? typeSettings?.[String(scoreboardId)] ?? {};
+        return { ...typeSettings, ...perSb };
+    }, [perScoreboard, typeSettings, scoreboardId]);
 
     const overridable = useMemo(() => OVERRIDABLE_GLOBAL_KEYS.filter(def =>
         !supportedSettings || def.meta.some(m => supportedSettings.includes(m))
@@ -1464,13 +1479,37 @@ function LayoutSettingsPanel({ layoutType, supportedSettings }) {
     const available = overridable.filter(def => overlaySettings[def.key] == null);
 
     const setOverride = useCallback((key, value) =>
-        setItem(`overlays.${layoutType}.${key}`, value), [layoutType, setItem]);
+        setItem(`overlays.${writeNs}.${key}`, value), [writeNs, setItem]);
+
+    // Reset every element setting + pinned override for this layout back to its
+    // built-in default by removing the stored keys (overlays read the default
+    // when the key is absent).
+    const hasCustomized = useMemo(
+        () => settingsDefs.some(def => overlaySettings[def.key] != null) || pinned.length > 0,
+        [settingsDefs, overlaySettings, pinned],
+    );
+    const resetToDefaults = useCallback(() => {
+        for (const def of settingsDefs) deleteItem(`overlays.${writeNs}.${def.key}`);
+        for (const def of pinned) deleteItem(`overlays.${writeNs}.${def.key}`);
+    }, [settingsDefs, pinned, writeNs, deleteItem]);
 
     return (
         <Stack gap="md">
+            {perScoreboard && (
+                <Text size="xs" dimmed>
+                    These settings apply to <b>Scoreboard {scoreboardId}</b> only — each scoreboard's scorecard is configured independently.
+                </Text>
+            )}
+            {(settingsDefs.length > 0 || pinned.length > 0) && (
+                <div className="flex justify-end">
+                    <Button variant="ghost" size="xs" onClick={resetToDefaults} disabled={!hasCustomized}>
+                        <RotateCcw size={13} className="mr-1" /> Reset to defaults
+                    </Button>
+                </div>
+            )}
             {settingsDefs.length > 0 && (
                 <Stack gap="xs">
-                    {settingsDefs.map(def => renderElementSetting(def, layoutType, overlaySettings, setItem))}
+                    {settingsDefs.map(def => renderElementSetting(def, writeNs, overlaySettings, setItem))}
                 </Stack>
             )}
 
@@ -1532,8 +1571,8 @@ function LayoutSettingsPanel({ layoutType, supportedSettings }) {
     );
 }
 
-function renderElementSetting(def, layoutType, overlaySettings, setItem) {
-    const settingsKey = `overlays.${layoutType}.${def.key}`;
+function renderElementSetting(def, writeNs, overlaySettings, setItem) {
+    const settingsKey = `overlays.${writeNs}.${def.key}`;
 
     if (def.type === 'switch') {
         const checked = overlaySettings?.[def.key] !== false;
@@ -1852,7 +1891,9 @@ export default function LayoutBrowser() {
     const sceneLayouts = useMemo(() => {
         const q = searchQuery.toLowerCase().trim();
         return allLayouts.filter(l => {
-            if (l.group !== 'scenes') return false;
+            // Full 1920×1080 scenes, plus the Event Header banner which lives with
+            // the scene-level furniture in this grouping.
+            if (l.group !== 'scenes' && l.group !== 'eventheader') return false;
             if (q && !l.name.toLowerCase().includes(q)) return false;
             return true;
         });
@@ -2209,7 +2250,7 @@ export default function LayoutBrowser() {
                                         <Text size="sm" fw={600} className="mb-2 capitalize">
                                             {selectedType} Settings
                                         </Text>
-                                        <LayoutSettingsPanel layoutType={selectedType} supportedSettings={supportedSettings} />
+                                        <LayoutSettingsPanel layoutType={selectedType} supportedSettings={supportedSettings} scoreboardId={mode === 'scoreboard' ? activeScoreboardTab : null} />
                                     </Panel>
                                 </CollapsibleContent>
                             </Collapsible>

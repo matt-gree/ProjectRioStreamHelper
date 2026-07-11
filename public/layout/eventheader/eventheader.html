@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="overlay-settings" content="textColor, accentColor, fontFamily" />
+  <style>
+    /* ITC Korinna is proprietary — dropped in locally under public/layout/fonts/
+       (gitignored). Falls back to a compatible serif when absent. */
+    @font-face {
+      font-family: 'ITC Korinna';
+      src: url('/layout/fonts/Korinna.woff2') format('woff2'),
+           url('/layout/fonts/Korinna.woff')  format('woff'),
+           url('/layout/fonts/Korinna.otf')   format('opentype'),
+           url('/layout/fonts/Korinna.ttf')   format('truetype');
+      font-weight: normal;
+      font-style: normal;
+      font-display: swap;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 1920px; height: 1080px; background: transparent; overflow: hidden; }
+    body {
+      /* Korinna is fixed per the event-header spec; the global fontFamily is the
+         fallback face only. */
+      font-family: 'ITC Korinna', 'Korinna', var(--font-family, 'Georgia'), Georgia, 'Times New Roman', serif;
+      color: var(--text-primary, #ffffff);
+    }
+    #stage {
+      position: relative;
+      width: 1920px;
+      height: 1080px;
+      transform-origin: top left;
+    }
+    /* Two thin single-row bands, each 45px of vertical space. Text is bottom-
+       aligned so its baseline sits on the band's bottom edge:
+         header band bottom → y = 45     (top 45px to work with)
+         footer band bottom → y = 1078   (bottom 45px to work with) */
+    .band {
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      height: 45px;
+      display: flex;
+      align-items: flex-end;   /* seat the row on the band's bottom edge */
+      justify-content: center;
+    }
+    #header { top: 0px; }       /* band bottom at y = 45   */
+    #footer { bottom: 2px; }    /* band bottom at y = 1078 */
+    .band[hidden] { display: none; }
+    /* Optional readability plate (off by default). */
+    .band.bg-scrim { background: radial-gradient(ellipse at center, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0) 72%); }
+    .band.bg-bar   { background: rgba(0,0,0,0.72); border-radius: 8px; }
+    .row {
+      display: flex;
+      align-items: baseline;
+      justify-content: center;
+      gap: calc(16px * var(--font-scale, 1));
+      white-space: nowrap;
+      /* Line box must fully contain ascenders + descenders so nothing is
+         clipped at the band edge (34 * 1.2 ≈ 41px, inside the 45px band). */
+      line-height: 1.2;
+      /* Same size top and bottom. */
+      font-size: calc(34px * var(--font-scale, 1));
+      font-weight: 700;
+      letter-spacing: 0.01em;
+    }
+    /* No overflow clip here — that was cropping glyph descenders. */
+    .field { flex: 0 0 auto; }
+    .sep {
+      color: var(--accent, #f59f00);
+      font-size: 0.5em;
+      align-self: center;
+      opacity: 0.9;
+    }
+  </style>
+</head>
+<body>
+  <div id="stage">
+    <div class="band" id="header"><div class="row" id="hdr-row"></div></div>
+    <div class="band" id="footer"><div class="row" id="ftr-row"></div></div>
+  </div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="/layout/lib/overlay-base.js"></script>
+  <script>
+    const REF_W = 1920, REF_H = 1080;
+    document.body.dataset.refW = REF_W;
+    document.body.dataset.refH = REF_H;
+
+    function autoScale() {
+      const el = document.getElementById('stage');
+      const scale = Math.min(window.innerWidth / REF_W, window.innerHeight / REF_H);
+      if (Math.abs(scale - 1) > 0.002) {
+        document.body.style.width = window.innerWidth + 'px';
+        document.body.style.height = window.innerHeight + 'px';
+        el.style.transform = `scale(${scale})`;
+      } else {
+        document.body.style.width = REF_W + 'px';
+        document.body.style.height = REF_H + 'px';
+        el.style.transform = '';
+      }
+    }
+    window.addEventListener('resize', autoScale);
+    autoScale();
+
+    const params = new URLSearchParams(window.location.search);
+    const SCOREBOARD = parseInt(params.get('scoreboard')) || 1;
+    const { deepGet, state, settings, applyDesignSettings } = OverlayBase;
+
+    // overlays.eventheader.<key> element setting, with a hard default.
+    const s = (key, def) => deepGet(settings, `overlays.eventheader.${key}`, def);
+    const on = (key) => s(key, true) !== false; // switches default ON
+
+    // Render one row: drop blank fields, join the rest with accent separators so
+    // the surviving fields stay centered (spec: "skip blank fields, re-center").
+    function renderRow(el, values, sep) {
+      el.innerHTML = '';
+      const present = values.filter(v => v != null && String(v).trim() !== '');
+      present.forEach((v, i) => {
+        if (i > 0 && sep) {
+          const d = document.createElement('span');
+          d.className = 'sep';
+          d.textContent = sep;
+          el.appendChild(d);
+        }
+        const span = document.createElement('span');
+        span.className = 'field';
+        span.textContent = v;
+        el.appendChild(span);
+      });
+      return present.length;
+    }
+
+    function render() {
+      applyDesignSettings('eventheader');
+
+      // ── data ────────────────────────────────────────────────────────
+      // Header leads with the parent competition ("Slice 2026"); the footer's
+      // Event field carries the specific start.gg event ("Stars Off"), falling
+      // back to the competition name when no event_name is present (Challonge /
+      // manually-entered tournaments).
+      const competitionName = deepGet(state, `tournamentInfo.name`, '');
+      const eventName = deepGet(state, `tournamentInfo.event_name`, '')
+                        || competitionName;
+      const location  = deepGet(state, `tournamentInfo.location`, '');
+      const dates     = deepGet(state, `tournamentInfo.date`, '');
+      const message   = deepGet(state, `tournamentInfo.message`, '');
+
+      const matchId   = deepGet(state, `score.${SCOREBOARD}.match`, '');
+      const hasMatch  = matchId !== '' && matchId != null;
+      const phase     = (hasMatch ? deepGet(state, `match.${matchId}.phase`, '') : '')
+                        || deepGet(state, `tournamentInfo.phase`, '');
+      // Round = the match label (start.gg round name), projected onto the board
+      // as score.{N}.phase so it tracks the live board.
+      const round     = deepGet(state, `score.${SCOREBOARD}.phase`, '');
+
+      // ── per-field visibility (also auto-drops when blank) ───────────
+      const fCompetition = on('showEvent') ? competitionName : '';
+      const fEvent    = on('showEvent')    ? eventName : '';
+      const fLocation = on('showLocation') ? location  : '';
+      const fDates    = on('showDates')    ? dates     : '';
+      const fMessage  = on('showMessage')  ? message   : '';
+      const fPhase    = on('showPhase')    ? phase     : '';
+      const fRound    = on('showRound')    ? round     : '';
+
+      // ── layout knobs ────────────────────────────────────────────────
+      const sep    = s('separator', '◆');
+      const scale  = (Number(s('fontScale', 100)) || 100) / 100;
+      const width  = Number(s('bandWidth', 1263)) || 1263;
+      const hOff   = Number(s('headerOffsetY', 0));
+      const fOff   = Number(s('footerOffsetY', 2));
+      const bg     = s('bgStyle', 'none');
+
+      document.getElementById('stage').style.setProperty('--font-scale', scale);
+
+      const header = document.getElementById('header');
+      const footer = document.getElementById('footer');
+      for (const band of [header, footer]) {
+        band.style.width = width + 'px';
+        band.classList.remove('bg-scrim', 'bg-bar');
+        if (bg === 'scrim') band.classList.add('bg-scrim');
+        else if (bg === 'bar') band.classList.add('bg-bar');
+      }
+      header.style.top = hOff + 'px';
+      footer.style.bottom = fOff + 'px';
+
+      // ── header (Event · Location · Dates) ───────────────────────────
+      const showHeader = on('showHeader');
+      const headerCount = showHeader
+        ? renderRow(document.getElementById('hdr-row'), [fCompetition, fLocation, fDates], sep) : 0;
+      header.hidden = !showHeader || headerCount === 0;
+
+      // ── footer (Message · Event · Phase · Round) ────────────────────
+      const showFooter = on('showFooter');
+      const footerCount = showFooter
+        ? renderRow(document.getElementById('ftr-row'), [fMessage, fEvent, fPhase, fRound], sep) : 0;
+      footer.hidden = !showFooter || footerCount === 0;
+    }
+
+    OverlayBase.init({
+      render,
+      fetchSettings: true,
+      shouldRender: (key) =>
+        key.startsWith('tournamentInfo.') ||
+        key === `score.${SCOREBOARD}.match` ||
+        key === `score.${SCOREBOARD}.phase` ||
+        key.startsWith('match.'),
+      shouldRenderSettings: (key) => key.startsWith('overlays.'),
+    });
+  </script>
+</body>
+</html>

@@ -11,6 +11,8 @@ default path matches the stat file by ``score.{N}.game_id`` + the
 ``Loaded from HUD == 0`` gate; ``GET /postgame/files`` lists recent usable files
 for the rare case the producer needs to pick a different one.
 """
+import asyncio
+
 from fastapi import APIRouter
 from fastapi.responses import ORJSONResponse
 
@@ -35,6 +37,18 @@ async def get_postgame(scoreboard: int):
     ``{present: False}`` when nothing has been captured."""
     payload = PostGame.get_payload(scoreboard)
     return payload or {"present": False, "scoreboard": scoreboard}
+
+
+@router.get("/abs", response_class=ORJSONResponse)
+async def character_abs(scoreboard: int, team: int, char_index: int):
+    """Per-AB walkthrough payload for one captured-game roster character
+    (Character Spotlight): every resolved plate appearance with before/after
+    situation, runner movements, and the re-simulated flight path for balls in
+    play. Heavy (full trajectories) — served REST-only, never through State.
+
+    The first call per capture runs the hit simulator over every contact in the
+    game, so it is pushed off the event loop."""
+    return await asyncio.to_thread(PostGame.character_abs, scoreboard, team, char_index)
 
 
 @router.get("/files", response_class=ORJSONResponse)

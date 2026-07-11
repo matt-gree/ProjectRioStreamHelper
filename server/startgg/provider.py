@@ -120,9 +120,12 @@ class StartGGProvider:
         await State.SetBatch([
             ("tournamentInfo.bracket_link", ""),
             ("tournamentInfo.name", ""),
+            ("tournamentInfo.event_name", ""),
             ("tournamentInfo.location", ""),
             ("tournamentInfo.date", ""),
             ("tournamentInfo.entrants", ""),
+            # Reset the auto-fill record so the next load fills fields fresh.
+            ("tournamentInfo._auto", {}),
         ])
         await State.Save()
 
@@ -238,15 +241,33 @@ class StartGGProvider:
 
         cls._tournament_data = result
 
-        # Write to State (same keys tournament_info.jsx subscribes to)
-        entries = [
-            ("tournamentInfo.name", result["tournamentName"]),
-            ("tournamentInfo.event_name", result["eventName"]),
-            ("tournamentInfo.location", result["address"] or ("Online" if result["isOnline"] else "")),
-            ("tournamentInfo.date", date_str),
-            ("tournamentInfo.entrants", str(result["numEntrants"])),
-            ("tournamentInfo.bracket_link", canonical_url),
-        ]
+        # Write to State (same keys tournament_info.jsx subscribes to). A load may
+        # be a first load or a *refresh* of an already-loaded event, and the
+        # producer may have hand-edited some Info fields in between. Preserve those
+        # edits: only overwrite a field when it's still empty or untouched since the
+        # last auto-fill (tracked in tournamentInfo._auto). start.gg's value always
+        # updates the auto-record, so re-blanking a field re-enables auto-fill.
+        info = State.state.get("tournamentInfo", {}) or {}
+        prev_auto = info.get("_auto", {}) or {}
+        new_auto: dict[str, str] = {}
+        entries = []
+
+        def merge(field: str, new_val: str):
+            new_auto[field] = new_val
+            current = info.get(field, "")
+            untouched = current in ("", None) or current == prev_auto.get(field)
+            if untouched and current != new_val:
+                entries.append((f"tournamentInfo.{field}", new_val))
+
+        merge("name", result["tournamentName"])
+        merge("event_name", result["eventName"])
+        merge("location", result["address"] or ("Online" if result["isOnline"] else ""))
+        merge("date", date_str)
+        merge("entrants", str(result["numEntrants"]))
+        # Identity/derived fields always track start.gg (never producer-edited).
+        entries.append(("tournamentInfo.bracket_link", canonical_url))
+        entries.append(("tournamentInfo._auto", new_auto))
+
         await State.SetBatch(entries)
         await State.Save()
 
@@ -448,6 +469,17 @@ class StartGGProvider:
         state_order = {"active": 0, "called": 0, "created": 1, "completed": 2}
         flat.sort(key=lambda rs: (state_order.get(rs[1].get("state"), 9), abs(rs[0])))
 
+        def _cache_players(pdict: dict) -> list[dict]:
+            """One side's player list from the bracket cache's lookup (name only —
+            no start.gg player id here, but enough to seat a match by name)."""
+            if not pdict:
+                return []
+            return [{
+                "gamerTag": pdict.get("name", ""),
+                "prefix": pdict.get("prefix", "") or "",
+                "playerId": None,
+            }]
+
         parsed: list[dict] = []
         for rn, s in flat:
             p1 = players.get(str(s.get("entrant1Id") or ""), {}) or {}
@@ -465,6 +497,12 @@ class StartGGProvider:
                 "p1_seed": p1.get("seed"),
                 "p2_seed": p2.get("seed"),
                 "state": s.get("state", ""),
+                # Consumable shape (mirrors _parse_set_full) so a set fetched from
+                # the cache can seat a match directly — needed for preview sets.
+                "entrants": [_cache_players(p1), _cache_players(p2)],
+                "seeds": [p1.get("seed"), p2.get("seed")],
+                "entrant_ids": [s.get("entrant1Id"), s.get("entrant2Id")],
+                "totalGames": s.get("totalGames"),
             })
 
         per_page = 64
@@ -483,8 +521,19 @@ class StartGGProvider:
         }
 
     @classmethod
-    async def GetSet(cls, set_id: int) -> dict:
-        """Get a single set by ID with full player detail."""
+    async def GetSet(cls, set_id) -> dict:
+        """Get a single set by ID with full player detail.
+
+        Accepts numeric ids (real sets, fetched with full user/profile detail via
+        SetQuery) and synthetic ``preview_<phaseGroupId>_<round>_<idx>`` ids that
+        start.gg hands out for an *unseeded* phase. Preview ids aren't resolvable
+        through SetQuery, so we resolve them from the phase group's set list — it
+        already carries entrant names, seeds and start.gg player ids, enough to
+        seat a match ahead of the bracket being seeded.
+        """
+        if isinstance(set_id, str) and not set_id.lstrip("-").isdigit():
+            return await cls._resolve_preview_set(set_id)
+
         data = await cls._query(
             "SetQuery",
             SET_QUERY,
@@ -496,6 +545,21 @@ class StartGGProvider:
             return {"error": "Set not found"}
 
         return cls._parse_set_full(raw)
+
+    @classmethod
+    async def _resolve_preview_set(cls, set_id: str) -> dict:
+        """Resolve a synthetic preview set id from its phase group's set list."""
+        m = re.match(r"preview_(\d+)_", set_id)
+        if not m:
+            return {"error": "Set not found"}
+        phase_group_id = int(m.group(1))
+        listing = await cls.GetSets(
+            phase_group_id=phase_group_id, include_finished=True,
+        )
+        for s in listing.get("sets", []):
+            if str(s.get("id")) == str(set_id):
+                return s
+        return {"error": "Set not found"}
 
     @classmethod
     async def GetEntrant(cls, entrant_id: int) -> dict | None:
@@ -653,6 +717,7 @@ class StartGGProvider:
                 "entrant2Id": str(entrant2["id"]) if entrant2 and entrant2.get("id") else None,
                 "score1": score1,
                 "score2": score2,
+                "totalGames": raw.get("totalGames"),
                 "state": state_map.get(raw.get("state"), str(raw.get("state", ""))),
                 "completed": raw.get("state") == 3,
                 "roundName": raw.get("fullRoundText", ""),
@@ -745,6 +810,24 @@ class StartGGProvider:
                 return None
             return e.get("initialSeedNum")
 
+        def entrant_players(slot):
+            """Per-side player list (gamerTag/prefix/playerId) — the sets-list
+            query carries participants[].player, enough to seat a match from a
+            *preview* set that GetSet can't fetch by id. Falls back to the
+            entrant display name when participant detail is absent."""
+            e = slot.get("entrant") or {}
+            out = []
+            for part in (e.get("participants") or []):
+                pl = part.get("player") or {}
+                out.append({
+                    "gamerTag": pl.get("gamerTag") or e.get("name") or "",
+                    "prefix": pl.get("prefix") or "",
+                    "playerId": pl.get("id"),
+                })
+            if not out and e.get("name"):
+                out.append({"gamerTag": e.get("name"), "prefix": "", "playerId": None})
+            return out
+
         # State: 1=created, 2=active, 3=completed, 6=called
         state_map = {1: "created", 2: "active", 3: "completed", 6: "called"}
 
@@ -779,6 +862,15 @@ class StartGGProvider:
             "p1_seed": entrant_seed(p1),
             "p2_seed": entrant_seed(p2),
             "state": state_map.get(raw.get("state"), str(raw.get("state", ""))),
+            # Consumable shape (mirrors _parse_set_full) so a list set — including
+            # a preview set from an unseeded phase — can seat a match directly.
+            "entrants": [entrant_players(p1), entrant_players(p2)],
+            "seeds": [entrant_seed(p1), entrant_seed(p2)],
+            "entrant_ids": [
+                (p1.get("entrant") or {}).get("id"),
+                (p2.get("entrant") or {}).get("id"),
+            ],
+            "totalGames": raw.get("totalGames"),
         }
 
     @staticmethod

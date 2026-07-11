@@ -84,7 +84,7 @@ async def startgg_set(set_id: int, session_id: str | None = None) -> ORJSONRespo
     response_class=ORJSONResponse
 )
 async def startgg_load_set(
-    set_id: int = 0,
+    set_id: str = "",
     scoreboard_number: int = 1,
     session_id: str | None = None,
 ) -> ORJSONResponse:

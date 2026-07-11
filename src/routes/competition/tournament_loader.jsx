@@ -6,6 +6,7 @@ import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import { Alert, AlertTitle, AlertDescription } from '../../components/ui/alert';
 import { notifications } from '../../lib/notify';
+import { RotateCw } from 'lucide-react';
 import { useStateStore, useBracketStore } from '../../context/store';
 import useTournament from '../../hooks/useTournament';
 
@@ -31,6 +32,9 @@ export default function TournamentLoader() {
     const [prefetching, setPrefetching] = useState(false);
     const [statusText, setStatusText] = useState('');
     const prefetchInflightRef = useRef(false);
+    // Tracks whether the URL field has been edited since the last successful load.
+    // A loaded, unedited URL turns the button into a Refresh (re-pull) action.
+    const [urlDirty, setUrlDirty] = useState(false);
 
     const bs = useBracketStore();
     const { tournament, update } = bs;
@@ -148,11 +152,16 @@ export default function TournamentLoader() {
         }
 
         notifications.show({ message: `Loaded: ${result.tournamentName}`, color: 'green' });
+        setUrlDirty(false);
 
         update({
             tournament: result,
             sets: [],
             entrants: [],
+            // Reset the cache marker too — otherwise a Refresh (same link) makes
+            // the prefetch below treat entrants as already-cached and skip the
+            // re-pull, leaving the list we just cleared empty ("No entrants found").
+            entrantsLoadedFor: null,
             selectedPhase: null,
             selectedPool: null,
             loadedSets: {},
@@ -208,22 +217,39 @@ export default function TournamentLoader() {
                         <TextField
                             label="Tournament URL"
                             placeholder="https://start.gg/tournament/.../event/... or https://challonge.com/..."
-                            description="Paste a start.gg event URL, or a Challonge tournament URL (deprecated — limited support)"
                             className="flex-1"
                             value={url}
-                            onChange={e => update({ url: e.currentTarget.value })}
+                            onChange={e => { update({ url: e.currentTarget.value }); setUrlDirty(true); }}
                             onKeyDown={e => e.key === 'Enter' && handleLoadEvent()}
                         />
-                        <Button size="sm" onClick={handleLoadEvent} disabled={loading || prefetching}>
-                            {(loading || prefetching) && <Loader size={12} />}
-                            Load
-                        </Button>
+                        {(() => {
+                            const busy = loading || prefetching;
+                            // Loaded + URL untouched → the button re-pulls (Refresh).
+                            const isRefresh = !!tournament && !urlDirty && !!url.trim();
+                            return (
+                                <Button
+                                    size="sm"
+                                    onClick={handleLoadEvent}
+                                    disabled={busy}
+                                    // Fixed width so swapping in the spinner doesn't resize the button.
+                                    className="w-[104px] shrink-0 justify-center gap-1.5"
+                                >
+                                    {busy
+                                        ? <Loader size={12} />
+                                        : isRefresh && <RotateCw size={13} />}
+                                    {isRefresh ? 'Refresh' : 'Load'}
+                                </Button>
+                            );
+                        })()}
                         {tournament && (
                             <Button size="sm" variant="outline" className="border-destructive/40 text-destructive" onClick={handleClear}>
                                 Clear
                             </Button>
                         )}
                     </div>
+                    <Text size="xs" dimmed>
+                        Paste a start.gg event URL, or a Challonge tournament URL (deprecated — limited support)
+                    </Text>
                     {statusText && (
                         <div className="mt-1 flex items-center gap-2">
                             <Loader size={12} />

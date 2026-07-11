@@ -686,8 +686,8 @@ function PostgameCalloutPicker({ element, scoreboard = 1 }) {
     const choose = (value) => {
         if (!value) { setFeed(null); return; }
         const [team, charIndex] = value.split(':').map(Number);
-        const name = teams.find(t => t.team === team)?.chars.find(c => c.charIndex === charIndex)?.name || 'callout';
-        setFeed({ element: 'postgamecallout', scoreboard, team, charIndex }, `Feed callout: ${name}`);
+        const name = teams.find(t => t.team === team)?.chars.find(c => c.charIndex === charIndex)?.name || 'spotlight';
+        setFeed({ element: 'postgamecallout', scoreboard, team, charIndex }, `Feed spotlight: ${name}`);
     };
 
     if (!present || teams.length === 0) {
@@ -703,7 +703,7 @@ function PostgameCalloutPicker({ element, scoreboard = 1 }) {
         <Stack gap="xs">
             <label className="flex flex-col gap-1">
                 <Group gap="xs" className="items-center">
-                    <Text size="xs" className="text-muted-foreground">Content — whose callout to show</Text>
+                    <Text size="xs" className="text-muted-foreground">Content — whose spotlight to show</Text>
                     <StagedDot show={staged} />
                 </Group>
                 <select
@@ -725,7 +725,8 @@ function PostgameCalloutPicker({ element, scoreboard = 1 }) {
             </label>
             {selValue && (
                 <Text size="xs" className="text-muted-foreground">
-                    Show the callout-stage source on air; re-pick to swap the featured character.
+                    Show the callout-stage source on air; the spotlight plays once and holds
+                    on the spray chart. Re-pick to swap the featured character.
                 </Text>
             )}
         </Stack>
@@ -2585,7 +2586,8 @@ function MatchAccordion({ m, open, onToggle, active, boundMap, gameModes }) {
         });
     };
 
-    const phase = draft.val('label', draft.match?.label || '');
+    const roundLabel = draft.val('label', draft.match?.label || '');
+    const compPhase = draft.val('phase', draft.match?.phase || '');
     const gameMode = draft.val('gameMode', draft.match?.gameMode || '');
     const bestOf = draft.val('format.bestOf', (draft.match?.format || {}).bestOf ?? 1);
     const w1 = draft.match?.series?.[1] ?? draft.match?.series?.['1'] ?? 0;
@@ -2662,7 +2664,10 @@ function MatchAccordion({ m, open, onToggle, active, boundMap, gameModes }) {
             {open && (
                 <div className="border-t border-border p-2.5">
                     <Stack gap="sm">
-                        {/* start.gg load + bracket phase (the round label, projected to the board). */}
+                        {/* start.gg load + round label. Round + competition phase
+                            both project to the lower-third's auto metadata line;
+                            a start.gg set fills both, and these let the producer
+                            see/override what will load. */}
                         <Group gap="xs" className="flex-nowrap items-center">
                             <Popover>
                                 <PopoverTrigger asChild>
@@ -2678,10 +2683,21 @@ function MatchAccordion({ m, open, onToggle, active, boundMap, gameModes }) {
                             <StagedDot show={draft.isStaged('label')} />
                             <input
                                 type="text"
-                                value={phase}
+                                value={roundLabel}
                                 onChange={(e) => draft.setField('label', e.target.value,
+                                    `Match ${m}: round ${e.target.value || 'cleared'}`)}
+                                placeholder="Round (e.g. Winners R2)…"
+                                className={cn(DB_FIELD, 'min-w-0 flex-1')}
+                            />
+                        </Group>
+                        <Group gap="xs" className="flex-nowrap items-center">
+                            <StagedDot show={draft.isStaged('phase')} />
+                            <input
+                                type="text"
+                                value={compPhase}
+                                onChange={(e) => draft.setField('phase', e.target.value,
                                     `Match ${m}: phase ${e.target.value || 'cleared'}`)}
-                                placeholder="Bracket phase (e.g. Winners R2)…"
+                                placeholder="Competition phase (e.g. Top Cut)…"
                                 className={cn(DB_FIELD, 'min-w-0 flex-1')}
                             />
                         </Group>

@@ -30,26 +30,25 @@
 import { createThemeEngine } from './svg-theme-engine.js';
 
 const ELEMENT = 'stats';
-const SETTINGS_TYPE = 'stats';
 const DEFAULT_PACKAGE = 'default';
 const MAX_STATS = 6;
 
 const FALLBACK_SVG = `
-<svg viewBox="0 0 325 120" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
-  <rect data-slot="card-bg" x="2" y="2" width="321" height="76" rx="10" data-h-full="112" data-h-compact="76" style="fill:var(--band,#0b0b12);stroke:var(--border,#1f1f30)"/>
+<svg viewBox="0 0 452 118" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+  <rect data-slot="card-bg" x="2" y="2" width="448" height="114" rx="10" data-h-full="114" data-h-compact="76" style="fill:var(--band,#0b0b12);stroke:var(--border,#1f1f30)"/>
   <g data-slot="content">
-    <image data-slot="char-icon" x="12" y="16" width="44" height="44" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
-    <text data-slot="stat-0-value" x="80" y="42" style="fill:var(--ink,#f5f5f8);font-family:var(--font-mono,monospace)" font-size="20" font-weight="700">0</text>
-    <text data-slot="stat-0-label" x="80" y="62" style="fill:var(--ink-dim,#8f8fa3);font-family:var(--font-body,sans-serif)" font-size="11">-</text>
-    <text data-slot="stat-1-value" x="145" y="42" style="fill:var(--ink,#f5f5f8);font-family:var(--font-mono,monospace)" font-size="20" font-weight="700">0</text>
-    <text data-slot="stat-1-label" x="145" y="62" style="fill:var(--ink-dim,#8f8fa3);font-family:var(--font-body,sans-serif)" font-size="11">-</text>
-    <text data-slot="stat-2-value" x="210" y="42" style="fill:var(--ink,#f5f5f8);font-family:var(--font-mono,monospace)" font-size="20" font-weight="700">0</text>
-    <text data-slot="stat-2-label" x="210" y="62" style="fill:var(--ink-dim,#8f8fa3);font-family:var(--font-body,sans-serif)" font-size="11">-</text>
-    <text data-slot="stat-3-value" x="275" y="42" style="fill:var(--ink,#f5f5f8);font-family:var(--font-mono,monospace)" font-size="20" font-weight="700">0</text>
-    <text data-slot="stat-3-label" x="275" y="62" style="fill:var(--ink-dim,#8f8fa3);font-family:var(--font-body,sans-serif)" font-size="11">-</text>
+    <image data-slot="char-icon" x="13" y="17" width="44" height="44" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <text data-slot="stat-0-value" data-maxw="86" x="114" y="43" text-anchor="middle" style="fill:var(--ink,#f5f5f8);font-family:var(--font-mono,monospace)" font-size="24" font-weight="700">0</text>
+    <text data-slot="stat-0-label" x="114" y="61" text-anchor="middle" style="fill:var(--ink-dim,#8f8fa3);font-family:var(--font-body,sans-serif)" font-size="12">-</text>
+    <text data-slot="stat-1-value" data-maxw="86" x="209" y="43" text-anchor="middle" style="fill:var(--ink,#f5f5f8);font-family:var(--font-mono,monospace)" font-size="24" font-weight="700">0</text>
+    <text data-slot="stat-1-label" x="209" y="61" text-anchor="middle" style="fill:var(--ink-dim,#8f8fa3);font-family:var(--font-body,sans-serif)" font-size="12">-</text>
+    <text data-slot="stat-2-value" data-maxw="86" x="304" y="43" text-anchor="middle" style="fill:var(--ink,#f5f5f8);font-family:var(--font-mono,monospace)" font-size="24" font-weight="700">0</text>
+    <text data-slot="stat-2-label" x="304" y="61" text-anchor="middle" style="fill:var(--ink-dim,#8f8fa3);font-family:var(--font-body,sans-serif)" font-size="12">-</text>
+    <text data-slot="stat-3-value" data-maxw="86" x="399" y="43" text-anchor="middle" style="fill:var(--ink,#f5f5f8);font-family:var(--font-mono,monospace)" font-size="24" font-weight="700">0</text>
+    <text data-slot="stat-3-label" x="399" y="61" text-anchor="middle" style="fill:var(--ink-dim,#8f8fa3);font-family:var(--font-body,sans-serif)" font-size="12">-</text>
     <g data-slot="line-group">
-      <text data-slot="line-label" x="16" y="100" style="fill:var(--ink-dim,#8f8fa3);font-family:var(--font-body,sans-serif)" font-size="13" font-weight="600"></text>
-      <text data-slot="line-text" data-maxw="240" x="76" y="100" style="fill:var(--ink,#f5f5f8);font-family:var(--font-mono,monospace)" font-size="13"></text>
+      <text data-slot="line-label" x="16" y="101" style="fill:var(--ink-dim,#8f8fa3);font-family:var(--font-body,sans-serif)" font-size="13" font-weight="600"></text>
+      <text data-slot="line-text" data-maxw="330" x="226" y="101" text-anchor="middle" style="fill:var(--ink,#f5f5f8);font-family:var(--font-mono,monospace)" font-size="13"></text>
     </g>
   </g>
 </svg>`;
@@ -69,11 +68,15 @@ function injectCss() {
   _cssInjected = true;
 }
 
-export function mountStatsCard({ host, sb, team }) {
+export function mountStatsCard({ host, sb, team, settingsType = 'stats' }) {
   injectCss();
   host.classList.add('st-host');
   const SB = sb || 1;
   const TEAM = team === 2 ? 2 : 1;
+  // Which settings namespace this card reads (overlays.{SETTINGS_TYPE}.*). The
+  // standalone Stats source uses 'stats'; the combined Roster + Stats element
+  // passes 'rosterstats' so its card is configured independently.
+  const SETTINGS_TYPE = settingsType || 'stats';
 
   const engine = createThemeEngine({ host, element: ELEMENT, fallbackSvg: FALLBACK_SVG });
 
@@ -88,6 +91,23 @@ export function mountStatsCard({ host, sb, team }) {
     return g(settings, `overlays.${SETTINGS_TYPE}.transitionType`, 'fade') === 'fade';
   }
 
+  // Resolve the bottom line from the producer's choice:
+  //   'gameLine' (default) — the live HUD game line, or the Season Stats label
+  //                          for API games (the original auto behavior)
+  //   'custom'             — a fixed user string (hidden + compact when blank)
+  //   'off'                — always hidden; card shrinks to data-h-compact
+  function resolveLine(info, settings) {
+    const mode = g(settings, `overlays.${SETTINGS_TYPE}.subLine`, 'gameLine');
+    if (mode === 'off') return { show: false, label: '', text: '' };
+    if (mode === 'custom') {
+      const text = String(g(settings, `overlays.${SETTINGS_TYPE}.subLineText`, '') || '').trim();
+      return { show: !!text, label: '', text };
+    }
+    const text = info.gameLine || info.bottomLabel || '';
+    const label = info.gameLine ? info.bottomLabel : '';
+    return { show: !!text, label, text };
+  }
+
   function flash(el) {
     if (!el) return;
     el.style.transition = 'fill 0s';
@@ -97,7 +117,7 @@ export function mountStatsCard({ host, sb, team }) {
     el.style.fill = '';
   }
 
-  function bind(info, { flashChanges }) {
+  function bind(info, { flashChanges, line }) {
     engine.setImage('char-icon', info.charIconUrl || '');
 
     for (let i = 0; i < MAX_STATS; i++) {
@@ -113,18 +133,17 @@ export function mountStatsCard({ host, sb, team }) {
     prevValues = {};
     for (const st of info.stats) prevValues[st.label] = String(st.value);
 
-    // Bottom line: "Game: <line>" for HUD games, "Season Stats" otherwise.
-    const hasLine = !!(info.gameLine || info.bottomLabel);
+    // Bottom line: producer-controlled (Game Line / Custom Text / Off).
     const lineGroup = engine.slots['line-group'];
-    if (lineGroup) lineGroup.setAttribute('opacity', hasLine ? '1' : '0');
-    engine.setText('line-label', info.gameLine ? info.bottomLabel : '');
-    engine.setText('line-text', info.gameLine || info.bottomLabel || '');
+    if (lineGroup) lineGroup.setAttribute('opacity', line.show ? '1' : '0');
+    engine.setText('line-label', line.show ? line.label : '');
+    engine.setText('line-text', line.show ? line.text : '');
 
     const bg = engine.slots['card-bg'];
     if (bg) {
       const hFull = parseFloat(bg.getAttribute('data-h-full'));
       const hCompact = parseFloat(bg.getAttribute('data-h-compact'));
-      if (hFull && hCompact) bg.setAttribute('height', hasLine ? hFull : hCompact);
+      if (hFull && hCompact) bg.setAttribute('height', line.show ? hFull : hCompact);
     }
 
     engine.refitText();
@@ -155,6 +174,8 @@ export function mountStatsCard({ host, sb, team }) {
     const wasShowing = prevCharKey !== '';
     prevCharKey = charKey;
 
+    const line = resolveLine(info, settings);
+
     const content = engine.slots['content'];
     if (charChanged && wasShowing && useFade(settings) && content) {
       // Dissolve: fade the content group out, rebind, fade back in.
@@ -164,13 +185,13 @@ export function mountStatsCard({ host, sb, team }) {
       content.style.opacity = '0';
       fadeTimer = setTimeout(() => {
         if (disposed || content !== engine.slots['content']) return;
-        bind(info, { flashChanges: false });
+        bind(info, { flashChanges: false, line });
         content.style.transition = 'opacity 0.25s ease';
         content.style.opacity = '1';
       }, 200);
     } else {
       if (content) { content.style.transition = ''; content.style.opacity = '1'; }
-      bind(info, { flashChanges: !charChanged && useFade(settings) });
+      bind(info, { flashChanges: !charChanged && useFade(settings), line });
     }
 
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => {

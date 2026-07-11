@@ -7,6 +7,7 @@ import {
 } from '../../context/match';
 import ParticipantPicker from '../../components/ParticipantPicker';
 import StartggSetPicker from '../../components/StartggSetPicker';
+import { notifications } from '../../lib/notify';
 import { Popover, PopoverTrigger, PopoverContent } from '../../components/ui/popover';
 import { SimpleSelect } from '../../components/ui/simple-select';
 import { Input } from '../../components/ui/input';
@@ -91,6 +92,11 @@ function SideColumn({ m, side, player }) {
 function MatchCard({ m, match, active, boundMap, bindableMap, gameModes }) {
     const [label, setLabel] = useState(match?.label || '');
     useEffect(() => { setLabel(match?.label || ''); }, [match?.label]);
+    // Competition phase (e.g. "Top Cut") — distinct from the round label; both
+    // project to the lower-third's auto metadata line. start.gg set loads fill
+    // it; this field lets the producer see/override what will load.
+    const [phase, setPhase] = useState(match?.phase || '');
+    useEffect(() => { setPhase(match?.phase || ''); }, [match?.phase]);
 
     const players = match?.player || {};
     const stage = match?.stage || 'draft';
@@ -112,6 +118,26 @@ function MatchCard({ m, match, active, boundMap, bindableMap, gameModes }) {
         if (next !== (match?.label || '')) updateMatch(m, { label: next });
     }, [label, match?.label, m]);
 
+    const commitPhase = useCallback(() => {
+        const next = phase.trim();
+        if (next !== (match?.phase || '')) updateMatch(m, { phase: next });
+    }, [phase, match?.phase, m]);
+
+    // Seat a picked start.gg set onto THIS match. Awaited so a failure surfaces
+    // (the picker's fire-and-forget onPick used to swallow errors — including the
+    // 422 that preview-set string ids threw).
+    const useStartGGSet = useCallback(async (s) => {
+        try {
+            await loadStartGGSet(m, s.id);
+            notifications.show({
+                message: `Loaded ${s.p1_name || 'TBD'} vs ${s.p2_name || 'TBD'} into Match ${m}`,
+                color: 'green',
+            });
+        } catch (e) {
+            notifications.show({ message: e?.message || 'Failed to load set', color: 'red' });
+        }
+    }, [m]);
+
     // Retire = unbind every board currently bound to this match. The match
     // object (and its final series) survives; the boards return to their feed.
     const boundBoards = active.filter((sb) => String(boundMap[sb]) === String(m));
@@ -131,11 +157,19 @@ function MatchCard({ m, match, active, boundMap, bindableMap, gameModes }) {
             <div className="space-y-4 p-4">
                 <Group gap="sm" wrap>
                     <Input
-                        className="h-8 w-48"
-                        placeholder="Label (optional)"
+                        className="h-8 w-40"
+                        placeholder="Round (e.g. Winners R2)"
                         value={label}
                         onChange={(e) => setLabel(e.currentTarget.value)}
                         onBlur={commitLabel}
+                        onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                    />
+                    <Input
+                        className="h-8 w-40"
+                        placeholder="Competition phase (e.g. Top Cut)"
+                        value={phase}
+                        onChange={(e) => setPhase(e.currentTarget.value)}
+                        onBlur={commitPhase}
                         onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
                     />
                     <div className="w-44">
@@ -163,7 +197,7 @@ function MatchCard({ m, match, active, boundMap, bindableMap, gameModes }) {
                         <PopoverContent align="start" className="w-96">
                             <StartggSetPicker
                                 pickLabel="Use"
-                                onPick={(s) => loadStartGGSet(m, s.id)}
+                                onPick={useStartGGSet}
                             />
                         </PopoverContent>
                     </Popover>

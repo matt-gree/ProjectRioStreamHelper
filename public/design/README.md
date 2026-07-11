@@ -106,7 +106,7 @@ Content types and their sub-slots (inside the template; any may be omitted):
 | `data-tpl` | Sub-slots |
 |------------|-----------|
 | `logo` | `logo` (`<image>`, tournament logo from `/branding/`), `logo-default` (fallback mark shown when no logo), `title` (optional caption) |
-| `match` | `status` (`CURRENT`/`UP NEXT`/override), `time` (the match's `scheduledAt`), `side1-name`/`side2-name`, `side1-sprite`/`side2-sprite` (captain headshots), `side1-score`/`side2-score` (series wins, hidden at Bo1) |
+| `match` | `status` (`CURRENT`/`UP NEXT`/override), `time` (the match's `scheduledAt`), `meta` (auto `Competition Phase · Round` from the bound match — each part shown only if present, hidden when the match has none), `meta-card` (optional `<rect>` backing plate the mount shows/hides with `meta`), `side1-name`/`side2-name` (slide into the sprite's slot when no captain is set), `side1-sprite`/`side2-sprite` (captain headshots), `side1-score`/`side2-score` (series wins, hidden at Bo1) |
 | `scorebox` | `status` (`TOP 5` / `FINAL`), `side1-name`/`side2-name`, `side1-score`/`side2-score` (live runs, `score.{N}.score_left/right`) |
 | `merch` | `image` (`/branding/merch/…`), `image-default` (theme-baked artwork — e.g. a product cluster — shown while no image is picked), `title`, `subtitle` |
 | `clock` | `clock-label`, `clock` (countdown / count-up / time-of-day, tabular numerals) |

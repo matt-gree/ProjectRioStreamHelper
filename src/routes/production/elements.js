@@ -107,13 +107,15 @@ export const ELEMENTS = [
     },
     {
         id: 'postgamecallout',
-        name: 'Stat Callout',
-        // Post-game only: a full-screen, port-coloured reveal of one finished-game
-        // roster character's box-score line. Fed like Stats — the producer picks
-        // which side + roster slot; the pick is written to the chosen container's
-        // feed key (production.feed.container.<id> = { element:'postgamecallout',
-        // … }) and the callout-stage container renders it. Reads postgame.{N}.*
-        // (Phase 6 capture). Native full-canvas 1920×1080.
+        name: 'Character Spotlight',
+        // Post-game only: the full-screen per-character callout — identity column
+        // (hero art, team-logo badge, H-AB premier stat, batting/pitching/defense
+        // boxes) around an embedded hit-visualizer AB Theater that replays every
+        // plate appearance and ends holding on the spray chart. Fed like Stats —
+        // the producer picks which side + roster slot; the pick is written to the
+        // chosen container's feed key (production.feed.container.<id> =
+        // { element:'postgamecallout', … }). Reads postgame.{N}.* plus the
+        // REST-only GET /postgame/abs walkthrough payload. Native 1920×1080.
         phase: 'post',
         flavor: 'fed',
         span: 4,

@@ -288,11 +288,17 @@
    * Sets: --accent, --accent-rgb, --card-bg, --text-primary, --border-radius,
    *       --border-color, --font-family, and per-overlay specific vars.
    */
-  function applyDesignSettings(layoutType) {
+  // `nsKey` optionally overrides the settings sub-namespace the per-layout
+  // override reads use (defaults to layoutType). The Scorecard passes
+  // `scorecard.{N}` so each scoreboard's card keeps an independent set of
+  // style-override pins; the type-specific branches below still key on the
+  // plain layoutType (none of them is the scorecard).
+  function applyDesignSettings(layoutType, nsKey) {
     const root = document.documentElement.style;
     // In globals-only preview mode, suppress per-layout reads so the iframe
     // shows what the Design tab settings produce in isolation.
     const effectiveLayoutType = PREVIEW_GLOBALS_ONLY ? null : layoutType;
+    const overrideNs = PREVIEW_GLOBALS_ONLY ? null : (nsKey || layoutType);
     const g = (key, def) => deepGet(settings, key, def);
 
     // ── Global defaults ──
@@ -304,7 +310,7 @@
     const globalFont = g('overlays.global.fontFamily', 'Inter');
 
     // ── Per-layout accent override (kept for advanced "Add override" feature) ──
-    const perAccent = effectiveLayoutType ? g(`overlays.${effectiveLayoutType}.accentColor`, null) : null;
+    const perAccent = overrideNs ? g(`overlays.${overrideNs}.accentColor`, null) : null;
     const accent = perAccent || globalAccent;
 
     root.setProperty('--accent', accent);
@@ -319,7 +325,7 @@
 
     // ── Promoted-to-global "final badge" color, with optional per-layout override ──
     const globalBadge = g('overlays.global.finalBadgeColor', null);
-    const perBadge = effectiveLayoutType ? g(`overlays.${effectiveLayoutType}.finalBadgeColor`, null) : null;
+    const perBadge = overrideNs ? g(`overlays.${overrideNs}.finalBadgeColor`, null) : null;
     const effBadge = perBadge || globalBadge;
     if (effBadge) root.setProperty('--final-badge-color', effBadge);
     else root.removeProperty('--final-badge-color');
@@ -345,8 +351,8 @@
     const textShadowBlur    = g('overlays.global.textShadowBlur',    4);
     const textShadowColor   = g('overlays.global.textShadowColor',   'rgba(0, 0, 0, 0.8)');
 
-    const perCardBlur = effectiveLayoutType ? g(`overlays.${effectiveLayoutType}.cardShadowBlur`, null) : null;
-    const perTextBlur = effectiveLayoutType ? g(`overlays.${effectiveLayoutType}.textShadowBlur`, null) : null;
+    const perCardBlur = overrideNs ? g(`overlays.${overrideNs}.cardShadowBlur`, null) : null;
+    const perTextBlur = overrideNs ? g(`overlays.${overrideNs}.textShadowBlur`, null) : null;
     const effCardBlur = perCardBlur != null ? perCardBlur : cardShadowBlur;
     const effTextBlur = perTextBlur != null ? perTextBlur : textShadowBlur;
 
@@ -372,13 +378,16 @@
       if (borderWidth  != null) root.setProperty('--border-width',  borderWidth  + 'px');
       if (textColor)          root.setProperty('--text-primary',   textColor);
     }
-    if (effectiveLayoutType === 'stats') {
-      const cardBg        = g('overlays.stats.cardBg',        null);
-      const borderColor   = g('overlays.stats.borderColor',   null);
-      const borderRadius  = g('overlays.stats.borderRadius',  null);
-      const borderWidth   = g('overlays.stats.borderWidth',   null);
-      const statValueColor = g('overlays.stats.statValueColor', null);
-      const subtextColor   = g('overlays.stats.subtextColor',   null);
+    // The combined Roster + Stats element hosts the same stat card under its own
+    // 'rosterstats' namespace, so it resolves the same app-var overrides here.
+    if (effectiveLayoutType === 'stats' || effectiveLayoutType === 'rosterstats') {
+      const t = effectiveLayoutType;
+      const cardBg        = g(`overlays.${t}.cardBg`,        null);
+      const borderColor   = g(`overlays.${t}.borderColor`,   null);
+      const borderRadius  = g(`overlays.${t}.borderRadius`,  null);
+      const borderWidth   = g(`overlays.${t}.borderWidth`,   null);
+      const statValueColor = g(`overlays.${t}.statValueColor`, null);
+      const subtextColor   = g(`overlays.${t}.subtextColor`,   null);
       if (cardBg)             root.setProperty('--card-bg',       cardBg);
       if (borderColor)        root.setProperty('--border-color',  borderColor);
       if (borderRadius != null) root.setProperty('--border-radius', borderRadius + 'px');

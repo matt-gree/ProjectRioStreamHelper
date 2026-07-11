@@ -10,7 +10,7 @@
 
     TEMPLATE CONTRACT (data-tpl / sub data-slots, see public/design/README.md):
       logo     : logo, logo-default, title
-      match    : status, time, side1-name/-sprite/-score, side2-...
+      match    : status, time, meta, side1-name/-sprite/-score, side2-...
       scorebox : status, side1-name/-score, side2-name/-score
       merch    : image, title, subtitle
       clock    : clock-label, clock
@@ -71,6 +71,10 @@
       <text data-slot="side2-score" data-maxw="60" x="608" y="166" text-anchor="end"
             style="fill:var(--ink);font-family:var(--font-display)" font-size="40" font-weight="700"
             font-variant-numeric="tabular-nums" opacity="0"></text>
+
+      <!-- auto Competition Phase · Round from the bound match (blanks collapse) -->
+      <text data-slot="meta" data-maxw="600" x="608" y="214" text-anchor="end"
+            style="fill:var(--ink-dim);font-family:var(--font-display)" font-size="21" font-weight="600" letter-spacing="1.5" opacity="0"></text>
     </g>
 
     <!-- .. SCOREBOX (live board score) .............................. -->
