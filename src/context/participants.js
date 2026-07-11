@@ -90,5 +90,27 @@ export const useParticipantsStore = create((set, get) => ({
         return result;
     },
 
+    /** Fetch the full address book in backup shape ({version, exportedAt, participants}). */
+    exportBook: async () => req("/export", { method: "GET" }),
+
+    /**
+     * Restore an address-book backup. Accepts the Export object or a bare rows
+     * array. Merges by default (non-destructive); replace=true wipes first.
+     * Refetches so the store reflects the server's authoritative de-dupe.
+     * Returns { imported, created, updated }.
+     */
+    importBook: async (parsed, replace = false) => {
+        const rows = Array.isArray(parsed) ? parsed
+            : Array.isArray(parsed?.participants) ? parsed.participants
+            : null;
+        if (!rows) throw new Error("Not a valid address-book export.");
+        const result = await req("/import", {
+            ...jsonBody({ participants: rows, replace }),
+            method: "POST",
+        });
+        await get().load(true);
+        return result;
+    },
+
     getById: (id) => get().participants.find(p => p.id === id) || null,
 }));

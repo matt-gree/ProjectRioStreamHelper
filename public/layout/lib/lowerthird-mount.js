@@ -149,11 +149,16 @@ function fmtDur(ms) {
   const m = Math.floor(s / 60); s -= m * 60;
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
 }
-function fmtTimeOfDay(d) {
-  let h = d.getHours();
-  const ap = h >= 12 ? 'PM' : 'AM';
-  h = h % 12 || 12;
-  return `${h}:${pad(d.getMinutes())} ${ap}`;
+// Time-of-day, optionally in a specific IANA time zone (e.g. 'America/New_York').
+// A bad/unsupported zone falls back to the machine's local time rather than
+// throwing, so a typo never blanks the clock on air.
+function fmtTimeOfDay(d, tz) {
+  const opts = { hour: 'numeric', minute: '2-digit', hour12: true };
+  if (tz) {
+    try { return d.toLocaleTimeString('en-US', { ...opts, timeZone: tz }); }
+    catch { /* invalid zone → local */ }
+  }
+  return d.toLocaleTimeString('en-US', opts);
 }
 
 // Read the five authored slots off state; index-keyed 1..5.
@@ -400,8 +405,29 @@ export function mountLowerThird({ host }) {
     return id === undefined ? '' : `${OverlayBase.BASE_URL}/game_assets/msb/characterIcons/${id}.png`;
   }
 
+  // Swap a logo image between its authored (with-caption) box and a larger
+  // no-caption box declared via data-full="x y w h" — so a caption-less logo
+  // can grow into the space the caption would occupy. Themes without data-full
+  // are untouched (always the authored box).
+  function applyLogoGeom(imgEl, full) {
+    if (!imgEl) return;
+    if (!imgEl.hasAttribute('data-basegeom')) {
+      imgEl.setAttribute('data-basegeom',
+        `${imgEl.getAttribute('x') || 0} ${imgEl.getAttribute('y') || 0} ${imgEl.getAttribute('width') || 0} ${imgEl.getAttribute('height') || 0}`);
+    }
+    const geom = (full && imgEl.getAttribute('data-full')) || imgEl.getAttribute('data-basegeom');
+    const [x, y, w, h] = geom.split(/\s+/);
+    imgEl.setAttribute('x', x); imgEl.setAttribute('y', y);
+    imgEl.setAttribute('width', w); imgEl.setAttribute('height', h);
+  }
+
   function bindLogo(seg, slot) {
+    const hasTitle = !!(slot.title && String(slot.title).trim());
     segText(seg, 'title', slot.title || '', { optional: true });
+    // Grow both the branding image and the theme-default mark when caption-less.
+    const defG = seg.slots['logo-default'];
+    applyLogoGeom(seg.slots['logo'], !hasTitle);
+    applyLogoGeom(defG ? defG.querySelector('image') : null, !hasTitle);
     const logoUrl = OverlayBase.brandingLogoUrl();
     const imgSlot = seg.slots['logo'];
     if (!imgSlot) return;
@@ -458,10 +484,9 @@ export function mountLowerThird({ host }) {
     // none. Bound to the theme's `meta` sub-slot + optional `meta-card` backing
     // plate; a theme without them omits the row.
     const compPhase = (match ? g(match, 'phase', '') : '') || (match ? g(state, 'tournamentInfo.phase', '') : '');
-    const metaParts = [
-      compPhase,
-      match ? g(match, 'label', '') : '',
-    ].map((v) => (v == null ? '' : String(v).trim())).filter(Boolean);
+    const round = match ? g(match, 'label', '') : '';
+    const metaParts = [compPhase, round]
+      .map((v) => (v == null ? '' : String(v).trim())).filter(Boolean);
     const metaText = metaParts.join('   ·   ');
     segText(seg, 'meta', metaText, { optional: true });
     if (seg.slots['meta-card']) seg.slots['meta-card'].setAttribute('opacity', metaText ? '1' : '0');
@@ -538,7 +563,9 @@ export function mountLowerThird({ host }) {
       clockEl.setAttribute('opacity', '1');
       let text = '';
       if (mode === 'clock') {
-        text = fmtTimeOfDay(new Date());
+        text = fmtTimeOfDay(new Date(), c.timezone);
+        // Optional trailing label (e.g. "ET") appended to the time-of-day read.
+        if (c.suffix) text += ' ' + String(c.suffix).trim();
       } else if (mode === 'countdown') {
         const ms = c.running
           ? (c.endsAt || 0) - Date.now()
@@ -551,6 +578,15 @@ export function mountLowerThird({ host }) {
       }
       if (clockEl.textContent !== text) clockEl.textContent = text;
       segText(seg, 'clock-label', c.label || '', { optional: true });
+      // Recentre the digits vertically when no label shows above them: a theme
+      // may declare data-nolabel-y as the label-less baseline (the authored
+      // with-label baseline is captured once as data-basey).
+      if (!clockEl.hasAttribute('data-basey')) {
+        clockEl.setAttribute('data-basey', clockEl.getAttribute('y') || '0');
+      }
+      const targetY = (!c.label && clockEl.getAttribute('data-nolabel-y'))
+        || clockEl.getAttribute('data-basey');
+      if (clockEl.getAttribute('y') !== targetY) clockEl.setAttribute('y', targetY);
     }
     host.classList.toggle('lt-warn', warn);
   }

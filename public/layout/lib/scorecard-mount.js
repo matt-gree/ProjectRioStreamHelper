@@ -97,6 +97,7 @@ export function mountScorecard({ host, sb }) {
   let revealKey = '';
   let laidOut = {};           // el-* -> bool (has been positioned once; gates animate-vs-snap)
   let baseState = [false, false, false];
+  let boxBaseX = null;        // theme-authored x of each box column (captured once per theme)
   let disposed = false;
 
   const g = OverlayBase.deepGet;
@@ -338,12 +339,50 @@ export function mountScorecard({ host, sb }) {
     engine.setText('pit-line', pit.line || '—');
   }
 
+  // The theme authors nine inning columns at fixed x's, sized for a full game.
+  // Snapshot those pristine x's once per theme so we can redistribute the ones
+  // we actually show — themes space their columns differently (default 112..432,
+  // slice26 140..460), so the span endpoints must come from the SVG, not a const.
+  function ensureBoxBaseX() {
+    if (boxBaseX) return boxBaseX;
+    boxBaseX = {};
+    for (let i = 1; i <= MAX_INN; i++) {
+      const el = engine.slots[`box-h-${i}`] || engine.slots[`box-away-${i}`];
+      if (!el) continue;
+      const v = parseFloat(el.getAttribute('x'));
+      if (!isNaN(v)) boxBaseX[i] = v;
+    }
+    return boxBaseX;
+  }
+
   function bindBox(d) {
-    const nInn = Math.max(d.away.length, d.home.length, 1);
+    const base = ensureBoxBaseX();
+    // How many inning columns this game warrants: its configured length (so a
+    // live game holds a stable width) but never fewer than have been played
+    // (extra innings), capped at nine.
+    const played = Math.max(d.away.length, d.home.length, 0);
+    const sel = parseInt(d.inningsSelected, 10) || 0;
+    const shown = Math.min(Math.max(sel, played, 1), MAX_INN);
+
+    // Span the shown columns evenly across the theme's authored first→last x so
+    // a short game fills the width instead of leaving the unplayed innings blank.
+    const firstX = base[1];
+    let lastX = firstX;
+    for (let i = MAX_INN; i >= 1; i--) { if (base[i] != null) { lastX = base[i]; break; } }
+    const canReflow = firstX != null && lastX != null;
+    const step = shown > 1 ? (lastX - firstX) / (shown - 1) : 0;
+
     for (let i = 1; i <= MAX_INN; i++) {
       const col = engine.slots[`box-col-${i}`];
-      const active = i <= Math.min(nInn, MAX_INN);
+      const active = i <= shown;
       if (col) col.setAttribute('opacity', active ? '1' : '0');
+      if (active && canReflow) {
+        const x = shown > 1 ? firstX + step * (i - 1) : (firstX + lastX) / 2;
+        for (const s of [`box-h-${i}`, `box-away-${i}`, `box-home-${i}`]) {
+          const el = engine.slots[s];
+          if (el) el.setAttribute('x', x);
+        }
+      }
       const a = d.away[i - 1];
       const h = d.home[i - 1];
       engine.setText(`box-away-${i}`, active ? (a != null ? a : '-') : '');
@@ -364,7 +403,7 @@ export function mountScorecard({ host, sb }) {
   async function update(state, settings) {
     const theme = g(settings, 'overlays.global.designPackage', null) || DEFAULT_PACKAGE;
     const themeChanged = await engine.ensureTheme(theme);
-    if (themeChanged) { revealKey = ''; laidOut = {}; baseState = [false, false, false]; }
+    if (themeChanged) { revealKey = ''; laidOut = {}; baseState = [false, false, false]; boxBaseX = null; }
     if (disposed) return;
 
     if (engine.usesAppVars) OverlayBase.applyDesignSettings(SETTINGS_TYPE, NS);
@@ -409,6 +448,7 @@ export function mountScorecard({ host, sb }) {
       r3Name: g(state, `score.${SB}.runner3Name`, ''),
       away: g(state, `score.${SB}.away_linescore`, []) || [],
       home: g(state, `score.${SB}.home_linescore`, []) || [],
+      inningsSelected: g(state, `score.${SB}.innings_selected`, 0),
       batTeam, pitTeam,
     };
 

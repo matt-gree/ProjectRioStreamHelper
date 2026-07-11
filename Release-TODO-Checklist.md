@@ -32,14 +32,14 @@ Scorecard settings now stored per scoreboard under `overlays.scorecard.{N}.*`; l
 - [x] Display player tags above player names (address-book prefix → `score.{N}.player.{T}.team`, `--accent` colored, hidden when empty)
 - Files: `public/layout/scoreboard1/playername.html` (column layout, tag line, `accentColor` added to meta whitelist)
 
-### 5. Event Header Layout  ⬜
+### 5. Event Header Layout  ✅
 - Font: ITC Korinna
 - Top row (center, 1263×47px): Event, Location, Dates
 - Bottom row (center, 1263×44px): Message, Bracket, Phase, Round
-- [ ] Center all text
-- [ ] Skip blank fields, re-center remaining
-- [ ] Hook into Competition tab
-- [ ] Add editable Message field to Competition settings
+- [x] Center all text
+- [x] Skip blank fields, re-center remaining
+- [x] Hook into Competition tab
+- [x] Add editable Message field to Competition settings
 
 ### 6. Lower Third  ⬜ (built, slice26; pending user visual validation)
 When a match is assigned, auto-include match metadata: Competition Phase, Round.

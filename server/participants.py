@@ -20,6 +20,7 @@ Design notes:
   graduates to the primary key later.
 """
 import asyncio
+import copy
 import secrets
 import time
 
@@ -178,6 +179,77 @@ class Participants:
         if existed:
             await cls.Save()
         return existed
+
+    # ----- backup / restore (manual import + export) -----------------------
+
+    @classmethod
+    def Export(cls) -> dict:
+        """Full address-book snapshot in the on-disk backup shape. What the
+        manual "Export" download serializes; round-trips through ImportRows."""
+        # Deep-copy so a caller can't mutate the live registry through the
+        # returned snapshot (the HTTP path serializes immediately, but callers
+        # in-process shouldn't alias internal rows).
+        return {
+            "version": SCHEMA_VERSION,
+            "exportedAt": _now(),
+            "participants": copy.deepcopy(cls.List()),
+        }
+
+    @classmethod
+    async def ImportRows(cls, rows, replace: bool = False) -> dict:
+        """Bulk import full participant rows (the Export backup format).
+
+        - ``replace=True`` wipes the registry first, then loads the rows exactly
+          (a clean restore).
+        - Otherwise MERGE: match each incoming row against the existing book by
+          start.gg userId, then by rioName. On a match, non-empty incoming
+          fields win (a restore refreshes a row without dropping local-only
+          fields); no match creates a new row. Never destructive in merge mode.
+
+        Ids are regenerated on collision so an import can't clobber an unrelated
+        local row that happens to share an id. Returns a small summary.
+        """
+        if not isinstance(rows, list):
+            return {"imported": 0, "created": 0, "updated": 0}
+        if replace:
+            cls.participants = {}
+
+        created = updated = 0
+        for raw in rows:
+            if not isinstance(raw, dict):
+                continue
+            incoming = cls._normalize(raw, raw.get("id") or _new_id())
+
+            match = None
+            if not replace:
+                sg = incoming["identities"].get("startgg")
+                sg_uid = sg.get("userId") if isinstance(sg, dict) else None
+                rio = incoming["identities"].get("rioName")
+                match = (cls.MatchByStartGG(sg_uid) if sg_uid else None) \
+                    or (cls.MatchByRioName(rio) if rio else None)
+
+            if match is not None:
+                # Display refreshes from the backup (incoming non-empty wins),
+                # but identities only FILL EMPTY — never rewrite the rioName join
+                # key or an existing start.gg link that identifies this person.
+                for k, v in incoming["display"].items():
+                    if v:
+                        match["display"][k] = v
+                for k, v in incoming["identities"].items():
+                    if v and not match["identities"].get(k):
+                        match["identities"][k] = v
+                match["meta"]["updatedAt"] = _now()
+                updated += 1
+            else:
+                pid = incoming["id"]
+                while pid in cls.participants:
+                    pid = _new_id()
+                incoming["id"] = pid
+                cls.participants[pid] = incoming
+                created += 1
+
+        await cls.Save()
+        return {"imported": created + updated, "created": created, "updated": updated}
 
     # ----- matching (the resurface loop) -----------------------------------
 

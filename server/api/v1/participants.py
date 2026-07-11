@@ -30,6 +30,14 @@ class StartGGImportPayload(BaseModel):
     players: list[dict[str, Any]] = []
 
 
+class ImportPayload(BaseModel):
+    """Manual restore of a full address-book backup (the Export shape). Rows are
+    whole participant records, not start.gg players. ``replace`` wipes the book
+    first; otherwise rows are merged by start.gg userId / rioName."""
+    participants: list[dict[str, Any]] = []
+    replace: bool = False
+
+
 @router.get("", response_class=ORJSONResponse)
 async def list_participants():
     """List every participant row (the streamer's working set)."""
@@ -57,6 +65,20 @@ async def delete_participant(pid: str):
     if not await Participants.Delete(pid):
         raise HTTPException(404, f"participant {pid!r} not found")
     return {"success": True}
+
+
+@router.get("/export", response_class=ORJSONResponse)
+async def export_participants():
+    """Full address-book snapshot for manual backup / transfer between
+    machines. Round-trips through POST /import."""
+    return Participants.Export()
+
+
+@router.post("/import", response_class=ORJSONResponse)
+async def import_participants(payload: ImportPayload):
+    """Restore an exported address book. Merges by default (non-destructive);
+    ``replace=true`` wipes the book first for an exact restore."""
+    return await Participants.ImportRows(payload.participants, replace=payload.replace)
 
 
 @router.post("/import/startgg", response_class=ORJSONResponse)

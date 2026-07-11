@@ -25,6 +25,7 @@ import { cn } from '../../lib/utils';
 import { notifications } from '../../lib/notify';
 import { useSettingsStore, useStateStore, useConfigStore } from '../../context/store';
 import { useObsStore } from '../../context/obs';
+import { usePersistentState } from '../../hooks/usePersistentState';
 import { bindingForUrl } from '../../lib/obs-binding';
 import { useShallow } from 'zustand/react/shallow';
 import useTournament from '../../hooks/useTournament';
@@ -1857,7 +1858,13 @@ export default function LayoutBrowser() {
     const [searchQuery, setSearchQuery] = useState('');
     const [previewRevision, setPreviewRevision] = useState(0);
 
-    const [mode, setMode] = useState('scoreboard');
+    // Remember the last Setup sub-tab across tab switches / restarts (local UI
+    // pref). Drop a stored 'controller' when this build can't show it.
+    const [mode, setMode] = usePersistentState(
+        'prsh.ui.setup.mode', 'scoreboard',
+        v => ['design', 'scoreboard', 'scenes', 'talent', 'break', 'shared', 'bracket', 'controller'].includes(v)
+            && (v !== 'controller' || controllerSupported),
+    );
 
     const fetchLayouts = useCallback(async () => {
         setLoading(true);

@@ -35,6 +35,9 @@ export const LAYOUT_SETTINGS = {
     ],
     stats: [...STAT_CARD_SETTINGS],
     teamlogo: [],
+    // Simple 4-Cam Scorecard — self-contained, fixed slice26 look. Aim (left/
+    // right) is a URL variant (?dir=), so there are no live element settings.
+    fourcam: [],
     // Roster + Stats — the combined auto-cycling source. Roster look shares
     // overlays.roster.*, the stat card shares overlays.stats.* + the active
     // Design Package; the only element-only knob is how long the card stays up.

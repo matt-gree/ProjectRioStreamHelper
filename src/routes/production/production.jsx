@@ -40,6 +40,7 @@ import { SimpleTooltip } from '../../components/ui/simple-tooltip';
 import { notifications } from '../../lib/notify';
 import { cn } from '../../lib/utils';
 import { PHASES, ELEMENTS, elementsForPhase, packRows } from './elements';
+import { usePersistentState } from '../../hooks/usePersistentState';
 
 /*
  * Production page — the producer's broadcast control board.
@@ -1571,6 +1572,25 @@ const LT_TYPE_OPTIONS = [
 ];
 const LT_TYPE_LABEL = Object.fromEntries(LT_TYPE_OPTIONS.map(o => [o.value, o.label]));
 
+// Curated time zones for the time-of-day clock. '' = the streaming machine's
+// local zone (the default). IANA ids are passed straight to Intl; the overlay
+// falls back to local time if a zone is somehow unsupported.
+const CLOCK_TIMEZONES = [
+    { value: '', label: 'System default' },
+    { value: 'America/New_York', label: 'Eastern (New York)' },
+    { value: 'America/Chicago', label: 'Central (Chicago)' },
+    { value: 'America/Denver', label: 'Mountain (Denver)' },
+    { value: 'America/Phoenix', label: 'Arizona (Phoenix)' },
+    { value: 'America/Los_Angeles', label: 'Pacific (Los Angeles)' },
+    { value: 'America/Anchorage', label: 'Alaska (Anchorage)' },
+    { value: 'Pacific/Honolulu', label: 'Hawaii (Honolulu)' },
+    { value: 'UTC', label: 'UTC' },
+    { value: 'Europe/London', label: 'London' },
+    { value: 'Europe/Paris', label: 'Central Europe (Paris)' },
+    { value: 'Asia/Tokyo', label: 'Tokyo' },
+    { value: 'Australia/Sydney', label: 'Sydney' },
+];
+
 // Human label for a match id in a select: "Label — A vs B", falling back to
 // names or "Match N". Shared by the lower third, the Draft bar and Matchup.
 function matchDisplayLabel(matches, id) {
@@ -2014,6 +2034,25 @@ function LowerThirdSlotFields({ i }) {
                                 onChange={(e) => setKey(p('clock.durationSec'), Math.max(0, Number(e.target.value) || 0) * 60, `Lower third: slot ${i} countdown length`)}
                             />
                         </Group>
+                    )}
+                    {clockMode === 'clock' && (
+                        <>
+                            <label className="flex flex-col gap-1">
+                                {fieldLabel('clock.timezone', 'Time zone')}
+                                <select
+                                    className={LT_INPUT} value={val(p('clock.timezone'), c.timezone) || ''}
+                                    onChange={(e) => setKey(p('clock.timezone'), e.target.value, `Lower third: slot ${i} clock time zone`)}
+                                >
+                                    {CLOCK_TIMEZONES.map(tz => (
+                                        <option key={tz.value} value={tz.value}>{tz.label}</option>
+                                    ))}
+                                </select>
+                            </label>
+                            <label className="flex flex-col gap-1">
+                                {fieldLabel('clock.suffix', 'Suffix (e.g. ET)')}
+                                {textField('clock.suffix', 'e.g. ET', c.suffix)}
+                            </label>
+                        </>
                     )}
                     {(clockMode === 'countdown' || clockMode === 'clock')
                         && textField('clock.label', 'Clock label (e.g. BACK IN)', c.label)}
@@ -3246,7 +3285,11 @@ function PendingBar() {
 }
 
 export default function Production() {
-    const [phase, setPhase] = useState('live');
+    // Remember the last soft-phase across tab switches / restarts (local UI pref).
+    const [phase, setPhase] = usePersistentState(
+        'prsh.ui.production.phase', 'live',
+        v => PHASES.some(p => p.value === v),
+    );
 
     return (
         <Stack gap="md">

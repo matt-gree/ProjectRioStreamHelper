@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
-import { X } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { X, Download, Upload } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
+import { notifications } from '../../lib/notify';
 import { Button } from '../../components/ui/button';
 import { Panel } from '../../components/ui/panel';
 import { TextField } from '../../components/ui/text-field';
@@ -137,23 +138,89 @@ function rowDisplay(draft) {
 }
 
 export default function PlayerList() {
-    const { participants, load, create, update, remove } = useParticipantsStore(useShallow(s => ({
+    const { participants, load, create, update, remove, exportBook, importBook } = useParticipantsStore(useShallow(s => ({
         participants: s.participants,
         load: s.load,
         create: s.create,
         update: s.update,
         remove: s.remove,
+        exportBook: s.exportBook,
+        importBook: s.importBook,
     })));
 
     useEffect(() => { load(); }, [load]);
 
     const addPerson = useCallback(() => { create({}); }, [create]);
 
+    const fileInputRef = useRef(null);
+    const [busy, setBusy] = useState(false);
+
+    const handleExport = useCallback(async () => {
+        try {
+            const data = await exportBook();
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const stamp = new Date().toISOString().slice(0, 10);
+            a.href = url;
+            a.download = `prsh-address-book-${stamp}.json`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+        } catch (e) {
+            notifications.show({ message: `Export failed: ${e.message}`, color: 'red' });
+        }
+    }, [exportBook]);
+
+    const handleImportFile = useCallback(async (e) => {
+        const file = e.target.files?.[0];
+        e.target.value = ''; // allow re-selecting the same file later
+        if (!file) return;
+        setBusy(true);
+        try {
+            const parsed = JSON.parse(await file.text());
+            const count = Array.isArray(parsed) ? parsed.length
+                : Array.isArray(parsed?.participants) ? parsed.participants.length : 0;
+            const replace = participants.length > 0 && count > 0 && window.confirm(
+                `Import ${count} ${count === 1 ? 'person' : 'people'}.\n\n` +
+                'OK  — Replace: wipe the current book, then load the file exactly.\n' +
+                'Cancel — Merge: keep everyone; add new people and refresh matches.',
+            );
+            const result = await importBook(parsed, replace);
+            notifications.show({
+                message: replace
+                    ? `Replaced address book: ${result.imported} imported.`
+                    : `Merged: ${result.created} added, ${result.updated} updated.`,
+                color: 'green',
+            });
+        } catch (err) {
+            notifications.show({ message: `Import failed: ${err.message}`, color: 'red' });
+        } finally {
+            setBusy(false);
+        }
+    }, [importBook, participants.length]);
+
     return (
         <div className="flex flex-col gap-4">
             <div className="flex items-center justify-between">
                 <Title order={3}>Address Book</Title>
-                <Button size="sm" onClick={addPerson}>+ Add Person</Button>
+                <div className="flex items-center gap-2">
+                    <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="application/json,.json"
+                        className="hidden"
+                        onChange={handleImportFile}
+                    />
+                    <Button size="sm" variant="outline" disabled={busy} onClick={() => fileInputRef.current?.click()}>
+                        <Upload size={14} className="mr-1.5" /> Import
+                    </Button>
+                    <Button size="sm" variant="outline" disabled={participants.length === 0} onClick={handleExport}>
+                        <Download size={14} className="mr-1.5" /> Export
+                    </Button>
+                    <Button size="sm" onClick={addPerson}>+ Add Person</Button>
+                </div>
             </div>
 
             <Text size="sm" dimmed>

@@ -256,6 +256,11 @@ export function mountMatchup({ host }) {
     const games = Array.isArray(mu.games) ? mu.games : [];
     for (let i = 1; i <= MAX_CARDS; i++) bindCard(i, games[i - 1] || null, name1, name2);
 
+    const history = engine.slots.history;
+    if (history) {
+      history.style.display = hasHistory ? '' : 'none';
+    }
+
     engine.refitText();
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { if (!disposed) engine.refitText(); });
 
