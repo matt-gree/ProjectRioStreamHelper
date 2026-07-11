@@ -1,0 +1,69 @@
+<svg viewBox="0 0 380 220" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+  <!--
+    DEFAULT package - Stat CARD (landscape, 380x220): the compact 2x2 stat card
+    used by the combined Roster + Stats element (rosterstats-mount.js via
+    stats-card-mount.js with svgElement:'statscard'). Fixed PLUM-GLASS palette
+    (does NOT opt into the Design-tab app vars). Character icon on the LEFT in a
+    plum well with a pink accent rail; a 2x2 grid of value/label cells (roomy row
+    spacing) spread across the right; a tight bottom caption line ("Tournament
+    Stats" for API games, or the live game line for HUD games). Equal top/bottom
+    edge padding. Fonts use the font-body token (Inter) for numerals and labels,
+    matching the dedicated Stats card on Inter-based packages (slice26) rather
+    than mono. Values/labels are bound by the mount from RioData.getStatsLine -
+    batting: AB / AVG over SLG / SO%; pitching: IP / ERA over K% / AVG.
+  -->
+  <defs>
+    <linearGradient id="sc-plum" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0"   stop-color="#7c2c5c" stop-opacity="0.60"/>
+      <stop offset="0.5" stop-color="#521d40" stop-opacity="0.60"/>
+      <stop offset="1"   stop-color="#37142d" stop-opacity="0.68"/>
+    </linearGradient>
+    <linearGradient id="sc-sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0"    stop-color="#ffffff" stop-opacity="0.16"/>
+      <stop offset="0.12" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <style>
+    .sc-num  { fill: var(--ink, #f6f2f6); font-family: var(--font-body, 'Inter', system-ui, sans-serif); font-variant-numeric: tabular-nums; }
+    .sc-lab  { fill: rgba(255,255,255,0.66); font-family: var(--font-body, 'Inter', system-ui, sans-serif); }
+    .sc-cap  { fill: rgba(255,255,255,0.82); font-family: var(--font-body, 'Inter', system-ui, sans-serif); }
+    .sc-rule { stroke: rgba(255,255,255,0.10); stroke-width: 1; }
+  </style>
+
+  <!-- Glass panel -->
+  <rect data-slot="card-bg" x="2" y="2" width="376" height="216" rx="22"
+        fill="url(#sc-plum)" stroke="rgba(255,255,255,0.18)" stroke-width="1.25"/>
+  <rect x="2" y="2" width="376" height="216" rx="22" fill="url(#sc-sheen)" pointer-events="none"/>
+
+  <g data-slot="content">
+    <!-- Character icon (left) in a soft plum well with a pink accent rail -->
+    <rect x="20" y="30" width="110" height="120" rx="16" fill="rgba(255,255,255,0.05)"/>
+    <rect x="20" y="30" width="4" height="120" rx="2" fill="#ff5fa2"/>
+    <image data-slot="char-icon" x="29" y="42" width="96" height="96"
+           preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+
+    <!-- 2x2 grid dividers -->
+    <line class="sc-rule" x1="258" y1="34" x2="258" y2="150"/>
+    <line class="sc-rule" x1="150" y1="90" x2="372" y2="90"/>
+
+    <!-- Row 1: top-left / top-right -->
+    <text data-slot="stat-0-value" data-maxw="106" x="204" y="60" text-anchor="middle" class="sc-num" font-size="34" font-weight="700">0</text>
+    <text data-slot="stat-0-label" x="204" y="78" text-anchor="middle" class="sc-lab" font-size="16" font-weight="600" letter-spacing="0.5">AB</text>
+    <text data-slot="stat-1-value" data-maxw="106" x="316" y="60" text-anchor="middle" class="sc-num" font-size="34" font-weight="700">.000</text>
+    <text data-slot="stat-1-label" x="316" y="78" text-anchor="middle" class="sc-lab" font-size="16" font-weight="600" letter-spacing="0.5">AVG</text>
+
+    <!-- Row 2: bottom-left / bottom-right -->
+    <text data-slot="stat-2-value" data-maxw="106" x="204" y="130" text-anchor="middle" class="sc-num" font-size="34" font-weight="700">.000</text>
+    <text data-slot="stat-2-label" x="204" y="148" text-anchor="middle" class="sc-lab" font-size="16" font-weight="600" letter-spacing="0.5">SLG</text>
+    <text data-slot="stat-3-value" data-maxw="106" x="316" y="130" text-anchor="middle" class="sc-num" font-size="34" font-weight="700">0%</text>
+    <text data-slot="stat-3-label" x="316" y="148" text-anchor="middle" class="sc-lab" font-size="16" font-weight="600" letter-spacing="0.5">SO%</text>
+
+    <!-- Bottom caption / game line (tight) -->
+    <g data-slot="line-group">
+      <line class="sc-rule" x1="20" y1="162" x2="360" y2="162"/>
+      <text data-slot="line-label" x="20" y="187" class="sc-cap" font-size="15" font-weight="700"></text>
+      <text data-slot="line-text" data-maxw="344" x="190" y="188" text-anchor="middle" class="sc-cap" font-size="22" font-weight="700"></text>
+    </g>
+  </g>
+</svg>

@@ -189,8 +189,8 @@
         : '';
     } else {
       stats = [
-        { label: 'ERA', value: fmt2(p.era     ?? 0) },
         { label: 'IP',  value: p.ip           ?? '0.0' },
+        { label: 'ERA', value: fmt2(p.era     ?? 0) },
         { label: 'K%',  value: fmt1(p.k_pct  ?? 0) + '%' },
         { label: 'AVG', value: fmt3(p.opp_avg ?? 0) },
       ];
@@ -200,7 +200,7 @@
     }
 
     const isHud = isHudSource(sb);
-    const bottomLabel = isHud && gameLine ? 'Game' : (isHud ? '' : 'Season Stats');
+    const bottomLabel = isHud && gameLine ? 'Game' : (isHud ? '' : 'Tournament Stats');
 
     return {
       charName,

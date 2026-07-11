@@ -6,18 +6,19 @@
   a stat card for a few seconds (overlays.rosterstats.dwellSeconds, default 7)
   before returning to the roster. The batting side flashes the batter; the
   pitching side flashes the pitcher (getStatsLine picks per side). Roster look
-  comes from overlays.roster.*, the card from overlays.stats.* + the active Design
-  Package — matching the standalone Roster and Stats sources. Native size 452×140.
+  comes from overlays.rosterstats.*; the card is a fixed plum-glass 2x2 grid
+  (statscard.svg, left icon + wider-than-tall) sitting centered in the middle of
+  the frame, with the roster still vertically centered behind it. Native 452x240.
 -->
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="overlay-settings" content="accentColor, showSuperstars, showRoleIcon, showTeamLogo, transitionType, subLine, subLineText, statValueColor, subtextColor, cardBg, borderColor, borderWidth, fontFamily, cardShadow, textShadow, dwellSeconds" />
+  <meta name="overlay-settings" content="showSuperstars, showRoleIcon, showTeamLogo, transitionType, subLine, subLineText, dwellSeconds" />
   <link rel="stylesheet" href="/layout/lib/rio-theme/tokens.css" />
   <style>
     html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
     body {
-      width: 452px; height: 140px;
+      width: 452px; height: 240px;
       display: flex; align-items: center; justify-content: center;
     }
     #host { position: relative; }
@@ -36,7 +37,7 @@
     const SB = parseInt(params.get('scoreboard')) || 1;
     const TEAM = parseInt(params.get('team')) || 1;
 
-    const REF_W = 452, REF_H = 140;
+    const REF_W = 452, REF_H = 240;
     document.body.dataset.refW = REF_W;
     document.body.dataset.refH = REF_H;
 

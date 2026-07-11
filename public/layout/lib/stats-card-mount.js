@@ -68,7 +68,8 @@ function injectCss() {
   _cssInjected = true;
 }
 
-export function mountStatsCard({ host, sb, team, settingsType = 'stats' }) {
+export function mountStatsCard({ host, sb, team, settingsType = 'stats',
+                                 svgElement = ELEMENT, fallbackSvg = FALLBACK_SVG }) {
   injectCss();
   host.classList.add('st-host');
   const SB = sb || 1;
@@ -78,7 +79,11 @@ export function mountStatsCard({ host, sb, team, settingsType = 'stats' }) {
   // passes 'rosterstats' so its card is configured independently.
   const SETTINGS_TYPE = settingsType || 'stats';
 
-  const engine = createThemeEngine({ host, element: ELEMENT, fallbackSvg: FALLBACK_SVG });
+  // Which design-package SVG this card renders. The standalone Stats source uses
+  // the wide 4-across 'stats' card; the Roster + Stats element passes 'statscard'
+  // for the compact 2x2 plum-glass card, so the two look independent even though
+  // they share this mount and the same RioData resolution.
+  const engine = createThemeEngine({ host, element: svgElement, fallbackSvg });
 
   let disposed = false;
   let prevCharKey = '';       // theme|charName — resets flash/fade baselines

@@ -21,12 +21,16 @@
 import { renderRoster } from '/layout/lib/roster-mount.js';
 import { mountStatsCard } from '/layout/lib/stats-card-mount.js';
 
-const STATS_W = 452, STATS_H = 118;
+// Stage is tall enough for the landscape 2x2 stat card to sit centered in the
+// middle with the roster still vertically centered behind it. STATS_W/H match the
+// statscard.svg viewBox (380x220, wider than tall).
+const STAGE_W = 452, STAGE_H = 240;
+const STATS_W = 380, STATS_H = 220;
 const DEFAULT_DWELL = 7;
 const FADE_MS = 200; // cross-fade duration (keep in sync with the CSS transition)
 
 const CSS = `
-.rs-stage { position: relative; width: 452px; height: 140px; }
+.rs-stage { position: relative; width: ${STAGE_W}px; height: ${STAGE_H}px; }
 .rs-layer { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; transition: opacity ${FADE_MS}ms ease; }
 .rs-roster { filter:
   drop-shadow(0 2px 2px rgba(0,0,0,0.12))
@@ -69,7 +73,7 @@ export function mountRosterStats({ host, sb, team }) {
   statsBox.className = 'rs-stats-box';
   const cardHost = document.createElement('div');
   // Inline position beats stats-card-mount's `.st-host { position: fixed }` rule,
-  // pinning the card inside our 325×120 box instead of the whole viewport.
+  // pinning the card inside our 380×220 box instead of the whole viewport.
   cardHost.style.cssText = 'position:absolute; inset:0;';
   statsBox.appendChild(cardHost);
   statsLayer.appendChild(statsBox);
@@ -79,8 +83,10 @@ export function mountRosterStats({ host, sb, team }) {
   host.appendChild(stage);
 
   // Independent card settings namespace (overlays.rosterstats.*), configured
-  // separately from the standalone Stats source.
-  const statsCard = mountStatsCard({ host: cardHost, sb: SB, team: TEAM, settingsType: 'rosterstats' });
+  // separately from the standalone Stats source. svgElement:'statscard' selects
+  // the compact 2x2 plum-glass card instead of the wide 4-across 'stats' card.
+  const statsCard = mountStatsCard({ host: cardHost, sb: SB, team: TEAM,
+                                     settingsType: 'rosterstats', svgElement: 'statscard' });
 
   // ── Auto-cycle state ──
   let phase = 'roster';      // 'roster' | 'stats'

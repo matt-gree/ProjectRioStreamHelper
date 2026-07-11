@@ -20,6 +20,7 @@ import {
 import { cn } from '../../lib/utils';
 import { useSocketSubscribe } from '../../context/socket';
 import { useSettingsStore, useStateStore } from '../../context/store';
+import { notifications } from '../../lib/notify';
 import ParticipantPicker from '../ParticipantPicker';
 
 /**
@@ -508,11 +509,40 @@ export default memo(function PoolBrowser({ scoreboardNumber: sb }) {
         return { id, label: g ? gameLabel(g) : `#${id}` };
     }), [excludedIds, excludedCache]);
 
+    const filterIsEmpty = !(filter.tag?.length || filter.username?.length || filter.vs_username?.length);
+    const scope = pool.scope ?? 'both';
+
     const findGames = useCallback(async () => {
         setFinding(true);
-        try { await fetch(`/api/v1/rotation/${sb}/preview`, { method: 'POST' }); }
-        finally { setFinding(false); }
-    }, [sb]);
+        try {
+            const data = await fetch(`/api/v1/rotation/${sb}/preview`, { method: 'POST' })
+                .then(r => r.json())
+                .catch(() => null);
+            const count = data?.total_games ?? 0;
+            if (count > 0) {
+                notifications.show({
+                    message: `Found ${count} game${count === 1 ? '' : 's'} for the pool.`,
+                    color: 'green',
+                });
+            } else if (filterIsEmpty) {
+                notifications.show({
+                    title: 'No games found',
+                    message: 'Add a game mode, player, or opponent above — the rotator needs at least one filter to match games.',
+                    color: 'yellow',
+                    autoClose: false,
+                });
+            } else {
+                const scopeWord = scope === 'live' ? 'live'
+                    : scope === 'completed' ? 'completed'
+                    : 'live or completed';
+                notifications.show({
+                    title: 'No games found',
+                    message: `No ${scopeWord} games match this filter right now.`,
+                    color: 'yellow',
+                });
+            }
+        } finally { setFinding(false); }
+    }, [sb, filterIsEmpty, scope]);
 
     const openPoolModal = useCallback(() => {
         setPoolModalOpen(true);

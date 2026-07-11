@@ -772,36 +772,61 @@ class RioGameDataProvider:
         await cls._clear_conflict(sb)
 
     @classmethod
+    async def _gate_board(cls, sb: int, left: str, right: str) -> None:
+        """Apply the identity gate outcome for one board against live players
+        ``left``/``right``: raise/clear the conflict flag or auto-retire a
+        decided match. Orientation itself is handled elsewhere (`_decide`); this
+        only manages the conflict flag + retire, never the live data."""
+        res = Match.gate_state(sb, left, right)
+        status = res.get("status")
+        if status == "conflict":
+            await State.Set(f"score.{sb}.match_conflict", {
+                "active": True,
+                "matchId": res["matchId"],
+                "expected": res["expected"],
+                "feed": res["feed"],
+            })
+            await State.Save()
+            logger.warning("[Match] board {} gate conflict: feed {} vs expected {}",
+                           sb, res["feed"], res["expected"])
+        elif status == "retire":
+            await cls._retire_match_from_board(sb, res["matchId"])
+        else:  # ok / nogate — the live players belong here; drop stale conflict
+            await cls._clear_conflict(sb)
+
+    @classmethod
     async def _evaluate_match_gates(cls, parsed: dict) -> None:
         """Run the identity gate for every bound HUD-target board on a new game.
 
         Conflicts are written to score.{N}.match_conflict for the app-wide
         notification; a clean resolve clears any stale conflict; a decided-match
-        mismatch auto-retires. Orientation itself is already handled per-board by
-        `_decide` (a mismatch falls through to pin/back-to-back), so this layer
-        only manages the conflict flag + retire, never the live data.
+        mismatch auto-retires.
         """
         entrants = parsed.get("entrants") or [[{}], [{}]]
         left = entrants[0][0].get("rioName", "") if entrants[0] else ""
         right = entrants[1][0].get("rioName", "") if entrants[1] else ""
 
         for sb in cls._hud_targets:
-            res = Match.gate_state(sb, left, right)
-            status = res.get("status")
-            if status == "conflict":
-                await State.Set(f"score.{sb}.match_conflict", {
-                    "active": True,
-                    "matchId": res["matchId"],
-                    "expected": res["expected"],
-                    "feed": res["feed"],
-                })
-                await State.Save()
-                logger.warning("[Match] board {} gate conflict: feed {} vs expected {}",
-                               sb, res["feed"], res["expected"])
-            elif status == "retire":
-                await cls._retire_match_from_board(sb, res["matchId"])
-            else:  # ok / nogate — the live players belong here; drop stale conflict
-                await cls._clear_conflict(sb)
+            await cls._gate_board(sb, left, right)
+
+    @classmethod
+    async def evaluate_match_gate_for_board(cls, sb: int) -> None:
+        """Re-run the identity gate for a single board against the *current* live
+        HUD game.
+
+        The new-game path (`_evaluate_match_gates`) only fires on an inning
+        reset, so a conflict introduced mid-game — by binding or re-binding a
+        match to a board that already has a live game — would otherwise stay
+        silent until the next new game (or an app restart re-reading the HUD).
+        Callers on the bind/match-mutation paths invoke this so the warning
+        surfaces immediately. No-op for boards with no live HUD game.
+        """
+        if sb not in cls._hud_targets or cls.current_game is None:
+            return
+        entrants = cls.current_game.get("entrants") or [[{}], [{}]]
+        left = entrants[0][0].get("rioName", "") if entrants[0] else ""
+        right = entrants[1][0].get("rioName", "") if entrants[1] else ""
+        await cls._gate_board(sb, left, right)
 
     # --- Player side preservation (3-layer system) ---
 

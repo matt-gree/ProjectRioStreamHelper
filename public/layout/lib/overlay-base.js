@@ -9,6 +9,20 @@
 (function () {
   'use strict';
 
+  // ── Bundled Inter ──
+  // Load the locally-packaged Inter face as early as possible (before render),
+  // so every overlay has Inter available offline — both as the app's baseline
+  // typeface and as the guaranteed fallback for any user-chosen font that fails
+  // to load. Injected once; idempotent across overlays that also link it
+  // statically. See /layout/lib/fonts/inter.css.
+  if (!document.getElementById('bundled-inter-font')) {
+    const interLink = document.createElement('link');
+    interLink.id = 'bundled-inter-font';
+    interLink.rel = 'stylesheet';
+    interLink.href = '/layout/lib/fonts/inter.css';
+    (document.head || document.documentElement).appendChild(interLink);
+  }
+
   // ── Resolve server URL ──
   const BASE_URL = (window.location.protocol === 'file:')
     ? 'http://localhost:5260'
@@ -321,7 +335,9 @@
     root.setProperty('--border-radius', globalRadius + 'px');
     root.setProperty('--border-width', globalBorderWidth + 'px');
     root.setProperty('--border-color', globalBorder);
-    root.setProperty('--font-family', `'${globalFont}', sans-serif`);
+    // Inter (bundled locally, injected above) is the guaranteed fallback when the
+    // chosen font isn't available/loaded; system sans-serif is the last resort.
+    root.setProperty('--font-family', `'${globalFont}', 'Inter', sans-serif`);
 
     // ── Promoted-to-global "final badge" color, with optional per-layout override ──
     const globalBadge = g('overlays.global.finalBadgeColor', null);
@@ -330,7 +346,8 @@
     if (effBadge) root.setProperty('--final-badge-color', effBadge);
     else root.removeProperty('--final-badge-color');
 
-    // Dynamically load the selected font from Google Fonts (Inter is already in the static @import)
+    // Dynamically load the selected font from Google Fonts (Inter ships bundled
+    // locally — injected at startup above — so it never needs a Google fetch).
     if (globalFont && globalFont !== 'Inter') {
       const href = `https://fonts.googleapis.com/css2?family=${globalFont.replace(/ /g, '+')}:wght@400;700&display=swap`;
       let link = document.getElementById('dynamic-font-link');

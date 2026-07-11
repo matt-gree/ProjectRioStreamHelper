@@ -28,7 +28,9 @@
   }
   </script>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=Chivo+Mono:wght@600;700;800&display=swap');
+    /* Inter is bundled locally (injected by overlay-base.js); only Chivo Mono is
+       fetched from Google Fonts here. */
+    @import url('https://fonts.googleapis.com/css2?family=Chivo+Mono:wght@600;700;800&display=swap');
     html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
     /* Native full-canvas size hint; the callout mount scales the 1920×1080 stage
        to whatever size the OBS source is actually set to. */

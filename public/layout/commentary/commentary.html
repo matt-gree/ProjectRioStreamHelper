@@ -20,10 +20,9 @@
        fixed-palette themes (the Default package's Rajdhani/JetBrains type). -->
   <link rel="stylesheet" href="/layout/lib/rio-theme/tokens.css" />
   <style>
-    /* Inter is the app's baseline overlay font (overlay-base.js only fetches a
-       font dynamically when it differs from Inter, assuming this static import).
-       A theme that wants a different face should @import it inside its own SVG. */
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+    /* Inter is the app's baseline overlay font — bundled locally and injected by
+       overlay-base.js (no Google Fonts dependency). A theme that wants a
+       different face should @import it inside its own SVG. */
     html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
     body { width: 1920px; height: 1080px; }
     #host { position: fixed; inset: 0; }

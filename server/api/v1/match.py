@@ -16,10 +16,20 @@ from fastapi.responses import ORJSONResponse
 from pydantic import BaseModel
 
 from server.match import Match, _norm_side, default_match
+from server.rio.provider import RioGameDataProvider
 from server.schedule import Schedule
 from server.state import State
 
 router = APIRouter(prefix="/match", tags=["match"])
+
+
+async def _regate_bound_boards(m) -> None:
+    """Re-run the identity gate on every board bound to match ``m`` against the
+    current live game. Called after a match mutation that can change identity
+    (participant edit, flip, set load, decide) so a conflict raised/cleared by
+    the change surfaces immediately instead of only on the next new game."""
+    for sb in Match.bound_scoreboards(m):
+        await RioGameDataProvider.evaluate_match_gate_for_board(sb)
 
 
 class MatchPayload(BaseModel):
@@ -88,6 +98,7 @@ async def update_match(m: int, payload: MatchPayload):
         await State.SetBatch(entries)
         await State.Save()
     await Match.project_match(m)
+    await _regate_bound_boards(m)
     return Match.get(m)
 
 
@@ -124,6 +135,7 @@ async def flip_match(m: int):
     if not Match.exists(m):
         raise HTTPException(404, f"match {m!r} not found")
     await Match.flip_sides(m)
+    await _regate_bound_boards(m)
     return Match.get(m)
 
 
@@ -139,6 +151,7 @@ async def decide_match(m: int, payload: DecidePayload):
     if not Match.exists(m):
         raise HTTPException(404, f"match {m!r} not found")
     await Match.force_decide(m, payload.side)
+    await _regate_bound_boards(m)
     return Match.get(m)
 
 
@@ -220,6 +233,7 @@ async def apply_startgg_set(m, s: dict, set_id: int) -> None:
     await State.SetBatch(entries)
     await State.Save()
     await Match.project_match(m)
+    await _regate_bound_boards(m)
 
 
 @router.post("/{m}/startgg-set", response_class=ORJSONResponse)
@@ -308,6 +322,10 @@ async def bind_scoreboard(sb: int, payload: BindPayload):
         await State.Set(f"score.{sb}.match", m)
         await State.Save()
         await Match.project_scoreboard(sb, m)
+        # Re-run the identity gate against the current live game so a mismatch
+        # created by binding mid-game surfaces the conflict now, rather than
+        # waiting for the next new-game event (or an app restart).
+        await RioGameDataProvider.evaluate_match_gate_for_board(sb)
     return {"success": True, "match": m}
 
 

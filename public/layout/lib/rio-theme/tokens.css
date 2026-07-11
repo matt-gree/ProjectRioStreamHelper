@@ -10,7 +10,9 @@
    vars below. The producer/mount can override the per-side and
    accent vars at runtime (port colours, global accent).
    ============================================================ */
-@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap');
+/* Inter is bundled locally (injected by overlay-base.js); only the display/mono
+   faces are fetched from Google Fonts here. */
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=JetBrains+Mono:wght@500;700&display=swap');
 
 :root {
 	/* --- Rio red — the brand core (the mushroom cap) --- */

@@ -246,7 +246,7 @@
     <g data-slot="inn-arrow-up"><polygon points="112,246 144,246 128,228" style="fill:var(--accent)"/></g>
     <g data-slot="inn-arrow-down" opacity="0"><polygon points="112,316 144,316 128,334" style="fill:var(--accent)"/></g>
     <g data-slot="final-badge" opacity="0">
-      <rect x="88" y="266" width="80" height="30" rx="6" style="fill:var(--accent)"/>
+      <rect x="88" y="266" width="80" height="30" rx="6" style="fill:rgba(255,255,255,0.14)"/>
       <text x="128" y="287" text-anchor="middle" fill="#ffffff" font-family="var(--font-display)" font-size="17" font-weight="700" letter-spacing="1">FINAL</text>
     </g>
 
@@ -286,7 +286,7 @@
     <text data-slot="c-inn-num" x="512" y="68" text-anchor="middle" class="sc-num" font-size="30" font-weight="700">1</text>
     <g data-slot="c-inn-arrow-up"><polygon points="502,28 522,28 512,16" style="fill:var(--accent)"/></g>
     <g data-slot="c-inn-arrow-down" opacity="0"><polygon points="502,80 522,80 512,92" style="fill:var(--accent)"/></g>
-    <text data-slot="c-final" x="512" y="68" text-anchor="middle" style="fill:var(--accent)" font-family="var(--font-display)" font-size="16" font-weight="700" opacity="0">FIN</text>
+    <text data-slot="c-final" x="512" y="68" text-anchor="middle" style="fill:var(--ink)" font-family="var(--font-display)" font-size="16" font-weight="700" opacity="0">FIN</text>
   </g>
 
   <!-- ░░ 4 · AT-BAT / PITCHER GAME LINES ░░ -->
@@ -317,7 +317,7 @@
     <g data-slot="box-col-8"><text data-slot="box-h-8" x="392" y="26" text-anchor="middle" class="sc-dim" font-size="14" font-weight="700">8</text></g>
     <g data-slot="box-col-9"><text data-slot="box-h-9" x="432" y="26" text-anchor="middle" class="sc-dim" font-size="14" font-weight="700">9</text></g>
     <rect x="470" y="10" width="1.5" height="86" class="sc-div"/>
-    <text x="502" y="26" text-anchor="middle" style="fill:var(--accent)" font-family="var(--font-display)" font-size="14" font-weight="700">R</text>
+    <text x="502" y="26" text-anchor="middle" style="fill:var(--ink-dim)" font-family="var(--font-display)" font-size="14" font-weight="700">R</text>
 
     <circle data-slot="box-away-dot" cx="90" cy="56" r="6" style="fill:var(--side1)"/>
     <text data-slot="box-away-1" x="112" y="61" text-anchor="middle" class="sc-num" font-size="15">-</text>
@@ -329,7 +329,7 @@
     <text data-slot="box-away-7" x="352" y="61" text-anchor="middle" class="sc-num" font-size="15">-</text>
     <text data-slot="box-away-8" x="392" y="61" text-anchor="middle" class="sc-num" font-size="15">-</text>
     <text data-slot="box-away-9" x="432" y="61" text-anchor="middle" class="sc-num" font-size="15">-</text>
-    <text data-slot="box-away-R" x="502" y="61" text-anchor="middle" style="fill:var(--accent)" font-family="var(--font-mono)" font-size="16" font-weight="700">0</text>
+    <text data-slot="box-away-R" x="502" y="61" text-anchor="middle" style="fill:var(--ink)" font-family="var(--font-mono)" font-size="16" font-weight="700">0</text>
 
     <circle data-slot="box-home-dot" cx="90" cy="84" r="6" style="fill:var(--side2)"/>
     <text data-slot="box-home-1" x="112" y="89" text-anchor="middle" class="sc-num" font-size="15">-</text>
@@ -341,7 +341,7 @@
     <text data-slot="box-home-7" x="352" y="89" text-anchor="middle" class="sc-num" font-size="15">-</text>
     <text data-slot="box-home-8" x="392" y="89" text-anchor="middle" class="sc-num" font-size="15">-</text>
     <text data-slot="box-home-9" x="432" y="89" text-anchor="middle" class="sc-num" font-size="15">-</text>
-    <text data-slot="box-home-R" x="502" y="89" text-anchor="middle" style="fill:var(--accent)" font-family="var(--font-mono)" font-size="16" font-weight="700">0</text>
+    <text data-slot="box-home-R" x="502" y="89" text-anchor="middle" style="fill:var(--ink)" font-family="var(--font-mono)" font-size="16" font-weight="700">0</text>
   </g>
 
   <!-- ░░ 6 · STADIUM ░░ -->

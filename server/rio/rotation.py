@@ -44,6 +44,24 @@ def _chip_kwargs(chip: dict) -> dict:
     }.items() if v}
 
 
+async def _resolve_game_mode_name(game: dict) -> str:
+    """Human-readable game-mode name for a pool game dict.
+
+    Ongoing games bake `game_mode_name` from the game-modes cache (which may
+    have been cold when the pool was built); completed games carry a resolved
+    `game_mode` name from pyrio. Fall back to resolving the raw `tag_set` id.
+    Returns "" for an unknown/raw ("ID:...") mode so callers can clear the tag.
+    """
+    name = game.get("game_mode_name") or game.get("game_mode") or ""
+    if not name or str(name).startswith("ID:"):
+        resolved = await stats_api.resolve_tag_set_name(game.get("tag_set"))
+        if resolved:
+            name = resolved
+    if not name or str(name).startswith("ID:"):
+        return ""
+    return str(name)
+
+
 def _game_display_fields(game: dict) -> tuple[str, str]:
     """(away, home) usernames from either a live or completed game dict —
     the two shapes use different field names."""
@@ -561,14 +579,35 @@ class PoolState:
 
         game_id = self.game_ids[self.current_index]
 
-        if OngoingGamePool.get_game(game_id):
+        game = OngoingGamePool.get_game(game_id)
+        if game:
             await OngoingGamePool.apply_game_to_scoreboard(game_id, self.sb_id)
         elif game_id in self.members:
-            await apply_completed_game_dict(self.members[game_id], self.sb_id)
+            game = self.members[game_id]
+            await apply_completed_game_dict(game, self.sb_id)
         else:
             logger.warning("[PoolState] Game {} not found in pool members or ongoing pool", game_id)
             await PoolManager._emit_status(self.sb_id)
             return
 
+        # Sync the scoreboard's game-mode tag to the applied game. The pool
+        # apply helpers deliberately leave stats_tag alone (it's shared with the
+        # single-live re-apply path), so a rotating board — where each advance
+        # is genuinely a new game — must set it here, mirroring the manual
+        # game-pool assign endpoint. Drives both the game-mode display (scorecard)
+        # and the per-scoreboard stats fetch. Guarded so a same-game re-apply
+        # (pool refresh) doesn't re-emit an unchanged tag.
+        await self._sync_stats_tag(game)
+
         self.next_advance_at = time.time() + self.interval
         await PoolManager._emit_status(self.sb_id)
+
+    async def _sync_stats_tag(self, game: dict | None):
+        """Set this board's game-mode tag to the applied game's mode, skipping a
+        redundant write when it hasn't changed."""
+        if not game:
+            return
+        name = await _resolve_game_mode_name(game)
+        key = f"scoreboards.binding.{self.sb_id}.stats_tag"
+        if Settings.Get(key, None) != name:
+            await Settings.Set(key, name)
