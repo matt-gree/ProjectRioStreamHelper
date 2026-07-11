@@ -256,10 +256,21 @@ export function mountMatchup({ host }) {
     const games = Array.isArray(mu.games) ? mu.games : [];
     for (let i = 1; i <= MAX_CARDS; i++) bindCard(i, games[i - 1] || null, name1, name2);
 
-    const history = engine.slots.history;
-    if (history) {
-      history.style.display = hasHistory ? '' : 'none';
+    // No shared history → collapse the entire lower region, leaving the top
+    // summary only. Themes opt in by (a) wrapping the cards + their divider in a
+    // `history` / `history-container` group and (b) providing a compact band
+    // background (`band-compact`) swapped in for the full one (`band-full`). All
+    // slots are optional: a theme without them keeps its full band with empty
+    // cards, exactly as before.
+    const hasHistory = games.length > 0;
+    for (const name of ['history', 'history-container']) {
+      const el = engine.slots[name];
+      if (el) el.style.display = hasHistory ? '' : 'none';
     }
+    const bandFull = engine.slots['band-full'];
+    const bandCompact = engine.slots['band-compact'];
+    if (bandFull) bandFull.setAttribute('opacity', hasHistory ? '1' : '0');
+    if (bandCompact) bandCompact.setAttribute('opacity', hasHistory ? '0' : '1');
 
     engine.refitText();
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { if (!disposed) engine.refitText(); });
