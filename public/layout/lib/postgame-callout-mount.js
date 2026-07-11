@@ -427,8 +427,8 @@ const CSS = `
   letter-spacing: 0.5px; color: rgba(255,255,255,0.6); text-transform: uppercase; }
 .cs-abchip .res .dtxt span { white-space: nowrap; line-height: 1.1; }
 .cs-abchip.hit .dtxt, .cs-abchip.hr .dtxt { color: rgba(255,255,255,0.85); }
-/* detail line beneath: contact quality fills the freed left slot; the row
-   only exists when there was contact — no reserved space on a strikeout */
+/* detail line beneath: contact quality fills the freed left slot — a
+   dimmed NONE on contactless PAs keeps every chip's vertical rhythm */
 .cs-abchip .det { margin-top: 6px; display: flex; align-items: baseline; }
 .cs-abchip .info { margin-top: 5px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .cs-abchip .swingtag { font-family: var(--mono); font-size: 11.5px; font-weight: 800; letter-spacing: 1.2px;
@@ -440,6 +440,7 @@ const CSS = `
   letter-spacing: 1.4px; white-space: nowrap; color: rgba(255,255,255,0.55); }
 .cs-abchip .ctag.nice { color: rgba(255,255,255,0.8); }
 .cs-abchip .ctag.perf { color: var(--side); }
+.cs-abchip .ctag.none { color: rgba(255,255,255,0.3); }
 .cs-abchip .starsused { font-size: 13px; letter-spacing: 2px; line-height: 1; color: var(--accent);
   text-shadow: 0 0 8px rgba(var(--accent-rgb), 0.7); }
 .cs-abchip.hit { background: rgba(var(--side-rgb), 0.22); border-color: rgba(var(--side-rgb), 0.7); }
@@ -544,9 +545,9 @@ function chipMarkup(ab, i) {
   const tag = swingTag(ab);
   // contact quality gives every ball in play its context — it owns the
   // detail line's left slot (the play detail moved up beside the result);
-  // same three-tier vocabulary as the stamp. No contact (K/BB/HBP) = the
-  // row simply doesn't render; no space is reserved for it.
-  const quality = contactQuality(ab);
+  // same three-tier vocabulary as the stamp. No contact (K/BB/HBP) reads a
+  // dimmed NONE so every chip keeps the same vertical rhythm.
+  const quality = contactQuality(ab) || ['none', 'NONE'];
   const starsBits = ab.starsUsed > 0 ? '★'.repeat(Math.min(ab.starsUsed, 6)) : '';
   const info = (tag || starsBits) ? `<div class="info">
       ${tag ? `<span class="swingtag">${escapeHtml(tag)}</span>` : ''}
@@ -561,7 +562,7 @@ function chipMarkup(ab, i) {
       <span class="abbr">${abbr}</span>
       <span class="dtxt">${chipDetail(ab).map((b) => `<span>${escapeHtml(b)}</span>`).join('')}</span>
     </div>
-    ${quality ? `<div class="det"><span class="ctag ${quality[0]}">${quality[1]}</span></div>` : ''}
+    <div class="det"><span class="ctag ${quality[0]}">${quality[1]}</span></div>
     ${info}
   </div>`;
 }
