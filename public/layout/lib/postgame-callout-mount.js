@@ -415,16 +415,17 @@ const CSS = `
   color: rgba(255,255,255,0.55); text-transform: uppercase; white-space: nowrap; }
 /* result row: big abbreviation left, the play detail (TO LF / ON 0-2 /
    168FT · 1 RBI) right-anchored beside it at its usual small size */
-.cs-abchip .res { margin-top: 5px; display: flex; align-items: baseline;
+.cs-abchip .res { margin-top: 5px; display: flex; align-items: center;
   justify-content: space-between; gap: 8px; }
 .cs-abchip .res .abbr { font-family: var(--mono); font-size: 31px; font-weight: 800;
   line-height: 1; color: rgba(255,255,255,0.85); white-space: nowrap; }
-/* sized so "346FT · 3 RBI" fits beside "HR" at standard chip widths —
-   tighter tracking than the old stand-alone detail row (ellipsis is the
-   last resort for extreme PA counts, not the norm) */
-.cs-abchip .res .dtxt { font-family: var(--mono); font-size: 13px; font-weight: 700;
-  letter-spacing: 0.5px; color: rgba(255,255,255,0.6); text-transform: uppercase;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; text-align: right; }
+/* detail bits stack as right-aligned rows beside the abbreviation ("346FT"
+   over "3 RBI") — the chip has vertical room to spare where a single line
+   would truncate */
+.cs-abchip .res .dtxt { display: flex; flex-direction: column; align-items: flex-end;
+  gap: 2px; min-width: 0; font-family: var(--mono); font-size: 13px; font-weight: 700;
+  letter-spacing: 0.5px; color: rgba(255,255,255,0.6); text-transform: uppercase; }
+.cs-abchip .res .dtxt span { white-space: nowrap; line-height: 1.1; }
 .cs-abchip.hit .dtxt, .cs-abchip.hr .dtxt { color: rgba(255,255,255,0.85); }
 /* detail line beneath: contact quality fills the freed left slot; the row
    only exists when there was contact — no reserved space on a strikeout */
@@ -494,9 +495,11 @@ const BASE_XY = { 0: [66, 118], 1: [118, 66], 2: [66, 14], 3: [14, 66], 4: [66, 
 
 function fmt3(n) { return (Number(n) || 0).toFixed(3).replace(/^0\./, '.'); }
 
-// One-line result detail for a ticker chip: distance / RBI / star swing for
+// Result detail bits for a ticker chip: distance / RBI / star swing for
 // balls that mattered, the fielder it went to for plain outs, the count a
-// strikeout ended on. All distances render in feet (recorded data is metric).
+// strikeout ended on. All distances render in feet (recorded data is
+// metric). Rendered as stacked rows beside the result abbreviation — the
+// chip has vertical room where it has no horizontal room.
 function chipDetail(ab) {
   const meta = RESULT_META[ab.resultCode] || {};
   const bits = [];
@@ -505,7 +508,7 @@ function chipDetail(ab) {
   if (ab.swing === 'Star') bits.push('★ SWING');
   if (!bits.length && ab.fielder && ab.fielder.position) bits.push(`TO ${ab.fielder.position}`);
   if (!bits.length && ab.resultCode === 1) bits.push(`ON ${ab.before.balls}-${ab.before.strikes}`);
-  return bits.slice(0, 2).join(' · ');
+  return bits.slice(0, 2);
 }
 
 // Compact swing-type tag shared by the AB chips and the hit-summary stamp:
@@ -556,7 +559,7 @@ function chipMarkup(ab, i) {
     </div>
     <div class="res">
       <span class="abbr">${abbr}</span>
-      <span class="dtxt">${escapeHtml(chipDetail(ab))}</span>
+      <span class="dtxt">${chipDetail(ab).map((b) => `<span>${escapeHtml(b)}</span>`).join('')}</span>
     </div>
     ${quality ? `<div class="det"><span class="ctag ${quality[0]}">${quality[1]}</span></div>` : ''}
     ${info}
