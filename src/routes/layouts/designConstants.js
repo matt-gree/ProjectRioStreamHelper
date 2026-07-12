@@ -141,6 +141,7 @@ export const OVERRIDABLE_GLOBAL_KEYS = [
     { key: 'showBackdropBlur', meta: ['showBackdropBlur'], type: 'switch', label: 'Backdrop Blur' },
     { key: 'showShadow',       meta: ['showShadow'],       type: 'switch', label: 'Card Shadow' },
     { key: 'finalBadgeColor',  meta: ['finalBadgeColor'],  type: 'color',  label: 'Final Badge Color' },
+    { key: 'fontFamily',       meta: ['fontFamily'],       type: 'font',   label: 'Font Family', defaultValue: 'Inter' },
 ];
 
 export const GLOBAL_DESIGN_KEYS = [

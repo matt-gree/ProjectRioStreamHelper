@@ -8,9 +8,10 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { width: 1920px; height: 1080px; background: transparent; overflow: hidden; }
     body {
-      /* Inter is fixed per the event-header spec; the global fontFamily is the
-         fallback face only. */
-      font-family: 'Inter', var(--font-family, 'Inter'), sans-serif;
+      /* The Design-tab Font Family (overlays.global.fontFamily → --font-family)
+         drives the face; Inter is the bundled fallback, then system sans-serif.
+         --font-family already resolves to Inter by default. */
+      font-family: var(--font-family, 'Inter'), 'Inter', sans-serif;
       color: var(--text-primary, #ffffff);
     }
     #stage {

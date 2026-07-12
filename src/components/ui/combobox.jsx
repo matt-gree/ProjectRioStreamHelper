@@ -14,18 +14,28 @@ import { cn } from "@/lib/utils";
  * `{ label, value, image }`. When an item carries an `image` url it
  * renders a small sprite (pixelated) before the label in both the
  * trigger and the dropdown — used for MSB team logos / character icons.
+ * `creatable` lets typed text outside `data` be committed as-is (e.g.
+ * a free-text system font name the picker doesn't enumerate).
  * Built on shadcn Command + Popover.
  * ------------------------------------------------------------------ */
 export const Combobox = React.forwardRef(function Combobox(
   { data = [], value, onChange, placeholder = "Select…", searchPlaceholder = "Search…",
-    nothingFound = "Nothing found", clearable = false, disabled, className, ...props }, ref
+    nothingFound = "Nothing found", clearable = false, disabled, className, creatable = false,
+    onOpen, ...props }, ref
 ) {
   const [open, setOpen] = React.useState(false);
+  const [search, setSearch] = React.useState("");
   const items = data.map((d) => (typeof d === "string" ? { label: d, value: d } : d));
   const selected = items.find((i) => i.value === value);
+  const trimmed = search.trim();
+  const showCreate = creatable && trimmed.length > 0 &&
+    !items.some((i) => i.label.toLowerCase() === trimmed.toLowerCase());
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(o) => { setOpen(o); if (o) onOpen?.(); else setSearch(""); }}
+    >
       <PopoverTrigger asChild disabled={disabled}>
         <button
           ref={ref}
@@ -43,10 +53,12 @@ export const Combobox = React.forwardRef(function Combobox(
             {selected?.image && (
               <img src={selected.image} alt="" className="size-4 shrink-0 object-contain pixelated" />
             )}
-            <span className="truncate">{selected ? selected.label : placeholder}</span>
+            <span className="truncate">
+              {selected ? selected.label : (creatable && value) ? value : placeholder}
+            </span>
           </span>
           <span className="flex items-center gap-1">
-            {clearable && selected && (
+            {clearable && (selected || (creatable && value)) && (
               <X
                 className="size-3.5 opacity-60 hover:opacity-100"
                 onClick={(e) => { e.stopPropagation(); onChange?.(null); }}
@@ -58,15 +70,19 @@ export const Combobox = React.forwardRef(function Combobox(
       </PopoverTrigger>
       <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
         <Command>
-          <CommandInput placeholder={searchPlaceholder} />
+          <CommandInput
+            placeholder={searchPlaceholder}
+            value={search}
+            onValueChange={setSearch}
+          />
           <CommandList>
-            <CommandEmpty>{nothingFound}</CommandEmpty>
+            {!showCreate && <CommandEmpty>{nothingFound}</CommandEmpty>}
             <CommandGroup>
               {items.map((item) => (
                 <CommandItem
                   key={item.value}
                   value={item.label}
-                  onSelect={() => { onChange?.(item.value); setOpen(false); }}
+                  onSelect={() => { onChange?.(item.value); setSearch(""); setOpen(false); }}
                 >
                   <Check className={cn("mr-2 size-4", item.value === value ? "opacity-100" : "opacity-0")} />
                   {item.image && (
@@ -75,6 +91,16 @@ export const Combobox = React.forwardRef(function Combobox(
                   {item.label}
                 </CommandItem>
               ))}
+              {showCreate && (
+                <CommandItem
+                  key="__create__"
+                  value={trimmed}
+                  onSelect={() => { onChange?.(trimmed); setSearch(""); setOpen(false); }}
+                >
+                  <Check className="mr-2 size-4 opacity-0" />
+                  Use "{trimmed}"
+                </CommandItem>
+              )}
             </CommandGroup>
           </CommandList>
         </Command>

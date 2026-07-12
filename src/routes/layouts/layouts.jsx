@@ -10,6 +10,7 @@ import { TextField } from '../../components/ui/text-field';
 import { NumberInput } from '../../components/ui/number-input';
 import { ColorInput } from '../../components/ui/color-input';
 import { Combobox } from '../../components/ui/combobox';
+import { FontCombobox } from '../../components/ui/font-combobox';
 import { SimpleSelect } from '../../components/ui/simple-select';
 import { Switch } from '../../components/ui/switch';
 import { Collapsible, CollapsibleContent } from '../../components/ui/collapsible';
@@ -840,19 +841,6 @@ function LogoUpload({ label, description }) {
     );
 }
 
-const FONT_OPTIONS = [
-    { value: 'Inter', label: 'Inter' },
-    { value: 'Roboto', label: 'Roboto' },
-    { value: 'Open Sans', label: 'Open Sans' },
-    { value: 'Montserrat', label: 'Montserrat' },
-    { value: 'Poppins', label: 'Poppins' },
-    { value: 'Lato', label: 'Lato' },
-    { value: 'Oswald', label: 'Oswald' },
-    { value: 'Rajdhani', label: 'Rajdhani' },
-    { value: 'Bebas Neue', label: 'Bebas Neue' },
-    { value: 'Lalezar', label: 'Lalezar' },
-];
-
 function parseRgba(val) {
     const m = val.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+))?\s*\)/);
     if (m) {
@@ -1330,7 +1318,14 @@ function GlobalDesignSection() {
                     </div>
                     <div className="flex flex-col gap-1">
                         <Label className="field-label">Font Family</Label>
-                        <Combobox value={fontFamily} onChange={(val) => setItem('overlays.global.fontFamily', val)} data={FONT_OPTIONS} />
+                        <FontCombobox
+                            value={fontFamily}
+                            onChange={(val) => setItem('overlays.global.fontFamily', val)}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                            Search fonts installed on this machine, pick a bundled web font, or type
+                            any font name available on the machine running the OBS browser source.
+                        </p>
                     </div>
                 </div>
             </div>
@@ -1672,6 +1667,16 @@ function OverrideRow({ def, value, onChange, onRemove }) {
                 <Switch checked={value !== false} onCheckedChange={onChange} />
                 {def.label}
             </Label>
+        );
+    } else if (def.type === 'font') {
+        editor = (
+            <div className="flex flex-col gap-1">
+                <Label className="field-label">{def.label}</Label>
+                <FontCombobox
+                    value={value ?? def.defaultValue}
+                    onChange={(v) => onChange(v || def.defaultValue)}
+                />
+            </div>
         );
     }
 

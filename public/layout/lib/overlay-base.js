@@ -335,9 +335,13 @@
     root.setProperty('--border-radius', globalRadius + 'px');
     root.setProperty('--border-width', globalBorderWidth + 'px');
     root.setProperty('--border-color', globalBorder);
+    // Per-layout font override (e.g. Event Header pinning a system font) wins
+    // over the global Design-tab choice.
+    const perFont = overrideNs ? g(`overlays.${overrideNs}.fontFamily`, null) : null;
+    const effFont = perFont || globalFont;
     // Inter (bundled locally, injected above) is the guaranteed fallback when the
     // chosen font isn't available/loaded; system sans-serif is the last resort.
-    root.setProperty('--font-family', `'${globalFont}', 'Inter', sans-serif`);
+    root.setProperty('--font-family', `'${effFont}', 'Inter', sans-serif`);
 
     // ── Promoted-to-global "final badge" color, with optional per-layout override ──
     const globalBadge = g('overlays.global.finalBadgeColor', null);
@@ -348,8 +352,8 @@
 
     // Dynamically load the selected font from Google Fonts (Inter ships bundled
     // locally — injected at startup above — so it never needs a Google fetch).
-    if (globalFont && globalFont !== 'Inter') {
-      const href = `https://fonts.googleapis.com/css2?family=${globalFont.replace(/ /g, '+')}:wght@400;700&display=swap`;
+    if (effFont && effFont !== 'Inter') {
+      const href = `https://fonts.googleapis.com/css2?family=${effFont.replace(/ /g, '+')}:wght@400;700&display=swap`;
       let link = document.getElementById('dynamic-font-link');
       if (!link) {
         link = document.createElement('link');
