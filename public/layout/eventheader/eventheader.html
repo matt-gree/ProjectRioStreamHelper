@@ -4,24 +4,13 @@
   <meta charset="utf-8" />
   <meta name="overlay-settings" content="textColor, accentColor, fontFamily" />
   <style>
-    /* ITC Korinna is proprietary — dropped in locally under public/layout/fonts/
-       (gitignored). Falls back to a compatible serif when absent. */
-    @font-face {
-      font-family: 'ITC Korinna';
-      src: url('/layout/fonts/Korinna.woff2') format('woff2'),
-           url('/layout/fonts/Korinna.woff')  format('woff'),
-           url('/layout/fonts/Korinna.otf')   format('opentype'),
-           url('/layout/fonts/Korinna.ttf')   format('truetype');
-      font-weight: normal;
-      font-style: normal;
-      font-display: swap;
-    }
+    /* Inter is bundled locally and injected by overlay-base.js. */
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { width: 1920px; height: 1080px; background: transparent; overflow: hidden; }
     body {
-      /* Korinna is fixed per the event-header spec; the global fontFamily is the
+      /* Inter is fixed per the event-header spec; the global fontFamily is the
          fallback face only. */
-      font-family: 'ITC Korinna', 'Korinna', var(--font-family, 'Georgia'), Georgia, 'Times New Roman', serif;
+      font-family: 'Inter', var(--font-family, 'Inter'), sans-serif;
       color: var(--text-primary, #ffffff);
     }
     #stage {
