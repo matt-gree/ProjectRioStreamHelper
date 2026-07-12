@@ -55,14 +55,9 @@ function HotkeyInput({ value, onChange }) {
 }
 
 /**
- * Settings modal with HUD path configuration and Challonge API key.
+ * Settings modal with HUD path configuration.
  */
 export default function SettingsModal({ opened, onClose }) {
-    // Challonge API key state
-    const [challongeKey, setChallongeKey] = useState('');
-    const [challongeConfigured, setChallongeConfigured] = useState(false);
-    const [challongeSaving, setChallongeSaving] = useState(false);
-
     // HUD path state
     const [hudPath, setHudPath] = useState('');
     const [resolvedPath, setResolvedPath] = useState(null);
@@ -135,8 +130,7 @@ export default function SettingsModal({ opened, onClose }) {
     }, [setSetting]);
 
     // Network — LAN access opt-in. Default is loopback-only; enabling exposes
-    // the app to anyone on the same WiFi (state, settings, Challonge key all
-    // unauthenticated).
+    // the app to anyone on the same WiFi (state and settings, unauthenticated).
     const allowLan = useSettingsStore(state => state?.server?.allow_lan) === true;
     const handleAllowLan = useCallback((value) => {
         setSetting('server.allow_lan', !!value);
@@ -218,14 +212,6 @@ export default function SettingsModal({ opened, onClose }) {
             setAssetsTotalExpected(data.total_expected || 0);
             setAssetsTotalFound(data.total_found || 0);
             setAssetsComplete(!!data.complete);
-        } catch { /* ignore */ }
-    }, []);
-
-    const fetchChallongeStatus = useCallback(async () => {
-        try {
-            const resp = await fetch('/api/v1/settings?key=challonge.api_key');
-            const data = await resp.json();
-            setChallongeConfigured(!!data);
         } catch { /* ignore */ }
     }, []);
 
@@ -391,43 +377,20 @@ export default function SettingsModal({ opened, onClose }) {
         setControllerPathSaving(false);
     }, [controllerPath, fetchControllerStatus]);
 
-    const handleSaveChallongeKey = useCallback(async () => {
-        if (!challongeKey.trim()) return;
-        setChallongeSaving(true);
-        try {
-            const resp = await fetch(`/api/v1/settings?key=challonge.api_key&value=${encodeURIComponent(challongeKey.trim())}`, {
-                method: 'PUT',
-            });
-            if (resp.ok) {
-                setChallongeConfigured(true);
-                setChallongeKey('');
-                notifications.show({ message: 'Challonge API key saved', color: 'green' });
-            } else {
-                const data = await resp.json().catch(() => ({}));
-                notifications.show({ message: data.error || 'Failed to save Challonge API key', color: 'red' });
-            }
-        } catch {
-            notifications.show({ message: 'Failed to save Challonge API key', color: 'red' });
-        }
-        setChallongeSaving(false);
-    }, [challongeKey]);
-
     useEffect(() => {
         if (opened) {
             fetchHudPath();
             fetchAssetsPath();
             fetchPinnedPlayer();
-            fetchChallongeStatus();
             fetchControllerStatus();
             fetchStreamLabels();
             fetchAnnouncements();
-            setChallongeKey('');
             const obs = useSettingsStore.getState()?.obs ?? {};
             setObsHost(obs.host ?? '127.0.0.1');
             setObsPort(String(obs.port ?? 4455));
             setObsPassword(obs.password ?? '');
         }
-    }, [opened, fetchHudPath, fetchAssetsPath, fetchPinnedPlayer, fetchChallongeStatus, fetchControllerStatus, fetchStreamLabels, fetchAnnouncements]);
+    }, [opened, fetchHudPath, fetchAssetsPath, fetchPinnedPlayer, fetchControllerStatus, fetchStreamLabels, fetchAnnouncements]);
 
     // Re-check the assets folder when the window regains focus — covers the
     // case where the user dragged files into the folder in another app and
@@ -750,31 +713,6 @@ export default function SettingsModal({ opened, onClose }) {
                     <Button size="xs" variant="outline" onClick={handleRefreshGameData} disabled={gameDataRefreshing} className="w-fit">
                         {gameDataRefreshing && <Loader size={12} />}
                         Refresh Game Data Now
-                    </Button>
-
-                    <Divider label="Challonge" />
-
-                    <div className="flex items-center justify-between">
-                        <Text size="sm">API Key</Text>
-                        <Badge className={challongeConfigured ? 'bg-[#22c55e] text-black' : 'bg-destructive text-white'}>
-                            {challongeConfigured ? 'Configured' : 'Not Set'}
-                        </Badge>
-                    </div>
-                    <Text size="xs" dimmed>
-                        Required to load Challonge tournaments. Get your key from your Challonge account settings. You must be an admin in the Mario Superstar Baseball Netplay Events Challonge Community. Note: Challonge support will be deprecated in the future as its API support is limited.
-                    </Text>
-                    <PasswordInput
-                        placeholder="Enter your Challonge API key"
-                        value={challongeKey}
-                        onChange={e => setChallongeKey(e.currentTarget.value)}
-                    />
-                    <Button
-                        size="xs"
-                        onClick={handleSaveChallongeKey}
-                        disabled={!challongeKey.trim() || challongeSaving}
-                    >
-                        {challongeSaving && <Loader size={12} />}
-                        Save Key
                     </Button>
 
                     {controllerSupported !== false && (

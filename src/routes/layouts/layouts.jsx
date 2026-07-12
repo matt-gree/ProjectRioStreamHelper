@@ -477,8 +477,6 @@ function PlayerSchedulePanel({ selected, onSelect, baseUrl, phases, phasesLoaded
         }
     }, [isLoaded, playerScheduleData, setStateItem]);
 
-    const isStartGG = bracketLink && /start\.gg/i.test(bracketLink);
-
     const allPgs = useMemo(() => phases.flatMap(phase =>
         (phase.phaseGroups || []).map(pg => ({
             ...pg,
@@ -492,7 +490,7 @@ function PlayerSchedulePanel({ selected, onSelect, baseUrl, phases, phasesLoaded
         if (allPgs.length === 0) return;
         setLoading(true);
         try {
-            const baseApi = isStartGG ? '/api/v1/startgg' : '/api/v1/challonge';
+            const baseApi = '/api/v1/startgg';
             const results = await Promise.all(
                 allPgs.map((pg) =>
                     fetch(`${baseApi}/bracket-data?phase_group_id=${pg.id}`)
@@ -529,7 +527,7 @@ function PlayerSchedulePanel({ selected, onSelect, baseUrl, phases, phasesLoaded
             console.error('[PlayerSchedule] load error', e);
         }
         setLoading(false);
-    }, [allPgs, selectedPgIds, isStartGG, setStateItem]);
+    }, [allPgs, selectedPgIds, setStateItem]);
 
     const scheduleUrl = `${baseUrl}/layout/bracket/player_schedule.html`;
     const variants = [
@@ -635,7 +633,7 @@ function PlayerSchedulePanel({ selected, onSelect, baseUrl, phases, phasesLoaded
 function BracketLayoutList({ selected, onSelect, baseUrl, onLoadBracket }) {
     const [expandedGroups, setExpandedGroups] = useState({});
     const bracketLink = useStateStore(s => s?.tournamentInfo?.bracket_link ?? '');
-    const { loading: sggLoading, setSource, fetchPhases, loadBracket } = useTournament();
+    const { loading: sggLoading, fetchPhases, loadBracket } = useTournament();
 
     const [phases, setPhases] = useState([]);
     const [loadedPgId, setLoadedPgId] = useState(null);
@@ -643,7 +641,6 @@ function BracketLayoutList({ selected, onSelect, baseUrl, onLoadBracket }) {
 
     useEffect(() => {
         if (bracketLink && !phasesLoaded) {
-            setSource(bracketLink);
             fetchPhases().then(result => {
                 if (result) {
                     setPhases(result);

@@ -120,9 +120,8 @@ export default function TournamentInfo() {
     ];
 
     // Loading a tournament now lives in the shared TournamentLoader (Competition
-    // tab chrome). This view only needs the source restored for its own entrants
-    // fetch + the fetch itself.
-    const { setSource, fetchEntrants } = useTournament();
+    // tab chrome). This view only needs the entrants fetch.
+    const { fetchEntrants } = useTournament();
 
     // Entrants list — persisted in the bracket store so switching tabs
     // doesn't trigger a refetch.
@@ -238,7 +237,6 @@ export default function TournamentInfo() {
     // loaded entrants for that exact link.
     useEffect(() => {
         if (bracket_link && entrantsLoadedFor !== bracket_link) {
-            setSource(bracket_link);
             handleFetchEntrants(1);
         }
         if (!bracket_link && entrantsLoadedFor) {

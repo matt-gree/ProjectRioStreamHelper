@@ -13,8 +13,8 @@ import {
 } from '../../components/ui/table';
 import { cn } from '../../lib/utils';
 import { notifications } from '../../lib/notify';
-import { useStateStore, useSettingsStore, useBracketStore } from '../../context/store';
-import useTournament, { detectSource } from '../../hooks/useTournament';
+import { useBracketStore } from '../../context/store';
+import useTournament from '../../hooks/useTournament';
 import { loadStartGGSetToMatch } from '../../context/match';
 
 // Tinted-translucent chips per set state, matching the brand.
@@ -38,12 +38,9 @@ function formatRelative(ms) {
 }
 
 export default function Bracket() {
-    const activeScoreboards = useSettingsStore(s => s?.scoreboards?.active ?? [1]);
-    const bracketLink = useStateStore(s => s?.tournamentInfo?.bracket_link ?? '');
-
     const {
         loading,
-        setSource, fetchSets, loadSet,
+        fetchSets,
     } = useTournament();
 
     // Pull all UI state from the persistent bracket store. Loading/clearing a
@@ -52,16 +49,9 @@ export default function Bracket() {
     const bs = useBracketStore();
     const {
         tournament, phases, selectedPhase, selectedPool,
-        includeFinished, loadedSets,
+        includeFinished,
         update,
     } = bs;
-
-    // Restore this hook instance's source from the persisted link so fetchSets/
-    // loadSet hit the right provider (start.gg is the default; Challonge needs
-    // this). The loader owns the actual fetching.
-    useEffect(() => {
-        if (bracketLink) setSource(bracketLink);
-    }, [bracketLink, setSource]);
 
     // ── Fetch sets ────────────────────────────────────────────
     // Single fetch path: page 1 sequentially (to learn totalPages), then
@@ -123,11 +113,9 @@ export default function Bracket() {
     }, [bs.lastFetchedAt]);
 
     // start.gg is match-first: a set loads into a Match (created or reused), and
-    // the producer binds that match to a board on the Match tab. Challonge
-    // (deprecated, no Match model) keeps the legacy direct-to-scoreboard path.
-    const isStartGG = detectSource(bracketLink) === 'startgg';
+    // the producer binds that match to a board on the Match tab.
 
-    // ── Load set into a match (start.gg) ──────────────────────
+    // ── Load set into a match ─────────────────────────────────
     const [loadedMatches, setLoadedMatches] = useState({}); // setId -> matchId
     const handleLoadToMatch = useCallback(async (s) => {
         try {
@@ -141,17 +129,6 @@ export default function Bracket() {
             notifications.show({ message: e?.message || 'Failed to load set', color: 'red' });
         }
     }, []);
-
-    // ── Load set into scoreboard (Challonge legacy) ───────────
-    const handleLoadSet = useCallback(async (setId, sbNum) => {
-        const result = await loadSet(setId, sbNum);
-        if (result) {
-            update({ loadedSets: { ...loadedSets, [sbNum]: setId } });
-            notifications.show({ message: `Set loaded into Scoreboard ${sbNum}`, color: 'green' });
-        } else {
-            notifications.show({ message: 'Failed to load set', color: 'red' });
-        }
-    }, [loadSet, update, loadedSets]);
 
     // ── Auto-fetch sets when phase/pool/filter changes ────────
     useEffect(() => {
@@ -284,7 +261,7 @@ export default function Bracket() {
                                     <TableHead className="text-center">Score</TableHead>
                                     <TableHead>Player 2</TableHead>
                                     <TableHead>Status</TableHead>
-                                    <TableHead>{isStartGG ? 'Match' : 'Load'}</TableHead>
+                                    <TableHead>Match</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -319,38 +296,17 @@ export default function Bracket() {
                                             </Badge>
                                         </TableCell>
                                         <TableCell>
-                                            {isStartGG ? (
-                                                <SimpleTooltip label="Load this set into a match — bind it to a board on the Match tab">
-                                                    <Button
-                                                        size="xs"
-                                                        variant={loadedMatches[s.id] ? 'default' : 'secondary'}
-                                                        className={cn(loadedMatches[s.id] && 'bg-[#22c55e] text-black hover:bg-[#22c55e]/90')}
-                                                        onClick={() => handleLoadToMatch(s)}
-                                                        disabled={loading || !s.p1_name || !s.p2_name}
-                                                    >
-                                                        {loadedMatches[s.id] ? `Match ${loadedMatches[s.id]}` : 'Load to Match'}
-                                                    </Button>
-                                                </SimpleTooltip>
-                                            ) : (
-                                                <div className="flex gap-1">
-                                                    {activeScoreboards.map(sb => {
-                                                        const isLoaded = loadedSets?.[sb] === s.id;
-                                                        return (
-                                                            <SimpleTooltip key={sb} label={`Load into Scoreboard ${sb}`}>
-                                                                <Button
-                                                                    size="xs"
-                                                                    variant={isLoaded ? 'default' : 'secondary'}
-                                                                    className={cn(isLoaded && 'bg-[#22c55e] text-black hover:bg-[#22c55e]/90')}
-                                                                    onClick={() => handleLoadSet(s.id, sb)}
-                                                                    disabled={loading}
-                                                                >
-                                                                    {activeScoreboards.length > 1 ? `SB${sb}` : 'Load'}
-                                                                </Button>
-                                                            </SimpleTooltip>
-                                                        );
-                                                    })}
-                                                </div>
-                                            )}
+                                            <SimpleTooltip label="Load this set into a match — bind it to a board on the Match tab">
+                                                <Button
+                                                    size="xs"
+                                                    variant={loadedMatches[s.id] ? 'default' : 'secondary'}
+                                                    className={cn(loadedMatches[s.id] && 'bg-[#22c55e] text-black hover:bg-[#22c55e]/90')}
+                                                    onClick={() => handleLoadToMatch(s)}
+                                                    disabled={loading || !s.p1_name || !s.p2_name}
+                                                >
+                                                    {loadedMatches[s.id] ? `Match ${loadedMatches[s.id]}` : 'Load to Match'}
+                                                </Button>
+                                            </SimpleTooltip>
                                         </TableCell>
                                     </TableRow>
                                 ))}
@@ -368,7 +324,7 @@ export default function Bracket() {
                 <Panel glow={false} className="p-8">
                     <div className="flex flex-col items-center gap-2">
                         <Text size="sm" dimmed>
-                            No tournament loaded. Paste a Start.gg or Challonge URL above to get started.
+                            No tournament loaded. Paste a start.gg URL above to get started.
                         </Text>
                     </div>
                 </Panel>

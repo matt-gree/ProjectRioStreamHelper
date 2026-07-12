@@ -126,8 +126,8 @@
       // ── data ────────────────────────────────────────────────────────
       // Header leads with the parent competition ("Slice 2026"); the footer's
       // Event field carries the specific start.gg event ("Stars Off"), falling
-      // back to the competition name when no event_name is present (Challonge /
-      // manually-entered tournaments).
+      // back to the competition name when no event_name is present
+      // (manually-entered tournaments).
       const competitionName = deepGet(state, `tournamentInfo.name`, '');
       const eventName = deepGet(state, `tournamentInfo.event_name`, '')
                         || competitionName;

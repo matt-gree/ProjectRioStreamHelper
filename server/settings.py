@@ -61,7 +61,9 @@ def _resolve_version() -> str:
 # bool/sentinel; SocketIO broadcasts replace the value with the same sentinel.
 # At-rest these are still plaintext in settings.json — encrypting the file
 # doesn't defend against the LAN API surface, which is the actual exposure.
-SECRET_KEYS = frozenset({"challonge.api_key"})
+# Currently empty (the Challonge API key was the only member); the mechanism
+# stays for the next secret-valued setting.
+SECRET_KEYS = frozenset()
 
 _REDACTED = "***"
 
@@ -106,8 +108,8 @@ class Settings:
         "server": {
             # When False, bind to 127.0.0.1 (loopback only). When True, bind
             # to 0.0.0.0 so phones/tablets on the same WiFi can reach the UI
-            # — but also exposes state, settings, and the Challonge key
-            # plaintext to anyone on the network. Opt-in via Settings.
+            # — but also exposes state and settings plaintext to anyone on
+            # the network. Opt-in via Settings.
             "allow_lan": False,
             "port": 5260,
             "dev": True,
@@ -151,9 +153,6 @@ class Settings:
             "sources": {
                 "1": {"type": "manual", "api_game_id": None}
             }
-        },
-        "challonge": {
-            "api_key": ""
         },
         "obs": {
             # OBS WebSocket (obs-websocket v5, OBS 28+). The connection is made

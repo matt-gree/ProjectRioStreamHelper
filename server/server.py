@@ -17,7 +17,6 @@ from server.rio.provider import RioGameDataProvider
 from server.rio import stats_api
 from server.settings import Settings, Config
 from server.startgg.provider import StartGGProvider
-from server.challonge.provider import ChallongeProvider
 from server.controller_overlay import ControllerOverlay
 from server.announcements import Announcements
 from server.participants import Participants
@@ -85,7 +84,6 @@ async def lifespan(app: FastAPI):
     await CompletedGamePool.Start()
     await PoolManager.Start()
     await StartGGProvider.Start()
-    await ChallongeProvider.Start()
     await ControllerOverlay.Start()
     await Announcements.Start()
     # Re-apply every persisted match onto its bound board(s) (resume-on-startup
@@ -111,7 +109,6 @@ async def lifespan(app: FastAPI):
     # on_shutdown
     await Announcements.Stop()
     await ControllerOverlay.Stop()
-    await ChallongeProvider.Stop()
     await StartGGProvider.Stop()
     await PoolManager.Stop()
     await CompletedGamePool.Stop()

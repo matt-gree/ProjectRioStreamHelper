@@ -26,7 +26,7 @@ export default function TournamentLoader() {
 
     const {
         loading, error,
-        setSource, loadEvent, fetchPhases, fetchSets, fetchEntrants, clearEvent,
+        loadEvent, fetchPhases, fetchSets, fetchEntrants, clearEvent,
     } = useTournament();
 
     const [prefetching, setPrefetching] = useState(false);
@@ -123,7 +123,6 @@ export default function TournamentLoader() {
         }
         if (tournament || !bracketLink) return;
         update({ url: bracketLink });
-        setSource(bracketLink);
         (async () => {
             const result = await loadEvent(bracketLink);
             if (!result || result.error) return;
@@ -138,7 +137,7 @@ export default function TournamentLoader() {
             update(phaseUpdate);
             if (phasesResult) prefetchTournamentData(phasesResult, bracketLink);
         })();
-    }, [bracketLink, tournament, bs.suppressAutoLoad, update, setSource, loadEvent, fetchPhases, prefetchTournamentData]);
+    }, [bracketLink, tournament, bs.suppressAutoLoad, update, loadEvent, fetchPhases, prefetchTournamentData]);
 
     // ── Load event ───────────────────────────────────────────────────
     const handleLoadEvent = useCallback(async () => {
@@ -216,7 +215,7 @@ export default function TournamentLoader() {
                     <div className="flex items-end gap-2">
                         <TextField
                             label="Tournament URL"
-                            placeholder="https://start.gg/tournament/.../event/... or https://challonge.com/..."
+                            placeholder="https://start.gg/tournament/.../event/..."
                             className="flex-1"
                             value={url}
                             onChange={e => { update({ url: e.currentTarget.value }); setUrlDirty(true); }}
@@ -248,7 +247,7 @@ export default function TournamentLoader() {
                         )}
                     </div>
                     <Text size="xs" dimmed>
-                        Paste a start.gg event URL, or a Challonge tournament URL (deprecated — limited support)
+                        Paste a start.gg event URL
                     </Text>
                     {statusText && (
                         <div className="mt-1 flex items-center gap-2">

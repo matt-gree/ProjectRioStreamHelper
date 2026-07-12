@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Dialog, DialogContent, DialogTitle } from './ui/dialog';
 import { Button } from './ui/button';
 import { Anchor } from './ui/primitives';
-import { useSettingsStore, useConfigStore } from '../context/store';
+import { useSettingsStore, useConfigStore, useStateStore } from '../context/store';
 import { SupportLinks } from './SupportLinks';
 
 // Tiny inline icons so we don't pull in a new dep.
@@ -57,7 +57,7 @@ function FloatLogo({ style }) {
 export default function WelcomeCard() {
     const dismissed = useSettingsStore(s => s?.ui?.welcome_dismissed) === true;
     const settingsLoaded = useSettingsStore(s => s.loaded);
-    const challongeKey = useSettingsStore(s => s?.challonge?.api_key);
+    const bracketLink = useStateStore(s => s?.tournamentInfo?.bracket_link);
     const setItem = useSettingsStore(s => s.setItem);
     const appName = useConfigStore(s => s.name) || 'PRSH';
     const version = useConfigStore(s => s.version);
@@ -66,7 +66,7 @@ export default function WelcomeCard() {
     const [hudResolved, setHudResolved] = useState(null);
     const [assetsState, setAssetsState] = useState(null); // null | { complete, total_found, total_expected }
 
-    const challongeConfigured = !!(challongeKey && String(challongeKey).trim());
+    const tournamentLoaded = !!(bracketLink && String(bracketLink).trim());
 
     // Open once settings have loaded and the user hasn't dismissed before.
     useEffect(() => {
@@ -187,8 +187,8 @@ export default function WelcomeCard() {
                             <ChecklistRow done={false} title="Add OBS browser sources">
                                 Open the <Anchor href="#/layouts" onClick={handleDismiss} style={{ color: '#ffb3b8' }}>Setup tab</Anchor> to copy URLs — or add sources straight to OBS — for scoreboards, brackets, and more.
                             </ChecklistRow>
-                            <ChecklistRow done={challongeConfigured} title="Tournament integration (optional)">
-                                Load a bracket from Start.gg (public) or Challonge (API key in Settings).
+                            <ChecklistRow done={tournamentLoaded} title="Tournament integration (optional)">
+                                Load a bracket from start.gg on the Competition tab.
                             </ChecklistRow>
                         </div>
 
