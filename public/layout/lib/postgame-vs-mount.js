@@ -151,14 +151,8 @@ const CSS = `
 }
 
 /* ── the center data well ── */
-.pv-spine {
-  position: absolute; left: 50%; top: 250px; height: 700px; width: 3px; margin-left: -1.5px;
-  background: linear-gradient(180deg, var(--s1), var(--accent) 50%, var(--s2));
-  border-radius: 2px; transform-origin: center top; z-index: 3;
-  box-shadow: 0 0 26px rgba(var(--accent-rgb), 0.75);
-}
-/* border-box so the -480px margin truly centers it on the spine, and hidden
-   until the reveal grows it out of the spine (GSAP owns opacity/scaleX). */
+/* border-box so the -480px margin truly centers it, and hidden
+   until the reveal grows it in (GSAP owns opacity/scaleX). */
 .pv-board {
   position: absolute; left: 50%; top: 268px; width: 960px; margin-left: -480px;
   box-sizing: border-box; opacity: 0; z-index: 3;
@@ -519,7 +513,6 @@ export function mountPostgameVs({ host }) {
       ${sidePlate(1, ctx.p1, ctx.winnerSide)}
       ${sidePlate(2, ctx.p2, ctx.winnerSide)}
       ${matchStrip(ctx)}
-      <div class="pv-spine"></div>
       <div class="pv-board"><div class="inner">
         <div class="pv-runs">
           <div class="v s1" data-count="${Number(ctx.t1.runs) || 0}">0</div>
@@ -539,7 +532,6 @@ export function mountPostgameVs({ host }) {
     stage.querySelectorAll('.pv-backdrop').forEach(e => e.style.clipPath = 'inset(0% 0% 0% 0%)');
     stage.querySelectorAll('.pv-row .fill').forEach(e => e.style.transform = `scaleX(${e.getAttribute('data-pct')})`);
     stage.querySelectorAll('[data-count]').forEach(e => e.textContent = String(Math.round(Number(e.getAttribute('data-count')) || 0)));
-    stage.querySelector('.pv-spine').style.opacity = '0';
     const board = stage.querySelector('.pv-board');
     board.style.opacity = '1';
     board.style.transform = 'none';
@@ -580,18 +572,15 @@ export function mountPostgameVs({ host }) {
     // 4 · match context drops in.
     t.fromTo(q('.pv-match'), { y: -46, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.55 }, '-=0.4');
 
-    // 5 · the trail spine draws, then the data well unfolds out of it —
-    // flaring bright and settling into the resting rim glow.
+    // 5 · the data well unfolds — flaring bright and settling into the
+    // resting rim glow.
     const accentRgb = getComputedStyle(stage).getPropertyValue('--accent-rgb').trim() || '249, 63, 145';
-    t.fromTo(q('.pv-spine'), { scaleY: 0, autoAlpha: 0 },
-      { scaleY: 1, autoAlpha: 1, duration: 0.35, ease: 'power2.inOut' }, '-=0.25');
     t.fromTo(q('.pv-board'), { scaleX: 0, autoAlpha: 0 },
-      { scaleX: 1, autoAlpha: 1, duration: 0.55, ease: 'power4.out' });
+      { scaleX: 1, autoAlpha: 1, duration: 0.55, ease: 'power4.out' }, '-=0.25');
     t.fromTo(q('.pv-board'),
       { boxShadow: `inset 0 2px 0 rgba(255,255,255,0.14), 0 18px 60px rgba(0,0,0,0.45), 0 0 130px rgba(${accentRgb}, 0.9)` },
       { boxShadow: `inset 0 2px 0 rgba(255,255,255,0.14), 0 18px 60px rgba(0,0,0,0.45), 0 0 44px rgba(${accentRgb}, 0.22)`,
         duration: 1.1, ease: 'power2.out' }, '<');
-    t.to(q('.pv-spine'), { autoAlpha: 0, duration: 0.3 }, '<+=0.1');
     t.fromTo(q('.pv-board .inner'), { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.3 }, '-=0.35');
 
     // 6 · hero runs count up; rows bloom outward from the center pills.
