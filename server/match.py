@@ -24,6 +24,7 @@ from server.participants import Participants
 from server.rio.resurface import RESURFACE_MAP
 from server.settings import Settings
 from server.state import State
+from server.utils.deep_dict import deep_get
 
 # Every score.player.* key the projector owns for one side. A projection always
 # writes the full set (resolved value or "") so re-projection is deterministic and
@@ -133,6 +134,20 @@ class Match:
     # ----- projection ------------------------------------------------------
 
     @classmethod
+    def _board_side_is_empty(cls, sb: int, t: int) -> bool:
+        """True if the board's side has no existing name/roster data yet.
+
+        Only an empty board may have its captain slot blanked by a
+        captain-less match projection — a board already carrying real data
+        (most commonly a live HUD game) must keep it, or binding a
+        captain-less match clears the live roster out from under the feed.
+        """
+        side = deep_get(State.state, f"score.{sb}.player.{t}") or {}
+        if not isinstance(side, dict):
+            return True
+        return not side.get("rioName") and not deep_get(side, "character.0.name")
+
+    @classmethod
     def _side_entries(cls, sb: int, t: int, player: dict | None) -> list[tuple]:
         """Resolve one side's projected score keys (value or "" for each)."""
         base = f"score.{sb}.player.{t}"
@@ -156,8 +171,18 @@ class Match:
         # chosen captain character goes in roster slot 0 and is marked captain.
         # A live HUD/API game later overwrites this with the real roster.
         captain = player.get("captain") or ""
-        vals["character.0.name"] = captain
-        vals["rio_captainIndex"] = 0 if captain else ""
+        if captain:
+            vals["character.0.name"] = captain
+            vals["rio_captainIndex"] = 0
+        elif cls._board_side_is_empty(sb, t):
+            vals["character.0.name"] = ""
+            vals["rio_captainIndex"] = ""
+        else:
+            # A blank match captain must never clear an already-populated
+            # board (e.g. a live HUD game) — drop these two keys from this
+            # projection so the existing data survives untouched.
+            del vals["character.0.name"]
+            del vals["rio_captainIndex"]
 
         if row:
             display = row.get("display") or {}
