@@ -31,7 +31,7 @@
       line-height: 1;
       letter-spacing: 0.06em;
       text-transform: uppercase;
-      color: var(--accent, #f59f00);
+      color: var(--tag-color, var(--accent, #f59f00));
       text-shadow: var(--text-shadow, none);
       white-space: nowrap;
     }
@@ -85,10 +85,19 @@
     const NAME_KEY = `score.${SCOREBOARD}.player.${TEAM_NUM}.rioName`;
     // Address-book prefix (sponsor/tag) projects to score.player.{T}.team.
     const TAG_KEY  = `score.${SCOREBOARD}.player.${TEAM_NUM}.team`;
-    const { deepGet, state, applyDesignSettings } = OverlayBase;
+    const { deepGet, state, settings, applyDesignSettings } = OverlayBase;
+
+    // Slice26's palette (lime side 1 / teal side 2) isn't exposed as a
+    // settings-driven color anywhere else, so it's hardcoded here to match
+    // the package's other themed elements.
+    const SLICE26_SIDE_COLOR = { 1: '#C5F707', 2: '#57E0E7' };
 
     function render() {
       applyDesignSettings('playername');
+      const designPackage = deepGet(settings, 'overlays.global.designPackage', 'default');
+      const tagColor = designPackage === 'slice26' ? SLICE26_SIDE_COLOR[TEAM_NUM] : null;
+      if (tagColor) document.documentElement.style.setProperty('--tag-color', tagColor);
+      else document.documentElement.style.removeProperty('--tag-color');
       document.getElementById('name-text').textContent = deepGet(state, NAME_KEY, '');
       document.getElementById('tag-text').textContent = deepGet(state, TAG_KEY, '');
     }
