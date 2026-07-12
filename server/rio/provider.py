@@ -699,7 +699,7 @@ class RioGameDataProvider:
     def refresh_hud_targets(cls):
         """Re-scan settings for the current HUD-target list.
 
-        Call after any change to scoreboards.sources or scoreboards.active so
+        Call after any change to project_rio.hud_enabled or scoreboards.active so
         the HUD watcher stops writing into demoted/removed scoreboards and
         starts writing into newly-promoted ones, without otherwise disturbing
         side-preservation state.
@@ -735,7 +735,7 @@ class RioGameDataProvider:
         """Push parsed game data to every HUD-target scoreboard.
 
         Side orientation is decided PER BOARD by the precedence cascade in
-        `_decide` (manual > pin > match > back-to-back), so a match-bound board
+        `_decide` (manual > match > pin > back-to-back), so a match-bound board
         can seat the authored sides while an unbound board still follows
         pin/back-to-back. Each board's `side_reason` is written to State so the
         UI/overlays can show why the order is what it is. Returns a

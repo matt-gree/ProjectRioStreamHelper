@@ -40,18 +40,28 @@ def test_put_state_emits_set_frame(client, mock_socket):
 
 
 # --- /settings (secret redaction) ---
+# SECRET_KEYS is currently empty, so these patch in a fake secret key to keep
+# the API-layer redaction paths covered. The per-key GET reads the copy
+# imported into server.api.v1.settings; the full GET reads server.settings.
 
-def test_settings_secret_get_returns_bool_not_value(client, set_setting):
-    set_setting("challonge.api_key", "supersecret")
-    r = client.get("/api/v1/settings", params={"key": "challonge.api_key"})
+@pytest.fixture
+def fake_secret(monkeypatch):
+    keys = frozenset({"myservice.api_key"})
+    monkeypatch.setattr("server.settings.SECRET_KEYS", keys)
+    monkeypatch.setattr("server.api.v1.settings.SECRET_KEYS", keys)
+
+
+def test_settings_secret_get_returns_bool_not_value(client, set_setting, fake_secret):
+    set_setting("myservice.api_key", "supersecret")
+    r = client.get("/api/v1/settings", params={"key": "myservice.api_key"})
     # Secret keys never leave the server as raw values — just whether configured.
     assert r.json() is True
 
 
-def test_settings_full_get_redacts_secret(client, set_setting):
-    set_setting("challonge.api_key", "supersecret")
+def test_settings_full_get_redacts_secret(client, set_setting, fake_secret):
+    set_setting("myservice.api_key", "supersecret")
     full = client.get("/api/v1/settings").json()
-    assert full["challonge"]["api_key"] == "***"
+    assert full["myservice"]["api_key"] == "***"
 
 
 def test_settings_nonsecret_round_trips(client):
@@ -68,9 +78,10 @@ def test_layouts_variant_matrix(client):
     for entry in layouts:
         by_type.setdefault(entry["type"], []).append(entry)
 
-    # Scoreboard expands into the 5 size variants.
-    assert len(by_type["scoreboard"]) == 5
-    assert {e["sizeVariant"] for e in by_type["scoreboard"]} == {"xs", "s", "m", "l", "xl"}
+    # Scoreboard expands into the size variants (xs/xl retired with the SVG
+    # conversion; the mount maps unknown/legacy sizes to "l").
+    assert len(by_type["scoreboard"]) == 3
+    assert {e["sizeVariant"] for e in by_type["scoreboard"]} == {"s", "m", "l"}
     assert all("?size=" in e["url"] for e in by_type["scoreboard"])
 
     # Team-variant layouts expand into ?team=1 / ?team=2.

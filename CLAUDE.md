@@ -4,13 +4,27 @@
 
 A web-based tournament stream overlay manager for **Mario Superstar Baseball (MSB)** via the Project Rio mod. Forked from TournamentStreamHelper (originally Qt/PySide6) and rebuilt as a single-game web app.
 
-**Tech stack:** Python 3.12+, FastAPI + python-socketio, asyncio, orjson, watchfiles, pyrio (git dep), React 19 + Zustand + Mantine 7, Vite.
+**Tech stack:** Python 3.12+, FastAPI + python-socketio, asyncio, orjson, watchfiles, pyrio (git submodule), React 19 + Zustand + Vite.
 
 **Server:** `server/` — FastAPI + SocketIO on configurable port (default 5260).
 **Frontend:** `src/` — React SPA served by FastAPI in production, Vite dev server in development.
 **Builds:** PyInstaller (`PRSH.spec`) for standalone macOS `.app` and Windows `.exe`; Inno Setup (`installer/PRSH.iss`) for the Windows installer.
+**Submodules:** `server/rio/pyrio` (MSB data + stat parsing), `gc-overlay/` (controller overlay, macOS), `rio-visualizer/` (hit-trajectory simulation).
 
-See [README.md](README.md) for end-user docs and the four scoreboard input methods explained from a user perspective.
+See [README.md](README.md) for end-user docs and [TESTING.md](TESTING.md) for the test-suite design.
+
+## Agent Quickstart
+
+```bash
+./venv/bin/python -m pytest        # backend suite (~2s)
+npm run test:run                   # frontend suite (vitest)
+npm run build                      # frontend production build
+npm run dev                        # Vite (5173) + FastAPI (5260) together
+```
+
+- `python main.py` from a source checkout runs the server **headless** (tray/Tk UI is gated on frozen builds, not dev mode). ⚠️ It uses the real `./user_data/` — there is no isolation mechanism yet.
+- Layout HTML and `public/layout/lib/*.js` are static — no build step, but OBS/browser caches them: **hard refresh** (Cmd/Ctrl+Shift+R) after editing.
+- CI (`.github/workflows/test.yml`) runs both suites on PRs and pushes to `main`/`2.0.0`.
 
 ---
 
@@ -20,26 +34,31 @@ These terms have specific meanings in this codebase. Use them precisely; correct
 
 | Term | Meaning |
 |------|---------|
-| **Scoreboard** | A tab in the UI; one entry under `score.{N}` in state. N ≥ 1; multiple may be active simultaneously, including duplicates of the same source. |
-| **Source** | A scoreboard's input mode. One of `Manual`, `HUD`, `Live API Game`, `Rotator`. Set in the score-controls panel. |
+| **Scoreboard / Board** | A tab in the UI; one entry under `score.{N}` in state. N ≥ 1; multiple may be active simultaneously. At least one always remains. |
+| **Binding** | What fills a scoreboard: `scoreboards.binding.{N}` in **Settings** — a `pool` (membership) + `playback` (how the pool is shown) + `stats_tag`. Defined in `server/bindings.py`. There is **no "source" enum** — "manual" is just the empty binding (single playback, empty pool). |
+| **Pool** | A binding's game membership: `filters` (search chips: tag/username/vs_username/limit), `scope` (`live \| completed \| both`), `pinned` (always in), `excluded` (never in), `refresh_interval` (0 = static). |
+| **Playback** | How a board presents its pool: `mode: single \| rotate`, `gameId` (single: null = auto-follow), `interval` + `running` (rotate). |
+| **Transport** | HUD file vs API — **derived, never user-picked**: board 1 carries the local HUD iff the global `project_rio.hud_enabled` toggle is on; every other board is API. `bindings.transport(sb)`. |
 | **Side** | `1 = left`, `2 = right`. Used everywhere PRSH state references team position. Never use "away/home" in app vocabulary — Project Rio uses those internally but we translate. |
 | **Team** | Synonymous with Side in state (`.player.{T}` where T∈{1,2}). |
+| **Match** | The fixture object above scoreboards: `match.{M}` in state (participants per side, captain, format, series, stage `draft \| live \| post`). A board binds to it via `score.{N}.match = M` (int id, never a round-name string). |
+| **Projector** | The resolve-by-copy pattern: a model (Match, Commentary, PlayerPlates, PostGame) resolves its records against the participant registry and copies the result into the state keys overlays read. Deterministic: writes the full key set (value or `""`) so unbinding blanks exactly what it set. |
+| **Element** | A Production-page broadcast unit. **Direct** elements render from live state; **fed** elements are pushed content on the Callout Stage (stat callout, game summary, spotlight). Related: **shared source** / **dedicated source** / **target** / **feed** — see `src/routes/production/elements.js`. |
 | **Layout** | An HTML file under `public/layout/`, served as an OBS Browser Source. Declares its style contract via `<meta name="overlay-settings">` and its native size via `body { width/height }`. |
-| **Layout type** | Derived from filename + group folder: `scoreboard`, `roster`, `stats`, `teamlogo`, `bracket`, `scene`, or the stem itself for standalone layouts. Drives `?size=` / `?team=` variant expansion. |
+| **Layout type** | Derived from filename + group folder (`server/api/v1/layouts.py`). Drives `?size=` / `?team=` variant expansion. |
 | **Scene** | A full 1920×1080 Layout under `public/layout/scenes/` designed to drop into an OBS scene as the entire stream canvas. |
 | **Overlay** | Generic OBS Browser Source terminology. Not PRSH-specific; do not use as a synonym for any of the terms above. |
-| **Size variant** | `?size=xs\|s\|m\|l\|xl` query param. Scoreboard layouts only. Maps to canonical (w,h) in `_SIZE_VARIANTS`. |
-| **Team variant** | `?team=1\|2` query param. Applies to stats, roster, and teamlogo. |
-| **Rotator (source)** | Scoreboard input method that cycles a scoreboard through a list of games at a configurable interval. |
-| **Rotator (layout group)** | `public/layout/rotator/*.html` — standalone layouts (e.g., the results ticker) designed to display rotating content. Cooperates with but is distinct from the Rotator source. |
-| **Rotation** | An in-flight cycling of games on a Rotator-source scoreboard, managed by `RotationManager`. No other meaning — there is no "player rotation" concept. |
-| **Search set** | A labeled chip representing one completed-games API search (Username / Vs Username / Tags / Limit). Search sets stack additively in the Rotator panel. |
-| **Game pool / Pool** | A set of game records (ongoing and/or completed) that a scoreboard, view, or rotation draws from. Two concrete pools: `OngoingGamePool` (live games from `/games/ongoing`) and `CompletedGamePool` (finished games from `/games`, populated by search sets). A Rotator-source scoreboard chooses via its **Pool selector**: `Both`, `Live Only`, or `Completed`. The Live API Game source reads from Ongoing only. |
+| **Size variant** | `?size=s\|m\|l` query param, scoreboard layouts only (`xs`/`xl` retired with the SVG conversion; legacy URLs fall back to `l`). |
+| **Team variant** | `?team=1\|2` query param. Applies to stats, roster, rosterstats, teamlogo, controller, playername. |
+| **Rotation / Rotating** | A board whose playback mode is `rotate`, cycling its pool at an interval. Managed by `PoolManager` (`server/rio/rotation.py`). No other meaning — there is no "player rotation" concept. |
+| **Rotator (layout group)** | `public/layout/rotator/*.html` — standalone layouts (e.g. the results ticker) that display rotating content. Distinct from rotate playback. |
+| **Design package / Theme** | A swappable SVG theme set under `public/design/{package}/` (default, classic, + user packages in `user_data`). Elements mount theme SVGs via `svg-theme-engine.js` data-slot binding. |
 | **HUD game** | Game data sourced from the local `decoded.hud.json` file. |
 | **API game** | Game data sourced from `https://api.projectrio.app/`. |
+| **Participant / Address Book** | The participant registry (`server/participants.py`, REST-only, `participants.json`): rio name → display identity (name, team, pronouns, socials). The join point for Match, Commentary, PlayerPlates, Matchup. |
 | **Pinned player** | A name in settings that PRSH forces onto a chosen Side at the start of each new game. Configured in Settings → Project Rio. |
 | **Stream labels** | Per-key `.txt` mirror of state under `user_data/stream_labels/`. Off by default. Intended for OBS Text Sources. |
-| **Branding** | Single tournament logo asset uploaded by the user to `user_data/branding/`, served at `/branding/`. |
+| **Branding** | Tournament logo + merch assets uploaded by the user to `user_data/branding/`, served at `/branding/`. |
 | **MSB assets** | User-supplied image pack at `user_data/game_assets/msb/{characterIcons,teamLogos,gameIcons}`. Validated against pyrio's canonical filename lists. PRSH does not ship these (Nintendo IP). |
 | **Announcement** | Notification surfaced from GitHub: either an "Update available" synthesized from the Releases API, or an entry in `announcements.json` on the repo's `announcements` branch. |
 
@@ -50,107 +69,99 @@ These terms have specific meanings in this codebase. Use them precisely; correct
 ### Core Data Flow
 
 ```
-Project Rio Game ─→ decoded.hud.json ─→ HudWatcher (OS file events)
-                                              │
-Project Rio API ───→ OngoingGamePool  ──→ RioGameDataProvider ──→ State.SetBatch()
-                └──→ CompletedGamePool ──→ RotationManager ─────┘        │
-                                                                          ▼
-                                                                  SocketIO + UI + OBS
-                                                                          │
-                                                       optional ───→ stream_labels/
+Project Rio game ─→ decoded.hud.json ─→ HudWatcher ─→ RioGameDataProvider ──┐
+Project Rio API ─→ Ongoing/CompletedGamePool ─→ PoolManager (bindings) ─────┤
+start.gg ─→ StartGGProvider ─→ Match (fixture) ─┐                           │
+Participants registry ──────────────────────────┤                           ▼
+Commentary / PlayerPlates / Matchup / Schedule ─┴─ projectors ──→ State.SetBatch()
+Post-game stat files ─→ PostGame capture ────────────────────────────↗      │
+                                                                            ▼
+                                              SocketIO (v1.state.set/set_batch) + v1.action bus
+                                                            │
+                                              React UI + OBS overlays (+ optional stream_labels/)
 ```
+
+Two write paths into `score.{N}.*` meet at the board: the **live feed** (HUD/API game data) and the **Match projector** (authored fixture data). The side cascade (below) and the projector's key ownership rules keep them from fighting.
 
 ### Module Organization
 
 ```
 server/
 ├── __init__.py              # FastAPI app + SocketIO setup
-├── server.py                # Static mounts + route registration
+├── server.py                # Static mounts + route registration + provider lifecycle
 ├── state.py                 # Central state store (Set, SetBatch, Save, Export)
-├── settings.py              # Settings + Config persistence
+├── settings.py              # Settings + Config persistence (incl. scoreboards.binding migration)
+├── bindings.py              # Pool + playback binding model — pure accessors, no cycles
+├── match.py                 # Match fixture model + projector + series/decided logic
+├── participants.py          # Participant registry (address book), REST-only singleton
+├── commentary.py            # Commentary desk (max 4 slots) + projector
+├── playerplates.py          # Player Plates element + projector
+├── postgame.py              # Post-game capture (stat files) + postgame.{N}.* projection
+├── matchup.py               # Matchup History band (singleton matchup.*)
+├── schedule.py              # Schedule queue (match.scheduledAt surfaces)
+├── design_packages.py       # Theme package enumeration/resolution
 ├── paths.py                 # Path helpers (per-user writable root in frozen builds)
-├── port_conflict.py         # Pre-flight port check + Tk recovery dialog (runs before async server)
-├── tray.py                  # macOS/Windows system-tray icon (pystray)
-├── win_window.py            # Windows: Tk taskbar window with server URL + Exit
+├── port_conflict.py         # Pre-flight port check + Tk recovery dialog
+├── tray.py / win_window.py  # macOS tray / Windows taskbar window (frozen builds only)
 ├── announcements.py         # GitHub-driven announcement fetcher + version check
-├── controller_overlay.py    # gc-overlay subprocess manager
+├── controller_overlay.py    # gc-overlay subprocess manager (macOS only)
 ├── api/v1/
+│   ├── action.py            # Universal action bus: POST /action → v1.action SocketIO cue
 │   ├── rio.py               # HUD game state, swap, refresh
-│   ├── state.py             # Get/set state keys
-│   ├── settings.py          # Get/set settings
-│   ├── scoreboards.py       # Score control (swap, up/down)
+│   ├── state.py, settings.py, scoreboards.py, stats.py, logs.py, assets.py, branding.py
 │   ├── game_pool.py         # Completed/ongoing pool endpoints
-│   ├── rotation.py          # Rotation control (start/stop/step/configure)
-│   ├── stats.py             # Character stats
-│   ├── layouts.py           # Layout metadata: type derivation, size/team variants, supportedSettings
-│   ├── branding.py          # Tournament logos
-│   ├── assets.py            # MSB image-pack validation against pyrio's canonical filenames
-│   ├── startgg.py           # Start.gg bracket integration
-│   ├── challonge.py         # Challonge bracket integration
+│   ├── rotation.py          # Rotate-playback control for a board's binding
+│   ├── layouts.py           # Layout catalog: type derivation, size/team variants, supportedSettings
+│   ├── match.py             # Match CRUD + bind + apply_startgg_set (the one set→match path)
+│   ├── matchup.py, schedule.py, commentary.py, playerplates.py, postgame.py, participants.py
+│   ├── startgg.py           # Start.gg bracket/sets/entrants endpoints
+│   ├── design.py            # Design package endpoints
+│   ├── visualizer.py        # Hit visualizer / spotlight endpoints
 │   ├── controller.py        # gc-overlay control
-│   ├── announcements.py     # List active / dismiss announcements
-│   └── logs.py              # In-app log viewer: list + tail
+│   └── announcements.py
 ├── rio/
-│   ├── provider.py          # RioGameDataProvider — HUD→State + side preservation
-│   ├── hud_watcher.py       # HudWatcher — OS-level file watching via watchfiles
-│   ├── stats_tracker.py     # StatsTracker — merges API historical + HUD current
+│   ├── provider.py          # RioGameDataProvider — HUD→State + side cascade (~1050 lines)
+│   ├── hud_watcher.py       # OS-level file watching via watchfiles
+│   ├── stats_tracker.py     # Merges API historical + HUD current stats
 │   ├── stats_api.py         # Project Rio API client
 │   ├── game_pool.py         # OngoingGamePool / CompletedGamePool
-│   ├── rotation.py          # RotationManager — per-scoreboard game rotation
+│   ├── rotation.py          # PoolManager / PoolState — binding pool membership + rotate playback
+│   ├── game_end.py          # GameEndWatcher — API-side game-end detection → Match.award_game
+│   ├── resurface.py         # Address-book identity resurfacing onto boards
+│   ├── hit_visualizer.py    # Hit viz data feed
 │   └── pyrio/               # Git submodule (matt-gree/pyrio)
 ├── startgg/                 # Start.gg GraphQL provider + queries
-├── challonge/               # Challonge REST provider
-└── utils/
-    ├── deep_dict.py         # deep_get/deep_set/deep_unset
-    ├── json.py              # orjson wrapper with async threshold
-    ├── router.py            # API decorator (@method)
-    └── keyring.py           # OAuth token storage
+└── utils/                   # deep_dict, orjson wrapper, @method router decorator, keyring
 
 src/                         # React frontend
-├── main.jsx
-├── components/
-│   ├── App.jsx              # Root with error boundary
-│   ├── providers.jsx
-│   ├── SettingsModal.jsx
-│   ├── LogsViewer.jsx       # In-app log viewer UI
-│   ├── WelcomeCard.jsx      # First-launch / missing-assets prompt
-│   ├── SupportLinks.jsx
-│   ├── fields.jsx
-│   └── scoreboard/          # PlayerSlot, TeamPanel, ScoreControls
+├── components/              # App, SettingsModal, WelcomeCard, LogsViewer, scoreboard/*
 ├── context/
 │   ├── store.jsx            # Zustand stores (state, settings, config, bracket)
 │   ├── socket.jsx           # SocketIO provider with RAF batching
-│   └── announcements.jsx
+│   ├── obs.jsx              # OBS WebSocket layer (browser→OBS, incl. shutdown-property reconciliation)
+│   ├── staging.js           # Confirm-to-live staging gateway (stageOrRun, F9)
+│   └── match.js, announcements.jsx
 ├── routes/
-│   ├── root.jsx
-│   ├── scoreboard_manager/  # Per-scoreboard source UI + Rotator panel
-│   ├── layouts/             # Layout catalog + per-layout settings + Design tab
-│   ├── bracket/             # In-app bracket view
-│   ├── tournament_info/
-│   ├── commentary/
-│   └── player_list/
-├── hooks/                   # useStartGG, useTournament
-├── data/                    # msb.js (character/team static data)
-└── lang/
+│   ├── production/          # Production tab (default route): element faces/setups, draft bar — 3300 lines, split pending
+│   ├── scoreboard_manager/  # "Match" tab: per-board binding UI + MatchPanel
+│   ├── competition/         # Merged tournament info + bracket (segmented)
+│   ├── layouts/             # "Setup" tab: layout catalog + Design tab (layouts.jsx also holds the style-settings registries)
+│   ├── commentary/, player_list/
+└── lang/, data/, hooks/, lib/
 
 public/
-├── layout/                  # OBS browser source HTML files (see "Layouts" below)
-│   ├── scoreboard1/         # scoreboard.html (size variants), roster/stats/teamlogo (team variants)
-│   ├── bracket/             # index/winners_only/losers_only/player_schedule
-│   ├── scenes/              # Full 1920×1080 scene overlays (NNL, rivalry)
-│   ├── rotator/             # Rotation-display layouts (ticker)
-│   ├── controller/          # Per-team controller-input overlay (?team=1|2; iframes the running gc-overlay at the side's HUD port)
-│   ├── preview/             # Sample state JSON blobs for in-app preview rendering
-│   └── lib/overlay-base.js  # Shared SocketIO client + setting resolution
-├── game_assets/             # (dev-mode only — frozen builds use user_data)
-└── favicon.png, logo*.png
+├── layout/                  # OBS browser source HTML (thin shells over lib/ mounts)
+│   ├── lib/                 # overlay-base.js, *-mount.js per element, svg-theme-engine.js,
+│   │                        # gsap-loader.js, reveal-gate.js, vendored three.js (~54k lines — ignore in LOC counts)
+│   ├── scoreboard1/, scorecard/, bracket/, scenes/, rotator/, controller/,
+│   ├── lowerthird/, commentary/, playerplates/, matchup/, schedule/,
+│   ├── eventheader/, hitvisualizer/, shared/ (callout-stage, stats-feed, split-screen)
+│   └── preview/             # Sample state JSON for in-app preview rendering
+├── design/                  # Built-in theme packages (default/, classic/)
+└── game_assets/             # (dev-mode only — frozen builds use user_data)
 
-user_data/
-├── settings.json            # User preferences
-├── state.json               # Persisted application state
-├── stream_labels/           # Exported state as text files (off by default)
-├── branding/                # Tournament logo (served at /branding/)
-└── game_assets/msb/         # User-supplied image pack (characterIcons/, teamLogos/, gameIcons/)
+user_data/                   # settings.json, state.json, participants.json,
+                             # stream_labels/, branding/, game_assets/msb/, design packages
 ```
 
 In **frozen builds**, `user_data/` lives under the per-user writable root resolved by `server/paths.py` (e.g., `~/Library/Application Support/PRSH/user_data/` on macOS, `%LOCALAPPDATA%\PRSH\user_data\` on Windows). In **dev mode** it's `./user_data/` next to the repo.
@@ -164,14 +175,17 @@ The server uses class-level singletons with `@classmethod` methods. State is sha
 | Class | Purpose |
 |-------|---------|
 | `State` | Central state store — in-memory dict + SocketIO broadcast + file export |
-| `Settings` | User settings persistence (`user_data/settings.json`) |
-| `Config` | Application config (server URL, version) |
-| `RioGameDataProvider` | HUD watcher lifecycle + game data parsing + side preservation |
+| `Settings` / `Config` | User settings persistence / app config |
+| `RioGameDataProvider` | HUD watcher lifecycle + game parsing + side cascade |
 | `StatsTracker` | Per-character stats merging (API historical + HUD current game) |
 | `HudWatcher` | File watcher (owned by RioGameDataProvider) |
-| `OngoingGamePool` / `CompletedGamePool` | Game pools from Project Rio API |
-| `RotationManager` | Per-scoreboard game rotation (Rotator source) |
-| `StartGGProvider` / `ChallongeProvider` | Bracket/tournament data |
+| `OngoingGamePool` / `CompletedGamePool` | Game caches from the Project Rio API |
+| `PoolManager` | Per-board binding pools: membership refresh + rotate playback (one `PoolState` per board) |
+| `Match` | Fixture model + projector + series arithmetic |
+| `Participants` | Participant registry (address book) |
+| `Commentary` / `PlayerPlates` / `Matchup` / `Schedule` / `PostGame` | Element models + projectors |
+| `GameEndWatcher` | API-board game-end detection → `Match.award_game` |
+| `StartGGProvider` | Bracket/tournament data |
 | `ControllerOverlay` | gc-overlay subprocess manager |
 | `Announcements` | GitHub-driven release check + announcements feed |
 
@@ -192,28 +206,89 @@ Every change flows through `State.Set(key, value)` or `State.SetBatch(entries)`.
 - `State.Save()` — diff from tracked keys only.
 - File export off by default (`general.disable_export: True`).
 
-### MSB State Keys
+### State namespaces (broadcast + persisted in state.json)
 
 ```
-score.{N}.inning, score.{N}.half_inning
-score.{N}.outs, score.{N}.strikes, score.{N}.balls
-score.{N}.batter, score.{N}.pitcher
-score.{N}.cbRioRunnerOn1/2/3                          (booleans)
-score.{N}.star_chance, score.{N}.stadium             (slug), score.{N}.innings_selected
-score.{N}.tag_set                                     (game-mode id of the live game)
-score.{N}.away_linescore, score.{N}.home_linescore   (per-inning runs; live + final)
-score.{N}.player.{T}.rioName                          (T ∈ {1,2}: 1 = left, 2 = right)
-score.{N}.player.{T}.rio_captainIndex
-score.{N}.player.{T}.msb_team                         (roster-derived team name, team_name_algo)
-score.{N}.player.{T}.logo                             (explicit in-game banner; may differ from msb_team)
-score.{N}.player.{T}.port                             (0-indexed controller port, HUD only)
-score.{N}.player.{T}.team_stars                       (team star-meter count)
-score.{N}.player.{T}.character.{C}                    (roster of 9; .name/.position/.is_starred/.batting_hand/.fielding_hand)
+score.{N}.*                       — per-board live game + projected fixture data:
+  inning, half_inning, outs/strikes/balls, batter, pitcher,
+  cbRioRunnerOn1/2/3, star_chance, stadium, innings_selected, tag_set,
+  away_linescore, home_linescore, phase, match (bound match id, int),
+  match_conflict, side_reason,
+  player.{T}.rioName, .rioName_override (producer pin, cleared on new HUD game),
+  player.{T}.rio_captainIndex, .msb_team, .logo, .port, .team_stars,
+  player.{T}.series_wins, .character.{C}.{name,position,is_starred,batting_hand,fielding_hand}
 
-scoreboards.active                                    (list of active scoreboard N's)
-scoreboards.sources.{N}.type                          (manual | hud | live_api | rotator)
-scoreboards.rotation.{N}.*                            (live rotation status for overlays)
+match.{M}.*                       — fixture: label, phase, stage (draft|live|post), scheduledAt,
+                                    format.bestOf, series.{1,2}, decided, per-side participant/captain/port,
+                                    provider.startgg.setId
+commentary.*                      — desk slots (max 4), resolve-by-copy from registry
+playerplates.*                    — plates band (modes: both|p1|p2 + location)
+matchup.*                         — matchup-history band (singleton)
+postgame.{N}.*                    — captured post-game: present, gameId, meta, player.{T}.totals
+lowerthird.slots.{1..5}.*         — lower-third band slot contents
+schedule.queue                    — upcoming-matches queue
+scoreboards.rotation.{N}.*        — live rotation status MIRROR for overlays (read-only; config lives in Settings)
+tournamentInfo.*, overlays.*      — tournament metadata; layout style settings
 ```
+
+### Scoreboard config lives in Settings, not State
+
+`scoreboards.active`, `scoreboards.aliases`, and `scoreboards.binding.{N}` (pool + playback + stats_tag) are **Settings** keys (`server/bindings.py` documents the schema). Legacy `scoreboards.sources` / flat `scoreboards.rotation` settings are read-only migration fallbacks — never write them.
+
+---
+
+## Scoreboards & Bindings
+
+- Each board's binding is independent; boards can share pool contents.
+- **Transport is derived**: board 1 carries the local HUD iff `project_rio.hud_enabled` (Settings toggle). There is no per-board source selector. Every other board is API-fed from its pool.
+- `playback.mode: single` shows one game (`gameId: null` = auto-follow the pool); `rotate` cycles the pool at `interval` while `running`.
+- `PoolManager` refreshes pool membership (`refresh_interval`; 0 = static/pinned-only), pre-fetches stats for rotations, and mirrors live rotation status into `scoreboards.rotation.{N}.*` state for overlays.
+- **Resume-on-startup:** rotate boards that were `running` at shutdown restart in the background on next launch.
+- A per-board game-mode `stats_tag` drives the stats fetch; on a new HUD game, `_apply_hud_game_mode()` auto-sets it from the HUD's `TagSetID` (overwriting a manual pick each game start).
+- `POST /scoreboards/reset` is the escape hatch that clears stale board/binding state.
+- Boards can be renamed (alias) and removed; at least one always remains. Layouts bind via `?scoreboard=N` — **a missing param defaults to board 1**, which is safe because board 1 always exists.
+
+---
+
+## Player-Side Cascade (who sits left/right)
+
+Project Rio randomly assigns away/home each game. `_decide()` in `server/rio/provider.py` resolves each board's orientation with precedence:
+
+**manual > match > pin > back_to_back > none**
+
+- **Manual** — the swap button; sets `_user_overridden`, scope = current game only (a new game clears it). Swapping back to the pinned orientation releases the override early.
+- **Match** — a bound match encodes *both* sides, so it strictly supersedes the pin on that board. `Match.orientation_for_sides` returns None for unbound boards or when live players don't match the fixture — then the pin governs.
+- **Pin** — `project_rio.pinned_player` + `pinned_side` (+ `pinned_hud_only`). Global setting, applies to every board the cascade reaches.
+- **Back-to-back** — previous game's player→side map; only consulted when nothing above matched.
+
+The deciding layer is mirrored to `score.{N}.side_reason`. On a new game (inning reset) the manual flags clear and the manual base reseeds from the non-manual cascade.
+
+---
+
+## Match Model & Projectors
+
+- A producer authors a `match.{M}` (or loads a start.gg set into one — `apply_startgg_set` in `server/api/v1/match.py` is the **only** set→match path). Binding a board (`score.{N}.match = M`) projects fixture fields into the `score.{N}.player.{T}.*` keys overlays already read.
+- **The match owns the series** (games won within the Bo format); boards own only their live game. Post-game capture and `GameEndWatcher` credit wins via `Match.award_game`; `decided` is set when a side reaches ceil(bestOf/2). The projector mirrors `series_wins` onto bound boards.
+- **Game-end detection:** HUD board → post-game stat-file capture (`server/postgame.py`, gated on GameID + Loaded-from-HUD==0). API boards → `GameEndWatcher` (ongoing-pool drop-out, matched by username+start_time, retries 12×10s).
+- **Identity gate:** if live players don't match the bound fixture, `score.{N}.match_conflict` raises the app-wide banner; a decided-mismatch auto-retires the binding.
+- Match 1 is the **primary match**: setting its players auto-preps the Matchup band and Player Plates (both re-pointable).
+- **Projector rules** (Match, Commentary, PlayerPlates, PostGame all follow this shape — reuse it, don't invent a new one): resolve records against the Participants registry, write the *full* owned key set via `SetBatch` (value or `""`), wrap `project_all()` startup hooks in try/except so a bad record never blocks boot. A captain-less match projection must never blank a live HUD captain.
+
+---
+
+## Production Tab & Elements
+
+- `src/routes/production/` — the default route: OBS scene/source control (via **browser-side** OBS WebSocket, `src/context/obs.jsx`, localhost:4455 — reaches the producer's OBS even in dual-machine setups), element faces/setups, match draft bar, break/lower-third editors.
+- **Staging:** `src/context/staging.js` `stageOrRun` gateway — with confirm-mode on, changes stage until F9/confirm.
+- **Action bus:** `POST /api/v1/action` → `v1.action` SocketIO cue to all overlays. Ephemeral one-shot cues (never stored in State), e.g. `overlay.conceal` for the OBS hide/show stutter fix. PRSH owns action names; packages own animations.
+- **OBS animation contract:** animated overlays get the browser-source `shutdown` property set by PRSH (fresh load on show); a per-source "Intro" toggle (`?intro=0`) makes a source resident/no-animation instead. Don't regress this — see `obs.jsx` comments.
+- **Fed elements** (stat callout, game summary/PvP, character spotlight, stats feed) render on the 1920×1080 **Callout Stage** (`public/layout/shared/callout-stage.html`) and are pushed from Production. The spotlight/hit-viz use vendored three.js and pyrio's `simulate_contacts` via the rio-visualizer submodule.
+
+## Design Packages (Themes)
+
+- Element visuals are **re-themable SVGs**: a theme file declares `data-slot`/`data-tpl` hooks; `public/layout/lib/svg-theme-engine.js` injects and binds them; mounts auto-fit text.
+- Packages live in `public/design/{default,classic}/` (built-in) + user packages in `user_data/design_packages/`; served via `GET /design/{package}/{file}` with resolution falling back element-by-element to `default`. Server side: `server/design_packages.py`, `server/api/v1/design.py`. Selected in Setup → Design.
+- Theme contract details (e.g. `--side1/--side2/--well` vars, mount-point conventions) live in the theme SVGs and mount scripts — read an existing pair (e.g. `lowerthird`) before authoring.
 
 ---
 
@@ -222,134 +297,78 @@ scoreboards.rotation.{N}.*                            (live rotation status for 
 Each Layout (HTML file under `public/layout/`) is enumerated by `server/api/v1/layouts.py`, which:
 
 1. **Derives a layout type** from the filename stem and group folder. `scenes/*` → `scene`; `bracket/*` → `bracket`; otherwise strips trailing digits from the stem.
-2. **Expands variants** if applicable:
-   - **Size variants** (`?size=xs..xl`) — scoreboard only. Maps to canonical pixel dimensions.
-   - **Team variants** (`?team=1|2`) — stats, roster, teamlogo.
-3. **Parses `body { width/height }`** for the OBS browser-source size hint. Bracket falls back to 1920×1080.
+2. **Expands variants** if applicable: size (`?size=s|m|l`, scoreboard only), team (`?team=1|2` — stats, roster, rosterstats, teamlogo, controller, playername), direction (`?dir=`, fourcam).
+3. **Parses `body { width/height }`** for the OBS browser-source size hint.
 4. **Parses `<meta name="overlay-settings">`** — the layout's whitelist of style knobs it respects.
 
 ### Style settings: two-tier system
 
-Defined in `src/routes/layouts/layouts.jsx`:
+Defined in `src/routes/layouts/layouts.jsx` (+ `designConstants.js`):
 
-- **`GLOBAL_DESIGN_KEYS`** + **`GLOBAL_DESIGN_DEFAULTS`** — globally-themed knobs (accentColor, cardBg, textColor, borderRadius, borderColor, borderWidth, fontFamily, shadow knobs, showCaptains, showLogo, showBackdropBlur, finalBadgeColor). Live in state at `overlays.global.*` and apply to every layout that opts in via its `<meta>` whitelist.
-- **`LAYOUT_SETTINGS[layoutType]`** — per-layout-type element settings (e.g., `showElo` for scoreboard, `connectorColor` for bracket). Live at `overlays.{type}.{key}`.
-- **`OVERRIDABLE_GLOBAL_KEYS`** — globals that a specific layout type can *pin* an override for (e.g., make bracket use a different accent than the rest of the design system).
+- **`GLOBAL_DESIGN_KEYS`** + **`GLOBAL_DESIGN_DEFAULTS`** — globally-themed knobs (accentColor, cardBg, textColor, borderRadius, fonts, shadows, showCaptains, …). Live at `overlays.global.*`, apply to every layout that opts in via its `<meta>` whitelist.
+- **`LAYOUT_SETTINGS[layoutType]`** — per-layout-type element settings. Live at `overlays.{type}.{key}` (scorecard is per-board: `overlays.scorecard.{N}.*`).
+- **`OVERRIDABLE_GLOBAL_KEYS`** — globals a layout type can pin an override for.
 
-The HTML's `<meta name="overlay-settings" content="...">` is the source of truth for what the Layouts tab is allowed to expose for that file. The UI never offers a control the layout didn't opt into.
+The `<meta name="overlay-settings">` whitelist is the source of truth for what the Setup tab exposes per file.
 
 ### Adding a new Layout — checklist
 
 1. Drop the HTML file in the appropriate `public/layout/<group>/` folder.
 2. Set `body { width: _px; height: _px }` to the native size.
-3. Declare every style knob the layout respects in `<meta name="overlay-settings" content="...">`.
-4. If the layout introduces a **new element-only setting**, add a def to `LAYOUT_SETTINGS[layoutType]` in `layouts.jsx`.
-5. If the layout introduces a **new globally-themable knob**, add it to `GLOBAL_DESIGN_KEYS`, `GLOBAL_DESIGN_DEFAULTS`, and `OVERRIDABLE_GLOBAL_KEYS`.
-6. Subscribe to `v1.state.set` **and** `v1.state.set_batch` via `overlay-base.js`. Batch your rendering.
-7. Use `?scoreboard=N` to bind scoreboard data (default `1`). Use `?size=` / `?team=` if the file is a variant template.
-
-### Default scoreboard binding
-
-`scoreboard.html` reads `parseInt(params.get('scoreboard')) || 1` — **a missing `?scoreboard=` defaults to scoreboard 1**, not "the active one" or "the first present." At least one scoreboard always remains in the UI, so this is safe by construction.
-
----
-
-## Multi-Scoreboard Rules
-
-- Each scoreboard's source is independent.
-- Multiple scoreboards may share a source type (two HUD-sourced scoreboards will mirror the same HUD; two Rotator sources can each rotate through their own pool with their own interval).
-- **Pinned player applies globally** — it's a Settings value, not per-scoreboard. Every HUD-sourced scoreboard honors the same pin.
-- A scoreboard can be renamed (alias appears in tab and is referenceable from layouts). It can be removed; at least one always remains.
-- Each Layout binds to a specific scoreboard via `?scoreboard=N` (default `1`).
-
----
-
-## Player-Side Preservation (HUD Source)
-
-When the same streamer plays back-to-back HUD games, Project Rio randomly assigns them to away or home each game. PRSH normalizes this via `_preserve_player_sides()` in `server/rio/provider.py`. The logic is a state machine with two flags (`_sides_swapped`, `_user_overridden`), not a strict priority cascade:
-
-**At game start (inning resets), both flags clear; then:**
-1. **Pinned player wins outright.** If the pinned name appears in either roster, set sides so the pin lands on the configured Side. Back-to-back is not consulted.
-2. **Back-to-back fallback.** Only if no pin matched: check the previous game's player→Side map; if a returning player switched, swap.
-
-**Mid-game (subsequent HUD events in the same game):**
-- The **manual swap button** is the only signal that re-fires; it sets `_user_overridden`.
-- Manual override scope: **current game only.** A detected new game (inning reset) clears it.
-- Special case: if the user manually swaps back to the orientation the pin would have chosen, `_user_overridden` clears so the next new game re-applies the pin cleanly.
-
-**Settings keys:**
-- `project_rio.pinned_player` — player name to pin.
-- `project_rio.pinned_side` — `"Team 1"` or `"Team 2"`.
-- `project_rio.pinned_hud_only` — only apply pin to HUD-sourced scoreboards.
-
----
-
-## Rotations (Rotator Source)
-
-`server/rio/rotation.py` — one `RotationState` per scoreboard, keyed by scoreboard number.
-
-- Owns: game-id list, advance interval, pool selector (`both | live | completed`), current index.
-- Pre-fetches stats for every game in the rotation at start so transitions don't block on the API.
-- On a per-game apply failure: logs a warning and advances; never kills the rotation.
-- Live status is mirrored into State at `scoreboards.rotation.{sb_id}.*` so any overlay can subscribe like normal state.
-- **Resume-on-startup:** rotations active at shutdown re-fetch their pool and restart in the background on next launch. Only resumes if (a) the scoreboard still exists, (b) its current source is still `rotator`, and (c) `enabled=true` with a non-empty `game_ids`.
+3. Declare every style knob it respects in `<meta name="overlay-settings" content="...">`.
+4. Register new element-only settings in `LAYOUT_SETTINGS[layoutType]`; new global knobs in `GLOBAL_DESIGN_KEYS`/defaults/overridables.
+5. Wire through **`OverlayBase.init()`** (`public/layout/lib/overlay-base.js`) — it centrally handles the SocketIO connect, initial fetch, `v1.state.set`/`set_batch`/`unset` dispatch, and `v1.action` cues. Write a `*-mount.js` in `lib/` and keep the HTML a thin shell (copy an existing pair, e.g. `playerplates`).
+6. Batch rendering: apply all changed keys to local state first, render once.
+7. Use `?scoreboard=N` to bind board data (default `1`); `?size=`/`?team=` if the file is a variant template.
+8. If it's a Production element, register it in `src/routes/production/elements.js` too (eventheader is a known gap here).
 
 ---
 
 ## Web Server (Port 5260)
 
-FastAPI + python-socketio.
-
 ### Networking
 
-- Default bind: **`127.0.0.1` (loopback only).** This is intentional: PRSH serves stateful APIs that mutate the live stream, and binding to all interfaces by default would let anything on the LAN (or open Wi-Fi) push fake state, change scoreboards mid-broadcast, or harvest data.
-- LAN access is opt-in via `server.allow_lan` (Settings). When true, binds `0.0.0.0`. Use for legitimate multi-machine setups (separate streaming PC).
-- `server/port_conflict.py` runs **synchronously before the async server** and reads `settings.json` directly (the async Settings class isn't initialized yet). On conflict, a Tk modal offers auto-retry on the next free port (persists), reveal-settings-folder, or quit.
+- Default bind: **`127.0.0.1` (loopback only).** Intentional: PRSH serves stateful APIs that mutate the live stream; binding wide by default would let anything on the LAN push fake state mid-broadcast.
+- LAN access is opt-in via `server.allow_lan` (Settings). When true, binds `0.0.0.0`.
+- `server/port_conflict.py` runs **synchronously before the async server** and reads `settings.json` directly. On conflict, a Tk modal offers auto-retry on the next free port, reveal-settings-folder, or quit (frozen builds).
 
 ### Static Mounts
 
-- `/assets/` — React build output
-- `/game_assets/` — character icons, team logos (resolved from `user_data/game_assets/msb/` in frozen builds, `./public/game_assets/` in dev)
-- `/layout/` — OBS browser source HTML
-- `/branding/` — tournament logo
+`/assets/` (React build), `/game_assets/`, `/layout/`, `/design/`, `/branding/`. ⚠️ Mount paths are CWD-relative — run the server from the repo root.
 
 ### Key API Routes (`/api/v1/`)
 
 | Endpoint | Purpose |
 |----------|---------|
-| `GET /state` | Full state JSON |
-| `GET/PUT /state/{key}` | Get/set individual state key |
-| `GET/PUT /settings/{key}` | Get/set settings |
-| `GET /rio/game` | Current HUD game state |
-| `POST /rio/refresh` | Re-read HUD file |
-| `POST /rio/swap` | Toggle team sides (sets `_user_overridden`) |
-| `GET /scoreboards` | Active scoreboards |
-| `GET /layouts` | Available layouts (with type/variants/supportedSettings/dims) |
+| `GET /state`, `GET/PUT /state/{key}` | Full state / individual key |
+| `GET/PUT /settings` | Settings (SECRET_KEYS values are redacted) |
+| `POST /action` | Broadcast a one-shot `v1.action` cue to overlays |
+| `GET /rio/game`, `POST /rio/refresh`, `POST /rio/swap` | HUD game / re-read / manual side swap |
+| `GET /scoreboards`, `POST /scoreboards/reset` | Boards; reset stale board/binding state |
+| `PUT /scoreboards/{sb}/player/{t}/name-override` | Producer name pin for a slot |
+| `GET /layouts` | Layout catalog (type/variants/supportedSettings/dims) |
 | `GET /games`, `GET /games/ongoing` | Game pool endpoints |
-| `POST /rotation/...` | Configure/start/stop/step a scoreboard's rotation |
-| `POST /tournament/startgg` | Load Start.gg bracket by slug |
-| `POST /tournament/challonge` | Load Challonge bracket |
-| `GET/POST /controller` | gc-overlay status & control |
-| `GET /announcements`, `POST /announcements/dismiss` | Active announcements + per-id dismissal |
-| `GET /logs`, `GET /logs/{name}` | Log file list + tail |
-| `GET /assets/msb/validate` | MSB image-pack validation report |
+| `POST /rotation/...` | Rotate-playback control for a board |
+| `/match/*` (+ `/match/{m}/startgg-set`) | Match CRUD, bind, set loading |
+| `/participants/*` (+ `/participants/import/startgg`) | Address book CRUD + entrant import |
+| `/commentary/*`, `/playerplates/*`, `/matchup/*`, `/schedule/*`, `/postgame/*` | Element models |
+| `/startgg/*` | Tournament load, phases, sets, entrants, bracket-data |
+| `/design/*`, `/visualizer/*`, `/controller`, `/announcements`, `/logs`, `/assets/msb/validate` | Themes, hit viz, gc-overlay, announcements, logs, asset validation |
 
 ### SocketIO Events
 
-- `v1.state.set` / `v1.state.set_batch` — state updates (server → clients). **Every consumer must handle both.**
+- `v1.state.set` / `v1.state.set_batch` (+ `unset` variants) — state updates (server → clients). **Every consumer must handle both** — overlays get this for free via `OverlayBase.init`.
 - `v1.settings.set` — settings updates (bidirectional).
 - `v1.state.get` — client requests full state on connect.
+- `v1.action` — ephemeral action cues (see action bus).
 
 ---
 
-## Tournament Brackets
+## Tournament Integration (start.gg)
 
-Both providers are thin pass-throughs that load remote bracket data and broadcast it to the in-app Bracket view and the `public/layout/bracket/` overlays.
+Start.gg GraphQL via `StartGGProvider`, loaded by event URL/slug on the Competition tab. **Match-first:** a set loads into a `match.{M}` (participant-registry upsert, round name → label, phase name → `match.phase`, `totalGames` → `format.bestOf`, reported score → `series` seed, setId → `provider.startgg.setId`) and the producer binds that match to a board. Both the API route and the bracket view's "Load to Match" go through `apply_startgg_set`. Unseeded phases produce string preview ids (`preview_…`) — set ids are `int | str`.
 
-- **Start.gg** — GraphQL via `StartGGProvider`. Load by tournament slug. **Match-first set loading:** a set loads into a `match.{M}` (participant-registry upsert, round name → label, `totalGames` → `format.bestOf`, reported numeric set score → `series` seed, setId recorded at `provider.startgg.setId`), and the match projects into `score.{N}.*` via binding. Both `/api/v1/match/{m}/startgg-set` and the bracket view's `/startgg/load-set` (create-or-reuse match by setId + bind) go through `apply_startgg_set` in `server/api/v1/match.py`. There is no direct start.gg→score path anymore.
-- **Challonge** — **DEPRECATED (soft):** kept working but unmaintained; the API isn't strong enough to justify parity. Does not participate in the Match model — its `LoadSetIntoScoreboard` still writes legacy score fields directly (and must never write `score.{N}.match`, which is the match binding key). New tournament features target start.gg only. REST via `ChallongeProvider`; requires API key + Admin membership in the MSB Netplay Events Challonge community.
-
-**`score.{N}.match` holds the bound match id (int), never a round-name string.** The round label projects into `score.{N}.phase` from the match's `label`.
+There is **no direct set→score path**. (Challonge was fully removed in July 2026; don't reintroduce provider branching.)
 
 ---
 
@@ -357,16 +376,14 @@ Both providers are thin pass-throughs that load remote bracket data and broadcas
 
 `server/announcements.py` pulls two sources from GitHub and merges them into a unified feed:
 
-1. **Release check** — `GET /repos/{repo}/releases/latest`. A newer tag than the running version synthesizes an "Update available" entry.
-2. **`announcements.json`** — raw file on the repo's dedicated `announcements` branch. Each entry supports `id`, `title`, `body`, `severity` (info/warn/error/success), `min_version` / `max_version`, `expires_at`, `link_url`, `link_text`.
+1. **Release check** — `GET /repos/{repo}/releases/latest`; a newer tag synthesizes an "Update available" entry.
+2. **`announcements.json`** — raw file on the repo's `announcements` branch (id/title/body/severity/min-max_version/expires_at/link). Maintainer publishes via the `Announce - *` GitHub workflows.
 
-Per-user dismissals are stored in `settings.announcements.dismissed_ids`. Triggered by the maintainer via a GitHub action; no need for a release to ship a notification.
-
----
+Per-user dismissals in `settings.announcements.dismissed_ids`.
 
 ## Logs
 
-In-app log viewer (`LogsViewer.jsx` + `server/api/v1/logs.py`). Lists rotated log files in the per-user logs dir (resolved via `server/paths.py`) with size + mtime; supports tailing by filename with path-traversal guards. Useful for end-user troubleshooting without asking them to find the logs folder.
+In-app log viewer (`LogsViewer.jsx` + `server/api/v1/logs.py`): lists rotated log files in the per-user logs dir, tails by filename with path-traversal guards.
 
 ---
 
@@ -374,39 +391,25 @@ In-app log viewer (`LogsViewer.jsx` + `server/api/v1/logs.py`). Lists rotated lo
 
 `ControllerOverlay` manages an optional subprocess that draws controller inputs as a separate OBS browser source.
 
-- **macOS only.** gc-overlay's Dolphin reader uses AF_UNIX MemoryWatcher sockets and macOS config paths, so the whole feature is gated on `platform.system() == "Darwin"`: `controller_overlay.PLATFORM_SUPPORTED` (detection/launch/status), the `Config.controller_overlay_supported` flag broadcast to the frontend (hides the Settings section + Layouts "Controller" tab), `layouts.py` (omits the `controller/` browser source from the catalog), and `PRSH.spec` (builds/bundles gc-overlay on Darwin only — Windows builds and the Inno installer omit it).
-- **Bundled via the `gc-overlay/` git submodule** (`matt-gree/gc-overlay`). On macOS it ships in every PRSH build and works out of the box — no extra user setup.
-- **Detection order** (`_find_gc_overlay`, first launchable wins): frozen nested binary alongside the PRSH executable → in-repo submodule `./gc-overlay/` (dev) → sibling `../gc-overlay/` (dev convenience). Custom override via Settings → Controller Overlay.
-- **Launch dispatch** (`_base_command`): frozen builds run the standalone **binary** directly; source checkouts run `python main.py` via gc-overlay's own venv. PyInstaller `datas` can strip the exec bit, so the binary is `chmod +x`'d before launch on POSIX.
-- **Build:** `scripts/build-gc-overlay.py` freezes the submodule into `gc-overlay/dist/gc-overlay/` (isolated venv, gc-overlay's `aiohttp`/`pyusb` deps kept out of PRSH's interpreter). Invoked from the top of `PRSH.spec`; `PRSH.spec` then bundles that folder. Set `SKIP_GC_OVERLAY_BUILD=1` to skip.
-- **Versioning:** gc-overlay owns `_version.py` + a `--version` flag. PRSH reads it (`_read_gc_version`) and surfaces it in `GetStatus().version`. **Update flow:** release gc-overlay standalone → in PRSH `git submodule update --remote gc-overlay && git commit` → rebuild PRSH. Two independent release cadences.
-- Runs on its own port (default 8069), serves its own WebSocket + HTML.
-- Settings: `controller_overlay.path`, `.port`, `.controller`, `.auto_start`.
-
-**Per-team (home/away) follow.** gc-overlay shows one controller per browser source, selectable via `?port=N` (0-indexed) or a runtime `{port}` WebSocket message. The HUD reports each player's controller port (`Away Port`/`Home Port`), which `provider.py` writes to `score.{N}.player.{T}.port`. The `public/layout/controller/controller.html` wrapper (`?team=1|2&scoreboard=N`) reads that port from PRSH state and iframes the running gc-overlay at the matching port, reloading only when the port changes — so a "left/right controller" browser source follows whoever is on that side. The side→port mapping lives entirely in PRSH; gc-overlay is unmodified.
-
----
-
-## HUD → Web Stats Auto-Fetch
-
-The HUD file now carries `TagSetID` (the game mode being played). On a new HUD game, `RioGameDataProvider._apply_hud_game_mode()` resolves it to the game-mode name and writes `scoreboards.sources.{sb}.stats_tag` for every HUD-target scoreboard — which both drives the automatic stats fetch and visually updates the per-scoreboard game-mode selectbox. This mirrors the live-API assignment path, which already sets `stats_tag` from the assigned game's mode. A manual selection is overwritten on each new game start.
+- **macOS only** (AF_UNIX MemoryWatcher sockets): gated by `controller_overlay.PLATFORM_SUPPORTED`, the `Config.controller_overlay_supported` flag (hides UI), `layouts.py` (omits `controller/` from the catalog), and `PRSH.spec` (bundles gc-overlay on Darwin only).
+- **Bundled via the `gc-overlay/` git submodule.** Detection order: frozen nested binary → in-repo submodule → sibling `../gc-overlay/`; custom override in Settings. Frozen builds run the standalone binary (re-`chmod +x`'d); source checkouts run `python main.py` in gc-overlay's own venv.
+- **Build:** `scripts/build-gc-overlay.py` (invoked from `PRSH.spec`; `SKIP_GC_OVERLAY_BUILD=1` to skip). gc-overlay owns its version; update via `git submodule update --remote gc-overlay`.
+- Runs on its own port (default 8069). Settings: `controller_overlay.{path,port,controller,auto_start}`.
+- **Per-side follow:** the HUD reports each player's controller port → `score.{N}.player.{T}.port`; `public/layout/controller/controller.html` (`?team=1|2`) iframes gc-overlay at that port, so a left/right browser source follows whoever is on that side.
 
 ---
 
 ## Platform-Specific Startup
 
 - **macOS** — system-tray icon (`tray.py`, pystray) holds the process; no visible window.
-- **Windows** — `win_window.py` opens a Tk window in the taskbar with app name, version, clickable server URL, and a graceful exit button. This is the only way for end users to close the app cleanly on Windows.
-- **Both** — `port_conflict.py` runs first; if 5260 (or the configured port) is taken, the user gets a Tk dialog before the server attempts to bind.
+- **Windows** — `win_window.py` opens a Tk taskbar window (app name, version, server URL, exit button) — the only clean way for end users to close the app on Windows.
+- **Both frozen only** — `port_conflict.py` dialog if the configured port is taken. Source checkouts skip all of this and run headless.
 
 ---
 
 ## MSB Image Assets
 
-PRSH does not ship MSB images (Nintendo IP). Users provide an asset pack under `user_data/game_assets/msb/{characterIcons,teamLogos,gameIcons}`. `server/api/v1/assets.py` validates the folder against pyrio's canonical filename lists per category and surfaces missing files in **Settings → Project Rio → MSB Image Assets** and on the first-launch Welcome card.
-
-- Custom location override: `settings.assets.msb_path`.
-- Default path: per-user writable root, resolved by `default_msb_assets_dir()`.
+PRSH does not ship MSB images (Nintendo IP). Users provide an asset pack under `user_data/game_assets/msb/{characterIcons,teamLogos,gameIcons}`. `server/api/v1/assets.py` validates against pyrio's canonical filename lists and surfaces missing files in Settings and the Welcome card. Custom location: `settings.assets.msb_path`.
 
 ---
 
@@ -422,27 +425,16 @@ npm run dev            # macOS/Linux — Vite + FastAPI concurrently
 npm run dev:win        # Windows
 ```
 
-- Vite: http://localhost:5173 (HMR)
-- FastAPI: http://localhost:5260 (`TSH_DEV=1` enables CORS for Vite)
+- Vite: http://localhost:5173 (HMR); FastAPI: http://localhost:5260 (`TSH_DEV=1` enables CORS for Vite).
 
-### Production
-
-```bash
-npm run build          # Build React → dist/
-python main.py         # Serve everything on :5260
-```
-
-### Frozen Builds
+### Production / Frozen
 
 ```bash
-npm run build
-pyinstaller PRSH.spec
+npm run build && python main.py            # serve everything on :5260
+npm run build && pyinstaller PRSH.spec     # dist/PRSH.app (macOS) / dist/PRSH/PRSH.exe (Windows)
 ```
 
-- macOS: `dist/PRSH.app/`
-- Windows: `dist/PRSH/PRSH.exe`, then `installer/PRSH.iss` → `PRSH-Setup.exe`
-
-`scripts/freeze-version.py` runs in `prebuild` to bake the version into the bundle.
+`scripts/freeze-version.py` bakes the version from the git tag in `prebuild`; then `installer/PRSH.iss` → `PRSH-Setup.exe` on Windows.
 
 ### HUD File Default Paths
 
@@ -454,23 +446,23 @@ pyinstaller PRSH.spec
 
 ## Testing
 
-No automated test suite. Manual smoke test:
-1. `npm run dev`
-2. React UI loads without console errors at http://localhost:5173.
-3. `localhost:5260/api/v1/state` returns valid JSON.
-4. HUD file watching: modify `decoded.hud.json` and confirm scoreboard updates.
-5. OBS layout: add browser source pointing at `localhost:5260/layout/scoreboard1/scoreboard.html?scoreboard=1`.
-6. Tournament loading: Start.gg slug, or Challonge URL + API key.
+Two suites; both run in CI (`.github/workflows/test.yml`) and both must stay green:
 
-**Important:** layout HTML and `overlay-base.js` are static — no build step. After editing, **hard refresh** the browser source (Cmd/Ctrl+Shift+R). Safari may also need Option+Cmd+E first.
+```bash
+./venv/bin/python -m pytest        # backend: tests/unit + tests/integration (~2s)
+npm run test:run                   # frontend: vitest
+```
+
+- Design doc: [TESTING.md](TESTING.md) — philosophy (protect silently-regressing logic; test at the seam; pin overlay/OBS contracts), tiers, and per-module coverage tables.
+- `tests/conftest.py` autouse fixtures (`mock_socket`, `isolate_user_data`, `reset_singletons`) redirect State/Settings persistence to `tmp_path` and reset singletons — reuse them; never let a test touch real `user_data/`.
+- Integration tests run in-process via `fastapi.testclient.TestClient` over `router_v1` (no uvicorn/socketio boot).
+- When changing behavior a test encodes (e.g. the side cascade), update the test *in the same change* — code, tests, and this file must never disagree.
+
+Manual smoke (still worth doing for UI/overlay changes): `npm run dev`, check console, load a layout in OBS/browser and hard-refresh it.
 
 ### Clearing Cached State
 
-If the app fails to launch due to corrupt `user_data/state.json`:
-
-```bash
-echo '{}' > user_data/state.json
-```
+If the app fails to launch due to corrupt `user_data/state.json`: `echo '{}' > user_data/state.json`. In-app: Settings → Reset State (`POST /scoreboards/reset`) clears stale board/binding state.
 
 ---
 
@@ -479,16 +471,18 @@ echo '{}' > user_data/state.json
 | Task | Files |
 |------|-------|
 | Change HUD game parsing | `server/rio/provider.py`, `server/rio/hud_watcher.py` |
-| Side preservation logic | `server/rio/provider.py` (`_preserve_player_sides`) |
+| Side cascade / orientation | `server/rio/provider.py` (`_decide`, `_preserve_player_sides`) + `tests/unit/rio/test_side_preservation.py` |
+| Binding model (pool/playback/transport) | `server/bindings.py`, `server/rio/rotation.py`, `server/api/v1/scoreboards.py` |
+| Match lifecycle / series / start.gg sets | `server/match.py`, `server/api/v1/match.py`, `server/rio/game_end.py` |
 | Add/modify state keys | `server/state.py`, `src/context/store.jsx` |
-| Add API endpoints | `server/api/v1/` (decorate with `@method`) |
-| Modify settings schema | `server/settings.py` (defaults), `src/components/SettingsModal.jsx` |
-| Rotation behavior | `server/rio/rotation.py`, `server/api/v1/rotation.py` |
-| Add/modify Layout | `public/layout/<group>/`, register knobs in `src/routes/layouts/layouts.jsx` |
-| Add/modify Scene | `public/layout/scenes/` (must be 1920×1080) |
-| Tournament integrations | `server/startgg/`, `server/challonge/` |
-| Bracket rendering | `public/layout/bracket/`, `src/routes/bracket/` |
-| Controller overlay | `server/controller_overlay.py`, `server/api/v1/controller.py` |
+| Add API endpoints | `server/api/v1/` (decorate with `@method`), register in `server/api/__init__.py` |
+| Settings schema | `server/settings.py` (defaults + migrations), `src/components/SettingsModal.jsx` |
+| Add/modify a Layout or element overlay | `public/layout/<group>/` + `public/layout/lib/*-mount.js`, register in `src/routes/layouts/layouts.jsx` (+ `src/routes/production/elements.js` if a Production element) |
+| Theme/design packages | `public/design/`, `server/design_packages.py`, `public/layout/lib/svg-theme-engine.js` |
+| Production tab / OBS control | `src/routes/production/production.jsx`, `src/context/obs.jsx`, `src/context/staging.js` |
+| Participant registry | `server/participants.py`, `src/routes/player_list/` |
+| Post-game capture | `server/postgame.py` (+ StatFiles path gating) |
+| Tournament integration | `server/startgg/`, `server/api/v1/startgg.py` |
 | Update character data | `user_data/games/msb/base_files/config.json` |
 | Add team logo | drop `.png` into `user_data/game_assets/msb/teamLogos/` named after the MSB team |
 
@@ -520,27 +514,18 @@ This app runs alongside the game. **Performance is a hard requirement.**
 ### Frontend
 
 - **Wrap data-connected components in `React.memo()`.**
-- **One `useShallow` Zustand selector per component** — combine subscriptions:
-
-  ```js
-  const player = useStateStore(useShallow(
-      s => s?.score?.[sb]?.team?.[t]?.player?.[p]
-  ));
-  ```
-
+- **One `useShallow` Zustand selector per component** — combine subscriptions.
 - **`useMemo` for derived data passed as props.**
 
 ### SocketIO + Overlays
 
-- **Handle both `v1.state.set` and `v1.state.set_batch`** in every consumer.
+- **Handle both `v1.state.set` and `v1.state.set_batch`** in every consumer (overlays: use `OverlayBase.init`, which guarantees this).
 - **`requestAnimationFrame` batching** — events within one frame flush as a single Zustand update.
 - **Layouts: apply all batch items to local state first, render once.**
-
----
 
 ## Known Limitations
 
 - Full state is sent on initial WebSocket connect (incremental after that).
+- No isolation for a second server instance (shared `user_data/`, fixed port, CWD-relative mounts).
 - `pandas` is ~50MB but required by pyrio.
-- No automated tests.
-- Bracket rendering for Challonge is best-effort; not guaranteed accurate.
+- `production.jsx` (~3300 lines) and `layouts.jsx` (~2200 lines) are known monoliths pending a split.

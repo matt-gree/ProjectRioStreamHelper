@@ -126,11 +126,15 @@ def test_match_governs_between_pin_and_b2b(monkeypatch):
     assert P._decide("A", "B") == (False, "back_to_back")
 
 
-def test_pin_overrides_match(monkeypatch, set_setting):
+def test_match_overrides_pin(monkeypatch, set_setting):
+    # A bound match encodes BOTH sides, so it supersedes the pin on that board
+    # (Phase B). The pin still governs when no board/match is in play.
     set_setting("project_rio.pinned_player", "A")
     set_setting("project_rio.pinned_side", "Team 1")
     monkeypatch.setattr(Match, "orientation_for_sides", classmethod(lambda cls, sb, l, r: True))
-    assert P._decide("A", "B", sb=1) == (False, "pin")
+    assert P._decide("A", "B", sb=1) == (True, "match")
+    # sb=None (global/back-to-back orientation) has no match layer: pin decides.
+    assert P._decide("A", "B", sb=None) == (False, "pin")
 
 
 # --- New game resets the override state machine ---

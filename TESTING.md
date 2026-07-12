@@ -201,7 +201,7 @@ Tiers are ordered by **(value × regression-risk) ÷ cost**. Implement top-down.
 | `provider.parse_game_data` | same | full HUD JSON → entrants[2], roster of 9, Top/Bottom→batting side, batter/pitcher resolution, runner-name resolution from roster index, `game_mode`/`tag_set`. |
 | `provider._get_msb_team_name` | same | delegates to pyrio `team_name`; bad captain index → `''`. |
 | `settings._deep_merge` | `test_settings_logic.py` | loaded overrides defaults, missing default keys preserved, nested dict merge, non-dict-over-dict replacement. |
-| `settings.redact_value/redact_settings` | same | `challonge.api_key` redacted to `***` when set / `""` when empty; non-secret untouched; deep copy (no mutation of input). |
+| `settings.redact_value/redact_settings` | same | secret key (patched fixture; SECRET_KEYS is currently empty) redacted to `***` when set / `""` when empty; non-secret untouched; deep copy (no mutation of input). |
 | `statCalc.deriveBatting` | `utils/statCalc.test.js` | AVG/SLG/OBP/OPS/SO%, divide-by-zero → 0, rounding (`.toFixed(3)`). |
 | `statCalc.derivePitching` | same | ERA (27×ER/outs), K%, OPP AVG, IP `floor.mod` formatting, zero-outs → 0. |
 

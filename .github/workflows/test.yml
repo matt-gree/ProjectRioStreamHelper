@@ -1,11 +1,12 @@
 # Run the automated test suite (see TESTING.md) on every PR and on pushes to
-# main. Separate from build-release.yml, which only builds/ships executables.
+# main and active release branches. Separate from build-release.yml, which
+# only builds/ships executables.
 name: Test
 
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, '2.0.0']
 
 # Cancel an in-progress run when new commits are pushed to the same ref.
 concurrency:
