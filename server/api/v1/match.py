@@ -32,6 +32,14 @@ async def _regate_bound_boards(m) -> None:
         await RioGameDataProvider.evaluate_match_gate_for_board(sb)
 
 
+def _sync_primary_if(m) -> None:
+    """Schedule the primary-match surface auto-prep (Matchup band + Player Plates)
+    when a mutation touched the *primary* match's players. A no-op for any other
+    match. Fire-and-forget — never blocks or fails the match write."""
+    if str(m) == str(Match.PRIMARY_MATCH_ID):
+        Match.schedule_primary_sync()
+
+
 class MatchPayload(BaseModel):
     """Partial match for update. Only the blocks present are applied; nested
     dicts are flattened into ``match.{M}.<dotpath>`` leaf writes."""
@@ -99,6 +107,7 @@ async def update_match(m: int, payload: MatchPayload):
         await State.Save()
     await Match.project_match(m)
     await _regate_bound_boards(m)
+    _sync_primary_if(m)
     return Match.get(m)
 
 
@@ -136,6 +145,7 @@ async def flip_match(m: int):
         raise HTTPException(404, f"match {m!r} not found")
     await Match.flip_sides(m)
     await _regate_bound_boards(m)
+    _sync_primary_if(m)
     return Match.get(m)
 
 
@@ -234,6 +244,7 @@ async def apply_startgg_set(m, s: dict, set_id: int) -> None:
     await State.Save()
     await Match.project_match(m)
     await _regate_bound_boards(m)
+    _sync_primary_if(m)
 
 
 @router.post("/{m}/startgg-set", response_class=ORJSONResponse)

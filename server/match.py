@@ -16,6 +16,8 @@ The projector is the single merge point where draft/fixture data meets the
 this slice the live feed remains last-writer-wins on HUD/Live boards by design;
 binding is verified against Manual boards.
 """
+import asyncio
+
 from loguru import logger
 
 from server.participants import Participants
@@ -72,12 +74,30 @@ def _norm_side(v):
     return None
 
 
+def _as_int(v):
+    """Coerce a match id (int or digit-string) to int, or None."""
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return None
+
+
 class Match:
     """Reads/writes ``match.{M}.*`` through State and projects onto bound boards.
 
     Stateless singleton (mirrors State/Settings): all data lives in the State
     store; these classmethods are just the projection + lifecycle logic.
     """
+
+    # The "primary" match — the head of the (still-informal) match queue. Setting
+    # its players auto-preps the producer-facing intro surfaces (Matchup band +
+    # Player Plates). One day this generalizes to a real queue; for now it's fixed.
+    PRIMARY_MATCH_ID = 1
+
+    # Last (rio1, rio2) ordered pair the primary auto-prep synced, so an edit that
+    # doesn't change the players (a label tweak, a format change) doesn't re-hit
+    # the Rio API. Session-only; None re-syncs on the next set.
+    _primary_synced_pair: tuple[str, str] | None = None
 
     # ----- reads -----------------------------------------------------------
 
@@ -215,6 +235,97 @@ class Match:
                 await cls.project_match(m)
             except Exception:
                 logger.exception("[Match] project_all failed for match {}", m)
+
+    # ----- primary-match auto-prep -----------------------------------------
+    #
+    # The primary match (id 1) is the head of the match queue a producer works
+    # off of. When its two participants are set, the head-to-head band (Matchup)
+    # and the Player Plates should be ready without hand-wiring — so setting the
+    # primary match's players auto-fetches the head-to-head and points the plates
+    # at it. Both stay overridable: a producer who fetches the Matchup for — or
+    # points the plates at — a *different* match keeps that; the auto-prep only
+    # touches a surface still following the primary.
+
+    @classmethod
+    def _plates_follow_primary(cls, PlayerPlates) -> bool:
+        """True while the Player Plates are still following the primary match —
+        source ``match`` and their picked match unset or the primary. A switch to
+        Manual, or a pick of another match, is a producer override we leave alone."""
+        cfg = PlayerPlates.config() or {}
+        if cfg.get("source") == "manual":
+            return False
+        mid = cfg.get("matchId")
+        return mid is None or _as_int(mid) == cls.PRIMARY_MATCH_ID
+
+    @classmethod
+    def _matchup_follows_primary(cls) -> bool:
+        """True while the Matchup band is unfetched or was last fetched for the
+        primary match. A fetch for another match is a producer override."""
+        mid = (State.state.get("matchup", {}) or {}).get("matchId")
+        return mid is None or _as_int(mid) == cls.PRIMARY_MATCH_ID
+
+    @classmethod
+    async def prepare_primary_surfaces(cls) -> None:
+        """Auto-prep the producer-facing intro surfaces for the primary match.
+
+        When the primary match has both participants resolvable to Rio names,
+        refresh the head-to-head band (Matchup) and point the Player Plates at it
+        so both are populated and ready before they go on air. Each surface is
+        only auto-managed while it still follows the primary (see the
+        ``_*_follow_primary`` guards); a producer override to another match — or
+        plates switched to Manual — is left untouched. Deduped on the ordered
+        ``(rio1, rio2)`` pair so edits that don't change the players don't re-hit
+        the Rio API.
+        """
+        m = cls.PRIMARY_MATCH_ID
+        if not cls.exists(m):
+            cls._primary_synced_pair = None
+            return
+        players = cls.get(m).get("player") or {}
+        rio1 = cls._participant_rioname(players.get("1") or players.get(1))
+        rio2 = cls._participant_rioname(players.get("2") or players.get(2))
+        if not rio1 or not rio2:
+            # Not both sides set yet — clear the guard so re-populating re-syncs.
+            cls._primary_synced_pair = None
+            return
+        pair = (rio1.strip().casefold(), rio2.strip().casefold())
+        if pair == cls._primary_synced_pair:
+            return
+
+        # Lazy imports — matchup/playerplates both import Match (cycle at module load).
+        from server.matchup import Matchup
+        from server.playerplates import PlayerPlates
+
+        if cls._plates_follow_primary(PlayerPlates):
+            await PlayerPlates.point_at_match(m)
+
+        ok = True
+        if cls._matchup_follows_primary():
+            result = await Matchup.Fetch(m)
+            ok = not result.get("error")
+            if not ok:
+                logger.warning("[Match] primary matchup auto-fetch failed: {}",
+                               result.get("error"))
+
+        # Record the pair only once the (network) fetch has succeeded — or was
+        # skipped as an override — so a transient API failure retries next edit.
+        if ok:
+            cls._primary_synced_pair = pair
+            logger.info("[Match] primary match {}: auto-prepped surfaces ({} vs {})",
+                        m, rio1, rio2)
+
+    @classmethod
+    def schedule_primary_sync(cls) -> None:
+        """Fire-and-forget the primary-match surface prep. Non-blocking so a match
+        edit never waits on — or fails because of — the Rio API."""
+        asyncio.create_task(cls._run_primary_sync())
+
+    @classmethod
+    async def _run_primary_sync(cls) -> None:
+        try:
+            await cls.prepare_primary_surfaces()
+        except Exception:
+            logger.exception("[Match] primary-surface auto-sync failed")
 
     # ----- Draft→Live reconciliation (Phase 5) -----------------------------
     #

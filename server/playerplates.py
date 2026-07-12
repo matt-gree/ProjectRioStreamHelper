@@ -177,6 +177,20 @@ class PlayerPlates:
         return cfg
 
     @classmethod
+    async def point_at_match(cls, m) -> dict:
+        """Re-point the band at match ``m`` (source ``match``), preserving the
+        producer's per-side sub-field / visibility / location / mode choices.
+
+        Used by the primary-match auto-prep (see ``Match.prepare_primary_surfaces``)
+        so setting the primary match's players populates the plates without wiping
+        the producer's authored plate options.
+        """
+        cfg = dict(cls.config() or {})
+        cfg["source"] = "match"
+        cfg["matchId"] = m
+        return await cls.set_config(cfg)
+
+    @classmethod
     async def project(cls) -> None:
         """Resolve the config against the registry and write the overlay keys."""
         await State.SetBatch(cls._project_entries())
