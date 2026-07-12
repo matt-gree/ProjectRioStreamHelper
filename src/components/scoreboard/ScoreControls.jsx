@@ -439,22 +439,9 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, trans
                     </Stack>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
-                    <Button variant="outline" size="sm" onClick={() => { onSwapTeams(); clearAtBatState(); }}>
-                        Swap Teams
-                    </Button>
-                    <Button variant="secondary" size="sm" onClick={() => {
-                        const t1 = useStateStore.getState()?.score?.[scoreboardNumber]?.player?.[1] ?? {};
-                        const t2 = useStateStore.getState()?.score?.[scoreboardNumber]?.player?.[2] ?? {};
-                        const fields = ['name', 'team', 'full_name', 'country', 'state', 'pronoun'];
-                        for (const f of fields) {
-                            setItem(`${base}.player.1.${f}`, t2[f] ?? '');
-                            setItem(`${base}.player.2.${f}`, t1[f] ?? '');
-                        }
-                    }}>
-                        Swap Tags
-                    </Button>
-                </div>
+                <Button variant="outline" size="sm" className="w-full" onClick={() => { onSwapTeams(); clearAtBatState(); }}>
+                    Swap Teams
+                </Button>
                 <Button variant="outline" size="sm" className="w-full border-destructive/40 text-destructive hover:bg-destructive/10" onClick={resetBaseballState}>
                     Reset Game State
                 </Button>

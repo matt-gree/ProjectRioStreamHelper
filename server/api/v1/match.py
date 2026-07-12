@@ -324,8 +324,13 @@ async def bind_scoreboard(sb: int, payload: BindPayload):
         await State.Save()
         await Match.clear_scoreboard(sb)
     else:
-        from server.bindings import is_rotating
-        if is_rotating(sb):
+        from server.bindings import is_rotating, transport
+        # A HUD-transport board is single by construction — its stored
+        # playback.mode is ignored while HUD is on (see server/bindings.py), so
+        # a board left in "rotate" from a prior HUD-off session must not be
+        # rejected here. Only a board that is *actually* rotating (API transport
+        # + rotate mode) has no fixed sides to project a match onto.
+        if transport(sb) != "hud" and is_rotating(sb):
             raise HTTPException(
                 409,
                 f"scoreboard {sb} is rotating — bind a match to a single-game board",

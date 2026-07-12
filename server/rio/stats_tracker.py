@@ -343,7 +343,12 @@ class StatsTracker:
         for display_team in range(2):
             data_team = (1 - display_team) if sides_swapped else display_team
             team_num = display_team + 1
-            username = slot.players[data_team] if data_team < len(slot.players) else ""
+            # Prefer the name currently in State (display slot) so a producer's
+            # manual name override drives the stats lookup too; fall back to the
+            # slot's cached HUD username. Both describe the same displayed player.
+            state_name = await State.Get(f"{sb}.player.{team_num}.rioName", "")
+            username = (str(state_name).strip() if state_name
+                        else (slot.players[data_team] if data_team < len(slot.players) else ""))
             roster = slot.rosters.get(data_team, [])
 
             for char_idx in range(min(9, len(roster))):

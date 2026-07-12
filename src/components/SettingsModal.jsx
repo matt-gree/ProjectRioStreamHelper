@@ -106,6 +106,10 @@ export default function SettingsModal({ opened, onClose }) {
     const [announcementCount, setAnnouncementCount] = useState(0);
     const [announcementsClearing, setAnnouncementsClearing] = useState(false);
 
+    // Reset match/scoreboard state (recovery hatch)
+    const [resetting, setResetting] = useState(false);
+    const [resetConfirm, setResetConfirm] = useState(false);
+
     // Logs viewer
     const [logsOpen, setLogsOpen] = useState(false);
 
@@ -311,6 +315,26 @@ export default function SettingsModal({ opened, onClose }) {
             const data = await resp.json();
             setAnnouncementCount(data?.items?.length || 0);
         } catch { /* ignore */ }
+    }, []);
+
+    const handleResetState = useCallback(async () => {
+        setResetting(true);
+        try {
+            const resp = await fetch('/api/v1/scoreboards/reset', { method: 'POST' });
+            const data = await resp.json();
+            if (resp.ok) {
+                notifications.show({
+                    message: 'Match & scoreboard state reset',
+                    color: 'green',
+                });
+            } else {
+                notifications.show({ message: data.detail || 'Reset failed', color: 'red' });
+            }
+        } catch {
+            notifications.show({ message: 'Reset failed', color: 'red' });
+        }
+        setResetting(false);
+        setResetConfirm(false);
     }, []);
 
     const handleClearAnnouncements = useCallback(async () => {
@@ -926,6 +950,41 @@ export default function SettingsModal({ opened, onClose }) {
                             Clear
                         </Button>
                     </div>
+
+                    <Divider label="Reset State" />
+
+                    <Text size="xs" dimmed>
+                        Returns every scoreboard to a clean single board and deletes all authored matches. Use this to recover from stuck state — e.g. a board that refuses a match bind with &ldquo;is rotating,&rdquo; an orphaned match binding, or a stuck match conflict. Your scoreboard tabs and the HUD toggle are kept; live HUD data re-populates board&nbsp;1 automatically.
+                    </Text>
+                    {resetConfirm ? (
+                        <div className="flex items-center gap-2">
+                            <Text size="sm" className="whitespace-nowrap text-destructive">
+                                Reset all match &amp; scoreboard state?
+                            </Text>
+                            <Button
+                                size="xs"
+                                variant="outline"
+                                className="border-destructive/40 text-destructive hover:bg-destructive/10"
+                                onClick={handleResetState}
+                                disabled={resetting}
+                            >
+                                {resetting && <Loader size={12} />}
+                                Confirm reset
+                            </Button>
+                            <Button size="xs" variant="ghost" onClick={() => setResetConfirm(false)} disabled={resetting}>
+                                Cancel
+                            </Button>
+                        </div>
+                    ) : (
+                        <Button
+                            size="xs"
+                            variant="outline"
+                            className="w-full border-destructive/40 text-destructive hover:bg-destructive/10"
+                            onClick={() => setResetConfirm(true)}
+                        >
+                            Reset match &amp; scoreboard state
+                        </Button>
+                    )}
 
                     <Divider label="Logs" />
 

@@ -204,6 +204,123 @@ async def set_hud_enabled(
 
 
 @method(
+    router.post, "/scoreboards/reset",
+    version="1", id="scoreboards.reset",
+    response_class=ORJSONResponse
+)
+async def reset_scoreboard_state(session_id: str | None = None) -> ORJSONResponse:
+    """Reset all match + scoreboard state back to a clean baseline.
+
+    Recovery hatch for corrupt/stuck state — e.g. a board left in ``rotate``
+    mode after an HUD-off session (which then rejects match binds as "rotating"),
+    an orphaned match binding, or a stuck match_conflict. Keeps the active
+    scoreboard tabs (and the global HUD toggle) but returns every board to a
+    default single binding and deletes every authored match.
+
+    Steps: stop all rotations → delete all matches (unbind + blank + drop
+    conflicts) → reset each active board's binding to the single default →
+    clear each board's live score state and rotation status → reset HUD
+    side-preservation → re-apply the current HUD frame to board 1 if HUD is on.
+    """
+    import copy
+
+    from server.match import Match
+
+    active = Settings.Get("scoreboards.active", [1])
+
+    # 1. Stop every rotation so no background task keeps writing during the reset.
+    for sb_id in list(active):
+        await PoolManager.stop_rotation(sb_id, user_stop=True)
+
+    # 2. Delete every authored match — unbind and blank the boards it held first.
+    for m in list(Match._all().keys()):
+        for sb in Match.bound_scoreboards(m):
+            await State.Unset(f"score.{sb}.match")
+            await State.Unset(f"score.{sb}.match_conflict")
+            await Match.clear_scoreboard(sb)
+        await State.Unset(f"match.{m}")
+
+    # 3. Reset each board to a clean single binding and blank its live state.
+    for sb_id in list(active):
+        await Settings.Set(f"scoreboards.binding.{sb_id}", copy.deepcopy(DEFAULT_BINDING))
+        await State.Set(f"score.{sb_id}", {})
+        await State.Unset(f"scoreboards.rotation.{sb_id}")
+        StatsTracker.reset_scoreboard(sb_id)
+
+    await State.Save()
+
+    # 4. Reset side-preservation and re-seat the current HUD frame on board 1.
+    RioGameDataProvider._reset_side_preservation()
+    if RioGameDataProvider.hud_watcher \
+            and RioGameDataProvider.hud_watcher.latest_game_data \
+            and 1 in RioGameDataProvider._hud_targets:
+        parsed = RioGameDataProvider.parse_game_data(
+            RioGameDataProvider.hud_watcher.latest_game_data
+        )
+        parsed = RioGameDataProvider._preserve_player_sides(parsed)
+        RioGameDataProvider.current_game = parsed
+        await RioGameDataProvider._apply_game_to_state(parsed)
+        await State.Save()
+
+    return ORJSONResponse({"success": True, "active": active})
+
+
+@method(
+    router.put, "/scoreboards/{sb_id}/player/{team}/name-override",
+    version="1", id="scoreboards.set_name_override",
+    response_class=ORJSONResponse
+)
+async def set_player_name_override(
+    sb_id: int,
+    team: int,
+    name: str = "",
+    session_id: str | None = None,
+) -> ORJSONResponse:
+    """Pin (or clear) a manual name override for one player slot.
+
+    The override BECOMES the slot's identity: it wins over the feed name, so it
+    drives the overlay name, address-book resurface, the match identity gate,
+    and the stats fetch — while the HUD keeps feeding roster/scores/gameplay.
+    It persists across same-game HUD frames and is cleared automatically on a
+    new HUD game (see `RioGameDataProvider._clear_name_overrides`). Passing an
+    empty name clears the override immediately.
+
+    Applies to any board, but is primarily for HUD/live boards whose feed would
+    otherwise overwrite a hand-typed name every frame.
+    """
+    import asyncio
+
+    if team not in (1, 2):
+        raise HTTPException(status_code=400, detail="team must be 1 or 2")
+    active = Settings.Get("scoreboards.active", [1])
+    if sb_id not in active:
+        raise HTTPException(status_code=404, detail="Scoreboard not found")
+
+    name = name.strip()
+    key = f"score.{sb_id}.player.{team}.rioName_override"
+    if name:
+        await State.Set(key, name)
+    else:
+        await State.Unset(key)
+
+    # Re-apply so the effective rioName + resurface reflect the change now. A
+    # HUD/live board re-runs its current frame (which reads the override back);
+    # a board with no live frame gets the value written straight through.
+    prov = RioGameDataProvider
+    if sb_id in prov._hud_targets and prov.current_game is not None:
+        await prov._apply_game_to_state(prov.current_game)
+    elif name:
+        await State.Set(f"score.{sb_id}.player.{team}.rioName", name)
+    await State.Save()
+
+    # Stats follow the (new) identity — fetch in the background so the click
+    # returns immediately; the merged stats broadcast when ready.
+    asyncio.create_task(StatsTracker.refresh_api_stats(sb_id))
+
+    return ORJSONResponse({"success": True, "override": name})
+
+
+@method(
     router.put, "/scoreboards/{sb_id}/alias",
     version="1", id="scoreboards.set_alias",
     response_class=ORJSONResponse

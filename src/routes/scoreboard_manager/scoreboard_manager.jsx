@@ -66,24 +66,18 @@ function ScoreboardTab({ scoreboardNumber }) {
         const newHome = currentHome === 1 ? 2 : 1;
 
         if (transport === 'hud') {
-            // Swap start.gg profile fields client-side (server only handles Rio game data)
-            const t1 = base?.player?.[1] ?? {};
-            const t2 = base?.player?.[2] ?? {};
-            const profileFields = ['full_name', 'country', 'state', 'pronoun'];
-            const swapEntries = [
-                { key: `${sb}.home_team`, value: newHome },
-            ];
-            for (const f of profileFields) {
-                swapEntries.push({ key: `${sb}.player.1.${f}`, value: t2[f] ?? '' });
-                swapEntries.push({ key: `${sb}.player.2.${f}`, value: t1[f] ?? '' });
-            }
-            setItems(swapEntries);
+            // A HUD board's live feed keeps writing its sides, so the swap is
+            // owned entirely by the server: /rio/swap flips the orientation flag
+            // and re-applies the whole player unit (address-book identity
+            // included) — or, with no live frame, swaps what's already in State.
+            // One authoritative broadcast keeps the UI and every overlay in sync;
+            // no partial client-side swap (that split is what let them diverge).
             try {
                 await fetch(
                     `/api/v1/rio/swap?scoreboard_number=${scoreboardNumber}`,
                     { method: 'POST' },
                 );
-            } catch { /* server swap failed, but home_team is already flipped */ }
+            } catch { /* nothing changed client-side; nothing to roll back */ }
             return;
         }
 

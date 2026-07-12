@@ -13,6 +13,7 @@ from server.match import Match
 from server.participants import Participants
 from server.settings import Settings
 from server.state import State
+from server.utils.deep_dict import deep_get
 
 
 def _apply_resurface(entries: list[tuple]) -> None:
@@ -188,7 +189,15 @@ async def apply_parsed_game_to_state(parsed: dict, scoreboard_number: int, home_
         player = entrants[team_idx][0] if entrants[team_idx] else {}
         prefix = f"{sb}.player.{team_num}"
 
-        entries.append((f"{prefix}.rioName", player.get("rioName", "")))
+        # Manual name override (producer-set, per display slot). When present it
+        # BECOMES the slot's identity: it wins over the feed name here, so it
+        # also drives resurface (scans .rioName entries below) and the match
+        # identity gate, and stats fetch/push read it back from State. The feed
+        # keeps writing roster/scores/gameplay; only the name is pinned. Cleared
+        # on a new HUD game (see `_clear_name_overrides`).
+        override = deep_get(State.state, f"{prefix}.rioName_override", "")
+        eff_rio = override or player.get("rioName", "")
+        entries.append((f"{prefix}.rioName", eff_rio))
         entries.append((f"{prefix}.msb_team", player.get("msb_team", "")))
         entries.append((f"{prefix}.rio_captainIndex", player.get("captainIndex", 0)))
         # Explicit banner art (may differ from the roster-derived msb_team).
@@ -218,10 +227,12 @@ async def apply_parsed_game_to_state(parsed: dict, scoreboard_number: int, home_
     # resurface guess, then promote the match draft→live. Appended last so these
     # keys win over the feed/resurface writes; live data already in `entries`
     # stays authoritative for everything else.
+    # Overrides drive identity, so the match gate sees the pinned names too
+    # (left → display slot 1, right → display slot 2).
+    eff_left = deep_get(State.state, f"{sb}.player.1.rioName_override", "") or left.get("rioName", "")
+    eff_right = deep_get(State.state, f"{sb}.player.2.rioName_override", "") or right.get("rioName", "")
     entries.extend(
-        Match.identity_entries(
-            scoreboard_number, left.get("rioName", ""), right.get("rioName", "")
-        )
+        Match.identity_entries(scoreboard_number, eff_left, eff_right)
     )
     await State.SetBatch(entries)
     await State.Save()
@@ -843,6 +854,9 @@ class RioGameDataProvider:
         # the live-API assignment path, which already does this from the game's
         # mode. Done before on_new_game so its stats fetch uses the new tag.
         if is_new_game:
+            # A fresh HUD game reverts every manual name override back to the
+            # HUD value (the override is scoped to a single game).
+            await cls._clear_name_overrides()
             await cls._apply_hud_game_mode(game_json)
 
         for sb in cls._hud_targets:
@@ -931,6 +945,20 @@ class RioGameDataProvider:
         return current_inning < cls._prev_inning
 
     @classmethod
+    async def _clear_name_overrides(cls):
+        """Drop every manual name override on the HUD-target boards.
+
+        Called at the start of a new HUD game so a producer-pinned name reverts
+        to the HUD value. Runs before the frame is applied so the fresh name
+        flows through. No-op when nothing is overridden.
+        """
+        for sb in cls._hud_targets:
+            for t in (1, 2):
+                key = f"score.{sb}.player.{t}.rioName_override"
+                if deep_get(State.state, key, ""):
+                    await State.Unset(key)
+
+    @classmethod
     def _swap_entrants(cls, parsed: dict) -> dict:
         """Swap entrants[0] and entrants[1] along with their scores."""
         parsed["entrants"].reverse()
@@ -948,6 +976,16 @@ class RioGameDataProvider:
         # _user_overridden, so _apply_game_to_state skips match orientation and
         # every board honors the user's flip (swaps == global state).
         if cls.hud_watcher and cls.hud_watcher.latest_game_data:
+            # Carry any manually-entered display identity (name/full_name/…) to
+            # the other side BEFORE the feed re-apply. The re-apply rewrites the
+            # game-derived fields (rioName, roster, scores) but never these, and
+            # resurface only refills them for address-book players — so without
+            # this a typed name for an UNREGISTERED player would stick to the old
+            # side while their rioName moved. A registered player is re-resolved
+            # from their swapped rioName in the same apply, landing on the same
+            # value this pre-swap just set (no flicker).
+            for sb in cls._hud_targets:
+                await cls._swap_display_identity(sb)
             parsed = cls.parse_game_data(cls.hud_watcher.latest_game_data)
             parsed = cls._preserve_player_sides(parsed)
             cls.current_game = parsed
@@ -956,6 +994,75 @@ class RioGameDataProvider:
             # Re-push stats with new swap state to every HUD target
             for sb in cls._hud_targets:
                 await StatsTracker.push_stats_to_state(sb, swaps.get(sb, cls._sides_swapped))
+        else:
+            # No live HUD frame to re-orient (between games, or a paused feed) —
+            # swap whatever is already on each HUD board directly, so a manual
+            # swap still reaches the overlays and the UI. The address book links
+            # a rioName to its full display identity, so the whole player object
+            # swaps as one unit (nothing left behind); this is the single
+            # authoritative swap the client now defers to entirely.
+            for sb in cls._hud_targets:
+                await cls._swap_current_state_sides(sb)
+                StatsTracker.set_sides_swapped(sb, cls._sides_swapped)
+                await StatsTracker.push_stats_to_state(sb, cls._sides_swapped)
+
+    @classmethod
+    async def _swap_display_identity(cls, sb: int) -> None:
+        """Swap only the display-identity fields (name/team/full_name/pronoun/
+        country/state/twitter/youtube) between the two sides of a board.
+
+        Used by the manual swap's live-frame path: the feed re-apply carries the
+        game data and address-book resurface carries registered players, but
+        neither moves a manually-typed name for an UNREGISTERED player — this
+        does. No-op if the board has no players.
+        """
+        score = State.state.get("score", {}) or {}
+        sc = score.get(str(sb)) or score.get(sb) or {}
+        players = sc.get("player") if isinstance(sc, dict) else None
+        if not isinstance(players, dict):
+            return
+        p1 = players.get("1") or players.get(1) or {}
+        p2 = players.get("2") or players.get(2) or {}
+        entries = []
+        # Carry a producer's name override with its side too, so a swap keeps the
+        # pinned name attached to its content (the feed re-apply reads it back by
+        # slot position). The no-frame path swaps whole player objects and gets
+        # this for free.
+        for f in set(_RESURFACE_MAP.values()) | {"rioName_override"}:
+            entries.append((f"score.{sb}.player.1.{f}", p2.get(f, "")))
+            entries.append((f"score.{sb}.player.2.{f}", p1.get(f, "")))
+        if entries:
+            await State.SetBatch(entries)
+            await State.Save()
+
+    @classmethod
+    async def _swap_current_state_sides(cls, sb: int) -> None:
+        """Swap the two sides already written to State for one HUD board.
+
+        Used by the manual swap when no live HUD frame is available to re-orient
+        from. Swaps the whole player objects (identity travels together via the
+        address book), the scores, and the per-side linescores, and flips
+        home_team. A no-op if the board has no score state yet.
+        """
+        score = State.state.get("score", {}) or {}
+        sc = score.get(str(sb)) or score.get(sb) or {}
+        if not isinstance(sc, dict) or not sc:
+            return
+        players = sc.get("player") or {}
+        p1 = players.get("1") or players.get(1) or {}
+        p2 = players.get("2") or players.get(2) or {}
+        entries = [
+            (f"score.{sb}.player.1", p2),
+            (f"score.{sb}.player.2", p1),
+            (f"score.{sb}.score_left", sc.get("score_right", 0)),
+            (f"score.{sb}.score_right", sc.get("score_left", 0)),
+            (f"score.{sb}.away_linescore", sc.get("home_linescore", [])),
+            (f"score.{sb}.home_linescore", sc.get("away_linescore", [])),
+            (f"score.{sb}.home_team", 1 if int(sc.get("home_team", 2) or 2) == 2 else 2),
+            (f"score.{sb}.side_reason", "manual"),
+        ]
+        await State.SetBatch(entries)
+        await State.Save()
 
     @classmethod
     def _pin_swap(cls, left: str, right: str) -> bool | None:

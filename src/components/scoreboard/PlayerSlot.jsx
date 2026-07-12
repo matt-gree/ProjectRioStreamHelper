@@ -1,4 +1,5 @@
 import { memo, useCallback, useMemo, useState } from 'react';
+import { X } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import { Stack, Text } from '../ui/primitives';
 import { TextField } from '../ui/text-field';
@@ -62,6 +63,13 @@ export default memo(function PlayerSlot({ scoreboardNumber = 1, teamNumber, play
     const rioName    = player?.rioName ?? '';
     const msbTeam    = player?.msb_team ?? '';
     const captain    = player?.rio_captainIndex ?? 0;
+    const rioOverride = player?.rioName_override ?? '';
+
+    // Feed boards (HUD / a loaded live game) rewrite the player name every
+    // frame, so a hand-typed name only sticks as a server-side override. Manual
+    // boards edit rioName directly. `overridden` marks the special pinned state.
+    const isFeed = sourceType === 'hud' || sourceType === 'live_game';
+    const overridden = isFeed && !!rioOverride;
 
     const setItem = useStateStore(s => s.setItem);
     const setItems = useStateStore(s => s.setItems);
@@ -70,13 +78,42 @@ export default memo(function PlayerSlot({ scoreboardNumber = 1, teamNumber, play
         setItem(`${basePath}.${field}`, value);
     }, [basePath, setItem]);
 
+    // Pin (or, with an empty value, clear) this slot's name override. The
+    // server makes the override the slot's identity — it drives the overlay
+    // name, resurface, the match gate, and a fresh stats fetch — and keeps it
+    // stuck against feed updates until the next HUD game.
+    const setNameOverride = useCallback(async (value) => {
+        try {
+            await fetch(
+                `/api/v1/scoreboards/${scoreboardNumber}/player/${teamNumber}/name-override`
+                    + `?name=${encodeURIComponent(value ?? '')}`,
+                { method: 'PUT' },
+            );
+        } catch { /* state unchanged on failure — nothing to roll back */ }
+    }, [scoreboardNumber, teamNumber]);
+
+    // Typing a raw name: on a feed board it becomes an override; on a manual
+    // board it writes rioName directly.
+    const handleRawName = useCallback((text) => {
+        if (isFeed) setNameOverride(text);
+        else set('rioName', text);
+    }, [isFeed, setNameOverride, set]);
+
     // Picking a person from the address book copies their enrichment into the
     // player sub-tree in one batch (resolve-by-copy). Picking "use without
     // saving" just sets the raw rioName, preserving the manual escape hatch.
     const resolveParticipant = useCallback((row) => {
+        // On a feed board a full copy would be overwritten next frame, so pin
+        // the picked person's rioName as the override instead — the server
+        // resurfaces the rest of their profile from the registry on re-apply.
+        if (isFeed) {
+            const picked = row?.identities?.rioName || row?.display?.tag || '';
+            if (picked) setNameOverride(picked);
+            return;
+        }
         const entries = participantToScoreEntries(row, basePath);
         if (entries.length) setItems(entries);
-    }, [basePath, setItems]);
+    }, [basePath, setItems, isFeed, setNameOverride]);
 
     // Build roster array from character state, memoized to avoid re-creating on every render
     const rosterState = player?.character;
@@ -122,12 +159,26 @@ export default memo(function PlayerSlot({ scoreboardNumber = 1, teamNumber, play
                 </div>
                 <div className="col-span-7">
                     <Stack gap={4}>
-                        <Text size="xs" dimmed span>Rio Name</Text>
+                        <div className="flex h-4 items-center justify-between">
+                            <Text size="xs" dimmed span>Rio Name</Text>
+                            {overridden && (
+                                <button
+                                    type="button"
+                                    onClick={() => setNameOverride('')}
+                                    className="inline-flex items-center gap-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-400 hover:text-amber-300"
+                                    title="Revert to the HUD name"
+                                >
+                                    Override
+                                    <X size={11} />
+                                </button>
+                            )}
+                        </div>
                         <ParticipantPicker
                             value={rioName}
                             placeholder="Online ID"
                             onResolve={resolveParticipant}
-                            onRawValue={(text) => set('rioName', text)}
+                            onRawValue={handleRawName}
+                            className={overridden ? 'border-amber-400 ring-1 ring-amber-400/40' : undefined}
                             leftSection={<img src="/game_assets/rio_logo.png" alt="Rio" width={16} height={16} style={{ objectFit: 'contain' }} />}
                         />
                     </Stack>

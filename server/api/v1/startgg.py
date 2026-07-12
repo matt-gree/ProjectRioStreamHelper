@@ -97,13 +97,16 @@ async def startgg_load_set(
     with the match binding key.
     """
     from server.api.v1.match import apply_startgg_set
-    from server.bindings import is_rotating
+    from server.bindings import is_rotating, transport
     from server.match import Match, default_match
     from server.state import State
 
     if not set_id:
         raise HTTPException(status_code=400, detail="set_id is required")
-    if is_rotating(scoreboard_number):
+    # A HUD-transport board is single by construction (its stored playback.mode
+    # is ignored while HUD is on), so only reject a board that is actually
+    # rotating — API transport + rotate mode. See server/bindings.py.
+    if transport(scoreboard_number) != "hud" and is_rotating(scoreboard_number):
         raise HTTPException(
             status_code=409,
             detail=f"scoreboard {scoreboard_number} is rotating — load a set into a single-game board",
