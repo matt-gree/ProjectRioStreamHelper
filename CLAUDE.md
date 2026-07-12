@@ -25,6 +25,7 @@ npm run dev                        # Vite (5173) + FastAPI (5260) together
 - `python main.py` from a source checkout runs the server **headless** (tray/Tk UI is gated on frozen builds, not dev mode). ⚠️ It uses the real `./user_data/` — there is no isolation mechanism yet.
 - Layout HTML and `public/layout/lib/*.js` are static — no build step, but OBS/browser caches them: **hard refresh** (Cmd/Ctrl+Shift+R) after editing.
 - CI (`.github/workflows/test.yml`) runs both suites on PRs and pushes to `main`/`2.0.0`.
+- **Deep-dive skills** in `.claude/skills/` — this file is the map; the skills hold the depth. Load the matching one before working in its area: `state-keys-and-projectors` (State contract, namespaces, projector pattern), `match-binding-lifecycle` (fixtures, bindings, side cascade, game end, start.gg), `overlay-authoring` (layouts, mounts, themes, OBS behavior), `run-and-verify` (tests, booting, smoke recipes).
 
 ---
 
@@ -235,6 +236,8 @@ tournamentInfo.*, overlays.*      — tournament metadata; layout style settings
 
 `scoreboards.active`, `scoreboards.aliases`, and `scoreboards.binding.{N}` (pool + playback + stats_tag) are **Settings** keys (`server/bindings.py` documents the schema). Legacy `scoreboards.sources` / flat `scoreboards.rotation` settings are read-only migration fallbacks — never write them.
 
+> Deep dive: `.claude/skills/state-keys-and-projectors/SKILL.md`
+
 ---
 
 ## Scoreboards & Bindings
@@ -247,6 +250,8 @@ tournamentInfo.*, overlays.*      — tournament metadata; layout style settings
 - A per-board game-mode `stats_tag` drives the stats fetch; on a new HUD game, `_apply_hud_game_mode()` auto-sets it from the HUD's `TagSetID` (overwriting a manual pick each game start).
 - `POST /scoreboards/reset` is the escape hatch that clears stale board/binding state.
 - Boards can be renamed (alias) and removed; at least one always remains. Layouts bind via `?scoreboard=N` — **a missing param defaults to board 1**, which is safe because board 1 always exists.
+
+> Deep dive: `.claude/skills/match-binding-lifecycle/SKILL.md`
 
 ---
 
@@ -273,6 +278,8 @@ The deciding layer is mirrored to `score.{N}.side_reason`. On a new game (inning
 - **Identity gate:** if live players don't match the bound fixture, `score.{N}.match_conflict` raises the app-wide banner; a decided-mismatch auto-retires the binding.
 - Match 1 is the **primary match**: setting its players auto-preps the Matchup band and Player Plates (both re-pointable).
 - **Projector rules** (Match, Commentary, PlayerPlates, PostGame all follow this shape — reuse it, don't invent a new one): resolve records against the Participants registry, write the *full* owned key set via `SetBatch` (value or `""`), wrap `project_all()` startup hooks in try/except so a bad record never blocks boot. A captain-less match projection must never blank a live HUD captain.
+
+> Deep dive: `.claude/skills/match-binding-lifecycle/SKILL.md` (fixtures, bindings, side cascade, game end) and `.claude/skills/state-keys-and-projectors/SKILL.md` (the projector pattern + add-an-element checklist)
 
 ---
 
@@ -321,6 +328,8 @@ The `<meta name="overlay-settings">` whitelist is the source of truth for what t
 6. Batch rendering: apply all changed keys to local state first, render once.
 7. Use `?scoreboard=N` to bind board data (default `1`); `?size=`/`?team=` if the file is a variant template.
 8. If it's a Production element, register it in `src/routes/production/elements.js` too (eventheader is a known gap here).
+
+> Deep dive: `.claude/skills/overlay-authoring/SKILL.md` (mount pattern, theme contract, OBS reveal/conceal behavior)
 
 ---
 
@@ -459,6 +468,8 @@ npm run test:run                   # frontend: vitest
 - When changing behavior a test encodes (e.g. the side cascade), update the test *in the same change* — code, tests, and this file must never disagree.
 
 Manual smoke (still worth doing for UI/overlay changes): `npm run dev`, check console, load a layout in OBS/browser and hard-refresh it.
+
+> Deep dive: `.claude/skills/run-and-verify/SKILL.md` (fixture contract, per-area verification recipes, isolation caveats)
 
 ### Clearing Cached State
 
