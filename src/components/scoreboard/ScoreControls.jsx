@@ -234,6 +234,7 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, trans
             setItem(`${base}.player.${t}.rioName`, '');
             setItem(`${base}.player.${t}.name`, '');
             setItem(`${base}.player.${t}.msb_team`, '');
+            setItem(`${base}.player.${t}.team`, '');
             setItem(`${base}.player.${t}.rio_captainIndex`, -1);
             setItem(`${base}.player.${t}.logo`, '');
             setItem(`${base}.player.${t}.port`, null);

@@ -3,8 +3,10 @@
  *
  * This is the bridge between the registry (which overlays never read) and the
  * live State keys overlays DO read. Picking a person copies their enrichment
- * into the player sub-tree. Only NON-EMPTY registry fields are written, so a
- * sparse row never clobbers a value already on the scoreboard.
+ * into the player sub-tree — a full identity swap, so EVERY mapped field is
+ * written (falling back to "" when the row leaves it blank). Writing only the
+ * non-empty ones would let a sparse row inherit stale values (e.g. a prefix)
+ * left over from whoever was previously in that slot.
  *
  * mainCharacter has no scoreboard target and is intentionally skipped here.
  */
@@ -34,9 +36,7 @@ export function participantToScoreEntries(row, basePath) {
     const entries = [];
     for (const [src, dst] of FIELD_MAP) {
         const v = dig(row, src);
-        if (v != null && v !== "") {
-            entries.push({ key: `${basePath}.${dst}`, value: v });
-        }
+        entries.push({ key: `${basePath}.${dst}`, value: v != null ? v : "" });
     }
     return entries;
 }

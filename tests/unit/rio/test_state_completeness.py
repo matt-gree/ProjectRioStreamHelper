@@ -256,6 +256,7 @@ def apply_reset(sb: int):
     for t in (1, 2):
         resets[f"{base}.player.{t}.rioName"] = ""
         resets[f"{base}.player.{t}.msb_team"] = ""
+        resets[f"{base}.player.{t}.team"] = ""
         resets[f"{base}.player.{t}.rio_captainIndex"] = -1
         resets[f"{base}.player.{t}.logo"] = ""
         resets[f"{base}.player.{t}.port"] = None

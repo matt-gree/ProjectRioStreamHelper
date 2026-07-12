@@ -86,7 +86,7 @@ function AddressBookRow({ row, onPersist, onDelete }) {
                 <TextField placeholder="Tag" value={draft.tag} onChange={e => setField('tag', e.currentTarget.value)} onBlur={persist} />
             </TableCell>
             <TableCell>
-                <TextField placeholder="NP6" value={draft.prefix} onChange={e => setField('prefix', e.currentTarget.value)} onBlur={persist} inputClassName="w-[80px]" />
+                <TextField placeholder="MSB" value={draft.prefix} onChange={e => setField('prefix', e.currentTarget.value)} onBlur={persist} inputClassName="w-[80px]" />
             </TableCell>
             <TableCell>
                 <TextField placeholder="Online ID" value={draft.rioName} onChange={e => setField('rioName', e.currentTarget.value)} onBlur={persist} />

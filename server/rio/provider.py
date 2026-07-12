@@ -45,6 +45,23 @@ def _apply_resurface(entries: list[tuple]) -> None:
     entries.extend(additions)
 
 
+def _clear_unresurfaced_prefix(entries: list[tuple], sb: str) -> None:
+    """Blank a side's address-book prefix if resurface didn't just set one.
+
+    Call AFTER `_apply_resurface()`. Every apply_* path already re-clears the
+    fields a new player brings no data for (logo, port, roster, ...) so the
+    previous occupant's values don't linger — but `.team` (the prefix/sponsor
+    tag) is written ONLY by resurface, on a match. Without this, a player with
+    no prefix of their own would silently keep whatever tag the last player in
+    this slot had.
+    """
+    present = {k for k, _ in entries}
+    for team_num in (1, 2):
+        key = f"{sb}.player.{team_num}.team"
+        if key not in present:
+            entries.append((key, ""))
+
+
 # Map pyrio's human-readable stadium names to the slug values used by the
 # frontend's STADIUM_OPTIONS / stadium renderer.
 _STADIUM_SLUGS = {
@@ -220,6 +237,7 @@ async def apply_parsed_game_to_state(parsed: dict, scoreboard_number: int, home_
                 entries.append((f"{prefix}.character.{char_idx}.position", positions[char_idx]))
 
     _apply_resurface(entries)
+    _clear_unresurfaced_prefix(entries, sb)
 
     # Draft→Live reconciliation: for a board bound to a match, overlay the
     # producer's authored participant identity (rioName-keyed, so it's correct
@@ -379,6 +397,7 @@ async def apply_completed_game_to_state(game: dict, scoreboard_number: int, side
             entries.append((f"{prefix}.character.{char_idx}.is_starred", False))
 
     _apply_resurface(entries)
+    _clear_unresurfaced_prefix(entries, sb)
     await State.SetBatch(entries)
     await State.Save()
 
