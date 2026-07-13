@@ -17,13 +17,10 @@ from loguru import logger
 
 def _settings_path() -> Path:
     """Resolve the settings.json path without pulling in the async Settings class."""
-    # Matches server.paths.user_data_dir() for frozen + dev layouts.
-    from server.paths import _frozen_writable_root
-    root = _frozen_writable_root()
-    if root is not None:
-        root.mkdir(parents=True, exist_ok=True)
-        return root / "user_data" / "settings.json"
-    return Path("./user_data/settings.json").resolve()
+    # Single source of truth for the layout (frozen root / PRSH_USER_DATA_DIR
+    # override / ./user_data); paths.py has no heavy imports.
+    from server.paths import user_data_dir
+    return user_data_dir() / "settings.json"
 
 
 def read_server_config() -> tuple[str, int]:
@@ -48,7 +45,9 @@ def read_server_config() -> tuple[str, int]:
                     host = "0.0.0.0"
     except Exception as e:
         logger.debug("[port_conflict] could not read settings: {}", e)
-    return host, port
+    # Keep the preflight checking the same port the server will bind.
+    from server.paths import env_port
+    return host, (env_port() or port)
 
 
 def probe_port(host: str, port: int) -> bool:

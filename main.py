@@ -11,6 +11,7 @@ from socketio import ASGIApp
 from loguru import logger
 
 from server import server, socketio
+from server.paths import env_port, suppress_browser
 from server.state import State
 from server.settings import Settings, Config as TSHConfig
 from server.participants import Participants
@@ -70,8 +71,10 @@ async def main() -> int:
 
     allow_lan = bool(Settings.Get("server.allow_lan", False))
     host = "0.0.0.0" if allow_lan else "127.0.0.1"
-    port = Settings.Get("server.port", 5260)
-    autostart = Settings.Get("server.autostart", True)
+    # PRSH_PORT / PRSH_NO_BROWSER env overrides support isolated agent/CI
+    # runs (paired with PRSH_USER_DATA_DIR — see server/paths.py).
+    port = env_port() or Settings.Get("server.port", 5260)
+    autostart = Settings.Get("server.autostart", True) and not suppress_browser()
 
     uvi = Server(Config(
         app=ASGIApp(

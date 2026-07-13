@@ -4,9 +4,11 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import ORJSONResponse
 
+from server.paths import app_root
+
 router = APIRouter()
 
-_layout_dir = Path("./public/layout")
+_layout_dir = app_root() / "public" / "layout"
 
 # The controller browser-source wraps gc-overlay, which only runs on macOS.
 # Hide that layout group from the catalog on other platforms.

@@ -22,7 +22,7 @@ npm run build                      # frontend production build
 npm run dev                        # Vite (5173) + FastAPI (5260) together
 ```
 
-- `python main.py` from a source checkout runs the server **headless** (tray/Tk UI is gated on frozen builds, not dev mode). ⚠️ It uses the real `./user_data/` — there is no isolation mechanism yet.
+- `python main.py` from a source checkout runs the server **headless** (tray/Tk UI is gated on frozen builds, not dev mode). ⚠️ With no overrides it uses the real `./user_data/` — for verification, boot an **isolated instance** via `PRSH_USER_DATA_DIR` + `PRSH_PORT` + `PRSH_NO_BROWSER` + `PRSH_HUD_FILE`, and drive the HUD pipeline with `scripts/replay-hud.py` (see the `run-and-verify` skill).
 - Layout HTML and `public/layout/lib/*.js` are static — no build step, but OBS/browser caches them: **hard refresh** (Cmd/Ctrl+Shift+R) after editing.
 - CI (`.github/workflows/test.yml`) runs both suites on PRs and pushes to `main`/`2.0.0`.
 - **Deep-dive skills** in `.claude/skills/` — this file is the map; the skills hold the depth. Load the matching one before working in its area: `state-keys-and-projectors` (State contract, namespaces, projector pattern), `match-binding-lifecycle` (fixtures, bindings, side cascade, game end, start.gg), `overlay-authoring` (layouts, mounts, themes, OBS behavior), `run-and-verify` (tests, booting, smoke recipes).
@@ -343,7 +343,7 @@ The `<meta name="overlay-settings">` whitelist is the source of truth for what t
 
 ### Static Mounts
 
-`/assets/` (React build), `/game_assets/`, `/layout/`, `/design/`, `/branding/`. ⚠️ Mount paths are CWD-relative — run the server from the repo root.
+`/assets/` (React build), `/game_assets/`, `/layout/`, `/design/`, `/branding/`. Read-only mounts are anchored to the repo root / bundle via `server/paths.py:app_root()` (CWD-independent); writable paths resolve through `user_data_dir()` (`PRSH_USER_DATA_DIR` override → frozen per-user root → `./user_data`).
 
 ### Key API Routes (`/api/v1/`)
 
@@ -537,6 +537,6 @@ This app runs alongside the game. **Performance is a hard requirement.**
 ## Known Limitations
 
 - Full state is sent on initial WebSocket connect (incremental after that).
-- No isolation for a second server instance (shared `user_data/`, fixed port, CWD-relative mounts).
+- A second server instance shares `user_data/` and the port unless isolated via the `PRSH_USER_DATA_DIR`/`PRSH_PORT`/`PRSH_NO_BROWSER`/`PRSH_HUD_FILE` env overrides (`server/paths.py`; see the `run-and-verify` skill).
 - `pandas` is ~50MB but required by pyrio.
 - `production.jsx` (~3300 lines) and `layouts.jsx` (~2200 lines) are known monoliths pending a split.

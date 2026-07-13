@@ -10,7 +10,7 @@ from pathlib import Path
 from aiopath import AsyncPath
 from loguru import logger
 from server import socketio
-from server.paths import user_data_dir
+from server.paths import app_root, user_data_dir
 from server.utils import json
 from server.utils.deep_dict import deep_set, deep_unset, deep_get
 
@@ -255,8 +255,16 @@ class Settings:
         },
         "lang": "en-US"
     }
-    _settings_out = AsyncPath(str(user_data_dir() / 'settings.json'))
+    # Resolved lazily (first use, cached) so a PRSH_USER_DATA_DIR override is
+    # honored and tests can inject a temp path by assigning this directly.
+    _settings_out: AsyncPath | None = None
     _save_lock: asyncio.Lock = asyncio.Lock()
+
+    @classmethod
+    def _settings_file(cls) -> AsyncPath:
+        if cls._settings_out is None:
+            cls._settings_out = AsyncPath(str(user_data_dir() / 'settings.json'))
+        return cls._settings_out
 
     @classmethod
     async def Save(cls):
@@ -264,18 +272,18 @@ class Settings:
             # Write to a sibling .tmp file then atomically rename so a kill
             # mid-write can't truncate settings.json and reset the user's
             # config to defaults on the next launch.
-            tmp = AsyncPath(str(cls._settings_out) + ".tmp")
+            tmp = AsyncPath(str(cls._settings_file()) + ".tmp")
             async with tmp.open(mode='wb') as f:
                 content = await json.dumps(cls.settings)
                 await f.write(content)
-            await tmp.replace(cls._settings_out)
+            await tmp.replace(cls._settings_file())
 
     @classmethod
     async def Load(cls) -> dict:
         loaded_server: dict = {}
         file_existed = False
         try:
-            async with cls._settings_out.open(mode='rb', encoding='utf-8') as f:
+            async with cls._settings_file().open(mode='rb', encoding='utf-8') as f:
                 loaded = await asyncio.to_thread(
                     orjson.loads,
                     await f.read()
@@ -503,7 +511,7 @@ class Config:
         # scripts/freeze-version.py for the resolution chain.
         try:
             text = await asyncio.to_thread(
-                Path('./pyproject.toml').read_text, encoding='utf-8'
+                (app_root() / 'pyproject.toml').read_text, encoding='utf-8'
             )
             context = tomllib.loads(text)["tool"]["poetry"]
             cls.config["name"] = context["name"]

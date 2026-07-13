@@ -10,7 +10,7 @@ from loguru import logger
 
 from server.api import router_v1
 from server.api.v1.assets import get_msb_assets_path
-from server.paths import user_data_dir, ensure_game_data, rio_visualizer_dir
+from server.paths import app_root, user_data_dir, ensure_game_data, rio_visualizer_dir
 from server.rio.game_pool import OngoingGamePool, CompletedGamePool
 from server.rio.rotation import PoolManager
 from server.rio.provider import RioGameDataProvider
@@ -36,7 +36,7 @@ async def load_manifest() -> dict:
     # PyInstaller on Windows drops files inside hidden (dot-prefixed) dirs,
     # so the spec also stages a copy at dist/vite_manifest.json. Prefer the
     # Vite-native path in dev, fall back to the staged copy in frozen builds.
-    candidates = [Path("./dist/.vite/manifest.json"), Path("./dist/vite_manifest.json")]
+    candidates = [app_root() / "dist/.vite/manifest.json", app_root() / "dist/vite_manifest.json"]
     manifest_json = next((p for p in candidates if p.is_file()), None)
     if manifest_json is None:
         logger.warning(
@@ -100,7 +100,7 @@ async def lifespan(app: FastAPI):
     # export so OBS Text (GDI+) sources don't point at missing files.
     if await State._is_export_enabled():
         import os
-        if not os.path.isdir(str(State._stream_labels_out)):
+        if not os.path.isdir(str(State._labels_dir())):
             await State.ExportAll()
 
     # wait for signal for shutdown
@@ -143,13 +143,18 @@ async def _unhandled_exception_handler(_request: Request, exc: Exception) -> ORJ
     logger.exception("unhandled exception in request handler: {}", exc)
     return ORJSONResponse({"error": "Internal server error"}, status_code=500)
 
+# Static app assets resolve against the repo root / frozen bundle root
+# (app_root), never the CWD, so `python main.py` works from any directory.
+_dist_dir = app_root() / "dist"
+_public_dir = app_root() / "public"
+
 # In dev mode dist/ may not exist yet; fall back to public/ for the template
-_template_dir = "./dist" if Path("./dist").is_dir() else "./public"
+_template_dir = str(_dist_dir) if _dist_dir.is_dir() else str(_public_dir)
 templates = Jinja2Templates(directory=_template_dir)
 
 # react assets (/dist/assets) — only mount if built; in dev mode Vite serves these
-if Path("./dist/assets").is_dir():
-    app.mount("/assets", StaticFiles(directory="./dist/assets"), name="assets")
+if (_dist_dir / "assets").is_dir():
+    app.mount("/assets", StaticFiles(directory=str(_dist_dir / "assets")), name="assets")
 
 # MSB assets — user-supplied (Nintendo IP, not bundled). Served from a
 # user-configurable path (Settings → Project Rio → MSB Image Assets) with
@@ -170,7 +175,7 @@ async def msb_asset(file_path: str):
     # This route is registered before the /game_assets static mount and would
     # otherwise shadow it for every /msb/* path, so resolve it here. No-op in
     # frozen builds (no public/ dir) where everything lives in user_data.
-    fallback_base = Path("./public/game_assets/msb").resolve()
+    fallback_base = (_public_dir / "game_assets/msb").resolve()
     fallback = (fallback_base / file_path).resolve()
     try:
         fallback.relative_to(fallback_base)  # path-traversal guard
@@ -181,11 +186,11 @@ async def msb_asset(file_path: str):
     return HTMLResponse("Not Found", status_code=404)
 
 # game assets (non-MSB) — served from public/game_assets/
-if Path("./public/game_assets").is_dir():
-    app.mount("/game_assets", StaticFiles(directory="./public/game_assets"), name="game_assets")
+if (_public_dir / "game_assets").is_dir():
+    app.mount("/game_assets", StaticFiles(directory=str(_public_dir / "game_assets")), name="game_assets")
 
 # OBS browser source layouts — served from public/layout/
-_layout_dir = Path("./public/layout")
+_layout_dir = _public_dir / "layout"
 
 @app.get("/layout", response_class=HTMLResponse)
 @app.get("/layout/", response_class=HTMLResponse)
@@ -244,7 +249,7 @@ async def layout_index(request: Request) -> HTMLResponse:
     return HTMLResponse(html)
 
 if _layout_dir.is_dir():
-    app.mount("/layout", StaticFiles(directory="./public/layout", html=True), name="layout")
+    app.mount("/layout", StaticFiles(directory=str(_layout_dir), html=True), name="layout")
 
 # RioVisualizer shared web assets (renderer.js core + themes) — served straight
 # from the submodule so the hit overlay and the standalone debug tool share one
@@ -275,7 +280,7 @@ async def design_asset(package_id: str, filename: str):
 # Favicon
 @app.get("/favicon.png")
 async def favicon():
-    return FileResponse("./public/favicon.png", media_type="image/png")
+    return FileResponse(str(_public_dir / "favicon.png"), media_type="image/png")
 
 # /api/v1/* | api_v1_*
 app.include_router(router_v1)

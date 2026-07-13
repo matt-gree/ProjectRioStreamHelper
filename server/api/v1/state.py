@@ -93,7 +93,7 @@ async def state_stream_labels_reveal(session_id: str | None = None):
     The folder is created on demand if it doesn't exist yet — the user
     may click this before enabling the txt export switch.
     """
-    path = Path(str(State._stream_labels_out))
+    path = Path(str(State._labels_dir()))
     try:
         path.mkdir(parents=True, exist_ok=True)
     except OSError as e:

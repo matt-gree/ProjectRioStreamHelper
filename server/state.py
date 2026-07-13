@@ -18,8 +18,23 @@ class State:
     last_state = {}
     changed_keys = []
     queue = asyncio.Queue()
-    _stream_labels_out = AsyncPath(str(user_data_dir() / "stream_labels"))
-    _program_state_out = AsyncPath(str(user_data_dir() / "state.json"))
+    # Output paths resolve lazily (first use, cached) rather than at import
+    # time, so a PRSH_USER_DATA_DIR override set for the process is honored
+    # and tests can inject temp paths by assigning these directly.
+    _stream_labels_out: AsyncPath | None = None
+    _program_state_out: AsyncPath | None = None
+
+    @classmethod
+    def _labels_dir(cls) -> AsyncPath:
+        if cls._stream_labels_out is None:
+            cls._stream_labels_out = AsyncPath(str(user_data_dir() / "stream_labels"))
+        return cls._stream_labels_out
+
+    @classmethod
+    def _state_file(cls) -> AsyncPath:
+        if cls._program_state_out is None:
+            cls._program_state_out = AsyncPath(str(user_data_dir() / "state.json"))
+        return cls._program_state_out
 
     @classmethod
     async def _is_export_enabled(cls) -> bool:
@@ -134,16 +149,16 @@ class State:
         # Write to a sibling .tmp file then atomically rename. Without this,
         # a kill mid-write leaves state.json truncated and Load() silently
         # falls back to {}, losing all persisted state.
-        tmp = AsyncPath(str(cls._program_state_out) + ".tmp")
+        tmp = AsyncPath(str(cls._state_file()) + ".tmp")
         async with tmp.open(mode='wb') as f:
             d = await json.dumps(cls.state)
             await f.write(d)
-        await tmp.replace(cls._program_state_out)
+        await tmp.replace(cls._state_file())
 
     @classmethod
     async def Load(cls):
         try:
-            async with cls._program_state_out.open(mode='rb', encoding='utf-8') as f:
+            async with cls._state_file().open(mode='rb', encoding='utf-8') as f:
                 cls.state = await json.loads(await f.read())
         except:
             logger.warning("unable to load state.json, using default dict")
@@ -233,20 +248,20 @@ class State:
     async def _create_files_dict(cls, path, di):
         pathdirs = "/".join(path.split("/")[0:-1])
 
-        _p = AsyncPath(f"{cls._stream_labels_out}/{pathdirs}")
+        _p = AsyncPath(f"{cls._labels_dir()}/{pathdirs}")
         if await _p.is_dir() == False:
             await _p.mkdir(parents=True, exist_ok=True)
 
         if di is None:
             # Write empty file so OBS Text (GDI+) sources never point at a missing path
-            await AsyncPath(f"{cls._stream_labels_out}/{path}.txt").write_text("")
+            await AsyncPath(f"{cls._labels_dir()}/{path}.txt").write_text("")
             return
 
         if isinstance(di, dict):
             for k, i in di.items():
                 await cls._create_files_dict(path+"/"+str(k).replace("/","_"), i)
         elif isinstance(di, str) and di.startswith("./"):
-            _p = AsyncPath(f"{cls._stream_labels_out}/{path}" + "." + di.rsplit(".", 1)[-1])
+            _p = AsyncPath(f"{cls._labels_dir()}/{path}" + "." + di.rsplit(".", 1)[-1])
             if await _p.exists() == True:
                 try:
                     await _p.unlink()
@@ -254,7 +269,7 @@ class State:
                     logger.exception("unable to remove file")
         elif isinstance(di, str) and di.startswith("http") and (di.endswith(".png") or di.endswith("jpg")):
             try:
-                _p = AsyncPath(f"{cls._stream_labels_out}/" + "." + di.rsplit(".", 1)[-1])
+                _p = AsyncPath(f"{cls._labels_dir()}/" + "." + di.rsplit(".", 1)[-1])
                 if await _p.exists() == True:
                     await _p.unlink()
             except:
@@ -266,7 +281,7 @@ class State:
                     dlpath = _p
                 ))
         else:
-            await AsyncPath(f"{cls._stream_labels_out}/{path}.txt").write_text(str(di))
+            await AsyncPath(f"{cls._labels_dir()}/{path}.txt").write_text(str(di))
 
     @classmethod
     async def _remove_files_dict(cls, path, di):
@@ -277,21 +292,21 @@ class State:
                 await cls._remove_files_dict(path+"/"+str(k).replace("/", "_"), i)
         elif isinstance(di, str) and (di.startswith("./") or di.startswith("http")):
             try:
-                _p = AsyncPath(f"{cls._stream_labels_out}/{path}." + di.rsplit(".", 1)[-1])
+                _p = AsyncPath(f"{cls._labels_dir()}/{path}." + di.rsplit(".", 1)[-1])
                 if await _p.exists() == True:
                     await _p.unlink()
             except:
                 logger.exception("unable to remove file")
         else:
             try:
-                _p = AsyncPath(f"{cls._stream_labels_out}/{path}.txt")
+                _p = AsyncPath(f"{cls._labels_dir()}/{path}.txt")
                 if await _p.exists() == True:
                     await _p.unlink()
             except:
                 logger.exception("unable to remove file")
 
         try:
-            _p = AsyncPath(f"{cls._stream_labels_out}/{path}")
+            _p = AsyncPath(f"{cls._labels_dir()}/{path}")
             if await _p.exists() == True:
                 await asyncio.to_thread(rmtree, str(_p))
         except:

@@ -1,3 +1,4 @@
+import os
 import platform
 from pathlib import Path
 
@@ -113,7 +114,17 @@ def get_default_hud_file_path() -> Path:
 
 
 async def get_user_hud_path() -> Path | None:
-    """Get user-configured HUD path from settings, falling back to OS default."""
+    """Get user-configured HUD path from settings, falling back to OS default.
+
+    PRSH_HUD_FILE (isolated agent/CI runs — see server/paths.py) is
+    authoritative and skips the existence check: the watcher watches the
+    parent directory, so the file may not exist until a replay writes it.
+    The parent directory must exist at startup.
+    """
+    override = os.environ.get("PRSH_HUD_FILE")
+    if override:
+        return Path(override).expanduser()
+
     user_path = Settings.Get("project_rio.hud_path", "")
     if user_path:
         path = Path(user_path)

@@ -1,6 +1,6 @@
 ---
 name: run-and-verify
-description: How to run PRSH's test suites, boot the app for verification, and smoke-test changes — the exact commands, the conftest fixture contract for writing new tests, isolation caveats (the dev server shares real user_data), and per-area verification recipes. Read before running the app, adding tests, or claiming a change is verified.
+description: How to run PRSH's test suites, boot the app for verification, and smoke-test changes — the exact commands, the conftest fixture contract for writing new tests, the isolated-server env overrides (PRSH_USER_DATA_DIR/PRSH_PORT/PRSH_NO_BROWSER/PRSH_HUD_FILE) + HUD replay harness, and per-area verification recipes. Read before running the app, adding tests, or claiming a change is verified.
 ---
 
 # Run & Verify
@@ -22,22 +22,67 @@ npm run build && python main.py              # production-style: everything on :
   moved or renamed.
 - Both suites run in CI (`.github/workflows/test.yml`) on PRs and pushes to
   `main`/`2.0.0`. **Both must stay green** — a change isn't done until they are.
-- Run the server from the **repo root**: static mounts in `server/server.py`
-  are CWD-relative.
+- Static assets (dist/, public/) are anchored to the repo root via
+  `server/paths.py:app_root()` — the server boots from any CWD. Writable
+  files still default to `./user_data` relative to the CWD, so still prefer
+  running from the repo root.
 
-## ⚠️ Isolation caveats (read before booting the app)
+## Booting an isolated server (env overrides)
 
-There is **no isolation mechanism yet** (planned; not built):
+Never verify against the developer's real `./user_data/` — boot an isolated
+instance instead. Four env vars (resolved in `server/paths.py`, HUD one in
+`server/rio/provider.py`) make this a one-liner:
 
-- `python main.py` / `npm run dev` use the developer's **real `./user_data/`**
-  (`state.json`, `settings.json`, participants, branding). Anything you write
-  through the live API mutates it.
-- The port is fixed at 5260 (Settings) — don't start a second instance.
-- Dev mode is already headless (tray/Tk are gated on frozen builds), so
-  booting for verification is fine — just treat `user_data/` as the user's
-  live data. Prefer read-only checks (`GET /api/v1/state`,
-  `GET /api/v1/layouts`) over mutating endpoints; if you must mutate, say so
-  in your report.
+| Var | Effect |
+|---|---|
+| `PRSH_USER_DATA_DIR` | Writable dir for state.json/settings.json/participants/branding (created on resolve) |
+| `PRSH_PORT` | Server port; wins over settings.json (port-conflict preflight checks the same port) |
+| `PRSH_NO_BROWSER` | Suppress the autostart browser tab |
+| `PRSH_HUD_FILE` | **Authoritative** decoded.hud.json path — no existence check (the file may not exist until a replay writes it; its parent dir must exist at boot) |
+
+```bash
+ISO=/tmp/prsh-agent && mkdir -p "$ISO"
+PRSH_USER_DATA_DIR="$ISO/user_data" PRSH_PORT=5299 PRSH_NO_BROWSER=1 \
+  PRSH_HUD_FILE="$ISO/decoded.hud.json" ./venv/bin/python main.py &
+```
+
+- **Boot takes ~15s** (startup network calls) — poll
+  `curl -sf "localhost:5299/api/v1/state"` until it answers; don't fixed-sleep.
+- Confirm the HUD watcher bound to your target in the log:
+  `[HudWatcher] Watching $ISO/decoded.hud.json`. Without `PRSH_HUD_FILE`, the
+  settings `project_rio.hud_path` is honored **only if the file already exists
+  at boot**, else it silently falls back to the real OS-default HUD path.
+- **Quote URLs containing `?` in zsh** (`curl "localhost:5299/api/v1/state?key=score.1.inning"`)
+  or the glob expansion eats them.
+- Dev mode is headless (tray/Tk are gated on frozen builds). Kill the server
+  when done; the isolated dir is disposable.
+
+### HUD replay harness
+
+`scripts/replay-hud.py` drives the full HUD pipeline (parse → side cascade →
+State → SocketIO) with real captured frames from `tests/data/hud/`, exactly
+the way Project Rio does — by rewriting the watched file:
+
+```bash
+./venv/bin/python scripts/replay-hud.py --target "$ISO/decoded.hud.json"
+# default sequence: game1_start (inning 1, 0-0) → game1_mid (inning 9, 6-14)
+#                   → game2_start (new GameID, sides swapped → back_to_back)
+curl -s "localhost:5299/api/v1/state?key=score.1.inning"       # → 1, then 9, then 1
+curl -s "localhost:5299/api/v1/state?key=score.1.side_reason"  # → "back_to_back" after game2
+```
+
+- `--frames game1_start` replays a single frame; `--list` shows what's
+  available; `--delay` defaults to 2s (past the watcher's 300ms debounce).
+- **Poll after each frame, don't fixed-sleep**: a new-game frame makes an
+  inline Rio API call (tag-set resolve) before state applies.
+- Fixture validity is pinned by `tests/unit/rio/test_hud_fixtures.py` — new
+  fixtures must parse through the real pipeline there.
+
+### Real-user_data cautions
+
+- `npm run dev` (and `main.py` without overrides) uses the developer's
+  **real `./user_data/`** — prefer read-only checks there; if you must
+  mutate, say so in your report.
 - Corrupt state recovery: `echo '{}' > user_data/state.json`, or
   `POST /api/v1/scoreboards/reset` for stale board/binding state.
 

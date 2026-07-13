@@ -33,11 +33,11 @@ from pathlib import Path
 
 from loguru import logger
 
-from server.paths import user_data_dir
+from server.paths import app_root, user_data_dir
 
 # Built-in packages live next to the other served static assets; PRSH.spec
 # bundles this folder the same way it bundles public/layout.
-BUILTIN_DIR = Path("./public/design")
+BUILTIN_DIR = app_root() / "public" / "design"
 
 # Package ids are folder names and URL path segments — keep them boring.
 _ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
