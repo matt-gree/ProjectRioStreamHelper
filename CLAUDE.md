@@ -25,7 +25,7 @@ npm run dev                        # Vite (5173) + FastAPI (5260) together
 - `python main.py` from a source checkout runs the server **headless** (tray/Tk UI is gated on frozen builds, not dev mode). ⚠️ With no overrides it uses the real `./user_data/` — for verification, boot an **isolated instance** via `PRSH_USER_DATA_DIR` + `PRSH_PORT` + `PRSH_NO_BROWSER` + `PRSH_HUD_FILE`, and drive the HUD pipeline with `scripts/replay-hud.py` (see the `run-and-verify` skill).
 - Layout HTML and `public/layout/lib/*.js` are static — no build step, but OBS/browser caches them: **hard refresh** (Cmd/Ctrl+Shift+R) after editing.
 - CI (`.github/workflows/test.yml`) runs both suites on PRs and pushes to `main`/`2.0.0`.
-- **Deep-dive skills** in `.claude/skills/` — this file is the map; the skills hold the depth. Load the matching one before working in its area: `state-keys-and-projectors` (State contract, namespaces, projector pattern), `match-binding-lifecycle` (fixtures, bindings, side cascade, game end, start.gg), `overlay-authoring` (layouts, mounts, themes, OBS behavior), `run-and-verify` (tests, booting, smoke recipes).
+- **Deep-dive skills** in `.claude/skills/` — this file is the map; the skills hold the depth. Load the matching one before working in its area: `state-keys-and-projectors` (State contract, namespaces, projector pattern), `match-binding-lifecycle` (fixtures, bindings, side cascade, game end, start.gg), `overlay-authoring` (layouts, mounts, themes, OBS behavior), `design-package-authoring` (theme SVG packages, converting designer exports), `run-and-verify` (tests, booting, smoke recipes).
 
 ---
 
@@ -295,7 +295,9 @@ The deciding layer is mirrored to `score.{N}.side_reason`. On a new game (inning
 
 - Element visuals are **re-themable SVGs**: a theme file declares `data-slot`/`data-tpl` hooks; `public/layout/lib/svg-theme-engine.js` injects and binds them; mounts auto-fit text.
 - Packages live in `public/design/{default,classic}/` (built-in) + user packages in `user_data/design_packages/`; served via `GET /design/{package}/{file}` with resolution falling back element-by-element to `default`. Server side: `server/design_packages.py`, `server/api/v1/design.py`. Selected in Setup → Design.
-- Theme contract details (e.g. `--side1/--side2/--well` vars, mount-point conventions) live in the theme SVGs and mount scripts — read an existing pair (e.g. `lowerthird`) before authoring.
+- Theme contract details (e.g. `--side1/--side2/--well` vars, mount-point conventions) live in the theme SVGs and mount scripts — read an existing pair (e.g. `lowerthird`) before authoring. Per-element slot contracts: `public/design/README.md`.
+
+> Deep dive: `.claude/skills/design-package-authoring/SKILL.md` (package tiers, install rules, converting designer exports, verification)
 
 ---
 

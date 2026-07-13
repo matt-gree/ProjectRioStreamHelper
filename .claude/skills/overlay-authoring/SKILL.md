@@ -72,6 +72,10 @@ per-layout→global→default fallback chain, `brandingLogoUrl()`, `hexToRgb`.
 
 ## Theme engine + design packages (`lib/svg-theme-engine.js`)
 
+(This is the mount/engine side. For authoring the theme SVGs themselves —
+package tiers, converting designer exports, per-element contracts — load the
+`design-package-authoring` skill.)
+
 Re-themable elements render a theme SVG from the active design package:
 
 ```js
