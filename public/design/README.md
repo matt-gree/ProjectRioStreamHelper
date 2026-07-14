@@ -1,9 +1,23 @@
 # Design Packages
 
+> **Designing a theme in Figma/Illustrator/etc.?** Read
+> [`DESIGNER-GUIDE.md`](DESIGNER-GUIDE.md) instead — it covers the
+> layer-naming grammar, export settings, and the install report. This file is
+> the engineering reference: the raw slot contracts each mount binds, and the
+> SVG-authoring rules. The two describe the same system at different levels.
+
 A **design package** is a folder of themed SVGs — one per re-themable element —
 plus an optional `package.json` manifest. The active package is picked globally
 (Setup → Design → **Design Package**, stored at `overlays.global.designPackage`)
 and every SVG element renders its file from that package.
+
+Installed SVGs pass through the **theme compiler** (`server/theme_compiler.py`,
+contracts in `server/theme_contracts.py`): it translates the designer
+layer-naming grammar (`slot=`/`part=`/`tpl=` layer ids) into the `data-*`
+markers below, normalizes export quirks, and lints against the element
+contract. Hand-authored files that already use `data-*` markers are unchanged
+(the compiler is a no-op on conforming input) — so everything in this document
+still applies verbatim when authoring by hand.
 
 ```
 <package>/
@@ -305,10 +319,20 @@ other package gets the fixed Rio night palette baked into
 5. Hard-refresh the OBS browser sources (Cmd/Ctrl+Shift+R) after edits — theme
    SVGs are cached per page load.
 
-**On the "just drop in a Figma export" workflow:** a flat export alone isn't
-enough — it has no `data-slot`/`data-part` markers, and Commentary additionally
-needs the count-by-count layout JSON (a single static export can't describe a
-reflowing row). Marking up slots is inherent to any data-bound SVG. The
-multi-count layout merge is the genuinely tedious part — worth automating with
-a small ingestion script (N raw per-count exports + a padding/font config →
-merged theme + layout JSON) if more Commentary themes get built.
+**On the "just drop in a Figma export" workflow:** a flat export alone still
+isn't a theme — but the gap is now bridged by the layer-naming grammar + theme
+compiler (see [`DESIGNER-GUIDE.md`](DESIGNER-GUIDE.md)). A designer names
+layers `slot=side1-name` etc.; the compiler emits the `data-*` markers and
+lints coverage on install. Two element classes still need structure a flat
+export can't express:
+
+- **Commentary** needs the count-by-count layout JSON (a single static export
+  can't describe a reflowing row). Worth a dedicated ingestion step (N raw
+  per-count exports + a padding/font config → merged theme + layout JSON) if
+  more Commentary themes get built; not yet automated.
+- **lowerthird / ticker** need `tpl=`-marked template groups; the compiler
+  relocates them into `<defs>` but the designer must still mark which group is
+  the template.
+
+Slot-only elements (matchup, stats, scoreboards, scorecard) are the fully
+round-trippable ones today.

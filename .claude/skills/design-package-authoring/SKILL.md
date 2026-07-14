@@ -122,14 +122,41 @@ then load the element's layout URL in a browser and **hard-refresh**
   right."
 - A report must distinguish browser-verified from OBS-verified.
 
-## Planned tooling (NOT built yet — you are this pipeline today)
+## The theme compiler (built — use it, don't hand-translate)
 
-The agreed direction (2026-07): a **layer-naming grammar** designers use in
-any vector tool (Figma/Illustrator/Affinity export layer names as SVG ids) +
-an **ingest compiler** on the zip-install path that translates ids →
-`data-*`, relocates templates, and lints against machine-readable element
-contracts with a human report; a **starter kit** design file mirroring the
-`default` package; and a **live-preview dev page** for edit→see iteration.
-Until those exist, do their job by hand per this skill — and if you build any
-of them, update this section and `public/design/README.md` in the same
-change.
+`server/theme_compiler.py` + `server/theme_contracts.py` now do most of step
+3–6 above automatically. It runs on **every zip install**
+(`design_packages.install_zip` → `compile_installed_svgs`, report returned in
+the package info and shown in the Design tab) and from the CLI
+`scripts/compile-theme.py` (dry-run by default; `--write` to fix in place).
+
+- **Grammar → markers**: layer ids `slot=side1-name maxw=420`, `part=rail`,
+  `tpl=match w=620`, `band x=210 w=1500 …` become `data-*` attributes.
+  Separators `=`/`:`, space/underscore token splits, case-insensitive.
+  Designer-facing spec: `public/design/DESIGNER-GUIDE.md`.
+- **Normalizations** (each reported): strip root width/height, fill
+  `preserveAspectRatio` from the contract, move `var()` out of presentation
+  attributes into inline style, relocate `data-tpl` groups into `<defs>`,
+  defuse `--` in comments, set `data-design-vars="app"` from manifest
+  `"palette": "app"`.
+- **Lint**: slot coverage (`bound/total`), missing-required, unknown-slot
+  with a did-you-mean suggestion, wrong node kind (catches outlined text),
+  canvas-size mismatch, unbound-text inventory.
+- **Two invariants** (pinned by `tests/unit/test_theme_compiler.py`):
+  conforming hand-authored files pass through byte-identical, and a parse
+  error returns the input untouched (an install is never blocked).
+
+**Contract fidelity is the maintenance burden**: `theme_contracts.py` is a
+hand-transcribed subset. The authoritative slot list is the **mount's header
+comment + its actual `setText`/`setImage`/`slots[...]` calls** — always
+broader than the old README table (matchup has away/home + seed + band-swap
+slots the README omitted). When a mount gains/drops a slot, update the
+contract in the same change. Elements with `slots=None` get grammar
+translation but no slot lint — transcribe them (commentary, playerplates,
+lowerthird, scorecard, scoreboards) as demand arrives.
+
+Still by hand: authoring Commentary's per-count layout JSON, and marking which
+group is the `tpl=` template. Still not built: the **starter-kit** design file
+mirroring `default`, and a **live-preview dev page** for edit→see iteration —
+build those with the user (designer eyes), and update this section + the
+README when they land.

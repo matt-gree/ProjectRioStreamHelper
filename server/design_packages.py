@@ -201,9 +201,42 @@ def install_zip(data: bytes, fallback_id: str | None = None) -> dict:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(zf.read(name))
 
+    report = compile_installed_svgs(dest, palette=manifest.get("palette"))
+
     info = _package_info(dest, builtin=False)
+    info["report"] = report
     logger.info("[Design] installed package '{}' ({} files)", package_id, len(kept))
     return info
+
+
+def compile_installed_svgs(folder: Path, palette: str | None = None) -> list[dict]:
+    """Run the theme compiler over a package's top-level SVGs, in place.
+
+    Translates the designer layer-naming grammar into data-* markers and lints
+    each file against its element contract (see server/theme_compiler.py).
+    Files under sources/ are untouched. A compiler failure never blocks the
+    install — the raw file stays and the report says so.
+    """
+    from server.theme_compiler import compile_svg  # local: keep module import light
+
+    report: list[dict] = []
+    for svg in sorted(folder.glob("*.svg")):
+        element = svg.stem
+        try:
+            out, file_report = compile_svg(
+                svg.read_text(encoding="utf-8"), element, filename=svg.name, palette=palette,
+            )
+            if file_report.changed:
+                svg.write_text(out, encoding="utf-8")
+            report.append(file_report.to_dict())
+        except Exception as e:
+            logger.exception("[Design] theme compiler failed on {}", svg.name)
+            report.append({
+                "file": svg.name, "element": element, "changed": False,
+                "bound": None, "total": None,
+                "findings": [{"level": "error", "message": f"theme compiler failed ({e}) — installed as-is"}],
+            })
+    return report
 
 
 def delete_package(package_id: str) -> None:

@@ -1178,6 +1178,9 @@ function DesignPackageSection() {
     const setItem = useSettingsStore(s => s.setItem);
     const [packages, setPackages] = useState(null);   // null = loading
     const [busy, setBusy] = useState(false);
+    // Theme-compiler report from the last install (grammar translation + lint;
+    // see server/theme_compiler.py). Kept visible until dismissed or replaced.
+    const [report, setReport] = useState(null);
 
     const refresh = useCallback(async () => {
         try {
@@ -1199,6 +1202,7 @@ function DesignPackageSection() {
             const data = await r.json().catch(() => ({}));
             if (!r.ok) throw new Error(data?.detail || `Install failed (${r.status})`);
             notifications.show({ message: `Installed design package "${data.name}"`, color: 'green' });
+            setReport(data.report?.length ? { pkg: data.name, files: data.report } : null);
             await refresh();
         } catch (e) {
             notifications.show({ message: `Install failed: ${e?.message || e}`, color: 'red' });
@@ -1259,6 +1263,41 @@ function DesignPackageSection() {
                         ? `${selected.description || 'No description.'}${selected.elements?.length ? ` Themes: ${selected.elements.join(', ')}.` : ''} Elements a package doesn't theme fall back to Default.`
                         : 'Themes every SVG element (commentary, lower third, stat callout). Install a package as a .zip, or drop a folder into user_data/design_packages/.'}
                 </Text>
+                {report && <InstallReport report={report} onDismiss={() => setReport(null)} />}
+            </div>
+        </div>
+    );
+}
+
+// Per-file theme-compiler report for the last package install: slot-binding
+// coverage + findings (warn = something won't bind on stream; info = FYI).
+function InstallReport({ report, onDismiss }) {
+    const LEVEL_STYLE = {
+        error: 'text-red-400',
+        warn: 'text-amber-400',
+        info: 'text-[var(--text-dim)]',
+    };
+    return (
+        <div className="mt-1 rounded border border-[var(--border)] p-2">
+            <div className="flex items-center justify-between">
+                <Text size="xs" fw={600}>Install report — {report.pkg}</Text>
+                <Button size="sm" variant="ghost" onClick={onDismiss}><X size={12} /></Button>
+            </div>
+            <div className="flex flex-col gap-1 mt-1">
+                {report.files.map((f) => (
+                    <div key={f.file}>
+                        <Text size="xs" fw={500}>
+                            {f.file}
+                            {f.total ? ` — ${f.bound}/${f.total} slots bound` : ''}
+                            {f.changed ? ' (compiled)' : ''}
+                        </Text>
+                        {(f.findings || []).map((fi, i) => (
+                            <Text key={i} size="xs" className={cn('pl-3', LEVEL_STYLE[fi.level] || '')}>
+                                {fi.level === 'warn' ? '⚠ ' : fi.level === 'error' ? '✕ ' : ''}{fi.message}
+                            </Text>
+                        ))}
+                    </div>
+                ))}
             </div>
         </div>
     );

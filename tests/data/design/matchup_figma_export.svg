@@ -1,0 +1,223 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="1920" height="1080">
+  
+  <defs>
+    <filter id="muGlow" x="-20%" y="-50%" width="140%" height="200%">
+      <feGaussianBlur stdDeviation="22" />
+    </filter>
+    <clipPath id="muBand"><rect x="48" y="632" width="1824" height="392" rx="18" /></clipPath>
+  </defs>
+
+  
+  <rect x="48" y="640" width="1824" height="392" rx="18" style="fill:var(--accent)" opacity="0.16" filter="url(#muGlow)" />
+
+  
+  <rect x="48" y="632" width="1824" height="392" rx="18" style="fill:var(--band)" />
+  <rect x="48" y="632" width="1824" height="392" rx="18" fill="none" style="stroke:var(--border)" stroke-width="1.5" />
+
+  <g clip-path="url(#muBand)">
+    
+    <rect x="48" y="632" width="10" height="392" style="fill:var(--accent)" />
+    <rect x="48" y="632" width="1824" height="2" fill="#ffffff" opacity="0.05" />
+
+    
+    <image x="84" y="664" width="110" height="110" preserveAspectRatio="xMidYMid meet" opacity="0" id="slot=logo" />
+    <g id="slot=logo-default">
+      
+      <g transform="translate(84,664) scale(6.875)" shape-rendering="crispEdges">
+        <rect x="5" y="0" width="6" height="1" fill="#000000" />
+        <rect x="3" y="1" width="2" height="1" fill="#000000" />
+        <rect x="5" y="1" width="1" height="1" fill="#ff0000" />
+        <rect x="6" y="1" width="1" height="1" fill="#ffffff" />
+        <rect x="7" y="1" width="1" height="1" fill="#ff0000" />
+        <rect x="8" y="1" width="2" height="1" fill="#ffffff" />
+        <rect x="10" y="1" width="1" height="1" fill="#ff0000" />
+        <rect x="11" y="1" width="2" height="1" fill="#000000" />
+        <rect x="2" y="2" width="1" height="1" fill="#000000" />
+        <rect x="3" y="2" width="2" height="1" fill="#ff0000" />
+        <rect x="5" y="2" width="2" height="1" fill="#ffffff" />
+        <rect x="7" y="2" width="1" height="1" fill="#ff0000" />
+        <rect x="8" y="2" width="3" height="1" fill="#ffffff" />
+        <rect x="11" y="2" width="2" height="1" fill="#ff0000" />
+        <rect x="13" y="2" width="1" height="1" fill="#000000" />
+        <rect x="1" y="3" width="1" height="1" fill="#000000" />
+        <rect x="2" y="3" width="2" height="1" fill="#ff0000" />
+        <rect x="4" y="3" width="4" height="1" fill="#ffffff" />
+        <rect x="8" y="3" width="1" height="1" fill="#ff0000" />
+        <rect x="9" y="3" width="3" height="1" fill="#ffffff" />
+        <rect x="12" y="3" width="2" height="1" fill="#ff0000" />
+        <rect x="14" y="3" width="1" height="1" fill="#000000" />
+        <rect x="1" y="4" width="1" height="1" fill="#000000" />
+        <rect x="2" y="4" width="4" height="1" fill="#ff0000" />
+        <rect x="6" y="4" width="3" height="1" fill="#ffffff" />
+        <rect x="9" y="4" width="1" height="1" fill="#ff0000" />
+        <rect x="10" y="4" width="2" height="1" fill="#ffffff" />
+        <rect x="12" y="4" width="2" height="1" fill="#ff0000" />
+        <rect x="14" y="4" width="1" height="1" fill="#000000" />
+        <rect x="0" y="5" width="1" height="1" fill="#000000" />
+        <rect x="1" y="5" width="1" height="1" fill="#ffffff" />
+        <rect x="2" y="5" width="2" height="1" fill="#ff0000" />
+        <rect x="4" y="5" width="2" height="1" fill="#ffffff" />
+        <rect x="6" y="5" width="1" height="1" fill="#ff0000" />
+        <rect x="7" y="5" width="3" height="1" fill="#ffffff" />
+        <rect x="10" y="5" width="4" height="1" fill="#ff0000" />
+        <rect x="14" y="5" width="1" height="1" fill="#ffffff" />
+        <rect x="15" y="5" width="1" height="1" fill="#000000" />
+        <rect x="0" y="6" width="1" height="1" fill="#000000" />
+        <rect x="1" y="6" width="2" height="1" fill="#ffffff" />
+        <rect x="3" y="6" width="1" height="1" fill="#ff0000" />
+        <rect x="4" y="6" width="3" height="1" fill="#ffffff" />
+        <rect x="7" y="6" width="1" height="1" fill="#ff0000" />
+        <rect x="8" y="6" width="4" height="1" fill="#ffffff" />
+        <rect x="12" y="6" width="1" height="1" fill="#ff0000" />
+        <rect x="13" y="6" width="2" height="1" fill="#ffffff" />
+        <rect x="15" y="6" width="1" height="1" fill="#000000" />
+        <rect x="0" y="7" width="1" height="1" fill="#000000" />
+        <rect x="1" y="7" width="2" height="1" fill="#ffffff" />
+        <rect x="3" y="7" width="2" height="1" fill="#ff0000" />
+        <rect x="5" y="7" width="3" height="1" fill="#ffffff" />
+        <rect x="8" y="7" width="1" height="1" fill="#ff0000" />
+        <rect x="9" y="7" width="2" height="1" fill="#ffffff" />
+        <rect x="11" y="7" width="2" height="1" fill="#ff0000" />
+        <rect x="13" y="7" width="2" height="1" fill="#ffffff" />
+        <rect x="15" y="7" width="1" height="1" fill="#000000" />
+        <rect x="0" y="8" width="1" height="1" fill="#000000" />
+        <rect x="1" y="8" width="2" height="1" fill="#ffffff" />
+        <rect x="3" y="8" width="3" height="1" fill="#ff0000" />
+        <rect x="6" y="8" width="2" height="1" fill="#ffffff" />
+        <rect x="8" y="8" width="1" height="1" fill="#ff0000" />
+        <rect x="9" y="8" width="1" height="1" fill="#ffffff" />
+        <rect x="10" y="8" width="3" height="1" fill="#ff0000" />
+        <rect x="13" y="8" width="2" height="1" fill="#ffffff" />
+        <rect x="15" y="8" width="1" height="1" fill="#000000" />
+        <rect x="0" y="9" width="1" height="1" fill="#000000" />
+        <rect x="1" y="9" width="1" height="1" fill="#ffffff" />
+        <rect x="2" y="9" width="4" height="1" fill="#ff0000" />
+        <rect x="6" y="9" width="4" height="1" fill="#000000" />
+        <rect x="10" y="9" width="4" height="1" fill="#ff0000" />
+        <rect x="14" y="9" width="1" height="1" fill="#ffffff" />
+        <rect x="15" y="9" width="1" height="1" fill="#000000" />
+        <rect x="0" y="10" width="1" height="1" fill="#000000" />
+        <rect x="1" y="10" width="3" height="1" fill="#ff0000" />
+        <rect x="4" y="10" width="2" height="1" fill="#000000" />
+        <rect x="6" y="10" width="4" height="1" fill="#ffffff" />
+        <rect x="10" y="10" width="2" height="1" fill="#000000" />
+        <rect x="12" y="10" width="3" height="1" fill="#ff0000" />
+        <rect x="15" y="10" width="1" height="1" fill="#000000" />
+        <rect x="1" y="11" width="1" height="1" fill="#000000" />
+        <rect x="2" y="11" width="1" height="1" fill="#ff0000" />
+        <rect x="3" y="11" width="1" height="1" fill="#000000" />
+        <rect x="4" y="11" width="2" height="1" fill="#ffffff" />
+        <rect x="6" y="11" width="1" height="1" fill="#000000" />
+        <rect x="7" y="11" width="2" height="1" fill="#ffffff" />
+        <rect x="9" y="11" width="1" height="1" fill="#000000" />
+        <rect x="10" y="11" width="2" height="1" fill="#ffffff" />
+        <rect x="12" y="11" width="1" height="1" fill="#000000" />
+        <rect x="13" y="11" width="1" height="1" fill="#ff0000" />
+        <rect x="14" y="11" width="1" height="1" fill="#000000" />
+        <rect x="2" y="12" width="2" height="1" fill="#000000" />
+        <rect x="4" y="12" width="2" height="1" fill="#ffffff" />
+        <rect x="6" y="12" width="1" height="1" fill="#000000" />
+        <rect x="7" y="12" width="2" height="1" fill="#ffffff" />
+        <rect x="9" y="12" width="1" height="1" fill="#000000" />
+        <rect x="10" y="12" width="2" height="1" fill="#ffffff" />
+        <rect x="12" y="12" width="2" height="1" fill="#000000" />
+        <rect x="3" y="13" width="1" height="1" fill="#000000" />
+        <rect x="4" y="13" width="2" height="1" fill="#ffffff" />
+        <rect x="6" y="13" width="1" height="1" fill="#000000" />
+        <rect x="7" y="13" width="2" height="1" fill="#ffffff" />
+        <rect x="9" y="13" width="1" height="1" fill="#000000" />
+        <rect x="10" y="13" width="2" height="1" fill="#ffffff" />
+        <rect x="12" y="13" width="1" height="1" fill="#000000" />
+        <rect x="4" y="14" width="1" height="1" fill="#000000" />
+        <rect x="5" y="14" width="6" height="1" fill="#ffffff" />
+        <rect x="11" y="14" width="1" height="1" fill="#000000" />
+        <rect x="5" y="15" width="6" height="1" fill="#000000" />
+      </g>
+    </g>
+
+    
+    <rect x="228" y="656" width="220" height="34" rx="6" style="fill:var(--accent)" />
+    <text x="338" y="680" text-anchor="middle" style="fill:#ffffff;font-family:var(--font-display)" font-size="18" font-weight="700" letter-spacing="2.5">HEAD TO HEAD</text>
+    <text x="228" y="768" style="fill:var(--ink-dim);font-family:var(--font-body)" font-size="21" font-weight="500" letter-spacing="1" id="slot=total-games">ALL TIME</text>
+
+    <image x="488" y="660" width="72" height="72" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0" id="slot=side1-sprite" />
+    <text x="576" y="712" style="fill:var(--ink);font-family:var(--font-display)" font-size="40" font-weight="700" id="slot=side1-name_maxw=280">Player One</text>
+    <text x="898" y="748" text-anchor="end" style="fill:var(--ink);font-family:var(--font-mono)" font-size="82" font-weight="700" font-variant-numeric="tabular-nums" id="slot=side1-wins_maxw=110">0</text>
+    <text x="960" y="740" text-anchor="middle" style="fill:var(--ink-dim);font-family:var(--font-display)" font-size="52" font-weight="600">–</text>
+    <text x="1022" y="748" text-anchor="start" style="fill:var(--ink);font-family:var(--font-mono)" font-size="82" font-weight="700" font-variant-numeric="tabular-nums" id="slot=side2-wins_maxw=110">0</text>
+    <text x="1344" y="712" text-anchor="end" style="fill:var(--ink);font-family:var(--font-display)" font-size="40" font-weight="700" id="slot=side2-name_maxw=280">Player Two</text>
+    <image x="1360" y="660" width="72" height="72" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0" id="slot=side2-sprite" />
+
+    <text x="1836" y="700" text-anchor="end" style="fill:var(--ink);font-family:var(--font-display)" font-size="30" font-weight="700" opacity="0" id="slot=subtitle_maxw=380">Winners Final</text>
+    <text x="1836" y="740" text-anchor="end" style="fill:var(--ink-dim);font-family:var(--font-body)" font-size="20" font-weight="500" letter-spacing="2">LAST 5 GAMES</text>
+
+    
+    <rect x="64" y="798" width="1792" height="2" style="fill:var(--border)" />
+
+    
+    <g opacity="0" id="slot=game1">
+      <rect x="72" y="816" width="344" height="188" rx="10" fill="#ffffff" opacity="0.04" />
+      <rect x="72" y="816" width="344" height="188" rx="10" fill="none" style="stroke:var(--border)" stroke-width="1" />
+      <text x="396" y="848" text-anchor="end" style="fill:var(--ink-dim);font-family:var(--font-body)" font-size="17" font-weight="500" id="slot=game1-date">JUN 1</text>
+      <image x="96" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="0" id="slot=game1-side1-logo" />
+      <text x="196" y="896" text-anchor="middle" style="fill:var(--ink);font-family:var(--font-mono)" font-size="46" font-weight="700" font-variant-numeric="tabular-nums" id="slot=game1-side1-score_maxw=72">0</text>
+      <text x="244" y="892" text-anchor="middle" style="fill:var(--ink-dim);font-family:var(--font-display)" font-size="28" font-weight="600">–</text>
+      <text x="292" y="896" text-anchor="middle" style="fill:var(--ink);font-family:var(--font-mono)" font-size="46" font-weight="700" font-variant-numeric="tabular-nums" id="slot=game1-side2-score_maxw=72">0</text>
+      <image x="344" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="0" id="slot=game1-side2-logo" />
+      <text x="96" y="948" style="fill:var(--ink-dim);font-family:var(--font-body)" font-size="19" font-weight="500" id="slot=game1-mode_maxw=296">Game mode</text>
+      <text x="96" y="980" style="fill:var(--ink-dim);font-family:var(--font-body)" font-size="19" font-weight="500" id="slot=game1-stadium_maxw=296">Stadium</text>
+    </g>
+
+    <g opacity="0" id="slot=game2">
+      <rect x="430" y="816" width="344" height="188" rx="10" fill="#ffffff" opacity="0.04" />
+      <rect x="430" y="816" width="344" height="188" rx="10" fill="none" style="stroke:var(--border)" stroke-width="1" />
+      <text x="754" y="848" text-anchor="end" style="fill:var(--ink-dim);font-family:var(--font-body)" font-size="17" font-weight="500" id="slot=game2-date">JUN 1</text>
+      <image x="454" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="0" id="slot=game2-side1-logo" />
+      <text x="554" y="896" text-anchor="middle" style="fill:var(--ink);font-family:var(--font-mono)" font-size="46" font-weight="700" font-variant-numeric="tabular-nums" id="slot=game2-side1-score_maxw=72">0</text>
+      <text x="602" y="892" text-anchor="middle" style="fill:var(--ink-dim);font-family:var(--font-display)" font-size="28" font-weight="600">–</text>
+      <text x="650" y="896" text-anchor="middle" style="fill:var(--ink);font-family:var(--font-mono)" font-size="46" font-weight="700" font-variant-numeric="tabular-nums" id="slot=game2-side2-score_maxw=72">0</text>
+      <image x="702" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="0" id="slot=game2-side2-logo" />
+      <text x="454" y="948" style="fill:var(--ink-dim);font-family:var(--font-body)" font-size="19" font-weight="500" id="slot=game2-mode_maxw=296">Game mode</text>
+      <text x="454" y="980" style="fill:var(--ink-dim);font-family:var(--font-body)" font-size="19" font-weight="500" id="slot=game2-stadium_maxw=296">Stadium</text>
+    </g>
+
+    <g opacity="0" id="slot=game3">
+      <rect x="788" y="816" width="344" height="188" rx="10" fill="#ffffff" opacity="0.04" />
+      <rect x="788" y="816" width="344" height="188" rx="10" fill="none" style="stroke:var(--border)" stroke-width="1" />
+      <text x="1112" y="848" text-anchor="end" style="fill:var(--ink-dim);font-family:var(--font-body)" font-size="17" font-weight="500" id="slot=game3-date">JUN 1</text>
+      <image x="812" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="0" id="slot=game3-side1-logo" />
+      <text x="912" y="896" text-anchor="middle" style="fill:var(--ink);font-family:var(--font-mono)" font-size="46" font-weight="700" font-variant-numeric="tabular-nums" id="slot=game3-side1-score_maxw=72">0</text>
+      <text x="960" y="892" text-anchor="middle" style="fill:var(--ink-dim);font-family:var(--font-display)" font-size="28" font-weight="600">–</text>
+      <text x="1008" y="896" text-anchor="middle" style="fill:var(--ink);font-family:var(--font-mono)" font-size="46" font-weight="700" font-variant-numeric="tabular-nums" id="slot=game3-side2-score_maxw=72">0</text>
+      <image x="1060" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="0" id="slot=game3-side2-logo" />
+      <text x="812" y="948" style="fill:var(--ink-dim);font-family:var(--font-body)" font-size="19" font-weight="500" id="slot=game3-mode_maxw=296">Game mode</text>
+      <text x="812" y="980" style="fill:var(--ink-dim);font-family:var(--font-body)" font-size="19" font-weight="500" id="slot=game3-stadium_maxw=296">Stadium</text>
+    </g>
+
+    <g opacity="0" id="slot=game4">
+      <rect x="1146" y="816" width="344" height="188" rx="10" fill="#ffffff" opacity="0.04" />
+      <rect x="1146" y="816" width="344" height="188" rx="10" fill="none" style="stroke:var(--border)" stroke-width="1" />
+      <text x="1470" y="848" text-anchor="end" style="fill:var(--ink-dim);font-family:var(--font-body)" font-size="17" font-weight="500" id="slot=game4-date">JUN 1</text>
+      <image x="1170" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="0" id="slot=game4-side1-logo" />
+      <text x="1270" y="896" text-anchor="middle" style="fill:var(--ink);font-family:var(--font-mono)" font-size="46" font-weight="700" font-variant-numeric="tabular-nums" id="slot=game4-side1-score_maxw=72">0</text>
+      <text x="1318" y="892" text-anchor="middle" style="fill:var(--ink-dim);font-family:var(--font-display)" font-size="28" font-weight="600">–</text>
+      <text x="1366" y="896" text-anchor="middle" style="fill:var(--ink);font-family:var(--font-mono)" font-size="46" font-weight="700" font-variant-numeric="tabular-nums" id="slot=game4-side2-score_maxw=72">0</text>
+      <image x="1418" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="0" id="slot=game4-side2-logo" />
+      <text x="1170" y="948" style="fill:var(--ink-dim);font-family:var(--font-body)" font-size="19" font-weight="500" id="slot=game4-mode_maxw=296">Game mode</text>
+      <text x="1170" y="980" style="fill:var(--ink-dim);font-family:var(--font-body)" font-size="19" font-weight="500" id="slot=game4-stadium_maxw=296">Stadium</text>
+    </g>
+
+    <g opacity="0" id="slot=game5">
+      <rect x="1504" y="816" width="344" height="188" rx="10" fill="#ffffff" opacity="0.04" />
+      <rect x="1504" y="816" width="344" height="188" rx="10" fill="none" style="stroke:var(--border)" stroke-width="1" />
+      <text x="1828" y="848" text-anchor="end" style="fill:var(--ink-dim);font-family:var(--font-body)" font-size="17" font-weight="500" id="slot=game5-date">JUN 1</text>
+      <image x="1528" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="0" id="slot=game5-side1-logo" />
+      <text x="1628" y="896" text-anchor="middle" style="fill:var(--ink);font-family:var(--font-mono)" font-size="46" font-weight="700" font-variant-numeric="tabular-nums" id="slot=game5-side1-score_maxw=72">0</text>
+      <text x="1676" y="892" text-anchor="middle" style="fill:var(--ink-dim);font-family:var(--font-display)" font-size="28" font-weight="600">–</text>
+      <text x="1724" y="896" text-anchor="middle" style="fill:var(--ink);font-family:var(--font-mono)" font-size="46" font-weight="700" font-variant-numeric="tabular-nums" id="slot=game5-side2-score_maxw=72">0</text>
+      <image x="1776" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="0" id="slot=game5-side2-logo" />
+      <text x="1528" y="948" style="fill:var(--ink-dim);font-family:var(--font-body)" font-size="19" font-weight="500" id="slot=game5-mode_maxw=296">Game mode</text>
+      <text x="1528" y="980" style="fill:var(--ink-dim);font-family:var(--font-body)" font-size="19" font-weight="500" id="slot=game5-stadium_maxw=296">Stadium</text>
+    </g>
+  </g>
+<rect x="0" y="0" width="4" height="4" fill="var(--accent)" /></svg>
