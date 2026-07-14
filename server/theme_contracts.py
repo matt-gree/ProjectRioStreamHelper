@@ -101,6 +101,66 @@ def _stats_slots() -> dict[str, Slot]:
     return s
 
 
+def _scoreboard_slots() -> dict[str, Slot]:
+    # Authoritative inventory: the ROW-STACK + DATA SLOTS header in
+    # public/layout/lib/scoreboard-mount.js. All optional — each size
+    # implements whatever subset fits (xs/s are row-top only), and the mount
+    # skips absent slots. Count dots / bases are recoloured by the mount via
+    # setAttribute, so any shape works ("any").
+    s: dict[str, Slot] = {
+        "card-bg": Slot("any"),
+        "card-rail": Slot("any"),
+        "row-top": Slot("group"),
+        "row-live": Slot("group"),
+        "row-final": Slot("group"),
+        "row-roster": Slot("group"),
+        "row-box": Slot("group"),
+        "logo": Slot("image"),
+        "logo-default": Slot("any"),
+        "inn-half": Slot("text"),
+        "inn-num": Slot("text"),
+        "inn-arrow-up": Slot("group"),
+        "inn-arrow-down": Slot("group"),
+        "final-badge": Slot("group"),
+        "bat-icon": Slot("image"),
+        "pit-icon": Slot("image"),
+        "bat-name": Slot("text"),
+        "pit-name": Slot("text"),
+        "meta-main": Slot("text"),
+        "meta-date": Slot("text"),
+        "elo1-group": Slot("group"),
+        "elo2-group": Slot("group"),
+        "box-away-R": Slot("text"),
+        "box-home-R": Slot("text"),
+        "box-away-name": Slot("text"),
+        "box-home-name": Slot("text"),
+    }
+    for t in (1, 2):
+        s[f"s{t}-logo"] = Slot("image")
+        s[f"s{t}-name"] = Slot("text")
+        s[f"s{t}-score"] = Slot("text")
+        s[f"s{t}-cap-ring"] = Slot("any")
+        s[f"elo{t}-in"] = Slot("text")
+        s[f"elo{t}-out"] = Slot("text")
+        s[f"elo{t}-delta"] = Slot("text")
+        for i in range(9):
+            s[f"s{t}-char-{i}"] = Slot("image")
+    for i in range(4):
+        s[f"ball-{i}"] = Slot("any")
+    for i in range(3):
+        s[f"strike-{i}"] = Slot("any")
+        s[f"out-{i}"] = Slot("any")
+    for b in (1, 2, 3):
+        s[f"base-{b}"] = Slot("any")
+        s[f"runner-{b}"] = Slot("image")
+    for i in range(1, 10):
+        s[f"box-col-{i}"] = Slot("group")
+        s[f"box-h-{i}"] = Slot("text")
+        s[f"box-away-{i}"] = Slot("text")
+        s[f"box-home-{i}"] = Slot("text")
+    return s
+
+
 _TICKER_PARTS = {
     "away-name": Slot("text", required=True),
     "home-name": Slot("text", required=True),
@@ -133,14 +193,19 @@ CONTRACTS: dict[str, Contract] = {
         (1920, 1080), "xMidYMid slice", slots={},
         note="callout is a pure backdrop — it recolors via CSS vars, data slots are ignored",
     ),
+    # scoreboards share one slot vocabulary; each size uses a subset (all optional)
+    "scoreboard-xs": Contract((400, 50), "xMidYMid meet", slots=_scoreboard_slots(),
+                              parts={"div": Slot("any")}),
+    "scoreboard-s": Contract((500, 80), "xMidYMid meet", slots=_scoreboard_slots(),
+                             parts={"div": Slot("any")}),
+    "scoreboard-m": Contract((600, 200), "xMidYMid meet", slots=_scoreboard_slots(),
+                             parts={"div": Slot("any")}),
+    "scoreboard-l": Contract((800, 460), "xMidYMid meet", slots=_scoreboard_slots(),
+                             parts={"div": Slot("any")}),
     # --- canvas checks only (slot lint not transcribed yet) ---
     "commentary": Contract((1920, 1080), "xMidYMax meet"),
     "playerplates": Contract((1920, 1080), "xMidYMax meet"),
     "lowerthird": Contract((1920, 1080), "xMidYMax meet"),
     "scorecard": Contract((1920, 1080), "xMidYMid meet"),
     "statscard": Contract((380, 220), "xMidYMid meet"),
-    "scoreboard-xs": Contract((400, 50), "xMidYMid meet"),
-    "scoreboard-s": Contract((500, 80), "xMidYMid meet"),
-    "scoreboard-m": Contract((600, 200), "xMidYMid meet"),
-    "scoreboard-l": Contract((800, 460), "xMidYMid meet"),
 }
