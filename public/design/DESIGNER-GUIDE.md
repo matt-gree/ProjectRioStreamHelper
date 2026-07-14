@@ -31,6 +31,7 @@ Add **modifiers** after a space to pass sizing hints:
 |---|---|---|
 | `maxw=420` | Long text shrinks to fit this width (SVG units) | `slot=side1-name maxw=420` |
 | `w=620` | A template card's width | `tpl=match w=620` |
+| `anim=expand-right` | (scoreboard, absolute mode) this group wipes open to the right when it appears and collapses when it hides — draw it in its open position | `slot=row-live anim=expand-right` |
 
 Two more markers you'll rarely need (advanced elements only):
 

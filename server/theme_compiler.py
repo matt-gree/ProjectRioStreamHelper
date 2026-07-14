@@ -51,6 +51,7 @@ _MARKERS = ("slot", "part", "tpl")
 _MODIFIERS = {
     "maxw": "maxw", "w": "w", "h": "h", "x": "x", "y": "y",
     "gap": "gap", "pad": "pad", "vw": "vw", "align": "align",
+    "anim": "anim",
     "hfull": "h-full", "h-full": "h-full",
     "hcompact": "h-compact", "h-compact": "h-compact",
 }

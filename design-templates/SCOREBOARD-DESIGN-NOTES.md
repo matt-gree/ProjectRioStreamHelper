@@ -44,6 +44,12 @@ once it's completed (ELO swings + stadium/date). You author **both, overlapping
 at that band position**; the app toggles which one is visible. In absolute mode
 it never moves them, so put each exactly where it should land on screen.
 
+**MLB-style expand:** to make the live panel *wipe open to the right* when a
+game starts (and collapse when it ends) instead of just appearing, name that
+group `slot=row-live anim=expand-right`. Draw it in its open position beside the
+core; the app animates the reveal (the core never moves). You author nothing
+extra — the motion is the app's, the tag just opts in.
+
 ## What each named layer does
 
 **Always visible (row-top):**

@@ -106,6 +106,14 @@ def test_tpl_groups_move_into_defs():
     assert "template group" in _messages(report)
 
 
+def test_anim_modifier_translates():
+    out, _ = compile_svg(
+        _mini('<g id="slot=row-live anim=expand-right"/>', 'viewBox="0 0 600 200"'),
+        "scoreboard-m",
+    )
+    assert 'data-slot="row-live"' in out and 'data-anim="expand-right"' in out
+
+
 def test_layout_marker_lifts_to_root_and_is_dropped():
     out, report = compile_svg(
         _mini('<rect id="layout=absolute" x="0" y="0" width="1" height="1"/>'

@@ -24,6 +24,10 @@
 // visibility (row-live and row-final are authored overlapping and swap in
 // place). Use absolute for hand-placed fixed-frame designs; use the stack for
 // responsive/reflowing cards. (engine.absoluteLayout, set per theme swap.)
+// In absolute mode a row tagged data-anim="expand-right" (grammar:
+// `slot=row-live anim=expand-right`) wipes open left→right on show and collapses
+// on hide (animated clip-path inset) instead of snapping — an MLB-style panel
+// that unfolds beside a fixed core. Ignored in stack mode.
 //
 // DATA SLOTS (all optional; the engine skips what a theme omits):
 //   sT-logo(image) sT-name(text,maxw) sT-score(text)          T ∈ {1,2}
@@ -129,6 +133,8 @@ export function mountScoreboard({ host, sb, size }) {
 
   let revealKey = '';
   let laidOut = {};
+  let animShown = {};   // absolute-mode row name -> last shown state (anim transitions)
+  let clipProxy = {};   // absolute-mode row name -> { p } proxy tweened for expand-right
   let disposed = false;
 
   const g = OverlayBase.deepGet;
@@ -187,6 +193,34 @@ export function mountScoreboard({ host, sb, size }) {
     laidOut['__card'] = true;
   }
 
+  // Absolute-mode row toggle. A plain row snaps opacity in place. A row tagged
+  // data-anim="expand-right" (grammar: `slot=row-live anim=expand-right`) instead
+  // wipes open left→right on show and collapses right→left on hide, via an
+  // animated clip-path inset — the core beside it never moves. First paint and
+  // theme swaps snap (no animation); only live show/hide transitions animate.
+  function toggleRow(el, name, show, fresh) {
+    const expand = el.getAttribute('data-anim') === 'expand-right';
+    const prev = animShown[name];
+    animShown[name] = show;
+    if (!expand) { el.setAttribute('opacity', show ? '1' : '0'); return; }
+    if (!gsap || fresh || prev === undefined) {          // snap to end state
+      el.setAttribute('opacity', show ? '1' : '0');
+      el.style.clipPath = show ? 'inset(0 0% 0 0)' : 'inset(0 100% 0 0)';
+      return;
+    }
+    if (prev === show) return;                            // no transition
+    const proxy = clipProxy[name] || (clipProxy[name] = { p: show ? 100 : 0 });
+    if (show) el.setAttribute('opacity', '1');
+    gsap.to(proxy, {
+      p: show ? 0 : 100,
+      duration: show ? 0.4 : 0.3,
+      ease: show ? 'power3.out' : 'power3.in',
+      overwrite: true,
+      onUpdate: () => { el.style.clipPath = `inset(0 ${proxy.p}% 0 0)`; },
+      onComplete: () => { if (!show) el.setAttribute('opacity', '0'); },
+    });
+  }
+
   function relayout(vis, fresh) {
     // Absolute themes place their rows by hand in a fixed frame: honour the
     // authored transforms/card size and only toggle each row's visibility.
@@ -195,7 +229,7 @@ export function mountScoreboard({ host, sb, size }) {
     if (engine.absoluteLayout) {
       for (const [name, want] of STACK) {
         const el = engine.slots[name];
-        if (el) el.setAttribute('opacity', want(vis) ? '1' : '0');
+        if (el) toggleRow(el, name, !!want(vis), fresh);
       }
       return;
     }
@@ -390,7 +424,7 @@ export function mountScoreboard({ host, sb, size }) {
   async function update(state, settings) {
     const theme = g(settings, 'overlays.global.designPackage', null) || DEFAULT_PACKAGE;
     const themeChanged = await engine.ensureTheme(theme);
-    if (themeChanged) { revealKey = ''; laidOut = {}; }
+    if (themeChanged) { revealKey = ''; laidOut = {}; animShown = {}; clipProxy = {}; }
     if (disposed) return;
 
     if (engine.usesAppVars) OverlayBase.applyDesignSettings(SETTINGS_TYPE);
