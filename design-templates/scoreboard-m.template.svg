@@ -1,36 +1,37 @@
-<svg viewBox="0 0 600 200" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+<svg viewBox="0 0 600 500" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
   <!--
-    FIGMA EDITING TEMPLATE - Scoreboard M (600x200).
-    Faithful copy of default/scoreboard-m.svg, restructured for design tools:
-    inline styles (no CSS classes), concrete colours (no var()), and a visible
-    placeholder box behind every icon slot. Restyle freely; keep the layer
-    NAMES (slot= / part= / data-h) intact. See SCOREBOARD-DESIGN-NOTES.md.
+    FIGMA EDITING TEMPLATE - Scoreboard M.
+    The app assembles this as ONE 600x200 card by stacking whichever rows
+    apply. Here the three rows are UNFOLDED vertically so you can see and edit
+    each one; the grey labels/frames and the row transforms are editing aids I
+    strip on return. Design each row as if its top-left is the start of its own
+    band (that's how the app reads it). See SCOREBOARD-DESIGN-NOTES.md.
 
-    LIVE-DATA COLOURS (leave these hues on data layers; the app repaints them):
-      side1 #e53935  side2 #1e88e5   = the two players' controller-port colours
-      accent #e60012                 = the producer's accent setting
-    YOUR COLOURS: card background, borders, dividers, text, everything else.
+    EDIT INSIDE the rows freely (position, size, colour, font - all yours).
+    Do NOT restack the rows or move them relative to each other - the app does
+    that. row-top's data-h is 78; row-live and row-final are 110 each.
 
-    ROW GROUPS row-live and row-final OVERLAP here on purpose (both are drawn
-    at the same spot; the app stacks whichever one applies at runtime). To edit
-    one, hide the other's visibility in the layers panel.
+    LIVE-DATA COLOURS (keep these hues on data layers; the app repaints them):
+      side1 #e53935  side2 #1e88e5  = the two players' controller-port colours
+      accent #e60012                = the producer's accent setting
+    Everything else (card, borders, dividers, text, shapes) is yours.
   -->
 
-  <rect id="slot=card-rail" data-name="slot=card-rail" x="8" y="6" width="6" height="188" rx="3" fill="#e60012"/>
-  <rect id="slot=card-bg" data-name="slot=card-bg" x="18" y="6" width="568" height="188" rx="12" fill="#0b0b12" stroke="#1f1f30" stroke-width="1.5"/>
+  <!-- ================= ROW TOP (always shown): names / logos / score / inning ================= -->
+  <rect id="slot=card-rail" data-name="slot=card-rail" x="8" y="6" width="6" height="80" rx="3" fill="#e60012"/>
+  <rect id="slot=card-bg" data-name="slot=card-bg" x="18" y="6" width="568" height="80" rx="12" fill="#0b0b12" stroke="#1f1f30" stroke-width="1.5"/>
 
-  <!-- ================= ROW TOP: names / logos / score / inning ================= -->
   <g id="slot=row-top" data-name="slot=row-top" data-h="78">
     <rect x="28" y="14" width="200" height="50" rx="8" fill="#e53935" fill-opacity="0.12"/>
     <rect x="376" y="14" width="200" height="50" rx="8" fill="#1e88e5" fill-opacity="0.12"/>
     <rect x="28" y="14" width="4" height="50" rx="2" fill="#e53935" opacity="0.85"/>
     <rect x="572" y="14" width="4" height="50" rx="2" fill="#1e88e5" opacity="0.85"/>
 
-    <rect data-name="s1-logo placeholder (team icon goes here)" x="40" y="18" width="42" height="42" rx="6" fill="#ffffff" fill-opacity="0.06" stroke="#8f8fa3" stroke-opacity="0.4" stroke-dasharray="3 3"/>
+    <rect data-name="s1-logo placeholder (team icon)" x="40" y="18" width="42" height="42" rx="6" fill="#ffffff" fill-opacity="0.06" stroke="#8f8fa3" stroke-opacity="0.4" stroke-dasharray="3 3"/>
     <image id="slot=s1-logo" data-name="slot=s1-logo" x="40" y="18" width="42" height="42" preserveAspectRatio="xMidYMid meet"/>
     <text id="slot=s1-name" data-name="slot=s1-name maxw=132" data-maxw="132" x="90" y="47" fill="#f5f5f8" font-family="Arial, sans-serif" font-size="22" font-weight="700">Player One</text>
 
-    <rect data-name="s2-logo placeholder (team icon goes here)" x="522" y="18" width="42" height="42" rx="6" fill="#ffffff" fill-opacity="0.06" stroke="#8f8fa3" stroke-opacity="0.4" stroke-dasharray="3 3"/>
+    <rect data-name="s2-logo placeholder (team icon)" x="522" y="18" width="42" height="42" rx="6" fill="#ffffff" fill-opacity="0.06" stroke="#8f8fa3" stroke-opacity="0.4" stroke-dasharray="3 3"/>
     <image id="slot=s2-logo" data-name="slot=s2-logo" x="522" y="18" width="42" height="42" preserveAspectRatio="xMidYMid meet"/>
     <text id="slot=s2-name" data-name="slot=s2-name maxw=132" data-maxw="132" x="514" y="47" text-anchor="end" fill="#f5f5f8" font-family="Arial, sans-serif" font-size="22" font-weight="700">Player Two</text>
 
@@ -46,19 +47,20 @@
     </g>
   </g>
 
-  <!-- ================= ROW LIVE: batter / pitcher / count / diamond ================= -->
-  <!-- (overlaps row-final; hide row-final to edit this) -->
-  <g id="slot=row-live" data-name="slot=row-live" data-h="110">
+  <!-- ================= ROW LIVE (shown during a game) ================= -->
+  <!-- editing aid: unfolded 130px below row-top; app ignores this transform -->
+  <g data-name="LABEL (editing aid, ignore)"><rect x="18" y="110" width="568" height="130" rx="12" fill="#ffffff" fill-opacity="0.02" stroke="#8f8fa3" stroke-opacity="0.2" stroke-dasharray="4 4"/><text x="26" y="126" fill="#8f8fa3" font-family="Arial, sans-serif" font-size="11" font-weight="700" letter-spacing="1">ROW-LIVE — batter / pitcher / count / diamond</text></g>
+  <g id="slot=row-live" data-name="slot=row-live" data-h="110" data-edit-offset="130" transform="translate(0,130)">
     <rect id="part=div" data-name="part=div" x="28" y="0" width="548" height="1.5" fill="#1f1f30"/>
 
     <rect x="28" y="44" width="32" height="20" rx="4" fill="#e60012"/>
     <text x="44" y="59" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="12" font-weight="700">AB</text>
-    <rect data-name="bat-icon placeholder (character goes here)" x="68" y="34" width="40" height="40" rx="4" fill="#ffffff" fill-opacity="0.06" stroke="#8f8fa3" stroke-opacity="0.4" stroke-dasharray="3 3"/>
+    <rect data-name="bat-icon placeholder (character)" x="68" y="34" width="40" height="40" rx="4" fill="#ffffff" fill-opacity="0.06" stroke="#8f8fa3" stroke-opacity="0.4" stroke-dasharray="3 3"/>
     <image id="slot=bat-icon" data-name="slot=bat-icon" x="68" y="34" width="40" height="40" preserveAspectRatio="xMidYMid meet"/>
     <text id="slot=bat-name" data-name="slot=bat-name maxw=106" data-maxw="106" x="116" y="60" fill="#f5f5f8" font-family="Arial, sans-serif" font-size="17" font-weight="600">Batter</text>
 
     <text id="slot=pit-name" data-name="slot=pit-name maxw=106" data-maxw="106" x="484" y="60" text-anchor="end" fill="#f5f5f8" font-family="Arial, sans-serif" font-size="17" font-weight="600">Pitcher</text>
-    <rect data-name="pit-icon placeholder (character goes here)" x="492" y="34" width="40" height="40" rx="4" fill="#ffffff" fill-opacity="0.06" stroke="#8f8fa3" stroke-opacity="0.4" stroke-dasharray="3 3"/>
+    <rect data-name="pit-icon placeholder (character)" x="492" y="34" width="40" height="40" rx="4" fill="#ffffff" fill-opacity="0.06" stroke="#8f8fa3" stroke-opacity="0.4" stroke-dasharray="3 3"/>
     <image id="slot=pit-icon" data-name="slot=pit-icon" x="492" y="34" width="40" height="40" preserveAspectRatio="xMidYMid meet"/>
     <rect x="540" y="44" width="24" height="20" rx="4" fill="#1e88e5"/>
     <text x="552" y="59" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="12" font-weight="700">P</text>
@@ -85,9 +87,10 @@
     <image id="slot=runner-1" data-name="slot=runner-1" x="413" y="46" width="20" height="20" preserveAspectRatio="xMidYMid meet"/>
   </g>
 
-  <!-- ================= ROW FINAL: ELO swings + game meta (completed games) ================= -->
-  <!-- (overlaps row-live; hide row-live to edit this) -->
-  <g id="slot=row-final" data-name="slot=row-final" data-h="110">
+  <!-- ================= ROW FINAL (shown on completed games — replaces ROW-LIVE) ================= -->
+  <!-- editing aid: unfolded 260px below row-top; app ignores this transform -->
+  <g data-name="LABEL (editing aid, ignore)"><rect x="18" y="260" width="568" height="130" rx="12" fill="#ffffff" fill-opacity="0.02" stroke="#8f8fa3" stroke-opacity="0.2" stroke-dasharray="4 4"/><text x="26" y="276" fill="#8f8fa3" font-family="Arial, sans-serif" font-size="11" font-weight="700" letter-spacing="1">ROW-FINAL — ELO swings + game meta (completed)</text></g>
+  <g id="slot=row-final" data-name="slot=row-final" data-h="110" data-edit-offset="260" transform="translate(0,260)">
     <rect id="part=div" data-name="part=div" x="28" y="0" width="548" height="1.5" fill="#1f1f30"/>
 
     <g id="slot=elo1-group" data-name="slot=elo1-group">

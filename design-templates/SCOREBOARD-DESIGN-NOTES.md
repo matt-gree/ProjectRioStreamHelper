@@ -15,14 +15,32 @@ data-dense element in PRSH, so read this before restyling.
 Start with **m** (the template you have). Each size is its own file
 (`scoreboard-m.svg`, etc.); a size just implements whatever slots fit.
 
+## What you control vs what the app controls
+
+- **Inside a row** — where the name/score/dots/diamond/icons sit, spacing,
+  alignment, everything — is **yours**. The app only pours in content (text,
+  images, lit/unlit dots); it never moves those pieces. (One exception: the
+  captain ring `sT-cap-ring` gets moved onto the captain's roster slot.)
+- **The rows as whole blocks** — the app owns. It stacks the active rows
+  top-to-bottom using each row's `data-h`, and sizes the card to fit. So don't
+  restack the rows or move them relative to each other; the app overrides that.
+
 ## Rows are toggle groups, not separate files
 
-`row-top` always shows. `row-live` and `row-final` are the **same slot on
+`row-top` always shows. `row-live` and `row-final` are the **same spot on
 screen** — the app shows `row-live` during a game and swaps to `row-final`
-once it's completed (ELO swings + stadium/date). You design **both** in one
-file; the app picks. In the template they're stacked at the same spot, so hide
-one group's visibility in Figma while you edit the other. When you send it
-back I re-stack them to the app's meld origin — you don't position them.
+once it's completed (ELO swings + stadium/date). You design **both**; the app
+picks which one is up.
+
+**In this template the rows are UNFOLDED vertically** so you can see and edit
+each one (in the real card they sit on top of each other at the same origin —
+that's how the app reads them). The grey dashed frames + "ROW-LIVE / ROW-FINAL"
+labels and the `transform`/`data-edit-offset` on those two rows are **editing
+aids** — I strip them on return and collapse each row back to its band origin.
+Design each row as if its top-left is the start of its own band. The canvas is
+600×500 here for the unfolded view; the real card is 600×200 (the install
+report will warn about that size — expected, because this is the editing file,
+not the finished theme).
 
 ## What each named layer does
 
