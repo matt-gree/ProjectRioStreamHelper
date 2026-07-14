@@ -30,6 +30,7 @@ export function createThemeEngine({ host, element, fallbackSvg }) {
   let themeCache = {};           // package id -> Promise<svg text> (promise, so
                                  // concurrent callers share one in-flight fetch)
   let usesAppVars = false;       // root <svg data-design-vars="app"> present
+  let absoluteLayout = false;    // root <svg data-layout="absolute"> present
   let ensureSeq = 0;             // last ensureTheme call wins on interleave
 
   async function fetchSvg(pkg) {
@@ -76,6 +77,10 @@ export function createThemeEngine({ host, element, fallbackSvg }) {
     // runs OverlayBase.applyDesignSettings); without it the theme brings its
     // own fixed palette and the mount clears those vars instead.
     usesAppVars = !!(el && el.getAttribute('data-design-vars') === 'app');
+    // Layout policy: a theme declares data-layout="absolute" on its root <svg>
+    // to place its groups by hand in a fixed frame (the mount only toggles their
+    // visibility, never restacking/resizing). Absent, the mount stack-lays out.
+    absoluteLayout = !!(el && el.getAttribute('data-layout') === 'absolute');
     slots = {};
     refitList = [];
     host.querySelectorAll('[data-slot]').forEach((node) => {
@@ -141,5 +146,6 @@ export function createThemeEngine({ host, element, fallbackSvg }) {
     refitText,
     get slots() { return slots; },
     get usesAppVars() { return usesAppVars; },
+    get absoluteLayout() { return absoluteLayout; },
   };
 }

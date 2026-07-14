@@ -106,6 +106,26 @@ def test_tpl_groups_move_into_defs():
     assert "template group" in _messages(report)
 
 
+def test_layout_marker_lifts_to_root_and_is_dropped():
+    out, report = compile_svg(
+        _mini('<rect id="layout=absolute" x="0" y="0" width="1" height="1"/>'
+              '<text id="slot=side1-name">x</text>',
+              'viewBox="0 0 600 200"'),
+        "scoreboard-m",
+    )
+    assert 'data-layout="absolute"' in out
+    assert 'id="layout=absolute"' not in out  # marker layer removed
+    assert 'data-slot="side1-name"' in out     # normal translation still runs
+    assert "data-layout" in _messages(report)
+
+
+def test_layout_marker_tolerates_figma_underscore_mangle():
+    out, _ = compile_svg(
+        _mini('<rect id="layout_stack"/>', 'viewBox="0 0 600 200"'), "scoreboard-m",
+    )
+    assert 'data-layout="stack"' in out
+
+
 def test_var_paint_moves_to_style():
     out, report = compile_svg(
         _mini('<rect fill="var(--accent)" stroke="#fff"/>'), "matchup",

@@ -36,6 +36,10 @@ Two more markers you'll rarely need (advanced elements only):
 
 - `part=away-name` — a piece **inside** a repeating card (ticker/lower-third).
 - `tpl=match w=620` — a **template** card the app clones per game/segment.
+- `layout=absolute` — an invisible marker layer that switches the overlay to
+  **absolute layout**: the app honours the exact vertical positions you draw
+  instead of auto-stacking its rows. Recommended for the scoreboard so you can
+  place every row by hand in the fixed frame. (See the scoreboard template.)
 
 Notes:
 - Names are **case-insensitive** and use lowercase letters, digits, and

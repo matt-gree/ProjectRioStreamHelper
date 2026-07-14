@@ -15,32 +15,34 @@ data-dense element in PRSH, so read this before restyling.
 Start with **m** (the template you have). Each size is its own file
 (`scoreboard-m.svg`, etc.); a size just implements whatever slots fit.
 
-## What you control vs what the app controls
+## Absolute layout — you place everything
 
-- **Inside a row** — where the name/score/dots/diamond/icons sit, spacing,
-  alignment, everything — is **yours**. The app only pours in content (text,
-  images, lit/unlit dots); it never moves those pieces. (One exception: the
-  captain ring `sT-cap-ring` gets moved onto the captain's roster slot.)
-- **The rows as whole blocks** — the app owns. It stacks the active rows
-  top-to-bottom using each row's `data-h`, and sizes the card to fit. So don't
-  restack the rows or move them relative to each other; the app overrides that.
+This template is **`data-layout="absolute"`**: WYSIWYG. What you see in the
+600×200 frame is exactly what ships. You position every piece by hand, anywhere
+in the frame. The **one rule: don't resize the outer 600×200 frame** — place
+inside it freely, but keep the frame itself locked to the native size.
 
-## Rows are toggle groups, not separate files
+- **Everything's position, size, colour, font, spacing** — **yours.** The app
+  only pours in content (text, images, lit/unlit dots) and shows/hides the rows;
+  it never moves a piece you placed. (One exception: the captain ring
+  `sT-cap-ring` gets snapped onto the captain's roster slot.)
+- To declare absolute mode from a design tool that can't edit the root `<svg>`,
+  drop an invisible layer named **`layout=absolute`** anywhere — the compiler
+  lifts it to the root and deletes the helper. (This template already carries
+  `data-layout="absolute"` on the root, so you don't need to.)
 
-`row-top` always shows. `row-live` and `row-final` are the **same spot on
-screen** — the app shows `row-live` during a game and swaps to `row-final`
-once it's completed (ELO swings + stadium/date). You design **both**; the app
-picks which one is up.
+> Without the flag, the app uses the older **stack** layout: it auto-stacks the
+> active rows and resizes the card. That mode still exists for elements built
+> around live collapse-and-reflow toggles (the vertical Scorecard) — but for
+> the scoreboard, absolute is the path.
 
-**In this template the rows are UNFOLDED vertically** so you can see and edit
-each one (in the real card they sit on top of each other at the same origin —
-that's how the app reads them). The grey dashed frames + "ROW-LIVE / ROW-FINAL"
-labels and the `transform`/`data-edit-offset` on those two rows are **editing
-aids** — I strip them on return and collapse each row back to its band origin.
-Design each row as if its top-left is the start of its own band. The canvas is
-600×500 here for the unfolded view; the real card is 600×200 (the install
-report will warn about that size — expected, because this is the editing file,
-not the finished theme).
+## Rows are toggle groups the app shows in place
+
+`row-top` always shows. `row-live` and `row-final` occupy the **same lower
+band** — the app shows `row-live` during a game and crossfades to `row-final`
+once it's completed (ELO swings + stadium/date). You author **both, overlapping
+at that band position**; the app toggles which one is visible. In absolute mode
+it never moves them, so put each exactly where it should land on screen.
 
 ## What each named layer does
 
@@ -96,6 +98,8 @@ a neutral silhouette set; the live app uses the tournament's own asset pack.
 - Keep the `slot=` / `part=` / `data-h` layer names. Figma may rewrite `=` or
   add suffixes on export — that's fine, the compiler tolerates it, but glance
   at the install report to confirm the slot count matches.
+- Keep the `data-layout="absolute"` on the root frame (or a `layout=absolute`
+  layer). Without it the app reverts to auto-stacking and ignores your vertical
+  positions.
 - Send me the `.svg` (or drop it in Setup → Design and read the report). I
-  reconcile the colour variables + row stacking and hand back the installable
-  theme.
+  reconcile the colour variables and hand back the installable theme.

@@ -18,6 +18,13 @@
 //   row-box     per-inning linescore
 // A theme implements whatever subset fits its size (xs/s are row-top only).
 //
+// LAYOUT MODES: by default the mount stack-lays the rows as above. A theme that
+// declares data-layout="absolute" on its root <svg> opts out — the mount then
+// honours the authored row transforms/card size and only toggles each row's
+// visibility (row-live and row-final are authored overlapping and swap in
+// place). Use absolute for hand-placed fixed-frame designs; use the stack for
+// responsive/reflowing cards. (engine.absoluteLayout, set per theme swap.)
+//
 // DATA SLOTS (all optional; the engine skips what a theme omits):
 //   sT-logo(image) sT-name(text,maxw) sT-score(text)          T ∈ {1,2}
 //   inn-half(text TOP/BOT) inn-num(text) inn-arrow-up/down(g) final-badge(g)
@@ -181,6 +188,17 @@ export function mountScoreboard({ host, sb, size }) {
   }
 
   function relayout(vis, fresh) {
+    // Absolute themes place their rows by hand in a fixed frame: honour the
+    // authored transforms/card size and only toggle each row's visibility.
+    // (No reflow — the swap between row-live and row-final, authored to overlap,
+    // is a straight opacity crossover in place.)
+    if (engine.absoluteLayout) {
+      for (const [name, want] of STACK) {
+        const el = engine.slots[name];
+        if (el) el.setAttribute('opacity', want(vis) ? '1' : '0');
+      }
+      return;
+    }
     const top = cardTop();
     let off = 0, activeCount = 0;
     for (const [name, want] of STACK) {

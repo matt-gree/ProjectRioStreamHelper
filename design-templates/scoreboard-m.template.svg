@@ -1,15 +1,20 @@
-<svg viewBox="0 0 600 500" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+<svg viewBox="0 0 600 200" preserveAspectRatio="xMidYMid meet" data-layout="absolute" xmlns="http://www.w3.org/2000/svg">
   <!--
-    FIGMA EDITING TEMPLATE - Scoreboard M.
-    The app assembles this as ONE 600x200 card by stacking whichever rows
-    apply. Here the three rows are UNFOLDED vertically so you can see and edit
-    each one; the grey labels/frames and the row transforms are editing aids I
-    strip on return. Design each row as if its top-left is the start of its own
-    band (that's how the app reads it). See SCOREBOARD-DESIGN-NOTES.md.
+    FIGMA EDITING TEMPLATE - Scoreboard M (ABSOLUTE layout).
+    This is the finished 600x200 card exactly as it appears on stream: what you
+    see here is what ships. You place everything by hand inside this fixed frame;
+    the app only pours in content and shows/hides the rows. See
+    SCOREBOARD-DESIGN-NOTES.md.
 
-    EDIT INSIDE the rows freely (position, size, colour, font - all yours).
-    Do NOT restack the rows or move them relative to each other - the app does
-    that. row-top's data-h is 78; row-live and row-final are 110 each.
+    data-layout="absolute" (the marker on the root, or a layer named
+    "layout=absolute") tells the app: DON'T restack or resize - honour my
+    positions. Move any piece anywhere in the frame; just don't resize the outer
+    600x200 frame.
+
+    ROWS = toggle groups the app shows one-at-a-time in place:
+      row-top    always shown (names / logos / score / inning)
+      row-live   shown during a game        } authored OVERLAPPING in the lower
+      row-final  shown once completed        } band - the app swaps between them
 
     LIVE-DATA COLOURS (keep these hues on data layers; the app repaints them):
       side1 #e53935  side2 #1e88e5  = the two players' controller-port colours
@@ -17,10 +22,10 @@
     Everything else (card, borders, dividers, text, shapes) is yours.
   -->
 
-  <!-- ================= ROW TOP (always shown): names / logos / score / inning ================= -->
-  <rect id="slot=card-rail" data-name="slot=card-rail" x="8" y="6" width="6" height="80" rx="3" fill="#e60012"/>
-  <rect id="slot=card-bg" data-name="slot=card-bg" x="18" y="6" width="568" height="80" rx="12" fill="#0b0b12" stroke="#1f1f30" stroke-width="1.5"/>
+  <rect id="slot=card-rail" data-name="slot=card-rail" x="8" y="6" width="6" height="188" rx="3" fill="#e60012"/>
+  <rect id="slot=card-bg" data-name="slot=card-bg" x="18" y="6" width="568" height="188" rx="12" fill="#0b0b12" stroke="#1f1f30" stroke-width="1.5"/>
 
+  <!-- ================= ROW TOP (always shown): names / logos / score / inning ================= -->
   <g id="slot=row-top" data-name="slot=row-top" data-h="78">
     <rect x="28" y="14" width="200" height="50" rx="8" fill="#e53935" fill-opacity="0.12"/>
     <rect x="376" y="14" width="200" height="50" rx="8" fill="#1e88e5" fill-opacity="0.12"/>
@@ -47,10 +52,8 @@
     </g>
   </g>
 
-  <!-- ================= ROW LIVE (shown during a game) ================= -->
-  <!-- editing aid: unfolded 130px below row-top; app ignores this transform -->
-  <g data-name="LABEL (editing aid, ignore)"><rect x="18" y="110" width="568" height="130" rx="12" fill="#ffffff" fill-opacity="0.02" stroke="#8f8fa3" stroke-opacity="0.2" stroke-dasharray="4 4"/><text x="26" y="126" fill="#8f8fa3" font-family="Arial, sans-serif" font-size="11" font-weight="700" letter-spacing="1">ROW-LIVE — batter / pitcher / count / diamond</text></g>
-  <g id="slot=row-live" data-name="slot=row-live" data-h="110" data-edit-offset="130" transform="translate(0,130)">
+  <!-- ============ ROW LIVE (shown during a game) - lower band, overlaps ROW-FINAL ============ -->
+  <g id="slot=row-live" data-name="slot=row-live" data-h="110" transform="translate(0,84)">
     <rect id="part=div" data-name="part=div" x="28" y="0" width="548" height="1.5" fill="#1f1f30"/>
 
     <rect x="28" y="44" width="32" height="20" rx="4" fill="#e60012"/>
@@ -87,10 +90,8 @@
     <image id="slot=runner-1" data-name="slot=runner-1" x="413" y="46" width="20" height="20" preserveAspectRatio="xMidYMid meet"/>
   </g>
 
-  <!-- ================= ROW FINAL (shown on completed games — replaces ROW-LIVE) ================= -->
-  <!-- editing aid: unfolded 260px below row-top; app ignores this transform -->
-  <g data-name="LABEL (editing aid, ignore)"><rect x="18" y="260" width="568" height="130" rx="12" fill="#ffffff" fill-opacity="0.02" stroke="#8f8fa3" stroke-opacity="0.2" stroke-dasharray="4 4"/><text x="26" y="276" fill="#8f8fa3" font-family="Arial, sans-serif" font-size="11" font-weight="700" letter-spacing="1">ROW-FINAL — ELO swings + game meta (completed)</text></g>
-  <g id="slot=row-final" data-name="slot=row-final" data-h="110" data-edit-offset="260" transform="translate(0,260)">
+  <!-- ====== ROW FINAL (shown on completed games - replaces ROW-LIVE, same band) ====== -->
+  <g id="slot=row-final" data-name="slot=row-final" data-h="110" transform="translate(0,84)" opacity="0">
     <rect id="part=div" data-name="part=div" x="28" y="0" width="548" height="1.5" fill="#1f1f30"/>
 
     <g id="slot=elo1-group" data-name="slot=elo1-group">

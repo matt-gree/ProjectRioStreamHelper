@@ -29,6 +29,8 @@ Normalizations applied (each one is reported):
 - ``data-tpl`` groups relocated into ``<defs>``
 - ``--`` inside XML comments defused (it breaks the parser)
 - manifest ``"palette": "app"`` sets ``data-design-vars="app"`` on the root
+- a ``layout=absolute`` (or ``layout=stack``) marker layer lifts to the root as
+  ``data-layout`` and is dropped (design tools can't set root attributes)
 
 Used by design_packages.install_zip (every installed zip) and by the CLI
 ``scripts/compile-theme.py`` (designer/agent iteration). A compiler failure
@@ -53,6 +55,7 @@ _MODIFIERS = {
     "hcompact": "h-compact", "h-compact": "h-compact",
 }
 _NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+_LAYOUT_MARKER_RE = re.compile(r"^layout[=:_ ]+(absolute|stack)$", re.I)
 _VAR_ATTRS = ("fill", "stroke", "stop-color", "color")
 
 
@@ -229,6 +232,24 @@ def compile_svg(
     if palette == "app" and root.get("data-design-vars") != "app":
         root.set("data-design-vars", "app")
         report.add("info", 'set data-design-vars="app" (token-skin palette, from the manifest)')
+        mutations += 1
+
+    # --- layout mode: a `layout=absolute` (or `layout=stack`) marker layer lifts
+    # to the root as data-layout and is dropped. Lets a design tool declare the
+    # mode with a named layer, since it can't set attributes on the root <svg>. ---
+    layout_markers = [
+        el for el in root.iter()
+        if isinstance(el.tag, str) and el.get("id")
+        and _LAYOUT_MARKER_RE.match(el.get("id").strip())
+    ]
+    if layout_markers:
+        mode = _LAYOUT_MARKER_RE.match(layout_markers[0].get("id").strip()).group(1).lower()
+        if root.get("data-layout") is None:
+            root.set("data-layout", mode)
+            report.add("info", f'set data-layout="{mode}" on the root (from a layout marker layer)')
+        for el in layout_markers:
+            if el in parent_of:
+                parent_of[el].remove(el)
         mutations += 1
 
     # --- grammar translation ---
