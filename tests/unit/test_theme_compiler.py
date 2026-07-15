@@ -114,6 +114,43 @@ def test_anim_modifier_translates():
     assert 'data-slot="row-live"' in out and 'data-anim="expand-right"' in out
 
 
+def test_meld_modifiers_translate():
+    # Horizontal-meld metadata round-trips: cardw / compactw become data-* markers.
+    out, _ = compile_svg(
+        _mini('<rect id="slot=card-bg compactw=224"/>'
+              '<g id="slot=row-live anim=expand-right cardw=380"/>',
+              'viewBox="0 0 388 128"'),
+        "scoreboard-s",
+    )
+    assert 'data-compact-w="224"' in out
+    assert 'data-cardw="380"' in out and 'data-anim="expand-right"' in out
+
+
+def test_scaffold_layers_are_stripped():
+    # A `scaffold`-tagged editing aid (dashed placeholder box) never ships.
+    out, report = compile_svg(
+        _mini('<rect id="scaffold=s1-logo" x="29" y="13" width="38" height="38"/>'
+              '<text id="slot=side1-name">x</text>'),
+        "matchup",
+    )
+    assert "scaffold" not in out and 'width="38"' not in out
+    assert 'data-slot="side1-name"' in out  # real slots survive
+    assert "scaffold" in _messages(report)
+
+
+def test_tspan_positioned_text_is_flattened():
+    # Figma exports <text><tspan x y>value</tspan></text>; the engine's setText
+    # would drop the tspan (and its position). The compiler lifts x/y onto <text>.
+    out, report = compile_svg(
+        _mini('<text id="slot=side1-name"><tspan x="75" y="42">Player One</tspan></text>'),
+        "matchup",
+    )
+    assert "<tspan" not in out
+    assert 'x="75"' in out and 'y="42"' in out
+    assert ">Player One<" in out
+    assert "flattened" in _messages(report)
+
+
 def test_layout_marker_lifts_to_root_and_is_dropped():
     out, report = compile_svg(
         _mini('<rect id="layout=absolute" x="0" y="0" width="1" height="1"/>'

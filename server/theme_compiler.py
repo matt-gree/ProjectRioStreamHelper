@@ -31,6 +31,8 @@ Normalizations applied (each one is reported):
 - manifest ``"palette": "app"`` sets ``data-design-vars="app"`` on the root
 - a ``layout=absolute`` (or ``layout=stack``) marker layer lifts to the root as
   ``data-layout`` and is dropped (design tools can't set root attributes)
+- ``scaffold``-tagged layers (dashed placeholder boxes and other editing aids)
+  are removed so they never ship — the live slot renders its real content
 
 Used by design_packages.install_zip (every installed zip) and by the CLI
 ``scripts/compile-theme.py`` (designer/agent iteration). A compiler failure
@@ -54,7 +56,15 @@ _MODIFIERS = {
     "anim": "anim",
     "hfull": "h-full", "h-full": "h-full",
     "hcompact": "h-compact", "h-compact": "h-compact",
+    # Horizontal-meld metadata (Scoreboard S): a segment's card width when it is
+    # the rightmost-visible, and card-bg's collapsed width.
+    "cardw": "cardw", "compactw": "compact-w", "compact-w": "compact-w",
 }
+
+# A layer tagged with a `scaffold` token (e.g. `scaffold=s1-logo`) is a
+# design-tool editing aid — the dashed placeholder boxes marking an image slot's
+# footprint. The compiler drops these so they never reach the live overlay.
+_SCAFFOLD_RE = re.compile(r"(?:^|[ _])scaffold(?:[=:][^ _]*)?(?:$|[ _])", re.I)
 _NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 _LAYOUT_MARKER_RE = re.compile(r"^layout[=:_ ]+(absolute|stack)$", re.I)
 _VAR_ATTRS = ("fill", "stroke", "stop-color", "color")
@@ -253,6 +263,24 @@ def compile_svg(
                 parent_of[el].remove(el)
         mutations += 1
 
+    # --- scaffold: drop `scaffold`-tagged editing aids (dashed placeholder boxes
+    # that mark an image slot's footprint in the design tool) so they never ship.
+    # A real logo/icon renders in its own slot on top; the placeholder was only a
+    # visual guide. Remove top-most tagged elements (their subtree goes with them).
+    scaffold_els = [
+        el for el in root.iter()
+        if isinstance(el.tag, str) and el.get("id") and _SCAFFOLD_RE.search(el.get("id"))
+    ]
+    removed_scaffold = 0
+    for el in scaffold_els:
+        parent = parent_of.get(el)
+        if parent is not None and el in list(parent):
+            parent.remove(el)
+            removed_scaffold += 1
+    if removed_scaffold:
+        report.add("info", f"removed {removed_scaffold} scaffold layer(s) (editing-only, never shipped)")
+        mutations += 1
+
     # --- grammar translation ---
     translated = 0
     grammar_problems: list[str] = []
@@ -285,6 +313,32 @@ def compile_svg(
         report.add("info", f"translated {translated} grammar id(s) into data-* markers")
     for p in grammar_problems:
         report.add("warn", p)
+
+    # --- Figma tspan-positioned text -> flat <text> ---
+    # Design tools export text as <text><tspan x=.. y=..>value</tspan></text>,
+    # putting the position on the tspan. The engine's setText writes textContent,
+    # which deletes the tspan (and its x/y) the moment live data arrives — so the
+    # value would jump to the <text> origin. Lift a single tspan's x/y onto the
+    # <text> and inline its value. Multi-tspan (multi-line) text is left as-is.
+    flattened = 0
+    for el in root.iter():
+        if not isinstance(el.tag, str) or _local(el.tag) != "text":
+            continue
+        children = [c for c in el if isinstance(c.tag, str)]
+        if len(children) != 1 or _local(children[0].tag) != "tspan":
+            continue
+        if (el.text or "").strip():
+            continue  # text directly on <text> alongside a tspan — leave it
+        tspan = children[0]
+        for pos in ("x", "y"):
+            if tspan.get(pos) is not None and el.get(pos) is None:
+                el.set(pos, tspan.get(pos))
+        el.text = tspan.text or ""
+        el.remove(tspan)
+        flattened += 1
+        mutations += 1
+    if flattened:
+        report.add("info", f"flattened {flattened} tspan-positioned text element(s) (x/y lifted onto <text>)")
 
     # --- var() in presentation attributes -> inline style ---
     moved_vars = 0
