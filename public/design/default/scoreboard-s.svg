@@ -1,52 +1,72 @@
-<svg viewBox="0 0 500 80" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+<svg viewBox="0 0 388 128" preserveAspectRatio="xMidYMid meet" data-layout="absolute" xmlns="http://www.w3.org/2000/svg">
   <!--
-    DEFAULT package - Scoreboard S (500x80): names + team logos + scores +
-    inning arrow. Single row-top band (row-stack contract in
-    scoreboard-mount.js). Fixed Rio palette; - -side1 / - -side2 come from the
-    players' controller ports at runtime.
+    DEFAULT package - Scoreboard S (388x128): a vertical two-row card (side 1 over
+    side 2), all Inter, HORIZONTAL-MELD absolute layout. The core (names + scores)
+    is always shown; two segments toggle independently and card-bg melds its WIDTH
+    to fit whichever are visible (each segment declares data-cardw = the card width
+    when it is the rightmost-visible; card-bg declares data-compact-w = collapsed):
+      row-inning  the inning number (arrows), swapping to final-badge on a
+                  completed game. Producer toggle overlays.scoreboard.showInning.
+      row-live    the live cluster (count + base diamond). Shows during play,
+                  collapses on completion. Producer master overlays.scoreboard.showLive.
+    Both segments carry data-anim expand-right (wipe open left to right on show,
+    collapse inward on hide). side1 / side2 / accent are runtime colour seams the
+    mount repaints per controller port + producer accent (literal fallbacks keep
+    the departure palette when unset). Faithful translation of the designer export
+    (design-sources/default/exports/scoreboard-s.svg) — positions are the author's.
   -->
-  <style>
-    .sb-cardbg { fill: var(--band); stroke: var(--border); stroke-width: 1.5; }
-    .sb-rail   { fill: var(--accent); }
-    .sb-ink    { fill: var(--ink); font-family: var(--font-display); }
-    .sb-num    { fill: var(--ink); font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
-  </style>
   <defs>
-    <linearGradient id="sbs-w1" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" style="stop-color:var(--side1)" stop-opacity="0.20"/>
-      <stop offset="1" style="stop-color:var(--side1)" stop-opacity="0"/>
+    <linearGradient id="sbs-w1" x1="17" y1="10" x2="187" y2="10" gradientUnits="userSpaceOnUse">
+      <stop style="stop-color:var(--side1,#e53935)" stop-opacity="0.2"/>
+      <stop offset="1" style="stop-color:var(--side1,#e53935)" stop-opacity="0"/>
     </linearGradient>
-    <linearGradient id="sbs-w2" x1="1" y1="0" x2="0" y2="0">
-      <stop offset="0" style="stop-color:var(--side2)" stop-opacity="0.20"/>
-      <stop offset="1" style="stop-color:var(--side2)" stop-opacity="0"/>
+    <linearGradient id="sbs-w2" x1="19" y1="118" x2="189" y2="118" gradientUnits="userSpaceOnUse">
+      <stop style="stop-color:var(--side2,#1e88e5)" stop-opacity="0.2"/>
+      <stop offset="1" style="stop-color:var(--side2,#1e88e5)" stop-opacity="0"/>
     </linearGradient>
   </defs>
 
-  <rect data-slot="card-rail" class="sb-rail" x="6" y="8" width="6" height="64" rx="3"/>
-  <rect data-slot="card-bg"  class="sb-cardbg" x="16" y="8" width="478" height="64" rx="11"/>
+  <rect data-slot="card-bg" x="8" width="380" height="128" rx="20" data-compact-w="224" fill="#0B0B12"/>
+  <rect data-slot="card-rail" width="6" height="128" rx="3" style="fill:var(--accent,#e60012)"/>
 
-  <g data-slot="row-top" data-h="64">
-    <!-- side washes + port chips -->
-    <rect x="24" y="16" width="170" height="48" rx="8" style="fill:url(#sbs-w1)"/>
-    <rect x="306" y="16" width="170" height="48" rx="8" style="fill:url(#sbs-w2)"/>
-    <rect x="24" y="16" width="4" height="48" rx="2" style="fill:var(--side1)" opacity="0.85"/>
-    <rect x="472" y="16" width="4" height="48" rx="2" style="fill:var(--side2)" opacity="0.85"/>
+  <!-- ░░ CORE side 1 (always shown) ░░ -->
+  <g data-slot="row-top">
+    <path d="M179 10H25C20.5817 10 17 13.5817 17 18V50C17 54.4183 20.5817 58 25 58H179C183.418 58 187 54.4183 187 50V18C187 13.5817 183.418 10 179 10Z" fill="url(#sbs-w1)"/>
+    <path opacity="0.85" d="M21 12C21 10.8954 20.1046 10 19 10C17.8954 10 17 10.8954 17 12V56C17 57.1046 17.8954 58 19 58C20.1046 58 21 57.1046 21 56V12Z" style="fill:var(--side1,#e53935)"/>
+    <image data-slot="s1-logo" x="29" y="13" width="38" height="38" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+    <text data-slot="s1-name" data-maxw="108" x="75" y="42.27" fill="#F5F5F8" font-family="Inter" font-size="20" font-weight="bold">Player One</text>
+    <text data-slot="s1-score" data-maxw="44" x="223.63" y="46.14" text-anchor="end" fill="#F5F5F8" font-family="Inter" font-size="32" font-weight="bold">0</text>
+  </g>
 
-    <image data-slot="s1-logo" x="36" y="21" width="38" height="38" preserveAspectRatio="xMidYMid meet" opacity="0"/>
-    <text data-slot="s1-name" data-maxw="108" x="82" y="47" class="sb-ink" font-size="20" font-weight="700">Player One</text>
-    <image data-slot="s2-logo" x="426" y="21" width="38" height="38" preserveAspectRatio="xMidYMid meet" opacity="0"/>
-    <text data-slot="s2-name" data-maxw="108" x="418" y="47" text-anchor="end" class="sb-ink" font-size="20" font-weight="700">Player Two</text>
+  <!-- ░░ CORE side 2 (always shown) ░░ -->
+  <g data-slot="row-bottom">
+    <path d="M181 118L27 118C22.5817 118 19 114.418 19 110L19 78C19 73.5817 22.5817 70 27 70L181 70C185.418 70 189 73.5817 189 78V110C189 114.418 185.418 118 181 118Z" fill="url(#sbs-w2)"/>
+    <path opacity="0.85" d="M21 72C21 70.8954 20.1046 70 19 70C17.8954 70 17 70.8954 17 72V116C17 117.105 17.8954 118 19 118C20.1046 118 21 117.105 21 116V72Z" style="fill:var(--side2,#1e88e5)"/>
+    <image data-slot="s2-logo" x="29" y="75" width="38" height="38" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+    <text data-slot="s2-name" data-maxw="108" x="75" y="102.27" fill="#F5F5F8" font-family="Inter" font-size="20" font-weight="bold">Player Two</text>
+    <text data-slot="s2-score" data-maxw="44" x="223.63" y="106.14" text-anchor="end" fill="#F5F5F8" font-family="Inter" font-size="32" font-weight="bold">0</text>
+  </g>
 
-    <text data-slot="s1-score" data-maxw="44" x="226" y="51" text-anchor="end" class="sb-num" font-size="32" font-weight="700">0</text>
-    <text data-slot="s2-score" data-maxw="44" x="274" y="51" text-anchor="start" class="sb-num" font-size="32" font-weight="700">0</text>
-
-    <!-- inning marker between the scores -->
-    <g data-slot="inn-arrow-up"><polygon points="242,24 258,24 250,15 " style="fill:var(--accent)"/></g>
-    <g data-slot="inn-arrow-down" opacity="0"><polygon points="242,52 258,52 250,61" style="fill:var(--accent)"/></g>
-    <text data-slot="inn-num" x="250" y="47" text-anchor="middle" class="sb-num" font-size="19" font-weight="700">1</text>
+  <!-- ░░ INNING segment (toggle) — melds card to 292 ░░ -->
+  <g data-slot="row-inning" data-anim="expand-right" data-cardw="292">
+    <text data-slot="inn-num" x="250.883" y="81.45" fill="#F5F5F8" font-family="Inter" font-size="48" font-weight="bold">1</text>
+    <g data-slot="inn-arrow-up"><path d="M250 37H282L266 19L250 37Z" style="fill:var(--accent,#e60012)"/></g>
+    <g data-slot="inn-arrow-down" opacity="0"><path d="M250 91H282L266 109L250 91Z" style="fill:var(--accent,#e60012)"/></g>
     <g data-slot="final-badge" opacity="0">
-      <rect x="221" y="27" width="58" height="26" rx="6" style="fill:var(--accent)"/>
-      <text x="250" y="45" text-anchor="middle" fill="#ffffff" font-family="var(--font-display)" font-size="14" font-weight="700" letter-spacing="1">FINAL</text>
+      <path d="M287.31 51H243.69C240.547 51 238 53.6863 238 57V71C238 74.3137 240.547 77 243.69 77H287.31C290.453 77 293 74.3137 293 71V57C293 53.6863 290.453 51 287.31 51Z" style="fill:var(--accent,#e60012)"/>
+      <text x="245.088" y="69.59" fill="#FFFFFF" font-family="Inter" font-size="14" font-weight="bold">FINAL</text>
     </g>
+  </g>
+
+  <!-- ░░ LIVE segment (toggle + game-state) — melds card to full 380 ░░ -->
+  <g data-slot="row-live" data-anim="expand-right" data-cardw="380">
+    <text data-slot="balls" x="319.238" y="111.23" fill="#F5F5F8" font-family="Inter" font-size="24" font-weight="bold">0</text>
+    <text x="336.75" y="110.23" fill="#F5F5F8" font-family="Inter" font-size="24" font-weight="bold">-</text>
+    <text data-slot="strikes" x="349.238" y="111.23" fill="#F5F5F8" font-family="Inter" font-size="24" font-weight="bold">0</text>
+    <path data-slot="out-0" d="M331.5 82C335.09 82 338 79.0899 338 75.5C338 71.9101 335.09 69 331.5 69C327.91 69 325 71.9101 325 75.5C325 79.0899 327.91 82 331.5 82Z" style="fill:rgba(255,255,255,0.08)"/>
+    <path data-slot="out-1" d="M352.5 82C356.09 82 359 79.0899 359 75.5C359 71.9101 356.09 69 352.5 69C348.91 69 346 71.9101 346 75.5C346 79.0899 348.91 82 352.5 82Z" style="fill:rgba(255,255,255,0.08)"/>
+    <rect data-slot="base-3" x="306" y="45.9706" width="24" height="24" transform="rotate(-45 306 45.9706)" style="fill:rgba(255,255,255,0.08)"/>
+    <rect data-slot="base-2" x="325" y="26.9706" width="24" height="24" transform="rotate(-45 325 26.9706)" style="fill:rgba(255,255,255,0.08)"/>
+    <rect data-slot="base-1" x="344" y="45.9706" width="24" height="24" transform="rotate(-45 344 45.9706)" style="fill:rgba(255,255,255,0.08)"/>
   </g>
 </svg>

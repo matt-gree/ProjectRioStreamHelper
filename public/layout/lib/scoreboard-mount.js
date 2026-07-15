@@ -12,11 +12,14 @@
 // sizes the shared card-bg (+ optional card-rail) to the stack, and hides the
 // [data-part="div"] top rule on the first visible row. Rows:
 //   row-top     always (names · logos · score · inning)
+//   row-inning  the inning number segment (arrows / final-badge swap)
 //   row-live    live game cluster (batter/pitcher · count · diamond)
 //   row-final   completed cluster (ELO swing · stadium/innings/date meta)
 //   row-roster  both 9-character rosters
 //   row-box     per-inning linescore
-// A theme implements whatever subset fits its size (xs/s are row-top only).
+// A theme implements whatever subset fits its size. row-inning/row-live are
+// gated by producer toggles overlays.scoreboard.showInning/showLive (both
+// default on); showLive is a master override the live game state ANDs with.
 //
 // LAYOUT MODES: by default the mount stack-lays the rows as above. A theme that
 // declares data-layout="absolute" on its root <svg> opts out — the mount then
@@ -28,6 +31,13 @@
 // `slot=row-live anim=expand-right`) wipes open left→right on show and collapses
 // on hide (animated clip-path inset) instead of snapping — an MLB-style panel
 // that unfolds beside a fixed core. Ignored in stack mode.
+//
+// HORIZONTAL MELD (absolute mode): if card-bg declares data-compact-w (its
+// collapsed width), the mount grows card-bg's WIDTH to enclose whichever
+// segments are visible — each segment declares data-cardw = the card width when
+// it is the rightmost-visible. The card melds like the vertical Scorecard but
+// sideways (Scoreboard S: a compact names+scores pill that extends to reveal the
+// inning + live cluster during a game, collapsing back when it completes).
 //
 // DATA SLOTS (all optional; the engine skips what a theme omits):
 //   sT-logo(image) sT-name(text,maxw) sT-score(text)          T ∈ {1,2}
@@ -62,7 +72,7 @@ const MAX_INN = 9;
 
 export const SIZE_DIMS = {
   xs: { w: 400, h: 50 },
-  s:  { w: 500, h: 80 },
+  s:  { w: 388, h: 128 },
   m:  { w: 600, h: 200 },
   l:  { w: 800, h: 460 },
 };
@@ -76,6 +86,7 @@ const DOT_OFF = 'rgba(255,255,255,0.08)';
 // Row order + visibility predicate over the resolved flags.
 const STACK = [
   ['row-top',    v => true],
+  ['row-inning', v => v.showInningSeg],
   ['row-live',   v => v.showLive],
   ['row-final',  v => v.showFinal],
   ['row-roster', v => v.showRoster],
@@ -97,6 +108,13 @@ function fallbackSvg({ w, h }) {
   </g>
 </svg>`;
 }
+
+// Horizontal-meld timing: the card-bg width tween and the segment wipe MUST
+// share one duration + ease so the card's right edge and the reveal edge move
+// in lockstep (an asymmetric hide previously drifted the wipe out of sync with
+// the card). Symmetric on grow and collapse.
+const MELD_DUR = 0.4;
+const MELD_EASE = 'power3.out';
 
 const CSS = `
 .sb-host { position: fixed; inset: 0; }
@@ -144,6 +162,12 @@ export function mountScoreboard({ host, sb, size }) {
       showElo:      g(settings, `overlays.${SETTINGS_TYPE}.showElo`, true) !== false,
       showTeamLogos: g(settings, `overlays.${SETTINGS_TYPE}.showTeamLogos`, true) !== false,
       showLogo:     OverlayBase.readSetting(SETTINGS_TYPE, 'showLogo', true) !== false,
+      // Producer switches for melded themes with independent segments (Scoreboard
+      // S): showLive is a master override for the live cluster (off hides it even
+      // during a live game); showInning toggles the inning number segment. Themes
+      // without those segments ignore both.
+      showLive:     g(settings, `overlays.${SETTINGS_TYPE}.showLive`, true) !== false,
+      showInning:   g(settings, `overlays.${SETTINGS_TYPE}.showInning`, true) !== false,
     };
   }
 
@@ -193,6 +217,134 @@ export function mountScoreboard({ host, sb, size }) {
     laidOut['__card'] = true;
   }
 
+  // Horizontal-meld reveal. The card-bg WIDTH animates to enclose the visible
+  // segments, and a single clip whose right edge tracks the card's right edge
+  // wipes the segment content — so a segment appears/disappears exactly as the
+  // growing/shrinking card edge sweeps over it, NOT on an independent per-row
+  // clock (segments and the card span different widths, so a fixed-duration
+  // per-row wipe drifts out of step with the card edge). The clip lives in the
+  // SVG's own user space (clipPathUnits=userSpaceOnUse) so it's immune to per-
+  // segment bounding boxes and to host scaling; only its right edge ever cuts
+  // (it's padded far past the top/bottom/left), and it is removed the instant
+  // the meld settles so the steady state carries no composite layer (which would
+  // otherwise trim round-glyph overshoot under GPU raster — see toggleRow).
+  const MELD_CLIP_ID = `sb-meld-wipe-${SB}`;
+  const CLIP_PAD = 400;
+
+  // Ensure the shared user-space clip rect exists in the current SVG (a theme
+  // swap re-injects the SVG, dropping it) and return the rect to size.
+  function ensureMeldClip() {
+    const svg = host.querySelector('svg');
+    if (!svg) return null;
+    let rect = svg.querySelector(`#${MELD_CLIP_ID} rect`);
+    if (rect) return rect;
+    const NS = 'http://www.w3.org/2000/svg';
+    let defs = svg.querySelector('defs');
+    if (!defs) { defs = document.createElementNS(NS, 'defs'); svg.insertBefore(defs, svg.firstChild); }
+    const cp = document.createElementNS(NS, 'clipPath');
+    cp.setAttribute('id', MELD_CLIP_ID);
+    cp.setAttribute('clipPathUnits', 'userSpaceOnUse');
+    rect = document.createElementNS(NS, 'rect');
+    rect.setAttribute('x', String(-CLIP_PAD));
+    rect.setAttribute('y', String(-CLIP_PAD));
+    rect.setAttribute('height', String((SIZE_DIMS[SIZE]?.h || 128) + CLIP_PAD * 2));
+    rect.setAttribute('width', '10000');   // sized per frame by meldTo
+    cp.appendChild(rect);
+    defs.appendChild(cp);
+    return rect;
+  }
+
+  // Drive card-bg width + the shared clip's right edge from ONE tween. `rows` are
+  // the expand-right segments with their target show state. cardX + width = the
+  // card's right edge; the clip rect (x = -CLIP_PAD) right edge = cardX+width, so
+  // clip width = cardX + width + CLIP_PAD.
+  function meldTo(bg, targetW, rows, fresh) {
+    const cardX = parseFloat(bg.getAttribute('x')) || 0;
+    const clipW = (w) => cardX + w + CLIP_PAD;
+    const prevW = laidOut['__cardw'];
+
+    // First paint / theme swap / no gsap: snap, no clip layer.
+    if (!gsap || fresh || prevW === undefined) {
+      bg.setAttribute('width', String(Math.max(targetW, 1)));
+      rows.forEach((r) => {
+        r.el.setAttribute('opacity', r.show ? '1' : '0');
+        r.el.style.clipPath = '';
+        animShown[r.name] = r.show;
+      });
+      laidOut['__cardw'] = targetW;
+      return;
+    }
+
+    const curW = parseFloat(bg.getAttribute('width')) || targetW;
+    const visChanged = rows.some((r) => animShown[r.name] !== r.show);
+    if (curW === targetW) {
+      // The card edge doesn't move, so there's nothing for the card-edge clip to
+      // wipe along. A visibility change here is a NON-rightmost segment toggling
+      // (e.g. the inning hidden while the live cluster still holds the full-width
+      // edge) — snap it in place; a card-edge wipe can't reach a mid-card row.
+      if (visChanged) {
+        rows.forEach((r) => {
+          r.el.setAttribute('opacity', r.show ? '1' : '0');
+          r.el.style.clipPath = '';
+          animShown[r.name] = r.show;
+        });
+      }
+      return;
+    }
+    // A row only participates in the sweep (opacity 1 + card-edge clip) if it is
+    // being SHOWN, or was shown and is now hiding (needs wiping out). A row that
+    // is hidden AND was already hidden must stay dark for the whole sweep —
+    // otherwise the growing card edge passes over its position and momentarily
+    // reveals it (e.g. Show Inning off while Show Live toggles on lit the inning
+    // up mid-animation, then blanked it on complete).
+    const rect = ensureMeldClip();
+    rows.forEach((r) => {
+      const wasShown = animShown[r.name] === true;
+      animShown[r.name] = r.show;
+      if (r.show || wasShown) {
+        r.el.setAttribute('opacity', '1');
+        if (rect) r.el.style.clipPath = `url(#${MELD_CLIP_ID})`;
+      } else {
+        r.el.setAttribute('opacity', '0');
+        r.el.style.clipPath = '';
+      }
+    });
+
+    const proxy = clipProxy['__card'] || (clipProxy['__card'] = { w: curW });
+    proxy.w = curW;
+    if (rect) rect.setAttribute('width', String(clipW(curW)));
+    gsap.to(proxy, {
+      w: targetW,
+      duration: MELD_DUR,
+      ease: MELD_EASE,
+      overwrite: true,
+      onUpdate: () => {
+        bg.setAttribute('width', String(Math.max(proxy.w, 1)));
+        if (rect) rect.setAttribute('width', String(clipW(proxy.w)));
+      },
+      onComplete: () => {
+        bg.setAttribute('width', String(Math.max(targetW, 1)));
+        rows.forEach((r) => {
+          r.el.style.clipPath = '';                 // steady state: no clip layer
+          r.el.setAttribute('opacity', r.show ? '1' : '0');
+        });
+      },
+    });
+    laidOut['__cardw'] = targetW;
+  }
+
+  // The expand-right wipe only clips the RIGHT edge; top/bottom/left get a
+  // generous negative inset so mid-wipe frames never trim content. rightPct:
+  // 0 = fully open, 100 = fully collapsed.
+  //
+  // CRITICAL: a clip-path — even a fully-open one — pins the group to its own
+  // GPU composited layer, whose texture is sized to the element's paint bounds.
+  // Round glyph overshoot (the 6/9/0 bottom/left curves) then gets trimmed by
+  // the layer edge under GPU raster (OBS, real Chrome) even though CPU raster
+  // doesn't show it. So the CLIP IS ONLY EVER APPLIED WHILE ANIMATING: a fully
+  // shown row carries no clip-path at all (steady-state = zero composite layer).
+  const clipInset = (rightPct) => `inset(-50% ${rightPct}% -50% -50%)`;
+
   // Absolute-mode row toggle. A plain row snaps opacity in place. A row tagged
   // data-anim="expand-right" (grammar: `slot=row-live anim=expand-right`) instead
   // wipes open left→right on show and collapses right→left on hide, via an
@@ -205,7 +357,7 @@ export function mountScoreboard({ host, sb, size }) {
     if (!expand) { el.setAttribute('opacity', show ? '1' : '0'); return; }
     if (!gsap || fresh || prev === undefined) {          // snap to end state
       el.setAttribute('opacity', show ? '1' : '0');
-      el.style.clipPath = show ? 'inset(0 0% 0 0)' : 'inset(0 100% 0 0)';
+      el.style.clipPath = show ? 'none' : clipInset(100);  // shown = no clip layer
       return;
     }
     if (prev === show) return;                            // no transition
@@ -213,11 +365,16 @@ export function mountScoreboard({ host, sb, size }) {
     if (show) el.setAttribute('opacity', '1');
     gsap.to(proxy, {
       p: show ? 0 : 100,
-      duration: show ? 0.4 : 0.3,
-      ease: show ? 'power3.out' : 'power3.in',
+      duration: MELD_DUR,     // lockstep with the card-bg width tween
+      ease: MELD_EASE,
       overwrite: true,
-      onUpdate: () => { el.style.clipPath = `inset(0 ${proxy.p}% 0 0)`; },
-      onComplete: () => { if (!show) el.setAttribute('opacity', '0'); },
+      onUpdate: () => { el.style.clipPath = clipInset(proxy.p); },
+      // Drop the clip once open so the steady state carries no composite layer
+      // (see clipInset); on hide, leave it collapsed and blank the opacity.
+      onComplete: () => {
+        if (show) el.style.clipPath = 'none';
+        else el.setAttribute('opacity', '0');
+      },
     });
   }
 
@@ -227,10 +384,34 @@ export function mountScoreboard({ host, sb, size }) {
     // (No reflow — the swap between row-live and row-final, authored to overlap,
     // is a straight opacity crossover in place.)
     if (engine.absoluteLayout) {
+      // Horizontal meld: any segment declaring data-cardw grows the shared
+      // card-bg width to fit whichever segments are visible (card-bg carries
+      // data-compact-w = the collapsed width). A theme without data-compact-w
+      // just toggles its rows in place (the original absolute behaviour).
+      const bg = engine.slots['card-bg'];
+      const compactW = bg ? parseFloat(bg.getAttribute('data-compact-w')) : NaN;
+      const meld = !!bg && Number.isFinite(compactW);
+      let cardW = meld ? compactW : 0;
+      const expandRows = [];
       for (const [name, want] of STACK) {
         const el = engine.slots[name];
-        if (el) toggleRow(el, name, !!want(vis), fresh);
+        if (!el) continue;
+        const show = !!want(vis);
+        const isExpand = el.getAttribute('data-anim') === 'expand-right';
+        // In a melding theme the expand-right segments are wiped by the shared
+        // card-edge clip (meldTo); non-expand rows just snap. In a non-melding
+        // absolute theme, each expand row does its own in-place clip wipe.
+        if (meld && isExpand) {
+          expandRows.push({ el, name, show });
+          if (show) {
+            const cw = parseFloat(el.getAttribute('data-cardw'));
+            if (Number.isFinite(cw)) cardW = Math.max(cardW, cw);
+          }
+        } else {
+          toggleRow(el, name, show, fresh);
+        }
       }
+      if (meld) meldTo(bg, cardW, expandRows, fresh);
       return;
     }
     const top = cardTop();
@@ -266,6 +447,15 @@ export function mountScoreboard({ host, sb, size }) {
   function teamLogoUrl(team) { return team && window.RioData ? RioData.teamLogoUrl(team) : ''; }
   function charIconUrl(name) { return name && window.RioData ? RioData.charIconUrl(name) : ''; }
 
+  // The side's captain character icon — the logo-slot fallback when a team logo
+  // isn't available (e.g. a completed game with no assigned MSB team).
+  function captainIconUrl(state, t) {
+    const capIdx = g(state, `score.${SB}.player.${t}.rio_captainIndex`, null);
+    if (capIdx == null) return '';
+    const name = g(state, `score.${SB}.player.${t}.character.${capIdx}.name`, '');
+    return name ? charIconUrl(name) : '';
+  }
+
   function bindImageProbe(slotName, url, fallbackSlot) {
     const el = engine.slots[slotName];
     if (!el) return;
@@ -293,8 +483,8 @@ export function mountScoreboard({ host, sb, size }) {
     engine.setText('s2-name', d.p2 || 'Player Two');
     engine.setText('s1-score', d.sL);
     engine.setText('s2-score', d.sR);
-    engine.setImage('s1-logo', vis.showTeamLogos ? teamLogoUrl(d.team1) : '');
-    engine.setImage('s2-logo', vis.showTeamLogos ? teamLogoUrl(d.team2) : '');
+    engine.setImage('s1-logo', vis.showTeamLogos ? (teamLogoUrl(d.team1) || d.cap1) : '');
+    engine.setImage('s2-logo', vis.showTeamLogos ? (teamLogoUrl(d.team2) || d.cap2) : '');
 
     const live = !d.isFinal;
     engine.setText('inn-half', live ? d.halfShort : '');
@@ -315,6 +505,10 @@ export function mountScoreboard({ host, sb, size }) {
     for (let i = 0; i < 4; i++) dot(`ball-${i}`, i < d.balls, BALL_ON);
     for (let i = 0; i < 3; i++) dot(`strike-${i}`, i < d.strikes, STRIKE_ON);
     for (let i = 0; i < 3; i++) dot(`out-${i}`, i < d.outs, OUT_ON);
+    // Text-count themes (e.g. Scoreboard S) show the count as numbers rather than
+    // dots; no-ops where those slots are absent.
+    engine.setText('balls', d.balls);
+    engine.setText('strikes', d.strikes);
 
     const on = [d.r1, d.r2, d.r3];
     const names = [d.r1Name, d.r2Name, d.r3Name];
@@ -446,6 +640,8 @@ export function mountScoreboard({ host, sb, size }) {
       p1, p2,
       team1: g(state, `score.${SB}.player.1.logo`, '') || g(state, `score.${SB}.player.1.msb_team`, ''),
       team2: g(state, `score.${SB}.player.2.logo`, '') || g(state, `score.${SB}.player.2.msb_team`, ''),
+      cap1: captainIconUrl(state, 1),
+      cap2: captainIconUrl(state, 2),
       sL: g(state, `score.${SB}.score_left`, 0),
       sR: g(state, `score.${SB}.score_right`, 0),
       inn: g(state, `score.${SB}.inning`, ''),
@@ -478,7 +674,11 @@ export function mountScoreboard({ host, sb, size }) {
     const hasBox = bindBox(d);
     bindImageProbe('logo', vis.showLogo ? OverlayBase.brandingLogoUrl() : '', 'logo-default');
 
-    vis.showLive = !isFinal;
+    // Live cluster: only during play, and only if the producer master is on.
+    vis.showLive = !isFinal && vis.showLive;
+    // Inning segment: the inning number during play (producer toggle), swapping
+    // to the final-badge on a completed game (bindTop drives which child shows).
+    vis.showInningSeg = isFinal || vis.showInning;
     vis.showFinal = isFinal && isCompleted && hasFinalContent;
     vis.showRoster = hasRoster;
     vis.showBox = hasBox;
@@ -498,6 +698,14 @@ export function mountScoreboard({ host, sb, size }) {
     host.classList.remove('sb-reveal');
     void host.offsetWidth;
     host.classList.add('sb-reveal');
+    // Drop the class once the slide finishes: the animation's retained end
+    // transform (translateX(0), via fill-mode `both`) otherwise keeps sb-host on
+    // a composited layer that's rastered once and then GPU-scaled — i.e. blurry
+    // until a reload re-rasters it. Removing the class returns it to an
+    // untransformed, un-layered (crisp) resting state.
+    host.addEventListener('animationend', function drop(e) {
+      if (e.animationName === 'sb-slide') host.classList.remove('sb-reveal');
+    }, { once: true });
   }
 
   // Gate playReveal behind the OBS on-screen signal: dedupe redundant activates,

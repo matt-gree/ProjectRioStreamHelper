@@ -27,6 +27,10 @@ export const LAYOUT_SETTINGS = {
     scoreboard: [
         { key: 'showElo', type: 'switch', label: 'Show ELO', description: 'Display ELO ratings on completed games' },
         { key: 'showTeamLogos', type: 'switch', label: 'Show Team Logos', description: 'Display MSB team logos' },
+        // Segment toggles honoured by melded themes (e.g. Small Scoreboard); a
+        // theme without those segments ignores them.
+        { key: 'showLive', type: 'switch', label: 'Show Live Cluster', description: 'The live count + base diamond. Off keeps it hidden even during a live game (the card stays compact).', defaultValue: true },
+        { key: 'showInning', type: 'switch', label: 'Show Inning', description: 'The inning number segment during a live game', defaultValue: true },
     ],
     roster: [
         { key: 'showSuperstars', type: 'switch', label: 'Show Superstar Icons', description: 'Display superstar badge on starred characters' },

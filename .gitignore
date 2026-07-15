@@ -306,3 +306,7 @@ public/game_assets/msb/
 /figma-exports/
 public/design/slice26*
 /slice26-wip/
+
+# Design masters (.fig + raw Figma exports) — local workspace, never committed.
+# Only the compiled theme SVGs under public/design/ or user_data/ ship.
+/design-sources/

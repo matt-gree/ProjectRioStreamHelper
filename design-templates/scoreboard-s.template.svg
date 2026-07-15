@@ -1,0 +1,87 @@
+<svg viewBox="0 0 388 128" preserveAspectRatio="xMidYMid meet" data-layout="absolute" xmlns="http://www.w3.org/2000/svg">
+  <!--
+    FIGMA REIMPORT TEMPLATE - Scoreboard S (388x128), the canonical editable
+    source for the vertical two-row melding small board. Import this into Figma
+    and it matches the live card 1:1; export it and the theme compiler
+    (server/theme_compiler.py) turns it back into the shipped
+    public/design/default/scoreboard-s.svg. Everything the pipeline needs is
+    carried in LAYER NAMES (Figma keeps names, not attributes), so keep them.
+
+    LAYER-NAME GRAMMAR (compiler translates on export):
+      slot=NAME                     a data slot the app fills
+      slot=NAME maxw=N              text that auto-shrinks past N units
+      slot=card-bg compactw=224    the card's collapsed (names+scores) width
+      slot=row-inning anim=expand-right cardw=292   a meld segment: its card
+      slot=row-live   anim=expand-right cardw=380   width when rightmost-visible,
+                                    wiping open left->right on show
+      scaffold=NAME                editing-only guide (dashed boxes) - STRIPPED
+      layout=absolute              invisible marker; sets the root layout mode
+
+    RUNTIME SEAM COLOURS - keep these three literal hues on their layers; on
+    compile they map to the app's live vars so they repaint per controller port
+    + producer accent:  #E53935 is side1,  #1E88E5 is side2,  #E60012 is accent.
+    Everything else is a fixed part of the look.
+
+    Text is real <text> (do NOT outline it). The tspans Figma emits on export
+    are flattened by the compiler automatically.
+  -->
+  <defs>
+    <linearGradient id="sbs-w1" x1="17" y1="10" x2="187" y2="10" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E53935" stop-opacity="0.2"/>
+      <stop offset="1" stop-color="#E53935" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="sbs-w2" x1="19" y1="118" x2="189" y2="118" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1E88E5" stop-opacity="0.2"/>
+      <stop offset="1" stop-color="#1E88E5" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Marker layer so the root layout mode survives a Figma round-trip. -->
+  <rect id="layout=absolute" x="0" y="0" width="1" height="1" opacity="0"/>
+
+  <rect id="slot=card-bg compactw=224" x="8" width="380" height="128" rx="20" fill="#0B0B12"/>
+  <rect id="slot=card-rail" width="6" height="128" rx="3" fill="#E60012"/>
+
+  <!-- CORE side 1 (always shown) -->
+  <g id="slot=row-top">
+    <path d="M179 10H25C20.5817 10 17 13.5817 17 18V50C17 54.4183 20.5817 58 25 58H179C183.418 58 187 54.4183 187 50V18C187 13.5817 183.418 10 179 10Z" fill="url(#sbs-w1)"/>
+    <path opacity="0.85" d="M21 12C21 10.8954 20.1046 10 19 10C17.8954 10 17 10.8954 17 12V56C17 57.1046 17.8954 58 19 58C20.1046 58 21 57.1046 21 56V12Z" fill="#E53935"/>
+    <image id="slot=s1-logo" x="29" y="13" width="38" height="38" preserveAspectRatio="xMidYMid meet" opacity="0" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="/>
+    <rect id="scaffold=s1-logo" x="29" y="13" width="38" height="38" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3"/>
+    <text id="slot=s1-name maxw=108" x="75" y="42.27" fill="#F5F5F8" font-family="Inter" font-size="20" font-weight="bold">Player One</text>
+    <text id="slot=s1-score maxw=44" x="223.63" y="46.14" text-anchor="end" fill="#F5F5F8" font-family="Inter" font-size="32" font-weight="bold">0</text>
+  </g>
+
+  <!-- CORE side 2 (always shown) -->
+  <g id="slot=row-bottom">
+    <path d="M181 118L27 118C22.5817 118 19 114.418 19 110L19 78C19 73.5817 22.5817 70 27 70L181 70C185.418 70 189 73.5817 189 78V110C189 114.418 185.418 118 181 118Z" fill="url(#sbs-w2)"/>
+    <path opacity="0.85" d="M21 72C21 70.8954 20.1046 70 19 70C17.8954 70 17 70.8954 17 72V116C17 117.105 17.8954 118 19 118C20.1046 118 21 117.105 21 116V72Z" fill="#1E88E5"/>
+    <image id="slot=s2-logo" x="29" y="75" width="38" height="38" preserveAspectRatio="xMidYMid meet" opacity="0" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="/>
+    <rect id="scaffold=s2-logo" x="29" y="75" width="38" height="38" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3"/>
+    <text id="slot=s2-name maxw=108" x="75" y="102.27" fill="#F5F5F8" font-family="Inter" font-size="20" font-weight="bold">Player Two</text>
+    <text id="slot=s2-score maxw=44" x="223.63" y="106.14" text-anchor="end" fill="#F5F5F8" font-family="Inter" font-size="32" font-weight="bold">0</text>
+  </g>
+
+  <!-- INNING segment (toggle) -> melds card to 292 -->
+  <g id="slot=row-inning anim=expand-right cardw=292">
+    <text id="slot=inn-num" x="250.883" y="81.45" fill="#F5F5F8" font-family="Inter" font-size="48" font-weight="bold">1</text>
+    <g id="slot=inn-arrow-up"><path d="M250 37H282L266 19L250 37Z" fill="#E60012"/></g>
+    <g id="slot=inn-arrow-down" opacity="0"><path d="M250 91H282L266 109L250 91Z" fill="#E60012"/></g>
+    <g id="slot=final-badge" opacity="0">
+      <path d="M287.31 51H243.69C240.547 51 238 53.6863 238 57V71C238 74.3137 240.547 77 243.69 77H287.31C290.453 77 293 74.3137 293 71V57C293 53.6863 290.453 51 287.31 51Z" fill="#E60012"/>
+      <text id="FINAL" x="245.088" y="69.59" fill="#FFFFFF" font-family="Inter" font-size="14" font-weight="bold">FINAL</text>
+    </g>
+  </g>
+
+  <!-- LIVE segment (toggle + game-state) -> melds card to full 380 -->
+  <g id="slot=row-live anim=expand-right cardw=380">
+    <text id="slot=balls" x="319.238" y="111.23" fill="#F5F5F8" font-family="Inter" font-size="24" font-weight="bold">0</text>
+    <text id="count-dash" x="336.75" y="110.23" fill="#F5F5F8" font-family="Inter" font-size="24" font-weight="bold">-</text>
+    <text id="slot=strikes" x="349.238" y="111.23" fill="#F5F5F8" font-family="Inter" font-size="24" font-weight="bold">0</text>
+    <path id="slot=out-0" d="M331.5 82C335.09 82 338 79.0899 338 75.5C338 71.9101 335.09 69 331.5 69C327.91 69 325 71.9101 325 75.5C325 79.0899 327.91 82 331.5 82Z" fill="#FFFFFF" fill-opacity="0.08"/>
+    <path id="slot=out-1" d="M352.5 82C356.09 82 359 79.0899 359 75.5C359 71.9101 356.09 69 352.5 69C348.91 69 346 71.9101 346 75.5C346 79.0899 348.91 82 352.5 82Z" fill="#FFFFFF" fill-opacity="0.08"/>
+    <rect id="slot=base-3" x="306" y="45.9706" width="24" height="24" transform="rotate(-45 306 45.9706)" fill="#FFFFFF" fill-opacity="0.08"/>
+    <rect id="slot=base-2" x="325" y="26.9706" width="24" height="24" transform="rotate(-45 325 26.9706)" fill="#FFFFFF" fill-opacity="0.08"/>
+    <rect id="slot=base-1" x="344" y="45.9706" width="24" height="24" transform="rotate(-45 344 45.9706)" fill="#FFFFFF" fill-opacity="0.08"/>
+  </g>
+</svg>

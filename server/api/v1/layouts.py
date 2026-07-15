@@ -47,7 +47,7 @@ def _parse_html_meta(path: Path) -> tuple[int | None, int | None, list[str] | No
 # (including ?size=xl sources that still exist in OBS) as "l".
 _SIZE_VARIANTS = {
     "scoreboard": [
-        ("s",  "Small",       500, 80),
+        ("s",  "Small",       388, 128),
         ("m",  "Medium",      600, 200),
         ("l",  "Large",       800, 460),
     ],
