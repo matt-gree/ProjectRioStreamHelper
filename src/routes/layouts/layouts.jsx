@@ -62,18 +62,14 @@ function ScaledIframe({ src, fallbackWidth, fallbackHeight, height = PREVIEW_HEI
     const containerRef = useRef(null);
     const iframeRef = useRef(null);
     const [nativeSize, setNativeSize] = useState(null);
-    const [layout, setLayout] = useState({ scale: 1, offsetX: 0, offsetY: 0 });
+    const [layout, setLayout] = useState({ scale: 1 });
 
     const recalc = useCallback((nw, nh) => {
         const el = containerRef.current;
         if (!el) return;
         const { width, height } = el.getBoundingClientRect();
         const scale = Math.min(width / nw, height / nh);
-        setLayout({
-            scale,
-            offsetX: (width - nw * scale) / 2,
-            offsetY: (height - nh * scale) / 2,
-        });
+        setLayout({ scale });
     }, []);
 
     useEffect(() => {
@@ -137,7 +133,7 @@ function ScaledIframe({ src, fallbackWidth, fallbackHeight, height = PREVIEW_HEI
     return (
         <div
             ref={containerRef}
-            className="relative w-full overflow-hidden bg-muted"
+            className="relative w-full overflow-hidden bg-muted flex items-center justify-center"
             style={{ height }}
         >
             <iframe
@@ -145,19 +141,21 @@ function ScaledIframe({ src, fallbackWidth, fallbackHeight, height = PREVIEW_HEI
                 src={src}
                 onLoad={handleLoad}
                 style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
                     width: nativeSize ? `${nativeSize.w}px` : '1px',
                     height: nativeSize ? `${nativeSize.h}px` : '1px',
                     border: 'none',
                     backgroundColor: 'transparent',
                     colorScheme: 'normal',
                     opacity: nativeSize ? 1 : 0,
-                    transform: nativeSize
-                        ? `translate(${layout.offsetX}px, ${layout.offsetY}px) scale(${layout.scale})`
-                        : 'none',
-                    transformOrigin: 'top left',
+                    // Scale with `zoom`, not `transform: scale()`. A CSS transform
+                    // rasters the iframe layer once at its pre-scale size and reuses
+                    // that texture, so scaling up stays blurry until a re-raster is
+                    // forced (the low-res-until-source-refresh symptom). `zoom` is
+                    // layout-affecting: the iframe content re-renders at the target
+                    // resolution, crisp from first paint, for SVG and HTML alike.
+                    // Flex-centered by the container (no manual offset transform,
+                    // which would re-introduce a composited layer).
+                    zoom: nativeSize ? layout.scale : 1,
                 }}
                 title="Layout Preview"
             />
@@ -1078,7 +1076,7 @@ const PREVIEW_ROWS = [
         { label: 'Player Stats',     path: '/layout/scoreboard1/stats.html?scoreboard=1',             w: 800,  h: 460 },
     ],
     [
-        { label: 'Small Scoreboard', path: '/layout/scoreboard1/scoreboard.html?scoreboard=1&size=s', w: 500,  h: 80  },
+        { label: 'Small Scoreboard', path: '/layout/scoreboard1/scoreboard.html?scoreboard=1&size=s', w: 388,  h: 128 },
         { label: 'Bracket',          path: '/layout/bracket/index.html',                              w: 960, h: 540 },
     ],
     [
