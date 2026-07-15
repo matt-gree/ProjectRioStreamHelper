@@ -98,11 +98,82 @@ package family via fixed CSS in its HTML).
      (commentary's per-position gradients: one gradient shared by main+sub,
      never split, never `objectBoundingBox`).
    - Elements the mount shows/hides start hidden (`style="opacity:0"`) where
-     the contract says so; no `clip-path` on tween targets.
+     the contract says so. **Never leave a resident `clip-path` on a text or
+     glyph node**: a clip-path pins the node to its own GPU composite layer
+     whose texture is sized to its paint bounds, and round-glyph overshoot
+     (the bottoms/sides of 6/9/0/O) gets trimmed under GPU raster (OBS, real
+     Chrome) even though CPU/headless raster looks fine. The mount applies clip
+     only *during* an animation and drops it at rest — an authored theme must
+     not add its own (see overlay-authoring for the full pattern).
    - Fonts aren't embedded: use fonts the element shells load (Rio tokens'
      `--font-display` etc.) or web-safe stacks with fallbacks.
 7. **Manifest + folder**: `package.json` with at least `id` + `name`; put raw
    design exports in `sources/` (served-suffix files only; it's for humans).
+
+## Designer-tool export pitfalls (learned converting the Scoreboard-S)
+
+Translate an export **faithfully** — do not re-center, re-mirror, or "improve"
+the designer's geometry. Their coordinates ARE the design; a 180°-rotated P2
+color, an off-center count, a right-shifted score are all intentional. Every
+"cleanup" I applied the first pass (re-centering count numbers, re-mirroring a
+gradient) was a regression the designer had to catch. Keep exact x/y, exact
+transforms, exact anchors.
+
+Figma-specific quirks the compiler now mostly handles, but that you must
+recognize when reviewing an export or authoring a reimport template:
+
+- **tspan-positioned text.** Figma emits `<text><tspan x y>value</tspan></text>`
+  — the position lives on the `<tspan>`, not the `<text>`. The engine's
+  `setText` sets `textContent`, which deletes the tspan (and its x/y), so the
+  glyph jumps to (0,0). The compiler flattens single-tspan text; if you hand-
+  author, put x/y on the `<text>` itself and use no tspan.
+- **Right-alignment is baked into x; no `text-anchor` is emitted.** A Figma
+  text box set to right-align exports as left-anchored text with x pushed
+  right (so "10" and "0" share a right edge only by coincidence of width).
+  Add `text-anchor="end"` and set x to the shared right edge yourself — the
+  auto-fit/reveal will otherwise misalign it. (This is why the P1 score looked
+  offset until anchored.)
+- **Empty `<image>` elements are dropped on export.** A logo/photo slot with no
+  fill vanishes from the SVG, so image slots silently go missing. Add the
+  `<image data-slot="…">` back by hand; in a reimport template give it a 1×1
+  transparent `data:` href so Figma keeps it on the round-trip.
+- **Template scaffolding must be strippable.** Dashed placeholder boxes (a
+  team-logo guide, a safe-area frame) are editing aids, not shipped art. Tag
+  them `scaffold=NAME` so the compiler removes them; never let a dashed guide
+  reach the served file.
+- `--` in a comment (designer notes with em-dashes) breaks the XML parser;
+  `var()` only resolves in inline `style=`. (Both already in the gotchas
+  sweep — the compiler defuses/relocates them, but exports reintroduce them.)
+
+## Horizontal-meld absolute themes (the Scoreboard-S pattern)
+
+A theme can declare a card that **physically resizes to fit its visible
+segments** instead of stacking rows. The contract lives entirely in layer-name
+grammar / `data-*` markers, so a designer authors it and the compiler wires it:
+
+- Root: `layout=absolute` marker layer → `data-layout="absolute"` (mount places
+  groups by hand, only toggling visibility; no reflow).
+- `slot=card-bg compactw=224` → the card's collapsed width (names + scores
+  only). The mount animates the card-bg **width** outward from here.
+- Each toggleable segment group: `slot=row-live anim=expand-right cardw=380`
+  → `data-cardw` = the card width when THIS segment is the rightmost visible.
+  The mount grows card-bg to `max(cardw over visible segments)`.
+- Segments reveal/hide by the **card's own right edge** sweeping over them (one
+  shared clip, one tween), so content appears exactly as the edge passes — not
+  on an independent per-row clock. Author segment content to the RIGHT of the
+  compact edge, ordered left→right; a hidden *middle* segment can't be
+  edge-wiped (it just snaps). Mount details: overlay-authoring.
+
+## Keep a Figma-reimport template (a real workflow win)
+
+For any theme complex enough that the designer will keep iterating, commit a
+`design-templates/<element>.template.svg` beside the shipped file: **literal
+seam colors + grammar layer-ids** (`slot=… maxw=…`, `anim=`, `cardw=`,
+`compactw=`, `layout=absolute`, `scaffold=…`) + the re-added transparent image
+slots. Import → edit in Figma → export → `compile-theme.py` reproduces the
+shipped SVG. Verify parity by diffing the compiled slot inventory against the
+shipped file (they must match). This gives the designer a 1:1 editable source
+and makes the round-trip lossless — worth the upkeep for flagship themes.
 
 ## Verifying a theme
 
@@ -138,7 +209,11 @@ the package info and shown in the Design tab) and from the CLI
   `preserveAspectRatio` from the contract, move `var()` out of presentation
   attributes into inline style, relocate `data-tpl` groups into `<defs>`,
   defuse `--` in comments, set `data-design-vars="app"` from manifest
-  `"palette": "app"`.
+  `"palette": "app"`, **flatten single-`<tspan>` text** (lifts the tspan's
+  x/y onto the `<text>` and inlines its content — see the Figma pitfalls
+  below), **strip `scaffold=`-tagged editing guides**, and translate the
+  **meld modifiers** `cardw=`/`compactw=`/`anim=` into `data-cardw` /
+  `data-compact-w` / `data-anim`.
 - **Lint**: slot coverage (`bound/total`), missing-required, unknown-slot
   with a did-you-mean suggestion, wrong node kind (catches outlined text),
   canvas-size mismatch, unbound-text inventory.

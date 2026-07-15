@@ -128,6 +128,41 @@ full-alpha frame flashes on the next show.
   render once (OverlayBase's coalescing does this if you just re-read
   `OverlayBase.state` in `update()`).
 
+## GPU-raster & compositing pitfalls (Scoreboard-S meld saga)
+
+These fail **only under GPU raster** (OBS, the user's real Chrome) and look
+fine in CPU/headless raster — so you cannot confirm them from a `--disable-gpu`
+screenshot; get the user's eyes or reason from first principles.
+
+- **A resident `clip-path` trims glyph overshoot.** Any element carrying a
+  clip-path — even a fully-open one — is pinned to its own composite layer
+  whose texture is sized to its paint bounds. Round-glyph overshoot (bottoms/
+  sides of 6/9/0/O) then gets shaved. Apply clip-path **only while a wipe is
+  animating and remove it at rest** (`el.style.clipPath = 'none'` on the tween's
+  `onComplete`); never leave one on a settled text node. (This is what made the
+  scoreboard digits "barely clip on the left and bottom.")
+- **A retained animation transform makes the layer blurry.** A CSS
+  `animation: … both` (or any lingering `transform`, even `translateX(0)`) keeps
+  the host on a composited layer that's rastered once and GPU-scaled — sharp
+  right after a reload, blurry thereafter. Drop the class on `animationend` so
+  the resting state is untransformed/un-layered.
+- **Two elements that must move together must share ONE tween.** When a wipe
+  reveals content as another element grows (the card-bg width vs. the segment
+  content), matching durations/eases is NOT enough — if they span different
+  widths their edges travel at different speeds and drift. Drive both from a
+  single tween in a shared coordinate space: the meld clips each segment with a
+  `clipPathUnits="userSpaceOnUse"` rect whose right edge **is** the card's
+  animating right edge, so content is revealed exactly as the edge passes it.
+  Only participate rows that are shown or transitioning shown→hidden — a row
+  that's hidden-and-staying-hidden must stay dark, or the sweeping edge lights
+  it up mid-animation. (`scoreboard-mount.js` `meldTo` is the reference.)
+- **Previews: scale with `zoom`, not `transform: scale()`.** The Layouts-tab
+  `ScaledIframe` (`src/routes/layouts/layouts.jsx`) fits an overlay into the
+  preview pane. `transform: scale()` rasters the iframe once at its pre-scale
+  size and reuses that texture (blurry until a re-mount forces a re-raster);
+  `zoom` is layout-affecting so the content re-renders crisp at the target
+  resolution. Applies to every preview at once.
+
 ## Catalog + registration (`server/api/v1/layouts.py`, `src/routes/layouts/layouts.jsx`)
 
 - **Layout type** is derived from filename stem + group folder (`scenes/*` →
