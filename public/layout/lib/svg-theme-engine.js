@@ -118,8 +118,17 @@ export function createThemeEngine({ host, element, fallbackSvg }) {
   // long value scales down proportionally instead of being squashed horizontally.
   // The authored size is captured once in data-basefs so the text can grow back
   // to full size when it later gets short again. Safe to call before fonts are
-  // ready; callers typically also re-run this once document.fonts.ready resolves.
+  // ready; callers typically also re-run this once document.fonts.ready resolves
+  // (the fonts-status check below makes that re-run re-measure everything).
+  //
+  // Runs on every mount update, so it must not thrash layout: slots whose text
+  // hasn't changed since their last fit are skipped outright, and the rest are
+  // processed in write→read→write phases so all getComputedTextLength() calls
+  // share one layout flush instead of forcing one reflow per slot.
+  const lastFit = new WeakMap();   // el -> { text, fontsLoaded } at last fit
   function refitText() {
+    const fontsLoaded = !!(document.fonts && document.fonts.status === 'loaded');
+    const dirty = [];
     for (const el of refitList) {
       // Drop any legacy horizontal-squash attributes if a theme still carries them.
       el.removeAttribute('textLength');
@@ -130,12 +139,19 @@ export function createThemeEngine({ host, element, fallbackSvg }) {
         if (base) el.setAttribute('data-basefs', String(base));
       }
       if (!base) continue;
+      const prev = lastFit.get(el);
+      if (prev && prev.text === el.textContent && prev.fontsLoaded === fontsLoaded) continue;
+      lastFit.set(el, { text: el.textContent, fontsLoaded });
       el.style.fontSize = base + 'px';   // reset to full size before measuring
       const maxw = parseFloat(el.getAttribute('data-maxw'));
       if (!maxw || !el.textContent) continue;
-      let len = 0;
-      try { len = el.getComputedTextLength(); } catch { len = 0; }
-      if (len > maxw) el.style.fontSize = (base * maxw / len) + 'px';
+      dirty.push({ el, base, maxw, len: 0 });
+    }
+    for (const d of dirty) {             // read phase: one shared layout flush
+      try { d.len = d.el.getComputedTextLength(); } catch { d.len = 0; }
+    }
+    for (const d of dirty) {             // write phase: shrink the over-wide
+      if (d.len > d.maxw) d.el.style.fontSize = (d.base * d.maxw / d.len) + 'px';
     }
   }
 

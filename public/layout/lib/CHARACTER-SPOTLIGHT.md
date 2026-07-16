@@ -28,7 +28,10 @@ character's story once, holding on the spray chart.
 
 | Concern | File |
 |---------|------|
-| **Scene mount** (DOM, CSS, walkthrough choreography, palette) | `public/layout/lib/postgame-callout-mount.js` (~1470 lines) |
+| **Scene mount** (orchestrator: DOM builders, palette, theme fetch, element contract) | `public/layout/lib/postgame-callout-mount.js` (~470 lines) |
+| **Scene stylesheet** (scoped `.cs-root` CSS) | `public/layout/lib/postgame-callout-css.js` |
+| **AB-ticker chips** (result-code metadata, swing-tag / contact-quality readers, chip markup) | `public/layout/lib/postgame-callout-chips.js` |
+| **AB walkthrough sequencer** (renderer plumbing, per-AB choreography, intro/finale) | `public/layout/lib/postgame-callout-theater.js` |
 | **3D hit replay** (Three.js scene, camera modes, ball trails, stadium) | `rio-visualizer/web/renderer.js` (~1615 lines, git submodule) |
 | **Stadium themes** (per-arena palette / fog / lighting / mound repaint) | `rio-visualizer/web/themes.js` |
 | **Host page** (the sized OBS shell + three.js importmap) | `public/layout/shared/callout-stage.html` |
@@ -481,8 +484,8 @@ top-of-file constants first — they were all left as knobs deliberately:
 
 | Where | Constants | Controls |
 |-------|-----------|----------|
-| mount | `BEAT.*` | walkthrough pacing (transition card, stamp dwell, HR/short holds, finale) |
-| mount | `DEEP_FLY_DISTANCE_M` (85), `DEEP_FLY_HEIGHT_M` (30) | when a ball earns the hero crane |
+| theater | `BEAT.*` | walkthrough pacing (transition card, stamp dwell, HR/short holds, finale) |
+| theater | `DEEP_FLY_DISTANCE_M` (85), `DEEP_FLY_HEIGHT_M` (30) | when a ball earns the hero crane |
 | mount | `PORT_COLORS`, `NEUTRAL_ACCENT` | fallback palette |
 | renderer | `TRAIL_RADIUS` (0.34) | trail thickness (all kinds) |
 | renderer | `HR_*`, `STAR_*` (crawl period, repeat, hold, pulse) | celebratory trail cadence |

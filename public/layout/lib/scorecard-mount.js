@@ -18,8 +18,9 @@
 // Requires overlay-base.js (OverlayBase) + rio-data.js (RioData).
 
 import { createThemeEngine } from './svg-theme-engine.js';
-import { createRevealGate } from './reveal-gate.js';
+import { createRevealGate, clearAnimClassOnEnd } from './reveal-gate.js';
 import { ensureGsap } from './gsap-loader.js';
+import { DOT_OFF, dot, bindImageProbe } from './mount-utils.js';
 
 const ELEMENT = 'scorecard';
 const SETTINGS_TYPE = 'scorecard';
@@ -34,7 +35,6 @@ const PORT_COLORS = ['#e53935', '#1e88e5', '#fdd835', '#43a047'];
 
 // Count-dot fill when active (matches the classic scoreboard convention).
 const BALL_ON = '#22c55e', STRIKE_ON = '#eab308', OUT_ON = '#ef4444';
-const DOT_OFF = 'rgba(255,255,255,0.08)';
 
 // Stacked element order + its visibility predicate over the resolved toggles.
 const STACK = [
@@ -216,33 +216,6 @@ export function mountScorecard({ host, sb }) {
   }
 
   // ── slot helpers ────────────────────────────────────────────────────────────
-  function bindImageProbe(slotName, url, fallbackSlot) {
-    const el = engine.slots[slotName];
-    if (!el) return;
-    if (!url) {
-      engine.setImage(slotName, '');
-      if (fallbackSlot && engine.slots[fallbackSlot]) engine.slots[fallbackSlot].setAttribute('opacity', '1');
-      return;
-    }
-    const img = new Image();
-    img.onload = () => {
-      if (disposed || el !== engine.slots[slotName]) return;
-      engine.setImage(slotName, url);
-      if (fallbackSlot && engine.slots[fallbackSlot]) engine.slots[fallbackSlot].setAttribute('opacity', '0');
-    };
-    img.onerror = () => {
-      if (disposed || el !== engine.slots[slotName]) return;
-      engine.setImage(slotName, '');
-      if (fallbackSlot && engine.slots[fallbackSlot]) engine.slots[fallbackSlot].setAttribute('opacity', '1');
-    };
-    img.src = url;
-  }
-
-  function dot(name, on, color) {
-    const el = engine.slots[name];
-    if (el) el.style.fill = on ? color : DOT_OFF;
-  }
-
   function teamLogoUrl(team) { return team && window.RioData ? RioData.teamLogoUrl(team) : ''; }
   function charIconUrl(name) { return name && window.RioData ? RioData.charIconUrl(name) : ''; }
 
@@ -274,9 +247,9 @@ export function mountScorecard({ host, sb }) {
     if (engine.slots['inn-arrow-down']) engine.slots['inn-arrow-down'].setAttribute('opacity', !d.isFinal && !d.isTop ? '1' : '0');
     if (engine.slots['final-badge'])    engine.slots['final-badge'].setAttribute('opacity', d.isFinal ? '1' : '0');
 
-    for (let i = 0; i < 4; i++) dot(`ball-${i}`, i < d.balls, BALL_ON);
-    for (let i = 0; i < 3; i++) dot(`strike-${i}`, i < d.strikes, STRIKE_ON);
-    for (let i = 0; i < 3; i++) dot(`out-${i}`, i < d.outs, OUT_ON);
+    for (let i = 0; i < 4; i++) dot(engine, `ball-${i}`, i < d.balls, BALL_ON);
+    for (let i = 0; i < 3; i++) dot(engine, `strike-${i}`, i < d.strikes, STRIKE_ON);
+    for (let i = 0; i < 3; i++) dot(engine, `out-${i}`, i < d.outs, OUT_ON);
 
     bindBases(d, vis);
   }
@@ -395,7 +368,7 @@ export function mountScorecard({ host, sb }) {
   function bindHeader(vis) {
     const title = vis.titleText == null ? 'Project Rio' : vis.titleText;
     engine.setText('header-title', title);
-    bindImageProbe('logo', OverlayBase.brandingLogoUrl(), 'logo-default');
+    bindImageProbe(engine, () => disposed, 'logo', OverlayBase.brandingLogoUrl(), 'logo-default');
     return title;
   }
 
@@ -492,6 +465,10 @@ export function mountScorecard({ host, sb }) {
     host.classList.remove('sc-reveal');
     void host.offsetWidth;
     host.classList.add('sc-reveal');
+    // Drop the class once the rise finishes so the retained end-state transform
+    // (fill-mode `both`) doesn't pin the host to a blurry GPU-scaled composited
+    // layer — see reveal-gate.js.
+    clearAnimClassOnEnd(host, 'sc-reveal');
   }
 
   // Gate playReveal behind the OBS on-screen signal: dedupe redundant activates,

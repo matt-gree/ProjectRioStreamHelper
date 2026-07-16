@@ -53,7 +53,7 @@
 // each cloned segment here (the engine's flat slot map only covers band-bg).
 
 import { createThemeEngine } from './svg-theme-engine.js';
-import { createRevealGate } from './reveal-gate.js';
+import { createRevealGate, clearAnimClassOnEnd } from './reveal-gate.js';
 
 const SETTINGS_TYPE = 'lowerthird';
 const ELEMENT = 'lowerthird';
@@ -596,6 +596,10 @@ export function mountLowerThird({ host }) {
     host.classList.remove('lt-reveal');
     void host.offsetWidth; // reflow so the animation restarts
     host.classList.add('lt-reveal');
+    // Drop the class once the rise finishes so the retained end-state transform
+    // (fill-mode `both`) doesn't pin the host to a blurry GPU-scaled composited
+    // layer — see reveal-gate.js.
+    clearAnimClassOnEnd(host, 'lt-reveal');
   }
   // The gate decides WHEN playReveal actually runs: it dedupes OBS's redundant
   // activate dispatches, snaps the band dark on hide, and holds it dark through

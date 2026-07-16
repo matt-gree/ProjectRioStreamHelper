@@ -63,8 +63,9 @@
 // Requires overlay-base.js (OverlayBase) + rio-data.js (RioData).
 
 import { createThemeEngine } from './svg-theme-engine.js';
-import { createRevealGate } from './reveal-gate.js';
+import { createRevealGate, clearAnimClassOnEnd } from './reveal-gate.js';
 import { ensureGsap } from './gsap-loader.js';
+import { DOT_OFF, dot, bindImageProbe } from './mount-utils.js';
 
 const SETTINGS_TYPE = 'scoreboard';
 const DEFAULT_PACKAGE = 'default';
@@ -81,13 +82,12 @@ export const SIZE_DIMS = {
 const PORT_COLORS = ['#e53935', '#1e88e5', '#fdd835', '#43a047'];
 
 const BALL_ON = '#22c55e', STRIKE_ON = '#eab308', OUT_ON = '#ef4444';
-const DOT_OFF = 'rgba(255,255,255,0.08)';
 
 // Row order + visibility predicate over the resolved flags.
 const STACK = [
   ['row-top',    v => true],
   ['row-inning', v => v.showInningSeg],
-  ['row-live',   v => v.showLive],
+  ['row-live',   v => v.showLiveSeg],
   ['row-final',  v => v.showFinal],
   ['row-roster', v => v.showRoster],
   ['row-box',    v => v.showBox],
@@ -434,11 +434,6 @@ export function mountScoreboard({ host, sb, size }) {
   }
 
   // ── binding helpers ─────────────────────────────────────────────────────────
-  function dot(name, on, color) {
-    const el = engine.slots[name];
-    if (el) el.style.fill = on ? color : DOT_OFF;
-  }
-
   function setOpacity(name, on) {
     const el = engine.slots[name];
     if (el) el.setAttribute('opacity', on ? '1' : '0');
@@ -454,28 +449,6 @@ export function mountScoreboard({ host, sb, size }) {
     if (capIdx == null) return '';
     const name = g(state, `score.${SB}.player.${t}.character.${capIdx}.name`, '');
     return name ? charIconUrl(name) : '';
-  }
-
-  function bindImageProbe(slotName, url, fallbackSlot) {
-    const el = engine.slots[slotName];
-    if (!el) return;
-    if (!url) {
-      engine.setImage(slotName, '');
-      if (fallbackSlot && engine.slots[fallbackSlot]) engine.slots[fallbackSlot].setAttribute('opacity', '1');
-      return;
-    }
-    const img = new Image();
-    img.onload = () => {
-      if (disposed || el !== engine.slots[slotName]) return;
-      engine.setImage(slotName, url);
-      if (fallbackSlot && engine.slots[fallbackSlot]) engine.slots[fallbackSlot].setAttribute('opacity', '0');
-    };
-    img.onerror = () => {
-      if (disposed || el !== engine.slots[slotName]) return;
-      engine.setImage(slotName, '');
-      if (fallbackSlot && engine.slots[fallbackSlot]) engine.slots[fallbackSlot].setAttribute('opacity', '1');
-    };
-    img.src = url;
   }
 
   function bindTop(d, vis) {
@@ -502,9 +475,9 @@ export function mountScoreboard({ host, sb, size }) {
     engine.setImage('pit-icon', charIconUrl(d.pitcher));
     engine.setText('pit-name', d.pitcher || '');
 
-    for (let i = 0; i < 4; i++) dot(`ball-${i}`, i < d.balls, BALL_ON);
-    for (let i = 0; i < 3; i++) dot(`strike-${i}`, i < d.strikes, STRIKE_ON);
-    for (let i = 0; i < 3; i++) dot(`out-${i}`, i < d.outs, OUT_ON);
+    for (let i = 0; i < 4; i++) dot(engine, `ball-${i}`, i < d.balls, BALL_ON);
+    for (let i = 0; i < 3; i++) dot(engine, `strike-${i}`, i < d.strikes, STRIKE_ON);
+    for (let i = 0; i < 3; i++) dot(engine, `out-${i}`, i < d.outs, OUT_ON);
     // Text-count themes (e.g. Scoreboard S) show the count as numbers rather than
     // dots; no-ops where those slots are absent.
     engine.setText('balls', d.balls);
@@ -672,10 +645,13 @@ export function mountScoreboard({ host, sb, size }) {
     const hasFinalContent = bindFinal(state, d, vis);
     const hasRoster = bindRoster(state);
     const hasBox = bindBox(d);
-    bindImageProbe('logo', vis.showLogo ? OverlayBase.brandingLogoUrl() : '', 'logo-default');
+    bindImageProbe(engine, () => disposed, 'logo', vis.showLogo ? OverlayBase.brandingLogoUrl() : '', 'logo-default');
 
     // Live cluster: only during play, and only if the producer master is on.
-    vis.showLive = !isFinal && vis.showLive;
+    // A NEW key (not an overwrite of vis.showLive) — the row-stack predicate
+    // needs this derived "show right now" value, but vis.showLive is still the
+    // raw producer toggle other callers may read.
+    vis.showLiveSeg = !isFinal && vis.showLive;
     // Inning segment: the inning number during play (producer toggle), swapping
     // to the final-badge on a completed game (bindTop drives which child shows).
     vis.showInningSeg = isFinal || vis.showInning;
@@ -702,10 +678,8 @@ export function mountScoreboard({ host, sb, size }) {
     // transform (translateX(0), via fill-mode `both`) otherwise keeps sb-host on
     // a composited layer that's rastered once and then GPU-scaled — i.e. blurry
     // until a reload re-rasters it. Removing the class returns it to an
-    // untransformed, un-layered (crisp) resting state.
-    host.addEventListener('animationend', function drop(e) {
-      if (e.animationName === 'sb-slide') host.classList.remove('sb-reveal');
-    }, { once: true });
+    // untransformed, un-layered (crisp) resting state. See reveal-gate.js.
+    clearAnimClassOnEnd(host, 'sb-reveal');
   }
 
   // Gate playReveal behind the OBS on-screen signal: dedupe redundant activates,

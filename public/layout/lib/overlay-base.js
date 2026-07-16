@@ -302,6 +302,39 @@
    * Sets: --accent, --accent-rgb, --card-bg, --text-primary, --border-radius,
    *       --border-color, --font-family, and per-overlay specific vars.
    */
+  // ── Per-layout element overrides: overlays.{type}.{key} → CSS var ──
+  // Declarative so applyDesignSettings below and DESIGN_SETTING_PROPS stay in
+  // sync automatically. Mirrors the UI-side registries in
+  // src/routes/layouts/designConstants.js (OVERRIDABLE_GLOBAL_KEYS /
+  // LAYOUT_SETTINGS) — a knob added there needs a row here to reach the DOM.
+  // `px: true` appends units (and accepts 0); `dedicated: true` marks a var no
+  // global section sets, so it is REMOVED when the setting is unset (an
+  // override of a global var is instead left alone — the global value written
+  // earlier in applyDesignSettings still applies).
+  const CARD_OVERRIDE_VARS = {
+    cardBg:       { prop: '--card-bg' },
+    borderColor:  { prop: '--border-color' },
+    borderRadius: { prop: '--border-radius', px: true },
+    borderWidth:  { prop: '--border-width',  px: true },
+  };
+  const STATS_VARS = {
+    ...CARD_OVERRIDE_VARS,
+    statValueColor: { prop: '--stat-value-color',   dedicated: true },
+    subtextColor:   { prop: '--stat-subtext-color', dedicated: true },
+  };
+  const LAYOUT_VAR_MAP = {
+    scoreboard: { ...CARD_OVERRIDE_VARS, textColor: { prop: '--text-primary' } },
+    // The combined Roster + Stats element hosts the same stat card under its
+    // own 'rosterstats' namespace, so it resolves the same overrides.
+    stats: STATS_VARS,
+    rosterstats: STATS_VARS,
+    bracket: {
+      connectorColor: { prop: '--connector-color', dedicated: true },
+      activeColor:    { prop: '--active-color',    dedicated: true },
+    },
+    playername: { textColor: { prop: '--text-primary' } },
+  };
+
   // `nsKey` optionally overrides the settings sub-namespace the per-layout
   // override reads use (defaults to layoutType). The Scorecard passes
   // `scorecard.{N}` so each scoreboard's card keeps an independent set of
@@ -384,62 +417,27 @@
     root.setProperty('--text-shadow',
       textShadowEnabled ? `0px 0px ${effTextBlur}px ${textShadowColor}` : 'none');
 
-    // ── Per-overlay specific vars ──
+    // ── Per-overlay specific vars (driven by LAYOUT_VAR_MAP above) ──
     // All per-layout reads gated by effectiveLayoutType so globals-only
     // preview mode shows the design system in isolation.
-    if (effectiveLayoutType === 'scoreboard') {
-      const cardBg       = g('overlays.scoreboard.cardBg',       null);
-      const borderColor  = g('overlays.scoreboard.borderColor',  null);
-      const borderRadius = g('overlays.scoreboard.borderRadius', null);
-      const borderWidth  = g('overlays.scoreboard.borderWidth',  null);
-      const textColor    = g('overlays.scoreboard.textColor',    null);
-      if (cardBg)             root.setProperty('--card-bg',        cardBg);
-      if (borderColor)        root.setProperty('--border-color',   borderColor);
-      if (borderRadius != null) root.setProperty('--border-radius', borderRadius + 'px');
-      if (borderWidth  != null) root.setProperty('--border-width',  borderWidth  + 'px');
-      if (textColor)          root.setProperty('--text-primary',   textColor);
-    }
-    // The combined Roster + Stats element hosts the same stat card under its own
-    // 'rosterstats' namespace, so it resolves the same app-var overrides here.
-    if (effectiveLayoutType === 'stats' || effectiveLayoutType === 'rosterstats') {
-      const t = effectiveLayoutType;
-      const cardBg        = g(`overlays.${t}.cardBg`,        null);
-      const borderColor   = g(`overlays.${t}.borderColor`,   null);
-      const borderRadius  = g(`overlays.${t}.borderRadius`,  null);
-      const borderWidth   = g(`overlays.${t}.borderWidth`,   null);
-      const statValueColor = g(`overlays.${t}.statValueColor`, null);
-      const subtextColor   = g(`overlays.${t}.subtextColor`,   null);
-      if (cardBg)             root.setProperty('--card-bg',       cardBg);
-      if (borderColor)        root.setProperty('--border-color',  borderColor);
-      if (borderRadius != null) root.setProperty('--border-radius', borderRadius + 'px');
-      if (borderWidth  != null) root.setProperty('--border-width',  borderWidth  + 'px');
-      if (statValueColor) root.setProperty('--stat-value-color',  statValueColor);
-      else root.removeProperty('--stat-value-color');
-      if (subtextColor)   root.setProperty('--stat-subtext-color', subtextColor);
-      else root.removeProperty('--stat-subtext-color');
-    }
-    if (effectiveLayoutType === 'bracket') {
-      const connColor = g('overlays.bracket.connectorColor', null);
-      const activeColor = g('overlays.bracket.activeColor', null);
-      if (connColor) root.setProperty('--connector-color', connColor);
-      else root.removeProperty('--connector-color');
-      if (activeColor) root.setProperty('--active-color', activeColor);
-      else root.removeProperty('--active-color');
-    }
-    if (effectiveLayoutType === 'playername') {
-      const textColor = g('overlays.playername.textColor', null);
-      if (textColor) root.setProperty('--text-primary', textColor);
+    const layoutVars = LAYOUT_VAR_MAP[effectiveLayoutType];
+    if (layoutVars) {
+      for (const [key, spec] of Object.entries(layoutVars)) {
+        const v = g(`overlays.${effectiveLayoutType}.${key}`, null);
+        if (spec.px ? v != null : v) root.setProperty(spec.prop, spec.px ? v + 'px' : v);
+        else if (spec.dedicated) root.removeProperty(spec.prop);
+      }
     }
   }
 
-  // Every inline :root property applyDesignSettings may set. Kept adjacent so
-  // the two stay in sync.
-  const DESIGN_SETTING_PROPS = [
+  // Every inline :root property applyDesignSettings may set: the globals it
+  // always writes, plus every per-layout var derived from LAYOUT_VAR_MAP.
+  const DESIGN_SETTING_PROPS = [...new Set([
     '--accent', '--accent-rgb', '--card-bg', '--text-primary', '--border-radius',
     '--border-width', '--border-color', '--font-family', '--final-badge-color',
     '--card-shadow-filter', '--card-box-shadow', '--text-shadow',
-    '--stat-value-color', '--stat-subtext-color', '--connector-color', '--active-color',
-  ];
+    ...Object.values(LAYOUT_VAR_MAP).flatMap((m) => Object.values(m).map((s) => s.prop)),
+  ])];
 
   /**
    * Remove everything applyDesignSettings set on :root. Design-package themes

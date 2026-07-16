@@ -44,6 +44,33 @@
 // Callers add the offClass CSS themselves, next to their reveal keyframes:
 //   .lt-host.lt-off { opacity: 0 !important; }
 
+// A CSS reveal animation authored with fill-mode `both` (so the pre-animation
+// state holds until it starts, and the post-animation transform/opacity holds
+// after it ends) leaves the element pinned to a composited GPU layer once the
+// animation finishes — the retained end-state transform never resolves back
+// to a plain, un-layered paint. Chrome/OBS rasters that layer once at its
+// starting resolution and then scales it, which reads as a soft/blurry
+// element until something forces a fresh raster (e.g. a reload). Dropping the
+// animation class on `animationend` (once the matching animation completes)
+// returns the element to its untransformed resting CSS — crisp again — while
+// leaving that resting CSS to hold the same visual end state the animation
+// left it in.
+//
+//   host.classList.add('sb-reveal');
+//   clearAnimClassOnEnd(host, 'sb-reveal');   // drop once the reveal settles
+//
+// Not `{ once: true }`: animationend BUBBLES, so a child's animation (e.g. the
+// lower third's per-segment lt-seg fade) finishing first would consume a once-
+// listener before the host's own reveal ends. The listener instead ignores
+// bubbled events and removes itself only when the host's animation completes.
+export function clearAnimClassOnEnd(host, className) {
+  host.addEventListener('animationend', function drop(e) {
+    if (e.target !== host) return;         // ignore bubbled child animations
+    host.classList.remove(className);
+    host.removeEventListener('animationend', drop);
+  });
+}
+
 export function createRevealGate({ host, offClass, play, settleMs = 120 }) {
   // Per-source opt-out: `?intro=0` on the browser-source URL disables the reveal
   // animation entirely. With no animation there is nothing to stutter — a

@@ -28,7 +28,7 @@ still applies verbatim when authoring by hand.
 ├── callout.svg          # the post-game Stat Callout backdrop
 ├── scorecard.svg        # the vertical Scorecard (stacked toggleable sections)
 ├── scoreboard-xs.svg    # horizontal scoreboard, 400×50
-├── scoreboard-s.svg     # horizontal scoreboard, 500×80
+├── scoreboard-s.svg     # small scoreboard, 388×128
 ├── scoreboard-m.svg     # horizontal scoreboard, 600×200
 ├── scoreboard-l.svg     # horizontal scoreboard, 800×460
 ├── ticker.svg           # the Results Ticker marquee bar (1920×80)

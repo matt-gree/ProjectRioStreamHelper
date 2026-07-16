@@ -47,10 +47,9 @@ function charArtUrl(name) {
   const id = OverlayBase.charId(name);
   return id === undefined ? '' : `${OverlayBase.BASE_URL}/game_assets/msb/characters/${id}.png`;
 }
-function teamLogoUrl(teamName) {
-  const id = OverlayBase.teamId(teamName);
-  return id === undefined ? '' : `${OverlayBase.BASE_URL}/game_assets/msb/teamLogos/${id}.png`;
-}
+// rio-data.js loads before this module (see callout-stage.html); the
+// window.RioData guard just matches the other mounts' defensive style.
+function teamLogoUrl(teamName) { return teamName && window.RioData ? RioData.teamLogoUrl(teamName) : ''; }
 
 // ── styles (scoped under .pv-root) ──────────────────────────────────────────
 // Slice26 "maximal" vocabulary rendered in HTML: one big translucent data well

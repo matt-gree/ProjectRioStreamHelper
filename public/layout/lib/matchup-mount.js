@@ -37,7 +37,7 @@
 // derivation at fetch time; this mount only binds values.
 
 import { createThemeEngine } from './svg-theme-engine.js';
-import { createRevealGate } from './reveal-gate.js';
+import { createRevealGate, clearAnimClassOnEnd } from './reveal-gate.js';
 
 const SETTINGS_TYPE = 'matchup';
 const ELEMENT = 'matchup';
@@ -101,16 +101,12 @@ export function mountMatchup({ host }) {
   let revealKey = '';
   let disposed = false;
 
-  function charIconUrl(name) {
-    if (window.RioData && RioData.charIconUrl) return RioData.charIconUrl(name);
-    const id = OverlayBase.charId(name);
-    return id === undefined ? '' : `${OverlayBase.BASE_URL}/game_assets/msb/characterIcons/${id}.png`;
-  }
-  function teamLogoUrl(team) {
-    if (window.RioData && RioData.teamLogoUrl) return RioData.teamLogoUrl(team);
-    const id = OverlayBase.teamId(team);
-    return id === undefined ? '' : `${OverlayBase.BASE_URL}/game_assets/msb/teamLogos/${id}.png`;
-  }
+  // rio-data.js loads before this module on every page that mounts the
+  // Matchup band (see matchup.html); the window.RioData guard just matches
+  // the other mounts' defensive style rather than covering a real load-order
+  // gap.
+  function charIconUrl(name) { return name && window.RioData ? RioData.charIconUrl(name) : ''; }
+  function teamLogoUrl(team) { return team && window.RioData ? RioData.teamLogoUrl(team) : ''; }
 
   // Try each candidate URL in order; bind the first that loads, else hide the
   // slot. Used for card logos (team logo → captain icon fallback: the user's
@@ -192,6 +188,10 @@ export function mountMatchup({ host }) {
     host.classList.remove('mu-reveal');
     void host.offsetWidth; // reflow so the animation restarts
     host.classList.add('mu-reveal');
+    // Drop the class once the rise finishes so the retained end-state transform
+    // (fill-mode `both`) doesn't pin the host to a blurry GPU-scaled composited
+    // layer — see reveal-gate.js.
+    clearAnimClassOnEnd(host, 'mu-reveal');
   }
   // Gate playReveal behind the OBS on-screen signal: dedupe redundant activates,
   // snap dark on hide, one clean rise per show (see reveal-gate.js).

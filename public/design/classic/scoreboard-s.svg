@@ -1,34 +1,40 @@
-<svg viewBox="0 0 500 80" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" data-design-vars="app">
+<svg viewBox="0 0 388 128" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" data-design-vars="app">
   <!--
-    CLASSIC package - Scoreboard S (500x80): names + team logos + scores +
-    TOP/BOT inning display, painted with the user's Design-tab CSS variables
+    CLASSIC package - Scoreboard S (388x128): the small scoreboard re-authored
+    for the vertical two-line canvas (side 1 over side 2, TOP/BOT inning column
+    on the right), painted with the user's Design-tab CSS variables
     (data-design-vars="app"). Row-stack contract in scoreboard-mount.js.
   -->
   <style>
     .cs-name { fill: var(--text-primary, #ffffff); font-family: var(--font-family, 'Inter', sans-serif); text-shadow: var(--text-shadow, none); }
     .cs-score { fill: var(--accent, #f59e0b); font-family: var(--font-family, 'Inter', sans-serif); }
     .cs-dim  { fill: rgba(255,255,255,0.6); font-family: var(--font-family, 'Inter', sans-serif); }
+    .cs-rule { stroke: var(--border-color, rgba(255,255,255,0.08)); stroke-width: 1; }
   </style>
 
-  <rect data-slot="card-bg" x="20" y="8" width="460" height="64" rx="14"
+  <rect data-slot="card-bg" x="14" y="8" width="360" height="112" rx="14"
         style="fill:var(--card-bg, rgba(15,15,25,0.88));filter:var(--card-shadow-filter, none)"/>
-  <rect x="20" y="8" width="460" height="64" rx="14" fill="none"
+  <rect x="14" y="8" width="360" height="112" rx="14" fill="none"
         style="stroke:var(--border-color, rgba(255,255,255,0.08));stroke-width:var(--border-width, 1px)"/>
 
-  <g data-slot="row-top" data-h="64">
-    <image data-slot="s1-logo" x="34" y="12" width="40" height="40" preserveAspectRatio="xMidYMid meet" opacity="0"/>
-    <text data-slot="s1-name" data-maxw="106" x="82" y="45" class="cs-name" font-size="15" font-weight="700">Player One</text>
-    <image data-slot="s2-logo" x="426" y="12" width="40" height="40" preserveAspectRatio="xMidYMid meet" opacity="0"/>
-    <text data-slot="s2-name" data-maxw="106" x="418" y="45" text-anchor="end" class="cs-name" font-size="15" font-weight="700">Player Two</text>
+  <g data-slot="row-top" data-h="112">
+    <image data-slot="s1-logo" x="28" y="18" width="36" height="36" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+    <text data-slot="s1-name" data-maxw="150" x="72" y="42" class="cs-name" font-size="16" font-weight="700">Player One</text>
+    <text data-slot="s1-score" data-maxw="48" x="308" y="48" text-anchor="end" class="cs-score" font-size="28" font-weight="800">0</text>
 
-    <text data-slot="s1-score" data-maxw="48" x="218" y="50" text-anchor="end" class="cs-score" font-size="28" font-weight="800">0</text>
-    <text data-slot="s2-score" data-maxw="48" x="282" y="50" text-anchor="start" class="cs-score" font-size="28" font-weight="800">0</text>
+    <line class="cs-rule" x1="28" y1="64" x2="308" y2="64"/>
 
-    <text data-slot="inn-half" x="250" y="32" text-anchor="middle" class="cs-dim" font-size="10" font-weight="700" letter-spacing="0.5">TOP</text>
-    <text data-slot="inn-num" x="250" y="52" text-anchor="middle" class="cs-name" font-size="16" font-weight="800">1</text>
+    <image data-slot="s2-logo" x="28" y="74" width="36" height="36" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+    <text data-slot="s2-name" data-maxw="150" x="72" y="98" class="cs-name" font-size="16" font-weight="700">Player Two</text>
+    <text data-slot="s2-score" data-maxw="48" x="308" y="104" text-anchor="end" class="cs-score" font-size="28" font-weight="800">0</text>
+
+    <line class="cs-rule" x1="320" y1="24" x2="320" y2="104"/>
+
+    <text data-slot="inn-half" x="346" y="56" text-anchor="middle" class="cs-dim" font-size="11" font-weight="700" letter-spacing="0.5">TOP</text>
+    <text data-slot="inn-num" x="346" y="80" text-anchor="middle" class="cs-name" font-size="20" font-weight="800">1</text>
     <g data-slot="final-badge" opacity="0">
-      <rect x="222" y="29" width="56" height="22" rx="4" style="fill:var(--final-badge-color, #ef4444)"/>
-      <text x="250" y="44" text-anchor="middle" fill="#ffffff" font-family="var(--font-family, 'Inter', sans-serif)" font-size="11" font-weight="800" letter-spacing="1">FINAL</text>
+      <rect x="318" y="52" width="56" height="24" rx="4" style="fill:var(--final-badge-color, #ef4444)"/>
+      <text x="346" y="68" text-anchor="middle" fill="#ffffff" font-family="var(--font-family, 'Inter', sans-serif)" font-size="11" font-weight="800" letter-spacing="1">FINAL</text>
     </g>
   </g>
 </svg>
