@@ -214,6 +214,21 @@ def test_is_new_game(prev, current, expected):
     assert P._is_new_game(current) is expected
 
 
+@pytest.mark.parametrize("prev_id,game_id,expected", [
+    ("g-1", "g-2", True),    # id changed → new game even without inning reset
+    ("g-1", "g-1", False),   # same game continuing
+    ("g-1", None,  False),   # frame without an id → inning fallback only
+    (None,  "g-1", False),   # no baseline id yet → inning fallback only
+    (123,   "123", False),   # id compare is type-insensitive (str vs int)
+])
+def test_is_new_game_by_game_id(prev_id, game_id, expected):
+    # Same-inning frames: without the GameID check none of these are "new"
+    # (a rematch abandoned in the 1st inning never decreases the inning).
+    P._prev_inning = 1
+    P._prev_game_id = prev_id
+    assert P._is_new_game(1, game_id) is expected
+
+
 # --- _swap_entrants ---
 
 def test_swap_entrants_reverses_sides_and_scores():

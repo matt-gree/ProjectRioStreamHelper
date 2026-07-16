@@ -25,6 +25,7 @@ from server.rio.resurface import RESURFACE_MAP
 from server.settings import Settings
 from server.state import State
 from server.utils.deep_dict import deep_get
+from server.utils.projection import run_startup_projection
 
 # Every score.player.* key the projector owns for one side. A projection always
 # writes the full set (resolved value or "") so re-projection is deterministic and
@@ -99,6 +100,14 @@ class Match:
     # doesn't change the players (a label tweak, a format change) doesn't re-hit
     # the Rio API. Session-only; None re-syncs on the next set.
     _primary_synced_pair: tuple[str, str] | None = None
+
+    # match id (str) -> {game id (str): credited side}. Two watchers can report
+    # the same finished game (HUD post-game capture + the API GameEndWatcher on
+    # another board bound to the same match); ids make award_game idempotent so
+    # the second report is a no-op instead of a double series credit. Session-
+    # only: a restart re-crediting a game would need the same id re-reported,
+    # which the stage guard / _done sets already prevent.
+    _credited_games: dict[str, dict] = {}
 
     # ----- reads -----------------------------------------------------------
 
@@ -256,10 +265,7 @@ class Match:
         """Startup hook — re-project every persisted match. A bad match logs and
         is skipped; it never blocks boot."""
         for m in list(cls._all().keys()):
-            try:
-                await cls.project_match(m)
-            except Exception:
-                logger.exception("[Match] project_all failed for match {}", m)
+            await run_startup_projection(f"Match {m}", cls.project_match(m))
 
     # ----- primary-match auto-prep -----------------------------------------
     #
@@ -492,17 +498,32 @@ class Match:
 
     @classmethod
     def _need(cls, m) -> int:
-        """Wins required to take the series (``ceil(bestOf/2)``)."""
+        """Wins required to take the series — a simple majority
+        (``bestOf // 2 + 1``), which only decides a series for an odd
+        ``bestOf``. Ingestion paths that set ``format.bestOf`` (e.g.
+        ``apply_startgg_set``) are responsible for normalizing even/falsy
+        values so a series is always decidable."""
         best_of = int((cls.get(m).get("format") or {}).get("bestOf") or 1)
         return best_of // 2 + 1
 
     @classmethod
-    async def award_game(cls, m, winner_rio: str) -> int | None:
+    async def award_game(cls, m, winner_rio: str, game_id=None) -> int | None:
         """Credit one series game to the side ``winner_rio`` sits on, mark the
         series decided if that reaches ``ceil(bestOf/2)``, then re-project so
         every bound board updates. Returns the credited side, or None when the
         winner isn't on this match (name mismatch — leave the series alone
-        rather than guess)."""
+        rather than guess).
+
+        Pass ``game_id`` when the caller knows which finished game it is
+        crediting: the same game then advances the series at most once per
+        match (returns the previously credited side on a repeat). ``None``
+        skips the dedup for callers without an id."""
+        if game_id is not None:
+            prior = cls._credited_games.get(str(m), {}).get(str(game_id))
+            if prior is not None:
+                logger.info("[Match] {}: game {} already credited to side {} — skipping",
+                            m, game_id, prior)
+                return prior
         side = cls.side_for_rio(m, winner_rio)
         if side is None:
             logger.warning("[Match] {}: winner {!r} not on this match — series not advanced",
@@ -520,6 +541,8 @@ class Match:
         await State.SetBatch(entries)
         await State.Save()
         await cls.project_match(m)
+        if game_id is not None:
+            cls._credited_games.setdefault(str(m), {})[str(game_id)] = side
         logger.info("[Match] {}: game to side {} ({}) — series now {}",
                     m, side, winner_rio, cls.get(m).get("series"))
         return side

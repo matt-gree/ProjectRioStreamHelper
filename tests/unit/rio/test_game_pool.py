@@ -110,3 +110,14 @@ async def test_apply_completed_dict_applies_pinned_swap(set_setting, mock_socket
     assert s("score.1.player.1.rioName") == "Bob"      # swapped to the left
     assert s("score.1.player.2.rioName") == "Alice"
     assert s("score.1.score_left") == 7                # home score now on left
+
+
+def test_stable_ongoing_game_id_is_deterministic():
+    # playback.gameId is persisted across restarts, so the synthetic id must be
+    # a pure function of its inputs (never builtin hash(), which is per-process).
+    from server.rio.game_pool import _stable_ongoing_game_id
+
+    a = _stable_ongoing_game_id("Alice", "Bob", "2026-07-15 10:00:00")
+    assert a == _stable_ongoing_game_id("Alice", "Bob", "2026-07-15 10:00:00")
+    assert 0 <= a < 2**31
+    assert a != _stable_ongoing_game_id("Bob", "Alice", "2026-07-15 10:00:00")

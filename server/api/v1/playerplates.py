@@ -15,11 +15,12 @@ from fastapi import APIRouter
 from fastapi.responses import ORJSONResponse
 from pydantic import BaseModel
 
-from server.commentary import SUBFIELD_LABELS
+from server.api.v1.subfields import register_subfields_route
 from server.playerplates import PlayerPlates
 from server.state import State
 
 router = APIRouter(prefix="/playerplates", tags=["playerplates"])
+register_subfields_route(router)
 
 
 class ConfigPayload(BaseModel):
@@ -37,16 +38,6 @@ class ConfigPayload(BaseModel):
 async def get_playerplates():
     """The whole player-plates object (authored config + projected display keys)."""
     return State.state.get("playerplates", {}) or {}
-
-
-@router.get("/fields", response_class=ORJSONResponse)
-async def list_subfields():
-    """Sub-plate field options (address-book key → label) the UI may offer.
-
-    Shared with Commentary (``server/commentary.py``) so both elements resolve
-    the same address-book fields.
-    """
-    return SUBFIELD_LABELS
 
 
 @router.put("", response_class=ORJSONResponse)

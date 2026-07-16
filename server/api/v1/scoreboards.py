@@ -234,9 +234,13 @@ async def reset_scoreboard_state(session_id: str | None = None) -> ORJSONRespons
 
     # 2. Delete every authored match — unbind and blank the boards it held first.
     for m in list(Match._all().keys()):
-        for sb in Match.bound_scoreboards(m):
-            await State.Unset(f"score.{sb}.match")
-            await State.Unset(f"score.{sb}.match_conflict")
+        bound = Match.bound_scoreboards(m)
+        if bound:
+            await State.UnsetBatch(
+                [k for sb in bound
+                 for k in (f"score.{sb}.match", f"score.{sb}.match_conflict")]
+            )
+        for sb in bound:
             await Match.clear_scoreboard(sb)
         await State.Unset(f"match.{m}")
 

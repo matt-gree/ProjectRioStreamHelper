@@ -107,7 +107,7 @@ class GameEndWatcher:
                     return
                 winner = await cls._lookup_winner(away, home, start_time)
                 if winner:
-                    side = await Match.award_game(m, winner)
+                    side = await Match.award_game(m, winner, game_id=game_id)
                     # Found the finished game either way: a name mismatch is a
                     # real result the producer resolves, not a reason to retry.
                     cls._done.add(game_id)

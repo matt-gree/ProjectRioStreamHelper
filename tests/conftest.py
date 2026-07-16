@@ -54,6 +54,8 @@ def reset_singletons():
     """Snapshot and restore class-level singleton state around every test."""
     from server.state import State
     from server.settings import Settings
+    from server.match import Match
+    from server.postgame import PostGame
     from server.rio.provider import RioGameDataProvider as Provider
     from server.rio.stats_tracker import StatsTracker
     from server.rio.rotation import PoolManager
@@ -65,12 +67,14 @@ def reset_singletons():
         "settings": copy.deepcopy(Settings.settings),
         "prev_sides": dict(Provider._prev_player_sides),
         "prev_inning": Provider._prev_inning,
+        "prev_game_id": Provider._prev_game_id,
         "sides_swapped": Provider._sides_swapped,
         "user_overridden": Provider._user_overridden,
         "hud_targets": list(Provider._hud_targets),
         "hud_watcher": Provider.hud_watcher,
         "stats_slots": dict(StatsTracker._slots),
         "rotations": dict(PoolManager._rotations),
+        "credited_games": copy.deepcopy(Match._credited_games),
     }
 
     # Clean baseline for the test.
@@ -83,13 +87,19 @@ def reset_singletons():
 
     Provider._prev_player_sides = {}
     Provider._prev_inning = None
+    Provider._prev_game_id = None
     Provider._sides_swapped = False
     Provider._user_overridden = False
     Provider._hud_targets = []
     Provider.hud_watcher = None
+    # asyncio.Lock binds to the loop it first awaits under — each test gets a
+    # fresh event loop, so drop any lock created under a previous test's loop.
+    Provider._update_lock = None
+    PostGame._capture_lock = None
 
     StatsTracker._slots = {}
     PoolManager._rotations = {}
+    Match._credited_games = {}
 
     yield
 
@@ -99,12 +109,16 @@ def reset_singletons():
     Settings.settings = saved["settings"]
     Provider._prev_player_sides = saved["prev_sides"]
     Provider._prev_inning = saved["prev_inning"]
+    Provider._prev_game_id = saved["prev_game_id"]
     Provider._sides_swapped = saved["sides_swapped"]
     Provider._user_overridden = saved["user_overridden"]
     Provider._hud_targets = saved["hud_targets"]
     Provider.hud_watcher = saved["hud_watcher"]
+    Provider._update_lock = None
+    PostGame._capture_lock = None
     StatsTracker._slots = saved["stats_slots"]
     PoolManager._rotations = saved["rotations"]
+    Match._credited_games = saved["credited_games"]
 
 
 @pytest.fixture

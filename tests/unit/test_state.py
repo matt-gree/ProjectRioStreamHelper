@@ -123,3 +123,16 @@ async def test_export_always_writes_state_json(set_setting, isolate_user_data):
     State.state = {"a": 1}
     await State.Export([])
     assert (isolate_user_data / "state.json").exists()
+
+
+async def test_http_image_dest_includes_key_path():
+    # The http(s) branch of _create_files_dict must build the same
+    # path-prefixed destination filename as the './' branch and
+    # _remove_files_dict, or create/remove disagree and downloads for
+    # different keys collide into the same file.
+    path = "score/1/player/1/logo"
+    await State._create_files_dict(path, "http://example.com/logo.png")
+    assert State.queue.qsize() == 1
+    job = await State.queue.get()
+    dlpath = str(job.keywords["dlpath"])
+    assert dlpath.endswith(f"stream_labels/{path}.png")

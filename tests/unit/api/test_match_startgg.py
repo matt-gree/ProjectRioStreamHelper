@@ -130,6 +130,31 @@ async def test_apply_missing_bestof_keeps_existing_format():
     assert Match.get(m)["format"]["bestOf"] == 5
 
 
+@pytest.mark.asyncio
+async def test_apply_zero_totalgames_keeps_existing_format():
+    m = await make_match()
+    await State.Set(f"match.{m}.format.bestOf", 5)
+    await apply_startgg_set(m, sgg_set(totalGames=0), 555)
+    assert Match.get(m)["format"]["bestOf"] == 5
+
+
+@pytest.mark.asyncio
+async def test_apply_even_totalgames_bumped_to_next_odd():
+    # _need() (server/match.py) decides a series by majority (bestOf//2+1);
+    # an even bestOf has no majority and can end all-square. Normalize to
+    # the next odd number so the series is always decidable.
+    m = await make_match()
+    await apply_startgg_set(m, sgg_set(totalGames=4), 555)
+    assert Match.get(m)["format"]["bestOf"] == 5
+
+
+@pytest.mark.asyncio
+async def test_apply_odd_totalgames_unchanged():
+    m = await make_match()
+    await apply_startgg_set(m, sgg_set(totalGames=3), 555)
+    assert Match.get(m)["format"]["bestOf"] == 3
+
+
 # --- /startgg/load-set (match-first) ---
 
 @pytest.mark.asyncio

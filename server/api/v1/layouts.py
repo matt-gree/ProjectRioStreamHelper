@@ -42,14 +42,23 @@ def _parse_html_meta(path: Path) -> tuple[int | None, int | None, list[str] | No
 
 # Size variants for layouts that support ?size= param.
 # Each: (size_code, label, width, height). Dims are the theme SVG's native
-# canvas (viewBox) — the recommended OBS browser-source size. The xl variant
-# was retired with the SVG conversion; the mount treats unknown/legacy sizes
-# (including ?size=xl sources that still exist in OBS) as "l".
+# canvas (viewBox) — the recommended OBS browser-source size — and come from
+# theme_contracts.CONTRACTS, the single Python source of truth (the JS copies
+# in scoreboard-mount.js / layouts.jsx / elements.js are pinned to it by
+# tests/unit/test_size_dims_parity.py). The xl variant was retired with the
+# SVG conversion; the mount treats unknown/legacy sizes (including ?size=xl
+# sources that still exist in OBS) as "l".
+def _scoreboard_canvas(size: str) -> tuple[int, int]:
+    from server.theme_contracts import CONTRACTS
+
+    return CONTRACTS[f"scoreboard-{size}"].canvas
+
+
 _SIZE_VARIANTS = {
     "scoreboard": [
-        ("s",  "Small",       388, 128),
-        ("m",  "Medium",      600, 200),
-        ("l",  "Large",       800, 460),
+        ("s",  "Small",  *_scoreboard_canvas("s")),
+        ("m",  "Medium", *_scoreboard_canvas("m")),
+        ("l",  "Large",  *_scoreboard_canvas("l")),
     ],
 }
 

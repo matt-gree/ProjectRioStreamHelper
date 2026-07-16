@@ -1,6 +1,7 @@
 """Character Spotlight server layer: the event-derived per-character counters
 (star hits, wall jumps, sliding catches — no aggregated stat-file fields exist
 for these) and the per-AB walkthrough payload (``PostGame.character_abs``)."""
+from server import postgame_contacts, postgame_stats
 from server.postgame import PostGame
 
 
@@ -30,7 +31,7 @@ def test_star_hit_counts_only_resolving_star_swing_hits():
         contact_ev(0, 2, "None", swing="Star"),     # unresolved (foul) → no
         contact_ev(0, 2, "Double", swing="Slap"),   # hit, not a star swing → no
     ]
-    derived = PostGame._char_event_derived(events)
+    derived = postgame_stats.char_event_derived(events)
     assert derived[0][2]["star_hits"] == 1
     assert 2 not in derived[1]
 
@@ -43,7 +44,7 @@ def test_wall_jump_and_slide_credit_the_fielding_team():
         contact_ev(0, 1, "Out", fielder=slider),
         contact_ev(1, 5, "Caught", fielder=fielder),  # home bats → away fields
     ]
-    derived = PostGame._char_event_derived(events)
+    derived = postgame_stats.char_event_derived(events)
     assert derived[1][4]["wall_jumps"] == 1
     assert derived[1][7]["sliding_catches"] == 1
     assert derived[0][4]["wall_jumps"] == 1
@@ -57,15 +58,15 @@ def test_runs_scored_credits_the_runner_not_the_batter():
     ev["Runner 1B"] = {"Runner Roster Loc": 7, "Runner Char Id": "Yoshi",
                        "Runner Initial Base": 1, "Runner Result Base": 2,
                        "Out Type": "None", "Out Location": 0, "Steal": "None"}
-    derived = PostGame._char_event_derived([ev])
+    derived = postgame_stats.char_event_derived([ev])
     assert derived[0][5]["runs"] == 1     # crossed home
     assert 7 not in derived[0]            # advanced but did not score
     assert derived[0].get(2, {}).get("runs", 0) == 0  # batter singled, no run
 
 
 def test_char_event_derived_tolerates_junk():
-    assert PostGame._char_event_derived(None) == {0: {}, 1: {}}
-    assert PostGame._char_event_derived(["bogus", {}, {"Half Inning": 9}]) == {0: {}, 1: {}}
+    assert postgame_stats.char_event_derived(None) == {0: {}, 1: {}}
+    assert postgame_stats.char_event_derived(["bogus", {}, {"Half Inning": 9}]) == {0: {}, 1: {}}
 
 
 # --- _runner_entries ---
@@ -82,7 +83,7 @@ def test_runner_entries_out_scored_and_advance():
                       "Out Type": "Force", "Out Location": 4, "Steal": "None",
                       "Runner Result Base": 255},
     }
-    entries = {r["base"]: r for r in PostGame._runner_entries(ev)}
+    entries = {r["base"]: r for r in postgame_contacts.runner_entries(ev)}
     assert entries[0]["resultBase"] == 1 and not entries[0]["out"]
     assert entries[2]["scored"] and entries[2]["resultBase"] == 4
     assert entries[3]["out"] and entries[3]["resultBase"] is None
@@ -197,10 +198,10 @@ def test_captain_eligible_non_captain_star_swings_cost_two():
 
 
 def test_star_cost_rules():
-    assert PostGame._star_cost("Mario", False) == 2   # eligible, not captain
-    assert PostGame._star_cost("Mario", True) == 1    # the captain themselves
-    assert PostGame._star_cost("Toad", False) == 1    # never captain-eligible
-    assert PostGame._star_cost("A3", False) == 1      # unknown name → safe 1
+    assert postgame_stats.star_cost("Mario", False) == 2   # eligible, not captain
+    assert postgame_stats.star_cost("Mario", True) == 1    # the captain themselves
+    assert postgame_stats.star_cost("Toad", False) == 1    # never captain-eligible
+    assert postgame_stats.star_cost("A3", False) == 1      # unknown name → safe 1
 
 
 # --- bunt detection ---

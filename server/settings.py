@@ -216,7 +216,6 @@ class Settings:
                 "textShadowColor": "rgba(0, 0, 0, 0.8)",
                 "showCaptains": True,
                 "showLogo": True,
-                "showBackdropBlur": True,
                 "finalBadgeColor": None,
             },
             "presets": {},
@@ -442,6 +441,11 @@ class Settings:
                         "gameId": None,
                         "interval": rot.get("interval", 30),
                         "current_index": rot.get("current_index", 0),
+                        # Carry the legacy "was this rotation actively cycling"
+                        # signal forward so a rotation that was running at
+                        # upgrade time resumes on next launch instead of
+                        # silently landing paused (`running` defaults False).
+                        "running": bool(rot.get("enabled")),
                         "interrupt": None,
                     }
                 else:

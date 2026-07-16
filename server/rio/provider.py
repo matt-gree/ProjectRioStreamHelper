@@ -1,3 +1,4 @@
+import asyncio
 import os
 import platform
 from pathlib import Path
@@ -434,8 +435,22 @@ class RioGameDataProvider:
     # Player side preservation state
     _prev_player_sides: dict = {}
     _prev_inning: int | None = None
+    _prev_game_id = None
     _sides_swapped: bool = False
     _user_overridden: bool = False
+
+    # Serializes the two entry points that read-modify-write the shared side
+    # state (_sides_swapped/_user_overridden/current_game): a HUD frame landing
+    # mid-swap would otherwise interleave with toggle_sides_swapped and apply a
+    # half-toggled orientation. Created lazily so it binds to the running event
+    # loop (tests reset it).
+    _update_lock: asyncio.Lock | None = None
+
+    @classmethod
+    def _lock(cls) -> asyncio.Lock:
+        if cls._update_lock is None:
+            cls._update_lock = asyncio.Lock()
+        return cls._update_lock
 
     # Hit visualizer: dedupe repeat HUD frames of the same contact, and a
     # monotonic counter the overlay watches to retrigger its animation.
@@ -722,6 +737,7 @@ class RioGameDataProvider:
         """Reset side preservation state when HUD target changes."""
         cls._prev_player_sides = {}
         cls._prev_inning = None
+        cls._prev_game_id = None
         cls._sides_swapped = False
         cls._user_overridden = False
         cls._hud_targets = _read_hud_targets()
@@ -774,6 +790,10 @@ class RioGameDataProvider:
         gl, gr = (raw_right, raw_left) if g_swapped else (raw_left, raw_right)
         cls._prev_player_sides = {gl: 0, gr: 1}
         cls._prev_inning = parsed.get("inning", 1)
+        # Only track a real id — a frame without one must not blind the next
+        # comparison (None would never mismatch).
+        if parsed.get("game_id"):
+            cls._prev_game_id = parsed["game_id"]
         return swaps
 
     # --- Per-game match identity gate (Phase B) ---
@@ -873,10 +893,19 @@ class RioGameDataProvider:
 
     @classmethod
     async def _on_hud_game_update(cls, game_json: dict):
-        """Callback from HudWatcher when the HUD file changes."""
+        """Callback from HudWatcher when the HUD file changes.
+
+        Serialized with toggle_sides_swapped by _update_lock so a HUD frame
+        never interleaves with a manual swap's read-modify-write.
+        """
+        async with cls._lock():
+            await cls._on_hud_game_update_impl(game_json)
+
+    @classmethod
+    async def _on_hud_game_update_impl(cls, game_json: dict):
         # Check for new game before parsing (uses raw inning from game_json)
         current_inning = game_json.get("inning", 1)
-        is_new_game = cls._is_new_game(current_inning)
+        is_new_game = cls._is_new_game(current_inning, game_json.get("game_id"))
 
         # On a new game, auto-select the game mode from the HUD's tag set so
         # web stats fetch automatically — and the per-scoreboard game-mode
@@ -968,9 +997,17 @@ class RioGameDataProvider:
                 await Settings.Set(f"scoreboards.binding.{sb}.stats_tag", name)
 
     @classmethod
-    def _is_new_game(cls, current_inning: int) -> bool:
-        """Detect new game by inning number decreasing."""
+    def _is_new_game(cls, current_inning: int, game_id=None) -> bool:
+        """Detect a new game: the HUD GameID changed, or the inning decreased.
+
+        GameID is authoritative when both frames carry one — it catches a new
+        game that starts in the same inning the last frame showed (a rematch
+        first-inning frame after a first-inning abandon, where the inning never
+        decreases). The inning fallback covers frames without ids.
+        """
         if cls._prev_inning is None:
+            return True
+        if game_id and cls._prev_game_id and str(game_id) != str(cls._prev_game_id):
             return True
         return current_inning < cls._prev_inning
 
@@ -982,11 +1019,11 @@ class RioGameDataProvider:
         to the HUD value. Runs before the frame is applied so the fresh name
         flows through. No-op when nothing is overridden.
         """
-        for sb in cls._hud_targets:
-            for t in (1, 2):
-                key = f"score.{sb}.player.{t}.rioName_override"
-                if deep_get(State.state, key, ""):
-                    await State.Unset(key)
+        keys = [f"score.{sb}.player.{t}.rioName_override"
+                for sb in cls._hud_targets for t in (1, 2)]
+        stale = [k for k in keys if deep_get(State.state, k, "")]
+        if stale:
+            await State.UnsetBatch(stale)
 
     @classmethod
     def _swap_entrants(cls, parsed: dict) -> dict:
@@ -997,7 +1034,16 @@ class RioGameDataProvider:
 
     @classmethod
     async def toggle_sides_swapped(cls):
-        """Called by UI swap action to toggle the persistent swap flag."""
+        """Called by UI swap action to toggle the persistent swap flag.
+
+        Serialized with _on_hud_game_update by _update_lock so the toggle +
+        re-apply below is atomic w.r.t. incoming HUD frames.
+        """
+        async with cls._lock():
+            await cls._toggle_sides_swapped_impl()
+
+    @classmethod
+    async def _toggle_sides_swapped_impl(cls):
         cls._sides_swapped = not cls._sides_swapped
         cls._user_overridden = True
         logger.info(f"[RIO] Manual swap toggled, sides_swapped={cls._sides_swapped}, user override active")
@@ -1173,7 +1219,7 @@ class RioGameDataProvider:
         left = entrants[0][0].get("rioName", "") if entrants[0] else ""
         right = entrants[1][0].get("rioName", "") if entrants[1] else ""
 
-        if cls._is_new_game(current_inning):
+        if cls._is_new_game(current_inning, parsed.get("game_id")):
             cls._user_overridden = False
             cls._sides_swapped, _ = cls._decide(left, right, sb=None, allow_manual=False)
         elif cls._user_overridden:

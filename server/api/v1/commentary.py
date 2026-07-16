@@ -15,10 +15,12 @@ from fastapi import APIRouter
 from fastapi.responses import ORJSONResponse
 from pydantic import BaseModel
 
-from server.commentary import Commentary, SUBFIELD_LABELS
+from server.api.v1.subfields import register_subfields_route
+from server.commentary import Commentary
 from server.state import State
 
 router = APIRouter(prefix="/commentary", tags=["commentary"])
+register_subfields_route(router)
 
 
 class SlotsPayload(BaseModel):
@@ -34,12 +36,6 @@ class SlotsPayload(BaseModel):
 async def get_commentary():
     """The whole commentary object (authored slots + projected display keys)."""
     return State.state.get("commentary", {}) or {}
-
-
-@router.get("/fields", response_class=ORJSONResponse)
-async def list_subfields():
-    """Sub-plate field options (address-book key → label) the UI may offer."""
-    return SUBFIELD_LABELS
 
 
 @router.put("", response_class=ORJSONResponse)

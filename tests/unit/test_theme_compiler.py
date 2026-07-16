@@ -151,6 +151,18 @@ def test_tspan_positioned_text_is_flattened():
     assert "flattened" in _messages(report)
 
 
+def test_tspan_flatten_preserves_trailing_tail_text():
+    # Text after the closing </tspan> (its `.tail`) is still part of the
+    # <text> content and must survive the flatten, not just the tspan's own
+    # `.text` — e.g. <text><tspan>Hello</tspan> World</text>.
+    out, report = compile_svg(
+        _mini('<text id="slot=side1-name"><tspan x="1" y="1">Hello</tspan> World</text>'),
+        "matchup",
+    )
+    assert "<tspan" not in out
+    assert ">Hello World<" in out
+
+
 def test_layout_marker_lifts_to_root_and_is_dropped():
     out, report = compile_svg(
         _mini('<rect id="layout=absolute" x="0" y="0" width="1" height="1"/>'

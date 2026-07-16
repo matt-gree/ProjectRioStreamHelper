@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import math
 
 import numpy as np
@@ -41,6 +42,17 @@ def _sanitize_row(d: dict) -> dict:
         else:
             out[k] = v
     return out
+
+
+def _stable_ongoing_game_id(away_player: str, home_player: str, start_time) -> int:
+    """Deterministic synthetic id for an ongoing game (the API provides none).
+
+    Must be stable across process restarts because `playback.gameId` is
+    persisted in Settings and looked up later — built-in `hash()` is
+    PYTHONHASHSEED-randomized per process and would break that lookup.
+    """
+    digest = hashlib.sha1(f"{away_player}|{home_player}|{start_time}".encode()).digest()
+    return int.from_bytes(digest[:4], "big") % (2 ** 31)
 
 
 def _pinned_swap_needed(player0: str, player1: str) -> bool | None:
@@ -215,7 +227,7 @@ class OngoingGamePool:
             start_time = g.get("start_time", 0)
 
             # Generate a stable synthetic game_id (the API does not provide one)
-            game_id = abs(hash((away_player, home_player, start_time))) % (2 ** 31)
+            game_id = _stable_ongoing_game_id(away_player, home_player, start_time)
 
             # Resolve integer captain indices to character names for display
             away_cap_idx = g.get("away_captain", 0)

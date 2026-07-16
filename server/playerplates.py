@@ -24,14 +24,13 @@ Commentary). ``mode`` is fully resolved here: each side's projected ``location``
 and ``active`` already account for the mode, so the overlay positions purely
 from ``location`` and shows purely from ``active``.
 """
-from loguru import logger
-
 # Reuse the Commentary sub-plate field vocabulary + resolvers so the two
 # elements offer/resolve address-book fields identically (single source of truth).
 from server.commentary import SUBFIELD_LABELS, _resolve_name, _resolve_sub
 from server.match import Match
 from server.participants import Participants
 from server.state import State
+from server.utils.projection import run_startup_projection
 
 MODES = ("both", "p1", "p2")
 SOURCES = ("match", "manual")
@@ -200,7 +199,4 @@ class PlayerPlates:
     async def project_all(cls) -> None:
         """Startup hook — re-resolve the persisted config against the current
         registry/matches. Logs and no-ops on failure; never blocks boot."""
-        try:
-            await cls.project()
-        except Exception:
-            logger.exception("[PlayerPlates] project_all failed")
+        await run_startup_projection("PlayerPlates", cls.project())

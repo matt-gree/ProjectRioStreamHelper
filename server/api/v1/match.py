@@ -118,9 +118,13 @@ async def delete_match(m: int):
     if not Match.exists(m):
         raise HTTPException(404, f"match {m!r} not found")
 
-    for sb in Match.bound_scoreboards(m):
-        await State.Unset(f"score.{sb}.match")
-        await State.Unset(f"score.{sb}.match_conflict")
+    bound = Match.bound_scoreboards(m)
+    if bound:
+        await State.UnsetBatch(
+            [k for sb in bound
+             for k in (f"score.{sb}.match", f"score.{sb}.match_conflict")]
+        )
+    for sb in bound:
         await Match.clear_scoreboard(sb)
 
     await State.Unset(f"match.{m}")
@@ -220,6 +224,13 @@ async def apply_startgg_set(m, s: dict, set_id: int) -> None:
     # bracket's real best-of instead of a hand-typed one.
     best_of = s.get("totalGames")
     if isinstance(best_of, int) and best_of >= 1:
+        # `_need()` (server/match.py) uses a majority (bestOf // 2 + 1) to
+        # decide a series — an even bestOf has no majority (e.g. 4 needs 3,
+        # so does 5) and can end all-square, undecidable. Bump to the next
+        # odd number so whatever start.gg reports always yields a decidable
+        # series.
+        if best_of % 2 == 0:
+            best_of += 1
         entries.append((f"match.{m}.format.bestOf", best_of))
     else:
         best_of = int((Match.get(m).get("format") or {}).get("bestOf") or 1)
@@ -319,8 +330,7 @@ async def bind_scoreboard(sb: int, payload: BindPayload):
         raise HTTPException(404, f"match {m!r} not found")
 
     if m is None:
-        await State.Unset(f"score.{sb}.match")
-        await State.Unset(f"score.{sb}.match_conflict")
+        await State.UnsetBatch([f"score.{sb}.match", f"score.{sb}.match_conflict"])
         await State.Save()
         await Match.clear_scoreboard(sb)
     else:

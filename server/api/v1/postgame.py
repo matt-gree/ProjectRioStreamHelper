@@ -16,6 +16,7 @@ import asyncio
 from fastapi import APIRouter
 from fastapi.responses import ORJSONResponse
 
+from server import postgame_files
 from server.postgame import PostGame
 
 router = APIRouter(prefix="/postgame", tags=["postgame"])
@@ -54,7 +55,7 @@ async def character_abs(scoreboard: int, team: int, char_index: int):
 @router.get("/files", response_class=ORJSONResponse)
 async def list_files(limit: int = 25):
     """Recent usable (non-HUD-replay) stat files, newest first, for a manual pick."""
-    return {"files": PostGame.list_files(limit=limit)}
+    return {"files": postgame_files.list_files(limit=limit)}
 
 
 @router.post("/clear", response_class=ORJSONResponse)

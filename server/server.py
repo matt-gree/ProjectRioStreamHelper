@@ -126,7 +126,19 @@ async def lifespan(app: FastAPI):
             shutdown_tasks.append(asyncio.create_task(asyncio.to_thread(Tray.icon.stop)))
     except Exception:
         pass
-    await asyncio.wait(shutdown_tasks, timeout=5.0)
+    # gather (not wait) so a failed save is logged instead of silently
+    # swallowed; the timeout still bounds a hung save at shutdown.
+    try:
+        await asyncio.wait_for(
+            asyncio.gather(*shutdown_tasks, return_exceptions=True), timeout=5.0
+        )
+    except asyncio.TimeoutError:
+        logger.warning("shutdown tasks did not finish within 5s — exiting anyway")
+    else:
+        for task in shutdown_tasks:
+            exc = task.exception()
+            if exc is not None:
+                logger.error("shutdown task failed: {!r}", exc)
 
 app = FastAPI(lifespan=lifespan)
 

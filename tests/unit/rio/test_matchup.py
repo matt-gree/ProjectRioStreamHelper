@@ -123,3 +123,32 @@ async def test_award_game_increments_winner_and_projects(bound_match, mock_socke
 async def test_award_game_unknown_winner_leaves_series_alone(bound_match):
     assert await Match.award_game(bound_match, "Carol") is None
     assert deep_get(State.state, "match.3.series") == {"1": 1, "2": 0}
+
+
+async def test_award_game_same_game_id_credits_once(bound_match):
+    # HUD post-game capture and the API GameEndWatcher can both report the
+    # same finished game — the second report must not double-advance.
+    assert await Match.award_game(bound_match, "Bob", game_id="g-1") == 2
+    assert await Match.award_game(bound_match, "Bob", game_id="g-1") == 2
+    assert deep_get(State.state, "match.3.series.2") == 1
+
+
+async def test_award_game_distinct_game_ids_credit_separately(bound_match):
+    await Match.award_game(bound_match, "Bob", game_id="g-1")
+    await Match.award_game(bound_match, "Bob", game_id="g-2")
+    assert deep_get(State.state, "match.3.series.2") == 2
+
+
+async def test_award_game_without_game_id_never_dedupes(bound_match):
+    # Legacy/manual callers pass no id — each call is a deliberate credit.
+    await Match.award_game(bound_match, "Bob")
+    await Match.award_game(bound_match, "Bob")
+    assert deep_get(State.state, "match.3.series.2") == 2
+
+
+async def test_award_game_unknown_winner_does_not_burn_game_id(bound_match):
+    # A name-mismatch decline must not mark the id credited — the producer can
+    # fix the fixture and the same game can then be credited.
+    assert await Match.award_game(bound_match, "Carol", game_id="g-9") is None
+    assert await Match.award_game(bound_match, "Bob", game_id="g-9") == 2
+    assert deep_get(State.state, "match.3.series.2") == 1

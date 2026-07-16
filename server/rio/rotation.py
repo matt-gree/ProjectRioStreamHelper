@@ -536,9 +536,19 @@ class PoolState:
 
         if current_id is not None and current_id in self.game_ids:
             self.current_index = self.game_ids.index(current_id)
-        elif self.game_ids:
-            self.current_index = self.current_index % len(self.game_ids)
         else:
+            # `current_id is None` means there was nothing displayed yet
+            # (fresh start) — reset quietly. Otherwise the displayed game is
+            # gone past the one-cycle grace (kept above only while still a
+            # member): a positional `% len` fallback would silently land on
+            # an arbitrary game, so reset deterministically to the front of
+            # the pool and log what happened.
+            if current_id is not None:
+                new_current_id = self.game_ids[0] if self.game_ids else None
+                logger.info(
+                    "[PoolState] sb {}: displayed game {} left the pool — resetting to index 0 (game {})",
+                    self.sb_id, current_id, new_current_id,
+                )
             self.current_index = 0
 
         if added or removed or not old_ids:

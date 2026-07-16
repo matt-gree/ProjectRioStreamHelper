@@ -171,6 +171,38 @@ async def test_refresh_now_drops_game_that_left_scope_when_not_displayed(mock_so
     assert displayed in state.game_ids
 
 
+async def test_refresh_now_resets_index_to_zero_when_displayed_game_vanishes(mock_socket, set_setting, monkeypatch):
+    """Past the one-cycle grace, a displayed game that's gone from `members`
+    entirely (e.g. bookkeeping already stale from a prior advance()) must
+    reset deterministically to index 0 — never an arbitrary positional
+    `current_index % len(game_ids)` wraparound — and log what vanished."""
+    from server.rio import rotation as rotation_mod
+
+    logged = []
+    monkeypatch.setattr(rotation_mod.logger, "info", lambda *a, **k: logged.append((a, k)))
+
+    _mark_rotating(set_setting)
+    OngoingGamePool.games = {1: _live(1, "A", "B"), 2: _live(2, "C", "D"), 3: _live(3, "E", "F")}
+    state = PoolState(sb_id=1, pool_cfg={
+        "filters": [{"tag": ["Ranked"]}], "scope": "live", "pinned": [], "excluded": [],
+    }, interval=30)
+    await state.refresh_now()
+    assert set(state.game_ids) == {1, 2, 3}
+    state.current_index = state.game_ids.index(2)  # displaying game 2
+
+    # Game 2 vanishes from both the live feed and this state's own bookkeeping
+    # (simulating the cursor having already moved off it in a way the grace
+    # check in refresh_now doesn't see) while other games remain in scope.
+    del state.members[2]
+    del OngoingGamePool.games[2]
+
+    await state.refresh_now()
+
+    assert 2 not in state.game_ids
+    assert state.current_index == 0
+    assert logged, "the vanished-game reset must be logged"
+
+
 async def test_refresh_now_defers_removal_of_currently_displayed_game(mock_socket, set_setting):
     """Scope-exit rule: the currently-displayed game finishes its turn — it's
     kept for the recompute where it falls out of scope, and only actually

@@ -113,6 +113,10 @@ async def test_v1_set_binding_preserves_curated_list_as_pinned(isolate_user_data
     assert b["playback"]["mode"] == "rotate"
     assert b["playback"]["interval"] == 45
     assert b["playback"]["current_index"] == 1
+    # The legacy rotation was actively cycling (rotation.2.enabled == True) —
+    # that must survive migration so the board resumes on next launch instead
+    # of landing silently paused.
+    assert b["playback"]["running"] is True
     assert b["pool"]["pinned"] == [101, 102, 103]
     assert b["pool"]["scope"] == "completed"
     assert b["pool"]["excluded"] == []
@@ -125,6 +129,30 @@ async def test_v1_set_binding_preserves_curated_list_as_pinned(isolate_user_data
     # Cached completed-game dicts resolve pinned display without a live lookup.
     assert b["pool"]["pinned_cache"]["101"]["away_user"] == "A"
     assert b["pool"]["pinned_cache"]["102"]["home_user"] == "D"
+
+
+async def test_v1_set_binding_not_running_migrates_with_running_false(isolate_user_data):
+    """A legacy rotation that was stopped (not enabled) must migrate to
+    playback.running == False, not just happen to default there."""
+    _write_settings(isolate_user_data, {
+        "scoreboards": {
+            "active": [4],
+            "binding": {"4": {"kind": "set", "gameId": None, "pool": "both", "stats_tag": None}},
+            "rotation": {
+                "4": {
+                    "enabled": False,
+                    "interval": 30,
+                    "current_index": 0,
+                    "game_ids": [201],
+                    "filters": {},
+                },
+            },
+        },
+    })
+    await Settings.Load()
+    b = Settings.settings["scoreboards"]["binding"]["4"]
+    assert b["playback"]["mode"] == "rotate"
+    assert b["playback"]["running"] is False
 
 
 async def test_v1_set_binding_no_filters_migrates_with_empty_filter_list(isolate_user_data):

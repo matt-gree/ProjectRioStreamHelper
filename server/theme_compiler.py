@@ -102,11 +102,23 @@ class FileReport:
 def parse_grammar_id(raw: str) -> tuple[str, str, dict[str, str], list[str]] | None:
     """Parse a grammar id into (marker, name, data_attrs, problems), or None.
 
-    None means "not a grammar id at all" — an ordinary designer id, left
-    alone. A recognized marker with problems still returns, so the caller can
-    report them.
+    The single dispatcher for every marker id the compiler understands:
+    ``slot``/``part``/``tpl``/``band`` (translated into data-* attributes),
+    plus the layer-level markers ``layout=absolute|stack`` (mode lifted onto
+    the root <svg>, layer dropped) and ``scaffold`` (design-tool editing aid,
+    layer stripped). None means "not a grammar id at all" — an ordinary
+    designer id, left alone. A recognized marker with problems still returns,
+    so the caller can report them.
     """
-    tokens = [t for t in re.split(r"[ _]+", raw.strip()) if t]
+    raw = raw.strip()
+    m = _LAYOUT_MARKER_RE.match(raw)
+    if m:
+        return "layout", m.group(1).lower(), {}, []
+    # A scaffold tag anywhere in the id wins over slot/part/tpl — the layer is
+    # editing-only and never ships, whatever else its name claims.
+    if _SCAFFOLD_RE.search(raw):
+        return "scaffold", "", {}, []
+    tokens = [t for t in re.split(r"[ _]+", raw) if t]
     if not tokens:
         return None
     problems: list[str] = []
@@ -154,6 +166,19 @@ def _defuse_comments(text: str) -> tuple[str, bool]:
         return f"<!--{inner}-->"
 
     return re.sub(r"<!--(.*?)-->", fix, text, flags=re.S), changed
+
+
+def _remove_layers(els: list, parent_of: dict) -> int:
+    """Detach each element from its parent (subtree goes with it). Safe when an
+    element's ancestor was already removed (nested markers): the membership
+    check makes a second removal a no-op instead of a ValueError."""
+    removed = 0
+    for el in els:
+        parent = parent_of.get(el)
+        if parent is not None and el in list(parent):
+            parent.remove(el)
+            removed += 1
+    return removed
 
 
 def _local(tag: str) -> str:
@@ -245,38 +270,36 @@ def compile_svg(
         report.add("info", 'set data-design-vars="app" (token-skin palette, from the manifest)')
         mutations += 1
 
-    # --- layout mode: a `layout=absolute` (or `layout=stack`) marker layer lifts
-    # to the root as data-layout and is dropped. Lets a design tool declare the
-    # mode with a named layer, since it can't set attributes on the root <svg>. ---
-    layout_markers = [
-        el for el in root.iter()
-        if isinstance(el.tag, str) and el.get("id")
-        and _LAYOUT_MARKER_RE.match(el.get("id").strip())
-    ]
+    # --- layer-level markers (dispatched by parse_grammar_id, same grammar as
+    # the slot/part/tpl translation below, but these DROP the layer):
+    #   layout=absolute|stack — lifts the mode to the root as data-layout; lets
+    #     a design tool declare it via a named layer, since it can't set
+    #     attributes on the root <svg>.
+    #   scaffold — design-tool editing aids (dashed placeholder boxes marking an
+    #     image slot's footprint). A real logo/icon renders in its own slot on
+    #     top; the placeholder was only a visual guide, so it never ships. ---
+    layout_markers: list[tuple] = []
+    scaffold_els: list = []
+    for el in root.iter():
+        if not isinstance(el.tag, str) or not el.get("id"):
+            continue
+        parsed = parse_grammar_id(el.get("id"))
+        if parsed is None:
+            continue
+        if parsed[0] == "layout":
+            layout_markers.append((el, parsed[1]))
+        elif parsed[0] == "scaffold":
+            scaffold_els.append(el)
+
     if layout_markers:
-        mode = _LAYOUT_MARKER_RE.match(layout_markers[0].get("id").strip()).group(1).lower()
+        mode = layout_markers[0][1]
         if root.get("data-layout") is None:
             root.set("data-layout", mode)
             report.add("info", f'set data-layout="{mode}" on the root (from a layout marker layer)')
-        for el in layout_markers:
-            if el in parent_of:
-                parent_of[el].remove(el)
+        _remove_layers([el for el, _ in layout_markers], parent_of)
         mutations += 1
 
-    # --- scaffold: drop `scaffold`-tagged editing aids (dashed placeholder boxes
-    # that mark an image slot's footprint in the design tool) so they never ship.
-    # A real logo/icon renders in its own slot on top; the placeholder was only a
-    # visual guide. Remove top-most tagged elements (their subtree goes with them).
-    scaffold_els = [
-        el for el in root.iter()
-        if isinstance(el.tag, str) and el.get("id") and _SCAFFOLD_RE.search(el.get("id"))
-    ]
-    removed_scaffold = 0
-    for el in scaffold_els:
-        parent = parent_of.get(el)
-        if parent is not None and el in list(parent):
-            parent.remove(el)
-            removed_scaffold += 1
+    removed_scaffold = _remove_layers(scaffold_els, parent_of)
     if removed_scaffold:
         report.add("info", f"removed {removed_scaffold} scaffold layer(s) (editing-only, never shipped)")
         mutations += 1
@@ -294,6 +317,8 @@ def compile_svg(
         if parsed is None:
             continue
         marker, name, attrs, problems = parsed
+        if marker in ("layout", "scaffold"):
+            continue  # layer-level markers — handled (and removed) above
         grammar_problems.extend(f"id {raw_id!r}: {p}" for p in problems)
         if marker != "band" and not name:
             continue
@@ -333,7 +358,7 @@ def compile_svg(
         for pos in ("x", "y"):
             if tspan.get(pos) is not None and el.get(pos) is None:
                 el.set(pos, tspan.get(pos))
-        el.text = tspan.text or ""
+        el.text = (tspan.text or "") + (tspan.tail or "")
         el.remove(tspan)
         flattened += 1
         mutations += 1

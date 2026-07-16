@@ -13,10 +13,9 @@ itself stays OUT of the broadcast — only the resolved name + chosen field valu
 on the wire. Re-projection runs whenever the assignment changes and at startup, so
 an address-book edit re-flows on the next change/restart (same contract as Match).
 """
-from loguru import logger
-
 from server.participants import Participants
 from server.state import State
+from server.utils.projection import run_startup_projection
 
 MAX_SLOTS = 4
 
@@ -130,7 +129,4 @@ class Commentary:
     async def project_all(cls) -> None:
         """Startup hook — re-resolve the persisted desk against the current
         registry. Logs and no-ops on failure; never blocks boot."""
-        try:
-            await cls.project()
-        except Exception:
-            logger.exception("[Commentary] project_all failed")
+        await run_startup_projection("Commentary", cls.project())

@@ -269,7 +269,7 @@ class State:
                     logger.exception("unable to remove file")
         elif isinstance(di, str) and di.startswith("http") and (di.endswith(".png") or di.endswith("jpg")):
             try:
-                _p = AsyncPath(f"{cls._labels_dir()}/" + "." + di.rsplit(".", 1)[-1])
+                _p = AsyncPath(f"{cls._labels_dir()}/{path}" + "." + di.rsplit(".", 1)[-1])
                 if await _p.exists() == True:
                     await _p.unlink()
             except:
