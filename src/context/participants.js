@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { makeReq, jsonBody } from "../lib/api";
 
 /*
  * Participant registry store — the streamer's local "address book".
@@ -11,22 +12,7 @@ import { create } from "zustand";
  * Rows are shaped { id, identities:{rioName,startgg}, display:{...}, meta:{...} }.
  */
 
-const BASE = "/api/v1/participants";
-
-async function req(path, options) {
-    const resp = await fetch(`${BASE}${path}`, options);
-    const data = await resp.json().catch(() => ({}));
-    if (!resp.ok) {
-        throw new Error(data?.error || `Request failed: ${resp.status}`);
-    }
-    return data;
-}
-
-const jsonBody = (partial) => ({
-    method: undefined,
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(partial ?? {}),
-});
+const req = makeReq("/api/v1/participants");
 
 export const useParticipantsStore = create((set, get) => ({
     participants: [],

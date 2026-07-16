@@ -11,22 +11,9 @@ import { useStateStore } from "./store";
 // The sub-plate field vocabulary is shared with Commentary (the server validates
 // against the same SUBFIELD_LABELS), so re-export it rather than duplicate.
 import { SUBFIELD_OPTIONS } from "./commentary";
+import { makeReq, jsonBody } from "../lib/api";
 
-const BASE = "/api/v1";
-
-async function req(path, options) {
-    const resp = await fetch(`${BASE}${path}`, options);
-    const data = await resp.json().catch(() => ({}));
-    if (!resp.ok) {
-        throw new Error(data?.error || `Request failed: ${resp.status}`);
-    }
-    return data;
-}
-
-const jsonBody = (body) => ({
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body ?? {}),
-});
+const req = makeReq("/api/v1");
 
 export const PP_SUBFIELD_OPTIONS = SUBFIELD_OPTIONS;
 

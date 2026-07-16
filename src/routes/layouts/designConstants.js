@@ -142,7 +142,6 @@ export const OVERRIDABLE_GLOBAL_KEYS = [
     { key: 'textShadowBlur', meta: ['textShadow'],     type: 'number',        label: 'Text Shadow Blur',   defaultValue: 4,  min: 0, max: 40, step: 1, suffix: 'px' },
     { key: 'showCaptains',     meta: ['showCaptains'],     type: 'switch', label: 'Show Captains' },
     { key: 'showLogo',         meta: ['showLogo'],         type: 'switch', label: 'Show Overlay Logo' },
-    { key: 'showBackdropBlur', meta: ['showBackdropBlur'], type: 'switch', label: 'Backdrop Blur' },
     { key: 'showShadow',       meta: ['showShadow'],       type: 'switch', label: 'Card Shadow' },
     { key: 'finalBadgeColor',  meta: ['finalBadgeColor'],  type: 'color',  label: 'Final Badge Color' },
     { key: 'fontFamily',       meta: ['fontFamily'],       type: 'font',   label: 'Font Family', defaultValue: 'Inter' },
@@ -153,7 +152,7 @@ export const GLOBAL_DESIGN_KEYS = [
     'showShadow', 'cardShadowBlur', 'cardShadowColor',
     'textShadowEnabled', 'textShadowBlur', 'textShadowColor',
     // Promoted from per-layout in v2:
-    'showCaptains', 'showLogo', 'showBackdropBlur', 'finalBadgeColor',
+    'showCaptains', 'showLogo', 'finalBadgeColor',
     // Design package selector — not a CSS knob, not per-layout overridable; read
     // directly by element mounts (e.g. commentary-mount.js) to pick a theme.
     'designPackage',
@@ -175,7 +174,6 @@ export const GLOBAL_DESIGN_DEFAULTS = {
     textShadowColor:   'rgba(0, 0, 0, 0.8)',
     showCaptains:      true,
     showLogo:          true,
-    showBackdropBlur:  true,
     finalBadgeColor:   null,
     designPackage:     'default',
 };

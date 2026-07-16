@@ -85,7 +85,7 @@ const STATUS_META = {
     disconnected: { dot: 'bg-muted-foreground/50',     label: 'OBS not connected' },
 };
 
-function ConnectionPill() {
+const ConnectionPill = memo(function ConnectionPill() {
     const { status, error, obsVersion } = useObsStore(useShallow(s => ({
         status: s.status, error: s.error, obsVersion: s.obsVersion,
     })));
@@ -114,10 +114,10 @@ function ConnectionPill() {
             )}
         </Group>
     );
-}
+});
 
 // Compact, labelled scene dropdown for the top bar.
-function SceneSelect({ label, value, scenes, onChange }) {
+const SceneSelect = memo(function SceneSelect({ label, value, scenes, onChange }) {
     return (
         <label className="flex items-center gap-1.5">
             <Text size="xs" className="text-muted-foreground">{label}</Text>
@@ -131,13 +131,13 @@ function SceneSelect({ label, value, scenes, onChange }) {
             </select>
         </label>
     );
-}
+});
 
 // Scene switching + Studio Mode, in the top bar. Studio off: the Program
 // dropdown cuts live. Studio on: stage in Preview, then Take to Program.
 // Always immediate — scene transport is the producer's manual "fire" surface,
 // never staged.
-function TopBarSceneControls() {
+const TopBarSceneControls = memo(function TopBarSceneControls() {
     const { status, scenes, programScene, previewScene, studioMode } = useObsStore(useShallow(s => ({
         status: s.status,
         scenes: s.scenes,
@@ -180,7 +180,7 @@ function TopBarSceneControls() {
             )}
         </Group>
     );
-}
+});
 
 // ── Staged mutation helpers ────────────────────────────────────────────────
 
@@ -219,7 +219,7 @@ function stageStateSet(stateKey, value, label) {
 // desk, lower-third slots, schedule queue). Deliberately buttons, not drag:
 // native HTML5 drag needs a mouse pointer, and the Production page is also
 // driven from phones/tablets at the venue.
-function MoveButtons({ canUp, canDown, onUp, onDown, label }) {
+const MoveButtons = memo(function MoveButtons({ canUp, canDown, onUp, onDown, label }) {
     return (
         <Stack gap="none" className="shrink-0">
             <button
@@ -236,20 +236,20 @@ function MoveButtons({ canUp, canDown, onUp, onDown, label }) {
             </button>
         </Stack>
     );
-}
+});
 
 // Amber "staged, not live yet" marker rendered next to pending controls.
-function StagedDot({ show, className }) {
+const StagedDot = memo(function StagedDot({ show, className }) {
     if (!show) return null;
     return (
         <SimpleTooltip label="Staged — goes live on confirm">
             <span className={cn('inline-block size-1.5 shrink-0 rounded-full bg-amber-400', className)} />
         </SimpleTooltip>
     );
-}
+});
 
 // Show/hide an OBS source (staging-aware).
-function VisibilityRow({ label, sub, item, sceneName }) {
+const VisibilityRow = memo(function VisibilityRow({ label, sub, item, sceneName }) {
     const { enabled, staged } = useDisplayedEnabled(sceneName, item);
     return (
         <label className="flex items-center justify-between gap-3">
@@ -266,7 +266,7 @@ function VisibilityRow({ label, sub, item, sceneName }) {
             />
         </label>
     );
-}
+});
 
 // ── OBS binding (program + studio preview) ─────────────────────────────────
 
@@ -418,7 +418,7 @@ const SceneGroup = memo(function SceneGroup({ icon: Icon, label, accent, sceneNa
     );
 });
 
-function LeftRail() {
+const LeftRail = memo(function LeftRail() {
     const { status, studioMode, programScene, previewScene, sceneItems } = useObsStore(useShallow(s => ({
         status: s.status,
         studioMode: s.studioMode,
@@ -471,7 +471,7 @@ function LeftRail() {
             </ScrollArea>
         </Panel>
     );
-}
+});
 
 // ── Fed elements: containers + feeds ───────────────────────────────────────
 
@@ -569,7 +569,7 @@ function useContainerBinding(container) {
 // written (through the staging gateway) to `production.feed.container.<id>` =
 // { element:'stats', … }, which the container overlay renders. Scoreboard 1 for
 // now; multi-scoreboard is later.
-function StatsFeedPicker({ element, scoreboard = 1 }) {
+const StatsFeedPicker = memo(function StatsFeedPicker({ element, scoreboard = 1 }) {
     const { container } = useContainerTarget(element.id, defaultContainerFor(element));
     const { value: selection, staged, setFeed } = useFeedControl(container);
     const players = useStateStore(s => s?.score?.[scoreboard]?.player);
@@ -650,14 +650,14 @@ function StatsFeedPicker({ element, scoreboard = 1 }) {
             )}
         </Stack>
     );
-}
+});
 
 // Content picker for the 'postgamecallout' fed element: choose WHICH finished-game
 // roster character gets the full-screen stat callout. Reads the Phase-6 capture at
 // postgame.{N}.player.{T}.characters[]; picking writes (through the staging
 // gateway) production.feed.container.<id> = { element:'postgamecallout',
 // scoreboard, team, charIndex }, which the callout-stage container renders.
-function PostgameCalloutPicker({ element, scoreboard = 1 }) {
+const PostgameCalloutPicker = memo(function PostgameCalloutPicker({ element, scoreboard = 1 }) {
     const { container } = useContainerTarget(element.id, defaultContainerFor(element));
     const { value: selection, staged, setFeed } = useFeedControl(container);
     const present = useStateStore(s => s?.postgame?.[scoreboard]?.present);
@@ -732,7 +732,7 @@ function PostgameCalloutPicker({ element, scoreboard = 1 }) {
             )}
         </Stack>
     );
-}
+});
 
 // Content control for the 'postgamevs' fed element (Game Summary): push the
 // whole captured game — both sides — onto the shared Callout Stage. There is
@@ -740,7 +740,7 @@ function PostgameCalloutPicker({ element, scoreboard = 1 }) {
 // gateway) production.feed.container.<id> = { element:'postgamevs', scoreboard }
 // and the callout-stage container renders the player-vs-player summary from
 // postgame.{N}.player.{T}.totals.
-function PostgameVsPicker({ element, scoreboard = 1 }) {
+const PostgameVsPicker = memo(function PostgameVsPicker({ element, scoreboard = 1 }) {
     const { container } = useContainerTarget(element.id, defaultContainerFor(element));
     const { value: selection, staged, setFeed } = useFeedControl(container);
     const pg = useStateStore(useShallow(s => {
@@ -804,7 +804,7 @@ function PostgameVsPicker({ element, scoreboard = 1 }) {
             )}
         </Stack>
     );
-}
+});
 
 // ── Hit Visualizer ─────────────────────────────────────────────────────────
 
@@ -896,7 +896,7 @@ function useHitViz(scoreboard = 1) {
 // Condensed face: the live actions only — Replay in place, Spotlight (cut to the
 // configured scene), and Split (toggle the split-screen feed). Setup lives in the
 // gear popover (HitVizSetup).
-function HitVizFace({ scoreboard = 1 }) {
+const HitVizFace = memo(function HitVizFace({ scoreboard = 1 }) {
     const v = useHitViz(scoreboard);
     return (
         <Stack gap="xs">
@@ -936,11 +936,11 @@ function HitVizFace({ scoreboard = 1 }) {
             </Group>
         </Stack>
     );
-}
+});
 
 // Gear setup — all the config, slim. Overlay visibility on air, the spotlight
 // auto-cut (enable · scene · hold), and which container slot the Feed button uses.
-function HitVizSetup({ scoreboard = 1 }) {
+const HitVizSetup = memo(function HitVizSetup({ scoreboard = 1 }) {
     const v = useHitViz(scoreboard);
     const containers = useSharedContainers();
     const element = ELEMENTS.find(e => e.id === 'hitvisualizer');
@@ -1012,7 +1012,7 @@ function HitVizSetup({ scoreboard = 1 }) {
             </div>
         </Stack>
     );
-}
+});
 
 // ── Commentary ─────────────────────────────────────────────────────────────
 
@@ -1073,7 +1073,7 @@ function useCommentaryDesk() {
 // The in-depth roster authoring (contact fields, socials) lives on the
 // Commentary tab; this face covers the live decisions. Reorder is buttons,
 // not drag, so it works from a phone (see MoveButtons).
-function CommentaryFace() {
+const CommentaryFace = memo(function CommentaryFace() {
     const desk = useCommentaryDesk();
 
     return (
@@ -1168,11 +1168,11 @@ function CommentaryFace() {
             </Button>
         </Stack>
     );
-}
+});
 
 // Gear setup for Commentary — show/hide the dedicated caster overlay. The
 // roster itself is authored on the Commentary tab.
-function CommentarySetup() {
+const CommentarySetup = memo(function CommentarySetup() {
     const element = ELEMENTS.find(e => e.id === 'commentary');
     const { primary } = useElementBindings(element);
 
@@ -1191,7 +1191,7 @@ function CommentarySetup() {
             </Text>
         </Stack>
     );
-}
+});
 
 // ── Player Plates ──────────────────────────────────────────────────────────
 // A sibling of Commentary: the two-player name/sub-plate band. The producer
@@ -1227,7 +1227,7 @@ function usePlayerPlates() {
 
 // One player's row: eye · name (typed, or resolved read-only when match-fed) ·
 // sub-plate field/value · sub toggle · (single-mode) location.
-function PlayerPlateSide({ t, pp }) {
+const PlayerPlateSide = memo(function PlayerPlateSide({ t, pp }) {
     const { config } = pp;
     const side = config.sides?.[t] || {};
     const isMatch = config.source === 'match';
@@ -1311,11 +1311,11 @@ function PlayerPlateSide({ t, pp }) {
             </Group>
         </div>
     );
-}
+});
 
 // Condensed face: mode + source (+ match picker), then the editor(s) for the
 // side(s) the mode shows.
-function PlayerPlatesFace({ element }) {
+const PlayerPlatesFace = memo(function PlayerPlatesFace({ element }) {
     const pp = usePlayerPlates();
     const { config } = pp;
     const ids = useMemo(
@@ -1366,10 +1366,10 @@ function PlayerPlatesFace({ element }) {
             {showSide(2) && <PlayerPlateSide t={2} pp={pp} />}
         </Stack>
     );
-}
+});
 
 // Gear setup: the dedicated overlay's on-air state + a one-line explainer.
-function PlayerPlatesSetup() {
+const PlayerPlatesSetup = memo(function PlayerPlatesSetup() {
     const element = ELEMENTS.find(e => e.id === 'playerplates');
     const { primary } = useElementBindings(element);
     return (
@@ -1390,7 +1390,7 @@ function PlayerPlatesSetup() {
             </Text>
         </Stack>
     );
-}
+});
 
 // ── Element option layer / faces / setups ──────────────────────────────────
 
@@ -1398,7 +1398,7 @@ function PlayerPlatesSetup() {
 // expanding panel (full) and in the rail source popover (content only, via
 // hideTarget/hideVisibility since the eye already toggles visibility there).
 // Newer, richer elements add their controls here and get both surfaces free.
-function ElementOptions({ element, hideTarget = false, hideVisibility = false }) {
+const ElementOptions = memo(function ElementOptions({ element, hideTarget = false, hideVisibility = false }) {
     const { primary } = useElementBindings(element);
 
     if (element.flavor === 'direct') {
@@ -1445,7 +1445,7 @@ function ElementOptions({ element, hideTarget = false, hideVisibility = false })
             <FedFace element={element} />
         </Stack>
     );
-}
+});
 
 // Does this element have overflow config worth a gear popover? Rich direct
 // elements (hit visualizer) and every fed element (target picker) do; a plain
@@ -1458,7 +1458,7 @@ function elementHasSetup(element) {
 }
 
 // The condensed FACE of an element window — its live actions only.
-function ElementFace({ element }) {
+const ElementFace = memo(function ElementFace({ element }) {
     if (element.id === 'hitvisualizer') return <HitVizFace />;
     if (element.id === 'commentary') return <CommentaryFace />;
     if (element.id === 'playerplates') return <PlayerPlatesFace element={element} />;
@@ -1467,10 +1467,10 @@ function ElementFace({ element }) {
     if (element.id === 'matchuphistory') return <MatchupFace element={element} />;
     if (element.flavor === 'fed') return <FedFace element={element} />;
     return <DirectFace element={element} />;
-}
+});
 
 // The gear-popover SETUP for an element — its bulky config.
-function ElementSetup({ element }) {
+const ElementSetup = memo(function ElementSetup({ element }) {
     if (element.id === 'hitvisualizer') return <HitVizSetup />;
     if (element.id === 'commentary') return <CommentarySetup />;
     if (element.id === 'playerplates') return <PlayerPlatesSetup />;
@@ -1478,11 +1478,11 @@ function ElementSetup({ element }) {
     if (element.id === 'matchuphistory') return <MatchupSetup />;
     if (element.flavor === 'fed') return <FedSetup element={element} />;
     return null;
-}
+});
 
 // Plain direct element (e.g. scoreboard): one live action — show/hide its
 // dedicated source in the program (or studio-preview) scene.
-function DirectFace({ element }) {
+const DirectFace = memo(function DirectFace({ element }) {
     const { primary } = useElementBindings(element);
     if (!primary) {
         return (
@@ -1497,22 +1497,22 @@ function DirectFace({ element }) {
             item={primary.item} sceneName={primary.scene}
         />
     );
-}
+});
 
 // Fed element face: the content picker (the live decision — what to feed). The
 // container it feeds is chosen in the gear; making that container's OBS source
 // active is what puts it on the broadcast.
-function FedFace({ element }) {
+const FedFace = memo(function FedFace({ element }) {
     if (element.feed === 'stats') return <StatsFeedPicker element={element} />;
     if (element.feed === 'postgamecallout') return <PostgameCalloutPicker element={element} />;
     if (element.feed === 'postgamevs') return <PostgameVsPicker element={element} />;
     return <Text size="xs" className="text-muted-foreground">No content options yet.</Text>;
-}
+});
 
 // Fed element setup: which named shared container the content is fed into,
 // plus that container source's own on-air toggle when it's in the program or
 // preview scene — so a shared source can be revealed from here too.
-function FedSetup({ element }) {
+const FedSetup = memo(function FedSetup({ element }) {
     const containers = useSharedContainers();
     const { container, setContainer } = useContainerTarget(element.id, defaultContainerFor(element));
     const binding = useContainerBinding(container);
@@ -1542,7 +1542,7 @@ function FedSetup({ element }) {
             )}
         </Stack>
     );
-}
+});
 
 // ── Lower Third (Break) ───────────────────────────────────────────────────
 // A direct element with rich authoring: the band is FIVE independently
@@ -1662,7 +1662,7 @@ function fmtRemaining(ms) {
 // Transport for slot i's clock (lowerthird.slots.{i}.clock.*). Transport acts
 // on the LIVE clock — you can't run a countdown that isn't live yet, so a
 // staged mode change doesn't surface here until committed.
-function ClockControl({ i }) {
+const ClockControl = memo(function ClockControl({ i }) {
     const c = useStateStore(useShallow(s => s?.lowerthird?.slots?.[i]?.clock
         ?? s?.lowerthird?.slots?.[String(i)]?.clock ?? {}));
     const mode = c.mode || 'off';
@@ -1725,7 +1725,7 @@ function ClockControl({ i }) {
             </Button>
         </Group>
     );
-}
+});
 
 // One-line description of what a slot currently shows (for the face rows).
 function ltSlotSummary(type, s, matches) {
@@ -1745,7 +1745,7 @@ function ltSlotSummary(type, s, matches) {
 // chevron (expand editor) · type picker · staged dot · on/off. Collapsed rows
 // show a one-line summary of their content; picking a type auto-expands the
 // row's editor in place.
-function LowerThirdSlotRow({ i, expanded, setExpanded }) {
+const LowerThirdSlotRow = memo(function LowerThirdSlotRow({ i, expanded, setExpanded }) {
     const { matches, slot, val, isStaged, setKey, swap } = useLowerThird();
     const s = slot(i);
     const type = val(`slots.${i}.type`, s.type) || '';
@@ -1797,9 +1797,9 @@ function LowerThirdSlotRow({ i, expanded, setExpanded }) {
             )}
         </div>
     );
-}
+});
 
-function LowerThirdFace({ element }) {
+const LowerThirdFace = memo(function LowerThirdFace({ element }) {
     // Which slot editors are open. Rows auto-open on a type pick and can be
     // collapsed back to a summary line; empty slots have nothing to expand.
     const [open, setOpen] = useState({});
@@ -1820,12 +1820,12 @@ function LowerThirdFace({ element }) {
             </Text>
         </Stack>
     );
-}
+});
 
 // Merch image picker: choose from /branding/merch uploads, or upload a new one
 // (immediate — an upload is a library action, not a broadcast change; the pick
 // itself stages through the caller's onChange).
-function MerchImagePicker({ value, onChange }) {
+const MerchImagePicker = memo(function MerchImagePicker({ value, onChange }) {
     const [images, setImages] = useState([]);
     const fileRef = useRef(null);
     useEffect(() => {
@@ -1860,12 +1860,12 @@ function MerchImagePicker({ value, onChange }) {
             <Button size="sm" variant="secondary" onClick={() => fileRef.current?.click()}>Upload</Button>
         </Group>
     );
-}
+});
 
 // Bracket phase-group picker for the Bracket slot: lists the loaded start.gg
 // event's phases and loads one into the shared bracket.* state. Loading is
 // momentary (like the Competition tab's own selector), not staged.
-function BracketPhasePicker() {
+const BracketPhasePicker = memo(function BracketPhasePicker() {
     const [phases, setPhases] = useState(null);
     const [busy, setBusy] = useState(false);
     const phaseName = useStateStore(s => s?.bracket?.phaseName || '');
@@ -1910,11 +1910,11 @@ function BracketPhasePicker() {
             </select>
         </Stack>
     );
-}
+});
 
 // One slot's content editor (expanded in place under the face row). Every
 // field routes through the staging gateway with the slot's key prefix.
-function LowerThirdSlotFields({ i }) {
+const LowerThirdSlotFields = memo(function LowerThirdSlotFields({ i }) {
     const { matches, slot, val, isStaged, setKey } = useLowerThird();
     const activeRaw = useSettingsStore(s => s?.scoreboards?.active ?? [1]);
     const aliases = useSettingsStore(s => s?.scoreboards?.aliases ?? {});
@@ -2090,7 +2090,7 @@ function LowerThirdSlotFields({ i }) {
             )}
         </Stack>
     );
-}
+});
 
 // ── Upcoming Schedule ────────────────────────────────────────────────────────
 // The producer's ordered match queue (schedule.queue → match.{M}), rendered by
@@ -2117,7 +2117,7 @@ async function putSchedule(body) {
 
 // Per-match display time ("6:30 PM", "After break"). Uncontrolled + commit on
 // blur/Enter so live state echoes don't fight the keystroke.
-function ScheduleTimeField({ m, initial }) {
+const ScheduleTimeField = memo(function ScheduleTimeField({ m, initial }) {
     const ref = useRef(null);
     useEffect(() => { if (ref.current && document.activeElement !== ref.current) ref.current.value = initial || ''; }, [initial]);
     const commit = () => {
@@ -2132,9 +2132,9 @@ function ScheduleTimeField({ m, initial }) {
             onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
         />
     );
-}
+});
 
-function ScheduleFace({ element }) {
+const ScheduleFace = memo(function ScheduleFace({ element }) {
     const queueRaw = useStateStore(useShallow(s => s?.schedule?.queue ?? []));
     const matches = useStateStore(useShallow(s => s?.match ?? {}));
     const queue = (Array.isArray(queueRaw) ? queueRaw : []).filter(id => matches?.[String(id)]);
@@ -2194,10 +2194,10 @@ function ScheduleFace({ element }) {
             )}
         </Stack>
     );
-}
+});
 
 // Gear: the overlay heading. Uncontrolled + commit-on-blur like the time field.
-function ScheduleSetup() {
+const ScheduleSetup = memo(function ScheduleSetup() {
     const title = useStateStore(s => s?.schedule?.title ?? '');
     const ref = useRef(null);
     useEffect(() => { if (ref.current && document.activeElement !== ref.current) ref.current.value = title || ''; }, [title]);
@@ -2211,7 +2211,7 @@ function ScheduleSetup() {
             />
         </label>
     );
-}
+});
 
 // ── Draft bar (match authoring) ─────────────────────────────────────────────
 // The condensed match-creation surface for the Draft phase (the full authoring
@@ -2255,7 +2255,7 @@ const DB_FIELD = 'h-8 rounded-md border border-border bg-card px-2 text-sm text-
 
 // Captain character icon, with a graceful fallback to initials when the image
 // pack isn't installed (404). `size` in px for both the box and the image.
-function CaptainIcon({ name, urls, size = 34 }) {
+const CaptainIcon = memo(function CaptainIcon({ name, urls, size = 34 }) {
     const [broken, setBroken] = useState(false);
     if (broken) {
         const initials = name.split(' ').map(w => w[0]).join('').slice(0, 2);
@@ -2269,14 +2269,14 @@ function CaptainIcon({ name, urls, size = 34 }) {
             style={{ width: size, height: size }}
         />
     );
-}
+});
 
 // The captain-picker grid — a 3×4 board of character icons, faster to scan and
 // hit than a scroll list. Keyboard: type a captain's first letter to select it;
 // repeating the same letter cycles through every captain that starts with it
 // (B → Birdo → Bowser → Bowser Jr, D → Daisy → Diddy → DK). Lives inside the
 // CaptainSelect dropdown; `autoFocus` grabs the keyboard when the popover opens.
-function CaptainGrid({ value, onChange, autoFocus = false, className }) {
+const CaptainGrid = memo(function CaptainGrid({ value, onChange, autoFocus = false, className }) {
     const urls = useAssetUrls();
     const ref = useRef(null);
     useEffect(() => { if (autoFocus) ref.current?.focus(); }, [autoFocus]);
@@ -2323,11 +2323,11 @@ function CaptainGrid({ value, onChange, autoFocus = false, className }) {
             })}
         </div>
     );
-}
+});
 
 // Captain dropdown: a standard select-style trigger (chosen icon + name) that
 // opens a popover containing the icon grid. Picking closes it.
-function CaptainSelect({ value, onChange, className }) {
+const CaptainSelect = memo(function CaptainSelect({ value, onChange, className }) {
     const [open, setOpen] = useState(false);
     const urls = useAssetUrls();
     const pick = (c) => { onChange(c); setOpen(false); };
@@ -2351,7 +2351,7 @@ function CaptainSelect({ value, onChange, className }) {
             </PopoverContent>
         </Popover>
     );
-}
+});
 
 // Canonical Dolphin controller-port colours (P1 red, P2 blue, P3 yellow, P4
 // green) — mirrors PORT_COLORS in the overlay mounts so the producer sees the
@@ -2362,7 +2362,7 @@ const PORT_COLORS = ['#e53935', '#1e88e5', '#fdd835', '#43a047'];
 // Away/Home Port and the projected score.{N}.player.{T}.port); shown as P1–P4
 // with the port's broadcast colour. Native <option> can't render a swatch, so
 // this is a small Popover.
-function PortSelect({ value, onChange, className }) {
+const PortSelect = memo(function PortSelect({ value, onChange, className }) {
     const [open, setOpen] = useState(false);
     const idx = value === '' || value == null ? null : Number(value);
     const dot = (i) => (
@@ -2409,11 +2409,11 @@ function PortSelect({ value, onChange, className }) {
             </PopoverContent>
         </Popover>
     );
-}
+});
 
 // Searchable game-mode combobox (Popover + Command). Flex-fills the settings
 // row; the value is the raw game-mode name (empty = unset).
-function GameModeSelect({ value, modes, onChange, className }) {
+const GameModeSelect = memo(function GameModeSelect({ value, modes, onChange, className }) {
     const [open, setOpen] = useState(false);
     const choose = (v) => { onChange(v); setOpen(false); };
     return (
@@ -2450,12 +2450,12 @@ function GameModeSelect({ value, modes, onChange, className }) {
             </PopoverContent>
         </Popover>
     );
-}
+});
 
 // One side of the draft: participant pick + captain, one row. A staged pick
 // carries a client-only _name display tag (the projection hasn't resolved it
 // yet), stripped by the commit PUT which only sends participantId + rioName.
-function DraftSide({ m, side, draft }) {
+const DraftSide = memo(function DraftSide({ m, side, draft }) {
     const live = draft.match?.player?.[side] ?? draft.match?.player?.[String(side)] ?? {};
     const pick = draft.val(`player.${side}.pick`, null);
     const name = pick ? (pick._name || pick.rioName) : (live.rioName || '');
@@ -2504,11 +2504,11 @@ function DraftSide({ m, side, draft }) {
             </Group>
         </Stack>
     );
-}
+});
 
 // Series wins as "n – n" with per-side steppers (staged). Post-game capture
 // advances this automatically; the steppers are the producer's correction.
-function SeriesControl({ m, draft }) {
+const SeriesControl = memo(function SeriesControl({ m, draft }) {
     const series = draft.match?.series || {};
     const bestOf = (draft.match?.format || {}).bestOf ?? 1;
     const winsFor = (side) => {
@@ -2545,7 +2545,7 @@ function SeriesControl({ m, draft }) {
             <StagedDot show={staged} />
         </Group>
     );
-}
+});
 
 const DRAFT_STAGE_BADGE = {
     draft: 'bg-[#a855f7]/15 text-[#c084fc]',
@@ -2580,7 +2580,7 @@ function clinchedSide(match) {
 // series / board binds. Every broadcast-visible edit routes through the staging
 // gateway; New / Next game / Delete are momentary. Deletable via the header
 // trash (a two-step Popover confirm, no blocking browser dialog).
-function MatchAccordion({ m, open, onToggle, active, boundMap, gameModes }) {
+const MatchAccordion = memo(function MatchAccordion({ m, open, onToggle, active, boundMap, gameModes }) {
     const draft = useMatchDraft(m);
     const stage = draft.match?.stage || 'draft';
     const [confirmDel, setConfirmDel] = useState(false);
@@ -2789,14 +2789,14 @@ function MatchAccordion({ m, open, onToggle, active, boundMap, gameModes }) {
             )}
         </div>
     );
-}
+});
 
 // The Match card — the Draft-phase authoring surface, rendered as its own
 // half-width element window. Holds a stack of match accordions (one per match)
 // and a New-match button; a match binds to at most one board (score.{N}.match
 // is a single value — rebinding a board moves it), so a board bound elsewhere
 // shows on other matches as a muted "on board N" chip you can steal.
-function MatchCard() {
+const MatchCard = memo(function MatchCard() {
     const matches = useStateStore(useShallow(s => s?.match ?? {}));
     const activeRaw = useSettingsStore(s => s?.scoreboards?.active ?? [1]);
     const active = Array.isArray(activeRaw) && activeRaw.length ? activeRaw : [1];
@@ -2876,14 +2876,14 @@ function MatchCard() {
             </div>
         </div>
     );
-}
+});
 
 // A board-bind chip, staged-aware (amber ring while the bind is pending). With
 // `radio`, it carries a radio dot (filled when this match holds the board) to
 // signal single-select — a match fills exactly one board. `elsewhere` = the
 // board is currently bound to a DIFFERENT match; the chip reads as a dashed
 // "steal it" affordance.
-function BindChip({ sb, bound, elsewhere = false, radio = false, onClick }) {
+const BindChip = memo(function BindChip({ sb, bound, elsewhere = false, radio = false, onClick }) {
     const pending = usePending(`bind:${sb}`);
     const displayBound = pending ? pending.value != null : bound;
     return (
@@ -2912,7 +2912,7 @@ function BindChip({ sb, bound, elsewhere = false, radio = false, onClick }) {
             </Button>
         </SimpleTooltip>
     );
-}
+});
 
 // ── Matchup History ──────────────────────────────────────────────────────────
 // Direct element: the head-to-head band. The producer picks a match and hits
@@ -2920,7 +2920,7 @@ function BindChip({ sb, bound, elsewhere = false, radio = false, onClick }) {
 // from the Project Rio API and projects the singleton matchup.* state that the
 // overlay renders. Fetching REPLACES broadcast-visible content, so it routes
 // through the staging gateway (one entry, key 'matchup:fetch').
-function MatchupFace({ element }) {
+const MatchupFace = memo(function MatchupFace({ element }) {
     const mu = useStateStore(useShallow(s => s?.matchup ?? {}));
     const matches = useStateStore(useShallow(s => s?.match ?? {}));
     const pending = usePending('matchup:fetch');
@@ -2973,10 +2973,10 @@ function MatchupFace({ element }) {
             )}
         </Stack>
     );
-}
+});
 
 // Gear: clear the band (staged — clearing live content is broadcast-visible).
-function MatchupSetup() {
+const MatchupSetup = memo(function MatchupSetup() {
     const present = useStateStore(s => s?.matchup?.present);
     const pending = usePending('matchup:fetch');
     const doClear = () => stageOrRun({
@@ -2996,7 +2996,7 @@ function MatchupSetup() {
             </Button>
         </Stack>
     );
-}
+});
 
 // ── Element grid ───────────────────────────────────────────────────────────
 // Row packing lives in elements.js (packRows) — pure and unit-tested.
@@ -3065,7 +3065,7 @@ const ElementWindow = memo(function ElementWindow({ element, span }) {
     );
 });
 
-function ElementsArea({ phase }) {
+const ElementsArea = memo(function ElementsArea({ phase }) {
     const status = useObsStore(s => s.status);
     const els = elementsForPhase(phase);
     const rows = useMemo(() => packRows(els), [els]);
@@ -3114,7 +3114,7 @@ function ElementsArea({ phase }) {
             {body}
         </Panel>
     );
-}
+});
 
 // ── Post-game capture / pending bar / page ─────────────────────────────────
 
@@ -3124,7 +3124,7 @@ function ElementsArea({ phase }) {
 // projects the box score to postgame.{N}.* (what the Stat Callout reads), and
 // advances a bound match to the post stage. Clear blanks it again. Momentary —
 // never staged.
-function PostGameBar() {
+const PostGameBar = memo(function PostGameBar() {
     const activeRaw = useSettingsStore(s => s?.scoreboards?.active ?? [1]);
     const aliases = useSettingsStore(s => s?.scoreboards?.aliases ?? {});
     const active = Array.isArray(activeRaw) && activeRaw.length ? activeRaw : [1];
@@ -3213,13 +3213,13 @@ function PostGameBar() {
             </Stack>
         </Panel>
     );
-}
+});
 
 // The confirm-to-live surface: a sticky bar listing every staged change, with
 // Go Live (also bound to the configured hotkey while this page is mounted) and
 // Discard all. Hidden entirely when confirm mode is off — unless changes are
 // still pending from before it was turned off, so nothing staged can strand.
-function PendingBar() {
+const PendingBar = memo(function PendingBar() {
     const enabled = useSettingsStore(s => s?.production?.confirm?.enabled) === true;
     const hotkey = useSettingsStore(s => s?.production?.confirm?.hotkey) || 'F9';
     const { pending, order } = useStagingStore(useShallow(s => ({ pending: s.pending, order: s.order })));
@@ -3282,7 +3282,7 @@ function PendingBar() {
             )}
         </div>
     );
-}
+});
 
 export default function Production() {
     // Remember the last soft-phase across tab switches / restarts (local UI pref).

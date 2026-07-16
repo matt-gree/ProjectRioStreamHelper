@@ -8,22 +8,9 @@
  * "compute the new array, send it". The server normalizes + re-projects.
  */
 import { useStateStore } from "./store";
+import { makeReq, jsonBody } from "../lib/api";
 
-const BASE = "/api/v1";
-
-async function req(path, options) {
-    const resp = await fetch(`${BASE}${path}`, options);
-    const data = await resp.json().catch(() => ({}));
-    if (!resp.ok) {
-        throw new Error(data?.error || `Request failed: ${resp.status}`);
-    }
-    return data;
-}
-
-const jsonBody = (body) => ({
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body ?? {}),
-});
+const req = makeReq("/api/v1");
 
 export const MAX_COMMENTATORS = 4;
 

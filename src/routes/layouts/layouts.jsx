@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { memo, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Copy, Check, RotateCw, RotateCcw, Settings as SettingsIcon, X } from 'lucide-react';
 import { Stack, Text, Loader, Divider } from '../../components/ui/primitives';
 import { Panel } from '../../components/ui/panel';
@@ -58,7 +58,7 @@ const COLOR_SWATCHES = [
     '#0f0f19', '#ffffff', '#000000',
 ];
 
-function ScaledIframe({ src, fallbackWidth, fallbackHeight, height = PREVIEW_HEIGHT }) {
+const ScaledIframe = memo(function ScaledIframe({ src, fallbackWidth, fallbackHeight, height = PREVIEW_HEIGHT }) {
     const containerRef = useRef(null);
     const iframeRef = useRef(null);
     const [nativeSize, setNativeSize] = useState(null);
@@ -161,7 +161,7 @@ function ScaledIframe({ src, fallbackWidth, fallbackHeight, height = PREVIEW_HEI
             />
         </div>
     );
-}
+});
 
 // Tinted-translucent source chips, matching the brand.
 const SOURCE_COLORS = {
@@ -183,7 +183,7 @@ function bindingBadgeKey({ transport, mode, gameId }) {
     return 'manual';
 }
 
-function CopyIconButton({ value }) {
+const CopyIconButton = memo(function CopyIconButton({ value }) {
     return (
         <CopyButton value={value}>
             {({ copied, copy }) => (
@@ -200,7 +200,7 @@ function CopyIconButton({ value }) {
             )}
         </CopyButton>
     );
-}
+});
 
 // Live OBS binding for a layout URL — drives the status dot/badge and the
 // Add-to-OBS button. Recomputes as OBS scene state changes.
@@ -232,7 +232,7 @@ function bindingLabel(binding) {
 }
 
 // Small glanceable dot for list rows. Hidden when OBS isn't connected.
-function BindingDot({ binding }) {
+const BindingDot = memo(function BindingDot({ binding }) {
     if (!binding || binding.state === 'offline') return null;
     const tone = BINDING_TONE[binding.state] || BINDING_TONE.absent;
     return (
@@ -240,10 +240,10 @@ function BindingDot({ binding }) {
             <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: tone.dot }} />
         </SimpleTooltip>
     );
-}
+});
 
 // Binding status + one-click "Add to OBS" for the previewed layout.
-function ObsBindingControls({ url, name, width, height }) {
+const ObsBindingControls = memo(function ObsBindingControls({ url, name, width, height }) {
     const binding = useLayoutBinding(url);
     const status = useObsStore(s => s.status);
     const programScene = useObsStore(s => s.programScene);
@@ -284,9 +284,9 @@ function ObsBindingControls({ url, name, width, height }) {
             </Button>
         </SimpleTooltip>
     );
-}
+});
 
-function LayoutItem({ item, selected, onSelect, activeTab }) {
+const LayoutItem = memo(function LayoutItem({ item, selected, onSelect, activeTab }) {
     const copyUrl = useMemo(() => {
         try {
             const u = new URL(item.url);
@@ -315,7 +315,7 @@ function LayoutItem({ item, selected, onSelect, activeTab }) {
             </div>
         </button>
     );
-}
+});
 
 // Order in which team layouts appear in the two-column section
 const TEAM_LAYOUT_ORDER = ['roster', 'stats', 'rosterstats', 'teamlogo', 'playername'];
@@ -327,7 +327,7 @@ const ANIMATED_TYPES = new Set([
     'scoreboard', 'scorecard', 'lowerthird', 'matchup', 'commentary', 'playerplates', 'hitvisualizer',
 ]);
 
-function LayoutList({ layouts, selected, onSelect, activeTab }) {
+const LayoutList = memo(function LayoutList({ layouts, selected, onSelect, activeTab }) {
     const [expandedGroups, setExpandedGroups] = useState({});
 
     if (layouts.length === 0) {
@@ -417,7 +417,7 @@ function LayoutList({ layouts, selected, onSelect, activeTab }) {
             )}
         </Stack>
     );
-}
+});
 
 // ── Bracket Layout List (dynamic, based on loaded tournament phases) ──
 const BRACKET_VARIANTS = [
@@ -426,7 +426,7 @@ const BRACKET_VARIANTS = [
     { key: 'losers', label: 'Losers Only', path: '/layout/bracket/index.html?losers_only=true' },
 ];
 
-function PlayerSchedulePanel({ selected, onSelect, baseUrl, phases, phasesLoaded, bracketLink }) {
+const PlayerSchedulePanel = memo(function PlayerSchedulePanel({ selected, onSelect, baseUrl, phases, phasesLoaded, bracketLink }) {
     const activePlayer = useStateStore(s => s?.bracket?.activePlayer ?? '');
     const playerScheduleData = useStateStore(s => s?.playerSchedule);
     const setStateItem = useStateStore(s => s.setItem);
@@ -626,9 +626,9 @@ function PlayerSchedulePanel({ selected, onSelect, baseUrl, phases, phasesLoaded
             )}
         </Stack>
     );
-}
+});
 
-function BracketLayoutList({ selected, onSelect, baseUrl, onLoadBracket }) {
+const BracketLayoutList = memo(function BracketLayoutList({ selected, onSelect, baseUrl, onLoadBracket }) {
     const [expandedGroups, setExpandedGroups] = useState({});
     const bracketLink = useStateStore(s => s?.tournamentInfo?.bracket_link ?? '');
     const { loading: sggLoading, fetchPhases, loadBracket } = useTournament();
@@ -771,10 +771,10 @@ function BracketLayoutList({ selected, onSelect, baseUrl, onLoadBracket }) {
             </div>
         </Stack>
     );
-}
+});
 
 // ── Tournament Logo Upload ──
-function LogoUpload({ label, description }) {
+const LogoUpload = memo(function LogoUpload({ label, description }) {
     const [logoInfo, setLogoInfo] = useState(null);
     const [uploading, setUploading] = useState(false);
 
@@ -834,7 +834,7 @@ function LogoUpload({ label, description }) {
             </div>
         </div>
     );
-}
+});
 
 function parseRgba(val) {
     const m = val.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+))?\s*\)/);
@@ -852,7 +852,7 @@ function toRgba(hex, opacity) {
     return `rgba(${r}, ${g}, ${b}, ${opacity})`;
 }
 
-function ColorWithOpacity({ label, description, value, onChange }) {
+const ColorWithOpacity = memo(function ColorWithOpacity({ label, description, value, onChange }) {
     const { hex, opacity } = parseRgba(value);
     const [localHex, setLocalHex] = useState(hex);
     const [localOpacity, setLocalOpacity] = useState(opacity);
@@ -897,10 +897,10 @@ function ColorWithOpacity({ label, description, value, onChange }) {
             </div>
         </div>
     );
-}
+});
 
 // ── Presets Panel (save/load/export hub for design configurations) ──
-function PresetsPanel() {
+const PresetsPanel = memo(function PresetsPanel() {
     const globalDesign = useSettingsStore(useShallow(s => s?.overlays?.global ?? {}));
     const presets = useSettingsStore(s => s?.overlays?.presets ?? {});
     const allLayoutSettings = useSettingsStore(useShallow(s => {
@@ -939,7 +939,7 @@ function PresetsPanel() {
             if (globalData[key] != null) setItem(`overlays.global.${key}`, globalData[key]);
         }
         const promotedToGlobal = new Set([
-            'showCaptains', 'showLogo', 'showShadow', 'showBackdropBlur', 'finalBadgeColor',
+            'showCaptains', 'showLogo', 'showShadow', 'finalBadgeColor',
         ]);
         if (preset.layouts) {
             for (const [layoutType, layoutValues] of Object.entries(preset.layouts)) {
@@ -1067,7 +1067,7 @@ function PresetsPanel() {
             </div>
         </Stack>
     );
-}
+});
 
 // ── Live preview grid for the Design tab ──
 const PREVIEW_ROWS = [
@@ -1084,7 +1084,7 @@ const PREVIEW_ROWS = [
     ],
 ];
 
-function PreviewTile({ label, path, w, h, src, reloadKey }) {
+const PreviewTile = memo(function PreviewTile({ label, path, w, h, src, reloadKey }) {
     return (
         <div>
             <Text size="xs" fw={600} dimmed className="mb-1">{label}</Text>
@@ -1096,9 +1096,9 @@ function PreviewTile({ label, path, w, h, src, reloadKey }) {
             </div>
         </div>
     );
-}
+});
 
-function DesignPreviews({ baseUrl, showOverrides, onToggleOverrides }) {
+const DesignPreviews = memo(function DesignPreviews({ baseUrl, showOverrides, onToggleOverrides }) {
     const buildUrl = (path) => {
         const sep = path.includes('?') ? '&' : '?';
         const flags = `preview=1${showOverrides ? '' : '&preview_globals_only=1'}`;
@@ -1131,10 +1131,10 @@ function DesignPreviews({ baseUrl, showOverrides, onToggleOverrides }) {
             ))}
         </Stack>
     );
-}
+});
 
 // ── Design tab body (controls + previews + presets) ──
-function DesignTabBody({ baseUrl }) {
+const DesignTabBody = memo(function DesignTabBody({ baseUrl }) {
     const [showOverrides, setShowOverrides] = useState(false);
 
     return (
@@ -1163,7 +1163,7 @@ function DesignTabBody({ baseUrl }) {
             </Panel>
         </Stack>
     );
-}
+});
 
 // ── Design Package selector (rendered at the top of the Design tab) ──
 // Packages are folders of per-element theme SVGs (see public/design/README.md):
@@ -1171,7 +1171,7 @@ function DesignTabBody({ baseUrl }) {
 // user_data/design_packages/ via the zip upload here. The selection is the
 // normal settings key overlays.global.designPackage, read by every SVG-element
 // mount.
-function DesignPackageSection() {
+const DesignPackageSection = memo(function DesignPackageSection() {
     const designPackage = useSettingsStore(s => s?.overlays?.global?.designPackage) ?? 'default';
     const setItem = useSettingsStore(s => s.setItem);
     const [packages, setPackages] = useState(null);   // null = loading
@@ -1265,11 +1265,11 @@ function DesignPackageSection() {
             </div>
         </div>
     );
-}
+});
 
 // Per-file theme-compiler report for the last package install: slot-binding
 // coverage + findings (warn = something won't bind on stream; info = FYI).
-function InstallReport({ report, onDismiss }) {
+const InstallReport = memo(function InstallReport({ report, onDismiss }) {
     const LEVEL_STYLE = {
         error: 'text-red-400',
         warn: 'text-amber-400',
@@ -1299,10 +1299,10 @@ function InstallReport({ report, onDismiss }) {
             </div>
         </div>
     );
-}
+});
 
 // ── Global Design Section (rendered inside the Design tab) ──
-function GlobalDesignSection() {
+const GlobalDesignSection = memo(function GlobalDesignSection() {
     const globalDesign = useSettingsStore(useShallow(s => s?.overlays?.global ?? {}));
     const setItem = useSettingsStore(s => s.setItem);
 
@@ -1321,7 +1321,6 @@ function GlobalDesignSection() {
     const textShadowColor   = globalDesign.textShadowColor   ?? 'rgba(0, 0, 0, 0.8)';
     const showCaptains      = globalDesign.showCaptains      !== false;
     const showLogo          = globalDesign.showLogo          !== false;
-    const showBackdropBlur  = globalDesign.showBackdropBlur  !== false;
     const finalBadgeColor   = globalDesign.finalBadgeColor   ?? '';
 
     return (
@@ -1422,7 +1421,7 @@ function GlobalDesignSection() {
 
             <div>
                 <Text size="xs" fw={700} dimmed className="mb-2 uppercase tracking-wide">Display Toggles</Text>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <Label className="flex items-center gap-2 text-sm">
                         <Switch checked={showCaptains} onCheckedChange={(c) => setItem('overlays.global.showCaptains', c)} />
                         Show Captains
@@ -1431,28 +1430,24 @@ function GlobalDesignSection() {
                         <Switch checked={showLogo} onCheckedChange={(c) => setItem('overlays.global.showLogo', c)} />
                         Show Overlay Logo
                     </Label>
-                    <Label className="flex items-center gap-2 text-sm">
-                        <Switch checked={showBackdropBlur} onCheckedChange={(c) => setItem('overlays.global.showBackdropBlur', c)} />
-                        Backdrop Blur
-                    </Label>
                 </div>
             </div>
         </Stack>
     );
-}
+});
 
 // Labeled color input (debounced) used in the global design grid.
-function LabeledColor({ label, ...props }) {
+const LabeledColor = memo(function LabeledColor({ label, ...props }) {
     return (
         <div className="flex flex-col gap-1">
             <Label className="field-label">{label}</Label>
             <DebouncedColorInput {...props} />
         </div>
     );
-}
+});
 
 // ── Debounced color input — updates local display immediately, saves after idle ──
-function DebouncedColorInput({ value, onChange, ...props }) {
+const DebouncedColorInput = memo(function DebouncedColorInput({ value, onChange, ...props }) {
     const [local, setLocal] = useState(value ?? '');
     const timerRef = useRef(null);
 
@@ -1474,14 +1469,14 @@ function DebouncedColorInput({ value, onChange, ...props }) {
     }, []);
 
     return <ColorInput {...props} value={local} onChange={handleChange} />;
-}
+});
 
 // ── Per-layout settings panel ──
 // The Scorecard stores its config per scoreboard (overlays.scorecard.{N}.*) so
 // two scorecard sources can be toggled independently; a plain overlays.scorecard.*
 // leaf is the legacy global, merged underneath as a non-destructive fallback.
 // All other layout types stay global (overlays.{type}.*).
-function LayoutSettingsPanel({ layoutType, supportedSettings, scoreboardId }) {
+const LayoutSettingsPanel = memo(function LayoutSettingsPanel({ layoutType, supportedSettings, scoreboardId }) {
     const allDefs = LAYOUT_SETTINGS[layoutType] ?? [];
     const settingsDefs = supportedSettings
         ? allDefs.filter(def => supportedSettings.includes(def.key))
@@ -1599,7 +1594,7 @@ function LayoutSettingsPanel({ layoutType, supportedSettings, scoreboardId }) {
             )}
         </Stack>
     );
-}
+});
 
 function renderElementSetting(def, writeNs, overlaySettings, setItem) {
     const settingsKey = `overlays.${writeNs}.${def.key}`;
@@ -1671,7 +1666,7 @@ function renderElementSetting(def, writeNs, overlaySettings, setItem) {
 }
 
 // One pinned override row (any type).
-function OverrideRow({ def, value, onChange, onRemove }) {
+const OverrideRow = memo(function OverrideRow({ def, value, onChange, onRemove }) {
     const sharedRemove = (
         <SimpleTooltip label="Remove override (use global value)">
             <Button variant="ghost" size="icon-sm" onClick={onRemove}><X size={14} /></Button>
@@ -1720,10 +1715,10 @@ function OverrideRow({ def, value, onChange, onRemove }) {
             {sharedRemove}
         </div>
     );
-}
+});
 
 // ── Controller Overlay Panel ──
-function ControllerOverlayPanel({ selected, onSelect }) {
+const ControllerOverlayPanel = memo(function ControllerOverlayPanel({ selected, onSelect }) {
     const [status, setStatus] = useState(null);
     const [loading, setLoading] = useState(false);
 
@@ -1879,7 +1874,7 @@ function ControllerOverlayPanel({ selected, onSelect }) {
             )}
         </Stack>
     );
-}
+});
 
 export default function LayoutBrowser() {
     const active = useSettingsStore(s => s?.scoreboards?.active ?? [1]);

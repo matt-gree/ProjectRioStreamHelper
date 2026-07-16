@@ -7,21 +7,9 @@
  * Every write re-projects the bound board(s) server-side (see server/match.py).
  */
 
-const BASE = "/api/v1";
+import { makeReq, jsonBody } from "../lib/api";
 
-async function req(path, options) {
-    const resp = await fetch(`${BASE}${path}`, options);
-    const data = await resp.json().catch(() => ({}));
-    if (!resp.ok) {
-        throw new Error(data?.error || `Request failed: ${resp.status}`);
-    }
-    return data;
-}
-
-const jsonBody = (body) => ({
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body ?? {}),
-});
+const req = makeReq("/api/v1");
 
 /** Create the next match. Returns { id, match }. */
 export async function createMatch() {
