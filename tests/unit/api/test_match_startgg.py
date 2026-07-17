@@ -12,21 +12,6 @@ from server.state import State
 from server.utils.deep_dict import deep_get
 
 
-@pytest.fixture(autouse=True)
-def isolate_participants(tmp_path, monkeypatch):
-    """Registry isolation: temp participants.json + a clean in-memory dict
-    (the shared conftest doesn't cover the Participants singleton)."""
-    from aiopath import AsyncPath
-    from server.participants import Participants
-
-    monkeypatch.setattr(Participants, "_out",
-                        AsyncPath(str(tmp_path / "participants.json")))
-    saved = Participants.participants
-    Participants.participants = {}
-    yield
-    Participants.participants = saved
-
-
 def sgg_set(**over):
     """A GetSet result shaped like _parse_set_full's output."""
     s = {

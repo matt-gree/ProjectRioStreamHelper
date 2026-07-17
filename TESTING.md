@@ -6,8 +6,8 @@
 >
 > **Run it now:**
 > ```bash
-> ./venv/bin/python -m pytest          # backend (175 tests, ~1.4s)
-> npm run test:run                     # frontend (vitest, 31 tests)
+> ./venv/bin/python -m pytest          # backend (493 tests, ~2.5s)
+> npm run test:run                     # frontend (vitest, 88 tests)
 > ```
 
 ## 1. Goal & philosophy
@@ -334,9 +334,19 @@ Gotchas baked into the workflow:
 | **3** ✅ | Tier 3 API (`tests/integration/test_api.py`) + Tier 4 (`src/context/store.test.js`, `src/context/socket.test.jsx`, `src/routes/layouts/designConstants.test.js`). | Contracts and frontend wiring covered. **+13 py, +22 js.** |
 | **4** ✅ | CI workflow ([`.github/workflows/test.yml`](.github/workflows/test.yml), §6). | Every PR gated; "no backslide" enforced. |
 
-Phases 0–4 are **done** — the suite (**175 py + 31 js**) gates every PR. The only
-remaining item is the optional Tier 5 smoke (overlay-base.js resolution + one
-end-to-end boot), deferred as low-ROI for a single-maintainer project.
+Phases 0–4 are **done** — the suite gates every PR. Later feature work kept
+adding tests alongside (matches, bindings, projectors, postgame, theme
+compiler…), and a two-round 2026-07-16 coverage-gap pass added the start.gg
+parsers, announcements feed, commentary projector, participant registry
+import/merge, GameEndWatcher resolver, /scoreboards API, post-game stat-file
+gating (`test_postgame_files.py`), the StatsTracker slot lifecycle, and —
+on the frontend — the OBS WebSocket layer (`src/context/obs.test.jsx`: the
+shutdown-property reconciliation and two-phase-hide contracts, against a
+mocked `obs-websocket-js`), the SocketIO unset/settings/config channels, and
+the Production element URL-binding rules, bringing the suite to
+**493 py + 88 js**. The only remaining planned item is the optional Tier 5
+smoke (overlay-base.js resolution + one end-to-end boot), deferred as low-ROI
+for a single-maintainer project.
 
 > **Tier 4 note:** `layouts.jsx`'s design constants (`GLOBAL_DESIGN_KEYS`,
 > `GLOBAL_DESIGN_DEFAULTS`, `OVERRIDABLE_GLOBAL_KEYS`, `LAYOUT_SETTINGS`) were
@@ -349,9 +359,12 @@ end-to-end boot), deferred as low-ROI for a single-maintainer project.
 Three autouse fixtures make the singleton-heavy server testable:
 - **`mock_socket`** — replaces `server.socketio.emit` with an `AsyncMock`; returned
   so tests assert emitted frames (e.g. SetBatch == 1 frame).
-- **`isolate_user_data`** — redirects `State`/`Settings` persisted paths into a
-  per-test `tmp_path`; no test touches the real `user_data/`.
+- **`isolate_user_data`** — redirects `State`/`Settings`/`Participants` persisted
+  paths into a per-test `tmp_path`; no test touches the real `user_data/`.
 - **`reset_singletons`** — snapshots/restores class state for `State`, `Settings`,
-  `RioGameDataProvider`, `StatsTracker`, `RotationManager` around every test.
+  `RioGameDataProvider`, `StatsTracker`, `PoolManager`, `Match._credited_games`,
+  `PostGame`, `GameEndWatcher`, `Announcements`, and `Participants` around every
+  test. A new class-level singleton with mutable state must be added here in the
+  same change that introduces it.
 
 Plus **`set_setting(key, value)`** for dotted-key settings overrides.

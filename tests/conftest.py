@@ -37,6 +37,7 @@ def isolate_user_data(tmp_path, monkeypatch):
     developer's real settings.json / state.json / stream_labels.
     """
     from aiopath import AsyncPath
+    from server.participants import Participants
     from server.state import State
     from server.settings import Settings
 
@@ -46,16 +47,21 @@ def isolate_user_data(tmp_path, monkeypatch):
                         AsyncPath(str(tmp_path / "stream_labels")))
     monkeypatch.setattr(Settings, "_settings_out",
                         AsyncPath(str(tmp_path / "settings.json")))
+    monkeypatch.setattr(Participants, "_out",
+                        AsyncPath(str(tmp_path / "participants.json")))
     return tmp_path
 
 
 @pytest.fixture(autouse=True)
 def reset_singletons():
     """Snapshot and restore class-level singleton state around every test."""
+    from server.announcements import Announcements
+    from server.participants import Participants
     from server.state import State
     from server.settings import Settings
     from server.match import Match
     from server.postgame import PostGame
+    from server.rio.game_end import GameEndWatcher
     from server.rio.provider import RioGameDataProvider as Provider
     from server.rio.stats_tracker import StatsTracker
     from server.rio.rotation import PoolManager
@@ -75,6 +81,10 @@ def reset_singletons():
         "stats_slots": dict(StatsTracker._slots),
         "rotations": dict(PoolManager._rotations),
         "credited_games": copy.deepcopy(Match._credited_games),
+        "gameend_pending": set(GameEndWatcher._pending),
+        "gameend_done": set(GameEndWatcher._done),
+        "announcements_active": list(Announcements._active),
+        "participants": dict(Participants.participants),
     }
 
     # Clean baseline for the test.
@@ -100,6 +110,10 @@ def reset_singletons():
     StatsTracker._slots = {}
     PoolManager._rotations = {}
     Match._credited_games = {}
+    GameEndWatcher._pending = set()
+    GameEndWatcher._done = set()
+    Announcements._active = []
+    Participants.participants = {}
 
     yield
 
@@ -119,6 +133,10 @@ def reset_singletons():
     StatsTracker._slots = saved["stats_slots"]
     PoolManager._rotations = saved["rotations"]
     Match._credited_games = saved["credited_games"]
+    GameEndWatcher._pending = saved["gameend_pending"]
+    GameEndWatcher._done = saved["gameend_done"]
+    Announcements._active = saved["announcements_active"]
+    Participants.participants = saved["participants"]
 
 
 @pytest.fixture

@@ -61,3 +61,48 @@ describe('element registry invariants', () => {
         }
     });
 });
+
+describe('element URL binding (match)', () => {
+    const byId = Object.fromEntries(ELEMENTS.map((e) => [e.id, e]));
+    const HOST = 'http://localhost:5260';
+
+    it('every element matches its own canonical url', () => {
+        for (const e of ELEMENTS) {
+            expect(e.match(HOST + e.url), e.id).toBe(true);
+        }
+    });
+
+    it('matching survives query params (scoreboard/size/intro variants)', () => {
+        expect(byId.scoreboard.match(
+            `${HOST}/layout/scoreboard1/scoreboard.html?scoreboard=2&size=m&intro=0`,
+        )).toBe(true);
+        expect(byId.lowerthird.match(
+            `${HOST}/layout/lowerthird/lowerthird.html?intro=0`)).toBe(true);
+    });
+
+    it('scoreboard binds the band, not siblings in the same folder', () => {
+        expect(byId.scoreboard.match(
+            `${HOST}/layout/scoreboard1/stats.html?team=1`)).toBe(false);
+        expect(byId.scoreboard.match(
+            `${HOST}/layout/scoreboard1/roster.html`)).toBe(false);
+    });
+
+    it('schedule is deliberately narrow: bracket player_schedule must not bind', () => {
+        expect(byId.schedule.match(
+            `${HOST}/layout/bracket/player_schedule.html`)).toBe(false);
+        expect(byId.schedule.match(
+            `${HOST}/layout/schedule/schedule.html`)).toBe(true);
+    });
+
+    it('both post-game feeds bind the shared callout stage', () => {
+        const stage = `${HOST}/layout/shared/callout-stage.html`;
+        expect(byId.postgamecallout.match(stage)).toBe(true);
+        expect(byId.postgamevs.match(stage)).toBe(true);
+    });
+
+    it('no element binds a non-PRSH browser source', () => {
+        for (const e of ELEMENTS) {
+            expect(e.match('https://example.com/some/page.html'), e.id).toBe(false);
+        }
+    });
+});
