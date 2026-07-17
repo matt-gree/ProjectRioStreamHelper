@@ -93,4 +93,96 @@ describe('SocketProvider', () => {
         await waitFor(() => expect(useStateStore.getState().getItem('p.2')).toBe('B'));
         expect(useStateStore.getState().getItem('p.1')).toBe('A');
     });
+
+    it('ignores a set_batch echo of its own session id', async () => {
+        await renderProvider();
+        h.socket.server('v1.state.set_batch', {
+            sid: h.socket.id,
+            items: [{ key: 'echo', value: 1 }],
+        });
+        await new Promise(r => setTimeout(r, 10));
+        expect(useStateStore.getState().getItem('echo')).toBeUndefined();
+    });
+
+    it('applies v1.state.unset and unset_batch', async () => {
+        h.socket.rpc['v1.state.get'] = { score: { 1: { a: 1, b: 2, c: 3 } } };
+        await renderProvider();
+        h.socket.server('v1.state.unset', { key: 'score.1.a' });
+        h.socket.server('v1.state.unset_batch',
+            { items: [{ key: 'score.1.b' }, { key: 'score.1.c' }] });
+        await waitFor(() =>
+            expect(useStateStore.getState().getItem('score.1.c')).toBeUndefined());
+        expect(useStateStore.getState().getItem('score.1.a')).toBeUndefined();
+        expect(useStateStore.getState().getItem('score.1.b')).toBeUndefined();
+    });
+
+    it('unset removes a top-level (single-segment) key too', async () => {
+        // why: Zustand's set() merges by default, and a merge can never
+        // remove a top-level key — deletion must use replace mode, or an
+        // unset of e.g. "matchup" leaves the stale object behind.
+        h.socket.rpc['v1.state.get'] = { matchup: { present: true }, keep: 1 };
+        await renderProvider();
+        h.socket.server('v1.state.unset', { key: 'matchup' });
+        await waitFor(() =>
+            expect(useStateStore.getState().getItem('matchup')).toBeUndefined());
+        expect(useStateStore.getState().getItem('keep')).toBe(1);
+        // Actions survive the replace — the store still functions.
+        expect(useStateStore.getState().loaded).toBe(true);
+    });
+
+    it('a set and an unset for different keys land in the same frame', async () => {
+        await renderProvider();
+        h.socket.server('v1.state.set', { key: 'x', value: 9 });
+        h.socket.server('v1.state.unset', { key: 'y' });
+        await waitFor(() => expect(useStateStore.getState().getItem('x')).toBe(9));
+    });
+
+    it('unmount removes listeners and resets loaded', async () => {
+        const { unmount } = render(<SocketProvider><div /></SocketProvider>);
+        await waitFor(() => expect(useStateStore.getState().loaded).toBe(true));
+        unmount();
+        expect(useStateStore.getState().loaded).toBe(false);
+        // A push after unmount must not apply — the handlers are gone.
+        h.socket.server('v1.state.set', { key: 'late', value: 1 });
+        await new Promise(r => setTimeout(r, 10));
+        expect(useStateStore.getState().getItem('late')).toBeUndefined();
+    });
+});
+
+describe('SocketProvider settings + config channels', () => {
+    it('fetches settings on connect and applies pushes', async () => {
+        h.socket.rpc['v1.settings.get'] = { obs: { port: 4455 } };
+        await renderProvider();
+        await waitFor(() => expect(useSettingsStore.getState().loaded).toBe(true));
+        expect(useSettingsStore.getState().getItem('obs.port')).toBe(4455);
+
+        h.socket.server('v1.settings.set', { key: 'obs.port', value: 4460 });
+        await waitFor(() =>
+            expect(useSettingsStore.getState().getItem('obs.port')).toBe(4460));
+    });
+
+    it('ignores settings echoes of its own session id', async () => {
+        await renderProvider();
+        await waitFor(() => expect(useSettingsStore.getState().loaded).toBe(true));
+        h.socket.server('v1.settings.set', { key: 'k', value: 1, sid: h.socket.id });
+        await new Promise(r => setTimeout(r, 10));
+        expect(useSettingsStore.getState().getItem('k')).toBeUndefined();
+    });
+
+    it('applies v1.settings.unset', async () => {
+        h.socket.rpc['v1.settings.get'] = { scoreboards: { aliases: { 2: 'Side' } } };
+        await renderProvider();
+        await waitFor(() => expect(useSettingsStore.getState().loaded).toBe(true));
+        h.socket.server('v1.settings.unset', { key: 'scoreboards.aliases.2' });
+        await waitFor(() => expect(
+            useSettingsStore.getState().getItem('scoreboards.aliases.2')
+        ).toBeUndefined());
+    });
+
+    it('fetches config once on connect', async () => {
+        h.socket.rpc['v1.config.get'] = { version: '2.0.0' };
+        await renderProvider();
+        await waitFor(() => expect(useConfigStore.getState().loaded).toBe(true));
+        expect(useConfigStore.getState().version).toBe('2.0.0');
+    });
 });

@@ -37,7 +37,9 @@ export const useStateStore = create((set, get) => ({
         return val !== undefined ? val : defaultValue;
     },
     deleteItem: (key, emit=true) => {
-        set(state => dissocPath(key.split("."), state));
+        // Replace (2nd arg true), not merge: a merge can never remove a
+        // top-level key, so a single-segment unset would silently no-op.
+        set(state => dissocPath(key.split("."), state), true);
         if(emit && _socketRef) {
             _socketRef.emit('v1.state.unset', { key });
         }
@@ -49,7 +51,7 @@ export const useStateStore = create((set, get) => ({
                 s = dissocPath(key.split("."), s);
             }
             return s;
-        });
+        }, true);
         if(emit && _socketRef && keys.length > 0) {
             _socketRef.emit('v1.state.unset_batch', {
                 items: keys.map(key => ({ key })),
@@ -73,7 +75,7 @@ export const useSettingsStore = create((set, get) => ({
         return val !== undefined ? val : defaultValue;
     },
     deleteItem: (key, emit=true) => {
-        set(state => dissocPath(key.split("."), state));
+        set(state => dissocPath(key.split("."), state), true);
         if(emit && _socketRef) {
             _socketRef.emit('v1.settings.unset', { key });
         }
