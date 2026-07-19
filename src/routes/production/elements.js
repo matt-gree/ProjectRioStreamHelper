@@ -18,12 +18,15 @@
  * manual wiring in the common case. Matching is scoped to the current PROGRAM
  * scene, which is also where firing happens.
  *
- * Layout: each element renders as a self-contained "window" in a 12-column grid
- * on the Production page. `span` is the element's PREFERRED width out of 12
- * columns — the page packs elements into rows and stretches every full row to
- * exactly 12 (see packRows in production.jsx), so spans are a starting point,
- * not a guarantee. The face holds the live actions, with bulky setup tucked
- * behind a gear popover so a small element (e.g. Hit Visualizer) stays compact.
+ * Console contract (production-console-contract skill) — the registry also
+ * carries each element's console declaration:
+ *   - `quickFace` : the rail card's rows (≤ 2), or explicit null (= not
+ *                   pinnable). OMITTED on most elements — the default derives
+ *                   from flavor via quickFaceFor(): direct → visibility
+ *                   toggle; fed → content pick + push.
+ *   - `stageBody` : key of the element's stage panel under stage/ — defaults
+ *                   to the element id via stageBodyFor(); declare only to
+ *                   deviate.
  */
 
 export const PHASES = [
@@ -39,8 +42,6 @@ export const ELEMENTS = [
         name: 'Scoreboard',
         phase: 'live',
         flavor: 'direct',
-        // Grid width on the Production page (out of 12 columns).
-        span: 3,
         // Its own dedicated source: the scoreboard layout. `url` is the canonical
         // overlay this element expects (the default when adding it to OBS or
         // checking whether the streamer's source points at the right thing);
@@ -51,11 +52,31 @@ export const ELEMENTS = [
         match: (url) => /\/layout\/scoreboard\d*\/scoreboard/i.test(url) || /scoreboard\.html/i.test(url),
     },
     {
+        id: 'scorecard',
+        name: 'Scorecard',
+        // The vertical scorecard — a stack of independently toggleable bands
+        // (header, phase, game mode, score block, rosters, bases, at-bat, box
+        // score, stadium) that the producer flips live; the mount animates each
+        // group in/out. Config is per board (overlays.scorecard.{N}.*), so two
+        // scorecard sources can be driven independently. Native 1920×1080; the
+        // SVG scales to whatever the OBS source is.
+        phase: 'live',
+        flavor: 'direct',
+        url: '/layout/scorecard/scorecard.html',
+        width: 1920,
+        height: 1080,
+        // Deliberately narrow: fourcam.html shares the folder and must NOT bind
+        // here, and 'scorecard' must not be swallowed by the Scoreboard matcher.
+        match: (url) => /scorecard\/scorecard/i.test(url) || /scorecard\.html/i.test(url),
+        // Two rows: is it on air, and which score block is showing — the pair a
+        // producer reaches for mid-game. Everything else is stage work.
+        quickFace: { rows: ['visibility', 'setting'] },
+    },
+    {
         id: 'stats',
         name: 'Stats',
         phase: 'live',
         flavor: 'fed',
-        span: 3,
         // `feed` names the content picker the card renders: 'stats' = pick which
         // roster character's stats to show. The pick is written to the chosen
         // named container's feed key (production.feed.container.<id> = { element:
@@ -79,7 +100,6 @@ export const ELEMENTS = [
         // The condensed face is per-caster on-air toggles + sub-field quick switch
         // + sub-plate toggle; the in-depth roster authoring lives on the
         // Commentary tab. Span 4 to fit up to four caster rows.
-        span: 4,
         // Its own dedicated source: the caster strip. Slots are projected to
         // commentary.{i}.* server-side from the authored commentary.slots.
         url: '/layout/commentary/commentary.html',
@@ -99,7 +119,6 @@ export const ELEMENTS = [
         // content, projected to playerplates.* server-side. Native 1920×1080.
         phase: ['draft', 'live', 'break'],
         flavor: 'direct',
-        span: 5,
         url: '/layout/playerplates/playerplates.html',
         width: 1920,
         height: 1080,
@@ -118,7 +137,6 @@ export const ELEMENTS = [
         // REST-only GET /postgame/abs walkthrough payload. Native 1920×1080.
         phase: 'post',
         flavor: 'fed',
-        span: 4,
         feed: 'postgamecallout',
         url: '/layout/shared/callout-stage.html',
         width: 1920,
@@ -137,7 +155,6 @@ export const ELEMENTS = [
         // Reads postgame.{N}.player.{T}.totals (Phase 6 capture). 1920×1080.
         phase: 'post',
         flavor: 'fed',
-        span: 4,
         feed: 'postgamevs',
         url: '/layout/shared/callout-stage.html',
         width: 1920,
@@ -156,7 +173,6 @@ export const ELEMENTS = [
         // belong to the design package. Native 1920×1080.
         phase: 'break',
         flavor: 'direct',
-        span: 6,
         url: '/layout/lowerthird/lowerthird.html',
         width: 1920,
         height: 1080,
@@ -171,7 +187,6 @@ export const ELEMENTS = [
         // sits in the gear. Draft-phase prep and break filler both want it.
         phase: ['draft', 'break'],
         flavor: 'direct',
-        span: 4,
         url: '/layout/schedule/schedule.html',
         width: 1920,
         height: 1080,
@@ -188,11 +203,59 @@ export const ELEMENTS = [
         // design package (/design/{pkg}/matchup.svg). Native 1920×1080.
         phase: ['draft', 'break'],
         flavor: 'direct',
-        span: 5,
         url: '/layout/matchup/matchup.html',
         width: 1920,
         height: 1080,
         match: (url) => /\/layout\/matchup\//i.test(url) || /matchup\.html/i.test(url),
+    },
+    {
+        id: 'bracket',
+        name: 'Bracket',
+        // The tournament bracket, rendered from the bracket.* structure the
+        // Bracket desk publishes. winners_only.html / losers_only.html are thin
+        // redirects into index.html with a flag, so all three are the same
+        // element wearing different filters — the desk decides WHICH phase is
+        // on screen, this decides whether it's visible. Break filler and
+        // draft-phase context both want it.
+        phase: ['draft', 'break'],
+        flavor: 'direct',
+        url: '/layout/bracket/index.html',
+        width: 1920,
+        height: 1080,
+        match: (url) => /\/layout\/bracket\/(index|winners_only|losers_only)/i.test(url),
+    },
+    {
+        id: 'ticker',
+        name: 'Results Ticker',
+        // The scrolling results strip (rotator group) — completed games cycling
+        // along the bottom. Nothing to decide live but whether it's up: its
+        // scroll speed and card spacing are number settings with no kit row, so
+        // they stay in Setup. Native 1920×80.
+        phase: ['live', 'break'],
+        flavor: 'direct',
+        url: '/layout/rotator/ticker.html',
+        width: 1920,
+        height: 80,
+        match: (url) => /\/layout\/rotator\/ticker/i.test(url),
+    },
+    {
+        id: 'eventheader',
+        name: 'Event Header',
+        // The two persistent bands framing the canvas: top (competition ·
+        // location · dates) and bottom (message · event · phase · round). It
+        // sits over the whole broadcast, so it appears in every phase. Bands
+        // and per-field visibility are live switches (overlays.eventheader.*);
+        // geometry stays in Setup. Native 1920×1080.
+        phase: ['draft', 'live', 'post', 'break'],
+        flavor: 'direct',
+        url: '/layout/eventheader/eventheader.html',
+        width: 1920,
+        height: 1080,
+        match: (url) => /eventheader/i.test(url),
+        // Its source visibility plus the two band switches would be three rows;
+        // the bands are the pair that matters live, and the source toggle stays
+        // one click away on the stage.
+        quickFace: { rows: ['setting', 'setting'] },
     },
     {
         id: 'hitvisualizer',
@@ -201,7 +264,6 @@ export const ELEMENTS = [
         flavor: 'direct',
         // Compact: live actions (Replay / Spotlight / Split) on the face, the
         // spotlight scene + hold-ms + split config behind the gear.
-        span: 2,
         // Its own dedicated source: the 3D hit overlay. The provider pushes every
         // contact to score.{N}.hit.*; the producer reveals this to show one and can
         // re-fire it with Replay (writes score.{N}.hit.replay_nonce). Native 1280×720.
@@ -216,32 +278,27 @@ export const ELEMENTS = [
 export const elementsForPhase = (phase) => ELEMENTS.filter((el) =>
     Array.isArray(el.phase) ? el.phase.includes(phase) : el.phase === phase);
 
-export const GRID_COLS = 12;
+// ── Console contract resolvers ─────────────────────────────────────────────
+// Quick-face row vocabulary (interpreted by the rail when it renders a card):
+//   'visibility' — toggle the element's source (direct default)
+//   'content'    — pick what feeds the shared container (uses el.feed)
+//   'push'       — push the picked content to the container
+//   'setting'    — one of the element's own live overlay settings (a band
+//                  switch, the scorecard's score block)
+const QUICK_FACE_DEFAULTS = {
+    direct: { rows: ['visibility'] },
+    fed: { rows: ['content', 'push'] },
+};
 
-// Pack elements into rows of preferred spans, then stretch every row except
-// the last to exactly GRID_COLS — the elements tile the full width, row by
-// row, with only the final row allowed to run short. Extra columns are dealt
-// round-robin so growth is spread across the row.
-export function packRows(elements, cols = GRID_COLS) {
-    const rows = [];
-    let row = [];
-    let used = 0;
-    for (const el of elements) {
-        const span = Math.min(el.span || 3, cols);
-        if (used + span > cols && row.length) {
-            rows.push(row);
-            row = [];
-            used = 0;
-        }
-        row.push({ element: el, span });
-        used += span;
-    }
-    if (row.length) rows.push(row);
-
-    rows.forEach((r, idx) => {
-        if (idx === rows.length - 1) return; // the last row may run short
-        let deficit = cols - r.reduce((sum, e) => sum + e.span, 0);
-        for (let i = 0; deficit > 0; i = (i + 1) % r.length, deficit--) r[i].span += 1;
-    });
-    return rows;
+// The element's effective quick face: explicit null = not pinnable (an
+// intentional, visible state — the pin affordance doesn't render); an omitted
+// quickFace takes the flavor default.
+export function quickFaceFor(el) {
+    if (el.quickFace === null) return null;
+    return el.quickFace ?? QUICK_FACE_DEFAULTS[el.flavor] ?? null;
 }
+
+export const isPinnable = (el) => quickFaceFor(el) !== null;
+
+// Key of the element's stage panel (stage/<key>); defaults to the element id.
+export const stageBodyFor = (el) => el.stageBody ?? el.id;

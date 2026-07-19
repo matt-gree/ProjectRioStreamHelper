@@ -2,7 +2,10 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <meta name="overlay-settings" content="textColor, accentColor, fontFamily" />
+  <!-- The whitelist must name every knob this file reads: Setup filters
+       LAYOUT_SETTINGS.eventheader down to what appears here, so an omitted key
+       is a setting the mount honours but nobody can reach. -->
+  <meta name="overlay-settings" content="showHeader, headerOffsetY, showFooter, footerOffsetY, showEvent, showLocation, showDates, showMessage, showPhase, showRound, bandWidth, fontScale, bgStyle, separator, textColor, accentColor, fontFamily" />
   <style>
     /* Inter is bundled locally and injected by overlay-base.js. */
     * { box-sizing: border-box; margin: 0; padding: 0; }

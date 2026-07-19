@@ -1,42 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { packRows, elementsForPhase, ELEMENTS, PHASES } from './elements';
-
-const el = (id, span) => ({ id, span });
-const spans = (rows) => rows.map((r) => r.map((e) => e.span));
-const rowSum = (r) => r.reduce((s, e) => s + e.span, 0);
-
-describe('packRows', () => {
-    it('stretches every row except the last to exactly 12 columns', () => {
-        const rows = packRows([el('a', 3), el('b', 4), el('c', 4), el('d', 6), el('e', 2)]);
-        // a+b+c = 11 → first row; d+e = 8 → last row, left short.
-        expect(spans(rows)).toEqual([[4, 4, 4], [6, 2]]);
-        expect(rowSum(rows[0])).toBe(12);
-    });
-
-    it('a row that already sums to 12 is untouched', () => {
-        const rows = packRows([el('a', 3), el('b', 3), el('c', 4), el('d', 2), el('e', 5)]);
-        expect(spans(rows)[0]).toEqual([3, 3, 4, 2]);
-    });
-
-    it('deals the deficit round-robin from the left', () => {
-        const rows = packRows([el('a', 2), el('b', 2), el('c', 3), el('x', 12)]);
-        // 2+2+3 = 7 → deficit 5 → +2, +2, +1.
-        expect(spans(rows)[0]).toEqual([4, 4, 4]);
-    });
-
-    it('a single incomplete row keeps its natural spans', () => {
-        expect(spans(packRows([el('a', 4)]))).toEqual([[4]]);
-    });
-
-    it('an oversized preferred span is clamped to the full width', () => {
-        expect(spans(packRows([el('a', 20), el('b', 3)]))).toEqual([[12], [3]]);
-    });
-
-    it('preserves element order across rows', () => {
-        const rows = packRows([el('a', 6), el('b', 6), el('c', 6)]);
-        expect(rows.flat().map((e) => e.element.id)).toEqual(['a', 'b', 'c']);
-    });
-});
+import {
+    elementsForPhase, ELEMENTS, PHASES,
+    quickFaceFor, isPinnable, stageBodyFor,
+} from './elements';
 
 describe('element registry invariants', () => {
     it('every element belongs to at least one known phase', () => {
@@ -59,6 +25,54 @@ describe('element registry invariants', () => {
         for (const e of ELEMENTS.filter((x) => x.flavor === 'fed')) {
             expect(e.url).toMatch(/\/layout\//);
         }
+    });
+});
+
+describe('console contract (production-console-contract skill)', () => {
+    const KNOWN_ROWS = new Set(['visibility', 'content', 'push', 'setting']);
+
+    it('every element resolves a quick face or an explicit null — never undefined', () => {
+        for (const e of ELEMENTS) {
+            const face = quickFaceFor(e);
+            expect(face === null || typeof face === 'object', e.id).toBe(true);
+        }
+    });
+
+    it('the two-row cap is hard: no resolved face exceeds 2 rows', () => {
+        for (const e of ELEMENTS) {
+            const face = quickFaceFor(e);
+            if (face === null) continue;
+            expect(face.rows.length, e.id).toBeGreaterThan(0);
+            expect(face.rows.length, e.id).toBeLessThanOrEqual(2);
+            for (const row of face.rows) expect(KNOWN_ROWS.has(row), `${e.id}: ${row}`).toBe(true);
+        }
+    });
+
+    it('flavor defaults: direct → visibility toggle, fed → content pick + push', () => {
+        expect(quickFaceFor({ flavor: 'direct' })).toEqual({ rows: ['visibility'] });
+        expect(quickFaceFor({ flavor: 'fed' })).toEqual({ rows: ['content', 'push'] });
+    });
+
+    it('explicit null means not pinnable; an explicit face wins over the default', () => {
+        expect(quickFaceFor({ flavor: 'direct', quickFace: null })).toBeNull();
+        expect(isPinnable({ flavor: 'direct', quickFace: null })).toBe(false);
+        expect(isPinnable({ flavor: 'direct' })).toBe(true);
+        const custom = { rows: ['visibility', 'push'] };
+        expect(quickFaceFor({ flavor: 'fed', quickFace: custom })).toBe(custom);
+    });
+
+    it('fed elements with a content row name their feed picker', () => {
+        for (const e of ELEMENTS) {
+            const face = quickFaceFor(e);
+            if (face?.rows.includes('content')) expect(e.feed, e.id).toBeTruthy();
+        }
+    });
+
+    it('stage body keys default to the element id and are unique', () => {
+        expect(stageBodyFor({ id: 'scoreboard' })).toBe('scoreboard');
+        expect(stageBodyFor({ id: 'x', stageBody: 'y' })).toBe('y');
+        const keys = ELEMENTS.map(stageBodyFor);
+        expect(new Set(keys).size).toBe(keys.length);
     });
 });
 

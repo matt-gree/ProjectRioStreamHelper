@@ -1,0 +1,273 @@
+import { memo, useMemo } from 'react';
+import { useShallow } from 'zustand/react/shallow';
+import { useStateStore } from '../../context/store';
+import { Stack, Group, Text } from '../../components/ui/primitives';
+import { Button } from '../../components/ui/button';
+import { SegmentedControl } from '../../components/ui/segmented-control';
+import { cn } from '../../lib/utils';
+import { StagedDot } from './controls';
+import { defaultContainerFor, useContainerTarget, useFeedControl } from './feeds';
+
+/*
+ * Content pickers for the fed elements — picking IS feeding: the pick is
+ * written (through the staging gateway) to production.feed.container.<id>,
+ * which the shared container overlay renders.
+ *
+ * Each pickable element exposes its choices through a hook returning one
+ * shape — { groups, value, choose, empty } — so the stage can render the full
+ * picker and the rail card can render the same choices as a single kit row.
+ * Before this, the rail could only re-push whatever the stage last picked,
+ * which made a pinned Stats card useless on its own.
+ */
+
+// A rail-friendly flattening of grouped options: "Team — Character".
+export function flattenGroups(groups) {
+    return groups.flatMap(g => g.options.map(o => ({
+        value: o.value,
+        label: groups.length > 1 ? `${g.label} — ${o.label}` : o.label,
+    })));
+}
+
+// Content picker for the 'stats' fed element: choose WHICH roster character's
+// stats to put on the chosen shared container. Scoreboard 1 for now;
+// multi-scoreboard is later.
+export function useStatsFeedOptions(element, scoreboard = 1) {
+    const { container } = useContainerTarget(element.id, defaultContainerFor(element));
+    const { value: selection, staged, setFeed } = useFeedControl(container);
+    const players = useStateStore(s => s?.score?.[scoreboard]?.player);
+
+    // Build per-team option groups from the live roster (9 slots each).
+    const teams = useMemo(() => {
+        const out = [];
+        for (const team of [1, 2]) {
+            const p = players?.[team];
+            const chars = [];
+            for (let i = 0; i < 9; i++) {
+                const name = p?.character?.[i]?.name;
+                if (name) chars.push({ charIndex: i, name });
+            }
+            if (chars.length) {
+                out.push({ team, label: p?.msb_team || p?.rioName || `Team ${team}`, chars });
+            }
+        }
+        return out;
+    }, [players]);
+
+    const mine = selection && selection.element === 'stats'
+        && (selection.scoreboard == null || selection.scoreboard === scoreboard);
+    const role = (mine && selection.role) || 'batting';
+    const selValue = mine ? `${selection.team}:${selection.charIndex}` : '';
+
+    const nameOf = (team, charIndex) =>
+        teams.find(t => t.team === team)?.chars.find(c => c.charIndex === charIndex)?.name || 'stats';
+    const feed = (team, charIndex, r) =>
+        setFeed({ element: 'stats', scoreboard, team, charIndex, role: r }, `Feed stats: ${nameOf(team, charIndex)}`);
+    const choose = (value) => {
+        if (!value) { setFeed(null); return; }
+        const [team, charIndex] = value.split(':').map(Number);
+        feed(team, charIndex, role);
+    };
+    const setRole = (r) => {
+        if (!selValue) return;
+        const [team, charIndex] = selValue.split(':').map(Number);
+        feed(team, charIndex, r);
+    };
+
+    return {
+        label: 'Content — whose stats to show',
+        groups: teams.map(t => ({
+            label: t.label,
+            options: t.chars.map(c => ({ value: `${t.team}:${c.charIndex}`, label: c.name })),
+        })),
+        value: selValue, choose, staged,
+        role, setRole,
+        empty: teams.length === 0
+            ? `No roster in live state yet — start or load a game on scoreboard ${scoreboard}.`
+            : null,
+    };
+}
+
+export const StatsFeedPicker = memo(function StatsFeedPicker({ element, scoreboard = 1 }) {
+    const o = useStatsFeedOptions(element, scoreboard);
+    if (o.empty) return <Text size="sm" className="text-muted-foreground">{o.empty}</Text>;
+    return (
+        <Stack gap="xs">
+            <GroupedFeedSelect o={o} />
+            {o.value && (
+                <SegmentedControl
+                    data={[{ label: 'Batting', value: 'batting' }, { label: 'Pitching', value: 'pitching' }]}
+                    value={o.role}
+                    onChange={o.setRole}
+                />
+            )}
+        </Stack>
+    );
+});
+
+// The stage-width form of a grouped content picker: label + staged dot above a
+// grouped select. Shared by every fed element that has choices.
+const GroupedFeedSelect = memo(function GroupedFeedSelect({ o }) {
+    return (
+        <label className="flex flex-col gap-1">
+            <Group gap="xs" className="items-center">
+                <Text size="xs" className="text-muted-foreground">{o.label}</Text>
+                <StagedDot show={o.staged} />
+            </Group>
+            <select
+                value={o.value}
+                onChange={(e) => o.choose(e.target.value)}
+                className="rounded-md border border-border bg-card px-2 py-1 text-sm text-foreground"
+            >
+                <option value="">Nothing fed</option>
+                {o.groups.map(g => (
+                    <optgroup key={g.label} label={g.label}>
+                        {g.options.map(opt => (
+                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                    </optgroup>
+                ))}
+            </select>
+        </label>
+    );
+});
+
+// Content picker for the 'postgamecallout' fed element: choose WHICH
+// finished-game roster character gets the full-screen stat callout. Reads the
+// capture at postgame.{N}.player.{T}.characters[].
+export function usePostgameCalloutOptions(element, scoreboard = 1) {
+    const { container } = useContainerTarget(element.id, defaultContainerFor(element));
+    const { value: selection, staged, setFeed } = useFeedControl(container);
+    const present = useStateStore(s => s?.postgame?.[scoreboard]?.present);
+    const players = useStateStore(useShallow(s => ({
+        1: s?.postgame?.[scoreboard]?.player?.[1],
+        2: s?.postgame?.[scoreboard]?.player?.[2],
+    })));
+
+    // Per-side option groups from the captured box score (9 roster slots each).
+    const teams = useMemo(() => {
+        const out = [];
+        for (const team of [1, 2]) {
+            const p = players?.[team];
+            const chars = Array.isArray(p?.characters) ? p.characters : [];
+            const opts = chars
+                .map((c, i) => ({ charIndex: i, name: c?.name, isPitcher: c?.wasPitcher }))
+                .filter(c => c.name);
+            if (opts.length) out.push({ team, label: p?.rioName || `Side ${team}`, chars: opts });
+        }
+        return out;
+    }, [players]);
+
+    const mine = selection && selection.element === 'postgamecallout'
+        && (selection.scoreboard == null || selection.scoreboard === scoreboard);
+    const selValue = mine ? `${selection.team}:${selection.charIndex}` : '';
+
+    const choose = (value) => {
+        if (!value) { setFeed(null); return; }
+        const [team, charIndex] = value.split(':').map(Number);
+        const name = teams.find(t => t.team === team)?.chars.find(c => c.charIndex === charIndex)?.name || 'spotlight';
+        setFeed({ element: 'postgamecallout', scoreboard, team, charIndex }, `Feed spotlight: ${name}`);
+    };
+
+    return {
+        label: 'Content — whose spotlight to show',
+        groups: teams.map(t => ({
+            label: t.label,
+            options: t.chars.map(c => ({
+                value: `${t.team}:${c.charIndex}`,
+                label: `${c.name}${c.isPitcher ? ' (P)' : ''}`,
+            })),
+        })),
+        value: selValue, choose, staged,
+        empty: (!present || teams.length === 0)
+            ? `No captured game on scoreboard ${scoreboard} yet — capture a finished game first (the callout reads its box score).`
+            : null,
+    };
+}
+
+export const PostgameCalloutPicker = memo(function PostgameCalloutPicker({ element, scoreboard = 1 }) {
+    const o = usePostgameCalloutOptions(element, scoreboard);
+    if (o.empty) return <Text size="sm" className="text-muted-foreground">{o.empty}</Text>;
+    return (
+        <Stack gap="xs">
+            <GroupedFeedSelect o={o} />
+            {o.value && (
+                <Text size="xs" className="text-muted-foreground">
+                    Show the callout-stage source on air; the spotlight plays once and holds
+                    on the spray chart. Re-pick to swap the featured character.
+                </Text>
+            )}
+        </Stack>
+    );
+});
+
+// Content control for the 'postgamevs' fed element (Game Summary): push the
+// whole captured game — both sides — onto the shared Callout Stage. There is
+// nothing to pick beyond the scoreboard: pushing writes
+// production.feed.container.<id> = { element:'postgamevs', scoreboard } and
+// the callout-stage container renders the player-vs-player summary from
+// postgame.{N}.player.{T}.totals.
+export const PostgameVsPicker = memo(function PostgameVsPicker({ element, scoreboard = 1 }) {
+    const { container } = useContainerTarget(element.id, defaultContainerFor(element));
+    const { value: selection, staged, setFeed } = useFeedControl(container);
+    const pg = useStateStore(useShallow(s => {
+        const p = s?.postgame?.[scoreboard];
+        return {
+            present: p?.present, winnerSide: p?.meta?.winnerSide,
+            n1: p?.player?.[1]?.rioName, s1: p?.player?.[1]?.score,
+            n2: p?.player?.[2]?.rioName, s2: p?.player?.[2]?.score,
+            hasTotals: !!p?.player?.[1]?.totals,
+        };
+    }));
+
+    const mine = selection && selection.element === 'postgamevs'
+        && (selection.scoreboard == null || selection.scoreboard === scoreboard);
+    const occupiedByOther = selection && !mine;
+
+    const push = () => setFeed(
+        { element: 'postgamevs', scoreboard },
+        `Feed game summary: ${pg.n1 || 'Side 1'} vs ${pg.n2 || 'Side 2'}`,
+    );
+    const clear = () => setFeed(null);
+
+    if (!pg.present) {
+        return (
+            <Text size="sm" className="text-muted-foreground">
+                No captured game on scoreboard {scoreboard} yet — capture a finished game first
+                (the summary reads its box score).
+            </Text>
+        );
+    }
+
+    return (
+        <Stack gap="xs">
+            <Group gap="xs" className="items-center">
+                <Text size="sm" className="text-foreground">
+                    <span className={cn(pg.winnerSide === 1 && 'font-bold')}>{pg.n1 || 'Side 1'}</span> {pg.s1 ?? 0}
+                    <span className="mx-1 text-muted-foreground">–</span>
+                    {pg.s2 ?? 0} <span className={cn(pg.winnerSide === 2 && 'font-bold')}>{pg.n2 || 'Side 2'}</span>
+                </Text>
+                <StagedDot show={staged} />
+            </Group>
+            <Group gap="xs" className="items-center">
+                {mine ? (
+                    <Button size="sm" variant="ghost" onClick={clear}>Clear from stage</Button>
+                ) : (
+                    <Button size="sm" onClick={push}>Push game summary</Button>
+                )}
+                {occupiedByOther && (
+                    <Text size="xs" className="text-muted-foreground">Replaces what the stage is showing.</Text>
+                )}
+            </Group>
+            {!pg.hasTotals && (
+                <Text size="xs" className="text-muted-foreground">
+                    Older capture without side totals — re-capture to include Stars Won.
+                </Text>
+            )}
+            {mine && (
+                <Text size="xs" className="text-muted-foreground">
+                    Show the callout-stage source on air; Clear hands the stage back.
+                </Text>
+            )}
+        </Stack>
+    );
+});
