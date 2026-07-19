@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import { Radio, PlugZap, ArrowLeftRight } from 'lucide-react';
+import { Radio, PlugZap, ArrowLeftRight, CircleDot, X } from 'lucide-react';
 import { useObsStore } from '../../context/obs';
 import { useSettingsStore } from '../../context/store';
 import {
@@ -153,7 +153,7 @@ const TopBarSceneControls = memo(function TopBarSceneControls() {
 // Go Live (also bound to the configured hotkey while this page is mounted) and
 // Discard all. Hidden entirely when confirm mode is off — unless changes are
 // still pending from before it was turned off, so nothing staged can strand.
-const PendingBar = memo(function PendingBar() {
+export const PendingBar = memo(function PendingBar() {
     const enabled = useSettingsStore(s => s?.production?.confirm?.enabled) === true;
     const hotkey = useSettingsStore(s => s?.production?.confirm?.hotkey) || 'F9';
     const { pending, order } = useStagingStore(useShallow(s => ({ pending: s.pending, order: s.order })));

@@ -26,6 +26,27 @@ describe('Match desk', () => {
         expect(screen.getByText(/No matches yet/)).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /New match/ })).toBeInTheDocument();
     });
+
+    /*
+     * The console opens on the Match desk and the accordion auto-expands the
+     * newest match, so this is the FIRST thing a user with any fixture sees at
+     * launch. Testing only the empty state above missed a ReferenceError in the
+     * expanded body that whitescreened the app on startup — render a real match.
+     */
+    it('renders an expanded fixture body — the default view at launch', () => {
+        useStateStore.setState({
+            match: {
+                1: {
+                    label: 'Winners Final', stage: 'live',
+                    format: { bestOf: 3 }, series: { 1: 1, 2: 0 },
+                },
+            },
+        });
+        ui(<MatchDesk />);
+        expect(screen.queryByText(/No matches yet/)).not.toBeInTheDocument();
+        // The expanded body's start.gg control — the icon that was undefined.
+        expect(screen.getByRole('button', { name: /start\.gg/ })).toBeInTheDocument();
+    });
 });
 
 describe('Capture desk', () => {

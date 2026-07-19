@@ -1,7 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import {
-    ChevronDown, ChevronRight, ChevronsUpDown, Check, Plus, X, Trash2, CircleDot,
+    ChevronDown, ChevronRight, ChevronsUpDown, Check, Plus, X, Trash2, CircleDot, Trophy,
 } from 'lucide-react';
 import { useStateStore } from '../../../context/store';
 import {
