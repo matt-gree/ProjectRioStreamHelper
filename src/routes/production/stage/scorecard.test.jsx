@@ -26,7 +26,10 @@ afterEach(() => {
     vi.unstubAllGlobals();
 });
 
-const ui = () => render(<TooltipProvider><Stage selection="scorecard" /></TooltipProvider>);
+// The selection carries the board (../instances), so "the Scorecard stage for
+// board 2" is a selection, not a dropdown inside the panel.
+const ui = (selection = 'scorecard:1') =>
+    render(<TooltipProvider><Stage selection={selection} /></TooltipProvider>);
 
 // The scorecard's bands are flipped DURING a broadcast, which is why they moved
 // out of Setup and onto the console. These pin the two things that would break
@@ -48,13 +51,27 @@ describe('Scorecard stage', () => {
 
     it('writes per board, so two scorecard sources stay independent', () => {
         useSettingsStore.setState({ scoreboards: { active: [1, 2] } });
-        ui();
-        // The board picker only renders with more than one active board.
-        fireEvent.change(screen.getByRole('combobox'), { target: { value: '2' } });
+        ui('scorecard:2');
         // Clicking a toggle row's label flips its switch (default true → false).
         fireEvent.click(screen.getByText('Box Score'));
         expect(useSettingsStore.getState()?.overlays?.scorecard?.[2]?.showBoxScore).toBe(false);
         expect(useSettingsStore.getState()?.overlays?.scorecard?.[1]).toBeUndefined();
+    });
+
+    it('has no board picker — the board is which panel you are on', () => {
+        // Two active boards used to render a dropdown here, which is the thing
+        // that let the panel's rows and its header strip point at different
+        // boards. Two rack rows replaced it.
+        useSettingsStore.setState({ scoreboards: { active: [1, 2] } });
+        ui('scorecard:2');
+        expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    });
+
+    it('resolves a selection stored before instances existed', () => {
+        useSettingsStore.setState({ scoreboards: { active: [1, 2] } });
+        ui('scorecard');
+        fireEvent.click(screen.getByText('Box Score'));
+        expect(useSettingsStore.getState()?.overlays?.scorecard?.[1]?.showBoxScore).toBe(false);
     });
 
     it('stages a band instead of cutting it live when confirm mode is on', () => {

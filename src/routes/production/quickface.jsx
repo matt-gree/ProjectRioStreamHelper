@@ -1,13 +1,11 @@
 import { memo } from 'react';
-import { useShallow } from 'zustand/react/shallow';
-import { useStateStore } from '../../context/store';
 import { Text } from '../../components/ui/primitives';
 import { ActionRow, SelectRow } from './kit';
-import {
-    flattenGroups, usePostgameCalloutOptions, useStatsFeedOptions,
-} from './feed-pickers';
+import { FEED_OPTION_HOOKS, flattenGroups } from './feed-pickers';
 import { quickFaceFor } from './elements';
-import { defaultContainerFor, useContainerBinding, useContainerTarget, useFeedControl } from './feeds';
+import {
+    defaultContainerFor, useContainerBinding, useContainerPush, useContainerTarget,
+} from './feeds';
 import { SourceToggleRow } from './stage/generic';
 import { ScorecardModeRow, useScorecard } from './stage/scorecard';
 import { EventHeaderBandRows, useEventHeader } from './stage/eventheader';
@@ -25,7 +23,7 @@ import { BracketPhasePicker, useBracketDesk } from './desks/bracket';
  */
 
 // Direct element: the one decision that matters live — is it on the broadcast.
-const DirectQuickFace = memo(function DirectQuickFace({ element, bindings }) {
+const DirectQuickFace = memo(function DirectQuickFace({ element: _element, bindings }) {
     if (!bindings?.primary) {
         return <Text size="xs" className="text-muted-foreground">No source in program or preview.</Text>;
     }
@@ -51,12 +49,6 @@ const ContainerRow = memo(function ContainerRow({ container }) {
     );
 });
 
-// Which pickable elements can offer their choices as a single rail row.
-const FEED_OPTION_HOOKS = {
-    stats: useStatsFeedOptions,
-    postgamecallout: usePostgameCalloutOptions,
-};
-
 /*
  * Fed element with choices (Stats, Character Spotlight): the content pick
  * itself, as one row. Picking IS feeding, so no separate push is needed — and
@@ -81,12 +73,7 @@ const PickableFedQuickFace = memo(function PickableFedQuickFace({ element, useOp
 // Fed element with nothing to pick (Game Summary): push it, or hand the
 // container back. The only decision is timing.
 const PushOnlyFedQuickFace = memo(function PushOnlyFedQuickFace({ element }) {
-    const { container } = useContainerTarget(element.id, defaultContainerFor(element));
-    const { value: feed, setFeed } = useFeedControl(container);
-    const last = useStateStore(useShallow(s => s?.production?.feed?.container?.[container]));
-    const mine = feed && feed.element === element.id;
-    const repush = mine ? null : (last && last.element === element.id ? last : null);
-
+    const { container, mine, canPush, toggle } = useContainerPush(element);
     return (
         <>
             <ContainerRow container={container} />
@@ -94,8 +81,9 @@ const PushOnlyFedQuickFace = memo(function PushOnlyFedQuickFace({ element }) {
                 {
                     label: mine ? 'Clear' : 'Push',
                     variant: mine ? 'ghost' : 'default',
+                    disabled: !mine && !canPush,
                     title: mine ? 'Hand the container back' : 'Push this onto the container',
-                    onClick: () => setFeed(mine ? null : (repush ?? { element: element.id, scoreboard: 1 })),
+                    onClick: toggle,
                 },
             ]} />
         </>
@@ -132,8 +120,8 @@ const CaptureQuickFace = memo(function CaptureQuickFace() {
 
 // Scorecard: on air + which score block. Its other eight bands are stage work —
 // these are the two a producer reaches for without leaving the rail.
-const ScorecardQuickFace = memo(function ScorecardQuickFace({ element, bindings }) {
-    const sc = useScorecard();
+const ScorecardQuickFace = memo(function ScorecardQuickFace({ element, bindings, board }) {
+    const sc = useScorecard(board);
     return (
         <>
             <DirectQuickFace element={element} bindings={bindings} />
@@ -181,11 +169,13 @@ const ELEMENT_QUICK_FACES = {
 
 // The quick face for a registered element, by flavor. Returns null when the
 // element declared quickFace: null (the rail should not be offering it).
-export const QuickFace = memo(function QuickFace({ element, bindings }) {
+export const QuickFace = memo(function QuickFace({ element, bindings, board }) {
     const face = quickFaceFor(element);
     if (!face) return null;
     const Custom = ELEMENT_QUICK_FACES[element.id];
-    if (Custom) return <Custom element={element} bindings={bindings} />;
+    // `board` is the pinned instance's board — a board-scoped face (Scorecard)
+    // must write the same board the card's chip reads.
+    if (Custom) return <Custom element={element} bindings={bindings} board={board} />;
     return element.flavor === 'fed'
         ? <FedQuickFace element={element} />
         : <DirectQuickFace element={element} bindings={bindings} />;

@@ -127,7 +127,7 @@ export function mountPostgameCallout({ host }) {
   }
   async function loadTheme(pkg) {
     if (themeCache[pkg] != null) return themeCache[pkg];
-    let svg = null;
+    let svg;
     try {
       svg = await fetchThemeSvg(pkg);
       if (svg == null && pkg !== 'default') svg = await fetchThemeSvg('default');

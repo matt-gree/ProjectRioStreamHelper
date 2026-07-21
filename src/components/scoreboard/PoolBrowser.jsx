@@ -685,7 +685,7 @@ export default memo(function PoolBrowser({ scoreboardNumber: sb }) {
         updatePool({ scope });
     }, [updatePool, status.active]);
 
-    const excludedIds = pool.excluded ?? [];
+    const excludedIds = useMemo(() => pool.excluded ?? [], [pool.excluded]);
     const excludedList = useMemo(() => excludedIds.map(id => {
         const g = excludedCache[id] ?? excludedCache[String(id)];
         return { id, label: g ? gameLabel(g) : `#${id}` };

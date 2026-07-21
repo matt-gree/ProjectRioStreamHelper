@@ -270,7 +270,7 @@ export function mountLowerThird({ host }) {
         el.style.fontSize = base + 'px';
         const maxw = parseFloat(el.getAttribute('data-maxw'));
         if (!maxw || !el.textContent) continue;
-        let len = 0;
+        let len;
         try { len = el.getComputedTextLength(); } catch { len = 0; }
         if (len > maxw) el.style.fontSize = (base * maxw / len) + 'px';
       }

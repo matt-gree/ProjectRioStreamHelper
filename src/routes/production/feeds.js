@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useSettingsStore, useStateStore } from '../../context/store';
 import { stageOrRun, usePending } from '../../context/staging';
 import { useBindingScenes } from './bindings';
+import { isPickableFeed } from './elements';
 
 /*
  * Fed elements: containers + feeds. A fed element's content is pushed into a
@@ -26,14 +28,22 @@ export function defaultContainerFor(element) {
 
 // The named shared containers (public/layout/shared/*) an element can be fed
 // into — Split-Screen, Stats, and any the user adds later. Sourced from the
-// layout catalog, independent of OBS scene membership.
+// layout catalog, independent of OBS scene membership. `url`/`width`/`height`
+// ride along so the source strip's Bind slot can add the container the producer
+// actually re-pointed to, not just the element's canonical default.
 export function useSharedContainers() {
     const [list, setList] = useState([]);
     useEffect(() => {
         let alive = true;
         fetch('/api/v1/layouts')
             .then(r => r.json())
-            .then(all => { if (alive) setList(all.filter(l => l.group === 'shared').map(l => ({ id: containerId(l.url), name: l.name }))); })
+            .then(all => {
+                if (!alive) return;
+                setList(all.filter(l => l.group === 'shared').map(l => ({
+                    id: containerId(l.url), name: l.name,
+                    url: l.url, width: l.width, height: l.height,
+                })));
+            })
             .catch(() => {});
         return () => { alive = false; };
     }, []);
@@ -82,6 +92,31 @@ export function useContainerTarget(elementId, defaultId) {
         setSetting('production.containers', { ...cur, [elementId]: id });
     };
     return { container, setContainer };
+}
+
+/*
+ * One fed element's push decision — "is MY content on the container, and can I
+ * put it there". The single definition behind both surfaces that expose it:
+ * the panel header's Push slot (sourcestrip.jsx) and the rail's push-only quick
+ * face (quickface.jsx). They were separate copies of this logic; a producer
+ * clicking Push on the rail and on the stage must mean exactly one thing.
+ *
+ * `canPush` is false for a pickable element that has never been picked — there
+ * is genuinely nothing to push yet, and the strip disables rather than lies.
+ * Otherwise pushing re-sends whatever this element last fed, so a rail card
+ * (which has no picker) can hand content back after a Clear.
+ */
+export function useContainerPush(element, scoreboard = 1) {
+    const { container } = useContainerTarget(element.id, defaultContainerFor(element));
+    const { value: feed, staged, setFeed } = useFeedControl(container);
+    const last = useStateStore(useShallow(s => s?.production?.feed?.container?.[container]));
+
+    const mine = !!feed && feed.element === element.id;
+    const repush = mine ? null : (last && last.element === element.id ? last : null);
+    const canPush = mine || !isPickableFeed(element) || !!repush;
+    const toggle = () => setFeed(mine ? null : (repush ?? { element: element.id, scoreboard }));
+
+    return { container, feed, mine, staged, canPush, toggle, setFeed };
 }
 
 // The OBS source rendering a named container, if it's in program or preview.

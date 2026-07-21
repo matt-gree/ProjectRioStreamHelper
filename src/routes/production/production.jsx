@@ -15,7 +15,8 @@ import { cn } from '../../lib/utils';
 import { usePersistentState } from '../../hooks/usePersistentState';
 import { PHASES } from './elements';
 import { runObs } from './controls';
-import { Rack, seededRail, useRackSelection, useRailPins } from './rack';
+import { Rack, deskForPhase, seededRail, useRackSelection, useRailPins } from './rack';
+import { togglePin as togglePinIn, useProductionInstances } from './instances';
 import { Stage } from './stage';
 import { Rail } from './rail';
 import MatchDesk from './desks/match';
@@ -247,19 +248,21 @@ export default function Production() {
     // stays empty. Toggling always writes an explicit array, so the seed is
     // adopted the moment the producer edits it rather than resurrecting later.
     const pins = useMemo(() => seededRail(rail), [rail]);
-    const togglePin = (id) => setRail((prev) => {
-        const cur = seededRail(prev);
-        return cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id];
-    });
+    // Pins are matched by the instance they resolve to, not by stored string —
+    // so unpinning removes the card the producer is looking at even when it is
+    // stored in a pre-instance form, and pinning can't produce two cards for
+    // one source. See ./instances.
+    const instances = useProductionInstances();
+    const togglePin = (id) => setRail(prev => togglePinIn(seededRail(prev), id, instances));
 
-    // Phase auto-select: entering Draft or Post-game brings that phase's desk
-    // to the stage. Live and Break keep whatever the producer had selected —
-    // there is no one right answer for them, and clobbering a deliberate pick
-    // mid-broadcast would be worse than doing nothing.
+    // Phase auto-select: a phase that owns a desk (Draft → Match, Post-game →
+    // Capture, Break → Bracket) brings it to the stage. Live owns none and
+    // keeps whatever the producer had selected — clobbering a deliberate pick
+    // mid-game would be worse than doing nothing.
     const onPhase = (next) => {
         setPhase(next);
-        if (next === 'draft') setSelection('desk:match');
-        else if (next === 'post') setSelection('desk:capture');
+        const desk = deskForPhase(next);
+        if (desk) setSelection(desk);
     };
 
     return (

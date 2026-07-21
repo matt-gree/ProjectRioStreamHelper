@@ -9,7 +9,7 @@ import { Switch } from '../../../components/ui/switch';
 import { notifications } from '../../../lib/notify';
 import { cn } from '../../../lib/utils';
 import {
-    ActionRow, KIT_INPUT, KIT_INPUT_FLOW, ListRow, NumberRow, SegmentedRow, SelectRow,
+    ActionRow, KIT_INPUT, KIT_INPUT_FLOW, NumberRow, SegmentedRow, SelectRow,
 } from '../kit';
 import { MoveButtons, StagedDot, stageStateSet } from '../controls';
 import { matchDisplayLabel } from '../matches';
@@ -21,9 +21,15 @@ import { DirectStage } from './generic';
  * Lower Third (Break) stage — a direct element with rich authoring: the band
  * is FIVE independently toggleable SLOTS (lowerthird.slots.1..5, left→right),
  * each carrying one content type — logo · match · scorebox · merch · clock ·
- * message · bracket. Everything lives on the stage: each slot row is a type
- * picker + on/off switch, and expands in place to that type's content editor —
- * picking a type auto-expands the row so authoring never hides behind a menu.
+ * message · bracket.
+ *
+ * The stage lays those slots out as five COLUMNS in the same left→right order
+ * the band renders, so the editor is a scale model of what goes on air: slot 3
+ * sits where slot 3 sits. Every slot's editor is open at all times — the panel
+ * has the width to show them, and a producer mid-break should never have to
+ * remember which collapsed row holds the countdown. Reorder is ◀ ▶ for the
+ * same reason: the arrows point the way the content moves on screen.
+ *
  * Values are written (through the staging gateway) to lowerthird.* state,
  * which the SVG overlay renders; segment widths/looks belong to the active
  * design package's theme. Putting the band on air is still the OBS source
@@ -194,101 +200,82 @@ const ClockControl = memo(function ClockControl({ i }) {
     );
 });
 
-// One-line description of what a slot currently shows (for the face rows).
-function ltSlotSummary(type, s, matches) {
-    if (!type) return '';
-    if (type === 'match') return s.matchId ? matchDisplayLabel(matches, s.matchId) : 'No match picked';
-    if (type === 'scorebox') return `Scoreboard ${s.scoreboard || 1}`;
-    if (type === 'clock') {
-        const m = s.clock?.mode || 'off';
-        return m === 'off' ? 'Clock off' : (m === 'clock' ? 'Time of day' : (m === 'countdown' ? 'Countdown' : 'Count up'));
-    }
-    if (type === 'bracket') return s.title || 'Loaded bracket phase';
-    if (type === 'space') return Number(s.width) > 0 ? `Fixed gap ${Math.round(s.width)}px` : 'Split / fill';
-    return s.title || '';
-}
-
-// One face row = one band slot: move ▲/▼ (reorder, phone-friendly buttons) ·
-// chevron (expand editor) · type picker · staged dot · on/off. Collapsed rows
-// show a one-line summary of their content; picking a type auto-expands the
-// row's editor in place.
-const LowerThirdSlotRow = memo(function LowerThirdSlotRow({ i, expanded, setExpanded }) {
-    const { matches, slot, val, isStaged, setKey, swap } = useLowerThird();
+/*
+ * One slot column — a card standing where its content stands on the band.
+ * Header: position numeral · ◀ ▶ reorder · staged dot · on/off. Then the type
+ * picker, then that type's fields, always visible.
+ *
+ * The card's border carries the slot's state, so the row of five reads as the
+ * band itself: a filled slot that's on is solid and lit, a filled slot that's
+ * off is solid and dimmed, an empty slot is dashed. Custom block
+ * (contract-sanctioned): per-slot authoring is typed text, uploads and clock
+ * transport — shapes no kit row expresses. Kept on kit tokens and spacing.
+ */
+const LowerThirdSlotCard = memo(function LowerThirdSlotCard({ i }) {
+    const { slot, val, isStaged, setKey, swap } = useLowerThird();
     const s = slot(i);
     const type = val(`slots.${i}.type`, s.type) || '';
     const enabled = !!val(`slots.${i}.enabled`, s.enabled);
-    const summary = ltSlotSummary(type, s, matches);
-    const open = expanded && !!type;
+    const staged = isStaged(`slots.${i}`) || isStaged(`slots.${i}.enabled`) || isStaged(`slots.${i}.type`);
+
     return (
-        <div className="rounded-md border border-border/60 px-1.5">
-            <ListRow
-                lead={
-                    <MoveButtons
-                        label={`slot ${i}`}
-                        canUp={i > 1} canDown={i < LT_SLOT_COUNT}
-                        onUp={() => swap(i, i - 1)}
-                        onDown={() => swap(i, i + 1)}
-                    />
-                }
-                // The type picker IS the row's identity, so it takes the name
-                // slot; the summary rides alongside only while collapsed, where
-                // there's room for it.
-                name={
-                    <select
-                        className={cn(KIT_INPUT, 'min-w-0 flex-1')} value={type}
-                        aria-label={`Slot ${i} content type`}
-                        onChange={(e) => {
-                            setKey(`slots.${i}.type`, e.target.value, `Lower third: slot ${i} type`);
-                            setExpanded(!!e.target.value);
-                        }}
-                    >
-                        {LT_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </select>
-                }
-                meta={!open ? summary : undefined}
-                controls={
-                    <>
-                        <StagedDot show={isStaged(`slots.${i}`) || isStaged(`slots.${i}.enabled`) || isStaged(`slots.${i}.type`)} />
-                        <Switch
-                            size="sm" checked={enabled} disabled={!type}
-                            onCheckedChange={(v) => setKey(`slots.${i}.enabled`, v, `Lower third: slot ${i} ${v ? 'on' : 'off'}`)}
-                        />
-                    </>
-                }
-                expanded={open}
-                onExpandedChange={setExpanded}
-                disabled={!type}
-            >
-                {/* Custom block (contract-sanctioned): per-slot content authoring
-                    is typed text, uploads and clock transport — shapes no kit row
-                    expresses. Kept on kit tokens and spacing. */}
-                <LowerThirdSlotFields i={i} />
-            </ListRow>
-            {type === 'clock' && enabled && !open && (
-                <div className="pb-1.5 pl-7"><ClockControl i={i} /></div>
+        <section
+            className={cn(
+                'flex min-w-0 flex-col gap-1.5 rounded-md border p-2 transition-colors',
+                !type && 'border-dashed border-border/50',
+                type && !enabled && 'border-border bg-card/40',
+                type && enabled && 'border-border bg-card',
             )}
-        </div>
+        >
+            <div className="flex min-h-6 items-center gap-1.5">
+                <Text
+                    size="xs" span
+                    className={cn('font-mono tabular-nums', enabled ? 'text-rio-400' : 'text-muted-foreground')}
+                >
+                    {i}
+                </Text>
+                <MoveButtons
+                    axis="x" label={`slot ${i}`}
+                    canUp={i > 1} canDown={i < LT_SLOT_COUNT}
+                    onUp={() => swap(i, i - 1)}
+                    onDown={() => swap(i, i + 1)}
+                />
+                <span className="flex-1" />
+                <StagedDot show={staged} />
+                <Switch
+                    size="sm" checked={enabled} disabled={!type}
+                    aria-label={`Slot ${i} on air`}
+                    onCheckedChange={(v) => setKey(`slots.${i}.enabled`, v, `Lower third: slot ${i} ${v ? 'on' : 'off'}`)}
+                />
+            </div>
+
+            <select
+                className={cn(KIT_INPUT, 'min-w-0', !type && 'text-muted-foreground')} value={type}
+                aria-label={`Slot ${i} content type`}
+                onChange={(e) => setKey(`slots.${i}.type`, e.target.value, `Lower third: slot ${i} type`)}
+            >
+                {LT_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+
+            {type && <LowerThirdSlotFields i={i} />}
+        </section>
     );
 });
 
 export default function LowerThirdStage({ element }) {
-    // Which slot editors are open. Rows auto-open on a type pick and can be
-    // collapsed back to a summary line; empty slots have nothing to expand.
-    const [open, setOpen] = useState({});
     return (
         <Stack gap="sm">
             <DirectStage element={element} />
-            <Stack gap="xs">
+            {/* Five columns in band order once the panel is wide enough to
+                hold them; two, then one, as it narrows. */}
+            <div className="grid grid-cols-1 items-start gap-2 @xl:grid-cols-2 @2xl:grid-cols-3 @5xl:grid-cols-5">
                 {Array.from({ length: LT_SLOT_COUNT }, (_, k) => k + 1).map((i) => (
-                    <LowerThirdSlotRow
-                        key={i} i={i} expanded={!!open[i]}
-                        setExpanded={(v) => setOpen(o => ({ ...o, [i]: v }))}
-                    />
+                    <LowerThirdSlotCard key={i} i={i} />
                 ))}
-            </Stack>
+            </div>
             <Text size="xs" className="text-muted-foreground">
-                Slots render left → right; widths come from the design package. A Space
-                slot splits the band and pushes content to the corners.
+                Slots render left → right, in this order; widths come from the design
+                package. A Space slot splits the band and pushes content to the corners.
             </Text>
         </Stack>
     );

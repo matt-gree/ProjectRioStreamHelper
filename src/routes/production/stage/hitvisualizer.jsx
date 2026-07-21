@@ -10,7 +10,7 @@ import { ELEMENTS } from '../elements';
 import { useElementBindings } from '../bindings';
 import { runObs } from '../controls';
 import { useContainerTarget, useFeedControl, useSharedContainers } from '../feeds';
-import { SourceToggleRow, Unbound } from './generic';
+import { BindingNote } from './generic';
 
 /*
  * Hit Visualizer stage body — live actions (Replay / Spotlight / Split feed)
@@ -152,14 +152,7 @@ export default function HitVisualizerStage({ element, scoreboard = 1 }) {
             ]} />
 
             <div className="mt-1 flex flex-col gap-1.5 border-t border-border/60 pt-2">
-                {primary ? (
-                    <SourceToggleRow
-                        label={primary.where === 'preview' ? 'In preview' : 'On air'}
-                        item={primary.item} sceneName={primary.scene}
-                    />
-                ) : (
-                    <Unbound />
-                )}
+                <BindingNote binding={primary} />
 
                 <ToggleRow
                     label="Spotlight auto-cut" checked={!!v.spotlight.enabled}

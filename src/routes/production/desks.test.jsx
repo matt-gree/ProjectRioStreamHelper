@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { render, screen, cleanup, waitFor, fireEvent } from '@testing-library/react';
 import { TooltipProvider } from '../../components/ui/tooltip';
-import { useStateStore } from '../../context/store';
+import { useSettingsStore, useStateStore } from '../../context/store';
 import MatchDesk from './desks/match';
 import CaptureDesk from './desks/capture';
 import BracketDesk from './desks/bracket';
@@ -44,8 +44,42 @@ describe('Match desk', () => {
         });
         ui(<MatchDesk />);
         expect(screen.queryByText(/No matches yet/)).not.toBeInTheDocument();
-        // The expanded body's start.gg control — the icon that was undefined.
-        expect(screen.getByRole('button', { name: /start\.gg/ })).toBeInTheDocument();
+        // The Fixture column's start.gg control — the icon that was undefined.
+        expect(screen.getByRole('button', { name: /Load a set/ })).toBeInTheDocument();
+    });
+
+    /*
+     * A rotating board has no fixed sides to project a fixture onto, so the
+     * server rejects the bind with a 409. The chip must look unavailable
+     * instead of letting the producer click into that error — and the rule the
+     * UI mirrors is the server's exact one: board 1 under the HUD toggle is
+     * single by construction whatever its stored playback mode says.
+     */
+    it('makes a rotating board unpickable rather than erroring on click', () => {
+        useSettingsStore.setState({
+            project_rio: { hud_enabled: false },
+            scoreboards: {
+                active: [1, 2],
+                binding: { 2: { playback: { mode: 'rotate' } } },
+            },
+        });
+        useStateStore.setState({ score: {}, match: { 1: { stage: 'draft', format: { bestOf: 1 } } } });
+        ui(<MatchDesk />);
+        expect(screen.getByRole('radio', { name: /Board 1/ })).not.toHaveAttribute('aria-disabled');
+        expect(screen.getByRole('radio', { name: /Board 2/ })).toHaveAttribute('aria-disabled', 'true');
+    });
+
+    it('keeps the HUD board pickable even with a stale rotate mode stored', () => {
+        useSettingsStore.setState({
+            project_rio: { hud_enabled: true },
+            scoreboards: {
+                active: [1],
+                binding: { 1: { playback: { mode: 'rotate' } } },
+            },
+        });
+        useStateStore.setState({ score: {}, match: { 1: { stage: 'draft', format: { bestOf: 1 } } } });
+        ui(<MatchDesk />);
+        expect(screen.getByRole('radio', { name: /Board 1/ })).not.toHaveAttribute('aria-disabled');
     });
 });
 

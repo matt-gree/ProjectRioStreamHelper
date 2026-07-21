@@ -85,7 +85,7 @@ const BALL_ON = '#22c55e', STRIKE_ON = '#eab308', OUT_ON = '#ef4444';
 
 // Row order + visibility predicate over the resolved flags.
 const STACK = [
-  ['row-top',    v => true],
+  ['row-top',    () => true],
   ['row-inning', v => v.showInningSeg],
   ['row-live',   v => v.showLiveSeg],
   ['row-final',  v => v.showFinal],
@@ -587,6 +587,25 @@ export function mountScoreboard({ host, sb, size }) {
     return nInn > 0;
   }
 
+  /*
+   * The two ways a scoreboard ends up with no players, kept apart because the
+   * producer does something different about each:
+   *
+   *   nothing under score.N   → this board isn't being fed a game at all. Check
+   *                             the board's binding, or that a game is running.
+   *   fed, but no names       → Project Rio is reporting a roster without
+   *                             players. In practice a stale decoded.hud.json:
+   *                             teams/innings/scores come off the roster, so the
+   *                             board looks full while `*_player` is still null.
+   */
+  function blankReason(state) {
+    const board = g(state, `score.${SB}`, null);
+    if (!board || !Object.keys(board).length) {
+      return `Scoreboard ${SB} has no game — check its binding, or that a game is running.`;
+    }
+    return `Scoreboard ${SB} has no player names yet — Project Rio hasn't reported who is playing (a stale HUD file looks like this).`;
+  }
+
   // ── main update ─────────────────────────────────────────────────────────────
   async function update(state, settings) {
     const theme = g(settings, 'overlays.global.designPackage', null) || DEFAULT_PACKAGE;
@@ -601,6 +620,14 @@ export function mountScoreboard({ host, sb, size }) {
     const p2 = g(state, `score.${SB}.player.2.rioName`, '');
     const hasGame = !!(p1 || p2);
     host.style.display = hasGame ? '' : 'none';
+    // Say WHY, or a blank source is indistinguishable from a broken one. The
+    // player names are the gate rather than the score because Project Rio fills
+    // teams, innings and scores from the roster before it knows who is playing
+    // — so a board can look fully populated and still have nobody in it, which
+    // is exactly the case that reads as "the overlay is broken".
+    OverlayBase.setBlank(
+      hasGame ? null : blankReason(state), `Scoreboard ${SB}`,
+    );
     if (!hasGame) { revealKey = ''; return; }
 
     const vis = readToggles(settings);

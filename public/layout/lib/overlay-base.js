@@ -452,7 +452,7 @@
   }
 
   // ── Backward-compatible alias ──
-  function applyAccentColor(layoutType, fallback) {
+  function applyAccentColor(layoutType, _fallback) {
     applyDesignSettings(layoutType);
   }
 
@@ -542,6 +542,61 @@
     });
   }
 
+  /*
+   * ── Why is this overlay blank? ──────────────────────────────────────────
+   *
+   * An overlay with nothing to draw hides itself, which is correct on air and
+   * indistinguishable from a broken one everywhere else: a blank browser source
+   * looks the same whether the layout 404'd, the theme failed to load, or there
+   * is simply no game. `setBlank(reason)` makes the mount say which.
+   *
+   * NEVER paints the reason onto the broadcast. A producer would rather have an
+   * empty corner than an error card composited into a live stream, so the
+   * visible note renders in PREVIEW_MODE only. On air the reason still goes to:
+   *   - `console.info`, readable in the browser source's own dev tools, and
+   *   - `data-prsh-blank` on <html>, which anything inspecting the document
+   *     (a future preview pane, a screenshot check) can read without guessing.
+   *
+   * Logged only when the reason CHANGES — mounts call this on every render, and
+   * a HUD feed at 30fps would otherwise bury the console.
+   */
+  let lastBlankReason = null;
+  let blankNote = null;
+
+  function setBlank(reason, label) {
+    const changed = reason !== lastBlankReason;
+    lastBlankReason = reason;
+
+    if (reason) document.documentElement.setAttribute('data-prsh-blank', reason);
+    else document.documentElement.removeAttribute('data-prsh-blank');
+
+    if (changed) {
+      const who = label ? `[${label}] ` : '';
+      if (reason) console.info(`${who}nothing to draw — ${reason}`);
+      else console.info(`${who}drawing`);
+    }
+
+    if (!PREVIEW_MODE) return;
+    if (!reason) {
+      if (blankNote) { blankNote.remove(); blankNote = null; }
+      return;
+    }
+    if (!blankNote) {
+      blankNote = document.createElement('div');
+      blankNote.setAttribute('data-prsh-blank-note', '');
+      blankNote.style.cssText = [
+        'position:fixed', 'inset:0', 'display:flex', 'align-items:center',
+        'justify-content:center', 'padding:16px', 'box-sizing:border-box',
+        'font:500 13px/1.45 Inter,system-ui,sans-serif', 'text-align:center',
+        'color:rgba(255,255,255,0.82)', 'background:rgba(10,10,16,0.55)',
+        'border:1px dashed rgba(255,255,255,0.22)', 'border-radius:10px',
+        'z-index:2147483647', 'pointer-events:none',
+      ].join(';');
+      document.body.appendChild(blankNote);
+    }
+    blankNote.textContent = reason;
+  }
+
   // ── Export ──
   window.OverlayBase = {
     BASE_URL,
@@ -560,6 +615,7 @@
     brandingLogoUrl,
     onObsShown,
     readSetting,
+    setBlank,
     PREVIEW_MODE,
     PREVIEW_GLOBALS_ONLY,
     init,

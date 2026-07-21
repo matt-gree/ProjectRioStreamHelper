@@ -7,7 +7,7 @@ import { useAssetUrls } from '../../lib/assets';
 import { ROSTER_SIZE } from '../../data/msb';
 import {
     FIELDER_POSITIONS,
-    RUNNER_POSITIONS, BATTER_POSITIONS, BASE_POSITIONS,
+    BATTER_POSITIONS, BASE_POSITIONS,
     BASE_HALF,
 } from '../../data/stadiums';
 

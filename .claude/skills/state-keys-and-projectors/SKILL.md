@@ -83,8 +83,9 @@ production.*                   Production-page element/feed state
 
 Adding a new namespace: no registration needed server-side (State is
 schema-less), but the frontend store (`src/context/store.jsx`) and any overlay
-`shouldRender` prefix filters must know about it, and CLAUDE.md's namespace
-table must be updated in the same change.
+`shouldRender` prefix filters must know about it, and the namespace map **above
+in this skill** must be updated in the same change (CLAUDE.md keeps only a
+pointer — this map is the source of truth).
 
 ## The projector pattern (resolve-by-copy)
 

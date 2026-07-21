@@ -10,6 +10,9 @@ import { SimpleTooltip } from '../../components/ui/simple-tooltip';
 import { cn } from '../../lib/utils';
 import { usePersistentState } from '../../hooks/usePersistentState';
 import { ELEMENTS, elementsForPhase, isPinnable } from './elements';
+import {
+    pinTarget, togglePin as togglePinIn, useInstanceLabel, useProductionInstances,
+} from './instances';
 import { StateChip, chipState } from './kit';
 import {
     useBindingScenes, elementBindings, setSourceVisibility, useDisplayedEnabled,
@@ -25,6 +28,11 @@ import {
  * pin ◆/◇. Purely state-sorted — no pinned section; a railed row stays in its
  * truthful section marked ◆. Desks are permanent rows with live meta, dimmed
  * when idle, never in the state sections.
+ *
+ * One row per INSTANCE, not per element (./instances): a board-scoped element
+ * running two boards is two rows with their own air state, because they are two
+ * sources. The board suffix in the name appears only when there is more than
+ * one of that element to tell apart.
  *
  * Selection + rail membership are per-producer-browser workspace layout
  * (usePersistentState), not broadcast config. A null rail means "never
@@ -102,6 +110,11 @@ const RackRow = memo(function RackRow({
 }) {
     return (
         <div
+            // Rows are identified by name + board meta, and several board-scoped
+            // elements carry the SAME meta ("Scoreboard 1") — so a text query
+            // can't address a row on its own. Same affordance as
+            // data-rack-section / data-chip-state.
+            data-rack-row={name}
             className={cn(
                 'group flex h-8 items-center gap-2 rounded-md px-2 motion-safe:animate-in motion-safe:fade-in-0',
                 selected ? 'bg-secondary/70' : 'hover:bg-secondary/40',
@@ -177,36 +190,52 @@ function useBracketDeskMeta() {
  * and quick faces (quickface.jsx). `pinnable: false` means the desk has no
  * face that fits the two-row cap — Match's controls can't be compressed that
  * far, so it is deliberately not pinnable.
+ *
+ * `phase` is the desk's home phase: switching the console to that phase brings
+ * this desk to the stage. Fixture authoring is what a producer does in Draft,
+ * post-game capture is the whole point of Post-game, and Break is when the
+ * bracket goes up — Live is the one phase with no desk, because mid-game the
+ * producer is flying elements, not filling one in.
  */
 export const DESKS = [
-    { id: 'desk:match', name: 'Match', useMeta: useMatchDeskMeta, pinnable: false },
-    { id: 'desk:capture', name: 'Capture', useMeta: useCaptureDeskMeta },
-    { id: 'desk:bracket', name: 'Bracket', useMeta: useBracketDeskMeta },
+    { id: 'desk:match', name: 'Match', phase: 'draft', useMeta: useMatchDeskMeta, pinnable: false },
+    { id: 'desk:capture', name: 'Capture', phase: 'post', useMeta: useCaptureDeskMeta },
+    { id: 'desk:bracket', name: 'Bracket', phase: 'break', useMeta: useBracketDeskMeta },
 ];
 
-const DeskRow = memo(function DeskRow({ desk, selection, onSelect, pins, onPinToggle }) {
+// The desk a phase switch should select, or undefined for a phase that owns
+// none (Live) — there the producer's current selection stands.
+export function deskForPhase(phase) {
+    return DESKS.find(d => d.phase === phase)?.id;
+}
+
+const DeskRow = memo(function DeskRow({ desk, selection, onSelect, pinned, onPinToggle }) {
     const { meta, idle } = desk.useMeta();
     return (
         <RackRow
             state="desk" name={desk.name} meta={meta} dimmed={idle}
             selected={selection === desk.id} onSelect={() => onSelect(desk.id)}
             pinnable={desk.pinnable !== false}
-            pinned={pins.includes(desk.id)}
+            pinned={pinned.has(desk.id)}
             onPinToggle={() => onPinToggle(desk.id)}
         />
     );
 });
 
-const DeskSection = memo(function DeskSection({ selection, onSelect, pins, onPinToggle }) {
+// Only the current phase's desk is racked. A desk is the work of one phase, so
+// the other two are noise the rest of the time — and the rack's whole job is to
+// show what's live right now. Live owns no desk, so the section is absent
+// entirely there rather than standing empty.
+const DeskSection = memo(function DeskSection({ phase, selection, onSelect, pinned, onPinToggle }) {
+    const desk = DESKS.find(d => d.phase === phase);
+    if (!desk) return null;
     return (
-        <div className="rounded-md bg-rio-500/5 pb-1">
+        <div data-rack-section="desk" className="rounded-md bg-rio-500/5 pb-1">
             <SectionHeader label="DESK" accent="text-rio-400" />
-            {DESKS.map(desk => (
-                <DeskRow
-                    key={desk.id} desk={desk} selection={selection}
-                    onSelect={onSelect} pins={pins} onPinToggle={onPinToggle}
-                />
-            ))}
+            <DeskRow
+                desk={desk} selection={selection}
+                onSelect={onSelect} pinned={pinned} onPinToggle={onPinToggle}
+            />
         </div>
     );
 });
@@ -221,6 +250,8 @@ export const Rack = memo(function Rack({
 }) {
     const status = useObsStore(s => s.status);
     const scenes = useBindingScenes();
+    const instances = useProductionInstances();
+    const label = useInstanceLabel(instances);
     const overrides = useSettingsStore(useShallow(s => s?.production?.overrides ?? {}));
     const [ownSelection, setOwnSelection] = useRackSelection();
     const [ownRail, setOwnRail] = useRailPins();
@@ -229,40 +260,50 @@ export const Rack = memo(function Rack({
     const selection = selectionProp ?? ownSelection;
     const setSelection = onSelect ?? setOwnSelection;
     const pins = pinsProp ?? seededRail(ownRail);
-    const togglePin = onPinToggle ?? ((id) => setOwnRail((prev) => {
-        const cur = seededRail(prev);
-        return cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id];
-    }));
+    const togglePin = onPinToggle ?? ((id) => setOwnRail(prev => togglePinIn(seededRail(prev), id, instances)));
 
-    // One binding pass for every element — sections are pure sorts of it.
-    const rows = useMemo(() => ELEMENTS.map((el) => {
-        const bindings = elementBindings(el, scenes, overrides[el.id]);
-        return { el, bindings, state: chipState(bindings) };
-    }), [scenes, overrides]);
+    // Pins are compared by what they RESOLVE to, so a pin stored as the bare
+    // `scoreboard` still lights the ◆ on the scoreboard:1 row it renders as.
+    const pinned = useMemo(
+        () => new Set(pins.map(p => pinTarget(p, instances))),
+        [pins, instances],
+    );
+
+    // One binding pass for every instance — sections are pure sorts of it. The
+    // binding is resolved AT the instance's board, so two scoreboard rows point
+    // at their own source rather than both racing for whichever OBS lists first.
+    const rows = useMemo(() => instances.map((inst) => {
+        const bindings = elementBindings(inst.element, scenes, overrides[inst.element.id], inst.board);
+        return { inst, bindings, state: chipState(bindings) };
+    }), [instances, scenes, overrides]);
 
     const inPhase = useMemo(() => new Set(elementsForPhase(phase).map(e => e.id)), [phase]);
     const onAir = rows.filter(r => r.state === 'air');
     const studio = rows.filter(r => r.state === 'pvw');
-    const offAir = rows.filter(r => r.state !== 'air' && r.state !== 'pvw' && inPhase.has(r.el.id));
-    const rest = rows.filter(r => r.state !== 'air' && r.state !== 'pvw' && !inPhase.has(r.el.id));
+    const off = rows.filter(r => r.state !== 'air' && r.state !== 'pvw');
+    const offAir = off.filter(r => inPhase.has(r.inst.element.id));
+    const rest = off.filter(r => !inPhase.has(r.inst.element.id));
 
-    const renderRow = ({ el, bindings, state }) => (
-        <RackRow
-            key={el.id} state={state} bindings={bindings} name={el.name}
-            selected={selection === el.id} onSelect={() => setSelection(el.id)}
-            quickAction={<EyeAction binding={bindings.primary} />}
-            pinnable={isPinnable(el)} pinned={pins.includes(el.id)}
-            onPinToggle={() => togglePin(el.id)}
-        />
-    );
+    const renderRow = ({ inst, bindings, state }) => {
+        const { name, board } = label(inst);
+        return (
+            <RackRow
+                key={inst.id} state={state} bindings={bindings} name={name} meta={board}
+                selected={selection === inst.id} onSelect={() => setSelection(inst.id)}
+                quickAction={<EyeAction binding={bindings.primary} />}
+                pinnable={isPinnable(inst.element)} pinned={pinned.has(inst.id)}
+                onPinToggle={() => togglePin(inst.id)}
+            />
+        );
+    };
 
     return (
         <Panel title="Rack" className="h-full">
             <ScrollArea className="h-[calc(100vh-13rem)]">
                 <div className="flex flex-col gap-1 p-2">
                     <DeskSection
-                        selection={selection} onSelect={setSelection}
-                        pins={pins} onPinToggle={togglePin}
+                        phase={phase} selection={selection} onSelect={setSelection}
+                        pinned={pinned} onPinToggle={togglePin}
                     />
                     <SectionHeader label="ON AIR" accent="text-emerald-400" />
                     {onAir.length

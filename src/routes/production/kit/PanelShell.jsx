@@ -48,7 +48,11 @@ export const PanelShell = memo(function PanelShell({
                     </button>
                 )}
             </header>
-            <div className="flex min-h-0 flex-col gap-1.5 p-2.5">{children}</div>
+            {/* @container: stage bodies lay themselves out against the PANEL's
+                width, not the viewport's. The same body is a single column on
+                a rail-width card and a multi-column spread on a wide stage,
+                without either surface knowing the page's breakpoints. */}
+            <div className="@container flex min-h-0 flex-col gap-1.5 p-2.5">{children}</div>
             {footer && <footer className="border-t border-border/60 px-2.5 py-1.5">{footer}</footer>}
         </section>
     );

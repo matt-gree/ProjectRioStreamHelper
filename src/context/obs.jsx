@@ -27,6 +27,52 @@ let reconnectAttempts = 0;
 // superseded generation no-op, so a settings change mid-flight can't race.
 let generation = 0;
 
+/*
+ * Which scenes we mirror. Program + preview are eager (refreshAll re-seeds them
+ * on every connect and studio-mode change); every other scene joins on demand
+ * via mirrorScene() and then stays for the life of the connection.
+ *
+ * This set is also the AUTHORITY for scene-item events. Before lazy mirroring
+ * the handlers refreshed whatever scene an event named, which quietly pulled
+ * scenes nobody had asked for into the store; now an event for an untracked
+ * scene is dropped, and one for a lazily-mirrored scene is honoured — the whole
+ * point, since a producer staging a Break scene needs it live, not a snapshot.
+ */
+let tracked = new Set();
+
+/*
+ * sourceName -> Promise<inputSettings | null>.
+ *
+ * GetInputSettings is one round trip per browser source, and refreshScene ran
+ * it per source PER SCENE. At program+preview that was the "scenes are small,
+ * so the per-source call is cheap" bargain; across N mirrored scenes sharing
+ * sources it stops being cheap, and it is exactly what lazy mirroring would
+ * otherwise multiply. Caching the PROMISE (not the value) also collapses the
+ * two concurrent refreshes of scenes sharing a source into one call.
+ *
+ * Invalidated by InputSettingsChanged and InputRemoved — a name can be reused
+ * by a different input, so a stale entry is not merely out of date.
+ */
+let inputCache = new Map();
+
+const gcPort = () =>
+    Number(useSettingsStore.getState()?.controller_overlay?.port) || null;
+
+function resetMirror() {
+    tracked = new Set();
+    inputCache = new Map();
+}
+
+// Track a scene and pull it in. Tracking BEFORE the fetch matters twice: the
+// refreshScene write guards on membership, and a second concurrent request for
+// the same scene short-circuits in mirrorScene.
+function track(sceneName, gen) {
+    if (!sceneName) return undefined;
+    tracked.add(sceneName);
+    useObsStore.setState({ mirroredScenes: [...tracked] });
+    return refreshScene(sceneName, gen);
+}
+
 const mapItem = (it) => ({
     id: it.sceneItemId,
     sourceName: it.sourceName,
@@ -96,9 +142,14 @@ export const useObsStore = create((set) => ({
     programScene: null,
     previewScene: null,
     // sceneName -> [{ id, sourceName, enabled, inputKind, isGroup, url, isPrsh }]
+    // Only mirrored scenes appear here; see `tracked`.
     sceneItems: {},
     // All scene names, in OBS list order (top first). Drives scene switching.
     scenes: [],
+    // The subset of `scenes` whose items are mirrored. A scene in here with no
+    // sceneItems entry yet is loading; one absent from here was never asked
+    // for — the distinction a "no sources" message needs to not lie.
+    mirroredScenes: [],
 
     // ---- Control (write) actions. Each throws on failure; callers toast. ----
     // We don't optimistically mutate state — OBS echoes every change back via
@@ -133,6 +184,15 @@ export const useObsStore = create((set) => ({
         }
         await obs.call('SetSceneItemEnabled', { sceneName, sceneItemId, sceneItemEnabled: enabled });
     },
+    // Pull a scene's items into the mirror and keep them live from then on.
+    // Idempotent and safe to call from render effects — a scene already tracked
+    // returns immediately rather than re-fetching, which is what makes "expand
+    // a scene section" cheap on the second expand.
+    mirrorScene: async (sceneName) => {
+        if (!obs || !sceneName || tracked.has(sceneName)) return;
+        await track(sceneName, generation);
+    },
+
     setProgramScene: async (sceneName) => {
         if (!obs) throw new Error('Not connected to OBS');
         await obs.call('SetCurrentProgramScene', { sceneName });
@@ -154,7 +214,12 @@ export const useObsStore = create((set) => ({
     // (the program scene by default). Input names are globally unique in OBS, so
     // we suffix on collision rather than fail. The resulting SceneItemCreated
     // event refreshes the scene mirror, so binding badges update on their own.
-    addBrowserSource: async ({ inputName, url, width, height, sceneName }) => {
+    //
+    // `enabled` defaults true (the Layouts tab's setup context: add it and see
+    // it). The Production console passes false — adding a source mid-broadcast
+    // must never put it on air, so the panel's Air switch stays the single
+    // deliberate act that does (production-console-contract skill).
+    addBrowserSource: async ({ inputName, url, width, height, sceneName, enabled = true }) => {
         if (!obs) throw new Error('Not connected to OBS');
         const scene = sceneName || useObsStore.getState().programScene;
         if (!scene) throw new Error('No active program scene in OBS');
@@ -180,9 +245,9 @@ export const useObsStore = create((set) => ({
                 // Clean reveals: unload on hide, fresh load on show (see desiredShutdown).
                 shutdown: desiredShutdown(url),
             },
-            sceneItemEnabled: true,
+            sceneItemEnabled: enabled,
         });
-        return { inputName: name, sceneName: scene };
+        return { inputName: name, sceneName: scene, enabled };
     },
 
     // Flip the intro animation on every live PRSH browser source that serves a
@@ -225,6 +290,7 @@ export const useObsStore = create((set) => ({
 
         // Supersede any in-flight connection/reconnect.
         const myGen = ++generation;
+        resetMirror();
         if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
         if (obs) { try { await obs.disconnect(); } catch { /* ignore */ } }
 
@@ -251,13 +317,15 @@ export const useObsStore = create((set) => ({
 
     disconnect: async () => {
         generation++; // invalidate handlers/in-flight work
+        resetMirror();
         if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
         reconnectAttempts = 0;
         const client = obs;
         obs = null;
         set({
             status: 'disconnected', error: null, obsVersion: null,
-            studioMode: false, programScene: null, previewScene: null, sceneItems: {}, scenes: [],
+            studioMode: false, programScene: null, previewScene: null,
+            sceneItems: {}, scenes: [], mirroredScenes: [],
         });
         if (client) { try { await client.disconnect(); } catch { /* ignore */ } }
     },
@@ -283,50 +351,83 @@ async function refreshAll(gen) {
         const scenes = (sceneList.scenes || []).map(sc => sc.sceneName);
         useObsStore.setState({ studioMode: studioModeEnabled, programScene, previewScene, scenes });
 
-        const wanted = [programScene];
-        if (studioModeEnabled && previewScene) wanted.push(previewScene);
-        await Promise.all([...new Set(wanted.filter(Boolean))].map(n => refreshScene(n, gen)));
+        // Program + preview are always mirrored; scenes a surface asked for
+        // stay mirrored, minus any that OBS no longer has (renamed/deleted).
+        // Everything else drops out of sceneItems so the store never serves
+        // items for a scene it has stopped following.
+        const eager = [programScene, studioModeEnabled ? previewScene : null];
+        const keep = [...tracked].filter(n => scenes.includes(n));
+        tracked = new Set([...eager, ...keep].filter(Boolean));
+        useObsStore.setState(state => ({
+            mirroredScenes: [...tracked],
+            sceneItems: Object.fromEntries(
+                Object.entries(state.sceneItems).filter(([n]) => tracked.has(n))),
+        }));
+
+        await Promise.all([...tracked].map(n => refreshScene(n, gen)));
     } catch (e) {
         if (gen === generation) console.debug('OBS refreshAll failed', e);
     }
+}
+
+/*
+ * Auto-correct the "Shutdown source when not visible" property for PRSH
+ * overlays so their reveals never flash a stale OBS texture (see
+ * desiredShutdown). Idempotent: only writes when the current value differs, so
+ * it settles after one pass and can't loop on the InputSettingsChanged echo.
+ *
+ * Runs once per source rather than once per (source × scene) — it hangs off
+ * the cache miss, which is the one place a source's settings are freshly seen.
+ */
+function reconcileShutdown(sourceName, settings) {
+    const url = settings?.url || '';
+    if (!isPrshUrl(url, gcPort()) || !url.includes('/layout/')) return;
+    const want = desiredShutdown(url);
+    if ((settings.shutdown === true) === want) return;
+    obs?.call('SetInputSettings', {
+        inputName: sourceName,
+        inputSettings: { shutdown: want },
+        overlay: true,
+    }).catch(() => { /* best-effort */ });
+}
+
+function inputSettingsFor(sourceName, gen) {
+    const hit = inputCache.get(sourceName);
+    if (hit) return hit;
+    const pending = (async () => {
+        try {
+            const { inputSettings } = await obs.call('GetInputSettings', { inputName: sourceName });
+            const settings = inputSettings || {};
+            if (gen === generation) reconcileShutdown(sourceName, settings);
+            return settings;
+        } catch {
+            // Input may have been removed between calls — don't cache the miss,
+            // or a source recreated under the same name stays invisible.
+            inputCache.delete(sourceName);
+            return null;
+        }
+    })();
+    inputCache.set(sourceName, pending);
+    return pending;
 }
 
 async function refreshScene(sceneName, gen) {
     if (!obs || !sceneName || gen !== generation) return;
     try {
         const { sceneItems } = await obs.call('GetSceneItemList', { sceneName });
-        const gcPort = Number(useSettingsStore.getState()?.controller_overlay?.port) || null;
-        // Enrich browser sources with their URL so we can tell which are
-        // fed by PRSH. Scenes are small, so the per-source call is cheap.
+        // Enrich browser sources with their URL so we can tell which are fed by
+        // PRSH. Cached per source name, so mirroring a fifth scene costs one
+        // GetSceneItemList plus a call only for sources not seen before.
         const enriched = await Promise.all(sceneItems.map(async (it) => {
             const base = mapItem(it);
             if (it.inputKind === 'browser_source' && !it.isGroup) {
-                try {
-                    const { inputSettings } = await obs.call('GetInputSettings', { inputName: it.sourceName });
-                    base.url = inputSettings?.url || null;
-                    base.isPrsh = isPrshUrl(base.url, gcPort);
-                    // Auto-correct the "Shutdown source when not visible" property
-                    // for PRSH overlays so their reveals never flash a stale OBS
-                    // texture (see desiredShutdown). Idempotent: only writes when
-                    // the current value differs, so it settles after one pass and
-                    // can't loop on the InputSettingsChanged echo.
-                    if (base.isPrsh && (base.url || '').includes('/layout/')) {
-                        const want = desiredShutdown(base.url);
-                        if ((inputSettings?.shutdown === true) !== want) {
-                            obs.call('SetInputSettings', {
-                                inputName: it.sourceName,
-                                inputSettings: { shutdown: want },
-                                overlay: true,
-                            }).catch(() => { /* best-effort */ });
-                        }
-                    }
-                } catch {
-                    // Input may have been removed between calls.
-                }
+                const settings = await inputSettingsFor(it.sourceName, gen);
+                base.url = settings?.url || null;
+                base.isPrsh = isPrshUrl(base.url, gcPort());
             }
             return base;
         }));
-        if (gen !== generation) return;
+        if (gen !== generation || !tracked.has(sceneName)) return;
         useObsStore.setState(state => ({
             sceneItems: { ...state.sceneItems, [sceneName]: enriched },
         }));
@@ -349,19 +450,31 @@ function wireEvents(client, gen) {
 
     client.on('SceneListChanged', ({ scenes }) => {
         if (!alive()) return;
-        useObsStore.setState({ scenes: (scenes || []).map(sc => sc.sceneName) });
+        const names = (scenes || []).map(sc => sc.sceneName);
+        // A deleted or renamed scene stops being tracked here rather than
+        // lingering in the mirror until the next refreshAll.
+        const gone = [...tracked].filter(n => !names.includes(n));
+        if (gone.length) {
+            for (const n of gone) tracked.delete(n);
+            useObsStore.setState(state => ({
+                mirroredScenes: [...tracked],
+                sceneItems: Object.fromEntries(
+                    Object.entries(state.sceneItems).filter(([n]) => tracked.has(n))),
+            }));
+        }
+        useObsStore.setState({ scenes: names });
     });
 
     client.on('CurrentProgramSceneChanged', ({ sceneName }) => {
         if (!alive()) return;
         useObsStore.setState({ programScene: sceneName });
-        refreshScene(sceneName, gen);
+        track(sceneName, gen);   // program is eager — track, don't just refresh
     });
 
     client.on('CurrentPreviewSceneChanged', ({ sceneName }) => {
         if (!alive()) return;
         useObsStore.setState({ previewScene: sceneName });
-        refreshScene(sceneName, gen);
+        track(sceneName, gen);
     });
 
     client.on('StudioModeStateChanged', ({ studioModeEnabled }) => {
@@ -385,10 +498,39 @@ function wireEvents(client, gen) {
         });
     });
 
-    const reloadScene = ({ sceneName }) => { if (alive()) refreshScene(sceneName, gen); };
+    // Only scenes we mirror. Lazily-mirrored ones are in `tracked`, so a Break
+    // scene a producer expanded stays live; a scene nobody opened is dropped
+    // rather than pulled in by the event.
+    const reloadScene = ({ sceneName }) => {
+        if (alive() && tracked.has(sceneName)) refreshScene(sceneName, gen);
+    };
     client.on('SceneItemCreated', reloadScene);
     client.on('SceneItemRemoved', reloadScene);
     client.on('SceneItemListReindexed', reloadScene);
+
+    // The settings cache's invalidation half. OBS hands us the new settings, so
+    // this patches every mirrored copy in place — no refetch, and no refreshScene
+    // fan-out that our own shutdown write could bounce off.
+    client.on('InputSettingsChanged', ({ inputName, inputSettings }) => {
+        if (!alive()) return;
+        const settings = inputSettings || {};
+        inputCache.set(inputName, Promise.resolve(settings));
+        reconcileShutdown(inputName, settings);
+        const url = settings.url || null;
+        const isPrsh = isPrshUrl(url, gcPort());
+        useObsStore.setState(state => ({
+            sceneItems: Object.fromEntries(Object.entries(state.sceneItems).map(([scene, items]) => [
+                scene,
+                items.map(it => (it.sourceName === inputName ? { ...it, url, isPrsh } : it)),
+            ])),
+        }));
+    });
+
+    // A name freed by one input can be taken by another, so a stale cache entry
+    // would describe the wrong source rather than merely be out of date.
+    client.on('InputRemoved', ({ inputName }) => {
+        if (alive()) inputCache.delete(inputName);
+    });
 }
 
 function scheduleReconnect() {
@@ -401,6 +543,30 @@ function scheduleReconnect() {
         reconnectTimer = null;
         useObsStore.getState().connect();
     }, delay);
+}
+
+/**
+ * Ask for a scene to be mirrored for as long as this component wants it, and
+ * read back its items. The store keeps the scene mirrored after unmount — a
+ * producer collapsing a scene section shouldn't pay the fetch again on the next
+ * expand, and the mirror is small.
+ *
+ * Re-runs on reconnect (`status`): a fresh connection starts with only program
+ * and preview tracked, so anything a surface had opened has to re-ask.
+ */
+export function useMirrorScene(sceneName) {
+    const status = useObsStore(s => s.status);
+    const items = useObsStore(s => (sceneName ? s.sceneItems[sceneName] : undefined));
+    const mirrored = useObsStore(s => !sceneName || s.mirroredScenes.includes(sceneName));
+
+    useEffect(() => {
+        if (status !== 'connected' || !sceneName) return;
+        useObsStore.getState().mirrorScene(sceneName);
+    }, [status, sceneName]);
+
+    // `loading` is the gap between asking and the items landing — the state a
+    // "no sources in this scene" message must not be shown during.
+    return { items: items || [], loading: !items, mirrored };
 }
 
 /**

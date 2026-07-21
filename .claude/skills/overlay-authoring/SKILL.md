@@ -70,6 +70,32 @@ HUD char id 0–53, team logos by 0–47 enumeration — mirrors
 `server/rio/pyrio/assets.py`), `readSetting(layoutType, key, def)` for the
 per-layout→global→default fallback chain, `brandingLogoUrl()`, `hexToRgb`.
 
+### An overlay that hides itself must say why — `OverlayBase.setBlank(reason, label)`
+
+A blank browser source looks identical whether the layout 404'd, the theme
+failed, or there is simply no game, and "my scoreboard shows nothing" is the
+support question that costs the most to answer. Any mount with a precondition
+(`hasGame`, a missing feed, an empty queue) calls `setBlank(reason)` when it
+hides and `setBlank(null)` when it draws.
+
+- **Never paint the reason on the broadcast.** A producer would rather have an
+  empty corner than an error card composited into a live stream. The visible
+  note renders in `PREVIEW_MODE` only; on air the reason goes to `console.info`
+  and to `data-prsh-blank` on `<html>`.
+- **Distinguish causes the producer acts on differently.** The Scoreboard's
+  `blankReason()` splits "no game on this board" (check the binding) from "a
+  game, but no player names" (a stale HUD file) — Project Rio fills teams,
+  innings and scores off the roster *before* it knows who is playing, so a board
+  can look fully populated and still be empty. That case reads as a broken
+  overlay and is the one worth naming precisely.
+- It logs only when the reason **changes** — mounts call it every render, and a
+  HUD feed would bury the console otherwise.
+- The Production stage mirrors the same predicate in `ReadinessNote`
+  (`stage/generic.jsx`), because a producer is looking at the panel, not the
+  browser source's dev tools. Two runtimes, no shared module: each side names
+  the other in a comment and `stage/generic.test.jsx` pins the state keys.
+  **Change what makes an overlay renderable, change both.**
+
 ## Theme engine + design packages (`lib/svg-theme-engine.js`)
 
 (This is the mount/engine side. For authoring the theme SVGs themselves —
@@ -194,4 +220,5 @@ screenshot; get the user's eyes or reason from first principles.
 6. Verify: `GET /api/v1/layouts` lists it with correct type/dims/settings;
    load the URL in a browser, hard-refresh, check the console; if animated,
    test the OBS eye-toggle + scene-cut paths.
-7. Update CLAUDE.md's layout sections if you added a type or variant axis.
+7. Update the "Catalog + registration" section **of this skill** if you added a
+   type or variant axis (CLAUDE.md keeps only a pointer — the detail lives here).

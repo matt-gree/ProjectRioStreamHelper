@@ -27,6 +27,19 @@
  *   - `stageBody` : key of the element's stage panel under stage/ — defaults
  *                   to the element id via stageBodyFor(); declare only to
  *                   deviate.
+ *   - `scope`     : 'board' when the SOURCE carries ?scoreboard=N, so two of
+ *                   them in one scene are two instances. Omitted = global.
+ *
+ * Two board mechanisms, and conflating them is how multiplicity ends up feeling
+ * bolted on:
+ *
+ *   URL-scoped  — the board is fixed by the source (`?scoreboard=N`). These get
+ *                 `scope: 'board'`, a board picker, and per-board settings.
+ *   Feed-scoped — the board is fixed by the pushed CONTENT ({ element,
+ *                 scoreboard } in the feed payload). The shared container is
+ *                 board-agnostic on purpose, so fed elements never take `scope`.
+ *
+ * Which is why `boundIn` discriminates instances for direct elements only.
  */
 
 export const PHASES = [
@@ -42,6 +55,10 @@ export const ELEMENTS = [
         name: 'Scoreboard',
         phase: 'live',
         flavor: 'direct',
+        // URL-scoped to a board: the source itself carries ?scoreboard=N, so two
+        // of these in one scene are two different instances (see `scope` note
+        // at the bottom of this file).
+        scope: 'board',
         // Its own dedicated source: the scoreboard layout. `url` is the canonical
         // overlay this element expects (the default when adding it to OBS or
         // checking whether the streamer's source points at the right thing);
@@ -62,6 +79,7 @@ export const ELEMENTS = [
         // SVG scales to whatever the OBS source is.
         phase: 'live',
         flavor: 'direct',
+        scope: 'board',
         url: '/layout/scorecard/scorecard.html',
         width: 1920,
         height: 1080,
@@ -102,9 +120,14 @@ export const ELEMENTS = [
         // Commentary tab. Span 4 to fit up to four caster rows.
         // Its own dedicated source: the caster strip. Slots are projected to
         // commentary.{i}.* server-side from the authored commentary.slots.
+        // Native 1920×1080 — a full-canvas overlay like matchup and plates, not
+        // a cropped strip: the layout's body is 1920×1080, `.cm-host` is
+        // `position: fixed; inset: 0`, and the theme SVG is a
+        // `viewBox="0 0 1920 1080"`. It was registered 1280×200, which made
+        // `addBrowserSource` create the OBS source at the wrong size.
         url: '/layout/commentary/commentary.html',
-        width: 1280,
-        height: 200,
+        width: 1920,
+        height: 1080,
         match: (url) => /\/layout\/commentary\//i.test(url) || /commentary\.html/i.test(url),
     },
     {
@@ -262,6 +285,7 @@ export const ELEMENTS = [
         name: 'Hit Visualizer',
         phase: 'live',
         flavor: 'direct',
+        scope: 'board',
         // Compact: live actions (Replay / Spotlight / Split) on the face, the
         // spotlight scene + hold-ms + split config behind the gear.
         // Its own dedicated source: the 3D hit overlay. The provider pushes every
@@ -299,6 +323,16 @@ export function quickFaceFor(el) {
 }
 
 export const isPinnable = (el) => quickFaceFor(el) !== null;
+
+// Fed elements whose content is CHOSEN rather than pushed wholesale — picking
+// is what feeds the container, so their Push slot has nothing to push until a
+// pick has happened. Single-sourced here because two modules key off it: the
+// rail's FEED_OPTION_HOOKS (which picker to render) and the source strip's
+// push slot (whether Push can do anything yet). elements.test.js pins them
+// against each other.
+export const PICKABLE_FEEDS = ['stats', 'postgamecallout'];
+
+export const isPickableFeed = (el) => PICKABLE_FEEDS.includes(el?.feed);
 
 // Key of the element's stage panel (stage/<key>); defaults to the element id.
 export const stageBodyFor = (el) => el.stageBody ?? el.id;

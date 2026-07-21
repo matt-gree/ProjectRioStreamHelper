@@ -59,7 +59,7 @@ describe('Production page mounts', () => {
         });
         ui();
         expect(screen.queryByText(/No matches yet/)).not.toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /start\.gg/ })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Load a set/ })).toBeInTheDocument();
     });
 
     it('with confirm mode armed and a change staged', () => {

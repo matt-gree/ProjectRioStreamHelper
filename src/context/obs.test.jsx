@@ -68,6 +68,34 @@ function sceneRpc(fake, sources, { program = 'Main' } = {}) {
         ({ inputSettings: sources[inputName] });
 }
 
+/*
+ * Multi-scene rig: { sceneName: { sourceName: settings } }, program first.
+ * Sources repeated across scenes are the same input, which is what makes the
+ * GetInputSettings cache observable.
+ */
+function multiSceneRpc(fake, rig, { program, preview, studio = false } = {}) {
+    const names = Object.keys(rig);
+    fake.rpc.GetStudioModeEnabled = { studioModeEnabled: studio };
+    fake.rpc.GetSceneList = {
+        currentProgramSceneName: program ?? names[0],
+        currentPreviewSceneName: preview ?? null,
+        scenes: names.map(sceneName => ({ sceneName })),
+    };
+    fake.rpc.GetSceneItemList = ({ sceneName }) => ({
+        sceneItems: Object.keys(rig[sceneName] || {}).map((n, i) => browserItem(i + 1, n)),
+    });
+    const all = Object.assign({}, ...Object.values(rig));
+    fake.rpc.GetInputSettings = ({ inputName }) => ({ inputSettings: all[inputName] });
+}
+
+async function connectMulti(rig, opts) {
+    const connectPromise = useObsStore.getState().connect();
+    const fake = h.instances.at(-1);
+    multiSceneRpc(fake, rig, opts);
+    await connectPromise;
+    return fake;
+}
+
 async function connectWith(sources, opts) {
     const connectPromise = useObsStore.getState().connect();
     const fake = h.instances.at(-1);
@@ -182,12 +210,26 @@ describe('addBrowserSource', () => {
         const res = await useObsStore.getState().addBrowserSource({
             inputName: 'PRSH Scoreboard', url: SB_URL, width: 800, height: 460,
         });
-        expect(res).toEqual({ inputName: 'PRSH Scoreboard', sceneName: 'Main' });
+        expect(res).toEqual({ inputName: 'PRSH Scoreboard', sceneName: 'Main', enabled: true });
         const [, payload] = fake.callsOf('CreateInput')[0];
         expect(payload.inputKind).toBe('browser_source');
+        expect(payload.sceneItemEnabled).toBe(true);
         expect(payload.inputSettings).toMatchObject({
             url: SB_URL, width: 800, height: 460, shutdown: true,
         });
+    });
+
+    // The Production console's source strip adds hidden: creating a source
+    // mid-broadcast must never put it on air (production-console-contract).
+    it('creates the scene item hidden when enabled: false', async () => {
+        const fake = await connectWith({});
+        fake.rpc.GetInputList = { inputs: [] };
+        const res = await useObsStore.getState().addBrowserSource({
+            inputName: 'PRSH Scoreboard', url: SB_URL, width: 800, height: 460, enabled: false,
+        });
+        expect(res.enabled).toBe(false);
+        const [, payload] = fake.callsOf('CreateInput')[0];
+        expect(payload.sceneItemEnabled).toBe(false);
     });
 
     it('suffixes on input-name collision instead of failing', async () => {
@@ -278,6 +320,187 @@ describe('setSceneItemEnabled (two-phase hide)', () => {
         await useObsStore.getState().setSceneItemEnabled('Main', 2, false);  // non-PRSH hide
         expect(fetchMock).not.toHaveBeenCalled();
         expect(fake.callsOf('SetSceneItemEnabled').length).toBe(2);
+    });
+});
+
+/*
+ * Lazy multi-scene mirroring. Program + preview are eager; every other scene
+ * joins only when a surface asks (mirrorScene), and from then on its scene-item
+ * events are honoured — staging a Break scene before cutting to it is the whole
+ * point, and it is impossible with a program+preview-only mirror.
+ */
+describe('lazy scene mirroring', () => {
+    const RIG = {
+        Main: { SB: { url: SB_URL, shutdown: true } },
+        Break: { Card: { url: 'http://localhost:5260/layout/scenes/break.html' } },
+        Intro: { Logo: { url: 'http://localhost:5260/layout/scenes/intro.html' } },
+    };
+
+    it('mirrors only program at connect, leaving other scenes untouched', async () => {
+        const fake = await connectMulti(RIG);
+        const s = useObsStore.getState();
+        expect(s.scenes).toEqual(['Main', 'Break', 'Intro']);
+        expect(Object.keys(s.sceneItems)).toEqual(['Main']);
+        expect(s.mirroredScenes).toEqual(['Main']);
+        expect(fake.callsOf('GetSceneItemList').map(([, p]) => p.sceneName)).toEqual(['Main']);
+    });
+
+    it('mirrors program AND preview eagerly in studio mode', async () => {
+        await connectMulti(RIG, { program: 'Main', preview: 'Break', studio: true });
+        const s = useObsStore.getState();
+        expect(s.mirroredScenes.sort()).toEqual(['Break', 'Main']);
+        expect(s.sceneItems.Break[0].sourceName).toBe('Card');
+    });
+
+    it('mirrorScene pulls a scene in on demand', async () => {
+        await connectMulti(RIG);
+        await useObsStore.getState().mirrorScene('Break');
+        const s = useObsStore.getState();
+        expect(s.sceneItems.Break.map(i => i.sourceName)).toEqual(['Card']);
+        expect(s.sceneItems.Break[0].isPrsh).toBe(true);
+        expect(s.mirroredScenes).toContain('Break');
+        expect(s.sceneItems.Intro).toBeUndefined();
+    });
+
+    it('a second mirrorScene for the same scene does not refetch', async () => {
+        const fake = await connectMulti(RIG);
+        await useObsStore.getState().mirrorScene('Break');
+        fake.calls.length = 0;
+        await useObsStore.getState().mirrorScene('Break');
+        expect(fake.callsOf('GetSceneItemList')).toEqual([]);
+    });
+
+    // The reason lazy mirroring needs an event fix: before it, handlers
+    // refreshed whatever scene an event named.
+    it('scene-item events are honoured for a lazily-mirrored scene', async () => {
+        const fake = await connectMulti(RIG);
+        await useObsStore.getState().mirrorScene('Break');
+        RIG.Break.Card2 = { url: 'http://localhost:5260/layout/scenes/break2.html' };
+        multiSceneRpc(fake, RIG);
+        fake.fire('SceneItemCreated', { sceneName: 'Break' });
+        await vi.waitFor(() =>
+            expect(useObsStore.getState().sceneItems.Break.length).toBe(2));
+        delete RIG.Break.Card2;
+    });
+
+    it('an event for an untracked scene does not pull it into the mirror', async () => {
+        const fake = await connectMulti(RIG);
+        fake.calls.length = 0;
+        fake.fire('SceneItemCreated', { sceneName: 'Intro' });
+        fake.fire('SceneItemListReindexed', { sceneName: 'Intro' });
+        expect(fake.callsOf('GetSceneItemList')).toEqual([]);
+        expect(useObsStore.getState().sceneItems.Intro).toBeUndefined();
+    });
+
+    it('a deleted scene drops out of the mirror', async () => {
+        const fake = await connectMulti(RIG);
+        await useObsStore.getState().mirrorScene('Break');
+        fake.fire('SceneListChanged', { scenes: [{ sceneName: 'Main' }, { sceneName: 'Intro' }] });
+        const s = useObsStore.getState();
+        expect(s.sceneItems.Break).toBeUndefined();
+        expect(s.mirroredScenes).toEqual(['Main']);
+    });
+
+    it('a lazily-mirrored scene survives a studio-mode refreshAll', async () => {
+        const fake = await connectMulti(RIG);
+        await useObsStore.getState().mirrorScene('Intro');
+        multiSceneRpc(fake, RIG, { program: 'Main', preview: 'Break', studio: true });
+        fake.fire('StudioModeStateChanged', { studioModeEnabled: true });
+        await vi.waitFor(() =>
+            expect(useObsStore.getState().mirroredScenes.sort())
+                .toEqual(['Break', 'Intro', 'Main']));
+    });
+
+    it('a reconnect starts over with only the eager scenes', async () => {
+        await connectMulti(RIG);
+        await useObsStore.getState().mirrorScene('Break');
+        // A reconnect awaits the old client's disconnect before building the
+        // new one, so gate the handshake to stage rpc on the right instance.
+        let release;
+        const gate = new Promise(r => { release = r; });
+        h.nextConnectImpl = async () => { await gate; return { obsWebSocketVersion: '5.3.0' }; };
+        const again = useObsStore.getState().connect();
+        await vi.waitFor(() => expect(h.instances.length).toBe(2));
+        multiSceneRpc(h.instances.at(-1), RIG);
+        release();
+        await again;
+        expect(useObsStore.getState().mirroredScenes).toEqual(['Main']);
+        expect(useObsStore.getState().sceneItems.Break).toBeUndefined();
+    });
+});
+
+/*
+ * The fan-out this phase had to mitigate: GetInputSettings was one round trip
+ * per browser source PER SCENE. Fine at two scenes, not at N.
+ */
+describe('input-settings cache', () => {
+    const SHARED = {
+        Main: { SB: { url: SB_URL, shutdown: true }, Cam: { url: null } },
+        Break: { SB: { url: SB_URL, shutdown: true }, Card: { url: null } },
+    };
+
+    it('a source shared by two scenes is fetched once', async () => {
+        const fake = await connectMulti(SHARED);
+        await useObsStore.getState().mirrorScene('Break');
+        const names = fake.callsOf('GetInputSettings').map(([, p]) => p.inputName);
+        expect(names.filter(n => n === 'SB').length).toBe(1);
+        expect(useObsStore.getState().sceneItems.Break.find(i => i.sourceName === 'SB').isPrsh)
+            .toBe(true);
+    });
+
+    it('shutdown reconciliation still runs exactly once per source', async () => {
+        const fake = await connectMulti({
+            Main: { SB: { url: SB_URL } },        // missing shutdown → needs the write
+            Break: { SB: { url: SB_URL } },
+        });
+        await useObsStore.getState().mirrorScene('Break');
+        expect(fake.callsOf('SetInputSettings').length).toBe(1);
+    });
+
+    it('InputSettingsChanged patches every mirrored copy without refetching', async () => {
+        const fake = await connectMulti(SHARED);
+        await useObsStore.getState().mirrorScene('Break');
+        fake.calls.length = 0;
+
+        const moved = SB_URL.replace('scoreboard=1', 'scoreboard=2');
+        fake.fire('InputSettingsChanged', {
+            inputName: 'SB', inputSettings: { url: moved, shutdown: true },
+        });
+
+        const s = useObsStore.getState();
+        expect(s.sceneItems.Main.find(i => i.sourceName === 'SB').url).toBe(moved);
+        expect(s.sceneItems.Break.find(i => i.sourceName === 'SB').url).toBe(moved);
+        expect(fake.callsOf('GetSceneItemList')).toEqual([]);
+        expect(fake.callsOf('GetInputSettings')).toEqual([]);
+    });
+
+    // A url edited in OBS to add ?intro=0 must still flip the shutdown
+    // property — the reconciliation can't only live on the fetch path.
+    it('InputSettingsChanged re-reconciles shutdown for the new url', async () => {
+        const fake = await connectMulti({ Main: { SB: { url: SB_URL, shutdown: true } } });
+        fake.calls.length = 0;
+        fake.fire('InputSettingsChanged', {
+            inputName: 'SB', inputSettings: { url: SB_URL + '&intro=0', shutdown: true },
+        });
+        expect(fake.callsOf('SetInputSettings')[0][1].inputSettings).toEqual({ shutdown: false });
+    });
+
+    it('a settled url does not bounce a write back (no echo loop)', async () => {
+        const fake = await connectMulti({ Main: { SB: { url: SB_URL, shutdown: true } } });
+        fake.calls.length = 0;
+        fake.fire('InputSettingsChanged', {
+            inputName: 'SB', inputSettings: { url: SB_URL, shutdown: true },
+        });
+        expect(fake.callsOf('SetInputSettings')).toEqual([]);
+    });
+
+    it('InputRemoved evicts the entry so a reused name is refetched', async () => {
+        const fake = await connectMulti({ Main: { SB: { url: SB_URL, shutdown: true } } });
+        fake.fire('InputRemoved', { inputName: 'SB' });
+        fake.calls.length = 0;
+        fake.fire('SceneItemCreated', { sceneName: 'Main' });
+        await vi.waitFor(() =>
+            expect(fake.callsOf('GetInputSettings').length).toBe(1));
     });
 });
 

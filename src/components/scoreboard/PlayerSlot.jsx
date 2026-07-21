@@ -39,7 +39,7 @@ function StarIcon({ active, superstarUrl }) {
  *   teamNumber: 1 | 2
  *   playerNumber: 1-based player index
  */
-export default memo(function PlayerSlot({ scoreboardNumber = 1, teamNumber, playerNumber, sourceType = 'manual' }) {
+export default memo(function PlayerSlot({ scoreboardNumber = 1, teamNumber, playerNumber: _playerNumber, sourceType = 'manual' }) {
     const basePath = `score.${scoreboardNumber}.player.${teamNumber}`;
     const [activeCharDetail, setActiveCharDetail] = useState(null);
 

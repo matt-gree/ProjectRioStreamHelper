@@ -18,6 +18,8 @@ import { Stack, Group, Text } from '../../components/ui/primitives';
 import { MSB_CAPTAINS } from '../../data/msb';
 import { cn } from '../../lib/utils';
 
+const EMPTY_MATCH = {};
+
 /*
  * MatchPanel — authoring surface for the fixture object above scoreboards.
  *
@@ -301,7 +303,7 @@ function MatchCard({ m, match, active, boundMap, bindableMap, gameModes }) {
 }
 
 export default function MatchPanel() {
-    const matchObj = useStateStore((s) => s.match) || {};
+    const matchObj = useStateStore((s) => s.match) ?? EMPTY_MATCH;
     const scores = useStateStore((s) => s.score);
     const active = useSettingsStore((s) => s?.scoreboards?.active ?? [1]);
     const bindings = useSettingsStore((s) => s?.scoreboards?.binding);

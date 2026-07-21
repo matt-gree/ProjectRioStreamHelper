@@ -108,6 +108,46 @@ export const ActionRow = memo(function ActionRow({ actions = [], className }) {
     );
 });
 
+/*
+ * label · arbitrary control, on the same geometry as SelectRow/NumberRow —
+ * for the pickers the kit doesn't own (participant, captain, port, a typed
+ * field). It exists so a panel that needs a bespoke control still gets the
+ * kit's label column and staged tint instead of inventing its own row.
+ * Keep labels short: the label column is fixed so every row aligns.
+ *
+ * `stacked` puts the label above its control instead. Use it where a fixed
+ * label gutter would cost more than it earns — a column of form fields, where
+ * the gutter pushes every control off the panel's left edge and strands the
+ * labels far from what they name. Rows in a control list stay unstacked.
+ */
+export const FieldRow = memo(function FieldRow({ label, staged, stacked, children, className }) {
+    const labelTone = staged ? 'text-amber-400' : 'text-muted-foreground';
+    if (stacked) {
+        return (
+            <div className={cn('flex min-w-0 flex-col gap-0.5', className)}>
+                {/* A stacked label sits directly above its value, so it has to
+                    read as a tier BELOW the region eyebrow and below the value
+                    itself — micro-caps, not another 12px grey line competing
+                    with the placeholder text under it. */}
+                {label != null && (
+                    <Text span truncate className={cn('label-display text-[10px]', labelTone)}>
+                        {label}
+                    </Text>
+                )}
+                <div className="flex min-h-7 min-w-0 items-center gap-1.5">{children}</div>
+            </div>
+        );
+    }
+    return (
+        <div className={cn(ROW, className)}>
+            {label != null && (
+                <Text size="xs" span truncate className={cn('w-16 shrink-0', labelTone)}>{label}</Text>
+            )}
+            <div className="flex min-w-0 flex-1 items-center gap-1.5">{children}</div>
+        </div>
+    );
+});
+
 // label · segmented control — plates mode and friends.
 export const SegmentedRow = memo(function SegmentedRow({
     label, value, onChange, data, disabled, className,
@@ -230,17 +270,42 @@ export function ListRow({
     );
 }
 
-// Labelled column grouping at stage width — a kit feature, not a per-element
-// invention (the Match desk uses two).
-export function KitColumns({ children, className }) {
-    return <div className={cn('grid grid-cols-1 gap-x-6 gap-y-3 md:grid-cols-2', className)}>{children}</div>;
+/*
+ * Labelled column grouping at stage width — a kit feature, not a per-element
+ * invention (the Match desk uses two). Columns are container-query driven:
+ * one column until the PANEL is wide enough, so the same body works on the
+ * stage and in a narrow window. `template` overrides the even split for
+ * asymmetric groupings (the Match desk gives its sides more room than its
+ * fixture fields).
+ */
+export function KitColumns({ children, template, className }) {
+    return (
+        <div
+            className={cn(
+                'grid grid-cols-1 gap-x-6 gap-y-3',
+                template ? '@2xl:grid-cols-[var(--kit-cols)]' : '@2xl:grid-cols-2',
+                className,
+            )}
+            style={template ? { '--kit-cols': template } : undefined}
+        >
+            {children}
+        </div>
+    );
 }
 
-export function KitColumn({ label, children, className }) {
+// `action` rides on the column's header rule — for the one control that FILLS
+// a column rather than living in it (the Match desk's start.gg load), which
+// would otherwise sit in the field list pretending to be a field.
+export function KitColumn({ label, action, children, className }) {
     return (
         <div className={cn('flex min-w-0 flex-col gap-1.5', className)}>
-            {label != null && (
-                <Text size="xs" className="label-display text-muted-foreground">{label}</Text>
+            {(label != null || action) && (
+                <div className="flex min-h-6 items-center gap-2">
+                    {label != null && (
+                        <Text size="xs" className="label-display text-muted-foreground">{label}</Text>
+                    )}
+                    {action && <div className="ml-auto flex items-center gap-1.5">{action}</div>}
+                </div>
             )}
             {children}
         </div>

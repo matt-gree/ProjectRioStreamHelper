@@ -65,8 +65,14 @@ export default function CharacterStatEditor({
         s => s?.score?.[scoreboardNumber]?.stats?.[teamNumber]?.character?.[charIndex]
     );
 
-    const batting = (scope === 'web' ? charStats?.api?.batting : charStats?.current_game?.batting) ?? {};
-    const pitching = (scope === 'web' ? charStats?.api?.pitching : charStats?.current_game?.pitching) ?? {};
+    const batting = useMemo(
+        () => (scope === 'web' ? charStats?.api?.batting : charStats?.current_game?.batting) ?? {},
+        [scope, charStats]
+    );
+    const pitching = useMemo(
+        () => (scope === 'web' ? charStats?.api?.pitching : charStats?.current_game?.pitching) ?? {},
+        [scope, charStats]
+    );
 
     const setBatting = useCallback((key, val) => {
         setItem(`${prefix}.${statPath}.batting.${key}`, val === '' ? 0 : Number(val));

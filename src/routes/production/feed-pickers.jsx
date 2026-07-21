@@ -2,7 +2,6 @@ import { memo, useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useStateStore } from '../../context/store';
 import { Stack, Group, Text } from '../../components/ui/primitives';
-import { Button } from '../../components/ui/button';
 import { SegmentedControl } from '../../components/ui/segmented-control';
 import { cn } from '../../lib/utils';
 import { StagedDot } from './controls';
@@ -19,6 +18,18 @@ import { defaultContainerFor, useContainerTarget, useFeedControl } from './feeds
  * Before this, the rail could only re-push whatever the stage last picked,
  * which made a pinned Stats card useless on its own.
  */
+
+/*
+ * Which fed elements offer CHOICES, keyed by their `feed` kind — the options
+ * hook each one exposes. Two consumers read it: the rail (which picker to
+ * render as one row) and elements.js's PICKABLE_FEEDS (whether the source
+ * strip's Push slot has anything to push before a pick has happened).
+ * elements.test.js pins the two against each other.
+ */
+export const FEED_OPTION_HOOKS = {
+    stats: useStatsFeedOptions,
+    postgamecallout: usePostgameCalloutOptions,
+};
 
 // A rail-friendly flattening of grouped options: "Team — Character".
 export function flattenGroups(groups) {
@@ -208,7 +219,7 @@ export const PostgameCalloutPicker = memo(function PostgameCalloutPicker({ eleme
 // postgame.{N}.player.{T}.totals.
 export const PostgameVsPicker = memo(function PostgameVsPicker({ element, scoreboard = 1 }) {
     const { container } = useContainerTarget(element.id, defaultContainerFor(element));
-    const { value: selection, staged, setFeed } = useFeedControl(container);
+    const { value: selection, staged } = useFeedControl(container);
     const pg = useStateStore(useShallow(s => {
         const p = s?.postgame?.[scoreboard];
         return {
@@ -222,12 +233,6 @@ export const PostgameVsPicker = memo(function PostgameVsPicker({ element, scoreb
     const mine = selection && selection.element === 'postgamevs'
         && (selection.scoreboard == null || selection.scoreboard === scoreboard);
     const occupiedByOther = selection && !mine;
-
-    const push = () => setFeed(
-        { element: 'postgamevs', scoreboard },
-        `Feed game summary: ${pg.n1 || 'Side 1'} vs ${pg.n2 || 'Side 2'}`,
-    );
-    const clear = () => setFeed(null);
 
     if (!pg.present) {
         return (
@@ -248,16 +253,11 @@ export const PostgameVsPicker = memo(function PostgameVsPicker({ element, scoreb
                 </Text>
                 <StagedDot show={staged} />
             </Group>
-            <Group gap="xs" className="items-center">
-                {mine ? (
-                    <Button size="sm" variant="ghost" onClick={clear}>Clear from stage</Button>
-                ) : (
-                    <Button size="sm" onClick={push}>Push game summary</Button>
-                )}
-                {occupiedByOther && (
-                    <Text size="xs" className="text-muted-foreground">Replaces what the stage is showing.</Text>
-                )}
-            </Group>
+            {occupiedByOther && (
+                <Text size="xs" className="text-muted-foreground">
+                    Push replaces what the stage is showing.
+                </Text>
+            )}
             {!pg.hasTotals && (
                 <Text size="xs" className="text-muted-foreground">
                     Older capture without side totals — re-capture to include Stars Won.

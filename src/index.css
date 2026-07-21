@@ -92,6 +92,21 @@
   * {
     border-color: var(--border);
   }
+  /* Reserve the scrollbar gutter permanently.
+     Any element whose HEIGHT is derived from the page WIDTH — the Production
+     stage preview, whose box is the overlay's aspect ratio — closes a loop
+     through the document: box grows -> page gets taller -> scrollbar appears ->
+     viewport narrows ~15px -> box shrinks -> page fits -> scrollbar goes ->
+     repeat, several times a second. It shakes the whole window. Reserving the
+     gutter means the viewport width no longer depends on the page height, which
+     cuts the cycle at the source rather than damping it downstream.
+     `overflow-y: scroll` is load-bearing, not belt-and-braces: scrollbar-gutter
+     has no effect while the root's overflow is `visible`, which is the default
+     — set the gutter alone and the viewport width still moves 15px. */
+  html {
+    overflow-y: scroll;
+    scrollbar-gutter: stable;
+  }
   body {
     background-color: var(--background);
     color: var(--foreground);

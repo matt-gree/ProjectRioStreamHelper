@@ -1,8 +1,34 @@
 import { describe, it, expect } from 'vitest';
 import {
-    elementsForPhase, ELEMENTS, PHASES,
+    elementsForPhase, ELEMENTS, PHASES, PICKABLE_FEEDS, isPickableFeed,
     quickFaceFor, isPinnable, stageBodyFor,
 } from './elements';
+import { FEED_OPTION_HOOKS } from './feed-pickers';
+
+/*
+ * PICKABLE_FEEDS decides whether the source strip's Push slot can do anything
+ * before a pick; FEED_OPTION_HOOKS decides whether there IS a picker. They are
+ * the same question asked by two surfaces, so they must not drift: a feed with
+ * a picker whose Push is enabled would push nothing, and a feed without one
+ * whose Push is disabled could never be fed at all.
+ */
+describe('pickable feeds', () => {
+    it('matches the set of feeds that actually expose a picker', () => {
+        expect([...PICKABLE_FEEDS].sort()).toEqual(Object.keys(FEED_OPTION_HOOKS).sort());
+    });
+
+    it('names only feeds some registered element declares', () => {
+        const feeds = new Set(ELEMENTS.map(e => e.feed).filter(Boolean));
+        for (const f of PICKABLE_FEEDS) expect(feeds, f).toContain(f);
+    });
+
+    it('classifies the registry: stats picks, game summary pushes wholesale', () => {
+        const byId = Object.fromEntries(ELEMENTS.map(e => [e.id, e]));
+        expect(isPickableFeed(byId.stats)).toBe(true);
+        expect(isPickableFeed(byId.postgamevs)).toBe(false);
+        expect(isPickableFeed(byId.scoreboard)).toBe(false); // direct: no feed at all
+    });
+});
 
 describe('element registry invariants', () => {
     it('every element belongs to at least one known phase', () => {

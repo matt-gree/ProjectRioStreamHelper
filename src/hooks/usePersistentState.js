@@ -1,4 +1,19 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+
+/*
+ * Every mounted hook on the same key, so a write from one reaches the others.
+ *
+ * Two components reading one key is normal here — the console's board pick is
+ * read by the stage panel, its header strip and the rail card at once — and
+ * without this they would each hold a private copy: the producer changes the
+ * board on the stage, and the header strip goes on commanding the old one until
+ * something happens to remount it. Same key, same value, always.
+ */
+const subscribers = new Map();
+
+function broadcast(key, value, self) {
+    for (const fn of subscribers.get(key) || []) if (fn !== self) fn(value);
+}
 
 /**
  * Drop-in replacement for useState that remembers the value across unmounts
@@ -26,16 +41,32 @@ export function usePersistentState(key, defaultValue, isValid) {
         }
     });
 
+    useEffect(() => {
+        if (!subscribers.has(key)) subscribers.set(key, new Set());
+        const subs = subscribers.get(key);
+        subs.add(setValue);
+        return () => {
+            subs.delete(setValue);
+            if (!subs.size) subscribers.delete(key);
+        };
+    }, [key]);
+
+    // The updater form needs the current value, and broadcasting must not happen
+    // inside a setState reducer (React may run it twice) — so hold the latest in
+    // a ref and do both from the event handler.
+    const latest = useRef(value);
+    latest.current = value;
+
     const set = useCallback((next) => {
-        setValue(prev => {
-            const resolved = typeof next === 'function' ? next(prev) : next;
-            try {
-                localStorage.setItem(key, JSON.stringify(resolved));
-            } catch {
-                // Ignore quota / private-mode failures — persistence is best-effort.
-            }
-            return resolved;
-        });
+        const resolved = typeof next === 'function' ? next(latest.current) : next;
+        try {
+            localStorage.setItem(key, JSON.stringify(resolved));
+        } catch {
+            // Ignore quota / private-mode failures — persistence is best-effort.
+        }
+        latest.current = resolved;
+        setValue(resolved);
+        broadcast(key, resolved, setValue);
     }, [key]);
 
     return [value, set];

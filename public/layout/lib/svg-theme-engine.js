@@ -41,7 +41,7 @@ export function createThemeEngine({ host, element, fallbackSvg }) {
   function loadThemeSvg(pkg) {
     if (themeCache[pkg] == null) {
       themeCache[pkg] = (async () => {
-        let svg = null;
+        let svg;
         try {
           svg = await fetchSvg(pkg);
           // Element-by-element fallback: a package may theme only some elements.

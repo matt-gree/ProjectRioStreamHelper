@@ -69,12 +69,8 @@ export default function SettingsModal({ opened, onClose }) {
 
     // MSB assets path state (mirrors HUD path UX)
     const [assetsPath, setAssetsPath] = useState('');
-    const [assetsResolved, setAssetsResolved] = useState('');
     const [assetsDefault, setAssetsDefault] = useState('');
     const [assetsCategories, setAssetsCategories] = useState({});
-    const [assetsTotalExpected, setAssetsTotalExpected] = useState(0);
-    const [assetsTotalFound, setAssetsTotalFound] = useState(0);
-    const [assetsComplete, setAssetsComplete] = useState(false);
     const [assetsBrowsing, setAssetsBrowsing] = useState(false);
     const [assetsSaving, setAssetsSaving] = useState(false);
     const [assetsRevealing, setAssetsRevealing] = useState(false);
@@ -206,12 +202,8 @@ export default function SettingsModal({ opened, onClose }) {
             const resp = await fetch('/api/v1/assets/msb');
             const data = await resp.json();
             setAssetsPath(data.configured || '');
-            setAssetsResolved(data.resolved || '');
             setAssetsDefault(data.default || '');
             setAssetsCategories(data.categories || {});
-            setAssetsTotalExpected(data.total_expected || 0);
-            setAssetsTotalFound(data.total_found || 0);
-            setAssetsComplete(!!data.complete);
         } catch { /* ignore */ }
     }, []);
 
@@ -456,11 +448,7 @@ export default function SettingsModal({ opened, onClose }) {
             const data = await resp.json();
             if (resp.ok) {
                 setAssetsPath(path);
-                setAssetsResolved(data.resolved || '');
                 setAssetsCategories(data.categories || {});
-                setAssetsTotalExpected(data.total_expected || 0);
-                setAssetsTotalFound(data.total_found || 0);
-                setAssetsComplete(!!data.complete);
                 bumpAssetsVersion();
                 notifications.show({ message: path ? 'MSB assets path updated' : 'MSB assets path reset to default', color: 'green' });
             } else {
@@ -472,7 +460,7 @@ export default function SettingsModal({ opened, onClose }) {
             notifications.show({ message: 'Failed to set MSB assets path', color: 'red' });
         }
         setAssetsSaving(false);
-    }, []);
+    }, [bumpAssetsVersion]);
 
     const handleClearAssetsPath = useCallback(async () => {
         await handleSetAssetsPath('');

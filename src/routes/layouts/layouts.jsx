@@ -6,10 +6,8 @@ import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
-import { TextField } from '../../components/ui/text-field';
 import { NumberInput } from '../../components/ui/number-input';
 import { ColorInput } from '../../components/ui/color-input';
-import { Combobox } from '../../components/ui/combobox';
 import { FontCombobox } from '../../components/ui/font-combobox';
 import { SimpleSelect } from '../../components/ui/simple-select';
 import { Switch } from '../../components/ui/switch';
@@ -19,6 +17,7 @@ import { Tabs, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { SimpleTooltip } from '../../components/ui/simple-tooltip';
 import { CopyButton } from '../../components/ui/copy-button';
 import { FileButton } from '../../components/ui/file-button';
+import ScaledIframe, { DEFAULT_PREVIEW_HEIGHT as PREVIEW_HEIGHT } from '../../components/ScaledIframe';
 import {
     DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 } from '../../components/ui/dropdown-menu';
@@ -36,8 +35,6 @@ import {
     GLOBAL_DESIGN_KEYS,
     GLOBAL_DESIGN_DEFAULTS,
 } from './designConstants';
-
-const PREVIEW_HEIGHT = 500;
 
 // Selected-row tint helper (replaces the per-item Mantine theme callbacks).
 const itemClass = (active, accent = 'primary') => cn(
@@ -57,111 +54,6 @@ const COLOR_SWATCHES = [
     '#6366f1', '#64748b',
     '#0f0f19', '#ffffff', '#000000',
 ];
-
-const ScaledIframe = memo(function ScaledIframe({ src, fallbackWidth, fallbackHeight, height = PREVIEW_HEIGHT }) {
-    const containerRef = useRef(null);
-    const iframeRef = useRef(null);
-    const [nativeSize, setNativeSize] = useState(null);
-    const [layout, setLayout] = useState({ scale: 1 });
-
-    const recalc = useCallback((nw, nh) => {
-        const el = containerRef.current;
-        if (!el) return;
-        const { width, height } = el.getBoundingClientRect();
-        const scale = Math.min(width / nw, height / nh);
-        setLayout({ scale });
-    }, []);
-
-    useEffect(() => {
-        if (nativeSize) recalc(nativeSize.w, nativeSize.h);
-    }, [nativeSize, recalc]);
-
-    useEffect(() => {
-        const el = containerRef.current;
-        if (!el || !nativeSize) return;
-        const observer = new ResizeObserver(() => recalc(nativeSize.w, nativeSize.h));
-        observer.observe(el);
-        return () => observer.disconnect();
-    }, [nativeSize, recalc]);
-
-    const handleLoad = useCallback(() => {
-        const readSize = () => {
-            try {
-                const doc = iframeRef.current?.contentDocument;
-                if (!doc) {
-                    if (fallbackWidth && fallbackHeight) {
-                        setNativeSize({ w: fallbackWidth, h: fallbackHeight });
-                    }
-                    return;
-                }
-                try {
-                    doc.documentElement.style.background = 'transparent';
-                    doc.documentElement.style.colorScheme = 'normal';
-                    doc.body.style.background = 'transparent';
-                    let injected = doc.getElementById('__prsh_preview_bg');
-                    if (!injected) {
-                        injected = doc.createElement('style');
-                        injected.id = '__prsh_preview_bg';
-                        injected.textContent =
-                            'html,body{background:transparent !important;color-scheme:normal !important;}';
-                        doc.head.appendChild(injected);
-                    }
-                } catch { /* ignore */ }
-                const refW = parseFloat(doc.body.dataset.refW);
-                const refH = parseFloat(doc.body.dataset.refH);
-                if (refW > 0 && refH > 0) {
-                    setNativeSize({ w: refW, h: refH });
-                    return;
-                }
-                const style = doc.defaultView.getComputedStyle(doc.body);
-                const cssW = parseFloat(style.width);
-                const cssH = parseFloat(style.height);
-                const w = cssW > 0 ? cssW : doc.body.scrollWidth;
-                const h = cssH > 0 ? cssH : doc.body.scrollHeight;
-                if (w > 0 && h > 0) {
-                    setNativeSize({ w, h });
-                }
-            } catch (e) {
-                if (fallbackWidth && fallbackHeight) {
-                    setNativeSize({ w: fallbackWidth, h: fallbackHeight });
-                }
-            }
-        };
-        requestAnimationFrame(readSize);
-    }, [fallbackWidth, fallbackHeight]);
-
-    return (
-        <div
-            ref={containerRef}
-            className="relative w-full overflow-hidden bg-muted flex items-center justify-center"
-            style={{ height }}
-        >
-            <iframe
-                ref={iframeRef}
-                src={src}
-                onLoad={handleLoad}
-                style={{
-                    width: nativeSize ? `${nativeSize.w}px` : '1px',
-                    height: nativeSize ? `${nativeSize.h}px` : '1px',
-                    border: 'none',
-                    backgroundColor: 'transparent',
-                    colorScheme: 'normal',
-                    opacity: nativeSize ? 1 : 0,
-                    // Scale with `zoom`, not `transform: scale()`. A CSS transform
-                    // rasters the iframe layer once at its pre-scale size and reuses
-                    // that texture, so scaling up stays blurry until a re-raster is
-                    // forced (the low-res-until-source-refresh symptom). `zoom` is
-                    // layout-affecting: the iframe content re-renders at the target
-                    // resolution, crisp from first paint, for SVG and HTML alike.
-                    // Flex-centered by the container (no manual offset transform,
-                    // which would re-introduce a composited layer).
-                    zoom: nativeSize ? layout.scale : 1,
-                }}
-                title="Layout Preview"
-            />
-        </div>
-    );
-});
 
 // Tinted-translucent source chips, matching the brand.
 const SOURCE_COLORS = {
@@ -426,7 +318,7 @@ const BRACKET_VARIANTS = [
     { key: 'losers', label: 'Losers Only', path: '/layout/bracket/index.html?losers_only=true' },
 ];
 
-const PlayerSchedulePanel = memo(function PlayerSchedulePanel({ selected, onSelect, baseUrl, phases, phasesLoaded, bracketLink }) {
+const PlayerSchedulePanel = memo(function PlayerSchedulePanel({ selected, onSelect, baseUrl, phases, phasesLoaded }) {
     const activePlayer = useStateStore(s => s?.bracket?.activePlayer ?? '');
     const playerScheduleData = useStateStore(s => s?.playerSchedule);
     const setStateItem = useStateStore(s => s.setItem);
@@ -631,7 +523,7 @@ const PlayerSchedulePanel = memo(function PlayerSchedulePanel({ selected, onSele
 const BracketLayoutList = memo(function BracketLayoutList({ selected, onSelect, baseUrl, onLoadBracket }) {
     const [expandedGroups, setExpandedGroups] = useState({});
     const bracketLink = useStateStore(s => s?.tournamentInfo?.bracket_link ?? '');
-    const { loading: sggLoading, fetchPhases, loadBracket } = useTournament();
+    const { fetchPhases, loadBracket } = useTournament();
 
     const [phases, setPhases] = useState([]);
     const [loadedPgId, setLoadedPgId] = useState(null);
@@ -766,7 +658,6 @@ const BracketLayoutList = memo(function BracketLayoutList({ selected, onSelect, 
                     baseUrl={baseUrl}
                     phases={phases}
                     phasesLoaded={phasesLoaded}
-                    bracketLink={bracketLink}
                 />
             </div>
         </Stack>
@@ -782,7 +673,7 @@ const LogoUpload = memo(function LogoUpload({ label, description }) {
         try {
             const resp = await fetch('/api/v1/branding/logo');
             if (resp.ok) setLogoInfo(await resp.json());
-        } catch (e) { /* ignore */ }
+        } catch { /* ignore */ }
     }, []);
 
     useEffect(() => { fetchLogo(); }, [fetchLogo]);
@@ -795,7 +686,7 @@ const LogoUpload = memo(function LogoUpload({ label, description }) {
             form.append('file', file);
             const resp = await fetch('/api/v1/branding/logo', { method: 'POST', body: form });
             if (resp.ok) setLogoInfo(await resp.json());
-        } catch (e) { /* ignore */ }
+        } catch { /* ignore */ }
         setUploading(false);
     }, []);
 
@@ -803,7 +694,7 @@ const LogoUpload = memo(function LogoUpload({ label, description }) {
         try {
             const resp = await fetch('/api/v1/branding/logo', { method: 'DELETE' });
             if (resp.ok) setLogoInfo(await resp.json());
-        } catch (e) { /* ignore */ }
+        } catch { /* ignore */ }
     }, []);
 
     return (
@@ -1084,7 +975,7 @@ const PREVIEW_ROWS = [
     ],
 ];
 
-const PreviewTile = memo(function PreviewTile({ label, path, w, h, src, reloadKey }) {
+const PreviewTile = memo(function PreviewTile({ label, path: _path, w, h, src, reloadKey }) {
     return (
         <div>
             <Text size="xs" fw={600} dimmed className="mb-1">{label}</Text>
@@ -1092,7 +983,7 @@ const PreviewTile = memo(function PreviewTile({ label, path, w, h, src, reloadKe
                 className="mx-auto overflow-hidden rounded-lg border border-night-600"
                 style={{ width: '100%', maxWidth: w, aspectRatio: `${w} / ${h}`, background: '#0b0b0f' }}
             >
-                <ScaledIframe key={reloadKey} src={src} fallbackWidth={w} fallbackHeight={h} height="100%" />
+                <ScaledIframe key={reloadKey} src={src} nativeWidth={w} nativeHeight={h} height="100%" />
             </div>
         </div>
     );
@@ -1778,7 +1669,7 @@ const ControllerOverlayPanel = memo(function ControllerOverlayPanel({ selected, 
             } else {
                 notifications.show({ message: data.error || 'Failed to start', color: 'red' });
             }
-        } catch (e) {
+        } catch {
             notifications.show({ message: 'Failed to start controller overlay', color: 'red' });
         }
         setLoading(false);
@@ -2058,7 +1949,7 @@ export default function LayoutBrowser() {
         try {
             const first = allLayouts.find(l => l.group === 'bracket');
             if (first) return new URL(first.url).origin;
-        } catch {}
+        } catch { /* malformed URL — fall through to the default */ }
         return `http://localhost:5260`;
     }, [allLayouts]);
 
@@ -2269,7 +2160,7 @@ export default function LayoutBrowser() {
                                             </CopyButton>
                                         </div>
                                     </div>
-                                    <ScaledIframe key={`${selectedUrl}-${previewRevision}`} src={selectedUrl} fallbackWidth={selected?.width} fallbackHeight={selected?.height} />
+                                    <ScaledIframe key={`${selectedUrl}-${previewRevision}`} src={selectedUrl} nativeWidth={selected?.width} nativeHeight={selected?.height} fallbackWidth={selected?.width} fallbackHeight={selected?.height} className="bg-muted" />
                                 </>
                             ) : (
                                 <div className="flex items-center justify-center" style={{ height: PREVIEW_HEIGHT }}>

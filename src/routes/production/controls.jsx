@@ -51,22 +51,30 @@ export function stageSettingsSet(settingKey, value, label) {
 // desk, lower-third slots, schedule queue). Deliberately buttons, not drag:
 // native HTML5 drag needs a mouse pointer, and the Production page is also
 // driven from phones/tablets at the venue.
-export const MoveButtons = memo(function MoveButtons({ canUp, canDown, onUp, onDown, label }) {
+//
+// `axis="x"` lays the pair out as ◀ ▶ for a list the producer sees running
+// left→right on air (the lower-third band). Same handlers, same labels — only
+// the arrows and their stacking follow the direction of the thing being moved.
+export const MoveButtons = memo(function MoveButtons({ canUp, canDown, onUp, onDown, label, axis = 'y' }) {
+    const x = axis === 'x';
+    const Wrap = x ? Group : Stack;
     return (
-        <Stack gap="none" className="shrink-0">
+        <Wrap gap="none" className={cn('shrink-0 items-center', x && 'flex-nowrap')}>
             <button
-                type="button" disabled={!canUp} onClick={onUp} aria-label={`Move ${label} up`}
+                type="button" disabled={!canUp} onClick={onUp}
+                aria-label={`Move ${label} ${x ? 'left' : 'up'}`}
                 className="text-muted-foreground hover:text-foreground disabled:opacity-30"
             >
-                <ChevronRight size={12} className="-rotate-90" />
+                <ChevronRight size={12} className={x ? 'rotate-180' : '-rotate-90'} />
             </button>
             <button
-                type="button" disabled={!canDown} onClick={onDown} aria-label={`Move ${label} down`}
+                type="button" disabled={!canDown} onClick={onDown}
+                aria-label={`Move ${label} ${x ? 'right' : 'down'}`}
                 className="text-muted-foreground hover:text-foreground disabled:opacity-30"
             >
-                <ChevronRight size={12} className="rotate-90" />
+                <ChevronRight size={12} className={x ? undefined : 'rotate-90'} />
             </button>
-        </Stack>
+        </Wrap>
     );
 });
 

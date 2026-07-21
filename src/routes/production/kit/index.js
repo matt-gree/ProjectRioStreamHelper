@@ -6,7 +6,7 @@ export { StateChip } from './StateChip';
 export { PanelShell } from './PanelShell';
 export { QuickCard } from './QuickCard';
 export {
-    ToggleRow, SelectRow, NumberRow, ActionRow, SegmentedRow, ListRow, IconToggle,
+    ToggleRow, SelectRow, NumberRow, FieldRow, ActionRow, SegmentedRow, ListRow, IconToggle,
     KitColumns, KitColumn,
 } from './rows';
 export { KIT_INPUT, KIT_INPUT_FLOW, KIT_FIELD } from './tokens';

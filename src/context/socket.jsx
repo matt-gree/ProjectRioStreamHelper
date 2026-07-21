@@ -242,5 +242,5 @@ export const useSocketSubscribe = (eventName, eventHandler) => {
         return () => {
             socket.off(eventName, eventHandler);
         }
-    }, [eventName, eventHandler]);
+    }, [socket, eventName, eventHandler]);
 }

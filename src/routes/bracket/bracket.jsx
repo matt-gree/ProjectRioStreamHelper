@@ -90,7 +90,7 @@ export default function Bracket() {
     }, [selectedPhase, selectedPool, includeFinished, fetchSets, update]);
 
     const [playerSearch, setPlayerSearch] = useState('');
-    const allSets = bs.allSets ?? [];
+    const allSets = useMemo(() => bs.allSets ?? [], [bs.allSets]);
     const allSetsLoadedFor = bs.allSetsLoadedFor ?? null;
 
     const filteredSets = useMemo(() => {

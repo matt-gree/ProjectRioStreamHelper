@@ -72,7 +72,7 @@ function fitText(el) {
   }
   if (!base) return;
   el.style.fontSize = base + 'px';
-  let len = 0;
+  let len;
   try { len = el.getComputedTextLength(); } catch { len = 0; }
   if (len > maxw) el.style.fontSize = (base * maxw / len) + 'px';
 }

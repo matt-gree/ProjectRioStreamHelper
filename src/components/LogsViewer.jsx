@@ -112,7 +112,7 @@ export default function LogsViewer({ opened, onClose }) {
                 const d = await r.json().catch(() => ({}));
                 notifications.show({ message: d.error || 'Could not open folder', color: 'red' });
             }
-        } catch (e) {
+        } catch {
             notifications.show({ message: 'Could not open folder', color: 'red' });
         }
     }, []);
