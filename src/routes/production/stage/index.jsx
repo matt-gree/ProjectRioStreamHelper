@@ -9,6 +9,7 @@ import {
 } from '../placements';
 import { SourceStrip } from '../sourcestrip';
 import { DirectStage, FedStage } from './generic';
+import { ElementStyleSettings } from './overlay-settings';
 import StagePreview from './preview';
 import HitVisualizerStage from './hitvisualizer';
 import MatchupStage from './matchup';
@@ -91,6 +92,16 @@ const ElementStage = memo(function ElementStage({ placement, title, pinned, onPi
                 what a preview is worth; a side-by-side split spends it. */}
             <div className="flex min-w-0 flex-col gap-1.5">
                 <Body element={element} board={board} placement={placement} />
+                {/* The body surfaces the settings a producer reaches for live;
+                    this is the catch-all so every remaining element setting is
+                    still reachable on the stage (phase 7). A body names what it
+                    already showed in `surfacedKeys` so nothing doubles up. */}
+                <ElementStyleSettings
+                    type={element.id}
+                    board={element.scope === 'board' ? board : null}
+                    label={element.scope === 'board' ? `${element.name} ${board ?? ''}`.trim() : element.name}
+                    exclude={Body.surfacedKeys}
+                />
             </div>
             {/* A generic placement is a PRSH source the registry has never
                 heard of, so we don't know its native size — and a preview at a

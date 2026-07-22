@@ -1,5 +1,5 @@
 import { memo, useState } from 'react';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, RotateCcw } from 'lucide-react';
 import { Switch } from '../../../components/ui/switch';
 import { Button } from '../../../components/ui/button';
 import { SegmentedControl } from '../../../components/ui/segmented-control';
@@ -86,6 +86,70 @@ export const NumberRow = memo(function NumberRow({
                 className={cn(KIT_INPUT, 'w-20', staged && 'border-amber-400/60 text-amber-400')}
             />
             {suffix && <Text size="xs" span dimmed className="shrink-0">{suffix}</Text>}
+        </div>
+    );
+});
+
+// label · text input — a short authored string (header title, field separator,
+// a card's custom bottom line). Commits on change like the rest of the kit;
+// the settings tier that feeds it keys writes by the same key each keystroke,
+// so a staged edit is one pending entry that updates in place, not a storm.
+export const TextRow = memo(function TextRow({
+    label, value, onChange, placeholder, disabled, staged, className,
+}) {
+    return (
+        <div className={cn(ROW, className)}>
+            {label != null && (
+                <Text size="xs" span truncate className={cn('w-16 shrink-0', staged ? 'text-amber-400' : 'text-muted-foreground')}>
+                    {label}
+                </Text>
+            )}
+            <input
+                type="text" disabled={disabled} placeholder={placeholder}
+                value={value ?? ''}
+                onChange={(e) => onChange?.(e.target.value)}
+                className={cn(KIT_INPUT, 'min-w-0 flex-1', staged && 'border-amber-400/60 text-amber-400')}
+            />
+        </div>
+    );
+});
+
+// label · swatch + hex — a per-overlay colour override. `value` null/'' means
+// "use the theme default": the swatch falls back to black for the native
+// picker but the field reads empty and shows a reset only once a colour is
+// pinned, so onChange(null) is how the producer clears back to the default.
+export const ColorRow = memo(function ColorRow({
+    label, value, onChange, disabled, staged, className,
+}) {
+    const has = value != null && value !== '';
+    return (
+        <div className={cn(ROW, className)}>
+            {label != null && (
+                <Text size="xs" span truncate className={cn('w-16 shrink-0', staged ? 'text-amber-400' : 'text-muted-foreground')}>
+                    {label}
+                </Text>
+            )}
+            <input
+                type="color" disabled={disabled} aria-label={label}
+                value={has ? value : '#000000'}
+                onChange={(e) => onChange?.(e.target.value)}
+                className="h-7 w-8 shrink-0 rounded-md border border-border bg-card p-0.5"
+            />
+            <input
+                type="text" disabled={disabled} placeholder="Default"
+                value={has ? value : ''}
+                onChange={(e) => onChange?.(e.target.value || null)}
+                className={cn(KIT_INPUT, 'min-w-0 flex-1', staged && 'border-amber-400/60 text-amber-400')}
+            />
+            {has && (
+                <button
+                    type="button" onClick={() => onChange?.(null)} disabled={disabled}
+                    aria-label={`Reset ${label}`}
+                    className="shrink-0 text-muted-foreground hover:text-foreground"
+                >
+                    <RotateCcw size={12} />
+                </button>
+            )}
         </div>
     );
 });

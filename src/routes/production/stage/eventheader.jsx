@@ -10,8 +10,10 @@ import { OverlaySettingRows, useOverlaySettings } from './overlay-settings';
  * dates; bottom: message · event · phase · round).
  *
  * Both bands and each field inside them are switches the producer flips live,
- * so the console owns them; the geometry knobs (offsets, band width, font
- * scale, separator) are set once per event and stay in Setup.
+ * so the body leads with them. The geometry knobs (offsets, band width, font
+ * scale, separator) are set once per event, not flipped live — they render in
+ * the stage's catch-all Style section below (ElementStyleSettings), so they're
+ * reachable without the Setup tab but sit apart from the live switches.
  *
  * A field also drops out automatically when its source text is blank, which is
  * invisible from a switch alone — so the field rows carry the live value as
@@ -59,14 +61,19 @@ export default function EventHeaderStage({ element }) {
                 <OverlaySettingRows os={os} type="eventheader" keys={FIELD_KEYS} />
             </div>
 
-            <Text size="xs" className="border-t border-border/60 pt-2 text-muted-foreground">
-                {empties.length > 0 && (
-                    <>A field with nothing behind it stays hidden however it's switched —{' '}
-                        {empties.map(f => f.label).join(', ')}{' '}
-                        {empties.length === 1 ? 'is' : 'are'} blank in Competition → Tournament info.{' '}</>
-                )}
-                Band offsets, width, font scale and the separator are set in Setup → Layouts.
-            </Text>
+            {empties.length > 0 && (
+                <Text size="xs" className="border-t border-border/60 pt-2 text-muted-foreground">
+                    A field with nothing behind it stays hidden however it's switched —{' '}
+                    {empties.map(f => f.label).join(', ')}{' '}
+                    {empties.length === 1 ? 'is' : 'are'} blank in Competition → Tournament info.
+                </Text>
+            )}
         </>
     );
 }
+
+// The switches this body already shows as headline live controls — excluded
+// from the stage's Style section so they don't render twice. The geometry knobs
+// (offsets, band width, font scale, separator) are left OUT of this list, so
+// they fall through to Style.
+EventHeaderStage.surfacedKeys = [...BAND_KEYS, BG_KEY, ...FIELD_KEYS];

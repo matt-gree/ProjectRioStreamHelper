@@ -42,11 +42,20 @@ describe('Scorecard stage', () => {
         }
     });
 
-    it('leaves the text fields to Setup — the kit has no text row', () => {
+    it('surfaces the authored text fields in the Style section (phase 7)', () => {
         ui();
         for (const def of LAYOUT_SETTINGS.scorecard.filter(d => d.type === 'text')) {
-            expect(screen.queryByText(def.label), def.key).not.toBeInTheDocument();
+            expect(screen.getByText(def.label), def.key).toBeInTheDocument();
         }
+    });
+
+    it('writes an authored text field to the per-board namespace', () => {
+        useSettingsStore.setState({ scoreboards: { active: [1, 2] } });
+        ui('scorecard:2');
+        const input = screen.getByPlaceholderText('Project Rio'); // titleText placeholder
+        fireEvent.change(input, { target: { value: 'Finals' } });
+        expect(useSettingsStore.getState()?.overlays?.scorecard?.[2]?.titleText).toBe('Finals');
+        expect(useSettingsStore.getState()?.overlays?.scorecard?.[1]).toBeUndefined();
     });
 
     it('writes per board, so two scorecard sources stay independent', () => {

@@ -173,14 +173,18 @@ Every broadcast element registers in `src/routes/production/elements.js` with:
   (match accordions today) differentiates open from collapsed on surface *and*
   border, not just the chevron — a producer with five matches has to see which
   one they are editing without reading it.
-- **Overlay style settings can be stage rows.** Some layouts (Scorecard, Event
-  Header) expose knobs the producer flips *during* a broadcast — bands that
-  animate in and out mid-game. Those belong on the stage, not only in Setup.
-  Render them with `stage/overlay-settings.jsx`: definitions stay single-sourced
-  in `LAYOUT_SETTINGS[type]`, writes go through `stageSettingsSet`. Only
-  `switch` and `select` defs are renderable — a text, colour or number setting
-  having no kit row is exactly the signal that it's authoring and belongs on a
-  tab. Per-board layouts (Scorecard) write `overlays.{type}.{N}.{key}`.
+- **Overlay style settings are stage rows.** A layout's element settings all
+  render on the stage — `switch`, `select`, `text`, `number`, `colour` each have
+  a kit row (`stage/overlay-settings.jsx`; definitions stay single-sourced in
+  `LAYOUT_SETTINGS[type]`, writes go through `stageSettingsSet`). The old cap
+  (switch/select only) was a proxy for a cramped one-column stage, not a real
+  authoring/live split — it's gone. A stage body still *leads* with the settings
+  a producer flips live (Scorecard bands, Event Header bands): it lists those
+  keys in a static `surfacedKeys` on the body component, and `ElementStyleSettings`
+  (added by `stage/index.jsx` for every element) renders the **rest** as a Style
+  section, so nothing is stranded on a tab and nothing doubles up. Per-board
+  layouts (Scorecard, Scoreboard) write `overlays.{type}.{N}.{key}`; the Style
+  section takes the board from the element's `scope`.
 - **The stage body is two columns: controls, then a live preview** of the
   selected element (`stage/preview.jsx`). The preview is the real overlay in an
   iframe against real state — never a mockup — so anything true of the browser
@@ -503,7 +507,9 @@ from. 28px control rhythm. Primitives:
 |-----|-------|-------------|
 | Toggle row | label + switch | source visibility, sub-plates, overlay band switches |
 | Select row | label + dropdown | board pick, content pick, spotlight scene |
-| Number row | label + number + suffix | spotlight hold, countdown minutes, gap width |
+| Number row | label + number + suffix | spotlight hold, countdown minutes, gap width, band geometry |
+| Text row | label + text input | header title, field separator, a card's custom bottom line |
+| Colour row | label + swatch + hex + reset | per-overlay colour overrides (bracket lines, port colours); empty = theme default |
 | Field row | label + any control; `stacked` puts the label above | pickers the kit doesn't own (participant, captain, port, a typed field). Stack it in a column of form fields, where a fixed label gutter would push every control off the panel's left edge |
 | Action row | 1–3 buttons | push, replay/spotlight/split, capture, clock transport |
 | Segmented row | segmented control | plates mode, scorecard score block |

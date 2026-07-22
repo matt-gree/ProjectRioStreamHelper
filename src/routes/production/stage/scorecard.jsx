@@ -15,8 +15,9 @@ import { OverlaySettingRow, OverlaySettingRows, defsFor, useOverlaySettings } fr
  *
  * The score block leads because it's the headline decision (full block /
  * condensed bar / off); the bands follow in the order they stack on screen.
- * Header title and phase text stay in Setup — authored per event, not flipped
- * live, and the kit has no text row.
+ * Header title and phase text are authored per event, not flipped live, so
+ * they render in the stage's catch-all Style section below rather than up here
+ * among the live bands. Colours come from the active design package.
  */
 
 const MODE_KEY = 'mainMode';
@@ -61,9 +62,14 @@ export default function ScorecardStage({ element, board }) {
 
             <Text size="xs" className="border-t border-border/60 pt-2 text-muted-foreground">
                 Bands animate in and out as you flip them, and apply to{' '}
-                <b>{sc.boardLabel(sc.board)}</b> only. Header title, phase text and
-                colours are authored in Setup → Layouts.
+                <b>{sc.boardLabel(sc.board)}</b> only. Header title and phase text
+                are below; colours come from the active design package.
             </Text>
         </>
     );
 }
+
+// The live bands this body already shows — excluded from the stage's Style
+// section (which then renders the authored text fields: header title, phase
+// text). Config is per board, so Style writes to overlays.scorecard.{N}.* too.
+ScorecardStage.surfacedKeys = [MODE_KEY, ...BAND_KEYS];

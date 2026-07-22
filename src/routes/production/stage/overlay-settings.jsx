@@ -2,8 +2,9 @@ import { memo, useCallback } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useSettingsStore } from '../../../context/store';
 import { usePending } from '../../../context/staging';
+import { Text } from '../../../components/ui/primitives';
 import { LAYOUT_SETTINGS } from '../../layouts/designConstants';
-import { SegmentedRow, ToggleRow } from '../kit';
+import { SegmentedRow, ToggleRow, TextRow, NumberRow, ColorRow } from '../kit';
 import { stageSettingsSet } from '../controls';
 
 /*
@@ -13,16 +14,20 @@ import { stageSettingsSet } from '../controls';
  * DURING a broadcast — bands that animate in and out mid-game. Those are live
  * broadcast decisions, so they belong on the console, not only in Setup where
  * they lived before. The definitions stay single-sourced in
- * LAYOUT_SETTINGS[type] (routes/layouts/designConstants.js); this module just
- * renders a chosen subset of them as rows and routes writes through the
- * staging gateway.
+ * LAYOUT_SETTINGS[type] (routes/layouts/designConstants.js); this module
+ * renders them as rows and routes writes through the staging gateway.
  *
- * Only `switch` and `select` defs are renderable here. Text, colour and number
- * settings have no kit row, which is exactly the contract's signal that they
- * are authoring and belong on the Setup tab.
+ * Every element-settings type has a kit row now — switch, select, text,
+ * number, colour. The old cap (switch/select only) was written for a cramped
+ * one-column stage, where a missing row doubled as the signal that a setting
+ * was authoring and belonged on a tab. With the two-column stage that
+ * inference no longer holds: it was evidence about available space, not about
+ * the setting. A stage body still chooses which of its settings to surface as
+ * headline live controls; ElementStyleSettings renders the rest as a Style
+ * section so nothing is stage-unreachable (production-console-v2 phase 7).
  */
 
-export const RENDERABLE = new Set(['switch', 'select']);
+export const RENDERABLE = new Set(['switch', 'select', 'text', 'number-override', 'color-override']);
 
 export const settingKey = (ns, key) => `overlays.${ns}.${key}`;
 
@@ -77,6 +82,31 @@ export const OverlaySettingRow = memo(function OverlaySettingRow({ os, def }) {
             />
         );
     }
+    if (def.type === 'text') {
+        return (
+            <TextRow
+                label={def.label} value={value} placeholder={def.placeholder} staged={!!pending}
+                onChange={(v) => os.set(def, v)}
+            />
+        );
+    }
+    if (def.type === 'number-override') {
+        return (
+            <NumberRow
+                label={def.label} value={value} staged={!!pending}
+                min={def.min} max={def.max} step={def.step} suffix={def.suffix}
+                onChange={(v) => os.set(def, v ?? def.defaultValue)}
+            />
+        );
+    }
+    if (def.type === 'color-override') {
+        return (
+            <ColorRow
+                label={def.label} value={value} staged={!!pending}
+                onChange={(v) => os.set(def, v)}
+            />
+        );
+    }
     return (
         <ToggleRow
             label={def.label} checked={!!value} staged={!!pending}
@@ -88,4 +118,30 @@ export const OverlaySettingRow = memo(function OverlaySettingRow({ os, def }) {
 // Convenience: a run of rows from a key list.
 export const OverlaySettingRows = memo(function OverlaySettingRows({ os, type, keys }) {
     return defsFor(type, keys).map(def => <OverlaySettingRow key={def.key} os={os} def={def} />);
+});
+
+/*
+ * Every renderable setting for an element, as a "Style" section — the stage's
+ * catch-all so no element setting is unreachable from the console. A stage body
+ * that already surfaces some settings as headline live controls names them in
+ * its `surfacedKeys`, and those drop out here to avoid a doubled row; the rest
+ * (a bracket's colours, a ticker's speed, an event header's geometry) render
+ * below the body. Elements with no settings render nothing.
+ *
+ * `board` is set only for the URL-scoped (?scoreboard=N) elements, whose config
+ * lives at overlays.{type}.{board}.* so two sources stay independent.
+ */
+export const ElementStyleSettings = memo(function ElementStyleSettings({ type, board, label, exclude }) {
+    const ns = board != null ? `${type}.${board}` : type;
+    const os = useOverlaySettings(type, ns, label ?? type, board ?? null);
+    const defs = (LAYOUT_SETTINGS[type] ?? []).filter(
+        def => RENDERABLE.has(def.type) && !exclude?.includes(def.key),
+    );
+    if (defs.length === 0) return null;
+    return (
+        <div className="mt-1 flex flex-col gap-1.5 border-t border-border/60 pt-2">
+            <Text size="xs" className="label-display text-muted-foreground">Style</Text>
+            {defs.map(def => <OverlaySettingRow key={def.key} os={os} def={def} />)}
+        </div>
+    );
 });

@@ -57,12 +57,22 @@ describe('Event Header stage', () => {
         }
     });
 
-    it('leaves geometry knobs to Setup — no kit row can express them', () => {
+    it('surfaces the geometry knobs in the Style section (phase 7)', () => {
         ui();
+        // Number + text settings that used to have no kit row now render below
+        // the live band/field switches, so nothing is stranded on the Setup tab.
         for (const key of ['headerOffsetY', 'footerOffsetY', 'bandWidth', 'fontScale', 'separator']) {
             const def = LAYOUT_SETTINGS.eventheader.find(d => d.key === key);
-            expect(screen.queryByText(def.label), key).not.toBeInTheDocument();
+            expect(screen.getByText(def.label), key).toBeInTheDocument();
         }
+    });
+
+    it('writes a geometry number to the shared namespace via the Style section', () => {
+        ui();
+        const sep = LAYOUT_SETTINGS.eventheader.find(d => d.key === 'separator');
+        const input = screen.getByPlaceholderText(sep.placeholder); // '◆'
+        fireEvent.change(input, { target: { value: '·' } });
+        expect(useSettingsStore.getState()?.overlays?.eventheader?.separator).toBe('·');
     });
 
     it('warns which fields are switched on but have nothing behind them', () => {
