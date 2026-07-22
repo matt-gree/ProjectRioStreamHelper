@@ -157,30 +157,49 @@ export function mountScoreboard({ host, sb, size }) {
 
   const g = OverlayBase.deepGet;
 
+  // Per-scoreboard settings namespace. Each scoreboard source keeps its own
+  // config under overlays.scoreboard.{N}.*; a plain overlays.scoreboard.* leaf
+  // is the legacy (pre-per-scoreboard) global, used as a non-destructive
+  // fallback so boards that were never individually edited keep their old look.
+  // Mirrors scorecard-mount's scGet — the two board-scoped mounts resolve the
+  // same way, and the Setup panel writes to whichever branch the producer edits.
+  const NS = `${SETTINGS_TYPE}.${SB}`;
+  function sbGet(settings, k, def) {
+    const perSb = g(settings, `overlays.${SETTINGS_TYPE}.${SB}.${k}`, undefined);
+    if (perSb !== undefined) return perSb;
+    return g(settings, `overlays.${SETTINGS_TYPE}.${k}`, def);
+  }
+
   function readToggles(settings) {
+    // showLogo is promoted-to-global (per-layout → overlays.global.showLogo);
+    // a per-board pin still wins over both, so check it before the global chain.
+    const perSbLogo = g(settings, `overlays.${SETTINGS_TYPE}.${SB}.showLogo`, undefined);
+    const showLogo = perSbLogo !== undefined
+      ? perSbLogo !== false
+      : OverlayBase.readSetting(SETTINGS_TYPE, 'showLogo', true) !== false;
     return {
-      showElo:      g(settings, `overlays.${SETTINGS_TYPE}.showElo`, true) !== false,
-      showTeamLogos: g(settings, `overlays.${SETTINGS_TYPE}.showTeamLogos`, true) !== false,
-      showLogo:     OverlayBase.readSetting(SETTINGS_TYPE, 'showLogo', true) !== false,
+      showElo:      sbGet(settings, 'showElo', true) !== false,
+      showTeamLogos: sbGet(settings, 'showTeamLogos', true) !== false,
+      showLogo,
       // Producer switches for melded themes with independent segments (Scoreboard
       // S): showLive is a master override for the live cluster (off hides it even
       // during a live game); showInning toggles the inning number segment. Themes
       // without those segments ignore both.
-      showLive:     g(settings, `overlays.${SETTINGS_TYPE}.showLive`, true) !== false,
-      showInning:   g(settings, `overlays.${SETTINGS_TYPE}.showInning`, true) !== false,
+      showLive:     sbGet(settings, 'showLive', true) !== false,
+      showInning:   sbGet(settings, 'showInning', true) !== false,
     };
   }
 
   function portColor(port, settings, fallbackIdx) {
     const idx = Number.isInteger(port) ? port : (fallbackIdx == null ? -1 : fallbackIdx);
     if (idx < 0) return null;
-    const ov = g(settings, `overlays.${SETTINGS_TYPE}.port${idx}Color`, null);
+    const ov = sbGet(settings, `port${idx}Color`, null);
     if (ov) return ov;
     return idx < PORT_COLORS.length ? PORT_COLORS[idx] : null;
   }
 
   function applyColours(settings, p1Port, p2Port) {
-    const accent = g(settings, `overlays.${SETTINGS_TYPE}.accentColor`, null);
+    const accent = sbGet(settings, 'accentColor', null);
     if (accent) host.style.setProperty('--accent', accent); else host.style.removeProperty('--accent');
     const c1 = portColor(p1Port, settings, 0);
     const c2 = portColor(p2Port, settings, 1);
@@ -613,7 +632,7 @@ export function mountScoreboard({ host, sb, size }) {
     if (themeChanged) { revealKey = ''; laidOut = {}; animShown = {}; clipProxy = {}; }
     if (disposed) return;
 
-    if (engine.usesAppVars) OverlayBase.applyDesignSettings(SETTINGS_TYPE);
+    if (engine.usesAppVars) OverlayBase.applyDesignSettings(SETTINGS_TYPE, NS);
     else OverlayBase.clearDesignSettings();
 
     const p1 = g(state, `score.${SB}.player.1.rioName`, '');

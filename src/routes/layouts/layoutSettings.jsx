@@ -18,16 +18,20 @@ import { LAYOUT_SETTINGS, OVERRIDABLE_GLOBAL_KEYS } from './designConstants';
 import { ColorWithOpacity, DebouncedColorInput, COLOR_SWATCHES } from './shared';
 
 // ── Per-layout settings panel ──
-// The Scorecard stores its config per scoreboard (overlays.scorecard.{N}.*) so
-// two scorecard sources can be toggled independently; a plain overlays.scorecard.*
-// leaf is the legacy global, merged underneath as a non-destructive fallback.
-// All other layout types stay global (overlays.{type}.*).
+// The Scorecard and Scoreboard store their config per scoreboard
+// (overlays.{type}.{N}.*) so two sources on different boards can be configured
+// independently; a plain overlays.{type}.* leaf is the legacy global, merged
+// underneath as a non-destructive fallback. These are exactly the URL-scoped
+// (?scoreboard=N) elements the console binds per board — the team-variant types
+// in the same mode (stats, roster, teamlogo) stay global on purpose, since
+// their setting is shared across boards. All other layout types stay global.
+const PER_BOARD_SETTINGS_TYPES = new Set(['scorecard', 'scoreboard']);
 const LayoutSettingsPanel = memo(function LayoutSettingsPanel({ layoutType, supportedSettings, scoreboardId }) {
     const allDefs = LAYOUT_SETTINGS[layoutType] ?? [];
     const settingsDefs = supportedSettings
         ? allDefs.filter(def => supportedSettings.includes(def.key))
         : allDefs;
-    const perScoreboard = layoutType === 'scorecard' && scoreboardId != null;
+    const perScoreboard = PER_BOARD_SETTINGS_TYPES.has(layoutType) && scoreboardId != null;
     const writeNs = perScoreboard ? `${layoutType}.${scoreboardId}` : layoutType;
 
     const typeSettings = useSettingsStore(useShallow(s => s?.overlays?.[layoutType] ?? {}));
@@ -68,7 +72,7 @@ const LayoutSettingsPanel = memo(function LayoutSettingsPanel({ layoutType, supp
         <Stack gap="md">
             {perScoreboard && (
                 <Text size="xs" dimmed>
-                    These settings apply to <b>Scoreboard {scoreboardId}</b> only — each scoreboard's scorecard is configured independently.
+                    These settings apply to <b>Scoreboard {scoreboardId}</b> only — each scoreboard is configured independently.
                 </Text>
             )}
             {(settingsDefs.length > 0 || pinned.length > 0) && (
