@@ -371,8 +371,17 @@ export function mountPostgameCallout({ host }) {
       root.style.display = 'none';
       theater.stopShow();
       prevKey = '';
+      // A spotlight with nothing pushed is a blank source — say so, or it reads
+      // as broken in the preview. `present` gates on a captured post-game; the
+      // rest gate on a character actually being picked to push.
+      OverlayBase.setBlank(
+        !present ? 'No captured game on this board — capture a game, then push a spotlight from Production.'
+          : 'No character picked — choose one on the spotlight card in Production.',
+        'Character Spotlight',
+      );
       return;
     }
+    OverlayBase.setBlank(null, 'Character Spotlight');
 
     const capturedAt = g(state, `postgame.${sb}.capturedAt`, '');
     const key = `${sb}:${team}:${ci}:${capturedAt}`;

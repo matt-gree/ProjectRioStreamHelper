@@ -172,6 +172,13 @@ export function mountStatsCard({ host, sb, team, settingsType = 'stats',
 
     const info = window.RioData ? RioData.getStatsLine(state, SB, TEAM) : null;
     host.style.display = info ? '' : 'none';
+    // No stats line for this side → nothing to draw. Name the gap so the empty
+    // card doesn't read as a broken source in the preview.
+    OverlayBase.setBlank(
+      info ? null
+        : `No stats for side ${TEAM} on scoreboard ${SB} — check the board has a game with this player.`,
+      `Stats ${TEAM}`,
+    );
     if (!info) { prevCharKey = ''; prevValues = {}; return; }
 
     const charKey = `${theme}|${info.charName}`;

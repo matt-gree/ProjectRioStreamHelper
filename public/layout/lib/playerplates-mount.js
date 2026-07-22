@@ -249,6 +249,14 @@ export function mountPlayerPlates({ host }) {
     });
 
     const anyActive = sides.some((s) => s.active);
+    // Neither plate is active → the band draws nothing. Unlike most overlays it
+    // never sets display:none (the plates animate out individually), so an idle
+    // source and a broken one look the same; say which in the preview.
+    OverlayBase.setBlank(
+      anyActive ? null
+        : 'No player plate is active — activate a side from the Player Plates desk in Production.',
+      'Player Plates',
+    );
     if (anyActive || firstPaint) await getGsap();
     if (disposed) return;
 

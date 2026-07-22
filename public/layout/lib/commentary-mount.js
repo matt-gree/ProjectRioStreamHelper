@@ -357,6 +357,14 @@ export function mountCommentary({ host }) {
       });
     }
     const N = active.length;
+    // No named, visible caster → the strip is empty. Like the plates it animates
+    // slots out rather than hiding the host, so idle and broken look alike; name
+    // the gap for the preview.
+    OverlayBase.setBlank(
+      N > 0 ? null
+        : 'No caster is on the strip — name and show a caster from the Commentary desk in Production.',
+      'Commentary',
+    );
     const firstPaint = prevN === undefined;
     const countChanged = !firstPaint && N !== prevN;
     // Growing: the row widens, so plates that stay active reflow into their

@@ -61,14 +61,18 @@ export const BindingNote = memo(function BindingNote({ binding, what = 'This ove
  * "It's on air and still blank" — the failure that reads as a broken overlay.
  *
  * A board-scoped overlay hides itself when it has no player names, which is
- * right on air and silent everywhere else. The mount says why in its own
- * console (OverlayBase.setBlank), but a producer is looking at THIS panel, not
- * the browser source's dev tools.
+ * right on air and silent everywhere else. Every silent mount now names its own
+ * blank reason via `OverlayBase.setBlank`, and the stage preview column loads
+ * each source with `?preview=1`, so that reason paints right below this body
+ * (phase 6b; `blank-reason.test.jsx` pins the coverage).
  *
- * The predicate is duplicated from `blankReason` in scoreboard-mount.js — two
- * runtimes, no shared module between `public/layout/lib` and `src/`. Both sides
- * name the other; `generic.test.jsx` pins the state keys. If you change what
- * makes a board renderable, change both.
+ * Scoreboard is the one element that ALSO mirrors the reason into the panel
+ * body here, because a scoreboard's DirectStage shows only its binding — no
+ * player state — so the note carries information the body otherwise lacks. That
+ * makes the predicate live in two runtimes with no shared module between
+ * `public/layout/lib` and `src/`: `generic.test.jsx` pins the state keys and
+ * `blankReason` in scoreboard-mount.js names this. If you change what makes a
+ * board renderable, change both.
  */
 export const ReadinessNote = memo(function ReadinessNote({ element, board }) {
     const players = useStateStore(useShallow(s => {

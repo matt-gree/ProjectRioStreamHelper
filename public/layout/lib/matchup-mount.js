@@ -213,6 +213,16 @@ export function mountMatchup({ host }) {
     const name2 = g(mu, 'side2.tag', '') || g(mu, 'side2.rioName', '');
     const hasContent = mu.present && name1 && name2;
     host.style.display = hasContent ? '' : 'none';
+    // Say WHY, or the blank source reads as broken. `matchup.present` is set by
+    // the Matchup projector once a fixture resolves two participants; without it
+    // there is nothing to draw, and with it but a name missing the Address Book
+    // hasn't matched a side yet.
+    OverlayBase.setBlank(
+      hasContent ? null
+        : !mu.present ? 'No matchup loaded — push a matchup from Production, or bind a match to a board.'
+          : 'Matchup is missing a name on one side — both participants need to resolve in the Address Book.',
+      'Matchup',
+    );
     if (!hasContent) { revealKey = ''; return; }
 
     applyColours(settings);

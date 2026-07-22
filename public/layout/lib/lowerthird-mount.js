@@ -625,6 +625,15 @@ export function mountLowerThird({ host }) {
 
     // Nothing authored (or only spacers) → keep the source blank on air.
     host.style.display = hasContent ? '' : 'none';
+    // Say WHY it's blank, or an empty band reads as a broken source. The two
+    // cases the producer fixes differently: no enabled slots at all, vs slots
+    // that are all spacers with no content.
+    OverlayBase.setBlank(
+      hasContent ? null
+        : active.length ? 'Lower third has only spacer slots — enable a content slot in Production.'
+          : 'Lower third has no enabled slots — turn one on in Production.',
+      'Lower Third',
+    );
     if (!hasContent) { revealKey = ''; structureKey = ''; return; }
 
     applyAccent(settings);

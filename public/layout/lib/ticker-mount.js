@@ -244,6 +244,14 @@ export function mountTicker({ host, sb }) {
     }
 
     host.style.display = games.length ? '' : 'none';
+    // A results ticker with an empty pool draws nothing — which looks identical
+    // to a broken source. Say the pool is empty rather than leaving a producer
+    // guessing at the layout.
+    OverlayBase.setBlank(
+      games.length ? null
+        : 'No results to scroll — the ticker’s pool has no games yet (bind or complete some).',
+      'Results Ticker',
+    );
     if (!games.length) { builtSig = ''; return; }
 
     const sig = [
