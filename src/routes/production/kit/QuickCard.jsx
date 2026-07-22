@@ -9,13 +9,13 @@ import { StateChip } from './StateChip';
 // truncation so an over-declared face degrades visibly instead of creeping
 // back into mishmash (production-console-contract skill).
 export const QuickCard = memo(function QuickCard({
-    state, bindings, title, onOpen, onUnpin, dragHandleProps, children, className,
+    state, title, onOpen, onUnpin, dragHandleProps, children, className,
 }) {
     const rows = Children.toArray(children).slice(0, 2);
     return (
         <section className={cn('flex min-w-0 flex-col rounded-lg border border-border bg-card', className)}>
             <header className="flex h-8 shrink-0 items-center gap-2 border-b border-border/60 px-2" {...dragHandleProps}>
-                <StateChip state={state} bindings={bindings} />
+                <StateChip state={state} />
                 <SimpleTooltip label="Open on stage">
                     <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left">
                         <Text size="xs" span truncate className="label-display font-semibold text-foreground">

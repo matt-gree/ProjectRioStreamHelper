@@ -143,7 +143,7 @@
     }
 
     async function boot() {
-      if (OverlayBase.PREVIEW_MODE) {
+      if (OverlayBase.SAMPLE_MODE) {
         try {
           const r = await fetch(`${OverlayBase.BASE_URL}/layout/preview/scoreboard_sample.json`);
           const data = r.ok ? await r.json() : null;
@@ -154,10 +154,10 @@
       OverlayBase.init({
         render,
         shouldRender: (key) => key.startsWith(`score.${SB}.player.`),
-        skipState: OverlayBase.PREVIEW_MODE,
+        skipState: OverlayBase.SAMPLE_MODE,
       });
 
-      if (OverlayBase.PREVIEW_MODE) render();
+      if (OverlayBase.SAMPLE_MODE) render();
     }
     boot();
   </script>

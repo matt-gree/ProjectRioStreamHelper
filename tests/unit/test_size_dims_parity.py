@@ -36,13 +36,15 @@ def test_scoreboard_mount_size_dims_match_contracts():
         assert entries[size] == _canvas(size), f"SIZE_DIMS.{size} drifted"
 
 
-def test_layouts_jsx_preview_rows_match_contracts():
-    src = (REPO / "src/routes/layouts/layouts.jsx").read_text()
+def test_design_jsx_preview_rows_match_contracts():
+    # PREVIEW_ROWS moved out of the layouts.jsx monolith into design.jsx when
+    # that file was split along its show-time / install-time seam.
+    src = (REPO / "src/routes/layouts/design.jsx").read_text()
     for label, size in (("Large Scoreboard", "l"), ("Small Scoreboard", "s")):
         m = re.search(
             rf"label:\s*'{label}'.*?w:\s*(\d+),\s*h:\s*(\d+)", src
         )
-        assert m, f"PREVIEW_ROWS entry for {label!r} not found in layouts.jsx"
+        assert m, f"PREVIEW_ROWS entry for {label!r} not found in design.jsx"
         assert (int(m.group(1)), int(m.group(2))) == _canvas(size), (
             f"PREVIEW_ROWS {label!r} drifted from scoreboard-{size} canvas"
         )

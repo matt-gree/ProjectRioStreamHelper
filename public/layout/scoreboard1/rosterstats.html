@@ -61,7 +61,7 @@
     autoScale();
 
     async function boot() {
-      if (OverlayBase.PREVIEW_MODE) {
+      if (OverlayBase.SAMPLE_MODE) {
         try {
           const resp = await fetch(`${OverlayBase.BASE_URL}/layout/preview/scoreboard_sample.json`);
           const data = resp.ok ? await resp.json() : null;
@@ -75,10 +75,10 @@
         shouldRenderSettings: (key) =>
           key.startsWith('overlays.') || key.startsWith('scoreboards.'),
         fetchSettings: true,
-        skipState: OverlayBase.PREVIEW_MODE,
+        skipState: OverlayBase.SAMPLE_MODE,
       });
 
-      if (OverlayBase.PREVIEW_MODE) { card.update(OverlayBase.state, OverlayBase.settings); autoScale(); }
+      if (OverlayBase.SAMPLE_MODE) { card.update(OverlayBase.state, OverlayBase.settings); autoScale(); }
     }
     boot();
   </script>

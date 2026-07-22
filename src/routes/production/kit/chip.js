@@ -5,19 +5,43 @@
 //
 //   AIR  — source enabled in the program scene
 //   PVW  — source enabled in the studio-preview scene (staged in OBS)
-//   OFF  — bound to an OBS source, currently hidden
+//   OFF  — an OBS source that isn't reaching the broadcast
 //   —    — no matching OBS source anywhere we can see
 //   DESK — content workflow (Match, Capture): feeds the broadcast, not on it
 
-// Derive a chip state from useElementBindings output ({ program, preview }).
-// Program wins over preview, matching which binding the controls act on.
-// Desk rows never derive — they pass state="desk" explicitly.
-export function chipState(bindings) {
-    const { program, preview } = bindings ?? {};
-    if (program?.item?.enabled) return 'air';
-    if (preview?.item?.enabled) return 'pvw';
-    if (program || preview) return 'off';
-    return 'unbound';
+/*
+ * A placement's chip (./placements). The chip's subject is what this copy of
+ * the source contributes to the BROADCAST, which is why the scene decides it:
+ *
+ *   program scene  → enabled ? AIR : OFF
+ *   preview scene  → enabled ? PVW : OFF
+ *   any other      → OFF, enabled or not
+ *
+ * That last line is the one worth being deliberate about. A source enabled in a
+ * Break scene nobody has cut to is not on the broadcast, so AIR would be a lie;
+ * OFF is the honest read, and the row's eye still shows the item's own state so
+ * the producer can see what WILL come up when that scene does. Scene grouping
+ * adds a coordinate to the vocabulary rather than a word to it.
+ *
+ * A FED element (a row nested under its container) takes both conditions. Its
+ * content reaches the broadcast only if the container source is up AND the
+ * container is carrying THIS element's content — one container holds one feed.
+ * Reading the container's enabled state alone is how Character Spotlight and
+ * Game Summary both used to say AIR while only one of them could be on screen.
+ * AIR keeps meaning exactly what it always meant; a fed element just has two
+ * ways to not be on.
+ *
+ * Desk rows never derive — they pass state="desk" explicitly.
+ */
+export function chipFor(placement) {
+    // No source anywhere — the one case that isn't about scenes at all.
+    if (!placement?.item) return 'unbound';
+    const live = placement.parent
+        ? placement.item.enabled && !!placement.mine
+        : placement.item.enabled;
+    if (placement.where === 'program') return live ? 'air' : 'off';
+    if (placement.where === 'preview') return live ? 'pvw' : 'off';
+    return 'off';
 }
 
 export const CHIP_META = {
@@ -33,7 +57,7 @@ export const CHIP_META = {
     },
     off: {
         label: 'OFF',
-        title: 'Bound to an OBS source, currently hidden',
+        title: 'Not on the broadcast — hidden, or in a scene that isn’t live',
         className: 'border-border bg-transparent text-muted-foreground',
     },
     unbound: {

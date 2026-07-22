@@ -118,12 +118,30 @@
   const state = {};
   const settings = {};
 
-  // ── Preview-mode flags (read from URL params) ──
-  // ?preview=1               — running in the Layouts-tab preview iframe
-  // ?preview_globals_only=1  — ignore per-layout style overrides; show what
-  //                            the Design tab globals look like in isolation
+  /*
+   * ── Preview-mode flags (read from URL params) ──
+   *
+   * ?preview=1               — running inside a preview iframe rather than an
+   *                            OBS source. Turns on preview CHROME: blank-reason
+   *                            notes (setBlank), instant reveals instead of
+   *                            animations, scale-to-fit. Says nothing about
+   *                            where the data comes from.
+   * ?sample=1                — render canned sample data INSTEAD of live state.
+   *                            For a catalog gallery, which has to show a
+   *                            representative overlay on a machine with no game
+   *                            in progress.
+   * ?preview_globals_only=1  — ignore per-layout style overrides; show what
+   *                            the Design tab globals look like in isolation
+   *
+   * These two were one flag, and it made the Production console's stage preview
+   * a mockup: every element showed the sample game, and `skipState` meant live
+   * state was never even fetched. A producer previewing what is about to go on
+   * air was looking at a fixture. The Design tab wants sample; the console wants
+   * the truth — so they are separate params, and the SAMPLE half is opt-in.
+   */
   const previewParams = new URLSearchParams(window.location.search);
   const PREVIEW_MODE = previewParams.get('preview') === '1';
+  const SAMPLE_MODE = previewParams.get('sample') === '1';
   const PREVIEW_GLOBALS_ONLY = previewParams.get('preview_globals_only') === '1';
 
   // ── Bootstrap ──
@@ -617,6 +635,7 @@
     readSetting,
     setBlank,
     PREVIEW_MODE,
+    SAMPLE_MODE,
     PREVIEW_GLOBALS_ONLY,
     init,
   };

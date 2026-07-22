@@ -3,7 +3,8 @@
  *
  * Vocabulary (memory: production-elements-glossary):
  *   - Element        : a pre-designed thing the producer puts on the broadcast,
- *                      shown on the Production page and organized by phase.
+ *                      listed on the Production page under the OBS scene its
+ *                      source lives in.
  *   - Direct element : owns a DEDICATED source; fire = show/hide it.
  *   - Fed element    : its content is fed to a SHARED source (the TARGET);
  *                      default target + streamer override. Fed elements with a
@@ -42,18 +43,10 @@
  * Which is why `boundIn` discriminates instances for direct elements only.
  */
 
-export const PHASES = [
-    { label: 'Draft', value: 'draft' },
-    { label: 'Live', value: 'live' },
-    { label: 'Post-game', value: 'post' },
-    { label: 'Break', value: 'break' },
-];
-
 export const ELEMENTS = [
     {
         id: 'scoreboard',
         name: 'Scoreboard',
-        phase: 'live',
         flavor: 'direct',
         // URL-scoped to a board: the source itself carries ?scoreboard=N, so two
         // of these in one scene are two different instances (see `scope` note
@@ -77,7 +70,6 @@ export const ELEMENTS = [
         // group in/out. Config is per board (overlays.scorecard.{N}.*), so two
         // scorecard sources can be driven independently. Native 1920×1080; the
         // SVG scales to whatever the OBS source is.
-        phase: 'live',
         flavor: 'direct',
         scope: 'board',
         url: '/layout/scorecard/scorecard.html',
@@ -93,7 +85,6 @@ export const ELEMENTS = [
     {
         id: 'stats',
         name: 'Stats',
-        phase: 'live',
         flavor: 'fed',
         // `feed` names the content picker the card renders: 'stats' = pick which
         // roster character's stats to show. The pick is written to the chosen
@@ -110,10 +101,7 @@ export const ELEMENTS = [
     {
         id: 'commentary',
         name: 'Commentary',
-        // Registry-bound caster desk — relevant across the broadcast lifecycle,
-        // so it shows in every soft phase. `phase` may be a single value or an
-        // array (see elementsForPhase).
-        phase: ['draft', 'live', 'post'],
+        // Registry-bound caster desk.
         flavor: 'direct',
         // The condensed face is per-caster on-air toggles + sub-field quick switch
         // + sub-plate toggle; the in-depth roster authoring lives on the
@@ -140,7 +128,6 @@ export const ELEMENTS = [
         // pre-game/intro (draft), on the desk (live), and over breaks. Direct
         // element (own dedicated source); the face is the mode + per-plate
         // content, projected to playerplates.* server-side. Native 1920×1080.
-        phase: ['draft', 'live', 'break'],
         flavor: 'direct',
         url: '/layout/playerplates/playerplates.html',
         width: 1920,
@@ -158,7 +145,6 @@ export const ELEMENTS = [
         // chosen container's feed key (production.feed.container.<id> =
         // { element:'postgamecallout', … }). Reads postgame.{N}.* plus the
         // REST-only GET /postgame/abs walkthrough payload. Native 1920×1080.
-        phase: 'post',
         flavor: 'fed',
         feed: 'postgamecallout',
         url: '/layout/shared/callout-stage.html',
@@ -176,7 +162,6 @@ export const ELEMENTS = [
         // into the same Callout Stage as the Stat Callout: pushing writes
         // production.feed.container.<id> = { element:'postgamevs', scoreboard }.
         // Reads postgame.{N}.player.{T}.totals (Phase 6 capture). 1920×1080.
-        phase: 'post',
         flavor: 'fed',
         feed: 'postgamevs',
         url: '/layout/shared/callout-stage.html',
@@ -187,14 +172,13 @@ export const ELEMENTS = [
     {
         id: 'lowerthird',
         name: 'Lower Third',
-        // Break phase (also freely placeable mid-game). A re-themable SVG band
+        // A re-themable SVG band
         // of FIVE independently toggleable slots (lowerthird.slots.1..5), each
         // one content type: logo · match · scorebox · merch · clock · message ·
         // bracket. Direct element (own dedicated source); everything lives on
         // the face — each slot row is a type picker + on/off that expands in
         // place to that slot's content editor (no gear). Slot widths/looks
         // belong to the design package. Native 1920×1080.
-        phase: 'break',
         flavor: 'direct',
         url: '/layout/lowerthird/lowerthird.html',
         width: 1920,
@@ -207,8 +191,7 @@ export const ELEMENTS = [
         // The producer's ordered match queue (schedule.queue, ids into
         // match.{M}) rendered by the schedule overlay. Queue authoring lives on
         // the face (add / reorder / remove, per-match display time); the title
-        // sits in the gear. Draft-phase prep and break filler both want it.
-        phase: ['draft', 'break'],
+        // sits in the gear.
         flavor: 'direct',
         url: '/layout/schedule/schedule.html',
         width: 1920,
@@ -221,10 +204,9 @@ export const ELEMENTS = [
         name: 'Matchup History',
         // Head-to-head band: all-time series summary + last-5 game cards for a
         // match's two participants, fetched from the Project Rio API into the
-        // singleton matchup.* state (POST /matchup/fetch). Draft-phase hype and
-        // break filler both want it. Direct element; SVG themed via the active
+        // singleton matchup.* state (POST /matchup/fetch). Direct element; SVG
+        // themed via the active
         // design package (/design/{pkg}/matchup.svg). Native 1920×1080.
-        phase: ['draft', 'break'],
         flavor: 'direct',
         url: '/layout/matchup/matchup.html',
         width: 1920,
@@ -237,10 +219,8 @@ export const ELEMENTS = [
         // The tournament bracket, rendered from the bracket.* structure the
         // Bracket desk publishes. winners_only.html / losers_only.html are thin
         // redirects into index.html with a flag, so all three are the same
-        // element wearing different filters — the desk decides WHICH phase is
-        // on screen, this decides whether it's visible. Break filler and
-        // draft-phase context both want it.
-        phase: ['draft', 'break'],
+        // element wearing different filters — the desk decides WHICH start.gg
+        // phase is on screen, this decides whether it's visible.
         flavor: 'direct',
         url: '/layout/bracket/index.html',
         width: 1920,
@@ -254,7 +234,6 @@ export const ELEMENTS = [
         // along the bottom. Nothing to decide live but whether it's up: its
         // scroll speed and card spacing are number settings with no kit row, so
         // they stay in Setup. Native 1920×80.
-        phase: ['live', 'break'],
         flavor: 'direct',
         url: '/layout/rotator/ticker.html',
         width: 1920,
@@ -266,10 +245,9 @@ export const ELEMENTS = [
         name: 'Event Header',
         // The two persistent bands framing the canvas: top (competition ·
         // location · dates) and bottom (message · event · phase · round). It
-        // sits over the whole broadcast, so it appears in every phase. Bands
-        // and per-field visibility are live switches (overlays.eventheader.*);
+        // sits over the whole broadcast. Bands and per-field visibility are
+        // live switches (overlays.eventheader.*);
         // geometry stays in Setup. Native 1920×1080.
-        phase: ['draft', 'live', 'post', 'break'],
         flavor: 'direct',
         url: '/layout/eventheader/eventheader.html',
         width: 1920,
@@ -283,7 +261,6 @@ export const ELEMENTS = [
     {
         id: 'hitvisualizer',
         name: 'Hit Visualizer',
-        phase: 'live',
         flavor: 'direct',
         scope: 'board',
         // Compact: live actions (Replay / Spotlight / Split) on the face, the
@@ -298,9 +275,18 @@ export const ELEMENTS = [
     },
 ];
 
-// An element's `phase` is a single value or an array of phases it appears in.
-export const elementsForPhase = (phase) => ELEMENTS.filter((el) =>
-    Array.isArray(el.phase) ? el.phase.includes(phase) : el.phase === phase);
+/*
+ * There is deliberately no `phase` on an element any more, and no PHASES list.
+ *
+ * Phase (Draft / Live / Post-game / Break) was PRSH inventing a show structure
+ * and then asking the producer to keep a selector in sync with it. It decided
+ * which rack section an element appeared in, which desk was reachable, and what
+ * hid behind "Other phases" — four jobs the OBS scene list does better, because
+ * the producer already built their scenes around the same structure and already
+ * cuts between them. Elements are now listed wherever their SOURCE is
+ * (./placements); if an element belongs in your break, put it in your break
+ * scene.
+ */
 
 // ── Console contract resolvers ─────────────────────────────────────────────
 // Quick-face row vocabulary (interpreted by the rail when it renders a card):
@@ -333,6 +319,21 @@ export const isPinnable = (el) => quickFaceFor(el) !== null;
 export const PICKABLE_FEEDS = ['stats', 'postgamecallout'];
 
 export const isPickableFeed = (el) => PICKABLE_FEEDS.includes(el?.feed);
+
+// A named shared container's stable id = its layout filename stem (e.g.
+// '/layout/shared/split-screen.html' → 'split-screen'). The producer feeds an
+// element into a container by writing production.feed.container.<id>; the
+// matching shared overlay reads the same key.
+export function containerId(url) {
+    return (url || '').replace(/^.*\/([^/]+)\.html?(?:\?.*)?$/, '$1');
+}
+
+// An element's default named container = the stem of its canonical layout URL
+// (Stats → 'stats-feed', Stat Callout → 'callout-stage'). The producer can
+// still re-point it to any other shared container.
+export function defaultContainerFor(element) {
+    return containerId(element.url) || 'stats-feed';
+}
 
 // Key of the element's stage panel (stage/<key>); defaults to the element id.
 export const stageBodyFor = (el) => el.stageBody ?? el.id;

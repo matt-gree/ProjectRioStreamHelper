@@ -10,14 +10,14 @@ import { StateChip } from './StateChip';
 // `pinnable={false}` is the quickFace: null case — the pin affordance does
 // not render at all, an intentional and visible state per the contract.
 export const PanelShell = memo(function PanelShell({
-    state, bindings, title, meta, primaryAction,
+    state, title, meta, primaryAction,
     pinnable = true, pinned = false, onPinToggle,
     onClose, footer, children, className,
 }) {
     return (
         <section className={cn('flex min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-card', className)}>
             <header className="flex h-9 shrink-0 items-center gap-2 border-b border-border/60 px-2.5">
-                <StateChip state={state} bindings={bindings} />
+                <StateChip state={state} />
                 <Text size="sm" truncate className="label-display min-w-0 flex-1 font-semibold text-foreground">
                     {title}
                 </Text>

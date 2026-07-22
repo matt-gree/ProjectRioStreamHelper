@@ -3,7 +3,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useStateStore } from '../../../context/store';
 import { Text } from '../../../components/ui/primitives';
 import { ToggleRow, SelectRow } from '../kit';
-import { setSourceVisibility, useDisplayedEnabled, useElementBindings } from '../bindings';
+import { setSourceVisibility, useDisplayedEnabled } from '../bindings';
 import {
     defaultContainerFor, useContainerBinding, useContainerTarget, useSharedContainers,
 } from '../feeds';
@@ -33,17 +33,26 @@ export const SourceToggleRow = memo(function SourceToggleRow({ label, item, scen
 // ("add its browser source in OBS") — the strip's Bind slot does that, so what
 // is left to say here is WHICH source answers to this panel.
 export const BindingNote = memo(function BindingNote({ binding, what = 'This overlay' }) {
-    if (!binding) {
+    // A sourceless placement is truthy but drives nothing — "has an item" is
+    // what makes something a binding, here and in the preview column.
+    if (!binding?.item) {
         return (
             <Text size="xs" className="text-muted-foreground">
-                {what} isn’t in the program or preview scene yet — add it from the header.
+                {what} isn’t in any scene we can see — add it from the header, or
+                with the + beside a scene in the rack.
             </Text>
         );
     }
+    // Name the scene rather than its role. With scenes as the grouping axis
+    // "the program scene" is a fact the producer already has from the section
+    // header, and the scene's own name is what they need when the same overlay
+    // sits in three of them.
     return (
         <Text size="xs" className="text-muted-foreground">
             Driving <span className="text-foreground">{binding.item.sourceName}</span> in{' '}
-            {binding.where === 'preview' ? 'studio preview' : 'the program scene'}.
+            <span className="text-foreground">{binding.scene}</span>
+            {binding.where === 'program' ? ' — the program scene.'
+                : binding.where === 'preview' ? ' — studio preview.' : '.'}
         </Text>
     );
 });
@@ -80,12 +89,17 @@ export const ReadinessNote = memo(function ReadinessNote({ element, board }) {
 
 // Plain direct element (e.g. scoreboard): its one control — show/hide — lives
 // in the header strip, so the body is left saying what the panel is wired to.
-export const DirectStage = memo(function DirectStage({ element, board }) {
-    const { primary } = useElementBindings(element, board);
+export const DirectStage = memo(function DirectStage({ element, board, placement }) {
     return (
         <>
-            <BindingNote binding={primary} />
+            <BindingNote binding={placement} />
             <ReadinessNote element={element} board={board} />
+            {element.generic && (
+                <Text size="xs" className="text-muted-foreground">
+                    This layout has no console controls — the rack can show and hide
+                    it, and its style settings live on the Setup tab.
+                </Text>
+            )}
         </>
     );
 });

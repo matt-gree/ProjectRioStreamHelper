@@ -21,9 +21,9 @@ contract.
 
 | Surface | Job | Shows |
 |---------|-----|-------|
-| **Rack** (left, ~278px) | Monitor + select | Every source's state chip, name, ONE inline quick action. Sections: **Desk → On air → Studio → {phase} off-air → collapsed rest**. Purely state-sorted; no pinned section. |
+| **Rack** (left, ~278px) | Monitor + select | Every source's state chip, name, ONE inline quick action, plus an Add (+) per scene. Sections: **Desk (permanent) → program scene → preview scene → every other scene (lazy, collapsed)**. Grouped by scene; no pinned section. |
 | **Stage** (center, flexible) | Work on one thing | The selected item's full controls (its *stage body*), under the *source strip* its header always carries. Content-sized. Replaces all gear popovers, MatchCard, and PostGameBar. |
-| **Quick rail** (right, ~252px) | Fly the broadcast | Producer-pinned cards: header (chip · name · click-through) + the element's *quick face* (≤ 2 kit rows). Drag-ordered, never auto-reorders, persists across phases and restarts. |
+| **Quick rail** (right, ~252px) | Fly the broadcast | Producer-pinned cards: header (chip · name · click-through) + the element's *quick face* (≤ 2 kit rows). Drag-ordered, never auto-reorders, persists across restarts. |
 
 Status vocabulary is ONE language everywhere: `AIR` (emerald, program scene) /
 `PVW` (sky, studio preview) / `OFF` (bound, hidden) / `—` (dashed, unbound) /
@@ -44,7 +44,6 @@ Every broadcast element registers in `src/routes/production/elements.js` with:
 ```js
 {
   id, name,
-  phase,            // string | string[] — which phase's off-air rack section offers it
   flavor,           // 'direct' (owns a dedicated source) | 'fed' (pushes to a shared container)
   url, width, height, match(url),   // OBS source binding — unchanged from today
   quickFace,        // ≤ 2 kit rows, or explicit null (see rules below)
@@ -57,8 +56,8 @@ Every broadcast element registers in `src/routes/production/elements.js` with:
 - **Every element must declare a quick face — or explicitly `null`.** Defaults
   are derivable, so most elements write nothing:
   - `direct` → one toggle row (show/hide its source)
-  - `fed` with pickable content → container toggle + the content pick itself
-    (picking IS feeding, so no separate push row is needed)
+  - `fed` with pickable content → the content pick + push/clear (picking ARMS
+    the element's intent; Push airs it — see "Pick vs air" below)
   - `fed` with nothing to pick → container toggle + push/clear
 - Row vocabulary: `visibility` · `content` · `push` · `setting` (one of the
   element's own live overlay settings). An element deviating from its flavor
@@ -288,24 +287,70 @@ copy, and a freeform "Push game summary" button inside a picker body).
   with `Eye`/`EyeOff` is the kit's existing on/off idiom, and its engaged tone is
   rio — so the only emerald in the header stays the AIR chip.
 - **The Push slot stays put and goes honestly grey.** It renders for every fed
-  element, including the pickable ones where "picking IS feeding": there it
-  reads `Clear` once something is fed, and a *disabled* `Push` before anything
-  ever has been. A slot that appears and vanishes per element is the mishmash
-  this contract exists to end; one that holds its place and disables is not.
+  element, including the pickable ones: it reads `Clear` once this element holds
+  the container, and a *disabled* `Push` before anything is armed. A slot that
+  appears and vanishes per element is the mishmash this contract exists to end;
+  one that holds its place and disables is not.
 - **Desks render nothing in the slot.** They have no OBS source (chip `DESK`),
   and letting a desk's own actions colonise the position would cost the strip
   the one property that makes it scannable.
-- **The strip is a STAGE surface.** Rail cards keep their quick face (visibility
-  as row one) — a `QuickCard` header is 8px shorter and already spoken for. Both
-  route through the same hooks (`setSourceVisibility`, `useContainerPush`), so
-  the two surfaces cannot disagree about what Push means.
-- Staging is unchanged: Air goes through `setSourceVisibility`, Push through
-  `useFeedControl`. Bind does not stage — it creates nothing visible.
+- **The strip is a STAGE surface.** Rail cards carry the same pick+push, so both
+  route through the same hooks (`setSourceVisibility`, `useContainerPush`,
+  `useFeedSelect`) and cannot disagree about what a pick or a Push means.
+- Staging: Air goes through `setSourceVisibility`, Push/live-edit through the
+  container write. Arming a pick (`production.feed.last.*`) is NOT staged — it
+  drives the preview, not the broadcast. Bind does not stage.
 
 `useContainerPush` (`feeds.js`) is the single definition of "is my content on
 the container, and can I put it there". `PICKABLE_FEEDS` (`elements.js`) and
 `FEED_OPTION_HOOKS` (`feed-pickers.jsx`) are the same question asked by two
 surfaces and are pinned against each other in `elements.test.js`.
+
+### Pick vs air — a pick is not a push (`useFeedSelect`)
+
+"Picking IS feeding" was wrong for a full-screen callout: choosing a character
+to preview must not slam it onto the broadcast. So picking is **decoupled** from
+airing (`useFeedSelect` in `feeds.js`):
+
+- **A pick ARMS.** It writes the element's standing intent
+  (`production.feed.last.{element}`) — what the preview draws and what Push
+  airs — and stops there. Immediate, never staged, not broadcast-visible.
+- **…unless this element already holds the container**, where the pick is a
+  live edit of what's on screen and updates the container too (through the
+  staging gateway, because that IS broadcast-visible). Selecting off-air arms;
+  Push airs; selecting on-air live-edits.
+- **Push** (`useContainerPush.toggle`) takes the armed intent to the container.
+  It is the only thing that puts a not-yet-live pickable element on air.
+- The rail's pickable quick face is therefore **pick row + Push/Clear**, not the
+  old container-toggle + pick. The card chip reports on-air state; the toggle
+  steps aside so pick+push fits the two-row cap.
+
+### Standing intent — what Push would show (`suggest.js`)
+
+A container holds exactly ONE occupant, so pushing the Game Summary onto the
+Callout Stage overwrites `production.feed.container.callout-stage` and takes the
+Character Spotlight's pick with it. `resolveIntent(state, element, scoreboard)`
+is the one answer to "what would Push put up", read by the stage picker, the
+rail picker, the Push slot and the preview so they can never disagree.
+
+- **Memory.** `useFeedSelect.select` / `useFeedControl.setFeed` write
+  `production.feed.last.{element}`. Clear deliberately leaves it — Clear takes
+  the element off air, it does not un-pick the character.
+- **Validated, never trusted.** `charIndex` indexes ONE game's roster, so every
+  pickable payload carries the character's `name` and `FEED_INTENT[feed].valid`
+  re-reads it from live state (`postgame.*` for the spotlight, `score.*` for
+  stats). A mismatch discards the memory. Feeds with no entry (a whole-game push
+  like `postgamevs`) replay as-is — nothing in them can go stale.
+- **Suggestion.** With no usable memory, `FEED_INTENT[feed].suggest` proposes.
+  The spotlight's opener is the **winning side's leader in total bases** (ties:
+  homeruns → RBI → roster order), never a loser's big day. It is the floor, not
+  the ceiling — add rankers there so every surface keeps reading one answer.
+- **Intent is not air.** Off the stage the picker shows intent and *says so*
+  ("Suggested — …" / "Not on the stage — Push shows …"), and drops its "Nothing
+  fed" option, because clearing a feed that isn't running would only snap the
+  dropdown back. The chip remains the sole statement of what is live.
+- Call `resolveIntent` inside a `useShallow` selector and return **flat
+  primitives** — a nested object rebuilt each render re-renders on every tick.
 
 ## Which source a panel commands — boards
 
@@ -320,23 +365,134 @@ bolted on:
 - **Type detection and instance identity are different questions.**
   `element.match()` is a deliberately loose regex (tolerates another host,
   `?intro=0`, `/scoreboard2/`) and is right for "which overlay is this" and
-  wrong for "which board's". `boundIn` filters by `match()`, then discriminates
-  with `paramsMatch` from `src/lib/obs-binding.js` — the same comparison the
-  Setup tab has always made. Don't collapse the two.
-- **A lone candidate binds regardless.** With exactly one source of the type
-  across the tracked scenes there is no ambiguity, so `elementBindings` retries
-  loosely — a rig whose only scoreboard source carries `?scoreboard=2` keeps
-  working. The count is taken **across all scenes**, never per scene, or a
-  board-1 source in program wins over the board 2 asked for in preview.
-- **The board comes from the selection, and is passed down.** `stage/index.jsx`
-  resolves the selected instance and hands `board` to both the strip and the
-  body; a rail card takes it from the pin. Which board a panel commands is the
-  same fact as which rack row the producer clicked, so the source the header
-  commands and the settings the rows write cannot disagree. Never re-derive a
-  board inside a body or a quick face — take the prop. See Instances below.
+  wrong for "which board's". A placement takes its type from `match()` and its
+  board from `boardOfUrl` (`src/lib/obs-binding.js`), where a missing
+  `?scoreboard=` means board 1 — the same statement Setup's comparison makes.
+  Don't collapse the two.
+- **Nothing searches for a source any more.** `boundIn`, `elementBindings` and
+  the lone-candidate retry are gone, along with the ambiguity they managed: a row
+  is built FROM a scene item, so it already has the one it commands. If you find
+  yourself writing a lookup from element to source, you are re-introducing the
+  bug — take the placement.
+- **Board and scene come from the selection, and are passed down.**
+  `stage/index.jsx` resolves the selected placement and hands it to both the
+  strip and the body; a rail card takes it from the pin. Which source a panel
+  commands is the same fact as which rack row the producer clicked, so the
+  header and the rows cannot disagree. Never re-derive a board or a scene inside
+  a body or a quick face — take the prop.
 
-> The rack is still one row per element, resolved at the default board — it
-> becomes one row per *instance* when instances land, which is the real fix.
+## Scenes are the grouping axis
+
+`src/routes/production/placements.js`. A **placement** is the console's row
+identity, and it is the third and last term in a chain the console converged on:
+
+| | is | keyed |
+|---|---|---|
+| **element** | a type — "Scoreboard" | `scoreboard` |
+| **instance** | + which board or variant | `scoreboard:2`, `roster~t1` |
+| **placement** | + which scene's copy | `scoreboard:2@Break` |
+
+- **The scene is part of the identity for the same reason the board is.** A
+  source in two scenes is two scene items with their own enabled state, so a
+  console that keys control on the instance alone drives whichever it resolved
+  first — the exact bug board-aware binding fixed one axis over. It is also the
+  payoff of scene grouping: staging a Break scene while Game is live means
+  toggling *that* copy.
+- **Derivation runs SOURCE → ROW.** The rack scans each scene's PRSH items and
+  identifies them; it never holds a list of elements and goes looking. That is
+  what killed the dead `—` rows, the lone-candidate retry, and the need to
+  enumerate boards. A row exists because a source exists.
+- **The rack lists only what is in a scene.** The Add picker (below) is the
+  other half of that trade — with unbound rows gone, it is how a source comes
+  into being.
+- **Fed elements are NOT discovered from sources, and they NEST under their
+  container.** Character Spotlight and Game Summary share one Callout Stage
+  source; a source→row scan alone would collapse two separately-driven elements
+  into one row. The container is what's really in the scene, so **it** takes the
+  row — always, targeted or not — and every fed element aimed at it rows
+  underneath (`parent` on the placement, a left rule + radio in the rack).
+  They are **mutually exclusive**: `production.feed.container.{id}` holds one
+  value, so exactly one can occupy the container. Flat top-level fed rows were
+  wrong three ways — two rows shared one scene item so both chips read `AIR`
+  when at most one could be on screen, either row's eye toggled the other's
+  source, and the container appeared as a row only while *nothing* was aimed at
+  it. A source in `/layout/shared/` is what makes something a container.
+- **A PRSH source the registry doesn't know still gets a row** (`genericElement`)
+  — chip, name and the Air slot, but deliberately **no preview**: native
+  dimensions come from the registry, and previewing at a guessed aspect is the
+  failure the preview column was rebuilt to stop telling.
+- **Ids are RESOLVED at read time, never rewritten** (same rule and same reasons
+  as instances). `resolvePlacement` narrows instance → element, then prefers a
+  **named scene** over "nearest air": `scoreboard@Break` means Break, and
+  answering with the program copy would fly the wrong scene.
+- **A selection or pin that resolves to nothing still opens a panel**
+  (`sourcelessPlacement`): chip `—`, the strip offering Bind, every control that
+  doesn't need a source working. The rack is a monitor and shows only what is
+  real; the stage is a workbench, and several stage bodies write STATE, not OBS.
+  Authoring a lower third the night before has nothing to do with whether a
+  browser source exists yet.
+
+**Phase is gone** — no `PHASES`, no `elementsForPhase`, no `phase` on an element
+or a desk, no `prsh.ui.production.phase`. Draft / Live / Post-game / Break was
+PRSH inventing a show structure and asking the producer to keep a selector in
+sync with it. It decided which rack section an element appeared in, which desk
+was reachable, and what hid behind "Other phases" — jobs the OBS scene list does
+better, because the producer already built their scenes around the same
+structure and already cuts between them.
+
+### The chip, with a scene coordinate
+
+`chipFor(placement)` — program → `AIR`/`OFF`, preview → `PVW`/`OFF`, **any other
+scene → `OFF`, enabled or not**. A source enabled in a Break scene nobody has
+cut to is not on the broadcast, so AIR would be a lie; the row's eye still shows
+the item's own state, so the producer sees what *will* come up. Scene grouping
+adds a coordinate to the vocabulary rather than a word to it. No source anywhere
+→ `—`.
+
+**A fed row takes both conditions**: its container must be up *and* be carrying
+this element's content (`placement.mine`). AIR keeps meaning exactly what it
+always meant — a fed element just has two ways not to be on. Reading the
+container's enabled state alone is what had two rows claiming AIR for one slot.
+
+**The stage preview shows LIVE state, and a fed element must name its occupant.**
+Two rules, both learned the hard way:
+
+- `previewUrl` passes `?preview=1` **without** `?sample=1`, so the preview is
+  what is about to go on air rather than the fixture game. That split lives in
+  `overlay-base.js` (see the overlay-authoring skill) — before it, every stage
+  preview was a mockup.
+- A fed element has no source of its own — Character Spotlight and Game Summary
+  are both registered at `/layout/shared/callout-stage.html` — so `previewUrl`
+  returns the same URL for every element aimed at one container, and the
+  container draws whichever occupant is fed. It therefore appends
+  **`?feed={elementId}`** (a fed element asks for itself; a container row asks
+  for `placement.carrying`), which the shell passes to `initFedContainer` as
+  `forceElement`, overriding the element only — board and content still come
+  from the live feed. Preview-only: on air there is no `?feed=`.
+
+The container's own row previews too, sized from the layout catalog, since
+`genericElement` carries no dimensions.
+
+### The Add picker
+
+`src/routes/production/addsource.jsx`, opened by the **+** in a scene's section
+header: *layout → board (when board-scoped) → add to THIS scene*.
+
+- **The catalog stops being a place you browse and becomes a transaction.** The
+  scene is already answered, because the producer opened the picker from it.
+- **Consumes `/api/v1/layouts`, not `ELEMENTS`** — the registry knows the ~14
+  things the console can CONTROL, the catalog knows the ~25 things OBS can SHOW.
+  Variants (size / team / direction) are separate catalog rows, so picking
+  "Scoreboard — Small" is choosing a row, not filling in a form.
+- **Adds HIDDEN**, like every Bind path in the console. Adding a source is
+  setup; the rack row's eye is the one deliberate act that puts it on air.
+- **The OBS input is named what the producer clicked** (`rowLabel`, variant and
+  all) — the catalog's raw `name` for a variant row is the filename stem, so
+  naming from it would create "scoreboard 2" for a row reading "Scoreboard —
+  Large".
+- `isBoardScoped` is **derived from the two places that already answer it** (the
+  `scoreboard1` group Setup's board tabs qualify, and `scope: 'board'` in the
+  registry) rather than a third hand-written list.
 
 ## The row kit
 
@@ -405,17 +561,13 @@ board binding, start.gg load), the **Capture** desk (post-game), and the
   loaded phase), dimmed when idle, selectable like any row. Never in the state
   sections. Rack meta must read from state only: the rack draws every frame and
   must not fire a desk's own fetches.
-- **The rack shows only the current phase's desk.** A desk is the work of one
-  phase; the others are noise the rest of the time, the same reason off-phase
-  elements collapse behind "Other phases". Live owns no desk, so the section is
-  absent there rather than standing empty. A desk selected before the phase
-  changed stays on the stage — the rack stops offering it, it doesn't yank it.
-- **Each desk declares its home phase** (`phase` in `DESKS`) and the phase
-  switch selects it: Draft → Match, Post-game → Capture, Break → Bracket. Live
-  owns no desk and keeps the producer's selection — mid-game they are flying
-  elements, not filling a desk in. One desk per phase; `deskForPhase()` is the
-  single lookup, so a new desk gets its phase from the registry rather than
-  from an `if` chain in `production.jsx`.
+- **All three are always racked**, in a permanent section above the scenes.
+  Desks used to appear one at a time, keyed to the phase they belonged to, and
+  that rule always needed a special case — Live owned no desk, so the section
+  stood empty — which was the tell that desks were never phase-shaped. A
+  producer fixes a fixture or re-captures a game when they need to, not when a
+  selector says they may. Desks carry no `phase` field and there is no
+  `deskForPhase()`.
 - Same panel contract as elements — desks may declare a quick face under the
   same rules (Capture's `select board + capture` fits; Match currently has no
   compliant face → `quickFace: null`, not pinnable).
@@ -427,7 +579,7 @@ board binding, start.gg load), the **Capture** desk (post-game), and the
 
 1. Build the overlay Layout first (see `overlay-authoring` skill) — the console
    binds to its URL.
-2. Register in `elements.js`: id, name, phase(s), flavor, url/dims/match, and
+2. Register in `elements.js`: id, name, flavor, url/dims/match, and
    quick face (or accept the flavor default, or explicit `null`).
 3. Write the stage body as kit rows in its own file under
    `src/routes/production/stage/`. No freeform JSX layout. **Do not write a
@@ -435,15 +587,20 @@ board binding, start.gg load), the **Capture** desk (post-game), and the
    panel header owns both, for every element.
 4. If it needs settings beyond kit rows' reach, that's a signal they belong on
    a tab, not the stage.
-5. Verify: rack row appears in the right phase section with a working chip and
+5. Verify: rack row appears under the scene its source is in, with a working chip and
    quick action; pin → rail card renders the quick face within cap; selection →
    stage body; staging gateway honored (test with confirm-mode on).
 
-## Persistence (all local UI prefs via `usePersistentState`, like the phase choice)
+## Persistence (all local UI prefs via `usePersistentState`)
 
-- `prsh.ui.production.phase` — existing.
-- `prsh.ui.production.selection` — selected **instance** id.
-- `prsh.ui.production.rail` — ordered array of pinned **instance** ids.
+- `prsh.ui.production.selection` — selected **placement** id.
+- `prsh.ui.production.rail` — ordered array of pinned **placement** ids.
+- `prsh.ui.production.scenes` — which off-air scene sections are expanded.
+  Persisted because expanding is also what *mirrors* a scene: a producer who set
+  up their Break section should find it live next load, not collapsed again.
+
+There is deliberately **no** `prsh.ui.production.phase`. It existed and is gone
+— see "Scenes are the grouping axis" below.
 
 Nothing here belongs in server Settings — it's per-producer-browser workspace
 layout, not broadcast config.
@@ -453,48 +610,59 @@ and it was the bug — see Instances below.
 
 ## Instances — the board is part of the identity
 
-`src/routes/production/instances.js`. An element is a TYPE ("Scoreboard"); an
-instance is one of that type on the broadcast ("Scoreboard on board 2"). A
-`scope: 'board'` element is URL-scoped (`?scoreboard=N`), so two of them in one
-scene are two independent things with their own source, air state and settings.
+`src/routes/production/instances.js` is now just the id grammar; discovery lives
+in `placements.js` (above). An element is a TYPE ("Scoreboard"); an instance is
+one of that type on the broadcast ("Scoreboard on board 2"). A `scope: 'board'`
+element is URL-scoped (`?scoreboard=N`), so two of them are two independent
+things with their own source, air state and settings.
 
-- **Instance id is `{type}:{board}`**, or plain `{type}` for a global element.
-  Rack rows, stage selection and rail pins all key on it. Desk ids
-  (`desk:match`) share the colon and must not parse as instances — the board
-  suffix is always DIGITS, which is what keeps the namespaces apart. Don't
-  introduce a numeric desk name.
-- **The instance set is discovered ∪ declared** — sources found in the tracked
-  scenes, plus `scoreboards.active`. Both halves matter: discovery alone hides a
-  board configured but not yet sourced (exactly when the producer needs the row,
-  since the strip's Bind slot is how the source gets made); declaration alone
-  drops a source whose board has left `active`, orphaning something on air.
-- **Nothing derives a board on its own.** The board comes from the selection or
-  the pin and is passed down. It used to be a hidden per-element preference each
-  surface resolved separately, which meant a two-board rig had ONE rack row
-  silently commanding whichever board a stored value named, and a panel whose
-  rows and header strip could point at different boards. A board *picker inside
-  a panel* is that bug coming back — switching board means selecting the other
-  rack row.
+- **Instance id is `{type}:{board}`**, or plain `{type}` for a global element;
+  a placement appends `@{scene}`. Desk ids (`desk:match`) share the colon and
+  must not parse as instances — the board suffix is always DIGITS, which is what
+  keeps the namespaces apart. Don't introduce a numeric desk name.
+- **The board is not the only axis.** `?team=`, `?size=`, `?dir=` and `?port=`
+  each make two sources of one overlay two different things, and they are read
+  straight off the URL for ANY element — registered or generic — as a `~` variant
+  tag (`roster~t1`, `scoreboard:2~zs`). They are the layout catalog's own variant
+  rows (`layouts.py`), so the producer already chose one when they picked
+  "Stats — Team 2" in the Add picker.
+  The two axes are deliberately asymmetrical: **board** is declared (`scope:
+  'board'`) and is the only one with a documented default (no param = board 1),
+  so it keeps its bare-number suffix; everything else is discovered. A URL naming
+  no variant yields exactly the id it always had, which is what keeps
+  pre-variant selections and pins resolving.
+  This is not bookkeeping: every team-variant layout (roster, stats, teamlogo,
+  controller, playername) is **unregistered**, so both sides row through
+  `genericElement`, which keys on the pathname. Without the variant, team 1 and
+  team 2 are one id — duplicate React keys in the rack and `resolvePlacement`'s
+  `find()` handing the left-side panel the right-side source.
+- **Nothing derives a board on its own.** It used to be a hidden per-element
+  preference each surface resolved separately, which meant a two-board rig had
+  ONE rack row silently commanding whichever board a stored value named, and a
+  panel whose rows and header strip could point at different boards. A board
+  *picker inside a panel* is that bug coming back — switching board means
+  selecting the other rack row.
 - **Feed-scoped elements never get instances.** Their container is
   board-agnostic and the board rides in the pushed payload (see the two-board-
-  mechanisms note in `elements.js`). Conflating the two is how multiplicity ends
-  up feeling bolted on.
-- **Name the board only when there's more than one instance** of that element,
-  using its alias. A single-board rig reading "Scoreboard · Scoreboard 1" on
-  every row is the board mechanism charging rent it isn't paying.
+  mechanisms note in `elements.js`).
+- **Name the detail only when there's more than one INSTANCE** of that element —
+  counted distinctly, not per placement. The detail is the board alias, the
+  variant ("Team 2", "Small"), or both. One board's scoreboard in three scenes is
+  still one thing to tell apart from nothing, and the section header already says
+  which scene the row is in. `usePlacementLabel` returns `{ name, detail }`; the
+  rack, stage and rail all render that one answer.
 
 ### Stored ids are RESOLVED, never rewritten
 
-Selection and pins outlive the boards they were written against. `resolveInstance`
-collapses three cases into one rule — fall back to the element's first instance:
-a pre-instance id (`scoreboard`), a removed board (`scoreboard:9`), and a live
-hit. Resolving at read time costs a lookup and cannot be wrong for longer than a
-render; a one-shot storage migration would have to run before the OBS mirror and
-settings load — precisely when the instance list is least trustworthy — and
-would destroy the producer's pin if it guessed wrong.
+Selection and pins outlive the boards and scenes they were written against, so
+`resolvePlacement` (see "Scenes are the grouping axis") answers what a stored id
+means *today* rather than rewriting storage. Resolving at read time costs a
+lookup and cannot be wrong for longer than a render; a one-shot migration would
+have to run before the OBS mirror and settings load — precisely when the list is
+least trustworthy — and would destroy the producer's pin if it guessed wrong.
 
 Pins are **acted on as stored** (reorder and unpin address the producer's array,
 so a legacy pin stays removable) but **rendered from what they resolve to**.
 `togglePin` compares by resolved target, so a legacy `scoreboard` and a new
-`scoreboard:1` can never sit on the rail as two cards for one source. New pins
-are written canonical, so a rail converges as it is used.
+`scoreboard:1@Game` can never sit on the rail as two cards for one source. New
+pins are written canonical, so a rail converges as it is used.

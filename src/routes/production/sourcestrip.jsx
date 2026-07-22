@@ -7,11 +7,10 @@ import { Button } from '../../components/ui/button';
 import { SimpleTooltip } from '../../components/ui/simple-tooltip';
 import { notifications } from '../../lib/notify';
 import { IconToggle } from './kit';
-import { instanceUrl, setSourceVisibility, useDisplayedEnabled, useElementBindings } from './bindings';
+import { instanceUrl, setSourceVisibility, useDisplayedEnabled } from './bindings';
 import { useActiveBoards } from './boards';
 import {
-    defaultContainerFor, useContainerBinding, useContainerPush, useContainerTarget,
-    useSharedContainers,
+    defaultContainerFor, useContainerPush, useContainerTarget, useSharedContainers,
 } from './feeds';
 import { StagedDot } from './controls';
 
@@ -150,7 +149,11 @@ const BindSlot = memo(function BindSlot({ element, board }) {
  */
 const AirSlot = memo(function AirSlot({ binding }) {
     const { enabled, staged } = useDisplayedEnabled(binding.scene, binding.item);
-    const where = binding.where === 'preview' ? 'in preview' : 'on air';
+    // Say WHERE, because with scenes as the grouping axis the same overlay can
+    // be a row in three of them and "on air" is true of at most one.
+    const where = binding.where === 'program' ? 'on air'
+        : binding.where === 'preview' ? 'in preview'
+            : `in ${binding.scene}`;
     return (
         <>
             <StagedDot show={staged} />
@@ -199,20 +202,30 @@ const PushSlot = memo(function PushSlot({ element }) {
 /*
  * The strip. Pass as PanelShell's `primaryAction`.
  *
+ * The source it commands is the SELECTED PLACEMENT's — this element, in this
+ * scene — handed down rather than re-resolved here, which is what stops the
+ * header from toggling one scene's copy while the row the producer clicked
+ * meant another's. For a fed element the placement is the shared container it
+ * feeds, exactly as before: "on air" for a fed element has never meant anything
+ * else, and Push is the slot that distinguishes its content from the container
+ * carrying it.
+ *
+ * Bind still renders when there is no placement. With unbound rack rows gone
+ * that is no longer the fresh-rig case (the rack's + is), but it remains the
+ * live one: delete a shared container's source while its fed element is on the
+ * stage and this is the panel that puts it back.
+ *
  * Desks render nothing here: they have no OBS source (chip DESK), and letting a
  * desk's own actions colonise this slot would cost the strip the one thing that
  * makes it scannable — that its position always means the same three verbs.
  */
-export const SourceStrip = memo(function SourceStrip({ element, board }) {
+export const SourceStrip = memo(function SourceStrip({ element, board, placement }) {
     const direct = element.flavor === 'direct';
-    const { container } = useContainerTarget(element.id, defaultContainerFor(element));
-    const elBindings = useElementBindings(element, board);
-    const containerBinding = useContainerBinding(container);
-    const binding = direct ? elBindings.primary : containerBinding;
-
     return (
         <div className="flex shrink-0 items-center gap-1.5">
-            {binding ? <AirSlot binding={binding} /> : <BindSlot element={element} board={board} />}
+            {placement?.item
+                ? <AirSlot binding={placement} />
+                : <BindSlot element={element} board={board} />}
             {!direct && <PushSlot element={element} />}
         </div>
     );

@@ -18,7 +18,7 @@ import { mountStats } from '/layout/lib/stats-mount.js';
 import { mountPostgameCallout } from '/layout/lib/postgame-callout-mount.js';
 import { mountPostgameVs } from '/layout/lib/postgame-vs-mount.js';
 
-export function initFedContainer({ host, perf = false, skipState = false }) {
+export function initFedContainer({ host, perf = false, skipState = false, forceElement = null, previewSel = null }) {
   const CONTAINER_ID = window.location.pathname.replace(/^.*\/([^/]+)\.html?(?:\?.*)?$/, '$1');
   const FEED_KEY = `production.feed.container.${CONTAINER_ID}`;
 
@@ -66,7 +66,31 @@ export function initFedContainer({ host, perf = false, skipState = false }) {
   }
 
   function render() {
-    const sel = OverlayBase.deepGet(OverlayBase.state, FEED_KEY, null);
+    const live = OverlayBase.deepGet(OverlayBase.state, FEED_KEY, null);
+    /*
+     * `forceElement` (from ?feed=) — draw THIS occupant whatever the container
+     * is actually carrying, against otherwise-live state.
+     *
+     * Several elements share one container URL, so a preview of one of them
+     * resolves to the same page as a preview of its siblings; without naming the
+     * occupant, every one of them previews as whatever is currently fed. It
+     * overrides only the element, so the rest of the live selection (which
+     * board, which character) still applies.
+     *
+     * `previewSel` (from ?feedsel=) — draw THIS content, whatever (if anything)
+     * is fed. A pickable element like Character Spotlight has no live selection
+     * until the producer picks one, and picking writes the live container key —
+     * i.e. goes ON AIR. That made a no-air preview impossible. The console hands
+     * the STANDING INTENT (the character Push would show) here instead, so the
+     * preview draws it without touching live state. It layers OVER forceElement's
+     * base, so element type still comes from ?feed= and only the content fields
+     * (board, team, character, role) are supplied.
+     *
+     * Both are preview-only by construction: the shells gate them on
+     * PREVIEW_MODE, so a browser source on air always follows the real feed.
+     */
+    const base = forceElement ? { ...(live || {}), element: forceElement } : live;
+    const sel = previewSel ? { ...(base || {}), ...previewSel } : base;
     if (!sel || !sel.element) { teardown(); return; }
     const sb = parseInt(sel.scoreboard) || 1;
     if (!ensureMount(sel.element, sb)) { teardown(); return; }

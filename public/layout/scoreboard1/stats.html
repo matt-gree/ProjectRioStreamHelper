@@ -42,7 +42,7 @@
     const card = mountStatsCard({ host, sb: SB, team: TEAM });
 
     async function boot() {
-      if (OverlayBase.PREVIEW_MODE) {
+      if (OverlayBase.SAMPLE_MODE) {
         try {
           const resp = await fetch(`${OverlayBase.BASE_URL}/layout/preview/scoreboard_sample.json`);
           const data = resp.ok ? await resp.json() : null;
@@ -57,10 +57,10 @@
           key.startsWith('overlays.stats.') || key.startsWith('overlays.global.') ||
           key.startsWith('scoreboards.'),
         fetchSettings: true,
-        skipState: OverlayBase.PREVIEW_MODE,
+        skipState: OverlayBase.SAMPLE_MODE,
       });
 
-      if (OverlayBase.PREVIEW_MODE) card.update(OverlayBase.state, OverlayBase.settings);
+      if (OverlayBase.SAMPLE_MODE) card.update(OverlayBase.state, OverlayBase.settings);
     }
     boot();
   </script>

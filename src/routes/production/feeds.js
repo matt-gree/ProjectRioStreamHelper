@@ -2,29 +2,20 @@ import { useEffect, useMemo, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useSettingsStore, useStateStore } from '../../context/store';
 import { stageOrRun, usePending } from '../../context/staging';
-import { useBindingScenes } from './bindings';
-import { isPickableFeed } from './elements';
+import { useConsoleScenes } from './placements';
+import { containerId, defaultContainerFor, isPickableFeed } from './elements';
+import { resolveIntent } from './suggest';
+
+export { containerId, defaultContainerFor };
+
+// Stable empty intent — a fresh {} each render would defeat useShallow.
+const NO_INTENT = Object.freeze({});
 
 /*
  * Fed elements: containers + feeds. A fed element's content is pushed into a
  * named SHARED container (the target); the matching shared overlay renders
  * it. Moved verbatim out of production.jsx (console slice 4).
  */
-
-// A named shared container's stable id = its layout filename stem (e.g.
-// '/layout/shared/split-screen.html' → 'split-screen'). The producer feeds an
-// element into a container by writing production.feed.container.<id>; the
-// matching shared overlay reads the same key.
-export function containerId(url) {
-    return (url || '').replace(/^.*\/([^/]+)\.html?(?:\?.*)?$/, '$1');
-}
-
-// An element's default named container = the stem of its canonical layout URL
-// (Stats → 'stats-feed', Stat Callout → 'callout-stage'). The producer can
-// still re-point it to any other shared container.
-export function defaultContainerFor(element) {
-    return containerId(element.url) || 'stats-feed';
-}
 
 // The named shared containers (public/layout/shared/*) an element can be fed
 // into — Split-Screen, Stats, and any the user adds later. Sourced from the
@@ -62,11 +53,73 @@ export function useFeedControl(container) {
         key,
         label: label || (feedObj ? `Feed ${container}` : `Clear ${container} feed`),
         value: feedObj,
+        // Every feed ALSO records itself under the element that sent it. A
+        // container holds one occupant, so without this the producer's pick is
+        // destroyed the moment anything else takes the stage — and Push, which
+        // could only replay the container's current value, had nothing to give
+        // back. Clearing deliberately leaves the memory: Clear takes the
+        // element off air, it doesn't un-pick the character. See suggest.js.
         run: () => (feedObj
-            ? useStateStore.getState().setItems([{ key: feedKey, value: feedObj }])
+            ? useStateStore.getState().setItems([
+                { key: feedKey, value: feedObj },
+                ...(feedObj.element
+                    ? [{ key: `production.feed.last.${feedObj.element}`, value: feedObj }]
+                    : []),
+            ])
             : useStateStore.getState().deleteItems([feedKey])),
     });
     return { value: pending ? pending.value : live, staged: !!pending, setFeed };
+}
+
+/*
+ * Picking content for a fed element, DECOUPLED from airing it.
+ *
+ * "Picking IS feeding" was wrong for a full-screen callout: choosing a
+ * character to preview shouldn't slam it onto the broadcast. So a pick records
+ * the element's standing INTENT (`production.feed.last.{id}` — what the preview
+ * draws and what Push would air, see suggest.js) and stops there... UNLESS this
+ * element already holds the container. Then the pick is a live edit of what's
+ * on screen, so it updates the container too — through the staging gateway,
+ * because that IS broadcast-visible. Selecting off-air arms; Push airs.
+ *
+ * The intent write is immediate and never staged: it drives the preview, not
+ * the broadcast, and no overlay renders `production.feed.last.*`.
+ */
+export function useFeedSelect(element, scoreboard = 1) {
+    const { container } = useContainerTarget(element.id, defaultContainerFor(element));
+    const feedKey = `production.feed.container.${container}`;
+    const lastKey = `production.feed.last.${element.id}`;
+    const live = useStateStore(s => s?.production?.feed?.container?.[container]);
+    const pending = usePending(`feed:${container}`);
+    const mine = !!live && live.element === element.id
+        && (live.scoreboard == null || live.scoreboard === scoreboard);
+
+    // Arm this pick; air it too only when we already own the container.
+    const select = (payload, label) => {
+        useStateStore.getState().setItems([{ key: lastKey, value: payload }]);
+        if (mine) {
+            stageOrRun({
+                key: `feed:${container}`,
+                label: label || `Feed ${container}`,
+                value: payload,
+                run: () => useStateStore.getState().setItems([
+                    { key: feedKey, value: payload },
+                    { key: lastKey, value: payload },
+                ]),
+            });
+        }
+    };
+
+    // Take this element off the container. Leaves the intent — Clear takes it
+    // off air, it does not un-pick the character.
+    const clear = (label) => stageOrRun({
+        key: `feed:${container}`,
+        label: label || `Clear ${container} feed`,
+        value: null,
+        run: () => useStateStore.getState().deleteItems([feedKey]),
+    });
+
+    return { container, mine, staged: !!pending, select, clear };
 }
 
 // Which named container an element feeds, persisted per element at
@@ -101,28 +154,37 @@ export function useContainerTarget(elementId, defaultId) {
  * face (quickface.jsx). They were separate copies of this logic; a producer
  * clicking Push on the rail and on the stage must mean exactly one thing.
  *
- * `canPush` is false for a pickable element that has never been picked — there
- * is genuinely nothing to push yet, and the strip disables rather than lies.
- * Otherwise pushing re-sends whatever this element last fed, so a rail card
- * (which has no picker) can hand content back after a Clear.
+ * What Push sends is the element's standing INTENT (suggest.js): the pick it
+ * last fed if that still names a real character, else a suggestion. One
+ * definition, so the stage's dropdown and the rail's Push button can never
+ * disagree about what is about to go on air.
+ *
+ * `canPush` is false only for a pickable element with no intent at all — there
+ * is genuinely nothing to show yet, and the strip disables rather than lies.
  */
 export function useContainerPush(element, scoreboard = 1) {
     const { container } = useContainerTarget(element.id, defaultContainerFor(element));
     const { value: feed, staged, setFeed } = useFeedControl(container);
-    const last = useStateStore(useShallow(s => s?.production?.feed?.container?.[container]));
+    // Flat primitives, so useShallow settles instead of firing on every tick.
+    const intent = useStateStore(useShallow(s => resolveIntent(s, element, scoreboard) || NO_INTENT));
 
     const mine = !!feed && feed.element === element.id;
-    const repush = mine ? null : (last && last.element === element.id ? last : null);
-    const canPush = mine || !isPickableFeed(element) || !!repush;
-    const toggle = () => setFeed(mine ? null : (repush ?? { element: element.id, scoreboard }));
+    const hasIntent = !!intent.element;
+    const canPush = mine || !isPickableFeed(element) || hasIntent;
+    const toggle = () => setFeed(
+        mine ? null : (hasIntent ? intent : { element: element.id, scoreboard }),
+    );
 
-    return { container, feed, mine, staged, canPush, toggle, setFeed };
+    return { container, feed, mine, staged, canPush, toggle, setFeed, intent: hasIntent ? intent : null };
 }
 
-// The OBS source rendering a named container, if it's in program or preview.
-// Matched by the container id appearing in the source URL's filename.
+// The OBS source rendering a named container, in ANY scene the console can see
+// — not just program and preview: a producer re-pointing a feed at a container
+// that lives in their Break scene has aimed at something real, and saying "not
+// in a scene" there would be a lie. Matched by the container id appearing in the
+// source URL's filename.
 export function useContainerBinding(container) {
-    const scenes = useBindingScenes();
+    const scenes = useConsoleScenes();
     return useMemo(() => {
         const re = new RegExp(`/${container}\\.html`, 'i');
         for (const sc of scenes) {

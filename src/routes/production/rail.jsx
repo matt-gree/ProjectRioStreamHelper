@@ -1,14 +1,13 @@
 import { memo, useMemo, useState } from 'react';
-import { useShallow } from 'zustand/react/shallow';
-import { useSettingsStore } from '../../context/store';
 import { Panel } from '../../components/ui/panel';
 import { ScrollArea } from '../../components/ui/scroll-area';
 import { Text } from '../../components/ui/primitives';
 import { cn } from '../../lib/utils';
 import { isPinnable } from './elements';
-import { QuickCard, chipState } from './kit';
-import { elementBindings, useBindingScenes } from './bindings';
-import { resolveInstance, useInstanceLabel, useProductionInstances } from './instances';
+import { QuickCard, chipFor } from './kit';
+import {
+    resolvePlacement, useConsolePlacements, useConsoleScenes, usePlacementLabel,
+} from './placements';
 import { DESK_QUICK_FACES, QuickFace } from './quickface';
 
 /*
@@ -28,30 +27,28 @@ import { DESK_QUICK_FACES, QuickFace } from './quickface';
  */
 
 /*
- * The board comes from the PIN (../instances), so a card's chip, its quick face
- * and the rack row it was pinned from are the same instance by construction.
- * The Scorecard face is board-aware (it drives overlays.scorecard.{N}.*) — a
- * chip resolved at board 1 beside a face editing board 2 would be one card
- * disagreeing with itself.
+ * Board AND scene come from the PIN (../placements), so a card's chip, its
+ * quick face and the rack row it was pinned from are the same placement by
+ * construction. The Scorecard face is board-aware (it drives
+ * overlays.scorecard.{N}.*) — a chip resolved at board 1 beside a face editing
+ * board 2 would be one card disagreeing with itself, and the same is now true
+ * of a card flying the Game scene's copy while showing the Break scene's state.
  */
 const ElementRailCard = memo(function ElementRailCard({
-    instance, title, scenes, override, onOpen, onUnpin, drag,
+    placement, title, onOpen, onUnpin, drag,
 }) {
-    const { element, board } = instance;
-    const bindings = elementBindings(element, scenes, override, board);
+    const { element, board } = placement;
     return (
         <QuickCard
-            state={chipState(bindings)} bindings={bindings} title={title}
+            state={chipFor(placement)} title={title}
             onOpen={onOpen} onUnpin={onUnpin} dragHandleProps={drag}
         >
-            <QuickFace element={element} bindings={bindings} board={board} />
+            <QuickFace element={element} placement={placement} board={board} />
         </QuickCard>
     );
 });
 
-const RailCard = memo(function RailCard({
-    entry, scenes, overrides, onOpen, onUnpin, drag,
-}) {
+const RailCard = memo(function RailCard({ entry, onOpen, onUnpin, drag }) {
     const DeskFace = DESK_QUICK_FACES[entry.id];
     if (DeskFace) {
         return (
@@ -65,8 +62,7 @@ const RailCard = memo(function RailCard({
     }
     return (
         <ElementRailCard
-            instance={entry.instance} title={entry.title} scenes={scenes}
-            override={overrides[entry.instance.element.id]}
+            placement={entry.placement} title={entry.title}
             onOpen={onOpen} onUnpin={onUnpin} drag={drag}
         />
     );
@@ -75,24 +71,23 @@ const RailCard = memo(function RailCard({
 const DESK_TITLES = { 'desk:capture': 'Capture', 'desk:bracket': 'Bracket' };
 
 export const Rail = memo(function Rail({ pins, onReorder, onUnpin, onOpen }) {
-    const scenes = useBindingScenes();
-    const instances = useProductionInstances();
-    const label = useInstanceLabel(instances);
-    const overrides = useSettingsStore(useShallow(s => s?.production?.overrides ?? {}));
+    const scenes = useConsoleScenes();
+    const placements = useConsolePlacements(scenes);
+    const label = usePlacementLabel(placements);
     const [dragging, setDragging] = useState(null);
 
     // A pin is kept under the id it is STORED as (that's what reorder and unpin
-    // act on) but rendered from the instance it currently resolves to — which is
-    // how a pin written before instances existed, or against a board since
-    // removed, still draws a working card. Pins naming an element that no longer
-    // exists at all resolve to nothing and drop out.
+    // act on) but rendered from the placement it currently resolves to — which
+    // is how a pin written before scenes were the axis, or against a board or
+    // scene since removed, still draws a working card. Pins naming a source that
+    // no longer exists anywhere resolve to nothing and drop out.
     const entries = useMemo(() => pins.map((id) => {
         if (DESK_QUICK_FACES[id]) return { id, title: DESK_TITLES[id] ?? id };
-        const instance = resolveInstance(id, instances);
-        if (!instance || !isPinnable(instance.element)) return null;
-        const { name, board } = label(instance);
-        return { id, instance, title: board ? `${name} · ${board}` : name };
-    }).filter(Boolean), [pins, instances, label]);
+        const placement = resolvePlacement(id, placements);
+        if (!placement || !isPinnable(placement.element)) return null;
+        const { name, detail } = label(placement);
+        return { id, placement, title: detail ? `${name} · ${detail}` : name };
+    }).filter(Boolean), [pins, placements, label]);
 
     const moveTo = (from, to) => {
         if (from === to || from < 0 || to < 0 || from >= pins.length || to >= pins.length) return;
@@ -110,7 +105,8 @@ export const Rail = memo(function Rail({ pins, onReorder, onUnpin, onOpen }) {
                         <div className="rounded-lg border border-dashed border-border p-3">
                             <Text size="xs" className="text-muted-foreground">
                                 Nothing pinned. Hit ◇ on any rack row — or on a stage panel’s header —
-                                to keep its live controls here, in your own order, across every phase.
+                                to keep its live controls here, in your own order, whatever scene
+                                you’re working in.
                             </Text>
                         </div>
                     ) : entries.map((entry, i) => (
@@ -128,7 +124,7 @@ export const Rail = memo(function Rail({ pins, onReorder, onUnpin, onOpen }) {
                             className={cn('cursor-grab', dragging === i && 'opacity-50')}
                         >
                             <RailCard
-                                entry={entry} scenes={scenes} overrides={overrides}
+                                entry={entry}
                                 onOpen={() => onOpen(entry.id)}
                                 onUnpin={() => onUnpin(entry.id)}
                             />

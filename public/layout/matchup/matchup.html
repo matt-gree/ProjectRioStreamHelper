@@ -41,7 +41,7 @@
     const mu = mountMatchup({ host });
 
     async function boot() {
-      if (OverlayBase.PREVIEW_MODE) {
+      if (OverlayBase.SAMPLE_MODE) {
         // Layouts/Setup preview: prime a representative fetched head-to-head.
         try {
           const r = await fetch(`${OverlayBase.BASE_URL}/layout/preview/matchup_sample.json`);
@@ -60,10 +60,10 @@
         shouldRender: (key) => key.startsWith('matchup') || key.startsWith('match.') || key.startsWith('branding') || key.startsWith('tournamentInfo'),
         shouldRenderSettings: (key) => key.startsWith('overlays.matchup.') || key.startsWith('overlays.global.'),
         fetchSettings: true,
-        skipState: OverlayBase.PREVIEW_MODE,
+        skipState: OverlayBase.SAMPLE_MODE,
       });
 
-      if (OverlayBase.PREVIEW_MODE) mu.update(OverlayBase.state, OverlayBase.settings);
+      if (OverlayBase.SAMPLE_MODE) mu.update(OverlayBase.state, OverlayBase.settings);
     }
     boot();
 

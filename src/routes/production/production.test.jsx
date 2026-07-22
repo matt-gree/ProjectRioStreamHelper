@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
 import { TooltipProvider } from '../../components/ui/tooltip';
 import { useSettingsStore, useStateStore } from '../../context/store';
+import { useObsStore } from '../../context/obs';
 import { useStagingStore } from '../../context/staging';
 import Production from './production';
 
@@ -24,6 +25,10 @@ beforeEach(() => {
 afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
+    useObsStore.setState({
+        status: 'disconnected', studioMode: false, programScene: null,
+        previewScene: null, sceneItems: {}, scenes: [], mirroredScenes: [],
+    });
 });
 
 const ui = () => render(<TooltipProvider><Production /></TooltipProvider>);
@@ -73,16 +78,40 @@ describe('Production page mounts', () => {
         expect(screen.getByRole('button', { name: /Go Live/ })).toBeInTheDocument();
     });
 
-    it('in every phase, since the phase switch swaps what the stage shows', () => {
+    /*
+     * Connected to OBS, with sources in more than one scene — the shape the
+     * console is actually flown in, and the one the whole page has to survive
+     * now that scenes are the grouping axis.
+     */
+    it('with OBS connected and overlays across two scenes', () => {
         useStateStore.setState({ match: { 1: { label: 'Semis', format: { bestOf: 3 } } } });
-        const { rerender } = ui();
-        for (const label of ['Live', 'Post-game', 'Break', 'Draft']) {
-            const tab = screen.getByText(label);
-            tab.click();
-            rerender(<TooltipProvider><Production /></TooltipProvider>);
-        }
-        // Reaching here without a render throw is the assertion; the Bracket
-        // desk row is present in every phase, so it proves the rack survived.
+        const item = (id, sourceName, url, enabled) => ({
+            id, sourceName, url, enabled,
+            inputKind: 'browser_source', isGroup: false, isPrsh: true,
+        });
+        useObsStore.setState({
+            status: 'connected', programScene: 'Game', scenes: ['Game', 'Break'],
+            mirroredScenes: ['Game', 'Break'],
+            sceneItems: {
+                Game: [item(1, 'Scoreboard', 'http://x/layout/scoreboard1/scoreboard.html', true)],
+                Break: [item(9, 'Lower Third', 'http://x/layout/lowerthird/lowerthird.html', false)],
+            },
+        });
+        ui();
+        expect(screen.getByText('PROGRAM · Game')).toBeInTheDocument();
+        // Scoped to the rack — 'Break' is also an option in the top bar's
+        // program-scene dropdown.
+        expect(document.querySelector('[data-rack-section="Break"]')).toBeTruthy();
+        // The desks are permanent, so they survive whatever the scenes do.
         expect(screen.getAllByText('Bracket').length).toBeGreaterThan(0);
+    });
+
+    // The phase selector is gone: OBS's scene list is the producer stating the
+    // shape of their show, where phase was PRSH guessing at it.
+    it('has no phase selector', () => {
+        ui();
+        for (const label of ['Draft', 'Post-game']) {
+            expect(screen.queryByText(label), `${label} phase tab is gone`).not.toBeInTheDocument();
+        }
     });
 });

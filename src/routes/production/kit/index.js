@@ -1,7 +1,7 @@
 // Production console row kit — see the production-console-contract skill.
 // All three console surfaces (rack, stage, quick rail) compose from these.
 
-export { chipState, CHIP_META } from './chip';
+export { chipFor, CHIP_META } from './chip';
 export { StateChip } from './StateChip';
 export { PanelShell } from './PanelShell';
 export { QuickCard } from './QuickCard';

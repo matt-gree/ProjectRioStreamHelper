@@ -42,7 +42,7 @@
     const lt = mountLowerThird({ host });
 
     async function boot() {
-      if (OverlayBase.PREVIEW_MODE) {
+      if (OverlayBase.SAMPLE_MODE) {
         // Layouts/Setup preview: prime a representative authored band.
         try {
           const r = await fetch(`${OverlayBase.BASE_URL}/layout/preview/lowerthird_sample.json`);
@@ -70,10 +70,10 @@
           || (key.startsWith('bracket') && slotTypeActive('bracket')),
         shouldRenderSettings: (key) => key.startsWith('overlays.lowerthird.') || key.startsWith('overlays.global.'),
         fetchSettings: true,
-        skipState: OverlayBase.PREVIEW_MODE,
+        skipState: OverlayBase.SAMPLE_MODE,
       });
 
-      if (OverlayBase.PREVIEW_MODE) lt.update(OverlayBase.state, OverlayBase.settings);
+      if (OverlayBase.SAMPLE_MODE) lt.update(OverlayBase.state, OverlayBase.settings);
     }
     boot();
 

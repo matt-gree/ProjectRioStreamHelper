@@ -2,47 +2,86 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import { TooltipProvider } from '../../../components/ui/tooltip';
 import { Eye, EyeOff } from 'lucide-react';
-import { chipState, StateChip, ListRow, QuickCard, IconToggle, NumberRow } from './index';
+import { chipFor, StateChip, ListRow, QuickCard, IconToggle, NumberRow } from './index';
 
 afterEach(cleanup);
 
 // App root provides a single TooltipProvider; mirror that here.
 const ui = (node) => render(<TooltipProvider>{node}</TooltipProvider>);
 
-// A useElementBindings-shaped binding for an OBS source item.
-const b = (enabled) => ({ item: { enabled }, scene: 'Game', where: 'program' });
+// A placement, as ./placements builds them.
+const at = (where, enabled, scene = 'Game') =>
+    ({ scene, where, item: { id: 1, sourceName: 'S', enabled } });
 
-describe('chipState — the one status language', () => {
-    it('program enabled wins: AIR even when preview is also enabled', () => {
-        expect(chipState({ program: b(true), preview: b(true) })).toBe('air');
-        expect(chipState({ program: b(true), preview: null })).toBe('air');
+describe('chipFor — the one status language', () => {
+    it('reads the program scene as AIR when the source is enabled', () => {
+        expect(chipFor(at('program', true))).toBe('air');
     });
 
-    it('preview enabled with program hidden is PVW (staged in OBS)', () => {
-        expect(chipState({ program: b(false), preview: b(true) })).toBe('pvw');
-        expect(chipState({ program: null, preview: b(true) })).toBe('pvw');
+    it('reads the studio preview scene as PVW', () => {
+        expect(chipFor(at('preview', true))).toBe('pvw');
     });
 
-    it('bound anywhere but hidden everywhere is OFF', () => {
-        expect(chipState({ program: b(false), preview: null })).toBe('off');
-        expect(chipState({ program: null, preview: b(false) })).toBe('off');
+    it('is OFF wherever the source is hidden', () => {
+        expect(chipFor(at('program', false))).toBe('off');
+        expect(chipFor(at('preview', false))).toBe('off');
     });
 
-    it('no binding anywhere is unbound (—)', () => {
-        expect(chipState({ program: null, preview: null })).toBe('unbound');
-        expect(chipState({})).toBe('unbound');
-        expect(chipState(undefined)).toBe('unbound');
+    /*
+     * The scene-grouping rule, and the one worth pinning: a source ENABLED in a
+     * scene nobody has cut to is not on the broadcast. AIR there would be a lie
+     * — the producer's eye still shows the item's own state, so nothing is
+     * hidden from them; only the claim about air is withheld.
+     */
+    it('is OFF in an off-air scene even when the source is enabled', () => {
+        expect(chipFor(at('other', true, 'Break'))).toBe('off');
+    });
+
+    it('no source at all is unbound (—)', () => {
+        expect(chipFor({ where: 'none', item: null })).toBe('unbound');
+        expect(chipFor(null)).toBe('unbound');
+        expect(chipFor(undefined)).toBe('unbound');
+    });
+
+    /*
+     * A fed element takes BOTH conditions. Its container holds one feed, so
+     * reading the container's enabled state alone made Character Spotlight and
+     * Game Summary both say AIR while at most one could be on screen — two rows
+     * sharing one scene item, and one of them lying.
+     */
+    describe('a fed row is on air only if its container is carrying it', () => {
+        const fed = (where, enabled, mine) =>
+            ({ ...at(where, enabled), parent: 'callout@Game', mine });
+
+        it('is AIR when the container is up and the feed is mine', () => {
+            expect(chipFor(fed('program', true, true))).toBe('air');
+            expect(chipFor(fed('preview', true, true))).toBe('pvw');
+        });
+
+        it('is OFF when the container is up but carrying someone else', () => {
+            expect(chipFor(fed('program', true, false))).toBe('off');
+        });
+
+        it('is OFF when the feed is mine but the container is hidden', () => {
+            expect(chipFor(fed('program', false, true))).toBe('off');
+        });
+
+        // The container itself keeps the plain reading — it IS the source.
+        it('leaves the container row reading its own source', () => {
+            expect(chipFor(at('program', true))).toBe('air');
+        });
     });
 });
 
 describe('StateChip', () => {
-    it('derives its label from bindings', () => {
-        ui(<StateChip bindings={{ program: b(true), preview: null }} />);
+    it('renders the state it is given', () => {
+        ui(<StateChip state={chipFor(at('program', true))} />);
         expect(screen.getByText('AIR')).toHaveAttribute('data-chip-state', 'air');
     });
 
-    it('an explicit state overrides derivation (desk rows)', () => {
-        ui(<StateChip state="desk" bindings={{ program: b(true) }} />);
+    // Desks have no OBS source at all, so they name their state outright.
+    it('takes a state that no placement could derive (desk rows)', () => {
+        ui(<StateChip state="desk" />);
         expect(screen.getByText('DESK')).toHaveAttribute('data-chip-state', 'desk');
     });
 

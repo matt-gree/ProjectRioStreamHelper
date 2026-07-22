@@ -1,6 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
+import { render, cleanup } from '@testing-library/react';
+import { TooltipProvider } from '../../../components/ui/tooltip';
+import { useStateStore } from '../../../context/store';
 import { ELEMENTS } from '../elements';
-import { previewUrl } from './preview';
+import StagePreview, { previewUrl } from './preview';
 
 const el = (id) => ELEMENTS.find(e => e.id === id);
 const bind = (url) => ({ item: { sourceName: 'SB', url }, scene: 'Main', where: 'program' });
@@ -62,5 +65,114 @@ describe('previewUrl', () => {
         for (const element of ELEMENTS) {
             expect(previewUrl(element, 1, null), element.id).toBeTruthy();
         }
+    });
+});
+
+/*
+ * A fed element has NO source of its own — Character Spotlight and Game Summary
+ * are both registered at /layout/shared/callout-stage.html, and the container
+ * draws whichever occupant is fed to it. So `previewUrl` returns the same URL
+ * for both, and the container in PREVIEW_MODE hardcodes ONE occupant: every
+ * Callout Stage preview drew Character Spotlight, whatever panel it was under.
+ *
+ * `?feed=` is how a preview names the occupant it wants. The container honours
+ * it (callout-stage.html) and falls back to its hardcoded default, so a bare
+ * ?preview=1 from the Setup catalog is unchanged.
+ */
+describe('previewUrl — a fed element names the occupant it wants', () => {
+    const CALLOUT = 'http://x/layout/shared/callout-stage.html';
+    const fedAt = (carrying) => ({
+        item: { id: 3, sourceName: 'Callout', url: CALLOUT, enabled: true },
+        scene: 'Game', where: 'program', parent: 'callout@Game',
+        container: 'callout-stage', carrying,
+    });
+
+    it('asks the container for THIS element, not whatever is fed', () => {
+        expect(previewUrl(el('postgamevs'), null, fedAt('postgamecallout')))
+            .toContain('feed=postgamevs');
+        expect(previewUrl(el('postgamecallout'), null, fedAt('postgamevs')))
+            .toContain('feed=postgamecallout');
+    });
+
+    // Two elements, one source, two different previews — the whole point.
+    it('gives two occupants of one container different preview urls', () => {
+        const a = previewUrl(el('postgamevs'), null, fedAt(null));
+        const b = previewUrl(el('postgamecallout'), null, fedAt(null));
+        expect(a).not.toBe(b);
+    });
+
+    // The container's own row shows what it is really carrying.
+    it('asks a container row for whatever it is carrying', () => {
+        const container = { item: { id: 3, sourceName: 'Callout', url: CALLOUT }, scene: 'Game', where: 'program', container: 'callout-stage', carrying: 'postgamevs' };
+        expect(previewUrl({ id: 'layout:/x', name: 'Callout Stage', flavor: 'direct' }, null, container))
+            .toContain('feed=postgamevs');
+    });
+
+    it('leaves an empty container to its own default', () => {
+        const container = { item: { id: 3, sourceName: 'Callout', url: CALLOUT }, scene: 'Game', where: 'program', container: 'callout-stage', carrying: null };
+        expect(previewUrl({ id: 'layout:/x', name: 'Callout Stage', flavor: 'direct' }, null, container))
+            .not.toContain('feed=');
+    });
+
+    // A direct element owns its source; naming a feed on it would be nonsense.
+    it('adds no feed param to a direct element', () => {
+        expect(previewUrl(el('scoreboard'), 1, bind('http://x/layout/scoreboard1/scoreboard.html')))
+            .not.toContain('feed=');
+    });
+});
+
+/*
+ * A pickable fed element (Character Spotlight) has no live selection until the
+ * producer picks — and picking is on-air. So its preview draws the STANDING
+ * INTENT (the character Push would show) via ?feedsel=, without a live pick.
+ */
+describe('StagePreview renders', () => {
+    beforeEach(() => {
+        vi.stubGlobal('localStorage', {
+            getItem: () => null, setItem: () => {}, removeItem: () => {}, clear: () => {},
+        });
+        useStateStore.setState({ score: {}, production: {}, postgame: {} });
+    });
+    afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+    const ui = (node) => render(<TooltipProvider>{node}</TooltipProvider>);
+    const CALLOUT = 'http://x/layout/shared/callout-stage.html';
+    const fedBinding = (carrying) => ({
+        item: { id: 3, sourceName: 'Callout', url: CALLOUT, enabled: true },
+        scene: 'Game', where: 'program', parent: 'callout@Game',
+        container: 'callout-stage', carrying,
+    });
+    const ch = (name, b = {}) => ({ name, batting: { singles: 0, doubles: 0, triples: 0, homeruns: 0, rbi: 0, ...b } });
+
+    it('shows an iframe for a fed element', () => {
+        ui(<StagePreview element={el('postgamevs')} board={null} binding={fedBinding('postgamecallout')} />);
+        const frame = document.querySelector('iframe');
+        expect(frame).not.toBeNull();
+        expect(frame.getAttribute('src')).toContain('feed=postgamevs');
+    });
+
+    it('previews the spotlight\'s SUGGESTED character with no live pick', () => {
+        // A captured game with a clear leader, and nothing fed to the container.
+        useStateStore.setState({
+            postgame: {
+                1: {
+                    present: true, meta: { winnerSide: 1 },
+                    player: { 1: { characters: [ch('Peach', { singles: 1 }), ch('Daisy', { homeruns: 2 })] }, 2: {} },
+                },
+            },
+        });
+        ui(<StagePreview element={el('postgamecallout')} board={null} binding={fedBinding(null)} />);
+        const src = document.querySelector('iframe').getAttribute('src');
+        expect(src).toContain('feed=postgamecallout');
+        const feedsel = JSON.parse(decodeURIComponent(new URL(src, 'http://x').searchParams.get('feedsel')));
+        expect(feedsel).toMatchObject({ scoreboard: 1, team: 1, charIndex: 1 }); // Daisy, the leader
+        // And it did NOT write the live container key — a preview is never on air.
+        expect(useStateStore.getState()?.production?.feed?.container?.['callout-stage']).toBeUndefined();
+    });
+
+    it('sends no feedsel when there is nothing to spotlight yet', () => {
+        ui(<StagePreview element={el('postgamecallout')} board={null} binding={fedBinding(null)} />);
+        const src = document.querySelector('iframe').getAttribute('src');
+        expect(src).toContain('feed=postgamecallout');
+        expect(src).not.toContain('feedsel=');
     });
 });

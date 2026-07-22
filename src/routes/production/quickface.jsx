@@ -3,9 +3,7 @@ import { Text } from '../../components/ui/primitives';
 import { ActionRow, SelectRow } from './kit';
 import { FEED_OPTION_HOOKS, flattenGroups } from './feed-pickers';
 import { quickFaceFor } from './elements';
-import {
-    defaultContainerFor, useContainerBinding, useContainerPush, useContainerTarget,
-} from './feeds';
+import { useContainerPush } from './feeds';
 import { SourceToggleRow } from './stage/generic';
 import { ScorecardModeRow, useScorecard } from './stage/scorecard';
 import { EventHeaderBandRows, useEventHeader } from './stage/eventheader';
@@ -22,61 +20,89 @@ import { BracketPhasePicker, useBracketDesk } from './desks/bracket';
  * them. An element with quickFace: null never reaches here — it isn't pinnable.
  */
 
+// What the toggle row calls itself. The scene is part of the answer now: the
+// same overlay can be pinned twice from two scenes, and "On air" is true of at
+// most one of them.
+function whereLabel(placement, what) {
+    const where = placement.where === 'program' ? 'on air'
+        : placement.where === 'preview' ? 'in preview'
+            : `in ${placement.scene}`;
+    return what ? `${what} ${where}` : where[0].toUpperCase() + where.slice(1);
+}
+
 // Direct element: the one decision that matters live — is it on the broadcast.
-const DirectQuickFace = memo(function DirectQuickFace({ element: _element, bindings }) {
-    if (!bindings?.primary) {
-        return <Text size="xs" className="text-muted-foreground">No source in program or preview.</Text>;
+const DirectQuickFace = memo(function DirectQuickFace({ element: _element, placement }) {
+    if (!placement?.item) {
+        // "No longer" would be a claim we can't make: with OBS offline the
+        // source may be sitting in a scene we simply can't see right now.
+        return <Text size="xs" className="text-muted-foreground">Not in any scene we can see.</Text>;
     }
     return (
         <SourceToggleRow
-            label={bindings.primary.where === 'preview' ? 'In preview' : 'On air'}
-            item={bindings.primary.item} sceneName={bindings.primary.scene}
+            label={whereLabel(placement)}
+            item={placement.item} sceneName={placement.scene}
         />
     );
 });
 
-// The container's on-air state — the first row of every fed quick face.
-const ContainerRow = memo(function ContainerRow({ container }) {
-    const binding = useContainerBinding(container);
-    if (!binding) {
-        return <Text size="xs" className="text-muted-foreground">Container not in program or preview.</Text>;
+// The container's state — the first row of every fed quick face. A fed
+// placement IS its container's source, so the pin already names which scene's
+// copy this card flies.
+const ContainerRow = memo(function ContainerRow({ placement }) {
+    if (!placement?.item) {
+        return <Text size="xs" className="text-muted-foreground">That container isn’t in any scene we can see.</Text>;
     }
     return (
         <SourceToggleRow
-            label={binding.where === 'preview' ? 'Container in preview' : 'Container on air'}
-            item={binding.item} sceneName={binding.scene}
+            label={whereLabel(placement, 'Container')}
+            item={placement.item} sceneName={placement.scene}
         />
     );
 });
 
 /*
- * Fed element with choices (Stats, Character Spotlight): the content pick
- * itself, as one row. Picking IS feeding, so no separate push is needed — and
- * that is what makes a pinned Stats card useful on its own, rather than only
- * re-pushing whatever the stage last chose.
+ * Fed element with choices (Stats, Character Spotlight): pick the content, then
+ * push it. Two rows, so the container-visibility toggle steps aside — the card
+ * chip already reports on-air state, and pick+push is what makes the card
+ * self-sufficient.
+ *
+ * Picking ARMS (writes the element's intent); it airs only if this element
+ * already holds the container. Push is what takes an armed pick on air — the
+ * same decoupling as the stage, so the rail and the stage mean one thing by a
+ * pick. `placeholder` (the "Nothing fed" clear) shows only while on air, where
+ * clearing means take-off-stage; off air it would clear whatever else is up.
  */
 const PickableFedQuickFace = memo(function PickableFedQuickFace({ element, useOptions }) {
     const o = useOptions(element);
-    const { container } = useContainerTarget(element.id, defaultContainerFor(element));
+    const { mine, canPush, toggle } = useContainerPush(element);
     if (o.empty) return <Text size="xs" className="text-muted-foreground">{o.empty}</Text>;
     return (
         <>
-            <ContainerRow container={container} />
             <SelectRow
                 label={null} value={o.value} onChange={o.choose} staged={o.staged}
-                placeholder="Nothing fed" options={flattenGroups(o.groups)}
+                placeholder={o.live ? 'Nothing fed' : undefined}
+                options={flattenGroups(o.groups)}
             />
+            <ActionRow actions={[
+                {
+                    label: mine ? 'Clear' : 'Push',
+                    variant: mine ? 'ghost' : 'default',
+                    disabled: !mine && !canPush,
+                    title: mine ? 'Take this off the container' : 'Push the armed pick onto the container',
+                    onClick: toggle,
+                },
+            ]} />
         </>
     );
 });
 
 // Fed element with nothing to pick (Game Summary): push it, or hand the
 // container back. The only decision is timing.
-const PushOnlyFedQuickFace = memo(function PushOnlyFedQuickFace({ element }) {
-    const { container, mine, canPush, toggle } = useContainerPush(element);
+const PushOnlyFedQuickFace = memo(function PushOnlyFedQuickFace({ element, placement }) {
+    const { mine, canPush, toggle } = useContainerPush(element);
     return (
         <>
-            <ContainerRow container={container} />
+            <ContainerRow placement={placement} />
             <ActionRow actions={[
                 {
                     label: mine ? 'Clear' : 'Push',
@@ -90,11 +116,11 @@ const PushOnlyFedQuickFace = memo(function PushOnlyFedQuickFace({ element }) {
     );
 });
 
-const FedQuickFace = memo(function FedQuickFace({ element }) {
+const FedQuickFace = memo(function FedQuickFace({ element, placement }) {
     const useOptions = FEED_OPTION_HOOKS[element.feed];
     return useOptions
         ? <PickableFedQuickFace element={element} useOptions={useOptions} />
-        : <PushOnlyFedQuickFace element={element} />;
+        : <PushOnlyFedQuickFace element={element} placement={placement} />;
 });
 
 // Capture desk: pick the board, capture. The only desk with a compliant face.
@@ -120,11 +146,11 @@ const CaptureQuickFace = memo(function CaptureQuickFace() {
 
 // Scorecard: on air + which score block. Its other eight bands are stage work —
 // these are the two a producer reaches for without leaving the rail.
-const ScorecardQuickFace = memo(function ScorecardQuickFace({ element, bindings, board }) {
+const ScorecardQuickFace = memo(function ScorecardQuickFace({ element, placement, board }) {
     const sc = useScorecard(board);
     return (
         <>
-            <DirectQuickFace element={element} bindings={bindings} />
+            <DirectQuickFace element={element} placement={placement} />
             <ScorecardModeRow sc={sc} />
         </>
     );
@@ -169,14 +195,14 @@ const ELEMENT_QUICK_FACES = {
 
 // The quick face for a registered element, by flavor. Returns null when the
 // element declared quickFace: null (the rail should not be offering it).
-export const QuickFace = memo(function QuickFace({ element, bindings, board }) {
+export const QuickFace = memo(function QuickFace({ element, placement, board }) {
     const face = quickFaceFor(element);
     if (!face) return null;
     const Custom = ELEMENT_QUICK_FACES[element.id];
-    // `board` is the pinned instance's board — a board-scoped face (Scorecard)
+    // `board` is the pinned placement's board — a board-scoped face (Scorecard)
     // must write the same board the card's chip reads.
-    if (Custom) return <Custom element={element} bindings={bindings} board={board} />;
+    if (Custom) return <Custom element={element} placement={placement} board={board} />;
     return element.flavor === 'fed'
-        ? <FedQuickFace element={element} />
-        : <DirectQuickFace element={element} bindings={bindings} />;
+        ? <FedQuickFace element={element} placement={placement} />
+        : <DirectQuickFace element={element} placement={placement} />;
 });

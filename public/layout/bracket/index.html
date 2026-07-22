@@ -1263,7 +1263,7 @@
        runs and tell init to skip state — otherwise the SocketIO v1.state.get
        wipe would race over our sample data. */
     async function boot() {
-      if (OverlayBase.PREVIEW_MODE) {
+      if (OverlayBase.SAMPLE_MODE) {
         try {
           const resp = await fetch(`${OverlayBase.BASE_URL}/layout/preview/bracket_sample.json`);
           const data = resp.ok ? await resp.json() : null;
@@ -1279,7 +1279,7 @@
         // NOT on unrelated scoreboard/ticker setting changes — those used to
         // strip/re-insert the bracket DOM and restart animations needlessly.
         shouldRenderSettings: (key) => key.startsWith('overlays.global.') || key.startsWith('overlays.bracket.'),
-        skipState: OverlayBase.PREVIEW_MODE,
+        skipState: OverlayBase.SAMPLE_MODE,
       });
     }
     boot();

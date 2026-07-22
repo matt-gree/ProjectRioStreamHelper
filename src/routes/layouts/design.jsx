@@ -49,9 +49,13 @@ const PreviewTile = memo(function PreviewTile({ label, path: _path, w, h, src, r
 });
 
 const DesignPreviews = memo(function DesignPreviews({ baseUrl, showOverrides, onToggleOverrides }) {
+    // `sample=1` is what makes these tiles render a representative game rather
+    // than live state — a design gallery has to show something on a machine with
+    // no game in progress. The Production console's stage preview deliberately
+    // omits it: there, the point is what is about to go on air.
     const buildUrl = (path) => {
         const sep = path.includes('?') ? '&' : '?';
-        const flags = `preview=1${showOverrides ? '' : '&preview_globals_only=1'}`;
+        const flags = `preview=1&sample=1${showOverrides ? '' : '&preview_globals_only=1'}`;
         return `${baseUrl}${path}${sep}${flags}`;
     };
     const reloadSuffix = showOverrides ? 'ov' : 'g';

@@ -183,13 +183,13 @@ screenshot; get the user's eyes or reason from first principles.
   that's hidden-and-staying-hidden must stay dark, or the sweeping edge lights
   it up mid-animation. (`scoreboard-mount.js` `meldTo` is the reference.)
 - **Previews: scale with `zoom`, not `transform: scale()`.** The Layouts-tab
-  `ScaledIframe` (`src/routes/layouts/layouts.jsx`) fits an overlay into the
+  `ScaledIframe` (`src/components/ScaledIframe.jsx`) fits an overlay into the
   preview pane. `transform: scale()` rasters the iframe once at its pre-scale
   size and reuses that texture (blurry until a re-mount forces a re-raster);
   `zoom` is layout-affecting so the content re-renders crisp at the target
   resolution. Applies to every preview at once.
 
-## Catalog + registration (`server/api/v1/layouts.py`, `src/routes/layouts/layouts.jsx`)
+## Catalog + registration (`server/api/v1/layouts.py`, `src/routes/layouts/designConstants.js`)
 
 - **Layout type** is derived from filename stem + group folder (`scenes/*` →
   `scene`, `bracket/*` → `bracket`, else stem minus trailing digits).
@@ -199,7 +199,7 @@ screenshot; get the user's eyes or reason from first principles.
   **missing param defaults to board 1**.
 - `controller/` is **macOS-only** (omitted from the catalog off-Darwin) —
   platform-gate any test that asserts on it.
-- Style settings are two-tier, defined in `src/routes/layouts/layouts.jsx`:
+- Style settings are two-tier, defined in `src/routes/layouts/designConstants.js`:
   `GLOBAL_DESIGN_KEYS`/`GLOBAL_DESIGN_DEFAULTS` (live at `overlays.global.*`)
   and `LAYOUT_SETTINGS[layoutType]` (live at `overlays.{type}.{key}`;
   scorecard is per-board `overlays.scorecard.{N}.*`).
@@ -217,6 +217,33 @@ screenshot; get the user's eyes or reason from first principles.
 5. Production element? Register in `src/routes/production/elements.js`
    (direct vs fed — fed elements render on the Callout Stage,
    `public/layout/shared/callout-stage.html`).
+   **Authoring a new shared container?** Pass `forceElement` from **`?feed=`**
+   AND `previewSel` from **`?feedsel=`** (both gated on `PREVIEW_MODE`) into
+   `initFedContainer`, and name a representative occupant in the sample block.
+   Several elements share one container URL, so a container that ignores `?feed=`
+   makes every one of them preview as whatever is currently fed. `?feed=` names
+   the element; `?feedsel=` (URL-encoded JSON) supplies its CONTENT — the
+   character/board the console's Push would show (`suggest.js` intent). Without
+   it a pickable element (Character Spotlight) previews blank until the producer
+   picks, and picking writes the live container key, i.e. goes ON AIR — so there
+   was no way to preview it off-air. Merge `previewSel` over the `forceElement`
+   base; on air neither param exists and the real feed governs. See
+   `callout-stage.html` + `fed-container.js`.
+
+### `?preview=1` vs `?sample=1` — two different questions
+
+- **`PREVIEW_MODE` (`?preview=1`)** — "you are in a preview iframe, not an OBS
+  source." Preview CHROME only: `setBlank` notes render visibly, animations
+  resolve instantly, stages scale to fit. Says nothing about data.
+- **`SAMPLE_MODE` (`?sample=1`)** — "render canned sample data instead of live
+  state." Guards the `*_sample.json` priming AND `skipState: true`.
+
+**A new layout's sample block and `skipState` must key on `SAMPLE_MODE`, never
+`PREVIEW_MODE`.** They were one flag, which made the Production console's stage
+preview a mockup — every element drew the fixture game and live state was never
+fetched, while the panel claimed to show what was about to go on air. The Design
+tab gallery passes `preview=1&sample=1` (it must render on a machine with no
+game); the console passes `preview=1` alone and gets the truth.
 6. Verify: `GET /api/v1/layouts` lists it with correct type/dims/settings;
    load the URL in a browser, hard-refresh, check the console; if animated,
    test the OBS eye-toggle + scene-cut paths.

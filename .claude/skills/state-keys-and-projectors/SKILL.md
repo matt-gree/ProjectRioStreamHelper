@@ -79,6 +79,8 @@ scoreboards.rotation.{N}.*     live rotation status MIRROR (PoolManager-owned, r
 tournamentInfo.*               tournament metadata (bracket_link etc.)
 overlays.*                     (in Settings, not State — style knobs)
 production.*                   Production-page element/feed state
+production.feed.container.{id} what a shared container is showing NOW (exactly one occupant)
+production.feed.last.{element} what that element last fed — survives losing the container (suggest.js)
 ```
 
 Adding a new namespace: no registration needed server-side (State is

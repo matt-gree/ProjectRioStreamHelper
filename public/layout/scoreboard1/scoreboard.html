@@ -50,7 +50,7 @@
     const sc = mountScoreboard({ host, sb: SB, size: SIZE });
 
     async function boot() {
-      if (OverlayBase.PREVIEW_MODE) {
+      if (OverlayBase.SAMPLE_MODE) {
         try {
           const r = await fetch(`${OverlayBase.BASE_URL}/layout/preview/scoreboard_sample.json`);
           const data = r.ok ? await r.json() : null;
@@ -64,10 +64,10 @@
         shouldRenderSettings: (key) =>
           key.startsWith('overlays.scoreboard.') || key.startsWith('overlays.global.'),
         fetchSettings: true,
-        skipState: OverlayBase.PREVIEW_MODE,
+        skipState: OverlayBase.SAMPLE_MODE,
       });
 
-      if (OverlayBase.PREVIEW_MODE) sc.update(OverlayBase.state, OverlayBase.settings);
+      if (OverlayBase.SAMPLE_MODE) sc.update(OverlayBase.state, OverlayBase.settings);
     }
     boot();
 

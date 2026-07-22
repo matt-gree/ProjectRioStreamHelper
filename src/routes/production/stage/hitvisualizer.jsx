@@ -6,8 +6,6 @@ import { useSettingsStore, useStateStore } from '../../../context/store';
 import { Text } from '../../../components/ui/primitives';
 import { notifications } from '../../../lib/notify';
 import { ActionRow, NumberRow, SelectRow, ToggleRow } from '../kit';
-import { ELEMENTS } from '../elements';
-import { useElementBindings } from '../bindings';
 import { runObs } from '../controls';
 import { useContainerTarget, useFeedControl, useSharedContainers } from '../feeds';
 import { BindingNote } from './generic';
@@ -122,13 +120,11 @@ const HitSummary = memo(function HitSummary({ v }) {
     );
 });
 
-export default function HitVisualizerStage({ element, scoreboard = 1 }) {
+export default function HitVisualizerStage({ board, placement, scoreboard = board ?? 1 }) {
     // One hook instance for the whole panel: the actions and the config below
     // are the same decision surface and must not drift apart.
     const v = useHitViz(scoreboard);
     const containers = useSharedContainers();
-    const el = element ?? ELEMENTS.find(e => e.id === 'hitvisualizer');
-    const { primary } = useElementBindings(el);
 
     return (
         <>
@@ -152,7 +148,7 @@ export default function HitVisualizerStage({ element, scoreboard = 1 }) {
             ]} />
 
             <div className="mt-1 flex flex-col gap-1.5 border-t border-border/60 pt-2">
-                <BindingNote binding={primary} />
+                <BindingNote binding={placement} />
 
                 <ToggleRow
                     label="Spotlight auto-cut" checked={!!v.spotlight.enabled}

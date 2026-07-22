@@ -41,7 +41,7 @@
     const ticker = mountTicker({ host, sb: SB });
 
     async function boot() {
-      if (OverlayBase.PREVIEW_MODE) {
+      if (OverlayBase.SAMPLE_MODE) {
         try {
           const resp = await fetch(`${OverlayBase.BASE_URL}/layout/preview/ticker_sample.json`);
           const games = (resp.ok ? await resp.json() : []) || [];
@@ -58,10 +58,10 @@
         shouldRenderSettings: (key) =>
           key.startsWith('overlays.ticker.') || key.startsWith('overlays.global.'),
         fetchSettings: true,
-        skipState: OverlayBase.PREVIEW_MODE,
+        skipState: OverlayBase.SAMPLE_MODE,
       });
 
-      if (OverlayBase.PREVIEW_MODE) ticker.update(OverlayBase.state, OverlayBase.settings);
+      if (OverlayBase.SAMPLE_MODE) ticker.update(OverlayBase.state, OverlayBase.settings);
     }
     boot();
   </script>

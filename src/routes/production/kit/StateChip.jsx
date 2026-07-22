@@ -1,12 +1,13 @@
 import { memo } from 'react';
 import { SimpleTooltip } from '../../../components/ui/simple-tooltip';
 import { cn } from '../../../lib/utils';
-import { chipState, CHIP_META } from './chip';
+import { CHIP_META } from './chip';
 
-// The chip pill. Pass a derived `state` ('air' | 'pvw' | 'off' | 'unbound' |
-// 'desk') or raw `bindings` (useElementBindings output) to derive it here.
-export const StateChip = memo(function StateChip({ state, bindings, className }) {
-    const s = state ?? chipState(bindings);
+// The chip pill. `state` is 'air' | 'pvw' | 'off' | 'unbound' | 'desk' —
+// derived by chipFor(placement) at the call site, so every surface states which
+// placement it is describing rather than re-resolving one of its own.
+export const StateChip = memo(function StateChip({ state, className }) {
+    const s = state ?? 'unbound';
     const meta = CHIP_META[s] ?? CHIP_META.unbound;
     return (
         <SimpleTooltip label={meta.title}>

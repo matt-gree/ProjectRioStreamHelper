@@ -53,10 +53,17 @@
     const host = document.getElementById('host');
     const PERF = params.get('perf') === '1';
 
+    // ?feedsel= is a URL-encoded JSON content override (see fed-container.js).
+    // Bad JSON must not white-screen a preview — fall back to no override.
+    function parseFeedSel(raw) {
+      if (!raw) return null;
+      try { return JSON.parse(decodeURIComponent(raw)); } catch { return null; }
+    }
+
     async function boot() {
       // Preview (Layouts/Setup tab): prime a representative captured game +
       // feed assignment, and skip live state so the server can't race in over it.
-      if (OverlayBase.PREVIEW_MODE) {
+      if (OverlayBase.SAMPLE_MODE) {
         try {
           const resp = await fetch(`${OverlayBase.BASE_URL}/layout/preview/postgame_sample.json`);
           const data = resp.ok ? await resp.json() : null;
@@ -65,10 +72,23 @@
             if (data.score) OverlayBase.deepSet(OverlayBase.state, 'score.1', data.score);
           }
         } catch { /* ignore */ }
+        // Sample mode has no live feed to follow, so name a representative
+        // occupant. `?feed=` still wins, for a gallery previewing a specific one.
         OverlayBase.deepSet(OverlayBase.state, 'production.feed.container.callout-stage',
-          { element: 'postgamecallout', scoreboard: 1, team: 1, charIndex: 0 });
+          { element: params.get('feed') || 'postgamecallout', scoreboard: 1, team: 1, charIndex: 0 });
       }
-      initFedContainer({ host, perf: PERF, skipState: OverlayBase.PREVIEW_MODE });
+      /*
+       * `?feed=` names WHICH occupant to draw; `?feedsel=` (JSON) supplies its
+       * content — the character/board Push WOULD show — so a pickable element
+       * previews without a live pick and without going on air. Both are
+       * preview-only: on air there is no ?feed=/?feedsel=, so the real feed
+       * governs. See fed-container.js.
+       */
+      initFedContainer({
+        host, perf: PERF, skipState: OverlayBase.SAMPLE_MODE,
+        forceElement: OverlayBase.PREVIEW_MODE ? params.get('feed') : null,
+        previewSel: OverlayBase.PREVIEW_MODE ? parseFeedSel(params.get('feedsel')) : null,
+      });
     }
     boot();
   </script>

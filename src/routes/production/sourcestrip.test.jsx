@@ -23,8 +23,13 @@ const src = (id, sourceName, url, enabled) => ({
 
 const connected = (items, extra = {}) => useObsStore.setState({
     status: 'connected', programScene: 'Main', scenes: ['Main'],
-    sceneItems: { Main: items }, ...extra,
+    mirroredScenes: ['Main'], sceneItems: { Main: items }, ...extra,
 });
+
+// The placement the console hands the strip — element + board + the scene item
+// it drives. The strip never resolves one of its own: which source it commands
+// is the same fact as which rack row the producer clicked.
+const at = (item, where = 'program', scene = 'Main') => ({ scene, where, item });
 
 /*
  * The strip's slots are PROGRESSIVE, not per-element: what renders is decided
@@ -40,15 +45,17 @@ describe('SourceStrip slots', () => {
     });
 
     it('retires Bind and offers Air once a source is bound', () => {
-        connected([src(1, 'Scoreboard', 'http://x/layout/scoreboard1/scoreboard.html', false)]);
-        ui(<SourceStrip element={el('scoreboard')} />);
+        const item = src(1, 'Scoreboard', 'http://x/layout/scoreboard1/scoreboard.html', false);
+        connected([item]);
+        ui(<SourceStrip element={el('scoreboard')} placement={at(item)} />);
         expect(screen.queryByRole('button', { name: /add to obs/i })).not.toBeInTheDocument();
         expect(screen.getByRole('button', { name: /show scoreboard on air/i })).toBeInTheDocument();
     });
 
     it('reads Hide when the bound source is visible', () => {
-        connected([src(1, 'Scoreboard', 'http://x/layout/scoreboard1/scoreboard.html', true)]);
-        ui(<SourceStrip element={el('scoreboard')} />);
+        const item = src(1, 'Scoreboard', 'http://x/layout/scoreboard1/scoreboard.html', true);
+        connected([item]);
+        ui(<SourceStrip element={el('scoreboard')} placement={at(item)} />);
         expect(screen.getByRole('button', { name: /hide scoreboard on air/i })).toBeInTheDocument();
     });
 
@@ -67,22 +74,31 @@ describe('SourceStrip slots', () => {
 });
 
 /*
- * The strip commands ONE board's source. Everything above depends on it holding
- * even when the scene has several of the same overlay — the case that used to
- * hand the toggle to whichever OBS listed first.
+ * The strip commands exactly the placement it was handed — never a source it
+ * went looking for. That is what stops a header from toggling one board's (or
+ * one scene's) copy while the row the producer clicked meant another's.
  */
-describe('SourceStrip board', () => {
+describe('SourceStrip drives its placement', () => {
     const sb = (n) => src(n, `Board ${n}`,
         `http://x/layout/scoreboard1/scoreboard.html?scoreboard=${n}`, false);
 
     it('drives the board it was given, not the first source in the scene', () => {
-        connected([sb(1), sb(2)]);
-        ui(<SourceStrip element={el('scoreboard')} board={2} />);
+        const [one, two] = [sb(1), sb(2)];
+        connected([one, two]);
+        ui(<SourceStrip element={el('scoreboard')} board={2} placement={at(two)} />);
         expect(screen.getByRole('button', { name: /show board 2 on air/i })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /show board 1 on air/i })).not.toBeInTheDocument();
     });
 
-    it('offers Bind — not another board\'s source — when this board has none', () => {
+    // In an off-air scene "on air" would be a lie, so the label names the scene.
+    it('names the scene when the placement is in neither program nor preview', () => {
+        const item = sb(1);
+        connected([item], { scenes: ['Main', 'Break'] });
+        ui(<SourceStrip element={el('scoreboard')} board={1} placement={at(item, 'other', 'Break')} />);
+        expect(screen.getByRole('button', { name: /show board 1 in break/i })).toBeInTheDocument();
+    });
+
+    it('offers Bind when the panel has no placement at all', () => {
         connected([sb(1), sb(2)]);
         ui(<SourceStrip element={el('scoreboard')} board={3} />);
         expect(screen.getByRole('button', { name: /add to obs/i })).toBeInTheDocument();
@@ -95,8 +111,9 @@ describe('SourceStrip board', () => {
  */
 describe('SourceStrip push slot', () => {
     it('is absent for direct elements', () => {
-        connected([src(1, 'Scoreboard', 'http://x/layout/scoreboard1/scoreboard.html', true)]);
-        ui(<SourceStrip element={el('scoreboard')} />);
+        const item = src(1, 'Scoreboard', 'http://x/layout/scoreboard1/scoreboard.html', true);
+        connected([item]);
+        ui(<SourceStrip element={el('scoreboard')} placement={at(item)} />);
         expect(screen.queryByRole('button', { name: /push|clear/i })).not.toBeInTheDocument();
     });
 
@@ -114,10 +131,12 @@ describe('SourceStrip push slot', () => {
         expect(screen.getByRole('button', { name: /^push$/i })).toBeEnabled();
     });
 
-    // A fed element's Air slot commands the CONTAINER, not a source of its own.
+    // A fed element's Air slot commands the CONTAINER, not a source of its own —
+    // which is exactly what its placement is (./placements).
     it('binds Air to the shared container the element feeds', () => {
-        connected([src(7, 'Callout Stage', 'http://x/layout/shared/callout-stage.html', false)]);
-        ui(<SourceStrip element={el('postgamevs')} />);
+        const item = src(7, 'Callout Stage', 'http://x/layout/shared/callout-stage.html', false);
+        connected([item]);
+        ui(<SourceStrip element={el('postgamevs')} placement={at(item)} />);
         expect(screen.getByRole('button', { name: /show callout stage on air/i })).toBeInTheDocument();
     });
 });

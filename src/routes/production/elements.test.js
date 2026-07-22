@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-    elementsForPhase, ELEMENTS, PHASES, PICKABLE_FEEDS, isPickableFeed,
+    ELEMENTS, PICKABLE_FEEDS, isPickableFeed,
     quickFaceFor, isPinnable, stageBodyFor,
 } from './elements';
 import { FEED_OPTION_HOOKS } from './feed-pickers';
@@ -31,20 +31,11 @@ describe('pickable feeds', () => {
 });
 
 describe('element registry invariants', () => {
-    it('every element belongs to at least one known phase', () => {
-        const known = new Set(PHASES.map((p) => p.value));
-        for (const e of ELEMENTS) {
-            const phases = Array.isArray(e.phase) ? e.phase : [e.phase];
-            expect(phases.length).toBeGreaterThan(0);
-            for (const p of phases) expect(known.has(p)).toBe(true);
-        }
-    });
-
-    it('elementsForPhase handles single and array phases', () => {
-        const live = elementsForPhase('live').map((e) => e.id);
-        expect(live).toContain('scoreboard');
-        expect(live).toContain('commentary'); // array phase
-        expect(elementsForPhase('break').map((e) => e.id)).toContain('lowerthird');
+    // The phase axis is gone: elements are listed under the OBS scene their
+    // source lives in, so a leftover `phase` would be a field nothing reads and
+    // the next person would keep it in sync for nothing.
+    it('carries no phase — scenes are the grouping axis', () => {
+        for (const e of ELEMENTS) expect(e.phase, `${e.id} has no phase`).toBeUndefined();
     });
 
     it('fed elements declare a canonical container url', () => {

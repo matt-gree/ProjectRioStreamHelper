@@ -1,10 +1,31 @@
 import { memo, useCallback, useState } from 'react';
 import { RotateCw, Eye, EyeOff } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 import { Text } from '../../../components/ui/primitives';
 import { SimpleTooltip } from '../../../components/ui/simple-tooltip';
 import ScaledIframe from '../../../components/ScaledIframe';
 import { usePersistentState } from '../../../hooks/usePersistentState';
+import { useStateStore } from '../../../context/store';
 import { instanceUrl } from '../bindings';
+import { resolveIntent } from '../suggest';
+
+// Stable empty intent — a fresh {} each render would defeat useShallow.
+const NO_SEL = Object.freeze({});
+
+/*
+ * The content a fed element's preview should draw — the standing intent, as a
+ * flat feedsel payload for the container. Only fed elements have one; a direct
+ * element or a container row previews live and needs no override. Kept to
+ * primitives inside useShallow so it settles instead of firing every tick.
+ */
+function useFeedSel(element, board) {
+    return useStateStore(useShallow((s) => {
+        if (element.flavor !== 'fed') return NO_SEL;
+        const i = resolveIntent(s, element, board || 1);
+        if (!i) return NO_SEL;
+        return { scoreboard: i.scoreboard ?? 1, team: i.team, charIndex: i.charIndex, role: i.role };
+    }));
+}
 
 /*
  * The stage's preview column — what the selected element actually looks like
@@ -21,11 +42,31 @@ import { instanceUrl } from '../bindings';
  * skill). That pairing is the point: the panel says why it's empty.
  */
 
-// Which URL to show. When the element is BOUND, preview the producer's actual
-// source URL, not the element's canonical one — their source may carry a size
-// or team variant, or `?intro=0`, and previewing a URL nobody is broadcasting
-// would be a confident lie. Unbound, fall back to what Bind would create.
-export function previewUrl(element, board, binding) {
+/*
+ * Which URL to show. When the element is BOUND, preview the producer's actual
+ * source URL, not the element's canonical one — their source may carry a size
+ * or team variant, or `?intro=0`, and previewing a URL nobody is broadcasting
+ * would be a confident lie. Unbound, fall back to what Bind would create.
+ *
+ * A FED element has no source of its own. It shares a container, and the
+ * container draws whichever occupant is fed to it — so every fed element aimed
+ * at one resolves to the SAME url, and previewing it plainly shows them all as
+ * whatever that container happens to be rendering. Worse, a container in
+ * PREVIEW_MODE hardcodes an occupant, so the answer wasn't even the live feed:
+ * every Callout Stage preview drew Character Spotlight.
+ *
+ * `?feed=` is the fix — the preview NAMES the occupant it wants, and the
+ * container obliges (see callout-stage.html). A fed element asks for itself; a
+ * container row asks for whatever it is currently carrying.
+ *
+ * `?feedsel=` carries the CONTENT: a pickable element (Character Spotlight) has
+ * no live selection until the producer picks one, and picking writes the live
+ * container key — i.e. goes on air. So the preview can't lean on the live feed
+ * or it stays blank until, and only until, it's too late. Instead it sends the
+ * standing intent (suggest.js) — the character Push would show — and the
+ * container draws it without touching live state. `feedSel` is that intent.
+ */
+export function previewUrl(element, board, binding, nonce = 0, feedSel = null) {
     const base = binding?.item?.url || instanceUrl(element, board);
     if (!base) return null;
     try {
@@ -34,6 +75,17 @@ export function previewUrl(element, board, binding) {
         // browser, and so a junk URL throws here rather than in the iframe.
         const u = new URL(base, window.location.origin);
         u.searchParams.set('preview', '1');
+        const feed = element.flavor === 'fed'
+            ? element.id
+            : (binding?.container ? binding.carrying : null);
+        if (feed) u.searchParams.set('feed', feed);
+        if (feed && feedSel) u.searchParams.set('feedsel', encodeURIComponent(JSON.stringify(feedSel)));
+        // Reload has to change the URL, not just remount. Layouts are static
+        // files with no build step, so the browser holds them on an etag with no
+        // Cache-Control; remounting an iframe at the SAME src can be answered
+        // from cache, which is why Reload could leave a just-edited layout
+        // looking unchanged. Absent at nonce 0 so the steady-state URL is stable.
+        if (nonce) u.searchParams.set('_', String(nonce));
         return `${u.pathname}${u.search}`;
     } catch {
         return null;
@@ -61,7 +113,9 @@ export function previewUrl(element, board, binding) {
 const MAX_PREVIEW_HEIGHT = 560;
 const MIN_PREVIEW_HEIGHT = 140;
 
-const StagePreview = memo(function StagePreview({ element, board, binding }) {
+const StagePreview = memo(function StagePreview({ element, board, binding: maybe, width, height }) {
+    // Same rule as BindingNote: no item, no binding.
+    const binding = maybe?.item ? maybe : null;
     const [open, setOpen] = usePersistentState('prsh.ui.production.preview', true);
     // Bumped to force a remount — overlays are static files behind a browser
     // cache, and a producer who just edited a theme wants to see it.
@@ -77,7 +131,12 @@ const StagePreview = memo(function StagePreview({ element, board, binding }) {
         setFit(prev => (prev && prev.w === f.w && prev.scale === f.scale ? prev : f));
     }, []);
 
-    const src = previewUrl(element, board, binding);
+    // A fed element previews the character Push would show, not the live feed
+    // (which is empty until a pick, and a pick is on-air). `team == null` means
+    // no intent — nothing captured/rostered yet — so send no override and let
+    // the container render its own empty state.
+    const feedSel = useFeedSel(element, board);
+    const src = previewUrl(element, board, binding, nonce, feedSel.team != null ? feedSel : null);
     if (!src) return null;
 
     return (
@@ -139,8 +198,12 @@ const StagePreview = memo(function StagePreview({ element, board, binding }) {
                             // addBrowserSource gives OBS, so the preview's
                             // viewport is the source's viewport — which is what
                             // makes it a scale model rather than a guess.
-                            nativeWidth={element.width}
-                            nativeHeight={element.height}
+                            // Overridable because a CONTAINER row's element is
+                            // synthesised from its URL and carries no dimensions
+                            // — the layout catalog holds a container's native
+                            // size, and the stage passes it in.
+                            nativeWidth={width ?? element.width}
+                            nativeHeight={height ?? element.height}
                             minHeight={MIN_PREVIEW_HEIGHT}
                             maxHeight={MAX_PREVIEW_HEIGHT}
                             onFit={onFit}
@@ -148,9 +211,11 @@ const StagePreview = memo(function StagePreview({ element, board, binding }) {
                         />
                     </div>
                     <Text size="xs" dimmed>
-                        {binding
-                            ? `Live — ${binding.item.sourceName} as OBS renders it.`
-                            : 'Live — not yet in a scene, so this is what Bind would add.'}
+                        {!binding
+                            ? 'Live — not yet in a scene, so this is what Bind would add.'
+                            : binding.parent
+                                ? `Live — ${binding.item.sourceName}, carrying this.`
+                                : `Live — ${binding.item.sourceName} as OBS renders it.`}
                     </Text>
                 </>
             )}

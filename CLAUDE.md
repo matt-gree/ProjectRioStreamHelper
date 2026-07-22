@@ -43,6 +43,7 @@ These terms have specific meanings in this codebase. Use them precisely; correct
 | **Team** | Synonymous with Side in state (`.player.{T}` where T∈{1,2}). |
 | **Match** | The fixture object above scoreboards: `match.{M}` in state (participants per side, captain, format, series, stage `draft \| live \| post`). A board binds to it via `score.{N}.match = M` (int id, never a round-name string). |
 | **Projector** | The resolve-by-copy pattern: a model (Match, Commentary, PlayerPlates, PostGame) resolves its records against the participant registry and copies the result into the state keys overlays read. Deterministic: writes the full key set (value or `""`) so unbinding blanks exactly what it set. |
+| **Placement** | A Production rack row: one source, in one scene — `{element}:{board}@{scene}`. The console's row identity; see `src/routes/production/placements.js`. |
 | **Element** | A Production-page broadcast unit. **Direct** elements render from live state; **fed** elements are pushed content on the Callout Stage (stat callout, game summary, spotlight). Related: **shared source** / **dedicated source** / **target** / **feed** — see `src/routes/production/elements.js`. |
 | **Layout** | An HTML file under `public/layout/`, served as an OBS Browser Source. Declares its style contract via `<meta name="overlay-settings">` and its native size via `body { width/height }`. |
 | **Layout type** | Derived from filename + group folder (`server/api/v1/layouts.py`). Drives `?size=` / `?team=` variant expansion. |
@@ -142,8 +143,10 @@ The deciding layer is mirrored to `score.{N}.side_reason`. Manual scope is the c
 
 The Production tab is a **console with three surfaces** — rack (monitor + select), stage (work on the one selected thing), quick rail (producer-pinned cards). Every element declares the same contract (registration · quick face · stage body) and all three surfaces compose from the shared row kit. **Read `.claude/skills/production-console-contract/SKILL.md` before touching `src/routes/production/`.**
 
+- **OBS scenes are the rack's grouping axis**, and rows are **placements** (`src/routes/production/placements.js`): one row per source per scene, keyed `{element}:{board}@{scene}`. The rack lists only what is really in a scene — derivation runs source → row — and the **+** in each scene header (`addsource.jsx`) is how a source is created. There is no "phase" concept; it was removed in favour of the producer's own scene list.
+
 - OBS control runs **browser-side** (`src/context/obs.jsx`, localhost:4455) — this reaches the producer's OBS even in dual-machine setups. Don't move it server-side.
-- **Selection, rail pins and phase are browser-local** (`usePersistentState`, `prsh.ui.production.*`) — per-producer workspace layout, never server Settings.
+- **Selection, rail pins and expanded scenes are browser-local** (`usePersistentState`, `prsh.ui.production.*`) — per-producer workspace layout, never server Settings. Stored ids are **resolved at read time, never rewritten**.
 - **Staging:** `src/context/staging.js` `stageOrRun` gateway — with confirm-mode on, changes stage until F9/confirm.
 - **Action bus:** `POST /api/v1/action` → `v1.action` SocketIO cue to all overlays. Ephemeral one-shot cues (never stored in State), e.g. `overlay.conceal` for the OBS hide/show stutter fix. PRSH owns action names; packages own animations.
 - **OBS animation contract:** animated overlays get the browser-source `shutdown` property set by PRSH (fresh load on show); a per-source "Intro" toggle (`?intro=0`) makes a source resident/no-animation instead. **Don't regress this** — see `obs.jsx` comments.
@@ -152,7 +155,7 @@ The Production tab is a **console with three surfaces** — rack (monitor + sele
 
 ## Layouts & Design Packages
 
-Layouts are HTML files under `public/layout/`, enumerated by `server/api/v1/layouts.py` (type derivation from filename + group folder, `?size=`/`?team=`/`?dir=` variant expansion, `body { width/height }` size hint, `<meta name="overlay-settings">` style whitelist). Style settings are two-tier: `GLOBAL_DESIGN_KEYS` (`overlays.global.*`) and `LAYOUT_SETTINGS[layoutType]` (`overlays.{type}.{key}`), both in `src/routes/layouts/layouts.jsx`.
+Layouts are HTML files under `public/layout/`, enumerated by `server/api/v1/layouts.py` (type derivation from filename + group folder, `?size=`/`?team=`/`?dir=` variant expansion, `body { width/height }` size hint, `<meta name="overlay-settings">` style whitelist). Style settings are two-tier: `GLOBAL_DESIGN_KEYS` (`overlays.global.*`) and `LAYOUT_SETTINGS[layoutType]` (`overlays.{type}.{key}`), both in `src/routes/layouts/designConstants.js`.
 
 - **Keep the `<meta>` whitelist and `LAYOUT_SETTINGS[type]` in sync.** Setup filters the registry down to what the whitelist names, so a key the mount honours but the whitelist omits is a setting nobody can reach. `src/routes/production/stage/eventheader.test.jsx` pins this.
 - Wire every layout through **`OverlayBase.init()`** (`public/layout/lib/overlay-base.js`) — keep the HTML a thin shell over a `lib/*-mount.js`.
@@ -248,9 +251,9 @@ If the app fails to launch due to corrupt `user_data/state.json`: `echo '{}' > u
 | Add/modify state keys | `server/state.py`, `src/context/store.jsx` |
 | Add API endpoints | `server/api/v1/` (decorate with `@method`), register in `server/api/__init__.py` |
 | Settings schema | `server/settings.py` (defaults + migrations), `src/components/SettingsModal.jsx` |
-| Add/modify a Layout or element overlay | `public/layout/<group>/` + `public/layout/lib/*-mount.js`, register in `src/routes/layouts/layouts.jsx` (+ `src/routes/production/elements.js` if a Production element) |
+| Add/modify a Layout or element overlay | `public/layout/<group>/` + `public/layout/lib/*-mount.js`, register in `src/routes/layouts/designConstants.js` (+ `src/routes/production/elements.js` if a Production element) |
 | Theme/design packages | `public/design/`, `server/design_packages.py`, `public/layout/lib/svg-theme-engine.js` |
-| Production console (rack/stage/rail) | `src/routes/production/{rack,rail}.jsx`, `stage/`, `desks/`, `kit/`, `elements.js` |
+| Production console (rack/stage/rail) | `src/routes/production/{rack,rail}.jsx`, `stage/`, `desks/`, `kit/`, `elements.js`, `placements.js` (row identity), `addsource.jsx` (Add picker) |
 | Production OBS control / staging | `src/context/obs.jsx`, `src/context/staging.js` |
 | Participant registry | `server/participants.py`, `src/routes/player_list/` |
 | Post-game capture | `server/postgame.py` (+ StatFiles path gating) |
@@ -300,4 +303,3 @@ This app runs alongside the game. **Performance is a hard requirement.**
 - Full state is sent on initial WebSocket connect (incremental after that).
 - A second server instance shares `user_data/` and the port unless isolated via the `PRSH_USER_DATA_DIR`/`PRSH_PORT`/`PRSH_NO_BROWSER`/`PRSH_HUD_FILE` env overrides (`server/paths.py`; see the `run-and-verify` skill).
 - `pandas` is ~50MB but required by pyrio.
-- `layouts.jsx` (~2200 lines) is a known monolith pending a split.

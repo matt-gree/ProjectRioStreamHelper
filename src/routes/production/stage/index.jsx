@@ -1,13 +1,12 @@
 import { memo, useMemo } from 'react';
-import { useShallow } from 'zustand/react/shallow';
-import { useSettingsStore } from '../../../context/store';
 import { Text } from '../../../components/ui/primitives';
-import { PanelShell, chipState } from '../kit';
+import { PanelShell, chipFor } from '../kit';
 import { isPinnable } from '../elements';
-import { elementBindings, useBindingScenes } from '../bindings';
+import { useSharedContainers } from '../feeds';
 import {
-    pinTarget, resolveInstance, useInstanceLabel, useProductionInstances,
-} from '../instances';
+    placementTarget, resolvePlacement, useConsolePlacements, useConsoleScenes,
+    usePlacementLabel,
+} from '../placements';
 import { SourceStrip } from '../sourcestrip';
 import { DirectStage, FedStage } from './generic';
 import StagePreview from './preview';
@@ -50,21 +49,39 @@ export function stageBodyComponent(element) {
     return STAGE_BODIES[element.id] ?? (element.flavor === 'fed' ? FedStage : DirectStage);
 }
 
-const ElementStage = memo(function ElementStage({ instance, title, pinned, onPinToggle }) {
-    const { element, board } = instance;
-    const scenes = useBindingScenes();
-    const override = useSettingsStore(useShallow(s => s?.production?.overrides?.[element.id]));
-    // The board comes from the SELECTION now (../instances), not from a hidden
-    // per-element preference. Which board this panel commands is the same fact
-    // as which rack row the producer clicked, so the strip's source and the
-    // body's settings cannot point at different boards.
-    const bindings = elementBindings(element, scenes, override, board);
+/*
+ * The panel commands ONE PLACEMENT — this element, on this board, in this
+ * scene. All three coordinates come from the selection and are passed down;
+ * nothing here re-derives any of them. Which source the header strip toggles
+ * and which settings the body writes are then the same fact as which rack row
+ * the producer clicked, and cannot drift apart.
+ */
+/*
+ * A container row IS a source and deserves a preview, but its element is
+ * synthesised from the URL by `genericElement`, which has no dimensions — and
+ * previewing at a guessed aspect is the failure this column was rebuilt to
+ * stop telling. The layout catalog is where a container's native size lives, so
+ * that is what we ask.
+ */
+function useContainerDims(placement) {
+    const containers = useSharedContainers();
+    const id = placement?.container;
+    return useMemo(() => {
+        if (!id) return null;
+        const entry = containers.find(c => c.id === id);
+        return entry?.width && entry?.height ? { width: entry.width, height: entry.height } : null;
+    }, [containers, id]);
+}
+
+const ElementStage = memo(function ElementStage({ placement, title, pinned, onPinToggle }) {
+    const { element, board } = placement;
     const Body = stageBodyComponent(element);
+    const dims = useContainerDims(placement);
     return (
         <PanelShell
-            state={chipState(bindings)} title={title}
-            meta={bindings.primary ? bindings.primary.item.sourceName : undefined}
-            primaryAction={<SourceStrip element={element} board={board} />}
+            state={chipFor(placement)} title={title}
+            meta={placement.item?.sourceName}
+            primaryAction={<SourceStrip element={element} board={board} placement={placement} />}
             pinnable={isPinnable(element)} pinned={pinned} onPinToggle={onPinToggle}
         >
             {/* Controls, then the preview BELOW them at the panel's full width.
@@ -73,23 +90,33 @@ const ElementStage = memo(function ElementStage({ instance, title, pinned, onPin
                 the stage's own column is the widest space on the page. Width is
                 what a preview is worth; a side-by-side split spends it. */}
             <div className="flex min-w-0 flex-col gap-1.5">
-                <Body element={element} board={board} />
+                <Body element={element} board={board} placement={placement} />
             </div>
-            <StagePreview
-                element={element} board={board} binding={bindings.primary}
-            />
+            {/* A generic placement is a PRSH source the registry has never
+                heard of, so we don't know its native size — and a preview at a
+                guessed aspect is exactly the failure this column was rebuilt to
+                stop telling. It gets the strip and the chip; the picture needs
+                a registration. A CONTAINER is the exception: it is generic (its
+                element comes from the URL) but the catalog knows its size. */}
+            {(!element.generic || dims) && (
+                <StagePreview
+                    element={element} board={board} binding={placement}
+                    width={dims?.width} height={dims?.height}
+                />
+            )}
         </PanelShell>
     );
 });
 
-// selection is either an instance id ('scoreboard:2', 'lowerthird') or a
-// 'desk:<name>' key; deskBodies maps the latter to { title, meta, body }.
+// selection is either a placement id ('scoreboard:2@Break', 'lowerthird@Game')
+// or a 'desk:<name>' key; deskBodies maps the latter to { title, meta, body }.
 export const Stage = memo(function Stage({ selection, deskBodies = {}, pins = [], onPinToggle }) {
-    const instances = useProductionInstances();
-    const label = useInstanceLabel(instances);
+    const scenes = useConsoleScenes();
+    const placements = useConsolePlacements(scenes);
+    const label = usePlacementLabel(placements);
     const pinnedIds = useMemo(
-        () => new Set(pins.map(p => pinTarget(p, instances))),
-        [pins, instances],
+        () => new Set(pins.map(p => placementTarget(p, placements))),
+        [pins, placements],
     );
 
     const desk = deskBodies[selection];
@@ -106,26 +133,27 @@ export const Stage = memo(function Stage({ selection, deskBodies = {}, pins = []
         );
     }
 
-    // Resolution, not a lookup: a selection persisted before instances existed
-    // — or against a board that has since been removed — still lands on a real
+    // Resolution, not a lookup: a selection persisted before scenes were the
+    // axis — or naming a scene or board since removed — still lands on a real
     // panel instead of dumping the producer on the empty state.
-    const instance = resolveInstance(selection, instances);
-    if (!instance) {
+    const placement = resolvePlacement(selection, placements);
+    if (!placement) {
         return (
             <PanelShell state="unbound" title="Stage" pinnable={false}>
                 <Text size="xs" className="text-muted-foreground">
-                    Pick anything in the rack to bring its controls here.
+                    Pick anything in the rack to bring its controls here — or add
+                    an overlay to a scene with the + beside its name.
                 </Text>
             </PanelShell>
         );
     }
-    const { name, board } = label(instance);
+    const { name, detail } = label(placement);
     return (
         <ElementStage
-            instance={instance}
-            title={board ? `${name} · ${board}` : name}
-            pinned={pinnedIds.has(instance.id)}
-            onPinToggle={() => onPinToggle?.(instance.id)}
+            placement={placement}
+            title={detail ? `${name} · ${detail}` : name}
+            pinned={pinnedIds.has(placement.id)}
+            onPinToggle={() => onPinToggle?.(placement.id)}
         />
     );
 });

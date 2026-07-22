@@ -9,9 +9,13 @@ afterEach(cleanup);
 
 const ui = (node) => render(<TooltipProvider>{node}</TooltipProvider>);
 
-// Like the rack, the stage must work with OBS disconnected: desks are content
-// workflows that never touched OBS, and an element panel still has to say what
-// it is and why its controls are inert.
+/*
+ * Like the rack, the stage must work with OBS disconnected — and unlike the
+ * rack, it must still open a panel for something with no source anywhere. The
+ * rack lists only what is really in a scene, but several stage bodies write
+ * STATE, not OBS: authoring a lower third the night before is a real workflow
+ * that has nothing to do with whether a browser source exists yet.
+ */
 describe('Stage without OBS', () => {
     it('renders the selected element in a panel with its state chip', () => {
         ui(<Stage selection="scoreboard" />);
@@ -21,7 +25,7 @@ describe('Stage without OBS', () => {
 
     it('explains an unbound source instead of showing dead controls', () => {
         ui(<Stage selection="scoreboard" />);
-        expect(screen.getByText(/isn’t in the program or preview scene/)).toBeInTheDocument();
+        expect(screen.getByText(/isn’t in any scene we can see/)).toBeInTheDocument();
     });
 
     it('renders a desk body with a DESK chip and honours pinnable:false', () => {

@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { Radio, PlugZap, ArrowLeftRight, CircleDot, X } from 'lucide-react';
 import { useObsStore } from '../../context/obs';
@@ -10,13 +10,13 @@ import { Stack, Group, Text } from '../../components/ui/primitives';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { Switch } from '../../components/ui/switch';
-import { SegmentedControl } from '../../components/ui/segmented-control';
 import { cn } from '../../lib/utils';
-import { usePersistentState } from '../../hooks/usePersistentState';
-import { PHASES } from './elements';
 import { runObs } from './controls';
-import { Rack, deskForPhase, seededRail, useRackSelection, useRailPins } from './rack';
-import { togglePin as togglePinIn, useProductionInstances } from './instances';
+import { Rack, seededRail, useRackSelection, useRailPins } from './rack';
+import {
+    togglePin as togglePinIn, useConsolePlacements, useConsoleScenes,
+} from './placements';
+import { AddSourceDialog } from './addsource';
 import { Stage } from './stage';
 import { Rail } from './rail';
 import MatchDesk from './desks/match';
@@ -27,8 +27,8 @@ import BracketDesk from './desks/bracket';
  * Production console — the producer's broadcast control board. Three surfaces
  * (design locked; see the production-console-contract skill):
  *
- * Top bar : phase selector + scene control (program / studio + Take) + OBS pill.
- * Rack    : state-sorted monitor + selector for every source and desk (./rack).
+ * Top bar : scene control (program / studio + Take) + OBS pill.
+ * Rack    : scene-grouped monitor + selector for every source and desk (./rack).
  * Stage   : the ONE selected item's full controls (./stage).
  * Rail    : the producer's pinned quick cards, in their own order (./rail).
  *
@@ -39,11 +39,10 @@ import BracketDesk from './desks/bracket';
  * "fire now" actions (scene switches, Take, replay, spotlight, clock
  * start/pause, post-game capture) always run immediately.
  *
- * Elements bind to OBS sources by URL match in the PROGRAM scene first, then
- * the STUDIO PREVIEW scene — so an element staged in preview is still visible
- * and controllable here (sky status dot) before it is ever taken to air.
- *
- * See memory: production-page-v1-locked, production-elements-glossary.
+ * Rows come from the SCENES themselves (./placements): every PRSH source in
+ * every scene the console can see, grouped under the scene it lives in. There
+ * is no phase selector — OBS's scene list is the producer stating the shape of
+ * their show, where "phase" was PRSH guessing at it.
  */
 
 const STATUS_META = {
@@ -235,40 +234,28 @@ export const DESK_BODIES = {
 };
 
 export default function Production() {
-    // Remember the last soft-phase across tab switches / restarts (local UI pref).
-    const [phase, setPhase] = usePersistentState(
-        'prsh.ui.production.phase', 'live',
-        v => PHASES.some(p => p.value === v),
-    );
     // Selection + rail pins live here so the rack and the stage read one copy
     // (usePersistentState is per-hook, not a shared store).
     const [selection, setSelection] = useRackSelection();
     const [rail, setRail] = useRailPins();
+    // Which scene the Add picker is aimed at, or null when it's closed. The
+    // rack's + carries the scene, so the picker never has to ask "where?".
+    const [addScene, setAddScene] = useState(null);
     // A never-touched rail (null) seeds its first-run cards; an emptied one ([])
     // stays empty. Toggling always writes an explicit array, so the seed is
     // adopted the moment the producer edits it rather than resurrecting later.
     const pins = useMemo(() => seededRail(rail), [rail]);
-    // Pins are matched by the instance they resolve to, not by stored string —
+    // Pins are matched by the placement they resolve to, not by stored string —
     // so unpinning removes the card the producer is looking at even when it is
-    // stored in a pre-instance form, and pinning can't produce two cards for
-    // one source. See ./instances.
-    const instances = useProductionInstances();
-    const togglePin = (id) => setRail(prev => togglePinIn(seededRail(prev), id, instances));
-
-    // Phase auto-select: a phase that owns a desk (Draft → Match, Post-game →
-    // Capture, Break → Bracket) brings it to the stage. Live owns none and
-    // keeps whatever the producer had selected — clobbering a deliberate pick
-    // mid-game would be worse than doing nothing.
-    const onPhase = (next) => {
-        setPhase(next);
-        const desk = deskForPhase(next);
-        if (desk) setSelection(desk);
-    };
+    // stored in a pre-scene or pre-instance form, and pinning can't produce two
+    // cards for one source. See ./placements.
+    const scenes = useConsoleScenes();
+    const placements = useConsolePlacements(scenes);
+    const togglePin = (id) => setRail(prev => togglePinIn(seededRail(prev), id, placements));
 
     return (
         <Stack gap="md">
-            <Group className="flex-wrap items-center justify-between gap-4">
-                <SegmentedControl data={PHASES} value={phase} onChange={onPhase} />
+            <Group className="flex-wrap items-center justify-end gap-4">
                 <Group gap="md" className="flex-wrap items-center">
                     <TopBarSceneControls />
                     <ConnectionPill />
@@ -277,9 +264,9 @@ export default function Production() {
 
             <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[280px_1fr] xl:grid-cols-[280px_1fr_252px]">
                 <Rack
-                    phase={phase}
                     selection={selection} onSelect={setSelection}
                     pins={pins} onPinToggle={togglePin}
+                    onAdd={setAddScene}
                 />
                 <Stage
                     selection={selection} deskBodies={DESK_BODIES}
@@ -292,6 +279,7 @@ export default function Production() {
             </div>
 
             <PendingBar />
+            <AddSourceDialog scene={addScene} onClose={() => setAddScene(null)} />
         </Stack>
     );
 }

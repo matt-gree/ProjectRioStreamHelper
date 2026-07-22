@@ -44,21 +44,29 @@ describe('fed quick faces', () => {
         ui('stats');
         const select = screen.getByRole('combobox');
         const labels = [...select.options].map(o => o.textContent);
-        expect(labels).toContain('Nothing fed');
         // Grouped options flatten to "Team — Character" so one row can carry them.
         expect(labels).toContain('Mario — Luigi');
         expect(labels).toContain('Wario — Wario');
+        // Off air there is no feed to clear, so no "Nothing fed" option.
+        expect(labels).not.toContain('Nothing fed');
+        // …and a Push button to air the armed pick.
+        expect(screen.getByRole('button', { name: /Push/ })).toBeInTheDocument();
     });
 
-    it('picking on the card feeds immediately — no separate push', () => {
+    it('picking arms the card without airing it — Push is a separate act', () => {
         useStateStore.setState({
             score: { 1: { player: { 1: { msb_team: 'Mario', character: [{ name: 'Mario' }] } } } },
         });
         ui('stats');
         fireEvent.change(screen.getByRole('combobox'), { target: { value: '1:0' } });
+        // Armed, not aired: the intent records the pick, the container stays empty.
+        expect(useStateStore.getState()?.production?.feed?.last?.stats)
+            .toMatchObject({ element: 'stats', team: 1, charIndex: 0 });
+        expect(useStateStore.getState()?.production?.feed?.container).toBeUndefined();
+        // Push airs it.
+        fireEvent.click(screen.getByRole('button', { name: /Push/ }));
         const feed = useStateStore.getState()?.production?.feed?.container;
-        const pushed = Object.values(feed ?? {})[0];
-        expect(pushed).toMatchObject({ element: 'stats', team: 1, charIndex: 0 });
+        expect(Object.values(feed ?? {})[0]).toMatchObject({ element: 'stats', team: 1, charIndex: 0 });
     });
 
     it('says why there is nothing to pick rather than showing an empty select', () => {

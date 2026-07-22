@@ -42,7 +42,7 @@
     const sc = mountScorecard({ host, sb: SB });
 
     async function boot() {
-      if (OverlayBase.PREVIEW_MODE) {
+      if (OverlayBase.SAMPLE_MODE) {
         // Layouts/Setup preview: prime a representative live game.
         try {
           const r = await fetch(`${OverlayBase.BASE_URL}/layout/preview/scoreboard_sample.json`);
@@ -63,10 +63,10 @@
           key.startsWith('overlays.global.') ||
           key.startsWith(`scoreboards.binding.${SB}.`),
         fetchSettings: true,
-        skipState: OverlayBase.PREVIEW_MODE,
+        skipState: OverlayBase.SAMPLE_MODE,
       });
 
-      if (OverlayBase.PREVIEW_MODE) sc.update(OverlayBase.state, OverlayBase.settings);
+      if (OverlayBase.SAMPLE_MODE) sc.update(OverlayBase.state, OverlayBase.settings);
     }
     boot();
 

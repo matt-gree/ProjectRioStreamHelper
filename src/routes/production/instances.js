@@ -1,154 +1,128 @@
-import { useMemo } from 'react';
-import { boardOfUrl } from '../../lib/obs-binding';
-import { ELEMENTS } from './elements';
-import { useBindingScenes } from './bindings';
-import { useActiveBoards, useBoardLabel } from './boards';
-
 /*
- * Instances — what the console's three surfaces actually list.
+ * Instances — which ONE of several sources of the same overlay a row commands.
  *
  * An element is a TYPE ("Scoreboard"). An instance is one of that type on the
- * broadcast ("Scoreboard on board 2"). For most elements the two are the same
- * thing, but a `scope: 'board'` element is URL-scoped: its source carries
- * `?scoreboard=N`, so two of them in one scene are two independent things with
- * their own source, their own air state and their own settings. Before this the
- * rack listed one row per TYPE and the board was a hidden per-element dropdown,
- * which meant a producer running two boards had one row that silently commanded
- * whichever board a stored preference happened to name.
+ * broadcast ("Scoreboard on board 2", "Stats for team 1"). For most elements
+ * the two are the same thing, but an overlay that reads a query param is
+ * URL-scoped: two sources carrying different values are two independent things
+ * with their own source, their own air state and their own settings.
  *
- * The board is part of the IDENTITY now, so it shows up where identity shows
- * up: a rack row each, a rail pin each, a stage selection each.
+ * TWO AXES, and they are not symmetrical:
  *
- * Feed-scoped elements deliberately get no instances. Their container is
+ *   board    ?scoreboard=N — declared on the element (`scope: 'board'`) and the
+ *                            only axis with a documented DEFAULT: a source with
+ *                            no param IS board 1. Keeps a bare-number suffix.
+ *   variant  ?team= ?size= ?dir= ?port= — read straight off the URL for ANY
+ *                            element, registered or not. These are the layout
+ *                            catalog's own variant axes (layouts.py expands
+ *                            each into a separate catalog row), so a producer
+ *                            picking "Stats — Team 2" has already chosen one.
+ *
+ * The variant axis is not optional bookkeeping. Team-variant layouts (stats,
+ * roster, rosterstats, teamlogo, controller, playername) are unregistered, so
+ * they row through `genericElement`, which keys on the PATHNAME — and left at
+ * that, team 1's and team 2's sources produce the same id. Two rows with one
+ * identity means duplicate React keys in the rack and a stage that drives
+ * whichever `find()` reached first: the left-team panel toggling the right-team
+ * source. That is the exact bug board-aware binding fixed, one axis over.
+ *
+ * Feed-scoped elements deliberately get neither. Their container is
  * board-agnostic and the board rides in the pushed payload — see the "two board
  * mechanisms" note in elements.js. Conflating the two is how multiplicity ends
  * up feeling bolted on.
+ *
+ * The scene is the third term, and it lives in ./placements — which is also
+ * where discovery now happens. This module used to build the instance list by
+ * taking the boards a producer had DECLARED (scoreboards.active) union the ones
+ * DISCOVERED in OBS, so that a configured-but-unsourced board still got a rack
+ * row to bind from. The rack lists only what is really in a scene now, and the
+ * Add picker is how a source comes into being, so the declared half has no
+ * reader left; what survives here is the id grammar the rest of the console
+ * keys on.
  */
 
+const ORIGIN = typeof window !== 'undefined' && window.location
+    ? window.location.origin
+    : 'http://localhost';
+
 /*
- * The id the surfaces key on: `scoreboard:2`, or plain `scoreboard` for a
- * global element.
+ * The params that make two sources of the same overlay two different things,
+ * with the one-letter tag each contributes to an id and how it reads in the
+ * rack. Mirrors DISTINGUISHING_PARAMS in lib/obs-binding.js, which answers the
+ * same question for MATCHING; the labels mirror the variant tables in
+ * server/api/v1/layouts.py, which is what the producer picked from.
+ *
+ * `scoreboard` is deliberately absent — it is the board axis above, and giving
+ * it a tag here would produce two spellings of one fact.
+ */
+const VARIANT_PARAMS = [
+    ['team', 't', (v) => `Team ${v}`],
+    ['size', 'z', (v) => ({ s: 'Small', m: 'Medium', l: 'Large' }[v] ?? String(v).toUpperCase())],
+    ['dir', 'd', (v) => ({ left: 'Point Left', right: 'Point Right' }[v] ?? v)],
+    ['port', 'p', (v) => `Port ${v}`],
+];
+
+/*
+ * `~` separates the variant from the rest of an id. It appears in neither half
+ * it divides: element ids are plain identifiers, the board suffix is digits,
+ * and layout pathnames don't carry it. Scene names may contain anything, but
+ * ./placements appends the scene AFTER this, and splits on its own separator
+ * first — so the variant is always read out of an already-narrowed string.
+ */
+export const VARIANT_SEP = '~';
+
+export const withVariant = (base, variant) => (variant ? `${base}${VARIANT_SEP}${variant}` : base);
+
+// The variant tag a source URL earns, e.g. 't2', 'zs', 't1.zl'. Empty when the
+// URL names none — which is every overlay that has only one of itself.
+export function variantOf(url) {
+    let u;
+    try { u = new URL(url || '', ORIGIN); } catch { return ''; }
+    const parts = [];
+    for (const [param, tag] of VARIANT_PARAMS) {
+        const v = u.searchParams.get(param);
+        if (v) parts.push(`${tag}${v}`);
+    }
+    return parts.join('.');
+}
+
+// How a variant reads in the rack ('t2' → "Team 2"). Null when there is
+// nothing to say, so a caller can drop the slot rather than print an empty one.
+export function variantLabel(variant) {
+    if (!variant) return null;
+    const out = [];
+    for (const part of String(variant).split('.')) {
+        const entry = VARIANT_PARAMS.find(([, tag]) => part.startsWith(tag));
+        if (entry) out.push(entry[2](part.slice(entry[1].length)));
+    }
+    return out.length ? out.join(' · ') : null;
+}
+
+/*
+ * The instance half of a row id: `scoreboard:2`, `stats~t1`, `scoreboard:1~zs`,
+ * or plain `lowerthird` for an element with only one of itself. ./placements
+ * appends `@{scene}` to make it a full row id.
  *
  * Desk ids ('desk:match') share the colon, and they must not be parsed as
  * instances. The board suffix is always DIGITS, which is what keeps the two
  * namespaces apart — `desk:match` has a non-numeric tail and falls through as
  * an opaque id. Don't introduce a numeric desk name.
  */
-export function instanceId(element, board) {
+export function instanceId(element, board, url) {
     if (!element) return null;
-    return element.scope === 'board' && board != null ? `${element.id}:${board}` : element.id;
+    const base = element.scope === 'board' && board != null
+        ? `${element.id}:${board}`
+        : element.id;
+    return withVariant(base, variantOf(url));
 }
 
 export function parseInstanceId(id) {
-    const m = /^(.+):(\d+)$/.exec(id ?? '');
-    return m ? { elementId: m[1], board: Number(m[2]) } : { elementId: id ?? null, board: null };
-}
-
-/*
- * One element's instances: the boards it is DISCOVERED on ∪ the boards the
- * producer has DECLARED.
- *
- * Both halves are load-bearing. Discovery alone would hide a board the producer
- * has configured but not yet added a source for — exactly the case where they
- * need the row, since the strip's Bind slot is how the source gets created.
- * Declaration alone would drop a source pointing at a board that has since left
- * `scoreboards.active`, silently orphaning a thing that is on air right now.
- */
-export function elementInstances(element, scenes = [], activeBoards = []) {
-    if (element.scope !== 'board') return [{ id: element.id, element, board: null }];
-    const boards = new Set(activeBoards.filter(Number.isFinite));
-    for (const sc of scenes) {
-        for (const it of sc.items ?? []) {
-            if (!element.match(it.url || '')) continue;
-            const b = boardOfUrl(it.url || '');
-            if (b != null) boards.add(b);
-        }
-    }
-    // A board-scoped element with nothing anywhere still gets one row: board 1
-    // always exists (CLAUDE.md — at least one board always remains), and a
-    // console that renders no Scoreboard row at all reads as a missing feature.
-    if (!boards.size) boards.add(1);
-    return [...boards]
-        .sort((a, b) => a - b)
-        .map(board => ({ id: `${element.id}:${board}`, element, board }));
-}
-
-export function productionInstances(scenes, activeBoards, elements = ELEMENTS) {
-    return elements.flatMap(el => elementInstances(el, scenes, activeBoards));
-}
-
-/*
- * What a stored id means TODAY.
- *
- * Selection and rail pins persist in the browser, so they outlive the boards
- * they were written against. Three cases collapse into one rule — fall back to
- * the element's first instance:
- *
- *   'scoreboard'    a pin from before instances existed   → scoreboard:1
- *   'scoreboard:3'  board 3 has since been removed        → scoreboard:1
- *   'scoreboard:2'  still there                           → itself
- *
- * Resolving at READ time rather than rewriting storage once is the point. A
- * one-shot migration would have to run before the OBS mirror and the settings
- * have loaded — which is precisely when the instance list is least trustworthy
- * — and it would destroy the producer's pin if it guessed wrong. This costs a
- * lookup and cannot be wrong for longer than a render.
- */
-export function resolveInstance(id, instances) {
-    if (!id) return null;
-    const exact = instances.find(i => i.id === id);
-    if (exact) return exact;
-    const { elementId } = parseInstanceId(id);
-    return instances.find(i => i.element.id === elementId) ?? null;
-}
-
-/*
- * What a stored pin currently POINTS AT — its resolved instance id, or the pin
- * itself for anything instances don't own (desk ids, a retired element).
- */
-export const pinTarget = (pin, instances) => resolveInstance(pin, instances)?.id ?? pin;
-
-/*
- * Pin/unpin by instance id, against pins that may still be stored in older
- * forms.
- *
- * Comparing by TARGET rather than by stored string is what stops a legacy
- * `scoreboard` pin and a freshly written `scoreboard:1` from both sitting on
- * the rail as two cards for one source — and it means unpinning removes the
- * card the producer is actually looking at, whatever it is stored as. New pins
- * are always written canonical, so a rail converges as it is used rather than
- * needing a rewrite pass.
- */
-export function togglePin(pins, id, instances) {
-    const cur = pins ?? [];
-    return cur.some(p => pinTarget(p, instances) === id)
-        ? cur.filter(p => pinTarget(p, instances) !== id)
-        : [...cur, id];
-}
-
-export function useProductionInstances() {
-    const scenes = useBindingScenes();
-    const boards = useActiveBoards();
-    return useMemo(() => productionInstances(scenes, boards), [scenes, boards]);
-}
-
-/*
- * How an instance names itself in the rack, on the stage and on a rail card.
- *
- * The board suffix appears only when the element HAS more than one instance:
- * a rig running a single board would otherwise read "Scoreboard · Scoreboard 1"
- * on every row, which is the board mechanism charging rent it isn't paying.
- */
-export function useInstanceLabel(instances) {
-    const boardLabel = useBoardLabel();
-    return useMemo(() => {
-        const counts = new Map();
-        for (const i of instances) counts.set(i.element.id, (counts.get(i.element.id) ?? 0) + 1);
-        return (inst) => ({
-            name: inst.element.name,
-            board: inst.board != null && counts.get(inst.element.id) > 1
-                ? boardLabel(inst.board)
-                : null,
-        });
-    }, [instances, boardLabel]);
+    const s = String(id ?? '');
+    const cut = s.indexOf(VARIANT_SEP);
+    const base = cut < 0 ? s : s.slice(0, cut);
+    const variant = cut < 0 ? null : s.slice(cut + 1) || null;
+    const m = /^(.+):(\d+)$/.exec(base);
+    return m
+        ? { elementId: m[1], board: Number(m[2]), variant }
+        : { elementId: base || null, board: null, variant };
 }
