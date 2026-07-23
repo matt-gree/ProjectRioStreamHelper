@@ -273,6 +273,30 @@ export const ELEMENTS = [
         height: 720,
         match: (url) => /hitvisualizer/i.test(url),
     },
+    {
+        id: 'controller',
+        name: 'Controller',
+        // The optional gc-overlay controller-input display — macOS-only (it reads
+        // controller state over AF_UNIX MemoryWatcher sockets; see the
+        // controller-overlay skill). The layouts API omits controller/ off-Darwin,
+        // so the Add picker never offers it there, and off-Darwin no controller
+        // source exists to derive a rack row from.
+        //
+        // Direct element: the rack row shows/hides the OBS source like any other.
+        // The heavy part — starting/stopping the gc-overlay SUBPROCESS and handing
+        // out the per-side-follow (?team=1|2) and per-port (1-4) source URLs —
+        // lives on its stage body (lifted out of Setup).
+        //
+        // Its layout is `?team=`-scoped for per-side follow: controller.html iframes
+        // gc-overlay at score.{N}.player.{T}.port, so a left/right source tracks
+        // whoever sits on that side even when Rio reassigns away/home. That is a
+        // team variant, not console board scope, so no `scope` here.
+        flavor: 'direct',
+        url: '/layout/controller/controller.html',
+        width: 512,
+        height: 256,
+        match: (url) => /\/layout\/controller\//i.test(url),
+    },
 ];
 
 /*

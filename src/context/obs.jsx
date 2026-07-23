@@ -88,8 +88,8 @@ const mapItem = (it) => ({
 //   1. served from the app's /layout/ mount (host/port can be anything, so
 //      this holds in single- and dual-machine setups), OR
 //   2. the gc-overlay controller display — a PRSH-managed subprocess on its own
-//      port (controller_overlay.port). The Layouts → Controller tab hands out
-//      its direct URL (http://localhost:8069/?port=N), which has no /layout/
+//      port (controller_overlay.port). The Production controller stage hands out
+//      its direct URL (http://<host>:8069/?port=N), which has no /layout/
 //      path, so we match it by port instead.
 // Everything else (cams, game capture, audio, third-party browser sources) is
 // ignored — the rail should only show PRSH's own overlay elements.

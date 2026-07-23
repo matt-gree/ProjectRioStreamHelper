@@ -21,6 +21,7 @@ import LowerThirdStage from './lowerthird';
 import ScorecardStage from './scorecard';
 import EventHeaderStage from './eventheader';
 import BracketStage from './bracket';
+import ControllerStage from './controller';
 
 /*
  * The stage — the console's center surface: ONE selected item's full controls,
@@ -43,6 +44,7 @@ const STAGE_BODIES = {
     scorecard: ScorecardStage,
     eventheader: EventHeaderStage,
     bracket: BracketStage,
+    controller: ControllerStage,
 };
 
 // An element's stage body: its own file when it has one, else the floor its
