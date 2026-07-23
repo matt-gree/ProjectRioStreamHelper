@@ -1,6 +1,7 @@
 import { memo, useEffect, useMemo, useState } from 'react';
-import { Plus, Search } from 'lucide-react';
+import { Plus, Search, Copy, Check } from 'lucide-react';
 import { useObsStore } from '../../context/obs';
+import { CopyButton } from '../../components/ui/copy-button';
 import {
     Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from '../../components/ui/dialog';
@@ -56,10 +57,12 @@ export function isBoardScoped(layout) {
     return layout.group === 'scoreboard1' || BOARD_SCOPED_TYPES.has(layout.type);
 }
 
-// The URL to create, with the chosen board written in. Origin is left as the
+// The overlay's URL, with the chosen board written in. Origin is left as the
 // API returned it: the source may end up on a different machine than the one
-// picking, and that URL is already host-qualified for exactly that reason.
-export function addUrl(layout, board) {
+// picking, and that URL is already host-qualified for exactly that reason. One
+// builder feeds both paths out of the picker — Add-to-OBS and Copy — so a
+// dual-machine or manual-OBS producer copies exactly what Add would have made.
+export function overlayUrl(layout, board) {
     if (!layout) return '';
     if (!isBoardScoped(layout) || board == null) return layout.url;
     try {
@@ -169,7 +172,7 @@ export const AddSourceDialog = memo(function AddSourceDialog({ scene, onClose })
         try {
             const res = await useObsStore.getState().addBrowserSource({
                 inputName: addName(picked, board, boards),
-                url: addUrl(picked, board),
+                url: overlayUrl(picked, board),
                 width: picked.width,
                 height: picked.height,
                 sceneName: scene,
@@ -256,10 +259,28 @@ export const AddSourceDialog = memo(function AddSourceDialog({ scene, onClose })
                                 </select>
                             </label>
                         ) : <span />}
-                        <Button size="sm" disabled={!picked || adding} onClick={add}>
-                            <Plus size={13} className="mr-1" />
-                            {adding ? 'Adding…' : 'Add hidden'}
-                        </Button>
+                        <Group gap="xs">
+                            {/* Copy the exact URL Add would create — the escape
+                                hatch for a producer whose OBS is on another
+                                machine or who wires sources by hand. No OBS
+                                needed, so it stays live even when Add can't. */}
+                            <CopyButton value={picked ? overlayUrl(picked, board) : ''}>
+                                {({ copied, copy }) => (
+                                    <Button
+                                        size="sm" variant="outline" disabled={!picked}
+                                        onClick={copy}
+                                    >
+                                        {copied
+                                            ? <><Check size={13} className="mr-1" /> Copied</>
+                                            : <><Copy size={13} className="mr-1" /> Copy URL</>}
+                                    </Button>
+                                )}
+                            </CopyButton>
+                            <Button size="sm" disabled={!picked || adding} onClick={add}>
+                                <Plus size={13} className="mr-1" />
+                                {adding ? 'Adding…' : 'Add hidden'}
+                            </Button>
+                        </Group>
                     </Group>
                 </Stack>
             </DialogContent>

@@ -3,7 +3,7 @@ import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/re
 import { TooltipProvider } from '../../components/ui/tooltip';
 import { useSettingsStore } from '../../context/store';
 import { useObsStore } from '../../context/obs';
-import { AddSourceDialog, addName, addUrl, isBoardScoped } from './addsource';
+import { AddSourceDialog, addName, overlayUrl, isBoardScoped } from './addsource';
 
 /*
  * The Add picker is the other half of "the rack lists only what's in the
@@ -40,20 +40,20 @@ describe('isBoardScoped — derived, not hand-listed', () => {
     });
 });
 
-describe('addUrl', () => {
+describe('overlayUrl', () => {
     it('writes the board in beside the variant the row already carries', () => {
-        expect(addUrl(layout(), 2))
+        expect(overlayUrl(layout(), 2))
             .toBe('http://host:5260/layout/scoreboard1/scoreboard.html?size=l&scoreboard=2');
     });
 
     // Writing ?scoreboard= onto an overlay that has no board would invent a
     // distinction the layout doesn't have.
     it('leaves a board-less layout alone', () => {
-        expect(addUrl(lowerthird, 2)).toBe(lowerthird.url);
+        expect(overlayUrl(lowerthird, 2)).toBe(lowerthird.url);
     });
 
     it('keeps the origin the API returned — the source may live on another machine', () => {
-        expect(addUrl(layout(), 1)).toContain('http://host:5260/');
+        expect(overlayUrl(layout(), 1)).toContain('http://host:5260/');
     });
 });
 
@@ -125,6 +125,23 @@ describe('AddSourceDialog', () => {
         ui('Break');
         await screen.findByText('Lower Third');
         expect(screen.getByRole('button', { name: /add hidden/i })).toBeDisabled();
+    });
+
+    /*
+     * The OBS-independent escape hatch: a producer running OBS on another
+     * machine (or wiring sources by hand) copies the exact URL Add would create,
+     * with no OBS round-trip. So Copy stays live even with OBS disconnected.
+     */
+    it('copies the overlay URL without OBS', async () => {
+        const writeText = vi.fn(() => Promise.resolve());
+        vi.stubGlobal('navigator', { clipboard: { writeText } });
+        useObsStore.setState({ status: 'disconnected' });
+
+        ui('Break');
+        fireEvent.click(await screen.findByText('Lower Third'));
+        fireEvent.click(screen.getByRole('button', { name: /copy url/i }));
+        await waitFor(() => expect(writeText).toHaveBeenCalledWith(lowerthird.url));
+        expect(addBrowserSource).not.toHaveBeenCalled();
     });
 
     // One board means no choice to make, so the step isn't shown at all.
