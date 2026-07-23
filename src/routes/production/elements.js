@@ -232,8 +232,8 @@ export const ELEMENTS = [
         name: 'Results Ticker',
         // The scrolling results strip (rotator group) — completed games cycling
         // along the bottom. Nothing to decide live but whether it's up: its
-        // scroll speed and card spacing are number settings with no kit row, so
-        // they stay in Setup. Native 1920×80.
+        // scroll speed and card spacing render in the stage's Style section
+        // (phase 7), not on a quick face. Native 1920×80.
         flavor: 'direct',
         url: '/layout/rotator/ticker.html',
         width: 1920,
@@ -246,8 +246,8 @@ export const ELEMENTS = [
         // The two persistent bands framing the canvas: top (competition ·
         // location · dates) and bottom (message · event · phase · round). It
         // sits over the whole broadcast. Bands and per-field visibility are
-        // live switches (overlays.eventheader.*);
-        // geometry stays in Setup. Native 1920×1080.
+        // live switches (overlays.eventheader.*); geometry renders in the
+        // stage's Style section (phase 7). Native 1920×1080.
         flavor: 'direct',
         url: '/layout/eventheader/eventheader.html',
         width: 1920,

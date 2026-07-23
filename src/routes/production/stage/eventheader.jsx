@@ -13,7 +13,7 @@ import { OverlaySettingRows, useOverlaySettings } from './overlay-settings';
  * so the body leads with them. The geometry knobs (offsets, band width, font
  * scale, separator) are set once per event, not flipped live — they render in
  * the stage's catch-all Style section below (ElementStyleSettings), so they're
- * reachable without the Setup tab but sit apart from the live switches.
+ * reachable on the console but sit apart from the live switches.
  *
  * A field also drops out automatically when its source text is blank, which is
  * invisible from a switch alone — so the field rows carry the live value as

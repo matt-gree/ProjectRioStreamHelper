@@ -89,9 +89,9 @@ function useBindTarget(element, board) {
  *
  * Adds HIDDEN (enabled: false). Adding a source is setup, and setup must never
  * be the thing that puts something on the broadcast — the Air switch beside it
- * is the one deliberate act that does. This is the one place the console
- * departs from the Layouts tab, which adds visible because it IS a setup
- * surface with nothing live to disturb.
+ * is the one deliberate act that does. (The old Setup layout browser added
+ * VISIBLE, because it was a setup surface with nothing live to disturb; it's
+ * gone now, and every console add path is hidden.)
  */
 const BindSlot = memo(function BindSlot({ element, board }) {
     const status = useObsStore(s => s.status);

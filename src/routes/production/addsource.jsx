@@ -20,11 +20,11 @@ import { useActiveBoards, useBoardLabel } from './boards';
  *
  *   layout → board (when the layout is board-scoped) → add to THIS scene
  *
- * The catalog stops being a place you browse and becomes a transaction. Setup's
- * Layouts tab is a gallery: pick a layout, look at it, copy its URL, maybe add
- * it to the program scene. This asks one question — "what goes in this scene?"
- * — and the scene is already answered, because the producer opened the picker
- * from that scene's + button.
+ * The catalog stops being a place you browse and becomes a transaction. This
+ * picker asks one question — "what goes in this scene?" — and the scene is
+ * already answered, because the producer opened it from that scene's + button.
+ * Copying a URL for a manual / dual-machine OBS is folded in here too, so the
+ * old Setup layout-browser had no job left to do (v2 phase 8).
  *
  * Variants (size / team / direction) are separate catalog rows, exactly as the
  * layouts API returns them, so choosing "Scoreboard — Small" is choosing a row

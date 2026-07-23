@@ -8,7 +8,7 @@ import Competition from './competition/competition';
 import Commentary from './commentary/commentary';
 import PlayerList from './player_list/player_list';
 import ScoreboardManager from './scoreboard_manager/scoreboard_manager';
-import LayoutBrowser from "./layouts/layouts";
+import DesignTab from "./layouts/layouts";
 
 // Nav tabs. Rendered in the header row by TSHFields; routes wired below.
 const allTabs = [
@@ -17,7 +17,7 @@ const allTabs = [
   { name: "Competition", path: "/competition" },
   { name: "Commentary", path: "/commentary" },
   { name: "Address Book", path: "/player_list" },
-  { name: "Setup", path: "/layouts" },
+  { name: "Design", path: "/layouts" },
 ];
 
 export default function Root() {
@@ -36,7 +36,7 @@ export default function Root() {
           <Route path="/bracket" element={<Competition />} />
           <Route path="/commentary" element={<Commentary />} />
           <Route path="/player_list" element={<PlayerList />} />
-          <Route path="/layouts" element={<LayoutBrowser />} />
+          <Route path="/layouts" element={<DesignTab />} />
         </Routes>
       </div>
     </div>

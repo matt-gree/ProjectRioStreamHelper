@@ -101,7 +101,8 @@ export const DirectStage = memo(function DirectStage({ element, board, placement
             {element.generic && (
                 <Text size="xs" className="text-muted-foreground">
                     This layout has no console controls — the rack can show and hide
-                    it, and its style settings live on the Setup tab.
+                    it. It’s a PRSH source the registry doesn’t know, so it has no
+                    style settings of its own.
                 </Text>
             )}
         </>
