@@ -10,6 +10,7 @@ import {
 import { SourceStrip } from '../sourcestrip';
 import { DirectStage, FedStage } from './generic';
 import { ElementStyleSettings } from './overlay-settings';
+import { IntroRow } from './intro';
 import StagePreview from './preview';
 import HitVisualizerStage from './hitvisualizer';
 import MatchupStage from './matchup';
@@ -102,6 +103,10 @@ const ElementStage = memo(function ElementStage({ placement, title, pinned, onPi
                     label={element.scope === 'board' ? `${element.name} ${board ?? ''}`.trim() : element.name}
                     exclude={Body.surfacedKeys}
                 />
+                {/* Reveal behaviour for animated overlays — renders nothing for
+                    the rest (see intro.jsx). A source-level toggle, so it sits
+                    below the element's own style knobs. */}
+                <IntroRow element={element} />
             </div>
             {/* A generic placement is a PRSH source the registry has never
                 heard of, so we don't know its native size — and a preview at a
