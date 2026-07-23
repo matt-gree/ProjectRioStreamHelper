@@ -157,7 +157,7 @@ The Production tab is a **console with three surfaces** — rack (monitor + sele
 
 Layouts are HTML files under `public/layout/`, enumerated by `server/api/v1/layouts.py` (type derivation from filename + group folder, `?size=`/`?team=`/`?dir=` variant expansion, `body { width/height }` size hint, `<meta name="overlay-settings">` style whitelist). Style settings are two-tier: `GLOBAL_DESIGN_KEYS` (`overlays.global.*`) and `LAYOUT_SETTINGS[layoutType]` (`overlays.{type}.{key}`), both in `src/routes/layouts/designConstants.js`.
 
-- **Keep the `<meta>` whitelist and `LAYOUT_SETTINGS[type]` in sync.** Setup filters the registry down to what the whitelist names, so a key the mount honours but the whitelist omits is a setting nobody can reach. `src/routes/production/stage/eventheader.test.jsx` pins this.
+- **Keep the `<meta>` whitelist and `LAYOUT_SETTINGS[type]` in sync.** The Production stage's Style section filters the registry down to what the whitelist names, so a key the mount honours but the whitelist omits is a setting nobody can reach. `src/routes/production/stage/eventheader.test.jsx` pins this.
 - Wire every layout through **`OverlayBase.init()`** (`public/layout/lib/overlay-base.js`) — keep the HTML a thin shell over a `lib/*-mount.js`.
 - Element visuals are **re-themable SVGs** bound by `data-slot`/`data-tpl` hooks via `svg-theme-engine.js`, with package resolution falling back element-by-element to `default`.
 

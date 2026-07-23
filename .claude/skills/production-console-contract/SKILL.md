@@ -185,6 +185,13 @@ Every broadcast element registers in `src/routes/production/elements.js` with:
   section, so nothing is stranded on a tab and nothing doubles up. Per-board
   layouts (Scorecard, Scoreboard) write `overlays.{type}.{N}.{key}`; the Style
   section takes the board from the element's `scope`.
+- **The reveal-animation toggle is a stage row too** (`stage/intro.jsx`, "On
+  show"). It renders only for animated overlays (`ANIMATED_ELEMENT_TYPES`) and
+  is a source BEHAVIOUR, not a `LAYOUT_SETTINGS` knob: it writes
+  `overlays.{type}.disableIntro` AND rewrites already-added OBS sources in place
+  (`?intro=0` + shutdown, via `obs.jsx setLayoutIntroDisabled`). Deliberately
+  **not staged** — the imperative OBS rewrite can't be deferred as a unit, so the
+  preference write and the rewrite stay atomic and immediate, like an Add.
 - **The stage body is two columns: controls, then a live preview** of the
   selected element (`stage/preview.jsx`). The preview is the real overlay in an
   iframe against real state — never a mockup — so anything true of the browser
@@ -377,8 +384,8 @@ bolted on:
   `?intro=0`, `/scoreboard2/`) and is right for "which overlay is this" and
   wrong for "which board's". A placement takes its type from `match()` and its
   board from `boardOfUrl` (`src/lib/obs-binding.js`), where a missing
-  `?scoreboard=` means board 1 — the same statement Setup's comparison makes.
-  Don't collapse the two.
+  `?scoreboard=` means board 1 — the documented board default. Don't collapse
+  the two.
 - **Nothing searches for a source any more.** `boundIn`, `elementBindings` and
   the lone-candidate retry are gone, along with the ambiguity they managed: a row
   is built FROM a scene item, so it already has the one it commands. If you find
@@ -501,8 +508,12 @@ header: *layout → board (when board-scoped) → add to THIS scene*.
   naming from it would create "scoreboard 2" for a row reading "Scoreboard —
   Large".
 - `isBoardScoped` is **derived from the two places that already answer it** (the
-  `scoreboard1` group Setup's board tabs qualify, and `scope: 'board'` in the
-  registry) rather than a third hand-written list.
+  `scoreboard1` layout group, and `scope: 'board'` in the registry) rather than
+  a third hand-written list.
+- **Copy URL is the OBS-independent path** (`overlayUrl`, the same builder Add
+  uses). A producer running OBS on another machine, or wiring sources by hand,
+  copies exactly what Add would create — no OBS round-trip, so it stays live
+  when Add can't. This is what let the Setup layout browser be deleted (phase 8).
 
 ## The row kit
 
@@ -643,11 +654,14 @@ things with their own source, air state and settings.
   so it keeps its bare-number suffix; everything else is discovered. A URL naming
   no variant yields exactly the id it always had, which is what keeps
   pre-variant selections and pins resolving.
-  This is not bookkeeping: every team-variant layout (roster, stats, teamlogo,
-  controller, playername) is **unregistered**, so both sides row through
-  `genericElement`, which keys on the pathname. Without the variant, team 1 and
-  team 2 are one id — duplicate React keys in the rack and `resolvePlacement`'s
-  `find()` handing the left-side panel the right-side source.
+  This is not bookkeeping: the team-variant layouts (roster, stats, teamlogo,
+  playername) are **unregistered**, so both sides row through `genericElement`,
+  which keys on the pathname. Without the variant, team 1 and team 2 are one id —
+  duplicate React keys in the rack and `resolvePlacement`'s `find()` handing the
+  left-side panel the right-side source. The same split holds for a REGISTERED
+  element with a variant: **Controller** is a registered element (its stage owns
+  the gc-overlay subprocess) whose `?team=` per-side-follow sources row as
+  `controller~t1` / `controller~t2` off the variant axis.
 - **Nothing derives a board on its own.** It used to be a hidden per-element
   preference each surface resolved separately, which meant a two-board rig had
   ONE rack row silently commanding whichever board a stored value named, and a

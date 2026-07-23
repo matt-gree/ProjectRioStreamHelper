@@ -51,6 +51,12 @@ git submodule update --remote gc-overlay
 Runs on its own port (default **8069**), separate from PRSH's 5260.
 Settings live under `controller_overlay.{path,port,controller,auto_start}`.
 
+Start/stop and the source URLs are the **Controller element's stage body** in
+the Production console (`src/routes/production/stage/controller.jsx`) — it hits
+`/api/v1/controller/{status,start,stop,port}`. `controller` is a registered
+Production element; off-Darwin the layouts catalog omits it, so the Add picker
+never offers it and no rack row derives.
+
 ## Per-side follow (the part that surprises people)
 
 The HUD reports each player's controller port, which PRSH writes to

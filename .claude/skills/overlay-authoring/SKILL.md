@@ -43,8 +43,8 @@ Copy an existing pair when starting: `public/layout/playerplates/playerplates.ht
 
 - `server/api/v1/layouts.py` parses `body { width/height }` for the OBS size
   hint and the `<meta>` whitelist for `supportedSettings` — both are load-bearing.
-- The `<meta>` whitelist is the source of truth for which style knobs the Setup
-  tab exposes for this file.
+- The `<meta>` whitelist is the source of truth for which style knobs the
+  Production stage's Style section exposes for this file.
 - Fixed-palette elements also link `/layout/lib/rio-theme/tokens.css`.
 
 ## What `OverlayBase.init()` guarantees (`lib/overlay-base.js`)

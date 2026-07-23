@@ -36,7 +36,7 @@ these are data, not theme choices.
   `/design/{pkg}/{element}.svg`.
 - Built-ins in `public/design/{default,classic}/` (repo); user packages in
   `user_data/design_packages/<id>/` (never in the repo). Install = zip upload
-  on Setup → Design or drop the folder in by hand.
+  on the Design tab or drop the folder in by hand.
 - Package ids: `^[a-z0-9][a-z0-9._-]{0,63}$`. Built-in ids can never be
   shadowed. Zip install keeps only `.svg .json .md .png .jpg .jpeg .webp
   .txt` (32 MB cap) — scripts are stripped by design; **behavior can never
