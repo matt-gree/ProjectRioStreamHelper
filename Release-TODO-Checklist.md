@@ -2,6 +2,13 @@
 
 Priority order. Correctness/stability before polish. Check off as completed.
 
+**Audited against the code 2026-07-28.** Items 9, 10 and 12 were finished but
+left unticked; 8 is partial and its target layout is ambiguous. Still genuinely
+open: **7** (Stats Plate), **8** (completed-game info), **11** (Player Plates),
+and **6**'s visual sign-off. Separately, the Production console has still never
+been run against a live OBS — that is not an item here, but it gates the
+release.
+
 ---
 
 ## Priority 1 — Bugs & Correctness
@@ -54,44 +61,80 @@ When a match is assigned, auto-include match metadata: Competition Phase, Round.
 - ⚠ **Restart the backend** — `phase` on `MatchPayload` is a Python change; the running server still rejects it (silently drops the edit) until reload
 - ⚠ Static asset — hard-refresh the OBS source + the Layouts/Production preview iframe (Cmd/Ctrl+Shift+R) to drop the cached pre-edit SVG
 
-### 7. Stats Plate Redesign  ⬜
+### 7. Stats Plate Redesign  ⬜ (not started)
 Redesign using existing Plum glass design language.
 - [ ] Increase height to ~2 rows
 - [ ] Larger typography in the extra space
 - [ ] Improve readability, keep visual style
+- Current: `stats.html` is still 452×118, a single `stats-row` (`stats-mount.js`);
+  `design/default/stats.svg` has a matching `viewBox="0 0 452 118"`. A height
+  change is a theme re-author across every package, not just a mount edit.
 
 ---
 
 ## Priority 3 — Scorecards
 
-### 8. Medium Scorecard (Completed Games)  ⬜
+### 8. Medium Scorecard (Completed Games)  ◑ (partial)
 For completed games, modify lower info section.
-- [ ] Replace Elo with: Game Mode, Stadium, Game Length, Date/Time
+- [x] Stadium and game mode surface on the completed cluster — Scorecard binds
+      `stadium` + `mode` (`scorecard-mount.js`, `prettyStadium`/`stats_tag`);
+      the medium Scoreboard's `row-final` carries `meta-main` (stadium ·
+      innings) + `meta-date` (`scoreboard-mount.js`)
+- [ ] Game Length and Date/Time — no game-length field anywhere; date is on the
+      Scoreboard's meta line only, not the Scorecard
+- [ ] Elo still renders (`elo{1,2}-group`, gated on the `showElo` toggle) — the
+      item asked for it to be *replaced*, not made optional
 - [ ] Stack team/player names vertically for larger type
-- [ ] If team logo unavailable, show captain's character portrait
+- [ ] If team logo unavailable, show captain's character portrait —
+      `teamLogoUrl()` has no fallback; roster order deliberately doesn't
+      reorder for the captain
+- ⚠ **Ambiguous which layout this is.** The completed-game cluster carrying Elo
+  lives in `scoreboard-mount.js` (the medium *Scoreboard*), not the Scorecard.
+  Resolve before building.
 
-### 9. Simple 4-Cam Scorecard  ⬜
+### 9. Simple 4-Cam Scorecard  ✅
 New scorecard type for 4-camera broadcasts.
-- [ ] Player names stacked vertically
-- [ ] Team logos
-- [ ] Directional arrow (left or right)
-- [ ] Prioritize readability; consistent with scorecard family
+- [x] Player names stacked vertically (both teams stacked, no score)
+- [x] Team logos
+- [x] Directional arrow — a URL variant, not a live toggle: `?dir=left` (default)
+      / `?dir=right` mirrors arrow, logos and text alignment, because a 4-cam
+      layout places several of these and each needs its own aim
+- [x] Readability / scorecard-family consistency — fixed slice26 look (plum
+      glass + lime/teal side bars + slice-ramp arrow), self-scales to any source
+      size. Native 480×176.
+- Files: `public/layout/scorecard/fourcam.html`, `?dir=` variant expansion in
+  `server/api/v1/layouts.py`
 
 ---
 
 ## Priority 4 — Broadcast Polish
 
-### 10. Matchup History  ⬜
-- [ ] First meeting → collapse Matchup History section (no empty area)
-- [ ] Unchanged when previous meetings exist
+### 10. Matchup History  ✅
+- [x] First meeting → collapse the lower region (cards + divider), leaving the
+      top summary, and swap the full band background for a compact one
+- [x] Unchanged when previous meetings exist
+- Files: `matchup-mount.js` (`hasHistory` gate)
+- Note: themes **opt in** via `history`/`history-container` groups and a
+  `band-compact` background. All slots are optional — a theme without them keeps
+  its full band with empty cards, exactly as before. Re-author per package.
+- Commit: `9564f05`
 
-### 11. Player Plates  ⬜
+### 11. Player Plates  ⬜ (not started)
 - [ ] Match Commentary Plates styling/layout/animation
 - [ ] Complete remaining production-readiness polish
+- Current: untouched since the element landed in `6427168`.
 
-### 12. Schedule Element  ⬜
-- [ ] Queue upcoming matches
-- [ ] Display queued matches on screen
-- [ ] Support up to 4 simultaneously, stacked vertically
+### 12. Schedule Element  ✅
+- [x] Queue upcoming matches — `schedule.queue` is an ordered list of match ids
+      in State; the queue never copies fixture data, so a fixture edit
+      re-renders with no projector
+- [x] Display queued matches on screen — `public/layout/schedule/schedule.html`,
+      with live / decided row states and `scheduledAt` free text
+- [x] Stacked vertically
+- Files: `server/schedule.py`, `server/api/v1/schedule.py`,
+  `src/routes/production/stage/schedule.jsx` (queue authoring on the stage)
+- Commit: `30613a9`
+- ⚠ Gap: no cap on rows — the layout renders the whole queue, so a long queue
+  overflows the 1080 canvas. "Up to 4" was a minimum, never an enforced limit.
 </content>
 </invoke>
