@@ -495,10 +495,54 @@ The container's own row previews too, sized from the layout catalog, since
 ### The Add picker
 
 `src/routes/production/addsource.jsx`, opened by the **+** in a scene's section
-header: *layout → board (when board-scoped) → add to THIS scene*.
+header: *layouts (+ boards) → preview → add them all to THIS scene*. Two panes —
+catalog left, live preview right.
 
 - **The catalog stops being a place you browse and becomes a transaction.** The
   scene is already answered, because the producer opened the picker from it.
+- **Selection is MULTI, and a pick is keyed on `url + board`** (`pickKey`), not
+  url. Building a scene is a batch — scoreboard, both stats bars, ticker, event
+  header — and one catalog row picked on two boards is two sources with their
+  own air state, settings and instance id. Keying on url alone collapses them,
+  which is the bug board-aware binding fixed one axis over.
+- **The board control is therefore ON THE ROW, not in the footer** — a
+  board-scoped row on a multi-board rig renders one chip per board, and the
+  chips ARE its check state (no checkbox beside them: a third reading of the
+  same fact goes ambiguous the moment only board 2 is picked). A single-board
+  rig gets no chips at all; the pick still carries board 1. A chipped row drops
+  its dimensions column — five chips and a size both squeezed leaves
+  "Scoreboard —…" three times over, and the size is stated authoritatively in
+  the preview header anyway.
+- **A row click checks AND focuses the preview**, so the one-element case is
+  still one click. Clicking a checked row unchecks it but keeps it previewed:
+  focus and check are different questions.
+- **The preview is `?preview=1&sample=1`** through `ScaledIframe` — the real
+  overlay, drawn against its own sample bundle, because a producer building a
+  scene has no game running. (The STAGE preview deliberately omits `sample`;
+  there the point is what is about to go on air.) It shapes its box from the
+  layout's aspect so the checkerboard's edges are the source's edges, capped at
+  the catalog list's height so the taller column is always the list and the
+  dialog never resizes as the producer moves down it. A layout with no declared
+  size previews at 1920×1080 — the same fallback `addBrowserSource` gives OBS,
+  because the preview's viewport must be the source's viewport.
+- **Two CSS traps live here, both "content sized the box that sizes the
+  content".** The preview column is a `minmax(0,1fr)` grid track, not a flex
+  child: ScaledIframe sizes its iframe in PIXELS, that becomes the ancestors'
+  min-content width, and the dialog's own grid grew past its max-width until the
+  footer buttons rendered outside it and were clipped — `min-w-0` cannot fix
+  that, a minimum is a floor, not a cap. And the list is a plain
+  `overflow-y-auto` div rather than the kit's `ScrollArea`, whose Radix viewport
+  wraps children in a shrink-to-fit `display: table` that sizes to a `truncate`
+  row's full nowrap label, running the rows past the pane and slicing
+  "1920×1080" down to "192".
+- **Batch adds run SEQUENTIALLY**, never in parallel: the OBS mirror reconciles
+  one event at a time, and `addBrowserSource`'s uniqueness check is
+  read-then-write, so two in flight both see the same input name free.
+- **Partial failure is reported, never rolled back** ("Added 4 of 5 — Scorecard
+  failed"). Deleting sources the producer just watched appear is worse than
+  naming the one that didn't make it. The successes leave the selection and the
+  dialog stays open on the failures, so a second Add retries rather than
+  duplicates.
 - **Consumes `/api/v1/layouts`, not `ELEMENTS`** — the registry knows the ~14
   things the console can CONTROL, the catalog knows the ~25 things OBS can SHOW.
   Variants (size / team / direction) are separate catalog rows, so picking
@@ -516,6 +560,8 @@ header: *layout → board (when board-scoped) → add to THIS scene*.
   uses). A producer running OBS on another machine, or wiring sources by hand,
   copies exactly what Add would create — no OBS round-trip, so it stays live
   when Add can't. This is what let the Setup layout browser be deleted (phase 8).
+  It **follows the selection**: several picks copy as one URL per line, and with
+  nothing checked it falls back to whatever is previewed.
 
 ## The row kit
 

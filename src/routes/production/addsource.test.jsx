@@ -3,13 +3,19 @@ import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/re
 import { TooltipProvider } from '../../components/ui/tooltip';
 import { useSettingsStore } from '../../context/store';
 import { useObsStore } from '../../context/obs';
-import { AddSourceDialog, addName, overlayUrl, isBoardScoped } from './addsource';
+import {
+    AddSourceDialog, addName, overlayUrl, isBoardScoped, pickKey, pickerPreviewUrl,
+} from './addsource';
 
 /*
  * The Add picker is the other half of "the rack lists only what's in the
  * scene". With unbound rows gone it is the only way a source comes into being,
  * so its three rules have to hold: the right URL, added to the RIGHT SCENE, and
  * added HIDDEN.
+ *
+ * Building a scene is a batch, so it also has to hold them for SEVERAL picks at
+ * once: keyed on url + board (one catalog row, two boards, two sources), added
+ * one at a time, and honest when only some of them land.
  */
 
 const layout = (over = {}) => ({
@@ -57,6 +63,45 @@ describe('overlayUrl', () => {
     });
 });
 
+describe('pickKey — a pick is a url AND a board', () => {
+    /*
+     * Scoreboard on board 1 and board 2 are two sources with their own air
+     * state, settings and instance id. Keying a selection on url alone would
+     * collapse them into one pick — the same bug board-aware binding fixed one
+     * axis over.
+     */
+    it('separates the same row on two boards', () => {
+        expect(pickKey(layout(), 1)).not.toBe(pickKey(layout(), 2));
+    });
+
+    it('is stable for a board-less row', () => {
+        expect(pickKey(lowerthird, null)).toBe(pickKey(lowerthird, null));
+        expect(pickKey(lowerthird, null)).not.toBe(pickKey(layout(), null));
+    });
+});
+
+describe('pickerPreviewUrl', () => {
+    /*
+     * `sample=1` is the whole reason the picker can show anything: a producer
+     * building a scene has no game running. The console's STAGE preview
+     * deliberately omits it (there the point is what's about to go on air).
+     */
+    it('previews the URL Add would create, with sample data', () => {
+        const src = pickerPreviewUrl(layout(), 2);
+        expect(src).toContain('/layout/scoreboard1/scoreboard.html');
+        expect(src).toContain('size=l');
+        expect(src).toContain('scoreboard=2');
+        expect(src).toContain('preview=1');
+        expect(src).toContain('sample=1');
+    });
+
+    // A dual-machine rig's catalog URL points at the PRSH host by IP; the
+    // producer's browser still has to load it from wherever the app is served.
+    it('drops the origin so a host-qualified URL loads locally', () => {
+        expect(pickerPreviewUrl(lowerthird, null).startsWith('/layout/')).toBe(true);
+    });
+});
+
 describe('addName', () => {
     /*
      * The name in OBS is the label the producer clicked. The catalog's raw
@@ -78,12 +123,17 @@ describe('addName', () => {
 });
 
 describe('AddSourceDialog', () => {
-    const addBrowserSource = vi.fn(() => Promise.resolve({ inputName: 'Lower Third', sceneName: 'Break' }));
+    const addBrowserSource = vi.fn();
 
     beforeEach(() => {
         useSettingsStore.setState({ scoreboards: {}, production: {} });
         useObsStore.setState({ status: 'connected', addBrowserSource });
-        addBrowserSource.mockClear();
+        // Reset the implementation too — several tests below install their own
+        // (a failing OBS, an overlap detector).
+        addBrowserSource.mockReset();
+        addBrowserSource.mockImplementation(
+            async ({ inputName, sceneName }) => ({ inputName, sceneName }),
+        );
         vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({
             ok: true, json: () => Promise.resolve([layout(), lowerthird]),
         })));
@@ -144,16 +194,139 @@ describe('AddSourceDialog', () => {
         expect(addBrowserSource).not.toHaveBeenCalled();
     });
 
-    // One board means no choice to make, so the step isn't shown at all.
-    it('asks for a board only when the rig has more than one', async () => {
+    // One board means no choice to make, so the row isn't asked — the pick
+    // still carries board 1, exactly as it always did.
+    it('shows board chips only when the rig has more than one', async () => {
         ui('Break');
-        fireEvent.click(await screen.findByText('Scoreboard — Large'));
-        expect(screen.queryByText('Board')).not.toBeInTheDocument();
+        await screen.findByText('Scoreboard — Large');
+        expect(screen.queryByRole('button', { name: /on Scoreboard 1$/ })).not.toBeInTheDocument();
 
         cleanup();
         useSettingsStore.setState({ scoreboards: { active: [1, 2] } });
         ui('Break');
-        fireEvent.click(await screen.findByText('Scoreboard — Large'));
-        expect(screen.getByText('Board')).toBeInTheDocument();
+        await screen.findByText('Scoreboard — Large');
+        expect(screen.getByRole('button', { name: 'Scoreboard — Large on Scoreboard 1' }))
+            .toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Scoreboard — Large on Scoreboard 2' }))
+            .toBeInTheDocument();
+    });
+
+    /*
+     * One catalog row, two boards, two sources. This is why a pick is keyed on
+     * url + board and why the board control sits on the ROW rather than in the
+     * footer: a single footer dropdown can only describe one of them.
+     */
+    it('adds one catalog row twice when two boards are chipped', async () => {
+        useSettingsStore.setState({ scoreboards: { active: [1, 2] } });
+        ui('Break');
+        await screen.findByText('Scoreboard — Large');
+        fireEvent.click(screen.getByRole('button', { name: 'Scoreboard — Large on Scoreboard 1' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Scoreboard — Large on Scoreboard 2' }));
+        fireEvent.click(screen.getByRole('button', { name: /add 2 hidden/i }));
+
+        await waitFor(() => expect(addBrowserSource).toHaveBeenCalledTimes(2));
+        expect(addBrowserSource.mock.calls[0][0]).toMatchObject({
+            url: 'http://host:5260/layout/scoreboard1/scoreboard.html?size=l&scoreboard=1',
+            inputName: 'Scoreboard — Large 1',
+        });
+        expect(addBrowserSource.mock.calls[1][0]).toMatchObject({
+            url: 'http://host:5260/layout/scoreboard1/scoreboard.html?size=l&scoreboard=2',
+            inputName: 'Scoreboard — Large 2',
+        });
+    });
+
+    /*
+     * Sequential, never parallel. The OBS mirror reconciles one event at a time,
+     * and CreateInput's own uniqueness check is read-then-write: two adds in
+     * flight both see the same name free.
+     */
+    it('adds a batch one at a time', async () => {
+        let inFlight = 0;
+        let overlapped = false;
+        addBrowserSource.mockImplementation(async ({ inputName }) => {
+            inFlight += 1;
+            if (inFlight > 1) overlapped = true;
+            await Promise.resolve();
+            inFlight -= 1;
+            return { inputName, sceneName: 'Break' };
+        });
+
+        ui('Break');
+        fireEvent.click(await screen.findByText('Lower Third'));
+        fireEvent.click(screen.getByText('Scoreboard — Large'));
+        fireEvent.click(screen.getByRole('button', { name: /add 2 hidden/i }));
+
+        await waitFor(() => expect(addBrowserSource).toHaveBeenCalledTimes(2));
+        expect(overlapped).toBe(false);
+    });
+
+    /*
+     * No rollback: deleting sources the producer just watched appear is worse
+     * than naming the one that didn't make it. The successes stay in OBS and
+     * leave the selection, so a second Add retries the failure instead of
+     * duplicating what already landed.
+     */
+    it('reports a partial failure and keeps only what failed selected', async () => {
+        addBrowserSource.mockImplementation(async ({ inputName }) => {
+            if (inputName.startsWith('Scoreboard')) throw new Error('OBS said no');
+            return { inputName, sceneName: 'Break' };
+        });
+
+        ui('Break');
+        fireEvent.click(await screen.findByText('Lower Third'));
+        fireEvent.click(screen.getByText('Scoreboard — Large'));
+        fireEvent.click(screen.getByRole('button', { name: /add 2 hidden/i }));
+
+        await waitFor(() => expect(addBrowserSource).toHaveBeenCalledTimes(2));
+        // Still open, one pick left — the one that failed.
+        expect(await screen.findByText('1 selected')).toBeInTheDocument();
+
+        addBrowserSource.mockClear();
+        fireEvent.click(screen.getByRole('button', { name: /add hidden/i }));
+        await waitFor(() => expect(addBrowserSource).toHaveBeenCalledTimes(1));
+        expect(addBrowserSource.mock.calls[0][0].inputName).toBe('Scoreboard — Large');
+    });
+
+    /*
+     * Focus and check are different questions. Clicking a checked row unchecks
+     * it but keeps it previewed — the producer is still looking at it.
+     */
+    it('previews the row it was told about, checked or not', async () => {
+        ui('Break');
+        fireEvent.click(await screen.findByText('Lower Third'));
+        expect(screen.getByTitle('Lower Third preview')).toBeInTheDocument();
+
+        // By role — once it's previewed, its name is on screen twice (the row
+        // and the preview's header).
+        fireEvent.click(screen.getByRole('button', { name: /^Lower Third/ }));
+        expect(screen.getByText('Nothing selected yet.')).toBeInTheDocument();
+        expect(screen.getByTitle('Lower Third preview')).toBeInTheDocument();
+    });
+
+    // The preview has to work on a machine with no game running, which is what
+    // every Layout's sample bundle is for.
+    it('previews with sample data, not live state', async () => {
+        ui('Break');
+        fireEvent.click(await screen.findByText('Lower Third'));
+        const src = screen.getByTitle('Lower Third preview').getAttribute('src');
+        expect(src).toContain('preview=1');
+        expect(src).toContain('sample=1');
+    });
+
+    /*
+     * Copy follows the selection, one URL per line — what a dual-machine
+     * producer pastes into a column of browser sources.
+     */
+    it('copies every selected URL, newline-joined', async () => {
+        const writeText = vi.fn(() => Promise.resolve());
+        vi.stubGlobal('navigator', { clipboard: { writeText } });
+
+        ui('Break');
+        fireEvent.click(await screen.findByText('Lower Third'));
+        fireEvent.click(screen.getByText('Scoreboard — Large'));
+        fireEvent.click(screen.getByRole('button', { name: /copy urls/i }));
+        await waitFor(() => expect(writeText).toHaveBeenCalledWith(
+            `${lowerthird.url}\n${layout().url}&scoreboard=1`,
+        ));
     });
 });
