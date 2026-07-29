@@ -40,30 +40,14 @@
     const host = document.getElementById('host');
     const ticker = mountTicker({ host, sb: SB });
 
-    async function boot() {
-      if (OverlayBase.SAMPLE_MODE) {
-        try {
-          const resp = await fetch(`${OverlayBase.BASE_URL}/layout/preview/ticker_sample.json`);
-          const games = (resp.ok ? await resp.json() : []) || [];
-          const trimmed = games.slice(0, 10);
-          OverlayBase.deepSet(OverlayBase.state, `scoreboards.rotation.${SB}.cached_games`, trimmed);
-          OverlayBase.deepSet(OverlayBase.state, `scoreboards.rotation.${SB}.game_ids`,
-            trimmed.map(g => g?.game_id).filter(Boolean));
-        } catch { /* ignore — the bar stays hidden when empty */ }
-      }
-
-      OverlayBase.init({
-        render: () => ticker.update(OverlayBase.state, OverlayBase.settings),
-        shouldRender: (key) => key.startsWith(`scoreboards.rotation.${SB}.`),
-        shouldRenderSettings: (key) =>
-          key.startsWith('overlays.ticker.') || key.startsWith('overlays.global.'),
-        fetchSettings: true,
-        skipState: OverlayBase.SAMPLE_MODE,
-      });
-
-      if (OverlayBase.SAMPLE_MODE) ticker.update(OverlayBase.state, OverlayBase.settings);
-    }
-    boot();
+    OverlayBase.init({
+      render: () => ticker.update(OverlayBase.state, OverlayBase.settings),
+      sample: 'ticker',
+      shouldRender: (key) => key.startsWith(`scoreboards.rotation.${SB}.`),
+      shouldRenderSettings: (key) =>
+        key.startsWith('overlays.ticker.') || key.startsWith('overlays.global.'),
+      fetchSettings: true,
+    });
   </script>
 </body>
 </html>

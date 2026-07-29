@@ -49,27 +49,14 @@
     const host = document.getElementById('host');
     const sc = mountScoreboard({ host, sb: SB, size: SIZE });
 
-    async function boot() {
-      if (OverlayBase.SAMPLE_MODE) {
-        try {
-          const r = await fetch(`${OverlayBase.BASE_URL}/layout/preview/scoreboard_sample.json`);
-          const data = r.ok ? await r.json() : null;
-          if (data) OverlayBase.deepSet(OverlayBase.state, `score.${SB}`, data);
-        } catch { /* ignore */ }
-      }
-
-      OverlayBase.init({
-        render: () => sc.update(OverlayBase.state, OverlayBase.settings),
-        shouldRender: (key) => key.startsWith(`score.${SB}.`),
-        shouldRenderSettings: (key) =>
-          key.startsWith('overlays.scoreboard.') || key.startsWith('overlays.global.'),
-        fetchSettings: true,
-        skipState: OverlayBase.SAMPLE_MODE,
-      });
-
-      if (OverlayBase.SAMPLE_MODE) sc.update(OverlayBase.state, OverlayBase.settings);
-    }
-    boot();
+    OverlayBase.init({
+      render: () => sc.update(OverlayBase.state, OverlayBase.settings),
+      sample: 'scoreboard',
+      shouldRender: (key) => key.startsWith(`score.${SB}.`),
+      shouldRenderSettings: (key) =>
+        key.startsWith('overlays.scoreboard.') || key.startsWith('overlays.global.'),
+      fetchSettings: true,
+    });
 
     // Follow OBS's on-screen signal (scene cuts AND the source's eye icon):
     // hide snaps the board dark, show plays one clean reveal, redundant

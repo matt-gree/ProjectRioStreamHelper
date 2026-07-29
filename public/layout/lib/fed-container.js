@@ -18,7 +18,7 @@ import { mountStats } from '/layout/lib/stats-mount.js';
 import { mountPostgameCallout } from '/layout/lib/postgame-callout-mount.js';
 import { mountPostgameVs } from '/layout/lib/postgame-vs-mount.js';
 
-export function initFedContainer({ host, perf = false, skipState = false, forceElement = null, previewSel = null }) {
+export function initFedContainer({ host, perf = false, sample = null, forceElement = null, previewSel = null }) {
   const CONTAINER_ID = window.location.pathname.replace(/^.*\/([^/]+)\.html?(?:\?.*)?$/, '$1');
   const FEED_KEY = `production.feed.container.${CONTAINER_ID}`;
 
@@ -101,7 +101,7 @@ export function initFedContainer({ host, perf = false, skipState = false, forceE
   OverlayBase.init({
     render,
     fetchSettings: true, // stats themes off overlays.* design settings; hit ignores them
-    skipState, // preview primes its own state and doesn't want live state racing in
+    sample, // the host page's sample bundle: a captured game plus an occupant
     // This container's assignment, plus any score change (stats read across a
     // scoreboard; hit-mount.update no-ops unless the contact actually changed).
     // tournamentInfo feeds the Game Summary's top match strip.

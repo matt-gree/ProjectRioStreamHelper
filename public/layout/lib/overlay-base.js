@@ -114,10 +114,6 @@
     return `<img class="${cls}" src="${BASE_URL}/game_assets/msb/teamLogos/${id}.png" onerror="this.style.display='none'" />`;
   }
 
-  // ── State & settings stores ──
-  const state = {};
-  const settings = {};
-
   /*
    * ── Preview-mode flags (read from URL params) ──
    *
@@ -126,23 +122,221 @@
    *                            notes (setBlank), instant reveals instead of
    *                            animations, scale-to-fit. Says nothing about
    *                            where the data comes from.
-   * ?sample=1                — render canned sample data INSTEAD of live state.
-   *                            For a catalog gallery, which has to show a
-   *                            representative overlay on a machine with no game
-   *                            in progress.
+   * ?sample=1                — render this layout's canned sample bundle INSTEAD
+   *                            of live state. For a catalog gallery or an Add
+   *                            picker, which has to show a representative
+   *                            overlay on a machine with no game in progress.
    * ?preview_globals_only=1  — ignore per-layout style overrides; show what
    *                            the Design tab globals look like in isolation
    *
-   * These two were one flag, and it made the Production console's stage preview
-   * a mockup: every element showed the sample game, and `skipState` meant live
-   * state was never even fetched. A producer previewing what is about to go on
-   * air was looking at a fixture. The Design tab wants sample; the console wants
-   * the truth — so they are separate params, and the SAMPLE half is opt-in.
+   * The first two were one flag, and it made the Production console's stage
+   * preview a mockup: every element showed the sample game and live state was
+   * never even fetched. A producer previewing what is about to go on air was
+   * looking at a fixture. The gallery wants sample; the console wants the truth
+   * — so they are separate params, and the SAMPLE half is opt-in.
    */
   const previewParams = new URLSearchParams(window.location.search);
   const PREVIEW_MODE = previewParams.get('preview') === '1';
   const SAMPLE_MODE = previewParams.get('sample') === '1';
   const PREVIEW_GLOBALS_ONLY = previewParams.get('preview_globals_only') === '1';
+
+  /*
+   * ── State & settings stores, and the sample bundle beside them ──────────
+   *
+   * `state` and `settings` are the SAME OBJECTS for the life of the page. That
+   * identity is load-bearing: a dozen layouts destructure them once at module
+   * scope (`const { deepGet, state } = OverlayBase`), and the socket's own
+   * full-state refresh already clears-and-repopulates rather than reassigning.
+   * Swapping in a different object — or hiding them behind a getter — silently
+   * strands every one of those layouts on whichever bundle was current when the
+   * script ran.
+   *
+   * So the sample doesn't replace the store, it takes it over. Two switches turn
+   * it on:
+   *   ?sample=1                     — this page only (gallery / picker preview)
+   *   state `production.sample`     — app-wide DEMO MODE, so a producer can lay
+   *                                   out an OBS scene against representative
+   *                                   content with no game running.
+   *
+   * On the way in, the live contents are PARKED in `liveBuffer` and the store is
+   * refilled from the sample; live socket writes redirect to the buffer and keep
+   * flowing. On the way out the buffer goes back. Demo mode therefore ends with
+   * the CURRENT game on screen in the next frame — not the one that was playing
+   * when it started, and with no reload. Off is the common case and costs
+   * nothing: with demo off the live write target IS the exported store.
+   *
+   * A layout that declares no sample ignores both switches and stays live —
+   * better than blanking a working source.
+   */
+  const SAMPLE_STATE_KEY = 'production.sample';
+
+  const state = {};
+  const settings = {};
+
+  let sampleState = null;     // null until a bundle is loaded — "no sample"
+  let sampleSettings = null;  // flat key→value seeds, or null
+  let liveBuffer = null;      // live state parked here while demo is on
+  let seededKeys = [];        // settings keys the seed actually filled
+  let demoOn = false;
+
+  // Where live state writes land: the exported store normally, the parking
+  // buffer while the sample is on screen.
+  function liveTarget() { return demoOn ? liveBuffer : state; }
+
+  function refill(target, source) {
+    for (const k of Object.keys(target)) delete target[k];
+    Object.assign(target, source);
+  }
+
+  /*
+   * Sample settings SEED, they don't override. A bundle names content-ish keys
+   * (a stats tag, a card title) so a bar doesn't collapse in a sample render —
+   * but a producer laying out a scene in demo mode has their own title set, and
+   * replacing it would make their alignment work show the wrong text. Anything
+   * the producer has set wins; the seed only fills a hole, and only the holes it
+   * filled are cleared again on the way out.
+   *
+   * Design settings are never seeded at all: designing against sample content is
+   * the point of demo mode.
+   */
+  function applySeeds() {
+    seededKeys = [];
+    if (!sampleSettings) return;
+    for (const [k, v] of Object.entries(sampleSettings)) {
+      if (deepGet(settings, k, null) == null) { deepSet(settings, k, v); seededKeys.push(k); }
+    }
+  }
+
+  function clearSeeds() {
+    for (const k of seededKeys) deepUnset(settings, k);
+    seededKeys = [];
+  }
+
+  // The producer just set a key we had seeded — it's theirs now, so leaving demo
+  // mode must not unset it back out from under them.
+  function forgetSeed(key) {
+    if (seededKeys.length) seededKeys = seededKeys.filter((k) => k !== key);
+  }
+
+  // `{sb}` / `{team}` in a sample bundle's keys resolve against this page's own
+  // URL, so one bundle serves every board and side variant of a layout.
+  function sampleTokens() {
+    return {
+      sb: parseInt(previewParams.get('scoreboard')) || 1,
+      team: parseInt(previewParams.get('team')) || 1,
+    };
+  }
+
+  function resolveKey(key, tokens) {
+    return key.replace(/\{(\w+)\}/g, (m, k) => (k in tokens ? tokens[k] : m));
+  }
+
+  // State fragments are merged into a nested bundle (mounts read them with
+  // deepGet); settings fragments stay a FLAT key→value map, because they are
+  // applied one key at a time against whatever the producer already has set.
+  function applyFragment(target, frag, tokens) {
+    if (!frag) return;
+    for (const [key, value] of Object.entries(frag)) deepSet(target, resolveKey(key, tokens), value);
+  }
+
+  function collectFragment(target, frag, tokens) {
+    if (!frag) return;
+    for (const [key, value] of Object.entries(frag)) target[resolveKey(key, tokens)] = value;
+  }
+
+  /**
+   * Load this layout's sample bundle. `spec` is either a file stem
+   * ('scoreboard' → /layout/preview/scoreboard_sample.json) or
+   * `{ file, state, settings }`, where the inline fragments are merged on top of
+   * the file's — that's for the handful of shells whose sample depends on their
+   * own URL params (which container occupant to draw, say).
+   *
+   * A bundle is a flat map of state key → value, so a sample IS a state
+   * fragment. Nothing has to translate between "sample shape" and "state shape",
+   * which is what let the per-shell fetch blocks drift apart.
+   */
+  async function loadSample(spec) {
+    const cfg = (typeof spec === 'string') ? { file: spec } : (spec || {});
+    const tokens = sampleTokens();
+    const st = {};
+    const se = {};
+
+    if (cfg.file) {
+      try {
+        const r = await fetch(`${BASE_URL}/layout/preview/${cfg.file}_sample.json`);
+        const doc = r.ok ? await r.json() : null;
+        if (doc) {
+          applyFragment(st, doc.state, tokens);
+          collectFragment(se, doc.settings, tokens);
+        }
+      } catch (e) {
+        console.warn(`[OverlayBase] sample "${cfg.file}" failed to load:`, e.message);
+      }
+    }
+    applyFragment(st, typeof cfg.state === 'function' ? cfg.state() : cfg.state, tokens);
+    collectFragment(se, typeof cfg.settings === 'function' ? cfg.settings() : cfg.settings, tokens);
+
+    sampleState = st;
+    sampleSettings = Object.keys(se).length ? se : null;
+  }
+
+  /*
+   * The demo switch is read STRICTLY: only a real `true` (or the string "true"
+   * / "1") turns it on. `PUT /api/v1/state` is str-typed, so setting it off over
+   * REST stores the string "false" — which is truthy in JS, and would leave
+   * every overlay stuck showing a fixture with no way back short of a reload.
+   * Anything that isn't recognisably on is off; the failure direction has to be
+   * "shows the real game".
+   */
+  function demoSwitchOn() {
+    const v = deepGet(liveTarget(), SAMPLE_STATE_KEY, false);
+    return v === true || v === 'true' || v === 1 || v === '1';
+  }
+
+  /**
+   * Recompute whether the sample is in force, swapping the store over if it
+   * changed. Returns true on a change, so callers render exactly once.
+   */
+  function syncDemo() {
+    const want = !!sampleState && (SAMPLE_MODE || demoSwitchOn());
+    if (want === demoOn) return false;
+
+    if (want) {
+      liveBuffer = {};
+      Object.assign(liveBuffer, state);
+      // Deep-clone in: the store is the page's mutable scratch space, and a
+      // stray write must not corrupt the bundle we have to restore from.
+      refill(state, JSON.parse(JSON.stringify(sampleState)));
+      demoOn = true;
+      applySeeds();
+    } else {
+      clearSeeds();
+      refill(state, liveBuffer || {});
+      liveBuffer = null;
+      demoOn = false;
+    }
+    document.documentElement.setAttribute('data-prsh-sample', demoOn ? 'on' : 'off');
+    return true;
+  }
+
+  /*
+   * A preview showing live state when the producer asked for sample data reads
+   * as "this element is broken" — it is usually blank, because there is no game.
+   * Say so instead. Preview chrome only: never painted onto a browser source.
+   */
+  function noteMissingSample() {
+    if (!PREVIEW_MODE || !SAMPLE_MODE || sampleState) return;
+    const note = document.createElement('div');
+    note.setAttribute('data-prsh-no-sample', '');
+    note.textContent = 'no sample data — showing live state';
+    note.style.cssText = [
+      'position:fixed', 'left:8px', 'bottom:8px', 'padding:4px 8px',
+      'font:500 11px/1.3 Inter,system-ui,sans-serif', 'color:rgba(255,255,255,0.78)',
+      'background:rgba(10,10,16,0.72)', 'border:1px dashed rgba(255,255,255,0.22)',
+      'border-radius:6px', 'z-index:2147483646', 'pointer-events:none',
+    ].join(';');
+    (document.body || document.documentElement).appendChild(note);
+  }
 
   // ── Bootstrap ──
   /**
@@ -152,6 +346,9 @@
    * @param {Function} [opts.shouldRender]   - (key) => bool — filter state keys (default: always true)
    * @param {Function} [opts.shouldRenderSettings] - (key) => bool — filter settings keys
    * @param {boolean}  [opts.fetchSettings]  - Whether to fetch & subscribe to settings (default: false)
+   * @param {string|Object} [opts.sample]    - This layout's sample bundle: a file
+   *        stem under /layout/preview/, or `{ file, state, settings }`. Declaring
+   *        it is all a layout does to support `?sample=1` and demo mode.
    */
   async function init(opts) {
     const {
@@ -159,10 +356,7 @@
       shouldRender = () => true,
       shouldRenderSettings = () => false,
       fetchSettings = false,
-      // When true, skip all state fetches and state socket events. Used by
-      // preview-mode overlays that prime `state` themselves from a static
-      // sample JSON and don't want server state racing in over the top.
-      skipState = false,
+      sample = null,
     } = opts;
 
     // Serialize renders. Load alone fires render() up to three times in quick
@@ -185,23 +379,29 @@
       }
     }
 
-    // Initial REST fetch
+    // The sample bundle loads BEFORE the first render, so a preview draws its
+    // fixture on the first paint rather than flashing empty and filling in.
+    if (sample) await loadSample(sample);
+    noteMissingSample();
+
+    // Initial REST fetch. State is fetched even in sample mode — the sample is a
+    // view over live data, not a replacement for fetching it.
     try {
-      const fetches = [];
-      if (!skipState) fetches.push(fetch(`${BASE_URL}/api/v1/state`));
+      const fetches = [fetch(`${BASE_URL}/api/v1/state`)];
       if (fetchSettings) fetches.push(fetch(`${BASE_URL}/api/v1/settings`));
 
       const responses = await Promise.all(fetches);
-      let i = 0;
-      if (!skipState) {
-        if (responses[i]?.ok) Object.assign(state, await responses[i].json());
-        i++;
-      }
-      if (fetchSettings && responses[i]?.ok) Object.assign(settings, await responses[i].json());
-      render();
+      if (responses[0]?.ok) Object.assign(liveTarget(), await responses[0].json());
+      if (fetchSettings && responses[1]?.ok) Object.assign(settings, await responses[1].json());
     } catch (e) {
       console.warn('[OverlayBase] Initial fetch failed:', e.message);
     }
+    syncDemo();
+    // Always stamp it, even when nothing changed — anything inspecting the
+    // document (a preview pane, a screenshot check) should be able to tell
+    // "live" from "attribute never written".
+    document.documentElement.setAttribute('data-prsh-sample', demoOn ? 'on' : 'off');
+    render();
 
     // SocketIO connection
     const socket = io(BASE_URL, { transports: ['websocket', 'polling'] });
@@ -209,22 +409,20 @@
     socket.on('connect', () => {
       console.log('[OverlayBase] SocketIO connected');
 
-      if (!skipState) {
-        socket.emit('v1.state.get', {}, (fullState) => {
-          if (fullState && !fullState.error) {
-            // Clear and repopulate (preserves object reference)
-            for (const k of Object.keys(state)) delete state[k];
-            Object.assign(state, fullState);
-            render();
-          }
-        });
-      }
+      socket.emit('v1.state.get', {}, (fullState) => {
+        if (fullState && !fullState.error) {
+          // Clear and repopulate (preserves object reference)
+          refill(liveTarget(), fullState);
+          syncDemo();
+          render();
+        }
+      });
 
       if (fetchSettings) {
         socket.emit('v1.settings.get', {}, (fullSettings) => {
           if (fullSettings && !fullSettings.error) {
-            for (const k of Object.keys(settings)) delete settings[k];
-            Object.assign(settings, fullSettings);
+            refill(settings, fullSettings);
+            applySeeds();
             render();
           }
         });
@@ -235,43 +433,53 @@
       console.warn('[OverlayBase] SocketIO connect error:', err.message);
     });
 
-    // State events (suppressed in skipState mode)
-    if (!skipState) {
-      socket.on('v1.state.set', (msg) => {
-        if (msg.sid === socket.id) return;
-        deepSet(state, msg.key, msg.value);
-        if (shouldRender(msg.key)) render();
-      });
-
-      socket.on('v1.state.set_batch', (msg) => {
-        if (msg.sid === socket.id) return;
-        let needs = false;
-        for (const item of msg.items) {
-          deepSet(state, item.key, item.value);
-          if (shouldRender(item.key)) needs = true;
-        }
-        if (needs) render();
-      });
-
-      socket.on('v1.state.unset', (msg) => {
-        if (msg.sid === socket.id) return;
-        deepUnset(state, msg.key);
-        if (shouldRender(msg.key)) render();
-      });
-
-      // Batched unset — the mirror of set_batch. The store's deleteItems() emits
-      // this; without handling it, clears (e.g. clearing production.feed.split)
-      // never reach overlays and the old value lingers.
-      socket.on('v1.state.unset_batch', (msg) => {
-        if (msg.sid === socket.id) return;
-        let needs = false;
-        for (const item of msg.items) {
-          deepUnset(state, item.key);
-          if (shouldRender(item.key)) needs = true;
-        }
-        if (needs) render();
-      });
+    /*
+     * A live state key changed. The live bundle is updated either way — that is
+     * what makes leaving demo mode instant. Whether it is worth a RENDER is a
+     * different question: the demo switch always is, and everything else only
+     * when the live bundle is the one on screen. Repainting a sample overlay on
+     * every HUD tick would restart reveal animations against data that never
+     * moved.
+     */
+    function liveKeyChanged(key) {
+      if (touchesSampleKey(key)) return syncDemo();
+      return !demoOn && shouldRender(key);
     }
+
+    socket.on('v1.state.set', (msg) => {
+      if (msg.sid === socket.id) return;
+      deepSet(liveTarget(), msg.key, msg.value);
+      if (liveKeyChanged(msg.key)) render();
+    });
+
+    socket.on('v1.state.set_batch', (msg) => {
+      if (msg.sid === socket.id) return;
+      let needs = false;
+      for (const item of msg.items) {
+        deepSet(liveTarget(), item.key, item.value);
+        if (liveKeyChanged(item.key)) needs = true;
+      }
+      if (needs) render();
+    });
+
+    socket.on('v1.state.unset', (msg) => {
+      if (msg.sid === socket.id) return;
+      deepUnset(liveTarget(), msg.key);
+      if (liveKeyChanged(msg.key)) render();
+    });
+
+    // Batched unset — the mirror of set_batch. The store's deleteItems() emits
+    // this; without handling it, clears (e.g. clearing production.feed.split)
+    // never reach overlays and the old value lingers.
+    socket.on('v1.state.unset_batch', (msg) => {
+      if (msg.sid === socket.id) return;
+      let needs = false;
+      for (const item of msg.items) {
+        deepUnset(liveTarget(), item.key);
+        if (liveKeyChanged(item.key)) needs = true;
+      }
+      if (needs) render();
+    });
 
     // Universal action bus — ephemeral one-shot cues, never stored in state.
     // overlay.conceal: the app is about to disable this browser source in OBS.
@@ -286,20 +494,31 @@
       }
     });
 
-    // Settings events (opt-in)
+    // Settings events (opt-in). These render even under demo mode — designing
+    // and aligning against sample content is exactly what demo mode is for.
     if (fetchSettings) {
       socket.on('v1.settings.set', (msg) => {
         if (msg.sid === socket.id) return;
         deepSet(settings, msg.key, msg.value);
+        forgetSeed(msg.key);
         if (shouldRenderSettings(msg.key)) render();
       });
 
       socket.on('v1.settings.unset', (msg) => {
         if (msg.sid === socket.id) return;
         deepUnset(settings, msg.key);
+        forgetSeed(msg.key);
         if (shouldRenderSettings(msg.key)) render();
       });
     }
+  }
+
+  // Does `key` reach the demo switch? True for the key itself, anything under
+  // it, and any ancestor written wholesale (a batch that replaces `production`).
+  function touchesSampleKey(key) {
+    return key === SAMPLE_STATE_KEY
+      || key.startsWith(SAMPLE_STATE_KEY + '.')
+      || SAMPLE_STATE_KEY.startsWith(key + '.');
   }
 
   // ── Hex → RGB helper ──
@@ -616,10 +835,16 @@
   }
 
   // ── Export ──
+  // `state` and `settings` are GETTERS, not objects: they hand back the live
+  // bundle or the sample one depending on whether demo mode is in force. Every
+  // mount reads them per render (`mount.update(OverlayBase.state, …)`), so the
+  // switch reaches all of them with no mount-side change. Never cache the
+  // returned object across renders.
   window.OverlayBase = {
     BASE_URL,
     state,
     settings,
+    get sampleActive() { return demoOn; },
     deepGet,
     deepSet,
     deepUnset,

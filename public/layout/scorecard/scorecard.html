@@ -41,34 +41,26 @@
     const host = document.getElementById('host');
     const sc = mountScorecard({ host, sb: SB });
 
-    async function boot() {
-      if (OverlayBase.SAMPLE_MODE) {
-        // Layouts/Setup preview: prime a representative live game.
-        try {
-          const r = await fetch(`${OverlayBase.BASE_URL}/layout/preview/scoreboard_sample.json`);
-          const data = r.ok ? await r.json() : null;
-          if (data) OverlayBase.deepSet(OverlayBase.state, `score.${SB}`, data);
-        } catch { /* ignore */ }
-        // Sample game-mode + producer text so the phase/mode bars have content.
-        OverlayBase.deepSet(OverlayBase.settings, `scoreboards.binding.${SB}.stats_tag`, 'Superstar');
-        OverlayBase.deepSet(OverlayBase.settings, `overlays.scorecard.${SB}.phaseText`, 'Winners Final');
-        OverlayBase.deepSet(OverlayBase.settings, `overlays.scorecard.${SB}.titleText`, 'Project Rio Invitational');
-      }
-
-      OverlayBase.init({
-        render: () => sc.update(OverlayBase.state, OverlayBase.settings),
-        shouldRender: (key) => key.startsWith(`score.${SB}.`),
-        shouldRenderSettings: (key) =>
-          key.startsWith('overlays.scorecard.') ||
-          key.startsWith('overlays.global.') ||
-          key.startsWith(`scoreboards.binding.${SB}.`),
-        fetchSettings: true,
-        skipState: OverlayBase.SAMPLE_MODE,
-      });
-
-      if (OverlayBase.SAMPLE_MODE) sc.update(OverlayBase.state, OverlayBase.settings);
-    }
-    boot();
+    OverlayBase.init({
+      render: () => sc.update(OverlayBase.state, OverlayBase.settings),
+      // Game mode and producer text are settings, not state, so the phase and
+      // mode bars need seeding too or they collapse in a sample render. Seeds
+      // only fill what the producer hasn't set — see OverlayBase.settingsView.
+      sample: {
+        file: 'scoreboard',
+        settings: {
+          'scoreboards.binding.{sb}.stats_tag': 'Superstar',
+          'overlays.scorecard.{sb}.phaseText': 'Winners Final',
+          'overlays.scorecard.{sb}.titleText': 'Project Rio Invitational',
+        },
+      },
+      shouldRender: (key) => key.startsWith(`score.${SB}.`),
+      shouldRenderSettings: (key) =>
+        key.startsWith('overlays.scorecard.') ||
+        key.startsWith('overlays.global.') ||
+        key.startsWith(`scoreboards.binding.${SB}.`),
+      fetchSettings: true,
+    });
 
     // Follow OBS's on-screen signal (scene cuts AND the source's eye icon):
     // hide snaps the card dark, show plays one clean reveal, redundant

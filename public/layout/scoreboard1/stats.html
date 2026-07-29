@@ -41,28 +41,15 @@
     const host = document.getElementById('host');
     const card = mountStatsCard({ host, sb: SB, team: TEAM });
 
-    async function boot() {
-      if (OverlayBase.SAMPLE_MODE) {
-        try {
-          const resp = await fetch(`${OverlayBase.BASE_URL}/layout/preview/scoreboard_sample.json`);
-          const data = resp.ok ? await resp.json() : null;
-          if (data) OverlayBase.deepSet(OverlayBase.state, `score.${SB}`, data);
-        } catch { /* ignore */ }
-      }
-
-      OverlayBase.init({
-        render: () => card.update(OverlayBase.state, OverlayBase.settings),
-        shouldRender: (key) => key.startsWith(`score.${SB}.`),
-        shouldRenderSettings: (key) =>
-          key.startsWith('overlays.stats.') || key.startsWith('overlays.global.') ||
-          key.startsWith('scoreboards.'),
-        fetchSettings: true,
-        skipState: OverlayBase.SAMPLE_MODE,
-      });
-
-      if (OverlayBase.SAMPLE_MODE) card.update(OverlayBase.state, OverlayBase.settings);
-    }
-    boot();
+    OverlayBase.init({
+      render: () => card.update(OverlayBase.state, OverlayBase.settings),
+      sample: 'scoreboard',
+      shouldRender: (key) => key.startsWith(`score.${SB}.`),
+      shouldRenderSettings: (key) =>
+        key.startsWith('overlays.stats.') || key.startsWith('overlays.global.') ||
+        key.startsWith('scoreboards.'),
+      fetchSettings: true,
+    });
   </script>
 </body>
 </html>

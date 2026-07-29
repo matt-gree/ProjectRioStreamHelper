@@ -142,24 +142,11 @@
       bindSide(2);
     }
 
-    async function boot() {
-      if (OverlayBase.SAMPLE_MODE) {
-        try {
-          const r = await fetch(`${OverlayBase.BASE_URL}/layout/preview/scoreboard_sample.json`);
-          const data = r.ok ? await r.json() : null;
-          if (data) OverlayBase.deepSet(OverlayBase.state, `score.${SB}`, data);
-        } catch { /* ignore */ }
-      }
-
-      OverlayBase.init({
-        render,
-        shouldRender: (key) => key.startsWith(`score.${SB}.player.`),
-        skipState: OverlayBase.SAMPLE_MODE,
-      });
-
-      if (OverlayBase.SAMPLE_MODE) render();
-    }
-    boot();
+    OverlayBase.init({
+      render,
+      sample: 'scoreboard',
+      shouldRender: (key) => key.startsWith(`score.${SB}.player.`),
+    });
   </script>
 </body>
 </html>

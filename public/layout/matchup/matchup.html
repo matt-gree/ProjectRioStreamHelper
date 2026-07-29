@@ -40,32 +40,14 @@
     const host = document.getElementById('host');
     const mu = mountMatchup({ host });
 
-    async function boot() {
-      if (OverlayBase.SAMPLE_MODE) {
-        // Layouts/Setup preview: prime a representative fetched head-to-head.
-        try {
-          const r = await fetch(`${OverlayBase.BASE_URL}/layout/preview/matchup_sample.json`);
-          const data = r.ok ? await r.json() : null;
-          if (data) {
-            if (data.matchup) OverlayBase.deepSet(OverlayBase.state, 'matchup', data.matchup);
-            if (data.match) OverlayBase.deepSet(OverlayBase.state, 'match', data.match);
-            if (data.tournamentInfo) OverlayBase.deepSet(OverlayBase.state, 'tournamentInfo', data.tournamentInfo);
-          }
-        } catch { /* ignore */ }
-      }
-
-      OverlayBase.init({
-        render: () => mu.update(OverlayBase.state, OverlayBase.settings),
-        // Re-render when our data, the bound match, or branding change.
-        shouldRender: (key) => key.startsWith('matchup') || key.startsWith('match.') || key.startsWith('branding') || key.startsWith('tournamentInfo'),
-        shouldRenderSettings: (key) => key.startsWith('overlays.matchup.') || key.startsWith('overlays.global.'),
-        fetchSettings: true,
-        skipState: OverlayBase.SAMPLE_MODE,
-      });
-
-      if (OverlayBase.SAMPLE_MODE) mu.update(OverlayBase.state, OverlayBase.settings);
-    }
-    boot();
+    OverlayBase.init({
+      render: () => mu.update(OverlayBase.state, OverlayBase.settings),
+      sample: 'matchup',
+      // Re-render when our data, the bound match, or branding change.
+      shouldRender: (key) => key.startsWith('matchup') || key.startsWith('match.') || key.startsWith('branding') || key.startsWith('tournamentInfo'),
+      shouldRenderSettings: (key) => key.startsWith('overlays.matchup.') || key.startsWith('overlays.global.'),
+      fetchSettings: true,
+    });
 
     // Follow OBS's on-screen signal (scene cuts AND the source's eye icon):
     // hide snaps the band dark, show plays one clean reveal, redundant

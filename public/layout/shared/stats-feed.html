@@ -50,29 +50,22 @@
       try { return JSON.parse(decodeURIComponent(raw)); } catch { return null; }
     }
 
-    async function boot() {
-      // Preview (Layouts/Setup tab): prime a representative stats assignment +
-      // sample roster, and skip live state so the server can't race in over it.
-      if (OverlayBase.SAMPLE_MODE) {
-        try {
-          const resp = await fetch(`${OverlayBase.BASE_URL}/layout/preview/scoreboard_sample.json`);
-          const data = resp.ok ? await resp.json() : null;
-          if (data) OverlayBase.deepSet(OverlayBase.state, 'score.1', data);
-        } catch { /* ignore */ }
-        // Sample mode has no live feed to follow, so name a representative
-        // occupant. `?feed=` still wins, for a gallery previewing a specific one.
-        OverlayBase.deepSet(OverlayBase.state, 'production.feed.container.stats-feed',
-          { element: params.get('feed') || 'stats', scoreboard: 1, team: 1, charIndex: 0, role: 'batting' });
-      }
-      // `?feed=` names the occupant; `?feedsel=` supplies its content so a
-      // pickable element previews without a live pick — see callout-stage.html.
-      initFedContainer({
-        host, perf: PERF, skipState: OverlayBase.SAMPLE_MODE,
-        forceElement: OverlayBase.PREVIEW_MODE ? params.get('feed') : null,
-        previewSel: OverlayBase.PREVIEW_MODE ? parseFeedSel(params.get('feedsel')) : null,
-      });
-    }
-    boot();
+    // `?feed=` names the occupant; `?feedsel=` supplies its content so a
+    // pickable element previews without a live pick — see callout-stage.html.
+    initFedContainer({
+      host, perf: PERF,
+      // Sample mode has no live feed to follow, so the bundle names a
+      // representative occupant alongside the game its stats come from.
+      sample: {
+        file: 'scoreboard',
+        state: {
+          'production.feed.container.stats-feed':
+            { element: params.get('feed') || 'stats', scoreboard: 1, team: 1, charIndex: 0, role: 'batting' },
+        },
+      },
+      forceElement: OverlayBase.PREVIEW_MODE ? params.get('feed') : null,
+      previewSel: OverlayBase.PREVIEW_MODE ? parseFeedSel(params.get('feedsel')) : null,
+    });
   </script>
 </body>
 </html>

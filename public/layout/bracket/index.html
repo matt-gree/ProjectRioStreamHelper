@@ -1258,31 +1258,18 @@
       return div.innerHTML;
     }
 
-    /* ─── Init ───
-       In preview mode, prime `state.bracket` from the sample JSON BEFORE init
-       runs and tell init to skip state — otherwise the SocketIO v1.state.get
-       wipe would race over our sample data. */
-    async function boot() {
-      if (OverlayBase.SAMPLE_MODE) {
-        try {
-          const resp = await fetch(`${OverlayBase.BASE_URL}/layout/preview/bracket_sample.json`);
-          const data = resp.ok ? await resp.json() : null;
-          if (data) OverlayBase.deepSet(OverlayBase.state, 'bracket', data);
-        } catch { /* ignore — render will show empty bracket */ }
-      }
-      OverlayBase.init({
-        render,
-        fetchSettings: true,
-        shouldRender: (key) => key === 'bracket' || key.startsWith('bracket.'),
-        // Re-render on global design changes (color, font, shadows, etc.)
-        // and bracket-specific overrides (connectorColor, activeColor, maxScale).
-        // NOT on unrelated scoreboard/ticker setting changes — those used to
-        // strip/re-insert the bracket DOM and restart animations needlessly.
-        shouldRenderSettings: (key) => key.startsWith('overlays.global.') || key.startsWith('overlays.bracket.'),
-        skipState: OverlayBase.SAMPLE_MODE,
-      });
-    }
-    boot();
+    /* ─── Init ─── */
+    OverlayBase.init({
+      render,
+      sample: 'bracket',
+      fetchSettings: true,
+      shouldRender: (key) => key === 'bracket' || key.startsWith('bracket.'),
+      // Re-render on global design changes (color, font, shadows, etc.)
+      // and bracket-specific overrides (connectorColor, activeColor, maxScale).
+      // NOT on unrelated scoreboard/ticker setting changes — those used to
+      // strip/re-insert the bracket DOM and restart animations needlessly.
+      shouldRenderSettings: (key) => key.startsWith('overlays.global.') || key.startsWith('overlays.bracket.'),
+    });
 
     // Window resize: rescale only. drawConnectors is intentionally NOT
     // re-called here — its math reads getBoundingClientRect at the current
