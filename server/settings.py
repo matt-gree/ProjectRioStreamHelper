@@ -171,6 +171,48 @@ class Settings:
             # maps an element id -> the OBS source name the streamer picked as
             # a fed element's target shared source (instead of the default).
             "overrides": {},
+            # Producer-built shared CONTAINERS. A container is one OBS browser
+            # source that hosts whichever of its members the producer feeds it
+            # (production.feed.container.{id} holds exactly one occupant), so
+            # its members are by definition mutually exclusive — the roster IS
+            # the membership relation, and nothing else stores it.
+            #
+            # `width`/`height` are the source's native pixel size: the size of
+            # the LARGEST member, since smaller members center and are never
+            # scaled (PRSH has no scaling system — OBS does placement). The
+            # member picker is filtered to what fits, so a size mismatch is
+            # unrepresentable rather than handled.
+            #
+            # These three are seeded so a fresh install has the containers the
+            # app already shipped with. Both non-full-canvas ones were sized
+            # smaller than the element they host and worked only because those
+            # two mounts happen to reflow — seeded here at their member's real
+            # native size (stats-feed 325x120 -> 452x118, split-screen
+            # 960x1080 -> 1280x720) rather than grandfathered.
+            "container_defs": {
+                "callout-stage": {
+                    "name": "Callout Stage",
+                    "width": 1920,
+                    "height": 1080,
+                    "members": ["postgamecallout", "postgamevs"],
+                },
+                "stats-feed": {
+                    "name": "Stats Bar",
+                    "width": 452,
+                    "height": 118,
+                    "members": ["stats"],
+                },
+                # The hit visualizer is both: it owns a dedicated source AND can
+                # occupy a container ("Split feed" on its stage), which is why a
+                # roster is a list of members rather than a list of fed
+                # elements.
+                "split-screen": {
+                    "name": "Split-Screen",
+                    "width": 1280,
+                    "height": 720,
+                    "members": ["hitvisualizer"],
+                },
+            },
             # Hit-visualizer "spotlight": on Fire, cut to `scene`, play the
             # animation, then cut back to the previous program scene. `holdMs`
             # is extra time held on the landing before returning.
@@ -326,6 +368,18 @@ class Settings:
                     if key in promoted_to_global:
                         layout_dict.pop(key, None)
             overlays["schema_version"] = 2
+            await cls.Save()
+
+        # Container membership moved ONTO the container. It used to live per
+        # element (`production.containers.{elementId}` -> container id) with the
+        # element's own layout stem as the implicit default; it is now the
+        # roster on `production.container_defs.{id}`. Two places storing one
+        # relationship is how these drift, so the old key is dropped rather than
+        # translated — 2.0.0 has never shipped, and the seeded defs above
+        # reproduce every pairing the defaults ever had.
+        production = cls.settings.setdefault("production", {})
+        if "containers" in production:
+            production.pop("containers", None)
             await cls.Save()
 
         # One-time binding migration: unify the per-scoreboard source-type enum

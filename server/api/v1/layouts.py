@@ -5,10 +5,21 @@ from fastapi import APIRouter, Request
 from fastapi.responses import ORJSONResponse
 
 from server.paths import app_root
+from server.settings import Settings
 
 router = APIRouter()
 
 _layout_dir = app_root() / "public" / "layout"
+
+# Shared containers are PRODUCER-BUILT, so they are not files to enumerate.
+# One generic shell renders every one of them (?container={id}), and the
+# catalog rows come from `production.container_defs` instead — which is what
+# gives each row the container's own name and native size. The folder is
+# skipped wholesale: the pre-2.0 named shells (callout-stage.html and friends)
+# stay on disk so browser sources already pointing at them keep rendering, but
+# offering them alongside the definitions would list the same container twice.
+_CONTAINER_GROUP = "shared"
+_CONTAINER_SHELL = "/layout/shared/container.html"
 
 # The controller browser-source wraps gc-overlay, which only runs on macOS.
 # Hide that layout group from the catalog on other platforms.
@@ -103,14 +114,6 @@ _DEFAULT_DIMS = {
 # (single-variant standalone layouts that aren't size or team variants).
 _STANDALONE_DISPLAY_NAMES = {
     "rotator/ticker": "Results Ticker",
-    # Named shared containers: each is a generic, descriptively-sized target the
-    # producer can feed any supported element into (production.feed.container.*).
-    # Split-Screen sits beside the game (tall); Stats is a small bar.
-    "shared/split-screen": "Split-Screen",
-    "shared/stats-feed": "Stats",
-    # Callout Stage is a full 1920×1080 target; first occupant is the post-game
-    # Stat Callout.
-    "shared/callout-stage": "Callout Stage",
     # Talent — registry-bound person overlays.
     "commentary/commentary": "Commentary",
     # Two-player name/sub-plate band (both L/R, or one player at left/center/
@@ -158,12 +161,46 @@ def _derive_type(stem: str, group: str = "") -> str:
     return base if base else stem
 
 
+def _container_layouts(base: str) -> list[dict]:
+    """Catalog rows for the producer's shared containers, one per definition.
+
+    A container is config, not a file: `production.container_defs.{id}` carries
+    its display name, its native size (the largest member's, since smaller
+    members center and never scale) and its member roster. Every one of them is
+    rendered by the same generic shell, told which definition to be.
+    """
+    defs = Settings.Get("production.container_defs", {}) or {}
+    shell = _layout_dir / "shared" / "container.html"
+    _, _, supported = _parse_html_meta(shell)
+
+    rows = []
+    for cid, cdef in sorted(defs.items()):
+        if not isinstance(cdef, dict):
+            continue
+        entry = {
+            "group": _CONTAINER_GROUP,
+            "name": cdef.get("name") or cid,
+            "type": "container",
+            "url": f"{base}{_CONTAINER_SHELL}?container={cid}",
+            "container": cid,
+            "members": list(cdef.get("members") or []),
+        }
+        w, h = cdef.get("width"), cdef.get("height")
+        if isinstance(w, int) and isinstance(h, int):
+            entry["width"] = w
+            entry["height"] = h
+        if supported is not None:
+            entry["supportedSettings"] = supported
+        rows.append(entry)
+    return rows
+
+
 @router.get("/layouts", response_class=ORJSONResponse)
 async def list_layouts(request: Request):
     """Return all available OBS layout HTML files grouped by folder path."""
     host = request.headers.get("host", "localhost:5260")
     base = f"http://{host}"
-    layouts = []
+    layouts = _container_layouts(base)
 
     if _layout_dir.is_dir():
         for f in sorted(_layout_dir.rglob("*.html")):
@@ -172,6 +209,10 @@ async def list_layouts(request: Request):
 
             # gc-overlay is macOS-only; omit its browser source elsewhere.
             if not _CONTROLLER_SUPPORTED and group == "controller":
+                continue
+
+            # Containers come from the definitions above, not from the folder.
+            if group == _CONTAINER_GROUP:
                 continue
 
             layout_type = _derive_type(f.stem, group)
