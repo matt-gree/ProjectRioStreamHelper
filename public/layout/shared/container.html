@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<!--
+  The shared CONTAINER — one shell for every container the producer builds.
+
+  A container is one OBS browser source that hosts whichever of its MEMBERS is
+  fed to it (production.feed.container.<id> holds exactly one occupant, which is
+  what makes members mutually exclusive). Its identity is entirely in config:
+  settings.production.container_defs.<id> carries the display name, the native
+  size and the member roster, and `?container=<id>` tells this page which one to
+  be. Rendering lives in the reusable element mounts via fed-container.js; this
+  file is the shell and nothing else — which is the point, since there is no
+  longer one file per container to keep in sync.
+
+  Sized at runtime from the definition (the size of the largest member, since
+  smaller members center and are never scaled). The console's Add picker creates
+  the OBS source at exactly that size.
+
+  The pre-2.0 named shells beside this one (callout-stage / stats-feed /
+  split-screen) still work for sources already pointing at them — they take
+  their id from their own filename — but the catalog offers only definitions.
+-->
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!--
+    The UNION of what this shell's possible occupants theme against, because one
+    shell now stands in for every container: the callout's accent/font/port
+    colours and the stats card's surface knobs. Each mount reads its own
+    overlays.<element>.* namespace, so listing a key here costs nothing to a
+    container whose members ignore it — but omitting one would strand a setting
+    the mount honours (the whitelist is what the Production stage's Style
+    section filters against; see designConstants.js).
+  -->
+  <meta name="overlay-settings" content="accentColor, cardBg, borderRadius, borderColor, borderWidth, fontFamily, cardShadow, textShadow, statValueColor, subtextColor, transitionType, port0Color, port1Color, port2Color, port3Color" />
+  <!-- three.js vendored locally; addons resolve bare 'three' via this map (for the hit element). -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "/layout/lib/three/three.module.js",
+      "three/addons/": "/layout/lib/three/addons/"
+    }
+  }
+  </script>
+  <style>
+    /* Inter is bundled locally (injected by overlay-base.js); only Chivo Mono is
+       fetched from Google Fonts here, for the callout occupants. */
+    @import url('https://fonts.googleapis.com/css2?family=Chivo+Mono:wght@600;700;800&display=swap');
+    html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+    /* No `body { width/height }` size hint: this shell has no native size of its
+       own. Each container's is its definition's, applied by fed-container.js,
+       and the catalog reports it from the same place. */
+    #host { position: fixed; inset: 0; }
+  </style>
+</head>
+<body>
+  <div id="host"></div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="/layout/lib/overlay-base.js"></script>
+  <script src="/layout/lib/rio-data.js"></script>
+  <!-- GSAP vendored locally; the callout mount also lazy-loads it as a fallback. -->
+  <script src="/layout/lib/gsap/gsap.min.js"></script>
+  <script type="module">
+    import { containerSample, initFedContainer } from '/layout/lib/fed-container.js';
+
+    const params = new URLSearchParams(window.location.search);
+    const host = document.getElementById('host');
+    const CONTAINER = params.get('container') || '';
+
+    // ?feedsel= is a URL-encoded JSON content override (see fed-container.js).
+    // Bad JSON must not white-screen a preview — fall back to no override.
+    function parseFeedSel(raw) {
+      if (!raw) return null;
+      try { return JSON.parse(decodeURIComponent(raw)); } catch { return null; }
+    }
+
+    /*
+     * `?feed=` names WHICH occupant to draw; `?feedsel=` (JSON) supplies its
+     * content — the character/board Push WOULD show — so a pickable element
+     * previews without a live pick and without going on air. Both are
+     * preview-only: on air there is no ?feed=/?feedsel=, so the real feed
+     * governs. See fed-container.js.
+     */
+    initFedContainer({
+      host,
+      containerId: CONTAINER,
+      perf: params.get('perf') === '1',
+      // Resolved against the definition once it has loaded: a gallery preview
+      // of one specific occupant names it with ?feed=, otherwise a container
+      // samples as the first member the producer put on its roster.
+      sample: (def) => containerSample(
+        CONTAINER,
+        params.get('feed') || (def?.members || [])[0] || null,
+      ),
+      forceElement: OverlayBase.PREVIEW_MODE ? params.get('feed') : null,
+      previewSel: OverlayBase.PREVIEW_MODE ? parseFeedSel(params.get('feedsel')) : null,
+    });
+  </script>
+</body>
+</html>

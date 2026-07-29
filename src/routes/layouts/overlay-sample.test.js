@@ -254,7 +254,11 @@ describe('sample coverage — every Layout declares a bundle', () => {
     for (const [name, path] of files) {
         const exempt = NO_SAMPLE[name];
         it(`${name}${exempt ? ' is exempt' : ' declares sample:'}`, () => {
-            const declares = /\bsample:\s*(['"{])/.test(readFileSync(path, 'utf8'));
+            // A stem, an inline `{ file, state }`, or a FUNCTION of the page's
+            // own config that returns one — the shared container shell resolves
+            // its occupant from the container definition's roster, so its
+            // bundle can't be written out literally.
+            const declares = /\bsample:\s*(['"{(]|\w+\s*=>)/.test(readFileSync(path, 'utf8'));
             expect(declares, exempt || `${name} needs a sample: bundle`).toBe(!exempt);
         });
     }

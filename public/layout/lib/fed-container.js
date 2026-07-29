@@ -1,7 +1,7 @@
 // fed-container.js — generic shared-container engine.
 //
-// A "named shared container" (Split-Screen, Stats, …) is a shared overlay whose
-// id is its filename stem. The producer feeds an element into it from the
+// A shared container is one OBS browser source that hosts whichever of its
+// MEMBERS the producer feeds it. The producer feeds an element into it from the
 // Production page by writing production.feed.container.<id> = { element,
 // scoreboard, …content }. This engine reads that key, mounts the matching
 // element renderer into a host element, swaps it when the assignment changes,
@@ -11,6 +11,14 @@
 //   import { initFedContainer } from '/layout/lib/fed-container.js';
 //   initFedContainer({ host: document.getElementById('host') });
 //
+// Containers are PRODUCER-BUILT: each one is a definition under
+// settings.production.container_defs.{id} (name · native size · member roster),
+// and container.html renders whichever the URL names. `containerId` is
+// therefore passed in from `?container=`; when it isn't, the id falls back to
+// the page's own filename stem, which is what keeps the pre-2.0 named shells
+// (callout-stage.html, stats-feed.html, split-screen.html) — and any browser
+// source still pointing at one — rendering exactly as before.
+//
 // Requires overlay-base.js (and rio-data.js for the stats element) loaded first,
 // and the host page's `three` importmap for the hit element.
 import { mountHit } from '/layout/lib/hit-mount.js';
@@ -18,9 +26,93 @@ import { mountStats } from '/layout/lib/stats-mount.js';
 import { mountPostgameCallout } from '/layout/lib/postgame-callout-mount.js';
 import { mountPostgameVs } from '/layout/lib/postgame-vs-mount.js';
 
-export function initFedContainer({ host, perf = false, sample = null, forceElement = null, previewSel = null }) {
-  const CONTAINER_ID = window.location.pathname.replace(/^.*\/([^/]+)\.html?(?:\?.*)?$/, '$1');
+// The container id this page is: what `?container=` names, else the filename
+// stem. Exported so the shell and the console agree on one derivation.
+export function containerIdFromLocation(explicit) {
+  if (explicit) return explicit;
+  return window.location.pathname.replace(/^.*\/([^/]+)\.html?(?:\?.*)?$/, '$1');
+}
+
+/*
+ * This container's definition, fetched once before init.
+ *
+ * It is read here rather than left to OverlayBase's own settings fetch because
+ * both things it decides have to be true on the FIRST paint: the page's native
+ * size, and which member the sample bundle stands up in demo mode (the bundle
+ * is loaded before the settings fetch, by design — a preview must draw its
+ * fixture rather than flash empty). A failure is not fatal: with no definition
+ * the container still renders whatever is fed to it.
+ */
+/*
+ * A representative occupant per member, for sample mode.
+ *
+ * A container draws whatever is FED to it, and neither the picker preview nor
+ * app-wide demo mode has a live feed to follow — so a container's sample bundle
+ * has to name an occupant as well as the captured game behind it. Which member
+ * that is comes from the definition's roster (its first), so a producer's own
+ * container samples as the thing they built it for.
+ *
+ * Keyed by the same element ids `ensureMount` switches on: one table, and a
+ * member the engine can't mount has no sample either.
+ */
+const SAMPLE_OCCUPANTS = {
+  hitvisualizer:   { file: 'scoreboard', content: { scoreboard: 1 } },
+  stats:           { file: 'scoreboard', content: { scoreboard: 1, team: 1, charIndex: 0, role: 'batting' } },
+  postgamecallout: { file: 'postgame',   content: { scoreboard: 1, team: 1, charIndex: 0 } },
+  postgamevs:      { file: 'postgame',   content: { scoreboard: 1 } },
+};
+
+/**
+ * This container's sample bundle: the occupant's own captured game, plus the
+ * feed key standing that occupant up inside this container.
+ *
+ * `occupant` is whatever the caller resolved (`?feed=` in a gallery preview,
+ * else the definition's first member). With no occupant at all there is
+ * nothing to draw, so the bundle is just the game — the container renders
+ * transparent, which is the honest sample for an empty container.
+ */
+export function containerSample(id, occupant) {
+  const spec = SAMPLE_OCCUPANTS[occupant];
+  if (!spec) return { file: 'scoreboard' };
+  return {
+    file: spec.file,
+    state: { [`production.feed.container.${id}`]: { element: occupant, ...spec.content } },
+  };
+}
+
+async function fetchDef(id) {
+  try {
+    const r = await fetch(`${OverlayBase.BASE_URL}/api/v1/settings`);
+    if (!r.ok) return null;
+    const s = await r.json();
+    const d = s?.production?.container_defs?.[id];
+    return (d && typeof d === 'object') ? d : null;
+  } catch (e) {
+    console.warn('[fed-container] container def unavailable:', e.message);
+    return null;
+  }
+}
+
+export async function initFedContainer({
+  host, perf = false, sample = null, forceElement = null, previewSel = null,
+  containerId = null,
+}) {
+  const CONTAINER_ID = containerIdFromLocation(containerId);
   const FEED_KEY = `production.feed.container.${CONTAINER_ID}`;
+  const def = containerId ? await fetchDef(CONTAINER_ID) : null;
+
+  // A definition-backed container has no size in its CSS — one shell serves
+  // every one of them — so it takes the definition's, which is the size the
+  // console gave the OBS browser source. Members smaller than the container
+  // center inside it and are never scaled.
+  if (def?.width && def?.height) {
+    document.body.style.width = `${def.width}px`;
+    document.body.style.height = `${def.height}px`;
+  }
+
+  // A definition-backed container resolves its own sample from its roster; the
+  // legacy named shells still pass theirs in literally.
+  const sampleSpec = typeof sample === 'function' ? sample(def) : sample;
 
   let mount = null;
   let mountedElement = null;
@@ -101,7 +193,7 @@ export function initFedContainer({ host, perf = false, sample = null, forceEleme
   OverlayBase.init({
     render,
     fetchSettings: true, // stats themes off overlays.* design settings; hit ignores them
-    sample, // the host page's sample bundle: a captured game plus an occupant
+    sample: sampleSpec, // a captured game plus the occupant standing in it
     // This container's assignment, plus any score change (stats read across a
     // scoreboard; hit-mount.update no-ops unless the contact actually changed).
     // tournamentInfo feeds the Game Summary's top match strip.
