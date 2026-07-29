@@ -17,6 +17,7 @@ import {
     togglePin as togglePinIn, useConsolePlacements, useConsoleScenes,
 } from './placements';
 import { AddSourceDialog } from './addsource';
+import { SampleModeSwitch } from './sample';
 import { Stage } from './stage';
 import { Rail } from './rail';
 import MatchDesk from './desks/match';
@@ -258,6 +259,7 @@ export default function Production() {
             <Group className="flex-wrap items-center justify-end gap-4">
                 <Group gap="md" className="flex-wrap items-center">
                     <TopBarSceneControls />
+                    <SampleModeSwitch />
                     <ConnectionPill />
                 </Group>
             </Group>

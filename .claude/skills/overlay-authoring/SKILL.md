@@ -62,8 +62,12 @@ Copy an existing pair when starting: `public/layout/playerplates/playerplates.ht
 - `BASE_URL` resolves to the page origin, or `http://localhost:5260` when
   loaded from `file:`.
 - Preview flags: `?preview=1` (Layouts-tab iframe), `?preview_globals_only=1`
-  (suppress per-layout overrides), `skipState: true` for sample-JSON previews
-  (`public/layout/preview/`).
+  (suppress per-layout overrides), `?sample=1` (render this layout's sample
+  bundle — see below).
+- **Sample bundle**: `init({ sample })` — a file stem under
+  `public/layout/preview/`, or `{ file, state, settings }`. That one line is a
+  layout's whole sample story; there is no per-shell fetch block and no
+  `skipState` (both are gone).
 
 Other helpers: `deepGet/deepSet`, `charImg`/`logoImg` (character art keyed by
 HUD char id 0–53, team logos by 0–47 enumeration — mirrors
@@ -230,22 +234,69 @@ screenshot; get the user's eyes or reason from first principles.
    base; on air neither param exists and the real feed governs. See
    `callout-stage.html` + `fed-container.js`.
 
+6. Declare a **sample bundle** (`init({ sample })`) — see below. The
+   coverage guard fails without one.
+7. Verify: `GET /api/v1/layouts` lists it with correct type/dims/settings;
+   load the URL in a browser, hard-refresh, check the console; if animated,
+   test the OBS eye-toggle + scene-cut paths.
+8. Update the "Catalog + registration" section **of this skill** if you added a
+   type or variant axis (CLAUDE.md keeps only a pointer — the detail lives here).
+
 ### `?preview=1` vs `?sample=1` — two different questions
 
 - **`PREVIEW_MODE` (`?preview=1`)** — "you are in a preview iframe, not an OBS
   source." Preview CHROME only: `setBlank` notes render visibly, animations
   resolve instantly, stages scale to fit. Says nothing about data.
-- **`SAMPLE_MODE` (`?sample=1`)** — "render canned sample data instead of live
-  state." Guards the `*_sample.json` priming AND `skipState: true`.
+- **`?sample=1`** — "render this layout's sample bundle instead of live state."
+  Says nothing about chrome.
 
-**A new layout's sample block and `skipState` must key on `SAMPLE_MODE`, never
-`PREVIEW_MODE`.** They were one flag, which made the Production console's stage
-preview a mockup — every element drew the fixture game and live state was never
-fetched, while the panel claimed to show what was about to go on air. The Design
-tab gallery passes `preview=1&sample=1` (it must render on a machine with no
-game); the console passes `preview=1` alone and gets the truth.
-6. Verify: `GET /api/v1/layouts` lists it with correct type/dims/settings;
-   load the URL in a browser, hard-refresh, check the console; if animated,
-   test the OBS eye-toggle + scene-cut paths.
-7. Update the "Catalog + registration" section **of this skill** if you added a
-   type or variant axis (CLAUDE.md keeps only a pointer — the detail lives here).
+They were one flag, which made the Production console's stage preview a mockup —
+every element drew the fixture game and live state was never fetched, while the
+panel claimed to show what was about to go on air. The gallery passes
+`preview=1&sample=1` (it must render on a machine with no game); the console
+passes `preview=1` alone and gets the truth.
+
+### Sample bundles — `init({ sample })`
+
+**Every Layout declares one. `src/routes/layouts/overlay-sample.test.js` fails
+if it doesn't.** A layout with no bundle previews as an empty box in the Add
+picker on a machine with no game running, which reads as a broken element rather
+than an unconfigured one.
+
+- **A bundle is a state fragment**: `{ "state": { "score.{sb}": {…} },
+  "settings": { … } }` — a flat map of state key → value. `{sb}` and `{team}`
+  resolve from the page's own URL, so one bundle serves every board and side
+  variant. Nothing translates between "sample shape" and "state shape", which is
+  what let the old per-shell blocks drift apart.
+- **Settings in a bundle SEED, they don't override.** Only content-ish keys
+  belong there (a stats tag, a card title), and only holes get filled — a
+  producer laying out a scene in demo mode keeps their own title, and leaving
+  demo mode clears exactly the keys the seed filled. Never seed a design key.
+- **`{ file, state, settings }`** when the bundle depends on this page's own URL
+  params. Shared containers use it to name their occupant (`?feed=` still wins).
+- Reuse an existing bundle before authoring one — `scoreboard` alone covers
+  eight layouts.
+
+### Demo mode — state `production.sample`
+
+The same bundles, switched app-wide at runtime, so a producer can build an OBS
+scene with no game running. Rules that must not erode
+(`src/routes/production/sample.jsx`, `sample.test.jsx`):
+
+- **`OverlayBase.state` and `.settings` keep ONE object identity for the page's
+  life.** A dozen layouts do `const { deepGet, state } = OverlayBase` once at
+  module scope. A getter over two bundles, or swapping the object, strands every
+  one of them on whichever bundle was current at script time — this is not
+  hypothetical, it shipped for an hour and the bracket drew its empty state
+  against a fully loaded sample. The sample takes the store OVER (live contents
+  park in a buffer); it never replaces it.
+- **Live state keeps flowing while the sample is up.** Leaving demo mode lands
+  on the CURRENT game, not the one that was playing when it started.
+- **Read the switch strictly** (`true`/`"true"`/`1`/`"1"`). `PUT /api/v1/state`
+  is str-typed, so an off written over REST arrives as the string `"false"`; a
+  truthiness check leaves every source stuck on a fixture.
+- **Global, never per-element**; **never self-enables**; **survives a restart**
+  — and that last one is only acceptable because the banner is unmissable and
+  carries the off switch. Keep the pair.
+- A layout with no bundle ignores both switches and stays live, and says so in
+  preview rather than reading as broken.

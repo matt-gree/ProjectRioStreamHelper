@@ -477,7 +477,9 @@ Two rules, both learned the hard way:
 - `previewUrl` passes `?preview=1` **without** `?sample=1`, so the preview is
   what is about to go on air rather than the fixture game. That split lives in
   `overlay-base.js` (see the overlay-authoring skill) — before it, every stage
-  preview was a mockup.
+  preview was a mockup. (Demo mode is the deliberate exception: when the
+  producer flips the top bar's **Sample** switch, the preview shows the fixture
+  because so does the browser source. The preview never disagrees with air.)
 - A fed element has no source of its own — Character Spotlight and Game Summary
   are both registered at `/layout/shared/callout-stage.html` — so `previewUrl`
   returns the same URL for every element aimed at one container, and the

@@ -49,6 +49,8 @@ These terms have specific meanings in this codebase. Use them precisely; correct
 | **Layout type** | Derived from filename + group folder (`server/api/v1/layouts.py`). Drives `?size=` / `?team=` variant expansion. |
 | **Scene** | A full 1920×1080 Layout under `public/layout/scenes/` designed to drop into an OBS scene as the entire stream canvas. |
 | **Overlay** | Generic OBS Browser Source terminology. Not PRSH-specific; do not use as a synonym for any of the terms above. |
+| **Sample bundle** | A Layout's canned state fragment under `public/layout/preview/*_sample.json`, declared via `OverlayBase.init({ sample })`. Every Layout has one. Keys carry `{sb}`/`{team}` tokens resolved from the page URL. |
+| **Demo mode** | State `production.sample` — the app-wide switch that makes every overlay render its sample bundle instead of live state, for building OBS scenes with no game running. Global, never self-enabling, guarded by an app-wide banner. |
 | **Size variant** | `?size=s\|m\|l` query param, scoreboard layouts only (`xs`/`xl` retired with the SVG conversion; legacy URLs fall back to `l`). |
 | **Team variant** | `?team=1\|2` query param. Applies to stats, roster, rosterstats, teamlogo, controller, playername. |
 | **Rotation / Rotating** | A board whose playback mode is `rotate`, cycling its pool at an interval. Managed by `PoolManager` (`server/rio/rotation.py`). No other meaning — there is no "player rotation" concept. |
@@ -159,6 +161,7 @@ Layouts are HTML files under `public/layout/`, enumerated by `server/api/v1/layo
 
 - **Keep the `<meta>` whitelist and `LAYOUT_SETTINGS[type]` in sync.** The Production stage's Style section filters the registry down to what the whitelist names, so a key the mount honours but the whitelist omits is a setting nobody can reach. `src/routes/production/stage/eventheader.test.jsx` pins this.
 - Wire every layout through **`OverlayBase.init()`** (`public/layout/lib/overlay-base.js`) — keep the HTML a thin shell over a `lib/*-mount.js`.
+- **Every layout declares a sample bundle** (`init({ sample })`); `src/routes/layouts/overlay-sample.test.js` fails if one doesn't. The same bundles drive app-wide **demo mode** (`production.sample`) — see `src/routes/production/sample.jsx` for the rules that keep a fixture off a live broadcast.
 - Element visuals are **re-themable SVGs** bound by `data-slot`/`data-tpl` hooks via `svg-theme-engine.js`, with package resolution falling back element-by-element to `default`.
 
 > Deep dive: `.claude/skills/overlay-authoring/SKILL.md` (mount pattern, `OverlayBase` guarantees, theme contract, OBS reveal/conceal, add-a-Layout checklist) and `.claude/skills/design-package-authoring/SKILL.md` (package tiers, install rules, converting designer exports).
@@ -252,6 +255,7 @@ If the app fails to launch due to corrupt `user_data/state.json`: `echo '{}' > u
 | Add API endpoints | `server/api/v1/` (decorate with `@method`), register in `server/api/__init__.py` |
 | Settings schema | `server/settings.py` (defaults + migrations), `src/components/SettingsModal.jsx` |
 | Add/modify a Layout or element overlay | `public/layout/<group>/` + `public/layout/lib/*-mount.js`, register in `src/routes/layouts/designConstants.js` (+ `src/routes/production/elements.js` if a Production element) |
+| Sample data / demo mode | `public/layout/preview/*_sample.json`, `public/layout/lib/overlay-base.js` (`sample` option), `src/routes/production/sample.jsx` (switch + banner) |
 | Theme/design packages | `public/design/`, `server/design_packages.py`, `public/layout/lib/svg-theme-engine.js` |
 | Production console (rack/stage/rail) | `src/routes/production/{rack,rail}.jsx`, `stage/`, `desks/`, `kit/`, `elements.js`, `placements.js` (row identity), `addsource.jsx` (Add picker) |
 | Production OBS control / staging | `src/context/obs.jsx`, `src/context/staging.js` |
