@@ -434,6 +434,8 @@ identity, and it is the third and last term in a chain the console converged on:
   when at most one could be on screen, either row's eye toggled the other's
   source, and the container appeared as a row only while *nothing* was aimed at
   it. A source in `/layout/shared/` is what makes something a container.
+  Which elements nest under which container is a direct read of the container's
+  **roster** (below), not an inverted scan over per-element settings.
 - **A PRSH source the registry doesn't know still gets a row** (`genericElement`)
   — chip, name and the Air slot, but deliberately **no preview**: native
   dimensions come from the registry, and previewing at a guessed aspect is the
@@ -489,8 +491,70 @@ Two rules, both learned the hard way:
   `forceElement`, overriding the element only — board and content still come
   from the live feed. Preview-only: on air there is no `?feed=`.
 
-The container's own row previews too, sized from the layout catalog, since
-`genericElement` carries no dimensions.
+The container's own row previews too, sized from its **definition** —
+`containerElement(id, def)` (`placements.js`) synthesises it rather than
+`genericElement`, because every container is rendered by ONE generic shell and
+keying identity on the pathname would give every container in a scene the same
+id (duplicate React keys, and a panel driving whichever source `find()` reached
+first — the bug the board and variant axes exist to prevent). Its element id is
+`container:{id}`, and the definition supplies the name and native size a
+generic element cannot.
+
+### Containers are producer-built
+
+`src/routes/production/containers.js`. A container is ONE OBS browser source
+that hosts whichever of its **members** the producer feeds it. It is not a file:
+`settings.production.container_defs.{id}` = `{ name, width, height, members }`,
+and one generic shell (`/layout/shared/container.html?container={id}`) renders
+any of them.
+
+- **Membership lives on the CONTAINER, and it is exclusive.** The roster IS the
+  relationship. It used to be stored per element
+  (`production.containers.{elementId}`, defaulting to the element's own layout
+  stem via `defaultContainerFor`) — one fact with two homes and a default no UI
+  ever wrote, which is the shape these drift apart in. Both are gone. Adding a
+  member to a second container MOVES it, because
+  `production.feed.container.{id}` holds one occupant and two containers
+  claiming one element could never both be honoured. Enforced in exactly one
+  place: `useContainerActions`.
+- **Sharing a container IS the definition of mutually exclusive.** That is what
+  the producer is choosing when they tick two members onto one roster.
+- **No container is a real state.** `useContainerOf` returns `null` when no
+  roster names an element, and every surface reports it — `canPush` is false,
+  the stage says which container to add it to. The old implicit default is
+  exactly what made membership look configured when nothing had been.
+- **A member must FIT** (`fitsContainer`): the container's size or smaller.
+  There is no scaling system — OBS does placement — so a larger member is
+  unrepresentable rather than handled, and a smaller one **centers, never
+  scales**. Centering is safe for the reason scaling was not: no aspect math,
+  no resampling, no blur.
+- **The sizes offered when building one are the CENSUS** of what can go in a
+  container (`containerSizeClasses`, derived from `CONTAINER_MEMBERS`), not
+  invented presets. Size is fixed at creation: the OBS source already exists at
+  those dimensions, and changing it later would leave the source at the old size
+  with nothing to say so. Two sizes means two containers.
+- **`CONTAINER_MEMBERS` is not the same question as `flavor`.** Every `fed`
+  element, plus anything declaring `containerHostable` — the hit visualizer owns
+  a dedicated source AND can be fed into a container ("Split feed" on its
+  stage). It is the console's half of a fact `fed-container.js` also holds (the
+  mounts it can stand up); `containers.test.jsx` pins the two together until the
+  mount registry makes them one list.
+- **The container id comes off the URL the same way in both runtimes**:
+  `?container=` first, filename stem as fallback (`containerId` in
+  `elements.js`, `containerIdFromLocation` in `fed-container.js`). The fallback
+  is what keeps a browser source still pointing at a pre-2.0 named shell
+  (`callout-stage.html`) rowing and feeding. Those files stay on disk; the
+  catalog offers only definitions, or the same container would list twice.
+- **The id is never all digits** (`containerIdFor`). A container's row id is
+  `container:{id}` and `parseInstanceId` reads a colon-plus-DIGITS as the board
+  suffix — same rule that forbids a numeric desk name.
+- **The catalog reports containers from the definitions** (`_container_layouts`
+  in `server/api/v1/layouts.py`), which is also the only place a container's
+  name and native size live. The `shared/` folder is skipped entirely.
+- **The container's stage panel owns name + roster** (`stage/container.jsx`,
+  dispatched on `element.container`, not by id). Deleting a definition clears
+  its feed but **never deletes the OBS source** — the console does not remove a
+  source the producer watched appear.
 
 ### The Add picker
 
@@ -545,6 +609,18 @@ catalog left, live preview right.
   duplicates.
 - **Consumes `/api/v1/layouts`, not `ELEMENTS`** — the registry knows the ~14
   things the console can CONTROL, the catalog knows the ~25 things OBS can SHOW.
+  The one exception is the **shared** group: container rows are built from the
+  definitions in the settings store and the catalog's own shared rows are
+  dropped, so a container the producer just created is pickable immediately
+  instead of racing a refetch against the settings write. The union is
+  self-healing — once the server reports the new one, the merge is a no-op.
+- **Containers are BUILT here**, from a **+ New** in the shared group's header:
+  name → size → members that fit, then the new definition is created, selected
+  and previewed so Create → Add is one continuous act. Building one belongs in
+  the transaction that puts it in a scene, because that is the only reason to
+  build one. Size comes first: it is the constraint the member list answers to,
+  and members that stop fitting after a size change are dropped visibly rather
+  than carried.
   Variants (size / team / direction) are separate catalog rows, so picking
   "Scoreboard — Small" is choosing a row, not filling in a form.
 - **Adds HIDDEN**, like every Bind path in the console. Adding a source is

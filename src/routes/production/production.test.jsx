@@ -5,6 +5,7 @@ import { useSettingsStore, useStateStore } from '../../context/store';
 import { useObsStore } from '../../context/obs';
 import { useStagingStore } from '../../context/staging';
 import Production from './production';
+import { withContainers } from '../../test/containers';
 
 const store = new Map();
 beforeEach(() => {
@@ -18,7 +19,7 @@ beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({
         ok: true, json: () => Promise.resolve({}),
     })));
-    useSettingsStore.setState({ overlays: {}, scoreboards: {}, production: {} });
+    useSettingsStore.setState({ overlays: {}, scoreboards: {}, production: withContainers() });
     useStateStore.setState({ match: {}, score: {}, postgame: {}, bracket: {} });
     useStagingStore.setState({ pending: {}, order: [] });
 });

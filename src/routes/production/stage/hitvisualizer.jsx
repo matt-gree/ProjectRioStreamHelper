@@ -7,8 +7,9 @@ import { Text } from '../../../components/ui/primitives';
 import { notifications } from '../../../lib/notify';
 import { ActionRow, NumberRow, SelectRow, ToggleRow } from '../kit';
 import { runObs } from '../controls';
-import { useContainerTarget, useFeedControl, useSharedContainers } from '../feeds';
-import { BindingNote } from './generic';
+import { useFeedControl } from '../feeds';
+import { useContainerOf } from '../containers';
+import { BindingNote, ContainerHostNote } from './generic';
 
 /*
  * Hit Visualizer stage body — live actions (Replay / Spotlight / Split feed)
@@ -44,7 +45,11 @@ function useHitViz(scoreboard = 1) {
     const setSetting = useSettingsStore(s => s.setItem);
     const obsConnected = status === 'connected';
 
-    const { container, setContainer } = useContainerTarget('hitvisualizer', 'split-screen');
+    // The container whose roster names the hit visualizer, if any. It is one
+    // of the few elements that is both a dedicated source and a container
+    // member, so this can legitimately be null — then Split feed has nowhere
+    // to land and says so.
+    const { container } = useContainerOf({ id: 'hitvisualizer' });
     const { value: containerFeed, staged: feedStaged, setFeed } = useFeedControl(container);
     const fedHere = !!containerFeed && containerFeed.element === 'hitvisualizer'
         && (Number(containerFeed.scoreboard) || 1) === scoreboard;
@@ -98,7 +103,7 @@ function useHitViz(scoreboard = 1) {
     return {
         hit, hasHit, fedHere, feedStaged, scenes, spotlight, obsConnected, firing,
         replay, feedContainer, clearContainer, setSpot, canSpotlight, fireSpotlight,
-        container, setContainer,
+        container,
     };
 }
 
@@ -124,7 +129,6 @@ export default function HitVisualizerStage({ board, placement, scoreboard = boar
     // One hook instance for the whole panel: the actions and the config below
     // are the same decision surface and must not drift apart.
     const v = useHitViz(scoreboard);
-    const containers = useSharedContainers();
 
     return (
         <>
@@ -172,12 +176,7 @@ export default function HitVisualizerStage({ board, placement, scoreboard = boar
             </div>
 
             <div className="mt-1 flex flex-col gap-1.5 border-t border-border/60 pt-2">
-                <SelectRow
-                    label="Feed into" value={v.container} onChange={v.setContainer}
-                    options={containers.length
-                        ? containers.map(c => ({ label: c.name, value: c.id }))
-                        : [{ label: 'Split-Screen', value: v.container }]}
-                />
+                <ContainerHostNote element={{ id: 'hitvisualizer', name: 'Hit Visualizer' }} />
             </div>
         </>
     );

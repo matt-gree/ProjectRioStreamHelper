@@ -4,12 +4,13 @@ import { useSettingsStore, useStateStore } from '../../context/store';
 import { useStagingStore } from '../../context/staging';
 import { ELEMENTS } from './elements';
 import { PostgameCalloutPicker } from './feed-pickers';
+import { withContainers } from '../../test/containers';
 
 beforeEach(() => {
     vi.stubGlobal('localStorage', {
         getItem: () => null, setItem: () => {}, removeItem: () => {}, clear: () => {},
     });
-    useSettingsStore.setState({ overlays: {}, scoreboards: {}, production: {} });
+    useSettingsStore.setState({ overlays: {}, scoreboards: {}, production: withContainers() });
     useStateStore.setState({ score: {}, production: {}, postgame: {} });
     useStagingStore.setState({ pending: {}, order: [] });
 });

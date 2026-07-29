@@ -9,9 +9,8 @@ import { notifications } from '../../lib/notify';
 import { IconToggle } from './kit';
 import { instanceUrl, setSourceVisibility, useDisplayedEnabled } from './bindings';
 import { useActiveBoards } from './boards';
-import {
-    defaultContainerFor, useContainerPush, useContainerTarget, useSharedContainers,
-} from './feeds';
+import { useContainerPush } from './feeds';
+import { useContainerOf, useSharedContainers } from './containers';
 import { StagedDot } from './controls';
 
 /*
@@ -56,12 +55,13 @@ function useAddTargetScene() {
 }
 
 // What Bind would create for this element: its own layout for a direct
-// element, the selected shared container's for a fed one (which may have been
-// re-pointed away from the element's canonical default).
+// element, and for a fed one the source of the container whose roster names it
+// — sized and named from the definition, since that is the only place a
+// container's name and native size live.
 function useBindTarget(element, board) {
     const containers = useSharedContainers();
     const boards = useActiveBoards();
-    const { container } = useContainerTarget(element.id, defaultContainerFor(element));
+    const { container } = useContainerOf(element);
     if (element.flavor === 'direct') {
         // Board-scoped: create the source for the board the panel is pointed at.
         // Suffix the name only on a multi-board rig — otherwise the producer

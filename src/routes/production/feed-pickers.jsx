@@ -5,7 +5,8 @@ import { Stack, Group, Text } from '../../components/ui/primitives';
 import { SegmentedControl } from '../../components/ui/segmented-control';
 import { cn } from '../../lib/utils';
 import { StagedDot } from './controls';
-import { defaultContainerFor, useContainerTarget, useFeedControl, useFeedSelect } from './feeds';
+import { useFeedControl, useFeedSelect } from './feeds';
+import { useContainerOf } from './containers';
 import { resolveIntent } from './suggest';
 
 // Stable empty intent — a fresh {} each render would defeat useShallow.
@@ -269,7 +270,7 @@ export const PostgameCalloutPicker = memo(function PostgameCalloutPicker({ eleme
 // the callout-stage container renders the player-vs-player summary from
 // postgame.{N}.player.{T}.totals.
 export const PostgameVsPicker = memo(function PostgameVsPicker({ element, scoreboard = 1 }) {
-    const { container } = useContainerTarget(element.id, defaultContainerFor(element));
+    const { container } = useContainerOf(element);
     const { value: selection, staged } = useFeedControl(container);
     const pg = useStateStore(useShallow(s => {
         const p = s?.postgame?.[scoreboard];

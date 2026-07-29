@@ -14,6 +14,10 @@ import { cn } from '../../lib/utils';
 import { notifications } from '../../lib/notify';
 import { ELEMENTS } from './elements';
 import { useActiveBoards, useBoardLabel } from './boards';
+import {
+    CONTAINER_MEMBERS, containerSizeClasses, containerUrl, fitsContainer,
+    useContainerActions, useSharedContainers,
+} from './containers';
 
 /*
  * The Add picker — how a source comes into being now that the rack lists only
@@ -293,6 +297,125 @@ const PickerPreview = memo(function PickerPreview({ layout, board, boardLabel, b
 });
 
 /*
+ * Building a container, in the picker that adds it.
+ *
+ * A container is producer-built config, not a file, so there has to be a place
+ * to make one — and the honest place is the transaction that puts it in a
+ * scene. The producer names it, picks a SIZE, and ticks the members that fit;
+ * the new definition is written and immediately selected, so Add drops the
+ * source into the scene they opened this from.
+ *
+ * SIZE FIRST, because it is the constraint everything else answers to. The
+ * sizes are the census of what can go in a container (containerSizeClasses),
+ * not invented presets, and the member list is filtered to what fits — a member
+ * larger than its container is unrepresentable rather than handled, since there
+ * is no scaling system. Smaller members center.
+ */
+const NewContainerForm = memo(function NewContainerForm({ onCreate, onCancel }) {
+    const classes = useMemo(() => containerSizeClasses(), []);
+    const [name, setName] = useState('');
+    const [sizeId, setSizeId] = useState(classes[0]?.id ?? null);
+    const [members, setMembers] = useState([]);
+
+    const size = classes.find(c => c.id === sizeId) ?? classes[0];
+    const candidates = size
+        ? CONTAINER_MEMBERS.filter(el => fitsContainer(el, size.width, size.height))
+        : [];
+
+    // Members that no longer fit after a size change are dropped rather than
+    // carried invisibly — the roster the producer confirms is the one they see.
+    const pickSize = (id) => {
+        const next = classes.find(c => c.id === id);
+        setSizeId(id);
+        if (next) {
+            setMembers(prev => prev.filter(m => {
+                const el = CONTAINER_MEMBERS.find(e => e.id === m);
+                return fitsContainer(el, next.width, next.height);
+            }));
+        }
+    };
+
+    const toggle = (id) => setMembers(prev => (
+        prev.includes(id) ? prev.filter(m => m !== id) : [...prev, id]
+    ));
+
+    return (
+        <div className="flex flex-col gap-2 pr-2">
+            <Text size="xs" span className="label-display px-1 tracking-wider text-muted-foreground">
+                New container
+            </Text>
+
+            <Input
+                autoFocus
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Name it — “Lower Bar”, “Replay Stage”"
+                className="h-8"
+            />
+
+            <div className="flex flex-col gap-0.5">
+                <Text size="xs" dimmed className="px-1">
+                    Size — members this size fill it; smaller ones center, never scale.
+                </Text>
+                {classes.map(c => (
+                    <button
+                        key={c.id} type="button" onClick={() => pickSize(c.id)}
+                        className={cn(
+                            'flex items-center gap-2 rounded-md px-2 py-1 text-left',
+                            c.id === sizeId ? 'bg-accent text-foreground' : 'hover:bg-accent/50',
+                        )}
+                    >
+                        <span className={cn(
+                            'size-2 shrink-0 rounded-full',
+                            c.id === sizeId ? 'bg-rio-400' : 'bg-muted-foreground/30',
+                        )} />
+                        <Text size="xs" span className="tabular-nums">{c.width} × {c.height}</Text>
+                        <Text size="xs" span truncate dimmed className="min-w-0 flex-1">
+                            {c.members.map(m => m.name).join(', ')}
+                        </Text>
+                    </button>
+                ))}
+            </div>
+
+            <div className="flex flex-col gap-0.5">
+                <Text size="xs" dimmed className="px-1">
+                    Members — one at a time on screen. Anything sharing a container
+                    can never be up together, which is what sharing one means.
+                </Text>
+                {candidates.map(el => (
+                    <label
+                        key={el.id}
+                        className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 hover:bg-accent/50"
+                    >
+                        <input
+                            type="checkbox"
+                            checked={members.includes(el.id)}
+                            onChange={() => toggle(el.id)}
+                            className="size-3 shrink-0 accent-current"
+                        />
+                        <Text size="xs" span truncate className="min-w-0 flex-1">{el.name}</Text>
+                        <Text size="xs" span dimmed className="tabular-nums">
+                            {el.width} × {el.height}
+                        </Text>
+                    </label>
+                ))}
+            </div>
+
+            <Group gap="xs" className="px-1 pt-1">
+                <Button
+                    size="sm"
+                    disabled={!name.trim() || !size}
+                    onClick={() => onCreate(name.trim(), size, members)}
+                >
+                    Create
+                </Button>
+                <Button size="sm" variant="outline" onClick={onCancel}>Cancel</Button>
+            </Group>
+        </div>
+    );
+});
+
+/*
  * One catalog row.
  *
  * Two shapes, decided by whether the row can be picked more than one way:
@@ -393,6 +516,12 @@ export const AddSourceDialog = memo(function AddSourceDialog({ scene, onClose })
     // What the preview is showing — independent of what's checked.
     const [focus, setFocus] = useState(null);
     const [adding, setAdding] = useState(false);
+    // The left pane swaps to the container builder rather than opening a second
+    // dialog: building one is part of this transaction, and the preview beside
+    // it keeps showing whatever is focused.
+    const [building, setBuilding] = useState(false);
+    const defs = useSharedContainers();
+    const { create } = useContainerActions();
 
     // Every open is a fresh transaction — a picker that remembers last time's
     // selection is one the producer has to check before clicking Add.
@@ -401,19 +530,56 @@ export const AddSourceDialog = memo(function AddSourceDialog({ scene, onClose })
         setQuery('');
         setPicks([]);
         setFocus(null);
+        setBuilding(false);
     }, [open]);
+
+    /*
+     * A container the producer just built has to be pickable IMMEDIATELY, and
+     * the definition is already in the settings store — so the shared group is
+     * the catalog's rows UNION the definitions, rather than a catalog refetch
+     * raced against the settings write. The union is self-healing: once the
+     * server reports the new one, the merge is a no-op.
+     *
+     * Absolute URL, like every other catalog row: Add hands it straight to OBS.
+     */
+    const containerRows = useMemo(() => defs.map(d => ({
+        group: 'shared',
+        name: d.name,
+        type: 'container',
+        url: `${window.location.origin}${containerUrl(d.id)}`,
+        width: d.width,
+        height: d.height,
+        container: d.id,
+    })), [defs]);
+
+    const createContainer = useCallback((name, size, members) => {
+        const id = create(name, size.width, size.height, members);
+        setBuilding(false);
+        // Select and preview it, so Create → Add is one continuous act.
+        const row = {
+            group: 'shared', name, type: 'container', container: id,
+            url: `${window.location.origin}${containerUrl(id)}`,
+            width: size.width, height: size.height,
+        };
+        setPicks(prev => [...prev, { layout: row, board: null }]);
+        setFocus({ layout: row, board: null });
+    }, [create]);
 
     const groups = useMemo(() => {
         const q = query.toLowerCase().trim();
         const out = new Map();
-        for (const l of layouts) {
+        // Containers come from the definitions; the catalog's own shared rows
+        // are the same list one round-trip behind, so they are dropped rather
+        // than shown twice.
+        const rows = [...layouts.filter(l => l.group !== 'shared'), ...containerRows];
+        for (const l of rows) {
             if (q && !rowLabel(l).toLowerCase().includes(q)) continue;
             const key = GROUP_LABELS[l.group] ?? l.group;
             if (!out.has(key)) out.set(key, []);
             out.get(key).push(l);
         }
         return [...out.entries()];
-    }, [layouts, query]);
+    }, [layouts, containerRows, query]);
 
     // url → the set of boards picked from that row, for the chips and the check.
     const pickedByUrl = useMemo(() => {
@@ -548,6 +714,12 @@ export const AddSourceDialog = memo(function AddSourceDialog({ scene, onClose })
                                 className="overflow-y-auto overflow-x-hidden"
                                 style={{ height: PANE_HEIGHT }}
                             >
+                                {building ? (
+                                    <NewContainerForm
+                                        onCreate={createContainer}
+                                        onCancel={() => setBuilding(false)}
+                                    />
+                                ) : (
                                 <div className="flex flex-col gap-2 pr-2">
                                     {error && <Text size="xs" className="text-destructive">{error}</Text>}
                                     {!error && !groups.length && (
@@ -557,9 +729,25 @@ export const AddSourceDialog = memo(function AddSourceDialog({ scene, onClose })
                                     )}
                                     {groups.map(([label, rows]) => (
                                         <div key={label} className="flex flex-col">
-                                            <Text size="xs" span className="label-display px-1 pb-0.5 tracking-wider text-muted-foreground">
-                                                {label}
-                                            </Text>
+                                            <div className="flex items-baseline gap-2 px-1 pb-0.5">
+                                                <Text size="xs" span className="label-display min-w-0 flex-1 tracking-wider text-muted-foreground">
+                                                    {label}
+                                                </Text>
+                                                {/* Building a container belongs
+                                                    with the containers, not in
+                                                    a settings page: it is only
+                                                    ever done in order to put
+                                                    one in a scene. */}
+                                                {label === GROUP_LABELS.shared && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setBuilding(true)}
+                                                        className="shrink-0 text-xs text-muted-foreground hover:text-foreground"
+                                                    >
+                                                        + New
+                                                    </button>
+                                                )}
+                                            </div>
                                             {rows.map(l => (
                                                 <CatalogRow
                                                     key={l.url}
@@ -574,6 +762,7 @@ export const AddSourceDialog = memo(function AddSourceDialog({ scene, onClose })
                                         </div>
                                     ))}
                                 </div>
+                                )}
                             </div>
                         </div>
 

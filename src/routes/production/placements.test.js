@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
-    fedTargets, genericElement, parsePlacementId, placementId, placementTarget,
+    genericElement, parsePlacementId, placementId, placementTarget,
     placementsInScene, resolvePlacement, sceneRole, sourcelessPlacement, togglePin,
 } from './placements';
+import { fedTargets } from './containers';
 
 /*
  * Placements are the console's row identity now: element + board + SCENE. These
@@ -17,13 +18,25 @@ const item = (id, sourceName, url, enabled = false) =>
     ({ id, sourceName, url, enabled, inputKind: 'browser_source', isGroup: false, isPrsh: true });
 
 const scene = (name, where, ...items) => ({ scene: name, where, items });
-const targets = fedTargets({});
-const rows = (sc) => placementsInScene(sc, targets);
+
+/*
+ * Container DEFINITIONS, the shape settings hold them in. Membership lives on
+ * the container now, so a test that used to hand `fedTargets` an element →
+ * container map builds a roster instead — which is the point: one relationship,
+ * one home.
+ */
+const defs = (spec) => Object.fromEntries(Object.entries(spec).map(([id, members]) => [
+    id, { id, name: id, width: 1920, height: 1080, members },
+]));
+const DEFAULT_DEFS = defs({ 'callout-stage': ['postgamecallout', 'postgamevs'] });
+const targets = fedTargets(DEFAULT_DEFS);
+const rows = (sc) => placementsInScene(sc, targets, {}, DEFAULT_DEFS);
 
 const SB = 'http://x/layout/scoreboard1/scoreboard.html';
 const LOWER = 'http://x/layout/lowerthird/lowerthird.html';
 const CALLOUT = 'http://x/layout/shared/callout-stage.html';
 const ROSTER = 'http://x/layout/scoreboard1/roster.html';
+const SHELL = 'http://x/layout/shared/container.html';
 
 describe('placement ids', () => {
     // Scene names are arbitrary user strings; the instance half never is.
@@ -112,19 +125,50 @@ describe('placementsInScene — source → row', () => {
      * and vanish when something did — a row blinking in and out on a setting.
      */
     it('rows a container nobody is aimed at just the same', () => {
-        const elsewhere = fedTargets({ postgamecallout: 'split-screen', postgamevs: 'split-screen' });
-        const out = placementsInScene(scene('Game', 'program', item(3, 'Callout', CALLOUT)), elsewhere);
+        const moved = defs({
+            'callout-stage': [],
+            'split-screen': ['postgamecallout', 'postgamevs'],
+        });
+        const out = placementsInScene(
+            scene('Game', 'program', item(3, 'Callout', CALLOUT)), fedTargets(moved), {}, moved,
+        );
         expect(out).toHaveLength(1);
         expect(out[0].container).toBe('callout-stage');
         expect(out[0].feeds).toEqual([]);
     });
 
     it('follows a fed element re-pointed at another container', () => {
-        const repointed = fedTargets({ postgamevs: 'split-screen' });
+        const repointed = defs({
+            'callout-stage': ['postgamecallout'],
+            'split-screen': ['postgamevs'],
+        });
         const out = placementsInScene(
-            scene('Game', 'program', item(3, 'Callout', CALLOUT)), repointed,
+            scene('Game', 'program', item(3, 'Callout', CALLOUT)),
+            fedTargets(repointed), {}, repointed,
         );
-        expect(out.map(p => p.element.id)).toEqual(['layout:/layout/shared/callout-stage.html', 'postgamecallout']);
+        expect(out.map(p => p.element.id)).toEqual(['container:callout-stage', 'postgamecallout']);
+    });
+
+    /*
+     * Every container is rendered by ONE generic shell, so identity has to come
+     * from the container id — keying on the pathname would give two containers
+     * in one scene the same row id, and a panel would drive whichever the
+     * lookup reached first. Same bug the board and variant axes exist to stop.
+     */
+    it('keeps two containers on one shell apart', () => {
+        const two = defs({ 'callout-stage': ['postgamecallout'], bar: ['stats'] });
+        const out = placementsInScene(scene('Game', 'program',
+            item(3, 'Callout', `${SHELL}?container=callout-stage`),
+            item(4, 'Bar', `${SHELL}?container=bar`)), fedTargets(two), {}, two);
+        expect(out.filter(p => p.container && !p.parent).map(p => p.id))
+            .toEqual(['container:callout-stage@Game', 'container:bar@Game']);
+    });
+
+    // A source still pointing at a pre-2.0 named shell resolves to the same
+    // container id its filename always meant, so it keeps rowing and feeding.
+    it('resolves a legacy named shell to its stem', () => {
+        const out = rows(scene('Game', 'program', item(3, 'Callout', CALLOUT)));
+        expect(out[0].container).toBe('callout-stage');
     });
 
     // An unregistered overlay outside shared/ is NOT a container — it gets a

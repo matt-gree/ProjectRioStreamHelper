@@ -1,9 +1,10 @@
 import { useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useObsStore } from '../../context/obs';
-import { useSettingsStore, useStateStore } from '../../context/store';
+import { useStateStore } from '../../context/store';
 import { boardOfUrl } from '../../lib/obs-binding';
-import { containerId, defaultContainerFor, ELEMENTS } from './elements';
+import { ELEMENTS } from './elements';
+import { containerOfSource, fedTargets, useContainerDefs } from './containers';
 import { instanceId, parseInstanceId, variantLabel, variantOf, withVariant } from './instances';
 import { useBoardLabel } from './boards';
 
@@ -112,28 +113,49 @@ export function genericElement(url) {
 }
 
 /*
- * Which named container each fed element is currently pointed at. Fed elements
- * are NOT discovered from sources the way direct ones are, and the difference is
- * load-bearing: Character Spotlight and Game Summary share one Callout Stage
- * source, so a source→row scan alone would collapse two elements the producer
- * drives separately into a single row. Instead the container source decides
- * WHICH SCENE they row in, and both row there — nested under it.
+ * A CONTAINER's row, synthesised from its definition.
+ *
+ * Deliberately not `genericElement`: every container is now rendered by the one
+ * generic shell, so keying identity on the pathname would give every container
+ * in a scene the same id — duplicate React keys and a panel driving whichever
+ * source `find()` reached first, which is the bug the board and variant axes
+ * exist to prevent. The container id IS the identity here, and it comes off the
+ * URL exactly as the overlay reads it.
+ *
+ * It also carries the definition's name and native size, so the rack row reads
+ * as the producer's own container and the stage can preview it — the two things
+ * a generic element cannot supply.
  */
-export function fedTargets(containers = {}) {
-    const out = {};
-    for (const el of FED_ELEMENTS) out[el.id] = containers[el.id] || defaultContainerFor(el);
-    return out;
+export function containerElement(id, def) {
+    return {
+        id: `container:${id}`,
+        name: def?.name || id,
+        flavor: 'direct',
+        generic: true,
+        container: id,
+        url: def?.url || `/layout/shared/container.html?container=${id}`,
+        width: def?.width,
+        height: def?.height,
+        match: (u) => containerOfSource(u) === id,
+    };
 }
 
-// Shared containers live in one folder, and that is what makes a source a
-// container rather than an overlay that happens to be unregistered.
-const SHARED_PATH = /\/layout\/shared\//i;
+/*
+ * Which container each fed element is pointed at — a direct read of the
+ * ROSTERS (./containers), not an inverted scan over per-element settings.
+ *
+ * Fed elements are NOT discovered from sources the way direct ones are, and the
+ * difference is load-bearing: Character Spotlight and Game Summary share one
+ * Callout Stage source, so a source→row scan alone would collapse two elements
+ * the producer drives separately into a single row. Instead the container
+ * source decides WHICH SCENE they row in, and both row there — nested under it.
+ */
 
 /*
  * One scene's rows. Order follows OBS's own scene-item order, so the rack reads
  * the way the producer's source list does.
  */
-export function placementsInScene({ scene, where, items = [] }, targets = {}, feeds = {}) {
+export function placementsInScene({ scene, where, items = [] }, targets = {}, feeds = {}, defs = {}) {
     const out = [];
     for (const item of items) {
         const url = item.url || '';
@@ -159,12 +181,12 @@ export function placementsInScene({ scene, where, items = [] }, targets = {}, fe
          * instance — which is what keeps team 1's roster and team 2's roster two
          * rows rather than one id serving both. See ./instances.
          */
-        const el = genericElement(url);
+        const stem = containerOfSource(url);
+        const isContainer = !!stem;
+        const el = isContainer ? containerElement(stem, defs[stem]) : genericElement(url);
         const variant = variantOf(url);
         const instance = instanceId(el, null, url);
         const id = placementId(instance, scene);
-        const stem = containerId(url);
-        const isContainer = SHARED_PATH.test(pathOf(url));
         const children = isContainer
             ? FED_ELEMENTS.filter(f => targets[f.id] === stem)
             : [];
@@ -256,15 +278,15 @@ export function useConsoleScenes() {
 // Every placement across every scene the console can see. One derivation, so
 // the rack, the stage and the rail cannot disagree about what exists.
 export function useConsolePlacements(consoleScenes) {
-    const containers = useSettingsStore(useShallow(s => s?.production?.containers ?? {}));
+    const defs = useContainerDefs();
     // What each container is currently CARRYING — the second half of a fed
     // element's chip, since being on air takes both the container being up and
     // the container holding this element's content.
     const feeds = useStateStore(useShallow(s => s?.production?.feed?.container ?? {}));
     return useMemo(() => {
-        const targets = fedTargets(containers);
-        return consoleScenes.flatMap(sc => placementsInScene(sc, targets, feeds));
-    }, [consoleScenes, containers, feeds]);
+        const targets = fedTargets(defs);
+        return consoleScenes.flatMap(sc => placementsInScene(sc, targets, feeds, defs));
+    }, [consoleScenes, defs, feeds]);
 }
 
 /*

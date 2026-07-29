@@ -4,6 +4,7 @@ import { TooltipProvider } from '../../components/ui/tooltip';
 import { useSettingsStore, useStateStore } from '../../context/store';
 import { useObsStore } from '../../context/obs';
 import { DESKS, RAIL_SEED, Rack } from './rack';
+import { withContainers } from '../../test/containers';
 
 // The test env's localStorage (Node's experimental stub) has no working
 // methods — usePersistentState silently no-ops against it. Stub a real one so
@@ -19,7 +20,7 @@ const fakeLocalStorage = {
 beforeEach(() => {
     store.clear();
     vi.stubGlobal('localStorage', fakeLocalStorage);
-    useSettingsStore.setState({ scoreboards: {}, production: {} });
+    useSettingsStore.setState({ scoreboards: {}, production: withContainers() });
 });
 afterEach(() => {
     cleanup();

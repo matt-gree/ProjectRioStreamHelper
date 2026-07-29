@@ -272,6 +272,12 @@ export const ELEMENTS = [
         width: 1280,
         height: 720,
         match: (url) => /hitvisualizer/i.test(url),
+        // Also a container MEMBER: its stage's "Split feed" pushes the hit into
+        // a shared container, so it is one of the few elements that can be both
+        // a dedicated source and an occupant. `flavor` answers "does it own a
+        // source"; this answers "can a container stand it up" (see
+        // containers.js CONTAINER_MEMBERS).
+        containerHostable: true,
     },
     {
         id: 'controller',
@@ -344,19 +350,24 @@ export const PICKABLE_FEEDS = ['stats', 'postgamecallout'];
 
 export const isPickableFeed = (el) => PICKABLE_FEEDS.includes(el?.feed);
 
-// A named shared container's stable id = its layout filename stem (e.g.
-// '/layout/shared/split-screen.html' → 'split-screen'). The producer feeds an
-// element into a container by writing production.feed.container.<id>; the
-// matching shared overlay reads the same key.
+/*
+ * A shared container's stable id, from the URL of the source rendering it.
+ *
+ * Containers are producer-built definitions (settings.production.container_defs)
+ * rendered by ONE generic shell, so the id is what `?container=` names. The
+ * filename stem is the fallback, which is what keeps a browser source still
+ * pointing at a pre-2.0 named shell ('/layout/shared/stats-feed.html' →
+ * 'stats-feed') rowing and feeding exactly as it did. The overlay side derives
+ * it the same way, in fed-container.js — the two must agree, or a producer's
+ * Push writes a key the source isn't reading.
+ */
 export function containerId(url) {
+    const q = (url || '').split('?')[1];
+    if (q) {
+        const named = new URLSearchParams(q).get('container');
+        if (named) return named;
+    }
     return (url || '').replace(/^.*\/([^/]+)\.html?(?:\?.*)?$/, '$1');
-}
-
-// An element's default named container = the stem of its canonical layout URL
-// (Stats → 'stats-feed', Stat Callout → 'callout-stage'). The producer can
-// still re-point it to any other shared container.
-export function defaultContainerFor(element) {
-    return containerId(element.url) || 'stats-feed';
 }
 
 // Key of the element's stage panel (stage/<key>); defaults to the element id.

@@ -1,9 +1,17 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
 import { TooltipProvider } from '../../components/ui/tooltip';
 import { useObsStore } from '../../context/obs';
+import { useSettingsStore } from '../../context/store';
+import { withContainers } from '../../test/containers';
 import { ELEMENTS } from './elements';
 import { SourceStrip } from './sourcestrip';
+
+// A fed element has nowhere to push until some container's roster names it, so
+// the strip's Push slot needs a rig with containers on it.
+beforeEach(() => {
+    useSettingsStore.setState({ scoreboards: {}, production: withContainers() });
+});
 
 afterEach(() => {
     cleanup();

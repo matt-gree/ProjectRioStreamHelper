@@ -44,7 +44,9 @@ These terms have specific meanings in this codebase. Use them precisely; correct
 | **Match** | The fixture object above scoreboards: `match.{M}` in state (participants per side, captain, format, series, stage `draft \| live \| post`). A board binds to it via `score.{N}.match = M` (int id, never a round-name string). |
 | **Projector** | The resolve-by-copy pattern: a model (Match, Commentary, PlayerPlates, PostGame) resolves its records against the participant registry and copies the result into the state keys overlays read. Deterministic: writes the full key set (value or `""`) so unbinding blanks exactly what it set. |
 | **Placement** | A Production rack row: one source, in one scene — `{element}:{board}@{scene}`. The console's row identity; see `src/routes/production/placements.js`. |
-| **Element** | A Production-page broadcast unit. **Direct** elements render from live state; **fed** elements are pushed content on the Callout Stage (stat callout, game summary, spotlight). Related: **shared source** / **dedicated source** / **target** / **feed** — see `src/routes/production/elements.js`. |
+| **Element** | A Production-page broadcast unit. **Direct** elements own a dedicated source; **fed** elements are pushed content into a container. Related: **dedicated source** / **feed** — see `src/routes/production/elements.js`. |
+| **Container** | One OBS browser source that hosts whichever of its **members** is fed to it. Producer-built: `settings.production.container_defs.{id}` = name + native size + member roster, all rendered by one shell (`/layout/shared/container.html?container={id}`). Membership lives on the container and is **exclusive** — `production.feed.container.{id}` holds exactly one occupant, so sharing a container is what "these never appear together" means. |
+| **Member** | An element on a container's roster. Must fit the container (same size or smaller — smaller ones center, nothing ever scales). |
 | **Layout** | An HTML file under `public/layout/`, served as an OBS Browser Source. Declares its style contract via `<meta name="overlay-settings">` and its native size via `body { width/height }`. |
 | **Layout type** | Derived from filename + group folder (`server/api/v1/layouts.py`). Drives `?size=` / `?team=` variant expansion. |
 | **Scene** | A full 1920×1080 Layout under `public/layout/scenes/` designed to drop into an OBS scene as the entire stream canvas. |
@@ -146,6 +148,8 @@ The deciding layer is mirrored to `score.{N}.side_reason`. Manual scope is the c
 The Production tab is a **console with three surfaces** — rack (monitor + select), stage (work on the one selected thing), quick rail (producer-pinned cards). Every element declares the same contract (registration · quick face · stage body) and all three surfaces compose from the shared row kit. **Read `.claude/skills/production-console-contract/SKILL.md` before touching `src/routes/production/`.**
 
 - **OBS scenes are the rack's grouping axis**, and rows are **placements** (`src/routes/production/placements.js`): one row per source per scene, keyed `{element}:{board}@{scene}`. The rack lists only what is really in a scene — derivation runs source → row — and the **+** in each scene header (`addsource.jsx`) is how a source is created. There is no "phase" concept; it was removed in favour of the producer's own scene list.
+
+- **Containers are producer-built** (`src/routes/production/containers.js`): a definition in Settings (name · native size · member roster), one generic shell rendering all of them. **Membership lives on the container and is exclusive** — the roster *is* the relationship, so `settings.production.containers.{elementId}` and `defaultContainerFor` are gone; don't reintroduce a per-element "feed into" target. A member must fit the container (smaller ones center; **PRSH has no scaling system** — OBS does placement). Built from the Add picker's **+ New**, edited on the container's own stage panel.
 
 - OBS control runs **browser-side** (`src/context/obs.jsx`, localhost:4455) — this reaches the producer's OBS even in dual-machine setups. Don't move it server-side.
 - **Selection, rail pins and expanded scenes are browser-local** (`usePersistentState`, `prsh.ui.production.*`) — per-producer workspace layout, never server Settings. Stored ids are **resolved at read time, never rewritten**.
@@ -258,6 +262,7 @@ If the app fails to launch due to corrupt `user_data/state.json`: `echo '{}' > u
 | Sample data / demo mode | `public/layout/preview/*_sample.json`, `public/layout/lib/overlay-base.js` (`sample` option), `src/routes/production/sample.jsx` (switch + banner) |
 | Theme/design packages | `public/design/`, `server/design_packages.py`, `public/layout/lib/svg-theme-engine.js` |
 | Production console (rack/stage/rail) | `src/routes/production/{rack,rail}.jsx`, `stage/`, `desks/`, `kit/`, `elements.js`, `placements.js` (row identity), `addsource.jsx` (Add picker) |
+| Shared containers (definitions, roster) | `src/routes/production/containers.js`, `stage/container.jsx`, `public/layout/shared/container.html` + `lib/fed-container.js`, `production.container_defs` in `server/settings.py`, `server/api/v1/layouts.py` |
 | Production OBS control / staging | `src/context/obs.jsx`, `src/context/staging.js` |
 | Participant registry | `server/participants.py`, `src/routes/player_list/` |
 | Post-game capture | `server/postgame.py` (+ StatFiles path gating) |

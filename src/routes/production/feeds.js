@@ -1,45 +1,27 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import { useSettingsStore, useStateStore } from '../../context/store';
+import { useStateStore } from '../../context/store';
 import { stageOrRun, usePending } from '../../context/staging';
 import { useConsoleScenes } from './placements';
-import { containerId, defaultContainerFor, isPickableFeed } from './elements';
+import { containerId, isPickableFeed } from './elements';
+import { containerOfSource, useContainerOf, useSharedContainers } from './containers';
 import { resolveIntent } from './suggest';
 
-export { containerId, defaultContainerFor };
+export { containerId };
+export { useSharedContainers };
 
 // Stable empty intent — a fresh {} each render would defeat useShallow.
 const NO_INTENT = Object.freeze({});
 
 /*
- * Fed elements: containers + feeds. A fed element's content is pushed into a
- * named SHARED container (the target); the matching shared overlay renders
- * it. Moved verbatim out of production.jsx (console slice 4).
+ * Fed elements: containers + feeds. A fed element's content is pushed into the
+ * shared container whose ROSTER names it; that container's source renders it.
+ *
+ * Which container that is comes from ./containers — membership lives on the
+ * container and nowhere else. It can be null (no roster names this element),
+ * which every hook here treats as a real state: there is nowhere to push, and
+ * the surfaces say so rather than falling back to a default nobody chose.
  */
-
-// The named shared containers (public/layout/shared/*) an element can be fed
-// into — Split-Screen, Stats, and any the user adds later. Sourced from the
-// layout catalog, independent of OBS scene membership. `url`/`width`/`height`
-// ride along so the source strip's Bind slot can add the container the producer
-// actually re-pointed to, not just the element's canonical default.
-export function useSharedContainers() {
-    const [list, setList] = useState([]);
-    useEffect(() => {
-        let alive = true;
-        fetch('/api/v1/layouts')
-            .then(r => r.json())
-            .then(all => {
-                if (!alive) return;
-                setList(all.filter(l => l.group === 'shared').map(l => ({
-                    id: containerId(l.url), name: l.name,
-                    url: l.url, width: l.width, height: l.height,
-                })));
-            })
-            .catch(() => {});
-        return () => { alive = false; };
-    }, []);
-    return list;
-}
 
 // One container's feed, staged. `value` is what controls display (the pending
 // pick if any, else the live feed — and a pending pick may legitimately be
@@ -86,7 +68,7 @@ export function useFeedControl(container) {
  * the broadcast, and no overlay renders `production.feed.last.*`.
  */
 export function useFeedSelect(element, scoreboard = 1) {
-    const { container } = useContainerTarget(element.id, defaultContainerFor(element));
+    const { container } = useContainerOf(element);
     const feedKey = `production.feed.container.${container}`;
     const lastKey = `production.feed.last.${element.id}`;
     const live = useStateStore(s => s?.production?.feed?.container?.[container]);
@@ -94,10 +76,17 @@ export function useFeedSelect(element, scoreboard = 1) {
     const mine = !!live && live.element === element.id
         && (live.scoreboard == null || live.scoreboard === scoreboard);
 
-    // Arm this pick; air it too only when we already own the container.
+    /*
+     * Arm this pick; air it too only when we already own the container.
+     *
+     * Arming works even with no container: the pick is the element's standing
+     * intent, and choosing which character you want on screen is a decision a
+     * producer can make before deciding where it lands. Only the AIRING half
+     * needs somewhere to land.
+     */
     const select = (payload, label) => {
         useStateStore.getState().setItems([{ key: lastKey, value: payload }]);
-        if (mine) {
+        if (mine && container) {
             stageOrRun({
                 key: `feed:${container}`,
                 label: label || `Feed ${container}`,
@@ -112,7 +101,7 @@ export function useFeedSelect(element, scoreboard = 1) {
 
     // Take this element off the container. Leaves the intent — Clear takes it
     // off air, it does not un-pick the character.
-    const clear = (label) => stageOrRun({
+    const clear = (label) => container && stageOrRun({
         key: `feed:${container}`,
         label: label || `Clear ${container} feed`,
         value: null,
@@ -120,31 +109,6 @@ export function useFeedSelect(element, scoreboard = 1) {
     });
 
     return { container, mine, staged: !!pending, select, clear };
-}
-
-// Which named container an element feeds, persisted per element at
-// settings.production.containers.<elementId>. The target itself is config
-// (immediate), but releasing the old container's feed is broadcast-visible, so
-// that goes through the staging gateway.
-export function useContainerTarget(elementId, defaultId) {
-    const container = useSettingsStore(s => s?.production?.containers?.[elementId]) || defaultId;
-    const setSetting = useSettingsStore(s => s.setItem);
-    const setContainer = (id) => {
-        if (id === container) return;
-        const oldKey = `production.feed.container.${container}`;
-        const oldFeed = useStateStore.getState()?.production?.feed?.container?.[container];
-        if (oldFeed && oldFeed.element === elementId) {
-            stageOrRun({
-                key: `feed:${container}`,
-                label: `Clear ${container} feed`,
-                value: null,
-                run: () => useStateStore.getState().deleteItems([oldKey]),
-            });
-        }
-        const cur = useSettingsStore.getState()?.production?.containers || {};
-        setSetting('production.containers', { ...cur, [elementId]: id });
-    };
-    return { container, setContainer };
 }
 
 /*
@@ -160,35 +124,42 @@ export function useContainerTarget(elementId, defaultId) {
  * disagree about what is about to go on air.
  *
  * `canPush` is false only for a pickable element with no intent at all — there
- * is genuinely nothing to show yet, and the strip disables rather than lies.
+ * is genuinely nothing to show yet, and the strip disables rather than lies —
+ * or when NO container's roster names this element, where there is nowhere for
+ * a push to land at all.
  */
 export function useContainerPush(element, scoreboard = 1) {
-    const { container } = useContainerTarget(element.id, defaultContainerFor(element));
+    const { container } = useContainerOf(element);
     const { value: feed, staged, setFeed } = useFeedControl(container);
     // Flat primitives, so useShallow settles instead of firing on every tick.
     const intent = useStateStore(useShallow(s => resolveIntent(s, element, scoreboard) || NO_INTENT));
 
     const mine = !!feed && feed.element === element.id;
     const hasIntent = !!intent.element;
-    const canPush = mine || !isPickableFeed(element) || hasIntent;
-    const toggle = () => setFeed(
+    const canPush = !!container && (mine || !isPickableFeed(element) || hasIntent);
+    const toggle = () => container && setFeed(
         mine ? null : (hasIntent ? intent : { element: element.id, scoreboard }),
     );
 
     return { container, feed, mine, staged, canPush, toggle, setFeed, intent: hasIntent ? intent : null };
 }
 
-// The OBS source rendering a named container, in ANY scene the console can see
-// — not just program and preview: a producer re-pointing a feed at a container
-// that lives in their Break scene has aimed at something real, and saying "not
-// in a scene" there would be a lie. Matched by the container id appearing in the
-// source URL's filename.
+/*
+ * The OBS source rendering a container, in ANY scene the console can see — not
+ * just program and preview: a container that lives in the producer's Break
+ * scene is something real, and saying "not in a scene" there would be a lie.
+ *
+ * Matched by resolving each source URL to a container id, which is the same
+ * derivation the overlay itself uses — so a definition-backed source
+ * (`container.html?container=x`) and a pre-2.0 named shell (`x.html`) both
+ * answer to the container they render.
+ */
 export function useContainerBinding(container) {
     const scenes = useConsoleScenes();
     return useMemo(() => {
-        const re = new RegExp(`/${container}\\.html`, 'i');
+        if (!container) return null;
         for (const sc of scenes) {
-            const item = sc.items.find(it => re.test(it.url || ''));
+            const item = sc.items.find(it => containerOfSource(it.url) === container);
             if (item) return { item, scene: sc.scene, where: sc.where };
         }
         return null;

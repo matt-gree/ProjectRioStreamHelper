@@ -2,7 +2,6 @@ import { memo, useMemo } from 'react';
 import { Text } from '../../../components/ui/primitives';
 import { PanelShell, chipFor } from '../kit';
 import { isPinnable } from '../elements';
-import { useSharedContainers } from '../feeds';
 import {
     placementTarget, resolvePlacement, useConsolePlacements, useConsoleScenes,
     usePlacementLabel,
@@ -22,6 +21,7 @@ import ScorecardStage from './scorecard';
 import EventHeaderStage from './eventheader';
 import BracketStage from './bracket';
 import ControllerStage from './controller';
+import ContainerStage from './container';
 
 /*
  * The stage — the console's center surface: ONE selected item's full controls,
@@ -47,9 +47,16 @@ const STAGE_BODIES = {
     controller: ControllerStage,
 };
 
-// An element's stage body: its own file when it has one, else the floor its
-// flavor guarantees.
+/*
+ * An element's stage body: its own file when it has one, else the floor its
+ * flavor guarantees.
+ *
+ * A CONTAINER is dispatched on being one rather than by id — every container
+ * the producer builds is a different element id (`container:{id}`), and they
+ * all edit the same two things: the name and the member roster.
+ */
 export function stageBodyComponent(element) {
+    if (element?.container) return ContainerStage;
     return STAGE_BODIES[element.id] ?? (element.flavor === 'fed' ? FedStage : DirectStage);
 }
 
@@ -61,20 +68,18 @@ export function stageBodyComponent(element) {
  * the producer clicked, and cannot drift apart.
  */
 /*
- * A container row IS a source and deserves a preview, but its element is
- * synthesised from the URL by `genericElement`, which has no dimensions — and
- * previewing at a guessed aspect is the failure this column was rebuilt to
- * stop telling. The layout catalog is where a container's native size lives, so
- * that is what we ask.
+ * A container row IS a source and deserves a preview, and unlike a generic
+ * element it knows its own size: `containerElement` carries the definition's,
+ * which is the size the OBS source was created at. A container with no
+ * definition left (a pre-2.0 named shell) has none, and gets no preview — the
+ * same rule as any unregistered source, for the same reason.
  */
 function useContainerDims(placement) {
-    const containers = useSharedContainers();
-    const id = placement?.container;
-    return useMemo(() => {
-        if (!id) return null;
-        const entry = containers.find(c => c.id === id);
-        return entry?.width && entry?.height ? { width: entry.width, height: entry.height } : null;
-    }, [containers, id]);
+    const { width, height } = placement?.element ?? {};
+    return useMemo(
+        () => (width && height ? { width, height } : null),
+        [width, height],
+    );
 }
 
 const ElementStage = memo(function ElementStage({ placement, title, pinned, onPinToggle }) {

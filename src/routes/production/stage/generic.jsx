@@ -2,11 +2,10 @@ import { memo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useStateStore } from '../../../context/store';
 import { Text } from '../../../components/ui/primitives';
-import { ToggleRow, SelectRow } from '../kit';
+import { ToggleRow } from '../kit';
 import { setSourceVisibility, useDisplayedEnabled } from '../bindings';
-import {
-    defaultContainerFor, useContainerBinding, useContainerTarget, useSharedContainers,
-} from '../feeds';
+import { useContainerBinding } from '../feeds';
+import { useContainerOf } from '../containers';
 import { PostgameCalloutPicker, PostgameVsPicker, StatsFeedPicker } from '../feed-pickers';
 
 /*
@@ -109,19 +108,37 @@ export const DirectStage = memo(function DirectStage({ element, board, placement
     );
 });
 
-// Which named shared container an element feeds. The container's own on-air
-// toggle used to sit here too; it is the header strip's Air slot now, since for
-// a fed element the container IS the source the panel commands.
-export const ContainerTarget = memo(function ContainerTarget({ element }) {
-    const containers = useSharedContainers();
-    const { container, setContainer } = useContainerTarget(element.id, defaultContainerFor(element));
+/*
+ * Which container hosts this element — stated, not chosen.
+ *
+ * Membership lives on the CONTAINER now (its roster is the relationship), so
+ * this is a read of it rather than the old per-element "Feed into" select. Two
+ * places storing one relationship is how these drift; the edit belongs where
+ * the data does, which is the container's own panel, and the link goes there.
+ *
+ * An element on no roster is a real state, not an error — it just has nowhere
+ * to be pushed, which the Push slot also reports by disabling. Say what to do
+ * about it rather than leaving a blank row.
+ */
+export const ContainerHostNote = memo(function ContainerHostNote({ element }) {
+    const { container, def } = useContainerOf(element);
     const binding = useContainerBinding(container);
+    if (!container) {
+        return (
+            <Text size="xs" className="text-amber-500/90">
+                No container holds {element.name} yet, so there is nowhere to push
+                it. Add it to a container’s members from that container’s panel —
+                or make one with the + beside a scene.
+            </Text>
+        );
+    }
     return (
         <>
-            <SelectRow
-                label="Feed into" value={container} onChange={setContainer}
-                options={containers.length ? containers.map(c => ({ label: c.name, value: c.id })) : [container]}
-            />
+            <Text size="xs" className="text-muted-foreground">
+                Fed into <span className="text-foreground">{def?.name || container}</span>
+                {def?.width && def?.height ? ` · ${def.width} × ${def.height}` : ''} — edit
+                its members on that container’s panel.
+            </Text>
             <BindingNote binding={binding} what="That container" />
         </>
     );
@@ -137,7 +154,7 @@ export const FedStage = memo(function FedStage({ element }) {
         <>
             {picker}
             <div className="mt-1 flex flex-col gap-1.5 border-t border-border/60 pt-2">
-                <ContainerTarget element={element} />
+                <ContainerHostNote element={element} />
             </div>
         </>
     );

@@ -6,6 +6,7 @@ import { useObsStore } from '../../context/obs';
 import { ELEMENTS, isPinnable, quickFaceFor } from './elements';
 import { RAIL_SEED, seededRail } from './rack';
 import { Rail } from './rail';
+import { withContainers } from '../../test/containers';
 
 const SB = 'http://x/layout/scoreboard1/scoreboard.html';
 const item = (id, sourceName, url, enabled = false) =>
@@ -22,7 +23,7 @@ const obs = (sceneItems, extra = {}) => useObsStore.setState({
     ...extra,
 });
 
-beforeEach(() => useSettingsStore.setState({ scoreboards: {}, production: {} }));
+beforeEach(() => useSettingsStore.setState({ scoreboards: {}, production: withContainers() }));
 afterEach(() => {
     cleanup();
     useObsStore.setState({
