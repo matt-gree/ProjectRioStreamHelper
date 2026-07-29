@@ -104,6 +104,7 @@
 
     OverlayBase.init({
       render,
+      sample: 'scoreboard',
       fetchSettings: true,
       shouldRender: (key) => key === NAME_KEY || key === TAG_KEY,
       shouldRenderSettings: (key) => key.startsWith('overlays.'),

@@ -1,0 +1,21 @@
+{
+  "state": {
+    "playerplates.mode": "both",
+    "playerplates.1": {
+      "active": true,
+      "name": "Baltor33",
+      "subLabel": "NP6",
+      "subValue": "he/him",
+      "subVisible": true,
+      "location": "left"
+    },
+    "playerplates.2": {
+      "active": true,
+      "name": "MattGree",
+      "subLabel": "GAMK",
+      "subValue": "he/him",
+      "subVisible": true,
+      "location": "right"
+    }
+  }
+}

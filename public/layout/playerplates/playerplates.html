@@ -39,6 +39,7 @@
 
     OverlayBase.init({
       render: () => pp.update(OverlayBase.state, OverlayBase.settings),
+      sample: 'playerplates',
       fetchSettings: true,
       shouldRender: (key) => key.startsWith('playerplates.'),
       shouldRenderSettings: (key) => key.startsWith('overlays.'),

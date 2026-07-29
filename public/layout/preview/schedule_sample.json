@@ -1,0 +1,95 @@
+{
+  "state": {
+    "schedule.title": "Upcoming Matches",
+    "schedule.queue": [
+      2,
+      3,
+      4,
+      5
+    ],
+    "match.2": {
+      "label": "Winners Final",
+      "stage": "live",
+      "format": {
+        "bestOf": 5
+      },
+      "series": {
+        "1": 0,
+        "2": 0
+      },
+      "gameMode": "Stars Off",
+      "scheduledAt": "",
+      "player": {
+        "1": {
+          "rioName": "MattGree"
+        },
+        "2": {
+          "rioName": "Joan"
+        }
+      }
+    },
+    "match.3": {
+      "label": "Losers Quarter",
+      "stage": "draft",
+      "format": {
+        "bestOf": 5
+      },
+      "series": {
+        "1": 0,
+        "2": 0
+      },
+      "gameMode": "Stars Off",
+      "scheduledAt": "7:15 PM",
+      "player": {
+        "1": {
+          "rioName": "Baltor33"
+        },
+        "2": {
+          "rioName": "SteelyDad"
+        }
+      }
+    },
+    "match.4": {
+      "label": "Losers Semi",
+      "stage": "draft",
+      "format": {
+        "bestOf": 5
+      },
+      "series": {
+        "1": 0,
+        "2": 0
+      },
+      "gameMode": "Stars Off",
+      "scheduledAt": "7:45 PM",
+      "player": {
+        "1": {
+          "rioName": "remkey"
+        },
+        "2": {
+          "rioName": "TBD"
+        }
+      }
+    },
+    "match.5": {
+      "label": "Grand Final",
+      "stage": "draft",
+      "format": {
+        "bestOf": 5
+      },
+      "series": {
+        "1": 0,
+        "2": 0
+      },
+      "gameMode": "Stars Off",
+      "scheduledAt": "8:30 PM",
+      "player": {
+        "1": {
+          "rioName": "TBD"
+        },
+        "2": {
+          "rioName": "TBD"
+        }
+      }
+    }
+  }
+}

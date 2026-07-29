@@ -49,7 +49,18 @@
 <script type="module">
 import { initFedContainer } from '/layout/lib/fed-container.js';
 const params = new URLSearchParams(window.location.search);
-initFedContainer({ host: document.getElementById('host'), perf: params.get('perf') === '1' });
+initFedContainer({
+  host: document.getElementById('host'), perf: params.get('perf') === '1',
+  // No live feed in sample mode, so name a representative occupant
+  // alongside the game its contact comes from.
+  sample: {
+    file: 'scoreboard',
+    state: {
+      'production.feed.container.split-screen':
+        { element: params.get('feed') || 'hitvisualizer', scoreboard: 1 },
+    },
+  },
+});
 </script>
 </script>
 </body>

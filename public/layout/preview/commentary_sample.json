@@ -1,0 +1,25 @@
+{
+  "state": {
+    "commentary.0": {
+      "name": "MattGree",
+      "subLabel": "PLAY-BY-PLAY",
+      "subValue": "@mattgree",
+      "subVisible": true,
+      "visible": true
+    },
+    "commentary.1": {
+      "name": "SteelyDad",
+      "subLabel": "COLOR",
+      "subValue": "@steelydad",
+      "subVisible": true,
+      "visible": true
+    },
+    "commentary.2": {
+      "name": "",
+      "subLabel": "",
+      "subValue": "",
+      "subVisible": false,
+      "visible": false
+    }
+  }
+}

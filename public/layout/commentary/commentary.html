@@ -41,6 +41,7 @@
 
     OverlayBase.init({
       render: () => cm.update(OverlayBase.state, OverlayBase.settings),
+      sample: 'commentary',
       fetchSettings: true,
       shouldRender: (key) => key.startsWith('commentary.'),
       shouldRenderSettings: (key) => key.startsWith('overlays.'),

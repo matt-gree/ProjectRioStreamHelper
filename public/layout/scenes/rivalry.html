@@ -578,6 +578,15 @@
 
     OverlayBase.init({
       render,
+      sample: {
+        file: 'scoreboard',
+        state: {
+          tournamentInfo: {
+            name: 'Slice 2026', event_name: 'MSB Singles',
+            phase: 'Top Cut', organizer_0_twitter: '@projectrio',
+          },
+        },
+      },
       fetchSettings: true,
       shouldRender: (key) =>
         key === 'tournamentInfo.phase'

@@ -513,6 +513,10 @@
 
     OverlayBase.init({
       render,
+      // The bracket bundle plus the player whose card this is: without an
+      // active player the layout draws its "set a player" note, which is
+      // correct on air and useless as a preview.
+      sample: { file: 'bracket', state: { 'bracket.activePlayer': 'Samn' } },
       shouldRender: (key) => key.startsWith('bracket') || key.startsWith('playerSchedule'),
       shouldRenderSettings: (key) => key.startsWith('overlays.'),
       fetchSettings: true,

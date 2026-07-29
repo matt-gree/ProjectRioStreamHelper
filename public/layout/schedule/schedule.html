@@ -85,6 +85,7 @@
 
     OverlayBase.init({
       render,
+      sample: 'schedule',
       shouldRender: (key) => key.startsWith('schedule.') || key.startsWith('match.'),
       fetchSettings: true,
     });

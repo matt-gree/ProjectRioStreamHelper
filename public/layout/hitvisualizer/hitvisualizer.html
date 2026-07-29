@@ -55,6 +55,7 @@ const mount = mountHit({
 
 OverlayBase.init({
   render: () => mount.update(OverlayBase.state, SB),
+  sample: 'scoreboard',
   shouldRender: (key) => key.startsWith(`score.${SB}.hit`),
 });
 

@@ -74,6 +74,7 @@
 
     OverlayBase.init({
       render,
+      sample: 'scoreboard',
       fetchSettings: true,
       shouldRender: (key) =>
         key.startsWith(`score.${SCOREBOARD}.player.${TEAM_NUM}.`)

@@ -1,6 +1,7 @@
 /* global OverlayBase */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 
 /*
  * OverlayBase's sample bundle — the mechanism behind both the catalog/picker
@@ -210,4 +211,51 @@ describe('OverlayBase sample bundle', () => {
         expect(note).not.toBeNull();
         expect(note.textContent).toContain('no sample data');
     });
+});
+
+/*
+ * Coverage guard, the same shape as blank-reason.test.jsx. Every Layout either
+ * declares a sample bundle or is on the exemption list below with a reason.
+ *
+ * The point is the Add picker and demo mode: a layout with no bundle previews as
+ * an empty box on a machine with no game running, which reads as a broken
+ * element rather than an unconfigured one. Adding a Layout should therefore
+ * cost one `sample:` line, and forgetting it should fail here rather than
+ * surface as a blank tile weeks later.
+ */
+const NO_SAMPLE = {
+    'bracket/losers_only.html': 'redirect shell — forwards to index.html with ?losers_only, params intact',
+    'bracket/winners_only.html': 'redirect shell — forwards to index.html with ?winners_only, params intact',
+};
+
+function layoutFiles(dir = 'public/layout', prefix = '') {
+    const out = [];
+    for (const entry of readdirSync(dir)) {
+        const full = join(dir, entry);
+        if (statSync(full).isDirectory()) {
+            // lib/ is the mount library, preview/ is the bundles themselves,
+            // fonts/ is assets — none of them is a Layout.
+            if (['lib', 'preview', 'fonts'].includes(entry)) continue;
+            out.push(...layoutFiles(full, `${prefix}${entry}/`));
+        } else if (entry.endsWith('.html')) {
+            out.push([`${prefix}${entry}`, full]);
+        }
+    }
+    return out;
+}
+
+describe('sample coverage — every Layout declares a bundle', () => {
+    const files = layoutFiles();
+
+    it('finds every Layout', () => {
+        expect(files.length).toBeGreaterThanOrEqual(26);
+    });
+
+    for (const [name, path] of files) {
+        const exempt = NO_SAMPLE[name];
+        it(`${name}${exempt ? ' is exempt' : ' declares sample:'}`, () => {
+            const declares = /\bsample:\s*(['"{])/.test(readFileSync(path, 'utf8'));
+            expect(declares, exempt || `${name} needs a sample: bundle`).toBe(!exempt);
+        });
+    }
 });
