@@ -24,11 +24,13 @@
 // tested. They used to be an if-chain in here, where a test could not reach
 // them and every new member meant editing control flow.
 //
-// Requires overlay-base.js (and rio-data.js for the stats member) loaded first,
-// and the host page's `three` importmap for the hit member.
+// Requires overlay-base.js (and rio-data.js for the roster/stats members)
+// loaded first, and the host page's `three` importmap for the hit member.
 import { createLayers, resolveFeed } from '/layout/lib/container-layers.js';
 import { mountHit } from '/layout/lib/hit-mount.js';
 import { mountStats } from '/layout/lib/stats-mount.js';
+import { mountRoster } from '/layout/lib/roster-mount.js';
+import { mountStatsCard } from '/layout/lib/stats-card-mount.js';
 import { mountPostgameCallout } from '/layout/lib/postgame-callout-mount.js';
 import { mountPostgameVs } from '/layout/lib/postgame-vs-mount.js';
 
@@ -77,6 +79,44 @@ const MEMBERS = {
       file: 'scoreboard',
       content: { scoreboard: 1, team: 1, charIndex: 0, role: 'batting' },
     },
+  },
+  roster: {
+    size: [452, 140],
+    mount: (box) => mountRoster({ host: box }),
+    sample: { file: 'scoreboard', content: { scoreboard: 1, team: 1 } },
+  },
+  // The themed 2x2 stat card — the SAME data as `stats`, wearing the design
+  // package's `statscard` element instead of the fed bar's DOM markup. Two
+  // members rather than a mode on one because a container's roster is a list of
+  // things that can be on screen, and these two are different pictures at
+  // different sizes; a container holds whichever one its look calls for.
+  statscard: {
+    size: [380, 220],
+    // Binds its side at MOUNT time (mountStatsCard closes over sb/team and
+    // resolves the line itself), so it takes `sel` here and declares an
+    // identity below — a scope change is a new layer, not an update.
+    mount: (box, ctx, sel) => {
+      // Inline positioning beats stats-card-mount's `.st-host { position:
+      // fixed }`, which would pin the card to the viewport instead of the
+      // centered box this member was given.
+      const cardHost = document.createElement('div');
+      cardHost.style.cssText = 'position:absolute; inset:0;';
+      box.appendChild(cardHost);
+      const card = mountStatsCard({
+        host: cardHost,
+        sb: Number(sel?.scoreboard) || 1,
+        team: Number(sel?.team) === 2 ? 2 : 1,
+        settingsType: 'statscard',
+        svgElement: 'statscard',
+      });
+      return {
+        update: (state) => card.update(state, OverlayBase.settings),
+        dispose: () => card.dispose(),
+        replay: () => {},
+      };
+    },
+    identity: (sel) => `statscard:${Number(sel.scoreboard) || 1}:${Number(sel.team) === 2 ? 2 : 1}`,
+    sample: { file: 'scoreboard', content: { scoreboard: 1, team: 1 } },
   },
   postgamecallout: {
     size: [1920, 1080],

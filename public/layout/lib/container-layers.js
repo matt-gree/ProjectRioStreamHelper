@@ -20,9 +20,12 @@
  *
  *   size      [w, h] native pixel size. Omit for a member that has no native
  *             size of its own and simply fills whatever it is given.
- *   mount     (box, ctx) => { update, dispose, replay? }. `box` is the sized,
- *             centered element to render into; `ctx` is whatever the caller
- *             passed to `show` (state, perf, …).
+ *   mount     (box, ctx, sel) => { update, dispose, replay? }. `box` is the
+ *             sized, centered element to render into; `ctx` is whatever the
+ *             caller passed to `show` (state, perf, …); `sel` is the selection
+ *             that caused this layer to be built, for a member that binds its
+ *             frame of reference at MOUNT time rather than per update. Pair
+ *             that with `identity` or the layer outlives the scope it bound.
  *   payload   (sel) => second argument for `mount.update`. Defaults to the
  *             selection itself; the hit visualizer takes a bare board number.
  *   identity  (sel) => layer key, when one member needs more than one layer.
@@ -176,7 +179,7 @@ export function createLayers({
         return spec.identity ? spec.identity(sel) : element;
     }
 
-    function build(element, key, ctx) {
+    function build(element, key, ctx, sel) {
         const spec = specOf(element);
         const layer = doc.createElement('div');
         layer.className = 'fc-layer';
@@ -202,7 +205,7 @@ export function createLayers({
 
         let mount;
         try {
-            mount = spec.mount(box, ctx);
+            mount = spec.mount(box, ctx, sel);
         } catch (e) {
             // A member that cannot stand up must not take the container with it:
             // the source stays alive and the next feed still draws.
@@ -240,7 +243,7 @@ export function createLayers({
         const key = keyOf(element, sel);
         if (!key) return false;
 
-        const entry = layers.get(key) || build(element, key, ctx);
+        const entry = layers.get(key) || build(element, key, ctx, sel);
         if (!entry) return false;
 
         const payload = entry.spec.payload ? entry.spec.payload(sel) : sel;

@@ -26,10 +26,11 @@ function fakeMember(size, { fail = false } = {}) {
         calls,
         spec: {
             size,
-            mount: (box) => {
+            mount: (box, ctx, sel) => {
                 if (fail) throw new Error('nope');
                 calls.mounts += 1;
                 calls.box = box;
+                calls.mountedWith = sel;
                 return {
                     update: (state, payload) => { calls.updates.push(payload); },
                     replay: () => { calls.replays += 1; },
@@ -178,6 +179,27 @@ describe('createLayers — the cross-fade', () => {
 
     const activeOf = (h) => [...h.querySelectorAll('.fc-layer')]
         .filter(l => l.dataset.active === '1').map(l => l.dataset.member);
+
+    /*
+     * A member that binds its frame of reference at MOUNT time (the themed stat
+     * card closes over sb/team and resolves the line itself) needs the selection
+     * that built its layer, not just the box. Pair that with `identity` — as the
+     * stat card does — or a scope change updates a layer bound to the old side.
+     */
+    it('hands the mount the selection that built its layer', async () => {
+        const a = fakeMember([325, 120]);
+        const layers = createLayers({
+            host: host(), container, raf: now, warn: () => {},
+            registry: {
+                a: { ...a.spec, identity: (sel) => `a:${sel.team}` },
+            },
+        });
+        await layers.show('a', { element: 'a', scoreboard: 1, team: 2 }, {});
+        expect(a.calls.mountedWith).toEqual({ element: 'a', scoreboard: 1, team: 2 });
+        // A different side is a different layer, not an update on this one.
+        await layers.show('a', { element: 'a', scoreboard: 1, team: 1 }, {});
+        expect(a.calls.mounts).toBe(2);
+    });
 
     it('mounts a member lazily, on first show', async () => {
         const { a, b, layers } = setup();

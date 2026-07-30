@@ -76,7 +76,8 @@ export function mountStatsCard({ host, sb, team, settingsType = 'stats',
   const TEAM = team === 2 ? 2 : 1;
   // Which settings namespace this card reads (overlays.{SETTINGS_TYPE}.*). The
   // standalone Stats source uses 'stats'; the combined Roster + Stats element
-  // passes 'rosterstats' so its card is configured independently.
+  // passes 'rosterstats' and the container MEMBER that replaces it passes
+  // 'statscard', so each card is configured independently.
   const SETTINGS_TYPE = settingsType || 'stats';
 
   // Which design-package SVG this card renders. The standalone Stats source uses

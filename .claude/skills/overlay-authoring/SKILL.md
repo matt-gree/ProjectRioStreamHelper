@@ -141,10 +141,12 @@ A shared container is one browser source hosting whichever of its **members** is
 fed to it. The engine is split in two on purpose:
 
 - **`fed-container.js` = the REGISTRY and the wiring.** One `MEMBERS` table:
-  `size` (native px), `mount(box, ctx)`, optional `payload(sel)` (what that
+  `size` (native px), `mount(box, ctx, sel)`, optional `payload(sel)` (what that
   member's `update` takes) and `identity(sel)` (when one member needs more than
   one layer — the hit caches stadium/playback per board, so a board change is a
-  separate mount). Each entry also carries its `sample` occupant. **Adding a
+  separate mount; the themed stat card closes over sb/team, which is why `mount`
+  gets the selection too — a mount-time binding without an `identity` outlives
+  the scope it bound). Each entry also carries its `sample` occupant. **Adding a
   member is one table entry, never an edit to control flow** — it used to be an
   if-chain, which is why only four of the thirteen `{ host }` mounts were
   reachable.

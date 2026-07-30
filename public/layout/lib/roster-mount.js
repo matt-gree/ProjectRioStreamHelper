@@ -2,9 +2,11 @@
 //
 // Extracted from public/layout/scoreboard1/roster.html so more than one overlay
 // can draw the same captain-first 9-character roster: the standalone Roster
-// source and the combined Roster + Stats source (rosterstats-mount.js) both call
-// renderRoster(). Data comes from RioData.getRosterSlots; visibility toggles from
-// overlays.roster.* — a single source of truth for both surfaces.
+// source, the combined Roster + Stats source (rosterstats-mount.js) and — via
+// mountRoster() at the bottom — the roster as a shared-CONTAINER member, which
+// is what replaces that combined source. Data comes from RioData.getRosterSlots;
+// visibility toggles from overlays.roster.* — a single source of truth for all
+// three surfaces.
 //
 //   import { renderRoster } from '/layout/lib/roster-mount.js';
 //   renderRoster(gridContainer, { state, settings, sb, team });
@@ -144,3 +146,71 @@ export function renderRoster(container, { state, settings, sb, team, settingsPre
 
 export const ROSTER_REF_W = REF_W;
 export const ROSTER_REF_H = REF_H;
+
+/*
+ * The roster as a CONTAINER MEMBER.
+ *
+ * `renderRoster` is a draw call; a container member is an object with a
+ * lifecycle (`fed-container.js`'s MEMBERS registry — mount · update · dispose).
+ * This is the adapter between the two, and it is what lets a container REST on a
+ * roster, which is the steady state the combined Roster + Stats source had.
+ *
+ * The drop-shadow lives here rather than on the host page for the same reason
+ * the grid CSS does: roster.html applies it to its own <body>, and a member
+ * inside a container has no body of its own to carry it.
+ *
+ * Frame of reference comes from the FEED, not from mount time — the engine
+ * writes the container's scope into every payload it feeds, so one layer serves
+ * whatever side the container is about and a scope change is an update rather
+ * than a rebuild.
+ */
+const HOST_CSS = `
+.rm-host {
+  position: absolute; inset: 0; display: flex;
+  align-items: center; justify-content: center;
+  filter:
+    drop-shadow(0 2px 2px rgba(0, 0, 0, 0.12))
+    drop-shadow(0 3px 1px rgba(0, 0, 0, 0.14))
+    drop-shadow(0 1px 5px rgba(0, 0, 0, 0.12))
+    drop-shadow(0 -1px 2px rgba(0, 0, 0, 0.1));
+}
+`;
+
+let _hostCssInjected = false;
+
+export function mountRoster({ host }) {
+  if (!_hostCssInjected) {
+    const s = document.createElement('style');
+    s.id = 'roster-mount-host-css';
+    s.textContent = HOST_CSS;
+    document.head.appendChild(s);
+    _hostCssInjected = true;
+  }
+
+  const root = document.createElement('div');
+  root.className = 'rm-host';
+  const grid = document.createElement('div');
+  root.appendChild(grid);
+  host.appendChild(root);
+
+  // sel = { scoreboard, team } — a scope, not a content pick. The roster has no
+  // "which one" to choose; whose roster it is, is the only question.
+  function update(state, sel) {
+    renderRoster(grid, {
+      state,
+      settings: OverlayBase.settings,
+      sb: Number(sel?.scoreboard) || 1,
+      team: Number(sel?.team) === 2 ? 2 : 1,
+    });
+  }
+
+  function dispose() {
+    if (root.parentNode) root.parentNode.removeChild(root);
+  }
+
+  // No entrance animation to re-run; declared so the container's activation
+  // replay path is uniform across members.
+  function replay() {}
+
+  return { update, dispose, replay };
+}
