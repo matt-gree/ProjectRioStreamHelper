@@ -555,6 +555,53 @@ any of them.
   dispatched on `element.container`, not by id). Deleting a definition clears
   its feed but **never deletes the OBS source** — the console does not remove a
   source the producer watched appear.
+- **A member leaving a roster takes its dependents with it** (`detach` in
+  `containers.js`): the feed if it is what the container carries, the `resting`
+  state if that named it, and any automation rule that drove it. A member leaves
+  three ways — removed, MOVED to another container, claimed by a new one — and
+  every one of them must clean up the same amount. The engine treats the leftovers
+  as inert, so this is not about what goes on air; it is about a definition that
+  claims to rest on something it cannot render, and rules that revive the day the
+  member returns.
+
+### Container automations
+
+`src/routes/production/automations.js` + `stage/automation.jsx`. A container can
+feed **itself**: a rule watches a state key and shows one of its members for a
+dwell, then returns to the container's resting occupant. The engine is
+**server-side, inside the state-write path** (`server/automations.py` on
+`State.hooks`), so a rule's feed write rides the same `SetBatch` as the HUD change
+that triggered it — the console only edits and reports.
+
+- **Two fields on the container definition**, both absent until set:
+  `resting` (the member it returns to; absent = empty/transparent, and that is
+  the right answer for a container that only ever holds pushed content) and
+  `scope` = `{scoreboard, team}` (its frame of reference).
+- **Scope is the mirror mechanism.** It resolves `{sb}` in a rule's trigger and
+  picks the side of the content the engine feeds, so a mirrored pair is **two
+  scoped containers running one canned rule** — the same batter change shows the
+  batter on the side at bat and the pitcher on the side in the field. Do not add
+  a per-rule side.
+- **Rules come from the QUICK-ADD LIBRARY only** (`AUTOMATION_LIBRARY`). A
+  free-text trigger key is a way to write an automation that silently never
+  fires; the canned entries are known-good and carry the producer-facing words
+  (`triggerLabel`, `guardLabel`). Editable per rule: the switch and the dwell.
+  Custom authoring waits until these have been through a real broadcast.
+- **A template is offered only when its member is on the roster** (`templatesFor`)
+  — a rule feeding a non-member is inert in the engine, so offering it would be
+  offering something that quietly does nothing.
+- **A rule id is `{container}:{template}`** (`ruleIdFor`), because two containers
+  legitimately run the same canned rule; adding one twice to one container is a
+  no-op, since two identical rules would fire twice into a key that holds one
+  occupant.
+- **Precedence is manual > rule > resting**, mirrored by the engine to
+  `production.feed.reason.{container}` and read by `useFeedReason` — same instinct
+  as `side_reason`: say WHY something is up. A producer Push suspends the rules,
+  and **clearing the container is what hands it back**; there is deliberately no
+  Resume verb, because resting *is* what a container shows when nothing else is
+  up.
+- Rules are **config, so writes are immediate and never staged** — the
+  broadcast-visible half is the feed the engine writes, not the rule.
 
 ### The Add picker
 

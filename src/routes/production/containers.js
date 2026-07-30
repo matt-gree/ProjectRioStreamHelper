@@ -3,6 +3,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useSettingsStore, useStateStore } from '../../context/store';
 import { stageOrRun } from '../../context/staging';
 import { containerId, ELEMENTS } from './elements';
+import { dropRules } from './automations';
 
 /*
  * Shared containers — producer-built.
@@ -99,12 +100,34 @@ function normalizeDef(id, raw) {
     if (!raw || typeof raw !== 'object') return null;
     const width = Number(raw.width) || 0;
     const height = Number(raw.height) || 0;
+    const members = Array.isArray(raw.members) ? raw.members.filter(m => typeof m === 'string') : [];
+    const scope = raw.scope && typeof raw.scope === 'object' ? raw.scope : {};
     return {
         id,
         name: raw.name || id,
         width,
         height,
-        members: Array.isArray(raw.members) ? raw.members.filter(m => typeof m === 'string') : [],
+        members,
+        /*
+         * The two automation fields (server/automations.py). Both are absent
+         * until a producer sets one, and both are read here so every surface
+         * gets the same normalized answer.
+         *
+         * `resting` — the member this container returns to when nothing else is
+         * up. Null (the default) means empty, which is the resting state of
+         * every container that only ever holds pushed content. A resting member
+         * that has since left the roster reads as null rather than as a member,
+         * so a roster edit cannot leave a container resting on something it
+         * can no longer render.
+         *
+         * `scope` — this container's frame of reference. It resolves `{sb}` in a
+         * rule's trigger and supplies the side of the content the engine feeds,
+         * which is what makes a mirrored pair flash the batter on one container
+         * and the pitcher on the other.
+         */
+        resting: members.includes(raw.resting) ? raw.resting : null,
+        scoreboard: Number(scope.scoreboard) || 1,
+        team: Number(scope.team) === 2 ? 2 : 1,
         url: containerUrl(id),
     };
 }
@@ -228,6 +251,26 @@ export function containerIdFor(name, taken = {}) {
     }
 }
 
+/*
+ * Take `elementId` off `def`'s roster, and take everything that HUNG off that
+ * membership with it: the feed if this element is what the container is
+ * carrying, the resting state if that named it, and any rule that drove it.
+ *
+ * One helper because a member leaves a roster three ways — removed, moved to
+ * another container, or claimed by a new one — and every one of them used to
+ * clean up a different amount. The engine treats a rule whose member has left as
+ * inert, so this is not about what goes on air; it is about a definition that
+ * still claims to rest on something it cannot render, and rules that come back
+ * to life the day the member returns.
+ */
+function detach(def, elementId, containerId) {
+    const next = { ...def, members: (def?.members || []).filter(m => m !== elementId) };
+    if (next.resting === elementId) delete next.resting;
+    releaseFeed(containerId, elementId);
+    dropRules({ container: containerId, member: elementId });
+    return next;
+}
+
 // The container mutations, as one hook so every surface edits rosters the same
 // way — and so exclusivity is enforced in exactly one place.
 export function useContainerActions() {
@@ -237,10 +280,8 @@ export function useContainerActions() {
         const next = { ...defs };
         // A new container claiming a member takes it off whatever held it.
         for (const [otherId, other] of Object.entries(next)) {
-            const kept = (other?.members || []).filter(m => !members.includes(m));
-            if (kept.length !== (other?.members || []).length) {
-                next[otherId] = { ...other, members: kept };
-                releaseFeed(otherId);
+            for (const member of (other?.members || [])) {
+                if (members.includes(member)) next[otherId] = detach(next[otherId], member, otherId);
             }
         }
         next[id] = { name: name || id, width, height, members: [...members] };
@@ -260,6 +301,9 @@ export function useContainerActions() {
         const next = { ...defs };
         delete next[id];
         releaseFeed(id);
+        // A rule for a container that no longer exists is inert, but leaving it
+        // in settings means it revives the day an id is reused.
+        dropRules({ container: id });
         writeDefs(next);
     }, []);
 
@@ -280,25 +324,54 @@ export function useContainerActions() {
             for (const [otherId, other] of Object.entries(next)) {
                 if (otherId === id) continue;
                 if (!(other?.members || []).includes(elementId)) continue;
-                next[otherId] = {
-                    ...other,
-                    members: other.members.filter(m => m !== elementId),
-                };
-                releaseFeed(otherId, elementId);
+                next[otherId] = detach(other, elementId, otherId);
             }
             const members = defs[id].members || [];
             if (!members.includes(elementId)) {
                 next[id] = { ...defs[id], members: [...members, elementId] };
             }
         } else {
-            next[id] = {
-                ...defs[id],
-                members: (defs[id].members || []).filter(m => m !== elementId),
-            };
-            releaseFeed(id, elementId);
+            next[id] = detach(defs[id], elementId, id);
         }
         writeDefs(next);
     }, []);
 
-    return { create, rename, remove, setMember };
+    /*
+     * The member this container rests on — its steady state.
+     *
+     * Only meaningful with an automation running (something has to take the
+     * container off resting for resting to be visible as a return), but it is a
+     * property of the CONTAINER, not of the rule: two rules on one container
+     * return to the same place, and a container with no rule still has a
+     * defensible answer to "what do you show when nothing is up".
+     */
+    const setResting = useCallback((id, elementId) => {
+        const defs = rawDefs();
+        if (!defs[id]) return;
+        const next = { ...defs[id] };
+        if (!elementId) delete next.resting;
+        // A non-member is REFUSED, not treated as a clear: only the picker
+        // writes here and it only offers members, so the other way round means a
+        // stray call silently destroys a setting it was never asked about.
+        else if ((defs[id].members || []).includes(elementId)) next.resting = elementId;
+        else return;
+        writeDefs({ ...defs, [id]: next });
+    }, []);
+
+    // This container's frame of reference. Board and side together, since a
+    // partial scope is the same trap as a missing one — the engine defaults both
+    // to 1 and a half-set scope would silently mean board 1.
+    const setScope = useCallback((id, scoreboard, team) => {
+        const defs = rawDefs();
+        if (!defs[id]) return;
+        writeDefs({
+            ...defs,
+            [id]: {
+                ...defs[id],
+                scope: { scoreboard: Number(scoreboard) || 1, team: Number(team) === 2 ? 2 : 1 },
+            },
+        });
+    }, []);
+
+    return { create, rename, remove, setMember, setResting, setScope };
 }

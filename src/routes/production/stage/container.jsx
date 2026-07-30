@@ -6,6 +6,7 @@ import {
     CONTAINER_MEMBERS, fitsContainer, useContainerActions, useContainerDefs,
 } from '../containers';
 import { BindingNote } from './generic';
+import AutomationSection from './automation';
 
 /*
  * A container's stage panel — where a container is BUILT.
@@ -134,6 +135,8 @@ export default function ContainerStage({ element, placement }) {
                     />
                 ))}
             </div>
+
+            <AutomationSection def={def} />
 
             <div className="mt-1 border-t border-border/60 pt-2">
                 <ActionRow
