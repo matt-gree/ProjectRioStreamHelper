@@ -99,6 +99,52 @@ export const ELEMENTS = [
         match: (url) => /shared\/stats-feed/i.test(url) || /stats/i.test(url),
     },
     {
+        id: 'statscard',
+        name: 'Stat Card',
+        // The same stat line as Stats, wearing the design package's `statscard`
+        // element — the compact 2x2 card, 380x220. It is a CONTAINER MEMBER and
+        // nothing else: it has no standalone layout, which is why its canonical
+        // url is the generic container shell.
+        //
+        // Not pickable, deliberately. It resolves the side's current batter or
+        // pitcher itself (RioData.getStatsLine, the same resolution the engine's
+        // `statscard` resolver mirrors), so there is nothing to choose — the only
+        // question is whose side, and that is the CONTAINER's scope.
+        flavor: 'fed',
+        feed: 'statscard',
+        url: '/layout/shared/container.html',
+        width: 380,
+        height: 220,
+        match: (url) => /shared\/container/i.test(url),
+        // Its frame of reference is the container's, not a board picker's: a
+        // manual Push takes scoreboard AND team from the container definition,
+        // the same pair the automation engine feeds it. Without this a push into
+        // a right-side container would silently show the left side.
+        containerScoped: true,
+    },
+    {
+        id: 'roster',
+        name: 'Roster',
+        // The captain-first 9-character roster for one side. A dedicated source
+        // (?scoreboard=N&team=T) like any direct element, AND a container member
+        // — a container RESTING on a roster and flashing a stat card over it is
+        // the combined Roster + Stats source, rebuilt out of parts.
+        //
+        // No `scope: 'board'`: its settings are global (overlays.roster.*, which
+        // is what roster.html reads), and its two sources differ by ?team=, which
+        // the instance grammar reads off the URL as a variant. Same shape as
+        // Controller.
+        flavor: 'direct',
+        url: '/layout/scoreboard1/roster.html',
+        width: 452,
+        height: 140,
+        // Narrow on purpose: rosterstats.html sits in the same folder and must
+        // not bind here while the two run in parallel.
+        match: (url) => /\/layout\/scoreboard\d*\/roster\.html/i.test(url),
+        containerHostable: true,
+        containerScoped: true,
+    },
+    {
         id: 'commentary',
         name: 'Commentary',
         // Registry-bound caster desk.

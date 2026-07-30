@@ -126,8 +126,26 @@ def _resolve_scoped(member: str, sb: int, team: int):
     return {"element": member, "scoreboard": sb, "team": team}
 
 
+def _resolve_statscard(member: str, sb: int, team: int):
+    """The themed stat card: a scope, plus the guard the fed bar gets for free.
+
+    Unlike `stats`, this card resolves its own line inside the mount
+    (RioData.getStatsLine), so the payload is only the frame of reference. What
+    it still needs from here is the GUARD — without one, every batter change
+    would fire whether or not this side has anyone on the field, and the
+    guard-fail retry that keeps a batter from being skipped a frame early would
+    never engage.
+    """
+    role = _team_role(sb, team)
+    field = "batter" if role == "batting" else "pitcher"
+    if not (deep_get(State.state, f"score.{sb}.{field}", "") or ""):
+        return None
+    return {"element": member, "scoreboard": sb, "team": team}
+
+
 RESOLVERS = {
     "stats": _resolve_stats,
+    "statscard": _resolve_statscard,
 }
 
 

@@ -38,6 +38,12 @@ export const LAYOUT_SETTINGS = {
         { key: 'showTeamLogo', type: 'switch', label: 'Show Team Logo', description: 'Display the team logo next to the roster' },
     ],
     stats: [...STAT_CARD_SETTINGS],
+    // Stat Card — the compact 2x2 card as a CONTAINER MEMBER (no standalone
+    // layout of its own). Same knobs as the standalone Stats source under its
+    // own namespace, so a container's card and a dedicated stats source are
+    // configured independently; the Production stage reaches these from the Stat
+    // Card row nested under its container.
+    statscard: [...STAT_CARD_SETTINGS],
     teamlogo: [],
     // Simple 4-Cam Scorecard — self-contained, fixed slice26 look. Aim (left/
     // right) is a URL variant (?dir=), so there are no live element settings.

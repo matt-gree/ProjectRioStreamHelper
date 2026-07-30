@@ -41,16 +41,22 @@ export const REASONS = {
  * The quick-add library.
  *
  * `{sb}` in a trigger resolves from the CONTAINER's scope server-side, so one
- * entry reads the same on every board instead of naming one. `member` is the
- * element the rule shows, and a template only offers itself for a container
- * whose roster already holds that member — a rule that feeds a non-member is
- * inert by design and would just look broken.
+ * entry reads the same on every board instead of naming one.
+ *
+ * `members` is what the rule can show, in PREFERENCE ORDER, and a template only
+ * offers itself for a container whose roster already holds one of them — a rule
+ * that feeds a non-member is inert by design and would just look broken. A list
+ * rather than a single id because "flash the stat card" is one decision the
+ * producer makes, and which card their container holds (the themed 2x2 Stat
+ * Card, or the fed Stats bar) is a look they already chose when they built the
+ * roster. The rule itself always stores the resolved member, so the engine
+ * still reads exactly one.
  */
 export const AUTOMATION_LIBRARY = [
     {
         id: 'batter-card',
         name: 'Batter change → stat card',
-        member: 'stats',
+        members: ['statscard', 'stats'],
         trigger: 'score.{sb}.batter',
         triggerLabel: 'the batter changes',
         guard: 'content',
@@ -71,10 +77,17 @@ export const AUTOMATION_LIBRARY = [
 
 export const libraryEntry = (id) => AUTOMATION_LIBRARY.find(t => t.id === id) || null;
 
+/*
+ * Which of a template's members this container would actually show: the first
+ * one its roster holds. Null when the roster holds none, which is exactly what
+ * makes the template unofferable.
+ */
+export const memberFor = (template, def) => (template?.members || []).find(
+    m => (def?.members || []).includes(m),
+) || null;
+
 // What a template needs on the roster before it can be offered.
-export const templatesFor = (def) => AUTOMATION_LIBRARY.filter(
-    t => (def?.members || []).includes(t.member),
-);
+export const templatesFor = (def) => AUTOMATION_LIBRARY.filter(t => !!memberFor(t, def));
 
 const EMPTY = Object.freeze({});
 
@@ -145,6 +158,13 @@ export function useAutomationActions() {
     const add = useCallback((templateId, container) => {
         const template = libraryEntry(templateId);
         if (!template || !container) return null;
+        // The member is resolved against the roster HERE, once, and stored — the
+        // engine reads a rule, not a preference list, and a roster edit that
+        // takes the member away leaves an inert rule rather than one that
+        // silently re-points at a different card mid-broadcast.
+        const def = useSettingsStore.getState()?.production?.container_defs?.[container];
+        const member = memberFor(template, def);
+        if (!member) return null;
         const id = ruleIdFor(templateId, container);
         writeRules({
             ...rawRules(),
@@ -153,7 +173,7 @@ export function useAutomationActions() {
                 template: templateId,
                 name: template.name,
                 container,
-                member: template.member,
+                member,
                 trigger: template.trigger,
                 guard: template.guard,
                 dwell: template.dwell,

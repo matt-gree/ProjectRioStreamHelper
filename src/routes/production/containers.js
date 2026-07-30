@@ -64,6 +64,24 @@ export const CONTAINER_MEMBERS = ELEMENTS.filter(
 );
 
 /*
+ * Can this member sit on more than one roster?
+ *
+ * Exclusivity is about an element's PUSH DESTINATION, not about what a container
+ * is allowed to draw: a content-bearing element pushed from its own row has to
+ * land somewhere unambiguous, and two rosters claiming it could never both be
+ * honoured. A CONTAINER-SCOPED member has no content of its own — it draws
+ * whoever the container's own scope has on the field — so the container is the
+ * subject, not the element, and the same member on two rosters is not a
+ * conflict. It is the mirrored pair: two scoped containers, the same two
+ * members, one canned rule, one showing the batter and the other the pitcher.
+ * Making that unbuildable would have made the pair the engine was designed
+ * around reachable only by hand-editing settings.
+ */
+export const isSharedMember = (el) => !!(el && el.containerScoped);
+const sharedIds = new Set(CONTAINER_MEMBERS.filter(isSharedMember).map(el => el.id));
+export const isSharedMemberId = (id) => sharedIds.has(id);
+
+/*
  * Does this element fit a container of this size? Same size or smaller.
  *
  * There is no scaling system — OBS does placement — so a member larger than its
@@ -161,9 +179,12 @@ export function useSharedContainers() {
 /*
  * Which container hosts this element — the roster read backwards.
  *
- * Exclusivity is enforced on write, so a well-formed settings file has at most
- * one match; taking the first keeps a hand-edited one deterministic rather than
- * letting two rosters fight per render.
+ * Exclusivity is enforced on write for a content-bearing member, so a
+ * well-formed settings file has at most one match; taking the first keeps a
+ * hand-edited one deterministic rather than letting two rosters fight per
+ * render. A SHARED member is deliberately on several, and first-match is the
+ * right answer there too: what it resolves is where that element's own row
+ * pushes and nests, and its settings are one namespace either way.
  */
 export function hostOf(defs, elementId) {
     for (const def of Object.values(defs || {})) {
@@ -278,10 +299,13 @@ export function useContainerActions() {
         const defs = rawDefs();
         const id = containerIdFor(name, defs);
         const next = { ...defs };
-        // A new container claiming a member takes it off whatever held it.
+        // A new container claiming a member takes it off whatever held it —
+        // unless the member is shared, which several containers may hold at once.
         for (const [otherId, other] of Object.entries(next)) {
             for (const member of (other?.members || [])) {
-                if (members.includes(member)) next[otherId] = detach(next[otherId], member, otherId);
+                if (members.includes(member) && !isSharedMemberId(member)) {
+                    next[otherId] = detach(next[otherId], member, otherId);
+                }
             }
         }
         next[id] = { name: name || id, width, height, members: [...members] };
@@ -312,9 +336,10 @@ export function useContainerActions() {
      *
      * Adding is a MOVE: the element comes off any other roster first, because a
      * container holds one occupant and an element that two containers both claim
-     * could only ever occupy one of them. Removing releases the feed if this
-     * element is what the container is currently carrying — leaving it up would
-     * strand content on air that nothing can then clear.
+     * could only ever occupy one of them. A SHARED member is the exception (see
+     * isSharedMember) — it is added, not moved. Removing releases the feed if
+     * this element is what the container is currently carrying — leaving it up
+     * would strand content on air that nothing can then clear.
      */
     const setMember = useCallback((id, elementId, on) => {
         const defs = rawDefs();
@@ -322,7 +347,7 @@ export function useContainerActions() {
         const next = { ...defs };
         if (on) {
             for (const [otherId, other] of Object.entries(next)) {
-                if (otherId === id) continue;
+                if (otherId === id || isSharedMemberId(elementId)) continue;
                 if (!(other?.members || []).includes(elementId)) continue;
                 next[otherId] = detach(other, elementId, otherId);
             }

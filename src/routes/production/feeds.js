@@ -129,7 +129,7 @@ export function useFeedSelect(element, scoreboard = 1) {
  * a push to land at all.
  */
 export function useContainerPush(element, scoreboard = 1) {
-    const { container } = useContainerOf(element);
+    const { container, def } = useContainerOf(element);
     const { value: feed, staged, setFeed } = useFeedControl(container);
     // Flat primitives, so useShallow settles instead of firing on every tick.
     const intent = useStateStore(useShallow(s => resolveIntent(s, element, scoreboard) || NO_INTENT));
@@ -137,9 +137,19 @@ export function useContainerPush(element, scoreboard = 1) {
     const mine = !!feed && feed.element === element.id;
     const hasIntent = !!intent.element;
     const canPush = !!container && (mine || !isPickableFeed(element) || hasIntent);
-    const toggle = () => container && setFeed(
-        mine ? null : (hasIntent ? intent : { element: element.id, scoreboard }),
-    );
+    /*
+     * A CONTAINER-SCOPED member has no content of its own — it draws whoever the
+     * side it belongs to has on the field — so its frame of reference is the
+     * container's scope, not the board picker's. That is the same pair the
+     * automation engine feeds it (`_scope_of` in server/automations.py), so a
+     * push and a rule put the identical thing on screen; without it a push into
+     * a right-side container would quietly show the left side, because `team`
+     * would simply be absent and default to 1.
+     */
+    const payload = element.containerScoped
+        ? { element: element.id, scoreboard: def?.scoreboard ?? scoreboard, team: def?.team ?? 1 }
+        : { element: element.id, scoreboard };
+    const toggle = () => container && setFeed(mine ? null : (hasIntent ? intent : payload));
 
     return { container, feed, mine, staged, canPush, toggle, setFeed, intent: hasIntent ? intent : null };
 }

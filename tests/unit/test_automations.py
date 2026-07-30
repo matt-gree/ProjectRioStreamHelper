@@ -149,6 +149,63 @@ async def test_the_mirrored_side_shows_the_pitcher(container, set_setting):
     }
 
 
+async def test_the_themed_card_is_fed_a_scope_and_nothing_else(container, set_setting):
+    """`statscard` resolves its own line, so the payload is only WHOSE side.
+
+    The fed `stats` bar is addressed (board, side, roster index, role) because
+    the producer can also pick a character for it. The themed card always draws
+    whoever this side has on the field — the same resolution the mount runs — so
+    there is nothing to address but the frame of reference.
+    """
+    set_setting("production.container_defs", {
+        CONTAINER: {
+            "name": "Roster + Stats", "width": 452, "height": 240,
+            "members": ["roster", "statscard"], "resting": "roster",
+            "scope": {"scoreboard": 1, "team": 1},
+        },
+    })
+    set_setting("production.automations", {
+        "r": {"container": CONTAINER, "trigger": "score.{sb}.batter",
+              "member": "statscard", "dwell": 7},
+    })
+    await Automations.Start()
+    await _hud(_game(batter="Mario"))
+    await _hud(_game(batter="Peach", idx=5))
+
+    assert _feed() == {"element": "statscard", "scoreboard": 1, "team": 1}
+    assert _reason() == RULE
+
+
+async def test_the_themed_card_still_carries_a_guard(container, set_setting):
+    """Resolving its own line does not mean firing unconditionally.
+
+    Without a guard, a batter change with nobody on the field for this side
+    would flash an empty card — and the guard-fail RETRY that keeps a batter
+    from being dropped a frame early would never engage.
+    """
+    set_setting("production.container_defs", {
+        CONTAINER: {
+            "name": "Roster + Stats", "width": 452, "height": 240,
+            "members": ["roster", "statscard"], "resting": "roster",
+            # Side 2 fields on a Top half, so the guard reads the PITCHER.
+            "scope": {"scoreboard": 1, "team": 2},
+        },
+    })
+    set_setting("production.automations", {
+        "r": {"container": CONTAINER, "trigger": "score.{sb}.batter",
+              "member": "statscard", "dwell": 7},
+    })
+    await Automations.Start()
+    await _hud(_game(batter="Mario"))
+    await _hud(_game(batter="Peach", idx=5) + [("score.1.pitcher", "")])
+
+    # Guard failed: still resting, and the baseline rolled back so the next tick
+    # retries this batter rather than skipping them.
+    assert _feed() == {"element": "roster", "scoreboard": 1, "team": 2}
+    await _hud(_game(batter="Peach", idx=5))
+    assert _feed() == {"element": "statscard", "scoreboard": 1, "team": 2}
+
+
 async def test_guard_failure_retries_on_the_next_tick(rule):
     """A batter whose card cannot resolve yet is not skipped.
 

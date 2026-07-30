@@ -36,6 +36,10 @@ const rows = (sc) => placementsInScene(sc, targets, {}, DEFAULT_DEFS);
 const SB = 'http://x/layout/scoreboard1/scoreboard.html';
 const LOWER = 'http://x/layout/lowerthird/lowerthird.html';
 const CALLOUT = 'http://x/layout/shared/callout-stage.html';
+// An unregistered PRSH layout with a ?team= variant. Roster used to be the
+// exemplar here; it is a registered element now (it is also a container
+// member), so the unregistered case needs a layout that really is one.
+const TEAMLOGO = 'http://x/layout/scoreboard1/teamlogo.html';
 const ROSTER = 'http://x/layout/scoreboard1/roster.html';
 const SHELL = 'http://x/layout/shared/container.html';
 
@@ -175,7 +179,7 @@ describe('placementsInScene — source → row', () => {
     // An unregistered overlay outside shared/ is NOT a container — it gets a
     // plain row, and nothing nests under it.
     it('does not treat an ordinary unregistered overlay as a container', () => {
-        const [p] = rows(scene('Game', 'program', item(4, 'Roster', ROSTER)));
+        const [p] = rows(scene('Game', 'program', item(4, 'Team Logo', TEAMLOGO)));
         expect(p.container).toBeNull();
         expect(p.feeds).toEqual([]);
     });
@@ -186,10 +190,10 @@ describe('placementsInScene — source → row', () => {
      * adding something the producer then cannot find.
      */
     it('rows an unregistered PRSH source rather than dropping it', () => {
-        const [p] = rows(scene('Game', 'program', item(4, 'Roster', ROSTER)));
+        const [p] = rows(scene('Game', 'program', item(4, 'Team Logo', TEAMLOGO)));
         expect(p.element.generic).toBe(true);
-        expect(p.element.name).toBe('Roster');
-        expect(p.id).toBe('layout:/layout/scoreboard1/roster.html@Game');
+        expect(p.element.name).toBe('Teamlogo');
+        expect(p.id).toBe('layout:/layout/scoreboard1/teamlogo.html@Game');
     });
 
     it('names a generic element from its file, not its query', () => {
@@ -198,23 +202,38 @@ describe('placementsInScene — source → row', () => {
     });
 
     /*
-     * THE TEAM AXIS. Every team-variant layout (roster, stats, teamlogo,
-     * controller…) is unregistered, so both sides row through genericElement —
-     * which keys on the PATHNAME. Left at that, team 1 and team 2 share one id:
+     * THE TEAM AXIS. An unregistered team-variant layout (teamlogo,
+     * playername…) rows through genericElement — which keys on the PATHNAME.
+     * Left at that, team 1 and team 2 share one id:
      * duplicate React keys in the rack, and `resolvePlacement`'s find() handing
      * the left-side panel the right-side source. Same class of bug as two boards
      * sharing a row, one axis over.
      */
     it('rows two team variants of one layout separately', () => {
         const out = rows(scene('Game', 'program',
-            item(4, 'Roster L', `${ROSTER}?team=1`), item(5, 'Roster R', `${ROSTER}?team=2`)));
+            item(4, 'Logo L', `${TEAMLOGO}?team=1`), item(5, 'Logo R', `${TEAMLOGO}?team=2`)));
         expect(out.map(p => p.id)).toEqual([
-            'layout:/layout/scoreboard1/roster.html~t1@Game',
-            'layout:/layout/scoreboard1/roster.html~t2@Game',
+            'layout:/layout/scoreboard1/teamlogo.html~t1@Game',
+            'layout:/layout/scoreboard1/teamlogo.html~t2@Game',
         ]);
-        expect(out.map(p => p.item.sourceName)).toEqual(['Roster L', 'Roster R']);
+        expect(out.map(p => p.item.sourceName)).toEqual(['Logo L', 'Logo R']);
         // One TYPE wearing two variants — the element is still the layout.
         expect(new Set(out.map(p => p.element.id)).size).toBe(1);
+    });
+
+    /*
+     * Roster is a REGISTERED element now — it has to be, since a container can
+     * only host something the element registry carries a size for, and a
+     * container resting on a roster is half of what the combined Roster + Stats
+     * source was. Its two sides still row separately: the variant is read off
+     * `?team=` whether or not the element is registered.
+     */
+    it('rows a registered roster as an element, one row per side', () => {
+        const out = rows(scene('Game', 'program',
+            item(6, 'Roster L', `${ROSTER}?scoreboard=1&team=1`),
+            item(7, 'Roster R', `${ROSTER}?scoreboard=1&team=2`)));
+        expect(out.map(p => p.id)).toEqual(['roster~t1@Game', 'roster~t2@Game']);
+        expect(out.every(p => p.element.generic)).toBe(false);
     });
 
     // Same axis on a registered element: one board, two sizes, two sources.
@@ -293,8 +312,8 @@ describe('resolvePlacement — stored ids are resolved, never rewritten', () => 
     // A variant is part of the identity, so it narrows like the board does.
     it('does not answer one variant with another', () => {
         const two = rows(scene('Game', 'program',
-            item(1, 'L', `${ROSTER}?team=1`), item(2, 'R', `${ROSTER}?team=2`)));
-        expect(resolvePlacement('layout:/layout/scoreboard1/roster.html~t2@Game', two).item.sourceName)
+            item(1, 'L', `${TEAMLOGO}?team=1`), item(2, 'R', `${TEAMLOGO}?team=2`)));
+        expect(resolvePlacement('layout:/layout/scoreboard1/teamlogo.html~t2@Game', two).item.sourceName)
             .toBe('R');
     });
 

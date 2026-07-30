@@ -87,6 +87,13 @@ def test_parse_html_meta_case_insensitive_meta(tmp_path):
 
 # --- container catalog rows ---
 
+# The definitions a fresh install ships with (server/settings.py); pinned in
+# full by tests/unit/test_settings_containers.py.
+SEEDED_CONTAINERS = {
+    "callout-stage", "stats-feed", "split-screen",
+    "roster-stats-1", "roster-stats-2",
+}
+
 async def test_container_rows_come_from_definitions_not_files(isolate_user_data):
     """A container is config, not a file.
 
@@ -99,7 +106,7 @@ async def test_container_rows_come_from_definitions_not_files(isolate_user_data)
     rows = _container_layouts("http://x")
 
     by_id = {r["container"]: r for r in rows}
-    assert set(by_id) == {"callout-stage", "stats-feed", "split-screen"}
+    assert set(by_id) == SEEDED_CONTAINERS
 
     stage = by_id["callout-stage"]
     assert stage["group"] == "shared"
@@ -128,7 +135,7 @@ async def test_a_malformed_definition_is_skipped_not_fatal(isolate_user_data):
     Settings.settings["production"]["container_defs"]["broken"] = "not a dict"
     rows = _container_layouts("http://x")
     assert "broken" not in {r["container"] for r in rows}
-    assert len(rows) == 3
+    assert len(rows) == len(SEEDED_CONTAINERS)
 
 
 async def test_the_catalog_does_not_also_list_the_shared_folder(isolate_user_data):
@@ -142,8 +149,6 @@ async def test_the_catalog_does_not_also_list_the_shared_folder(isolate_user_dat
 
     payload = orjson.loads((await list_layouts(_Req())).body)
     shared = [row for row in payload if row["group"] == "shared"]
-    assert {row["container"] for row in shared} == {
-        "callout-stage", "stats-feed", "split-screen",
-    }
+    assert {row["container"] for row in shared} == SEEDED_CONTAINERS
     # No row for the shell itself, and none for the legacy files.
     assert all(row["url"].endswith(f"?container={row['container']}") for row in shared)

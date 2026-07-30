@@ -238,6 +238,40 @@ class Settings:
                     "height": 720,
                     "members": ["hitvisualizer"],
                 },
+                # The mirrored pair that REPLACES the Roster + Stats element
+                # (rosterstats.html): one container per side, each resting on
+                # that side's roster, each able to flash that side's stat card
+                # over it. 452x240 is the element's own stage — the roster
+                # (452x140) and the card (380x220) both center inside it.
+                #
+                # Seeded because they are a MIGRATION, not a new feature: a
+                # producer replaces two browser-source URLs and gets what they
+                # had. What is deliberately NOT seeded is the automation — the
+                # flip is the part that has to be proven against real HUD
+                # traffic, so the producer adds "Batter change -> stat card"
+                # from the quick-add library once, per side, and can suspend it
+                # with one switch if it misbehaves on air.
+                #
+                # Scope is board 1 / left and board 1 / right. A rig running
+                # more boards re-points the Board picker on each container's
+                # stage; there is no seeding a pair per board without inventing
+                # a show structure nobody asked for.
+                "roster-stats-1": {
+                    "name": "Roster + Stats — Left",
+                    "width": 452,
+                    "height": 240,
+                    "members": ["roster", "statscard"],
+                    "resting": "roster",
+                    "scope": {"scoreboard": 1, "team": 1},
+                },
+                "roster-stats-2": {
+                    "name": "Roster + Stats — Right",
+                    "width": 452,
+                    "height": 240,
+                    "members": ["roster", "statscard"],
+                    "resting": "roster",
+                    "scope": {"scoreboard": 1, "team": 2},
+                },
             },
             # Container AUTOMATIONS — one rule per entry, interpreted by the
             # server-side engine in server/automations.py:

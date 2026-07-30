@@ -3,7 +3,8 @@ import { Check, Plus, Trash2 } from 'lucide-react';
 import { Text } from '../../../components/ui/primitives';
 import { ActionRow, IconToggle, ListRow, TextRow } from '../kit';
 import {
-    CONTAINER_MEMBERS, fitsContainer, useContainerActions, useContainerDefs,
+    CONTAINER_MEMBERS, fitsContainer, isSharedMember, useContainerActions,
+    useContainerDefs,
 } from '../containers';
 import { BindingNote } from './generic';
 import AutomationSection from './automation';
@@ -21,7 +22,11 @@ import AutomationSection from './automation';
  * advice: `production.feed.container.{id}` holds exactly one occupant, so
  * sharing a container is what "these two never appear at once" means. Checking
  * an element that another container already holds MOVES it, and the roster says
- * so before the click rather than after.
+ * so before the click rather than after — except for a container-SCOPED member
+ * (a roster, a stat card), which has no content of its own to be in two places
+ * at once and is added rather than moved. That exception is what makes a
+ * mirrored pair buildable here instead of only by hand: two containers, the
+ * same two members, opposite sides.
  *
  * The size is fixed at creation and not editable here. It is the size of the
  * largest member (smaller ones center and are never scaled — PRSH has no
@@ -30,21 +35,29 @@ import AutomationSection from './automation';
  * Making a second container and re-pointing is the honest path.
  */
 
-// Which container currently holds each member, so a row can say what checking
-// it would take the element away from.
+/*
+ * Which OTHER containers hold each member, so a row can say what checking it
+ * would take the element away from — or, for a shared member, who else is
+ * already drawing it.
+ */
 function useHolders(defs) {
     return useMemo(() => {
         const out = {};
         for (const def of Object.values(defs)) {
-            for (const m of def.members || []) out[m] = def.id;
+            for (const m of def.members || []) (out[m] ??= []).push(def);
         }
         return out;
     }, [defs]);
 }
 
-const MemberRow = memo(function MemberRow({ element, def, holder, holderName, carrying, setMember }) {
-    const on = holder === def.id;
-    const elsewhere = !!holder && !on;
+const MemberRow = memo(function MemberRow({ element, def, holders, carrying, setMember }) {
+    const on = (holders || []).some(h => h.id === def.id);
+    const others = (holders || []).filter(h => h.id !== def.id);
+    // A shared member is ADDED, not moved: several containers legitimately draw
+    // it, because it has no content of its own to be in two places at once.
+    const shared = isSharedMember(element);
+    const elsewhere = others.length > 0;
+    const otherNames = others.map(h => h.name).join(', ');
     const smaller = element.width < def.width || element.height < def.height;
     return (
         <ListRow
@@ -52,8 +65,10 @@ const MemberRow = memo(function MemberRow({ element, def, holder, holderName, ca
             name={element.name}
             meta={[
                 carrying ? 'on the container' : null,
-                // Say where it would come FROM, since checking is a move.
-                elsewhere ? `held by ${holderName}` : null,
+                // Say where it would come FROM, since checking is a move —
+                // unless it is shared, where nothing moves and the other
+                // containers are context rather than a warning.
+                elsewhere ? `${shared ? 'also on' : 'held by'} ${otherNames}` : null,
                 // Centering is the one size relaxation, so name it where the
                 // producer decides — not as a surprise on air.
                 on && smaller ? `${element.width} × ${element.height} · centered` : null,
@@ -63,8 +78,8 @@ const MemberRow = memo(function MemberRow({ element, def, holder, holderName, ca
                     icon={Check} offIcon={Plus} on={on}
                     label={on
                         ? `Remove ${element.name} from this container`
-                        : elsewhere
-                            ? `Move ${element.name} here from ${holderName}`
+                        : elsewhere && !shared
+                            ? `Move ${element.name} here from ${otherNames}`
                             : `Add ${element.name} to this container`}
                     onClick={() => setMember(def.id, element.id, !on)}
                 />
@@ -128,8 +143,7 @@ export default function ContainerStage({ element, placement }) {
                     <MemberRow
                         key={el.id}
                         element={el} def={def}
-                        holder={holders[el.id]}
-                        holderName={defs[holders[el.id]]?.name || holders[el.id]}
+                        holders={holders[el.id]}
                         carrying={placement?.carrying === el.id}
                         setMember={setMember}
                     />

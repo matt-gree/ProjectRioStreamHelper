@@ -53,7 +53,11 @@ describe('the quick-add library', () => {
     it('ships the rosterstats case study as its first entry', () => {
         const t = libraryEntry('batter-card');
         expect(t).toBeTruthy();
-        expect(t.member).toBe('stats');
+        // Either card, in preference order: the themed 2x2 Stat Card when the
+        // container holds one, else the fed Stats bar. Which card a container
+        // holds is a look the producer chose when they built the roster, not a
+        // second rule to pick.
+        expect(t.members).toEqual(['statscard', 'stats']);
         // `{sb}` resolves from the CONTAINER's scope server-side, so one canned
         // rule reads the same on every board instead of naming one.
         expect(t.trigger).toBe('score.{sb}.batter');
@@ -64,7 +68,7 @@ describe('the quick-add library', () => {
         for (const t of AUTOMATION_LIBRARY) {
             expect(t.triggerLabel, t.id).toBeTruthy();
             expect(t.guardLabel, t.id).toBeTruthy();
-            expect(t.member, t.id).toBeTruthy();
+            expect(t.members?.length, t.id).toBeTruthy();
             expect(t.dwell, t.id).toBeGreaterThan(0);
         }
     });
@@ -75,7 +79,10 @@ describe('the quick-add library', () => {
      */
     it('only offers a template whose member is on the roster', () => {
         expect(templatesFor({ members: ['stats'] }).map(t => t.id)).toEqual(['batter-card']);
+        expect(templatesFor({ members: ['roster', 'statscard'] }).map(t => t.id))
+            .toEqual(['batter-card']);
         expect(templatesFor({ members: ['postgamevs'] })).toEqual([]);
+        expect(templatesFor({ members: ['roster'] })).toEqual([]);
         expect(templatesFor({})).toEqual([]);
     });
 });
@@ -137,6 +144,50 @@ describe('rule mutations', () => {
         const { add } = harness(useAutomationActions);
         expect(add('nope', CONTAINER)).toBeNull();
         expect(add('batter-card', null)).toBeNull();
+        expect(useSettingsStore.getState().production.automations).toEqual({});
+    });
+
+    /*
+     * The template offers a preference list; the RULE stores one member,
+     * resolved against this container's roster at add time. Resolving once and
+     * storing it is what keeps the engine reading a rule rather than a
+     * preference — and stops a later roster edit silently re-pointing a live
+     * rule at a different card mid-broadcast.
+     */
+    it('resolves the member off the roster and stores it, preferring the themed card', () => {
+        useSettingsStore.setState({
+            production: {
+                container_defs: {
+                    bar: { name: 'Bar', width: 452, height: 240, members: ['stats'] },
+                    pair: { name: 'Pair', width: 452, height: 240, members: ['roster', 'statscard'] },
+                    both: {
+                        name: 'Both', width: 452, height: 240,
+                        members: ['stats', 'statscard'],
+                    },
+                },
+                automations: {},
+            },
+        });
+        const { add } = harness(useAutomationActions);
+        const rules = () => useSettingsStore.getState().production.automations;
+        add('batter-card', 'bar');
+        expect(rules()['bar:batter-card'].member).toBe('stats');
+        add('batter-card', 'pair');
+        expect(rules()['pair:batter-card'].member).toBe('statscard');
+        // Preference order decides when a roster holds both.
+        add('batter-card', 'both');
+        expect(rules()['both:batter-card'].member).toBe('statscard');
+    });
+
+    it('refuses a template no member on the roster can satisfy', () => {
+        useSettingsStore.setState({
+            production: {
+                container_defs: { bare: { name: 'Bare', width: 452, height: 240, members: ['roster'] } },
+                automations: {},
+            },
+        });
+        const { add } = harness(useAutomationActions);
+        expect(add('batter-card', 'bare')).toBeNull();
         expect(useSettingsStore.getState().production.automations).toEqual({});
     });
 });

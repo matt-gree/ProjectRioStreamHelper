@@ -517,6 +517,17 @@ any of them.
   `production.feed.container.{id}` holds one occupant and two containers
   claiming one element could never both be honoured. Enforced in exactly one
   place: `useContainerActions`.
+- **…except for a container-SCOPED member, which is added, not moved.**
+  Exclusivity answers *where does a push land*, and a member declaring
+  `containerScoped` (Roster, Stat Card) has no content of its own to land — it
+  draws whoever the **container's** scope has on the field, so the container is
+  the subject and two rosters holding it is not a contradiction. It is the
+  mirrored pair the automation engine was designed around: two scoped
+  containers, the same members, one canned rule, one showing the batter and the
+  other the pitcher. Without the exception that pair was only buildable by
+  hand-editing settings. `isSharedMember` in `containers.js`; a `containerScoped`
+  element also takes its Push payload's board **and side** from the container
+  definition rather than the board picker (`useContainerPush`).
 - **Sharing a container IS the definition of mutually exclusive.** That is what
   the producer is choosing when they tick two members onto one roster.
 - **No container is a real state.** `useContainerOf` returns `null` when no

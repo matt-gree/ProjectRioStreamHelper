@@ -320,6 +320,46 @@ describe('roster mutations', () => {
         expect(feedOf('a')).toEqual({ element: 'postgamevs', scoreboard: 1 });
     });
 
+    /*
+     * The SHARED-MEMBER exception, and the reason there is one.
+     *
+     * Exclusivity answers "where does a push land". A container-scoped member
+     * (a roster, a stat card) has no content of its own — it draws whoever the
+     * CONTAINER's scope has on the field — so the container is the subject and
+     * two rosters holding it is not a contradiction. It is the mirrored pair the
+     * automation engine was designed around: two scoped containers, the same two
+     * members, one canned rule, one showing the batter and the other the
+     * pitcher. Moving would have made that unbuildable anywhere but a text
+     * editor.
+     */
+    it('adds a container-scoped member instead of moving it', () => {
+        useSettingsStore.setState({
+            production: {
+                container_defs: {
+                    left: { id: 'left', name: 'L', width: 452, height: 240, members: ['roster'] },
+                    right: { id: 'right', name: 'R', width: 452, height: 240, members: [] },
+                },
+            },
+        });
+        act.setMember('right', 'roster', true);
+        expect(defsOf().left.members).toEqual(['roster']);
+        expect(defsOf().right.members).toEqual(['roster']);
+    });
+
+    it('still takes a shared member off the one container it was removed from', () => {
+        useSettingsStore.setState({
+            production: {
+                container_defs: {
+                    left: { id: 'left', name: 'L', width: 452, height: 240, members: ['roster'] },
+                    right: { id: 'right', name: 'R', width: 452, height: 240, members: ['roster'] },
+                },
+            },
+        });
+        act.setMember('left', 'roster', false);
+        expect(defsOf().left.members).toEqual([]);
+        expect(defsOf().right.members).toEqual(['roster']);
+    });
+
     it('creates a container and claims its members off whatever held them', () => {
         const id = act.create('Lower Bar', 452, 118, ['stats']);
         expect(id).toBe('lower-bar');

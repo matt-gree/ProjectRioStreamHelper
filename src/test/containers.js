@@ -33,6 +33,27 @@ export const SEEDED_CONTAINER_DEFS = {
         height: 720,
         members: ['hitvisualizer'],
     },
+    // The mirrored pair that replaces the Roster + Stats element: one container
+    // per side, resting on that side's roster with its stat card able to flash
+    // over it. They share both members, which is the shared-member exception —
+    // neither carries content of its own, so neither has a push destination to
+    // be ambiguous about.
+    'roster-stats-1': {
+        name: 'Roster + Stats — Left',
+        width: 452,
+        height: 240,
+        members: ['roster', 'statscard'],
+        resting: 'roster',
+        scope: { scoreboard: 1, team: 1 },
+    },
+    'roster-stats-2': {
+        name: 'Roster + Stats — Right',
+        width: 452,
+        height: 240,
+        members: ['roster', 'statscard'],
+        resting: 'roster',
+        scope: { scoreboard: 1, team: 2 },
+    },
 };
 
 // Settings' `production` slice with the containers in place, spread-able over

@@ -22,10 +22,16 @@ def _defs():
     return Settings.settings["production"]["container_defs"]
 
 
+SEEDED = {
+    "callout-stage", "stats-feed", "split-screen",
+    "roster-stats-1", "roster-stats-2",
+}
+
+
 async def test_seeds_the_containers_the_app_ships_with(isolate_user_data):
     await Settings.Load()
     defs = _defs()
-    assert set(defs) == {"callout-stage", "stats-feed", "split-screen"}
+    assert set(defs) == SEEDED
     # Every definition carries the four things a container IS.
     for cid, d in defs.items():
         assert d["name"], cid
@@ -34,14 +40,54 @@ async def test_seeds_the_containers_the_app_ships_with(isolate_user_data):
         assert isinstance(d["members"], list), cid
 
 
+# Members with no content of their own: they draw whoever the CONTAINER's own
+# scope has on the field, so they are the exception to exclusivity below.
+# Mirrors `containerScoped` in src/routes/production/elements.js.
+SCOPED_MEMBERS = {"roster", "statscard"}
+
+
 async def test_rosters_are_mutually_exclusive_across_containers(isolate_user_data):
-    """One element, one container — the roster IS the membership relation."""
+    """One element, one container — the roster IS the membership relation.
+
+    Exclusivity is about an element's PUSH DESTINATION: a content-bearing element
+    pushed from its own row has to land somewhere unambiguous. A container-scoped
+    member has no content of its own, so the container is the subject rather than
+    the element, and the same member on two rosters is not a conflict — it is the
+    mirrored pair (one container per side, one canned rule) the automation engine
+    was designed around.
+    """
     await Settings.Load()
     seen = set()
     for d in _defs().values():
         for member in d["members"]:
+            if member in SCOPED_MEMBERS:
+                continue
             assert member not in seen, f"{member} is on two rosters"
             seen.add(member)
+
+
+async def test_the_mirrored_pair_replaces_the_roster_stats_element(isolate_user_data):
+    """Two scoped containers ARE the combined Roster + Stats source.
+
+    452x240 is that element's own stage: the roster (452x140) and the stat card
+    (380x220) both center inside it. Each container rests on the roster — its
+    steady state and its boot state — and differs from its twin only by side,
+    which is what makes one flash the batter and the other the pitcher off ONE
+    rule.
+    """
+    await Settings.Load()
+    defs = _defs()
+    for cid, team in (("roster-stats-1", 1), ("roster-stats-2", 2)):
+        d = defs[cid]
+        assert (d["width"], d["height"]) == (452, 240), cid
+        assert sorted(d["members"]) == ["roster", "statscard"], cid
+        assert d["resting"] == "roster", cid
+        assert d["scope"] == {"scoreboard": 1, "team": team}, cid
+
+    # Deliberately NOT seeded: the flip is the half that has to be proven
+    # against real HUD traffic, so the producer adds it from the quick-add
+    # library and can suspend it with one switch.
+    assert Settings.settings["production"]["automations"] == {}
 
 
 async def test_callout_stage_holds_both_post_game_callouts(isolate_user_data):
