@@ -56,6 +56,7 @@ def isolate_user_data(tmp_path, monkeypatch):
 def reset_singletons():
     """Snapshot and restore class-level singleton state around every test."""
     from server.announcements import Announcements
+    from server.automations import Automations
     from server.participants import Participants
     from server.state import State
     from server.settings import Settings
@@ -98,6 +99,7 @@ def reset_singletons():
     # test would otherwise run inside every later test's writes.
     State.hooks = []
     State.unset_hooks = []
+    Automations.reset()
 
     Provider._prev_player_sides = {}
     Provider._prev_inning = None
@@ -121,6 +123,7 @@ def reset_singletons():
 
     yield
 
+    Automations.reset()
     State.hooks = []
     State.unset_hooks = []
     State.state = saved["state"]

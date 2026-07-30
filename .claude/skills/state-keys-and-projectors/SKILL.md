@@ -59,12 +59,13 @@ Rules for a hook:
   configured, and cache any normalized settings subtree against
   `Settings.revision` (bumped on every settings write) rather than re-deriving
   per call.
-- A hook whose own writes come back through the hook must recognise them, or it
-  reads its own output as somebody else's input.
+- A hook whose own writes come back through the hook must recognise them
+  (`Automations._writing`), or it reads its own output as somebody else's input.
 - Anything class-level a hook keeps must be added to `reset_singletons` in
-  `tests/conftest.py`, **and `State.hooks` cleared there** — a hook registered in
-  one test otherwise runs inside every later test's writes.
+  `tests/conftest.py`, **and `State.hooks` cleared there** — a `Start()` in one
+  test otherwise runs the engine inside every later test's writes.
 
+The only hook today is the container automation engine (`server/automations.py`).
 Prefer a hook to a polling loop whenever the decision is a *function of a write*
 — that co-location is the difference between "same frame" and "a round-trip".
 
@@ -114,6 +115,7 @@ overlays.*                     (in Settings, not State — style knobs)
 production.*                   Production-page element/feed state
 production.feed.container.{id} what a shared container is showing NOW (exactly one occupant)
 production.feed.last.{element} what that element last fed — survives losing the container (suggest.js)
+production.feed.reason.{id}    which tier decided that: manual | rule | resting (server/automations.py mirror)
 ```
 
 Adding a new namespace: no registration needed server-side (State is

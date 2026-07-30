@@ -188,6 +188,21 @@ class Settings:
             # member picker is filtered to what fits, so a size mismatch is
             # unrepresentable rather than handled.
             #
+            # Two optional fields exist for automation (server/automations.py)
+            # and are absent until a producer sets them:
+            #
+            #   `resting`  the member this container returns to when nothing
+            #              else is up — the steady state a rule's dwell expires
+            #              back into. Absent/None means empty (transparent),
+            #              which is the resting state of every container that
+            #              only ever holds pushed content.
+            #   `scope`    {"scoreboard": N, "team": T} — this container's frame
+            #              of reference. It resolves `{sb}` in a rule's trigger
+            #              and supplies the side for the content the engine
+            #              feeds, which is what makes a mirrored pair of
+            #              containers flash the batter on one and the pitcher on
+            #              the other.
+            #
             # These three are seeded so a fresh install has the containers the
             # app already shipped with. Both non-full-canvas ones were sized
             # smaller than the element they host and worked only because those
@@ -224,6 +239,23 @@ class Settings:
                     "members": ["hitvisualizer"],
                 },
             },
+            # Container AUTOMATIONS — one rule per entry, interpreted by the
+            # server-side engine in server/automations.py:
+            #
+            #   {"enabled": bool, "name": str, "container": id,
+            #    "trigger": "score.{sb}.batter", "member": elementId,
+            #    "guard": "content", "dwell": seconds}
+            #
+            # A rule watches one state key, and when it CHANGES (and the guard
+            # resolves) it feeds `member` into `container` for `dwell` seconds
+            # before returning to that container's resting occupant. `{sb}` in
+            # the trigger resolves from the container's own scope, so the rule
+            # itself is board-agnostic and reads the same on every board.
+            #
+            # Empty by default: a producer adds one from the quick-add library
+            # (the templates live with the console, src/routes/production/
+            # automations.js — the engine only interprets rules).
+            "automations": {},
             # Hit-visualizer "spotlight": on Fire, cut to `scene`, play the
             # animation, then cut back to the previous program scene. `holdMs`
             # is extra time held on the landing before returning.

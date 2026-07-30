@@ -19,6 +19,7 @@ from server.settings import Settings, Config
 from server.startgg.provider import StartGGProvider
 from server.controller_overlay import ControllerOverlay
 from server.announcements import Announcements
+from server.automations import Automations
 from server.participants import Participants
 from server.match import Match
 from server.commentary import Commentary
@@ -96,6 +97,13 @@ async def lifespan(app: FastAPI):
     # registry/matches so a match-fed plate reflects the latest names on launch.
     await PlayerPlates.project_all()
 
+    # Container automations. Registers the state write hooks (so a rule decides
+    # in the same batch as its trigger) and settles every container: a producer's
+    # suspension is restored from the mirrored reason, anything else returns to
+    # its resting occupant. Last, so State + Settings are loaded and the boot
+    # projections have already landed.
+    await Automations.Start()
+
     # If stream labels are enabled but the output dir is missing, do a full
     # export so OBS Text (GDI+) sources don't point at missing files.
     if await State._is_export_enabled():
@@ -107,6 +115,7 @@ async def lifespan(app: FastAPI):
     yield
 
     # on_shutdown
+    await Automations.Stop()
     await Announcements.Stop()
     await ControllerOverlay.Stop()
     await StartGGProvider.Stop()
