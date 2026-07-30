@@ -150,25 +150,96 @@ describe('a new container id', () => {
 /*
  * The console's list of what can occupy a container and the ENGINE's list of
  * what it can actually mount are the same fact in two runtimes with no shared
- * module between `public/layout/lib` and `src/`. Pinned against each other
- * until the mount registry makes them one list.
+ * module between `public/layout/lib` and `src/`, so they are pinned against each
+ * other here.
+ *
+ * Read out of the source text rather than imported: `fed-container.js` imports
+ * the mounts by absolute `/layout/…` URL and drags in three.js and GSAP, none of
+ * which belongs in a unit test. The mechanics it delegates to
+ * `container-layers.js` ARE imported and tested directly — see
+ * container-layers.test.js.
  */
+function engineMembers() {
+    const src = readFileSync('public/layout/lib/fed-container.js', 'utf8');
+    const start = src.indexOf('const MEMBERS = {');
+    expect(start, 'fed-container.js no longer declares a MEMBERS registry').toBeGreaterThan(-1);
+    const table = src.slice(start, src.indexOf('\n};', start));
+
+    // Entries are the table's own two-space-indented keys, so a nested `size:`
+    // or `sample:` can't be mistaken for one.
+    const marks = [...table.matchAll(/\n {2}(\w+): \{/g)];
+    const out = {};
+    marks.forEach((m, i) => {
+        const body = table.slice(m.index, i + 1 < marks.length ? marks[i + 1].index : table.length);
+        const size = /size: \[(\d+), (\d+)\]/.exec(body);
+        out[m[1]] = {
+            size: size ? [Number(size[1]), Number(size[2])] : null,
+            hasSample: /sample: \{/.test(body),
+        };
+    });
+    return out;
+}
+
 describe('members the engine can actually mount', () => {
-    it('matches fed-container.js', () => {
-        const src = readFileSync('public/layout/lib/fed-container.js', 'utf8');
+    const engine = engineMembers();
+
+    it('has an entry for every member the console offers', () => {
         for (const el of CONTAINER_MEMBERS) {
             expect(
-                src.includes(`'${el.id}'`),
+                engine[el.id],
                 `fed-container.js cannot mount "${el.id}", but the console offers it as a member`,
-            ).toBe(true);
+            ).toBeTruthy();
+        }
+    });
+
+    /*
+     * The engine centers a member in a box of its NATIVE size, and the console
+     * filters the member picker by the same number (`fitsContainer`) and creates
+     * the OBS source at it. Three readers, one fact — and the size the census
+     * quoted for `stats` was the standalone stats.html card's (452×118) rather
+     * than the fed stats bar's (325×120), which seeded a container its only
+     * member did not fit.
+     */
+    it('agrees with the element registry about every member size', () => {
+        for (const el of CONTAINER_MEMBERS) {
+            expect(engine[el.id].size, `no size declared for "${el.id}"`).toEqual([el.width, el.height]);
         }
     });
 
     it('gives every member a sample occupant, so a container is never a blank preview', () => {
-        const src = readFileSync('public/layout/lib/fed-container.js', 'utf8');
-        const table = src.slice(src.indexOf('SAMPLE_OCCUPANTS'), src.indexOf('export function containerSample'));
         for (const el of CONTAINER_MEMBERS) {
-            expect(table.includes(el.id), `no sample occupant for "${el.id}"`).toBe(true);
+            expect(engine[el.id].hasSample, `no sample occupant for "${el.id}"`).toBe(true);
+        }
+    });
+});
+
+/*
+ * The seeded definitions have to obey the rule the console enforces on the
+ * producer's own containers: a member must FIT. They are written in Python and
+ * read here as text for the same reason as above — one fact, two runtimes.
+ */
+describe('the seeded container definitions', () => {
+    const src = readFileSync('server/settings.py', 'utf8');
+    const start = src.indexOf('"container_defs": {');
+    const raw = src.slice(src.indexOf('{', start), src.indexOf('\n            },', start) + 14);
+    const defs = JSON.parse(
+        raw.split('\n')
+            .filter(line => !/^\s*#/.test(line))   // drop comment-only lines
+            .join('\n')
+            .replace(/,(\s*[}\]])/g, '$1'),        // Python's trailing commas
+    );
+
+    it('seeds every container at a size its members fit', () => {
+        for (const [id, def] of Object.entries(defs)) {
+            for (const m of def.members) {
+                const el = CONTAINER_MEMBERS.find(e => e.id === m);
+                expect(el, `"${id}" rosters "${m}", which is not a container member`).toBeTruthy();
+                expect(
+                    fitsContainer(el, def.width, def.height),
+                    `"${id}" is ${def.width}×${def.height}, too small for its member "${m}" `
+                    + `(${el.width}×${el.height})`,
+                ).toBe(true);
+            }
         }
     });
 });

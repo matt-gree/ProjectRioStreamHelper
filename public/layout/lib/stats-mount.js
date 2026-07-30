@@ -89,11 +89,22 @@ export function mountStats({ host }) {
   let prevCharName = '';
   let prevStats = null;
 
-  // Scale the card to the OBS source size (relative to its native ref), so a
-  // bigger source enlarges it. Uses the window size — that's the source canvas.
+  /*
+   * Scale the card to the box it was given (relative to its native ref), so a
+   * bigger source enlarges it.
+   *
+   * MEASURES ITS OWN HOST, not the window. `.sm-root` is `inset: 0`, so in a
+   * dedicated source the two are the same number — but inside a shared CONTAINER
+   * this mount is handed a 325×120 box centered in a container that may be
+   * 1920×1080, and scaling to the window there would blow the card up ~6× and
+   * out of the box it is centered in. A member never scales to its container;
+   * that is the whole reason centering is allowed where scaling is not.
+   */
   function autoScale() {
     if (OverlayBase.PREVIEW_MODE) { wrap.style.transform = ''; return; }
-    const scale = Math.min(window.innerWidth / REF_W, window.innerHeight / REF_H);
+    const w = root.clientWidth || window.innerWidth;
+    const h = root.clientHeight || window.innerHeight;
+    const scale = Math.min(w / REF_W, h / REF_H);
     wrap.style.transform = Math.abs(scale - 1) > 0.001 ? `scale(${scale})` : '';
   }
   window.addEventListener('resize', autoScale);

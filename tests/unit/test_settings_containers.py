@@ -53,17 +53,24 @@ async def test_callout_stage_holds_both_post_game_callouts(isolate_user_data):
     assert sorted(stage["members"]) == ["postgamecallout", "postgamevs"]
 
 
-async def test_the_two_undersized_containers_take_their_member_s_size(isolate_user_data):
-    """Both non-full-canvas containers were SMALLER than what they host.
+async def test_every_container_is_sized_to_its_member(isolate_user_data):
+    """A container is the size of its largest member — no grandfathering.
 
-    stats-feed was 325x120 around a 452x118 stats card and split-screen was
-    960x1080 around a 1280x720 hit visualizer; they worked only because those
-    two mounts happen to reflow. Reconciled on the move to definitions rather
-    than grandfathered — a container is the size of its largest member.
+    split-screen really was undersized (960x1080 around a 1280x720 hit
+    visualizer) and now takes its member's size.
+
+    stats-feed is the cautionary one. It was moved to 452x118 on the strength of
+    a census line reading "stats 452x118" — but that is `stats.html`, the
+    STANDALONE stat card (stats-card-mount, a ?team= variant). The fed `stats`
+    element is the bar in stats-mount.js, whose native size is 325x120. The
+    "fix" therefore left the container 2px too short for its only member, which
+    `fitsContainer` would have filtered out of the container's own member picker.
+    Two runtimes, one number: containers.test.jsx now pins the seeded defs
+    against the element registry so this cannot recur silently.
     """
     await Settings.Load()
     defs = _defs()
-    assert (defs["stats-feed"]["width"], defs["stats-feed"]["height"]) == (452, 118)
+    assert (defs["stats-feed"]["width"], defs["stats-feed"]["height"]) == (325, 120)
     assert defs["stats-feed"]["members"] == ["stats"]
     assert (defs["split-screen"]["width"], defs["split-screen"]["height"]) == (1280, 720)
     assert defs["split-screen"]["members"] == ["hitvisualizer"]

@@ -196,10 +196,16 @@ class Settings:
                     "height": 1080,
                     "members": ["postgamecallout", "postgamevs"],
                 },
+                # 325x120 is the FED stats bar's native size (stats-mount.js
+                # REF_W/REF_H). The standalone stats.html card is 452x118 and is
+                # a different layout entirely — seeding that number gave this
+                # container a size its only member did not fit (120 > 118), which
+                # `fitsContainer` would have filtered out of its own member
+                # picker. containers.test.jsx pins the pair now.
                 "stats-feed": {
                     "name": "Stats Bar",
-                    "width": 452,
-                    "height": 118,
+                    "width": 325,
+                    "height": 120,
                     "members": ["stats"],
                 },
                 # The hit visualizer is both: it owns a dedicated source AND can

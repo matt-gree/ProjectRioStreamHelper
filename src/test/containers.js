@@ -20,8 +20,11 @@ export const SEEDED_CONTAINER_DEFS = {
     },
     'stats-feed': {
         name: 'Stats Bar',
-        width: 452,
-        height: 118,
+        // The FED stats bar's native size (stats-mount.js). 452x118 is the
+        // standalone stats.html card — a different layout — and seeding that here
+        // put the fixture at a size its own member did not fit.
+        width: 325,
+        height: 120,
         members: ['stats'],
     },
     'split-screen': {

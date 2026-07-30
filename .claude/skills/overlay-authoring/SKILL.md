@@ -135,6 +135,69 @@ engine.refitText();                                  // after text binds + on fo
   `true` only when a different SVG was injected — reset your diff/animation
   state (`firstPaint`, prev-value caches) exactly then.
 
+## The container runtime — `fed-container.js` + `container-layers.js`
+
+A shared container is one browser source hosting whichever of its **members** is
+fed to it. The engine is split in two on purpose:
+
+- **`fed-container.js` = the REGISTRY and the wiring.** One `MEMBERS` table:
+  `size` (native px), `mount(box, ctx)`, optional `payload(sel)` (what that
+  member's `update` takes) and `identity(sel)` (when one member needs more than
+  one layer — the hit caches stadium/playback per board, so a board change is a
+  separate mount). Each entry also carries its `sample` occupant. **Adding a
+  member is one table entry, never an edit to control flow** — it used to be an
+  if-chain, which is why only four of the thirteen `{ host }` mounts were
+  reachable.
+- **`container-layers.js` = the MECHANICS**, importing nothing. That is what makes
+  them testable (`src/routes/layouts/container-layers.test.js`, 28 tests):
+  fed-container imports its mounts by absolute `/layout/…` URL and drags in
+  three.js and GSAP, so nothing inside it can be unit tested.
+
+Rules the runtime encodes:
+
+- **Members stay mounted; swaps CROSS-FADE.** Tearing the outgoing member down
+  and building the incoming one is a hard cut, disqualifying for a container an
+  automation flips several times an inning. Layers are built **lazily** (a
+  mounted-but-never-shown member costs a GL context for nothing) and then
+  retained.
+- **Only the ACTIVE member is updated.** A cross-fade wants a still frame to fade
+  out of, not a member re-rendering behind its own dissolve — and a hidden member
+  re-reading a HUD feed is pure cost. A member returning from idle is updated,
+  then `replay()`d, so it re-enters with its own animation; a freshly-built one
+  already played it on mount. (`mountStats` keeps a no-op `replay` so this path is
+  uniform.)
+- **The reveal is CSS** — the engine only flips `data-active`. So the attribute it
+  writes and the selector the stylesheet matches must be the same string; a typo
+  in either leaves every layer at full opacity, stacked, with every
+  attribute-level test still green. Pinned by a test. **Never `will-change:
+  opacity`** on a layer (resident composited layer → rastered once, GPU-scaled →
+  the scoreboard-meld blur).
+- **Native size, centered, never scaled.** `memberBox` gives a member that fits
+  its own native box; a member with no declared size, or one LARGER than its
+  container, **fills** instead — that second case is unrepresentable in the
+  console (`fitsContainer`) but a pre-2.0 named shell still produces it
+  (split-screen.html is a 960×1080 page hosting a 1280×720 hit), so it degrades to
+  its old fill behaviour rather than being clipped by a box it overflows.
+  *Corollary:* **a member mount must measure its own host, not `window`.**
+  `stats-mount`'s autoScale read the window and would have blown a 325×120 card up
+  ~6× inside a 1920×1080 container, out of the box it is centered in.
+- **Scope is applied LAST and beats the payload.** A scoped source carries its own
+  frame of reference on its URL (`?scoreboard=N&team=T`, via `scopeFromParams`),
+  and every source of one definition shares ONE feed key — so the feed says WHAT
+  to show and the URL says WHOSE. If a payload field could win, two team-scoped
+  sources would render identically and the mirrored pair that makes one flash the
+  batter and the other the pitcher collapses into two copies of one thing.
+- **An empty or unmountable container names its blank reason** (`setBlank`), so
+  the stage preview says why rather than reading as broken.
+- **A member whose mount throws must not take the container with it** — the source
+  stays alive and the next feed still draws.
+
+Sizes live in three places (the registry here, `ELEMENTS` in the console,
+`container_defs` in Settings) with no shared module between them;
+`production/containers.test.jsx` pins all three. That guard exists because a
+census once quoted `stats.html`'s 452×118 for the *fed* stats bar (325×120) and
+seeded a container 2px too short for its only member.
+
 ## OBS show/hide + animation contract
 
 This is the most regression-prone area. The invariant: **whenever the source
@@ -233,6 +296,8 @@ screenshot; get the user's eyes or reason from first principles.
    was no way to preview it off-air. Merge `previewSel` over the `forceElement`
    base; on air neither param exists and the real feed governs. See
    `callout-stage.html` + `fed-container.js`.
+   **Adding a container MEMBER?** You add one entry to the `MEMBERS` registry in
+   `fed-container.js` — never control flow. See "The container runtime" below.
 
 6. Declare a **sample bundle** (`init({ sample })`) — see below. The
    coverage guard fails without one.
