@@ -29,6 +29,20 @@ export function instanceUrl(element, board) {
     return `${element.url}?scoreboard=${board}`;
 }
 
+/*
+ * The same URL, host-qualified for pasting into a browser source by hand.
+ *
+ * This is the OBS-INDEPENDENT path, and it is the only thing the strip can offer
+ * when nothing is connected: the producer's OBS may be on another machine, be a
+ * different app entirely, or just not be running yet. It resolves against the
+ * origin the console is already served from, which is by definition a host that
+ * can reach PRSH.
+ */
+export function absoluteOverlayUrl(url) {
+    if (!url) return '';
+    try { return new URL(url, window.location.origin).toString(); } catch { return url; }
+}
+
 // Toggle an OBS source's visibility through the confirm-to-live buffer. The
 // pending key is the (scene, item) pair, so flipping the same switch twice
 // cancels out (liveValue match drops the entry).

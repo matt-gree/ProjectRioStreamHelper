@@ -74,10 +74,17 @@ describe('SourceStrip slots', () => {
         expect(screen.getByRole('button', { name: /add to obs/i })).toBeEnabled();
     });
 
-    it('cannot bind with OBS disconnected, and says why instead of dangling a dead button', () => {
+    /*
+     * With OBS disconnected the slot hands over the URL rather than saying no. It
+     * used to read a flat "OBS offline", which is a dead end in the one place the
+     * panel exists to act — and wrong about the situation: a producer whose OBS is
+     * on another machine, or who uses another app entirely, needs exactly this
+     * string. Bind is the only verb that actually requires the connection.
+     */
+    it('offers the source URL instead of Bind when OBS is disconnected', () => {
         ui(<SourceStrip element={el('scoreboard')} />);
         expect(screen.queryByRole('button', { name: /add to obs/i })).not.toBeInTheDocument();
-        expect(screen.getByText(/obs offline/i)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /copy url/i })).toBeEnabled();
     });
 });
 

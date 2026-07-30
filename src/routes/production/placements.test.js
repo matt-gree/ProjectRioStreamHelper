@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
-    genericElement, parsePlacementId, placementId, placementTarget,
+    catalogPlacements, genericElement, parsePlacementId, placementId, placementTarget,
     placementsInScene, resolvePlacement, sceneRole, sourcelessPlacement, togglePin,
 } from './placements';
 import { fedTargets } from './containers';
+import { chipFor } from './kit';
 
 /*
  * Placements are the console's row identity now: element + board + SCENE. These
@@ -322,5 +323,95 @@ describe('togglePin — compared by what a pin RESOLVES to', () => {
     it('passes through a pin placements do not own (a desk)', () => {
         expect(placementTarget('desk:capture', all)).toBe('desk:capture');
         expect(togglePin(['desk:capture'], 'desk:capture', all)).toEqual([]);
+    });
+});
+
+/*
+ * ── The catalog tier: the rack with no OBS ────────────────────────────────
+ *
+ * Source → row is right when there is a source. With OBS closed there is none,
+ * and the console used to collapse to three desk rows — no row to select, so no
+ * stage, so no way to author a lower third, build a container or preview
+ * anything. These pin the trade: it lists what PRSH can CONFIGURE, in the same
+ * placement shape everything downstream already consumes.
+ */
+describe('catalogPlacements — what PRSH can configure with no OBS', () => {
+    const defs = {
+        'callout-stage': {
+            id: 'callout-stage', name: 'Callout Stage', width: 1920, height: 1080,
+            members: ['postgamecallout', 'postgamevs'],
+        },
+    };
+    const all = (o) => catalogPlacements({ defs, boards: [1], ...o });
+    const idsOf = (rows) => rows.map(p => p.id);
+
+    it('rows every direct element, with no source and no scene', () => {
+        const rows = all();
+        const lt = rows.find(p => p.element.id === 'lowerthird');
+        expect(lt).toMatchObject({ id: 'lowerthird', item: null, scene: null, where: 'none' });
+        // Which is exactly what makes the chip honest without a new word for it.
+        expect(chipFor(lt)).toBe('unbound');
+    });
+
+    /*
+     * Ids are the PRE-SCENE form, which is also what a legacy pin looks like — so
+     * a selection or pin made offline resolves to the real scene copy the moment
+     * OBS opens. Read-time resolution, nothing rewritten.
+     */
+    it('keys rows in the pre-scene form, so they resolve once OBS is up', () => {
+        const offline = all().find(p => p.element.id === 'scoreboard');
+        expect(offline.id).toBe('scoreboard:1');
+
+        const online = rows(scene('Game', 'program', item(1, 'SB1', `${SB}?scoreboard=1`)));
+        expect(resolvePlacement(offline.id, online).id).toBe('scoreboard:1@Game');
+    });
+
+    // The one legitimate reader left for the DECLARED board list: with no OBS
+    // there is nothing to discover boards from, and Settings knows the rig.
+    it('gives a board-scoped element one row per declared board', () => {
+        const ids = idsOf(all({ boards: [1, 2, 3] }));
+        expect(ids).toContain('scoreboard:1');
+        expect(ids).toContain('scoreboard:3');
+        expect(ids.filter(i => i.startsWith('scorecard:'))).toHaveLength(3);
+        // …and a global element stays single.
+        expect(ids.filter(i => i === 'lowerthird')).toHaveLength(1);
+    });
+
+    it('rows a container from its definition, with its roster nested under it', () => {
+        const rows = all();
+        const stage = rows.find(p => p.id === 'container:callout-stage');
+        expect(stage).toMatchObject({ container: 'callout-stage', item: null });
+        expect(stage.element.name).toBe('Callout Stage');
+        expect(stage.feeds).toEqual(['postgamecallout', 'postgamevs']);
+
+        const kids = rows.filter(p => p.parent === stage.id).map(p => p.element.id);
+        expect(kids).toEqual(['postgamecallout', 'postgamevs']);
+    });
+
+    // Feeding a container is a STATE write and needs no OBS, so `mine` has to be
+    // right offline too — it is what the row's radio reads.
+    it('marks which member the container is carrying', () => {
+        const rows = all({ feeds: { 'callout-stage': { element: 'postgamevs' } } });
+        const byId = Object.fromEntries(rows.map(p => [p.element.id, p]));
+        expect(byId.postgamevs.mine).toBe(true);
+        expect(byId.postgamecallout.mine).toBe(false);
+    });
+
+    /*
+     * A fed element no roster claims rows at the TOP level. Online it has no
+     * container source to nest under and simply doesn't appear; offline, being
+     * unreachable is the problem — its stage is where the producer finds out it
+     * needs a container.
+     */
+    it('still rows a fed element that no container has rostered', () => {
+        const orphan = catalogPlacements({ defs: {}, boards: [1] })
+            .find(p => p.element.id === 'stats');
+        expect(orphan).toBeTruthy();
+        expect(orphan.parent).toBeUndefined();
+    });
+
+    it('never rows the same thing twice', () => {
+        const ids = idsOf(all({ boards: [1, 2] }));
+        expect(new Set(ids).size).toBe(ids.length);
     });
 });

@@ -239,9 +239,15 @@ export default function Production() {
     // (usePersistentState is per-hook, not a shared store).
     const [selection, setSelection] = useRackSelection();
     const [rail, setRail] = useRailPins();
-    // Which scene the Add picker is aimed at, or null when it's closed. The
-    // rack's + carries the scene, so the picker never has to ask "where?".
-    const [addScene, setAddScene] = useState(null);
+    /*
+     * The Add picker's target: `{ scene }` while open, null while closed.
+     *
+     * Wrapped rather than held as a bare scene string, because "open with no
+     * scene" is a real state — the catalog tier's + (no OBS, so no scenes) opens
+     * the picker for its Copy URL and its container builder, both of which need
+     * nothing from OBS. A bare string can't tell that from closed.
+     */
+    const [add, setAdd] = useState(null);
     // A never-touched rail (null) seeds its first-run cards; an emptied one ([])
     // stays empty. Toggling always writes an explicit array, so the seed is
     // adopted the moment the producer edits it rather than resurrecting later.
@@ -268,7 +274,7 @@ export default function Production() {
                 <Rack
                     selection={selection} onSelect={setSelection}
                     pins={pins} onPinToggle={togglePin}
-                    onAdd={setAddScene}
+                    onAdd={(scene) => setAdd({ scene: scene ?? null })}
                 />
                 <Stage
                     selection={selection} deskBodies={DESK_BODIES}
@@ -281,7 +287,9 @@ export default function Production() {
             </div>
 
             <PendingBar />
-            <AddSourceDialog scene={addScene} onClose={() => setAddScene(null)} />
+            <AddSourceDialog
+                open={!!add} scene={add?.scene ?? null} onClose={() => setAdd(null)}
+            />
         </Stack>
     );
 }

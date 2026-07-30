@@ -6,6 +6,7 @@ import { ToggleRow } from '../kit';
 import { setSourceVisibility, useDisplayedEnabled } from '../bindings';
 import { useContainerBinding } from '../feeds';
 import { useContainerOf } from '../containers';
+import { useConsoleOffline } from '../placements';
 import { PostgameCalloutPicker, PostgameVsPicker, StatsFeedPicker } from '../feed-pickers';
 
 /*
@@ -32,13 +33,24 @@ export const SourceToggleRow = memo(function SourceToggleRow({ label, item, scen
 // ("add its browser source in OBS") — the strip's Bind slot does that, so what
 // is left to say here is WHICH source answers to this panel.
 export const BindingNote = memo(function BindingNote({ binding, what = 'This overlay' }) {
+    const offline = useConsoleOffline();
     // A sourceless placement is truthy but drives nothing — "has an item" is
     // what makes something a binding, here and in the preview column.
     if (!binding?.item) {
+        /*
+         * With OBS closed, "isn't in any scene we can see" is true but useless —
+         * and the two ways out it named (the header's Bind, a scene's +) are both
+         * gone, since neither exists without a connection. Say what IS available:
+         * the panel works, and the header hands over the URL.
+         */
         return (
             <Text size="xs" className="text-muted-foreground">
-                {what} isn’t in any scene we can see — add it from the header, or
-                with the + beside a scene in the rack.
+                {offline
+                    ? `OBS isn’t connected, so PRSH can’t see your scenes. Everything on this
+                       panel still works — Copy URL in the header gives you the source to paste
+                       in by hand.`.replace(/\s+/g, ' ')
+                    : `${what} isn’t in any scene we can see — add it from the header, or with
+                       the + beside a scene in the rack.`.replace(/\s+/g, ' ')}
             </Text>
         );
     }
@@ -128,7 +140,7 @@ export const ContainerHostNote = memo(function ContainerHostNote({ element }) {
             <Text size="xs" className="text-amber-500/90">
                 No container holds {element.name} yet, so there is nowhere to push
                 it. Add it to a container’s members from that container’s panel —
-                or make one with the + beside a scene.
+                or make one with the + in the rack.
             </Text>
         );
     }

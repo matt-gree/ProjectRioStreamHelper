@@ -6,7 +6,7 @@ import { boardOfUrl } from '../../lib/obs-binding';
 import { ELEMENTS } from './elements';
 import { containerOfSource, fedTargets, useContainerDefs } from './containers';
 import { instanceId, parseInstanceId, variantLabel, variantOf, withVariant } from './instances';
-import { useBoardLabel } from './boards';
+import { useActiveBoards, useBoardLabel } from './boards';
 
 /*
  * Placements — what the rack actually lists once the grouping axis is SCENES.
@@ -275,6 +275,89 @@ export function useConsoleScenes() {
     }, [scenes, sceneItems, mirroredScenes, programScene, previewScene, studioMode]);
 }
 
+/*
+ * ── With no OBS: the CATALOG tier ────────────────────────────────────────
+ *
+ * Source → row is the right derivation when there is a source to derive from.
+ * With OBS closed there is none, and the console used to collapse to three desk
+ * rows and an apology — no way to select an element, so no stage, so no way to
+ * author a lower third, build a container, set a scorecard's bands or preview
+ * any of it. Everything the console does that isn't show/hide became unreachable
+ * because of the one thing it can't do.
+ *
+ * OBS IS THE CONTROL SURFACE, NOT THE CONTENT PIPELINE. Without it PRSH can
+ * still author, preview, feed a container and hand out source URLs; what it
+ * loses is showing/hiding and knowing what is in a scene. So the rack degrades
+ * along exactly that line: it stops mirroring and lists what PRSH can CONFIGURE
+ * — every element, plus the producer's containers with their rostered members
+ * nested under them, exactly as they nest online.
+ *
+ * These are the same shape as `sourcelessPlacement` (`item: null`, `scene: null`)
+ * because that is what they are: things we know the identity of and not the
+ * location. Everything downstream therefore works untouched — `chipFor` reads
+ * `—`, the stage opens, the fed radio still writes a feed (a state write needs
+ * no OBS), and only the controls that need a scene item stand down.
+ *
+ * Ids are the PRE-SCENE form (`scoreboard:1`), which is also exactly what a
+ * legacy pin looks like — so a selection or a pin made with OBS closed resolves
+ * to the real scene copy the moment it opens. Read-time resolution again; no
+ * migration, nothing rewritten.
+ */
+export function catalogPlacements({ defs = {}, boards = [1], feeds = {} } = {}) {
+    const targets = fedTargets(defs);
+    const out = [];
+    const row = (element, board = null, extra = null) => {
+        const instance = instanceId(element, board);
+        return {
+            id: instance, instance, element, board, variant: '',
+            scene: null, where: 'none', item: null, ...extra,
+        };
+    };
+
+    // A board-scoped element gets one row per board the producer actually runs.
+    // This is the one legitimate reader left for the DECLARED board list: with
+    // no OBS there is nothing to discover them from, and Settings genuinely
+    // knows how many boards the rig has.
+    for (const el of DIRECT_ELEMENTS) {
+        if (el.scope === 'board') for (const b of boards) out.push(row(el, b));
+        else out.push(row(el));
+    }
+
+    for (const def of Object.values(defs).sort((a, b) => a.name.localeCompare(b.name))) {
+        const children = FED_ELEMENTS.filter(f => targets[f.id] === def.id);
+        const carrying = feeds[def.id]?.element ?? null;
+        const parent = row(containerElement(def.id, def), null, {
+            container: def.id, feeds: children.map(f => f.id), carrying,
+        });
+        out.push(parent);
+        for (const f of children) {
+            out.push(row(f, null, {
+                parent: parent.id, container: def.id, mine: carrying === f.id, carrying,
+            }));
+        }
+    }
+
+    // A fed element no roster claims rows at the TOP level rather than not at
+    // all. Online it has no container source to nest under and simply doesn't
+    // appear; here, being unreachable is the problem — its stage is where the
+    // producer finds out it needs a container and which one to add it to.
+    for (const f of FED_ELEMENTS) if (!targets[f.id]) out.push(row(f));
+
+    return out;
+}
+
+/*
+ * Whether the console is running without OBS.
+ *
+ * `connecting` deliberately does NOT count: scenes are empty then too, and
+ * swapping the rack to the catalog for the third of a second before the mirror
+ * lands would read as a glitch. The rack says "Connecting…" instead.
+ */
+export function useConsoleOffline() {
+    const status = useObsStore(s => s.status);
+    return status === 'disconnected' || status === 'error';
+}
+
 // Every placement across every scene the console can see. One derivation, so
 // the rack, the stage and the rail cannot disagree about what exists.
 export function useConsolePlacements(consoleScenes) {
@@ -283,10 +366,13 @@ export function useConsolePlacements(consoleScenes) {
     // element's chip, since being on air takes both the container being up and
     // the container holding this element's content.
     const feeds = useStateStore(useShallow(s => s?.production?.feed?.container ?? {}));
+    const boards = useActiveBoards();
+    const offline = useConsoleOffline();
     return useMemo(() => {
+        if (offline) return catalogPlacements({ defs, boards, feeds });
         const targets = fedTargets(defs);
         return consoleScenes.flatMap(sc => placementsInScene(sc, targets, feeds, defs));
-    }, [consoleScenes, defs, feeds]);
+    }, [consoleScenes, defs, feeds, boards, offline]);
 }
 
 /*

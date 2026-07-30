@@ -23,9 +23,16 @@ describe('Stage without OBS', () => {
         expect(document.querySelectorAll('[data-chip-state="unbound"]').length).toBe(1);
     });
 
-    it('explains an unbound source instead of showing dead controls', () => {
+    /*
+     * An unbound panel explains itself rather than showing dead controls — and
+     * with OBS closed it explains the RIGHT thing. "Isn't in any scene we can
+     * see" is true then but useless, and both ways out it used to name (the
+     * header's Bind, a scene's +) exist only with a connection.
+     */
+    it('points at Copy URL rather than at a Bind it cannot offer', () => {
         ui(<Stage selection="scoreboard" />);
-        expect(screen.getByText(/isn’t in any scene we can see/)).toBeInTheDocument();
+        expect(screen.getByText(/OBS isn’t connected/)).toBeInTheDocument();
+        expect(screen.getByText(/Copy URL in the header/)).toBeInTheDocument();
     });
 
     it('renders a desk body with a DESK chip and honours pinnable:false', () => {

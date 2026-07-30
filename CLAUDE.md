@@ -152,6 +152,7 @@ The Production tab is a **console with three surfaces** — rack (monitor + sele
 - **Containers are producer-built** (`src/routes/production/containers.js`): a definition in Settings (name · native size · member roster), one generic shell rendering all of them. **Membership lives on the container and is exclusive** — the roster *is* the relationship, so `settings.production.containers.{elementId}` and `defaultContainerFor` are gone; don't reintroduce a per-element "feed into" target. A member must fit the container (smaller ones center; **PRSH has no scaling system** — OBS does placement). Built from the Add picker's **+ New**, edited on the container's own stage panel.
 
 - OBS control runs **browser-side** (`src/context/obs.jsx`, localhost:4455) — this reaches the producer's OBS even in dual-machine setups. Don't move it server-side.
+- **OBS is the control surface, not the content pipeline.** With no connection the rack swaps its scene sections for a **catalog tier** (`catalogPlacements`/`useConsoleOffline` in `placements.js`): every element and container, in the same sourceless placement shape, so the stage, previews, container rosters and feeds all keep working. The strip's Bind becomes **Copy URL**, and the Add picker opens scene-less for Copy URL + **+ New** container. Don't reintroduce a surface that dies without OBS.
 - **Selection, rail pins and expanded scenes are browser-local** (`usePersistentState`, `prsh.ui.production.*`) — per-producer workspace layout, never server Settings. Stored ids are **resolved at read time, never rewritten**.
 - **Staging:** `src/context/staging.js` `stageOrRun` gateway — with confirm-mode on, changes stage until F9/confirm.
 - **Action bus:** `POST /api/v1/action` → `v1.action` SocketIO cue to all overlays. Ephemeral one-shot cues (never stored in State), e.g. `overlay.conceal` for the OBS hide/show stutter fix. PRSH owns action names; packages own animations.
@@ -262,7 +263,9 @@ If the app fails to launch due to corrupt `user_data/state.json`: `echo '{}' > u
 | Sample data / demo mode | `public/layout/preview/*_sample.json`, `public/layout/lib/overlay-base.js` (`sample` option), `src/routes/production/sample.jsx` (switch + banner) |
 | Theme/design packages | `public/design/`, `server/design_packages.py`, `public/layout/lib/svg-theme-engine.js` |
 | Production console (rack/stage/rail) | `src/routes/production/{rack,rail}.jsx`, `stage/`, `desks/`, `kit/`, `elements.js`, `placements.js` (row identity), `addsource.jsx` (Add picker) |
-| Shared containers (definitions, roster) | `src/routes/production/containers.js`, `stage/container.jsx`, `public/layout/shared/container.html` + `lib/fed-container.js`, `production.container_defs` in `server/settings.py`, `server/api/v1/layouts.py` |
+| Shared containers (definitions, roster) | `src/routes/production/containers.js`, `stage/container.jsx`, `public/layout/shared/container.html`, `production.container_defs` in `server/settings.py`, `server/api/v1/layouts.py` |
+| Container runtime (members, cross-fade, centering) | `public/layout/lib/fed-container.js` (the `MEMBERS` registry — add a member here, never control flow) + `lib/container-layers.js` (retained layers, cross-fade, `memberBox`, scope merge) |
+| Console with no OBS (catalog tier) | `src/routes/production/placements.js` (`catalogPlacements`, `useConsoleOffline`), `rack.jsx` (`CatalogSection`), `sourcestrip.jsx` (Copy URL), `addsource.jsx` (`open` vs `scene`) |
 | Production OBS control / staging | `src/context/obs.jsx`, `src/context/staging.js` |
 | Participant registry | `server/participants.py`, `src/routes/player_list/` |
 | Post-game capture | `server/postgame.py` (+ StatFiles path gating) |

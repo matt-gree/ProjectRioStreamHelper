@@ -113,13 +113,22 @@ describe('Rail', () => {
         expect(screen.getByText('On air')).toBeInTheDocument();
     });
 
+    /*
+     * The alternative is a card silently vanishing from the rail mid-event
+     * because someone deleted a source. The pin is the producer's, so it degrades
+     * to a sourceless card that states only what we actually know — and WHICH
+     * unknown it is, since a rail card has no room to say it twice.
+     */
     it('keeps a card for a pin with no source rather than dropping it', () => {
-        // The alternative is a card silently vanishing from the rail mid-event
-        // because someone deleted a source — or, as here, because OBS is not
-        // connected. The pin is the producer's, so it degrades to a sourceless
-        // card that states only what we actually know.
+        // OBS connected, so the source really is nowhere we can see.
+        obs({ Game: [] });
         ui(<Rail pins={['scoreboard:9@Nowhere']} onReorder={noop} onUnpin={noop} onOpen={noop} />);
         expect(document.querySelectorAll('header').length).toBe(1);
         expect(screen.getByText(/Not in any scene we can see/)).toBeInTheDocument();
+    });
+
+    it('names the real reason when OBS is what is missing', () => {
+        ui(<Rail pins={['scoreboard:9@Nowhere']} onReorder={noop} onUnpin={noop} onOpen={noop} />);
+        expect(screen.getByText(/OBS not connected/)).toBeInTheDocument();
     });
 });

@@ -505,8 +505,19 @@ const CatalogRow = memo(function CatalogRow({
     );
 });
 
-export const AddSourceDialog = memo(function AddSourceDialog({ scene, onClose }) {
-    const open = !!scene;
+/*
+ * `open` is separate from `scene` because the picker is worth opening with no
+ * scene at all.
+ *
+ * With OBS closed there are no scenes and therefore no + in a scene header — but
+ * two of this dialog's three jobs need nothing from OBS: copying the exact URL
+ * Add would have created, and BUILDING A CONTAINER (a definition in Settings).
+ * Gating the whole picker on a scene made the container builder unreachable for
+ * anyone whose OBS wasn't up, which is also why it went unverified for a week.
+ * Add is the only slot that stands down.
+ */
+export const AddSourceDialog = memo(function AddSourceDialog({ scene, open: openProp, onClose }) {
+    const open = openProp ?? !!scene;
     const { layouts, error } = useLayoutCatalog(open);
     const boards = useActiveBoards();
     const boardLabel = useBoardLabel();
@@ -672,10 +683,15 @@ export const AddSourceDialog = memo(function AddSourceDialog({ scene, onClose })
         <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
             <DialogContent className="max-h-[90vh] overflow-hidden sm:max-w-4xl">
                 <DialogHeader>
-                    <DialogTitle className="label-display">Add to “{scene}”</DialogTitle>
+                    <DialogTitle className="label-display">
+                        {scene ? `Add to “${scene}”` : 'Overlays'}
+                    </DialogTitle>
                     <DialogDescription>
-                        Pick as many as you like — they all go in hidden, and you turn them on
-                        from the rack.
+                        {scene
+                            ? 'Pick as many as you like — they all go in hidden, and you turn them '
+                              + 'on from the rack.'
+                            : 'OBS isn’t connected, so there’s no scene to add to. You can still '
+                              + 'preview anything here, copy its source URL, and build a container.'}
                     </DialogDescription>
                 </DialogHeader>
 
@@ -797,12 +813,25 @@ export const AddSourceDialog = memo(function AddSourceDialog({ scene, onClose })
                                     </Button>
                                 )}
                             </CopyButton>
-                            <Button size="sm" disabled={!picks.length || adding} onClick={add}>
-                                <Plus size={13} className="mr-1" />
-                                {adding
-                                    ? 'Adding…'
-                                    : `Add ${picks.length > 1 ? `${picks.length} ` : ''}hidden`}
-                            </Button>
+                            {/* Add is the one slot that needs OBS: it creates a
+                                browser source in a scene. It holds its place and
+                                goes honestly grey rather than vanishing — same
+                                rule as the source strip's Push slot. */}
+                            <SimpleTooltip label={scene
+                                ? `Add to “${scene}”, hidden`
+                                : 'OBS isn’t connected — copy the URL instead'}>
+                                <span>
+                                    <Button
+                                        size="sm" disabled={!scene || !picks.length || adding}
+                                        onClick={add}
+                                    >
+                                        <Plus size={13} className="mr-1" />
+                                        {adding
+                                            ? 'Adding…'
+                                            : `Add ${picks.length > 1 ? `${picks.length} ` : ''}hidden`}
+                                    </Button>
+                                </span>
+                            </SimpleTooltip>
                         </Group>
                     </Group>
                 </Stack>

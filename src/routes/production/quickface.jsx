@@ -4,6 +4,7 @@ import { ActionRow, SelectRow } from './kit';
 import { FEED_OPTION_HOOKS, flattenGroups } from './feed-pickers';
 import { quickFaceFor } from './elements';
 import { useContainerPush } from './feeds';
+import { useConsoleOffline } from './placements';
 import { SourceToggleRow } from './stage/generic';
 import { ScorecardModeRow, useScorecard } from './stage/scorecard';
 import { EventHeaderBandRows, useEventHeader } from './stage/eventheader';
@@ -32,10 +33,17 @@ function whereLabel(placement, what) {
 
 // Direct element: the one decision that matters live — is it on the broadcast.
 const DirectQuickFace = memo(function DirectQuickFace({ element: _element, placement }) {
+    const offline = useConsoleOffline();
     if (!placement?.item) {
         // "No longer" would be a claim we can't make: with OBS offline the
-        // source may be sitting in a scene we simply can't see right now.
-        return <Text size="xs" className="text-muted-foreground">Not in any scene we can see.</Text>;
+        // source may be sitting in a scene we simply can't see right now — which
+        // is worth SAYING when that is the actual reason, since a rail card has
+        // no room to explain twice.
+        return (
+            <Text size="xs" className="text-muted-foreground">
+                {offline ? 'OBS not connected.' : 'Not in any scene we can see.'}
+            </Text>
+        );
     }
     return (
         <SourceToggleRow
@@ -49,8 +57,15 @@ const DirectQuickFace = memo(function DirectQuickFace({ element: _element, place
 // placement IS its container's source, so the pin already names which scene's
 // copy this card flies.
 const ContainerRow = memo(function ContainerRow({ placement }) {
+    const offline = useConsoleOffline();
     if (!placement?.item) {
-        return <Text size="xs" className="text-muted-foreground">That container isn’t in any scene we can see.</Text>;
+        return (
+            <Text size="xs" className="text-muted-foreground">
+                {offline
+                    ? 'OBS not connected.'
+                    : 'That container isn’t in any scene we can see.'}
+            </Text>
+        );
     }
     return (
         <SourceToggleRow

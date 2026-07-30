@@ -317,11 +317,59 @@ describe('Rack fed containers', () => {
 // With OBS disconnected the rack still renders: desks are content workflows
 // that never touched OBS, and the producer is told why the scene list is empty
 // rather than shown a blank column.
+/*
+ * With no OBS the rack becomes a CATALOG instead of a mirror (./placements
+ * `catalogPlacements`). It used to collapse to three desk rows and an apology,
+ * which made every stage — lower-third authoring, container rosters, scorecard
+ * bands, all the previews — unreachable because of the one thing PRSH can't do
+ * without OBS. It monitors nothing and selects everything, which is the honest
+ * half of its job.
+ */
 describe('Rack without OBS', () => {
-    it('keeps the desks and explains the missing scenes', () => {
+    it('lists what PRSH can configure instead of what is in a scene', () => {
         ui(<Rack />);
-        expect(screen.getByText('Match')).toBeInTheDocument();
+        expect(screen.getByText('Match')).toBeInTheDocument();       // desks stay
         expect(screen.getByText(/OBS not connected/)).toBeInTheDocument();
-        expect(document.querySelectorAll('[data-rack-row]').length).toBe(DESKS.length);
+        expect(document.querySelector('[data-rack-section="catalog"]')).toBeInTheDocument();
+
+        const rows = document.querySelectorAll('[data-rack-row]');
+        expect(rows.length).toBeGreaterThan(DESKS.length);
+        expect(screen.getByText('Scoreboard')).toBeInTheDocument();
+        expect(screen.getByText('Lower Third')).toBeInTheDocument();
+    });
+
+    // The producer's containers are definitions in Settings, so they are just as
+    // real with OBS closed — and their rostered members nest under them exactly
+    // as they do on air.
+    it('rows the producer’s containers with their members nested', () => {
+        ui(<Rack />);
+        expect(screen.getByText('Callout Stage')).toBeInTheDocument();
+        const nested = [...document.querySelectorAll('[data-rack-nested]')]
+            .map(n => n.getAttribute('data-rack-row'));
+        expect(nested).toContain('Game Summary');
+        expect(nested).toContain('Character Spotlight');
+    });
+
+    /*
+     * No eye: there is no scene item to show or hide, and a dead control is worse
+     * than an absent one. Every row still SELECTS, which is the whole point.
+     */
+    it('offers no visibility control, and every chip reads unbound', () => {
+        ui(<Rack />);
+        expect(screen.queryByRole('button', { name: /show source/i })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /hide source/i })).not.toBeInTheDocument();
+        const chips = [...document.querySelectorAll('[data-rack-section="catalog"] [data-chip-state]')];
+        expect(chips.length).toBeGreaterThan(0);
+        expect(chips.every(c => c.getAttribute('data-chip-state') === 'unbound')).toBe(true);
+    });
+
+    // The + still opens the picker — with no scene, for its Copy URL and its
+    // container builder, both of which need nothing from OBS.
+    it('keeps an Add affordance that opens the picker with no scene', () => {
+        const onAdd = vi.fn();
+        ui(<Rack onAdd={onAdd} />);
+        const add = screen.getByRole('button', { name: /copy an overlay url/i });
+        fireEvent.click(add);
+        expect(onAdd).toHaveBeenCalledWith(null);
     });
 });

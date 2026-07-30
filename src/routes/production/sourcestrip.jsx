@@ -1,13 +1,15 @@
 import { memo, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import { Eye, EyeOff, Plus } from 'lucide-react';
+import { Check, Copy, Eye, EyeOff, Plus } from 'lucide-react';
 import { useObsStore } from '../../context/obs';
-import { Text } from '../../components/ui/primitives';
 import { Button } from '../../components/ui/button';
+import { CopyButton } from '../../components/ui/copy-button';
 import { SimpleTooltip } from '../../components/ui/simple-tooltip';
 import { notifications } from '../../lib/notify';
 import { IconToggle } from './kit';
-import { instanceUrl, setSourceVisibility, useDisplayedEnabled } from './bindings';
+import {
+    absoluteOverlayUrl, instanceUrl, setSourceVisibility, useDisplayedEnabled,
+} from './bindings';
 import { useActiveBoards } from './boards';
 import { useContainerPush } from './feeds';
 import { useContainerOf, useSharedContainers } from './containers';
@@ -99,11 +101,33 @@ const BindSlot = memo(function BindSlot({ element, board }) {
     const target = useBindTarget(element, board);
     const [adding, setAdding] = useState(false);
 
+    /*
+     * With no OBS, hand over the URL instead of saying no.
+     *
+     * The slot used to read a flat "OBS offline", which is a dead end in the one
+     * place the panel exists to act — and it was wrong about the situation: a
+     * producer whose OBS is on another machine, or who is using another app
+     * entirely, needs exactly this string and nothing else. Same builder Bind
+     * uses, so what they paste is what Add would have created. (The Add picker's
+     * Copy URL is the same escape hatch, one surface over.)
+     */
     if (status !== 'connected') {
         return (
-            <SimpleTooltip label="Connect OBS to add this source from here">
-                <Text size="xs" span className="shrink-0 text-muted-foreground/70">OBS offline</Text>
-            </SimpleTooltip>
+            <CopyButton value={absoluteOverlayUrl(target.url)}>
+                {({ copied, copy }) => (
+                    <SimpleTooltip label={
+                        copied
+                            ? 'Copied — paste it into a browser source'
+                            : `Copy this overlay’s URL (${target.width}×${target.height}) — OBS isn’t connected`
+                    }>
+                        <Button size="xs" variant="secondary" onClick={copy} className="shrink-0">
+                            {copied
+                                ? <><Check size={11} className="mr-0.5" /> Copied</>
+                                : <><Copy size={11} className="mr-0.5" /> Copy URL</>}
+                        </Button>
+                    </SimpleTooltip>
+                )}
+            </CopyButton>
         );
     }
 

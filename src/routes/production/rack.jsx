@@ -11,8 +11,8 @@ import { cn } from '../../lib/utils';
 import { usePersistentState } from '../../hooks/usePersistentState';
 import { ELEMENTS, isPinnable } from './elements';
 import {
-    placementTarget, togglePin as togglePinIn, useConsolePlacements, useConsoleScenes,
-    usePlacementLabel,
+    placementTarget, togglePin as togglePinIn, useConsoleOffline, useConsolePlacements,
+    useConsoleScenes, usePlacementLabel,
 } from './placements';
 import { StateChip, chipFor } from './kit';
 import { setSourceVisibility, useDisplayedEnabled } from './bindings';
@@ -296,18 +296,64 @@ const ROLE_META = {
     other: { tag: null, accent: 'text-muted-foreground' },
 };
 
-const AddButton = memo(function AddButton({ scene, onAdd }) {
+// `scene` is null in the catalog tier (no OBS, so no scene to add into) — the
+// picker still opens there for its Copy URL and its container builder, both of
+// which are OBS-independent.
+const AddButton = memo(function AddButton({ scene, onAdd, label }) {
     if (!onAdd) return null;
+    // The accessible name stays free of typographic quotes; the tooltip is where
+    // the scene name gets dressed.
     return (
-        <SimpleTooltip label={`Add an overlay to “${scene}”`}>
+        <SimpleTooltip label={label ?? `Add an overlay to “${scene}”`}>
             <button
-                type="button" onClick={() => onAdd(scene)}
-                aria-label={`Add an overlay to ${scene}`}
+                type="button" onClick={() => onAdd(scene ?? null)}
+                aria-label={label ?? `Add an overlay to ${scene}`}
                 className="shrink-0 text-muted-foreground/70 transition-colors hover:text-foreground"
             >
                 <Plus size={13} />
             </button>
         </SimpleTooltip>
+    );
+});
+
+/*
+ * The CATALOG tier — the rack with no OBS to mirror (./placements
+ * `catalogPlacements`).
+ *
+ * One section, no scenes, because with OBS closed there are none to group by:
+ * every element PRSH can configure, plus the producer's containers with their
+ * members nested under them exactly as they nest on air. It is a selector rather
+ * than a monitor, which is the honest half of the rack's job when there is
+ * nothing to monitor.
+ *
+ * NO EYE ON THESE ROWS. There is no scene item to show or hide, and a dead
+ * control is worse than an absent one. A fed row keeps its radio: choosing what
+ * occupies a container is a STATE write and works with nothing connected — the
+ * overlay renders it whether it is hosted by OBS or a browser window.
+ */
+const CatalogSection = memo(function CatalogSection({
+    rows, selection, onSelect, pinned, onPinToggle, onAdd, label,
+}) {
+    return (
+        <div data-rack-section="catalog">
+            <SectionHeader
+                label="ELEMENTS" count={rows.length}
+                action={<AddButton onAdd={onAdd} label="Copy an overlay URL, or build a container" />}
+            />
+            {rows.map((p) => {
+                const { name, detail } = label(p);
+                return (
+                    <RackRow
+                        key={p.id} state={chipFor(p)} name={name} meta={detail}
+                        nested={!!p.parent}
+                        selected={selection === p.id} onSelect={() => onSelect(p.id)}
+                        quickAction={p.parent ? <FeedAction placement={p} /> : null}
+                        pinnable={isPinnable(p.element)} pinned={pinned.has(p.id)}
+                        onPinToggle={() => onPinToggle(p.id)}
+                    />
+                );
+            })}
+        </div>
     );
 });
 
@@ -368,6 +414,7 @@ export const Rack = memo(function Rack({
     selection: selectionProp, onSelect, pins: pinsProp, onPinToggle, onAdd,
 }) {
     const status = useObsStore(s => s.status);
+    const offline = useConsoleOffline();
     const scenes = useConsoleScenes();
     const placements = useConsolePlacements(scenes);
     const label = usePlacementLabel(placements);
@@ -410,21 +457,34 @@ export const Rack = memo(function Rack({
                         selection={selection} onSelect={setSelection}
                         pinned={pinned} onPinToggle={togglePin}
                     />
-                    {scenes.map(sc => (
-                        <SceneSection
-                            key={sc.scene} scene={sc} rows={byScene.get(sc.scene) ?? []}
-                            open={sc.where !== 'other' || (openScenes ?? []).includes(sc.scene)}
-                            onToggle={() => toggleScene(sc.scene)}
-                            selection={selection} onSelect={setSelection}
-                            pinned={pinned} onPinToggle={togglePin}
-                            onAdd={onAdd} label={label}
-                        />
-                    ))}
+                    {offline
+                        ? (
+                            <CatalogSection
+                                rows={placements}
+                                selection={selection} onSelect={setSelection}
+                                pinned={pinned} onPinToggle={togglePin}
+                                onAdd={onAdd} label={label}
+                            />
+                        )
+                        : scenes.map(sc => (
+                            <SceneSection
+                                key={sc.scene} scene={sc} rows={byScene.get(sc.scene) ?? []}
+                                open={sc.where !== 'other' || (openScenes ?? []).includes(sc.scene)}
+                                onToggle={() => toggleScene(sc.scene)}
+                                selection={selection} onSelect={setSelection}
+                                pinned={pinned} onPinToggle={togglePin}
+                                onAdd={onAdd} label={label}
+                            />
+                        ))}
                     {status !== 'connected' && (
                         <Text size="xs" dimmed className="px-2 pt-2">
                             {status === 'connecting'
                                 ? 'Connecting to OBS…'
-                                : 'OBS not connected — the rack lists your scenes and their sources. Enable the WebSocket server in OBS (Tools → WebSocket Server Settings) and configure it in Settings → OBS.'}
+                                : 'OBS not connected, so this is everything PRSH can configure rather than '
+                                  + 'what’s in your scenes. Authoring, previews and container feeds all work; '
+                                  + 'showing and hiding needs OBS. Use + to copy a source URL. To connect: '
+                                  + 'enable the WebSocket server in OBS (Tools → WebSocket Server Settings), '
+                                  + 'then set it up in Settings → OBS.'}
                         </Text>
                     )}
                 </div>
