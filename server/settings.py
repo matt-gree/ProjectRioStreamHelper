@@ -104,6 +104,11 @@ def _deep_merge(defaults: dict, loaded: dict) -> dict:
 
 
 class Settings:
+    # Bumped on every write (and after Load). Read-mostly consumers that would
+    # otherwise re-normalize a settings subtree on the hot path cache against
+    # this instead of subscribing — cheaper than a watcher list, and impossible
+    # to leak. The first of them is the state write hook in server/automations.py.
+    revision = 0
     settings = {
         "server": {
             # When False, bind to 127.0.0.1 (loopback only). When True, bind
@@ -529,6 +534,7 @@ class Settings:
     @classmethod
     async def Set(cls, key: str, value, session_id: str | None = None):
         deep_set(cls.settings, key, value)
+        cls.revision += 1
         await asyncio.gather(
             socketio.emit('v1.settings.set', {
                 "key": key,
@@ -541,6 +547,7 @@ class Settings:
     @classmethod
     async def Unset(cls, key: str, session_id: str | None = None):
         deep_unset(cls.settings, key)
+        cls.revision += 1
         await asyncio.gather(
             socketio.emit('v1.settings.unset', {
                 "key": key,

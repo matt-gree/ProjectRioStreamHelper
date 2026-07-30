@@ -94,6 +94,10 @@ def reset_singletons():
     # Fresh queue per test so a coroutine enqueued under one test's event loop
     # never gets awaited under another's ("attached to a different loop").
     State.queue = asyncio.Queue()
+    # The write-path hooks are class-level too: a consumer registered in one
+    # test would otherwise run inside every later test's writes.
+    State.hooks = []
+    State.unset_hooks = []
 
     Provider._prev_player_sides = {}
     Provider._prev_inning = None
@@ -117,6 +121,8 @@ def reset_singletons():
 
     yield
 
+    State.hooks = []
+    State.unset_hooks = []
     State.state = saved["state"]
     State.last_state = saved["last_state"]
     State.changed_keys = saved["changed_keys"]
@@ -147,5 +153,9 @@ def set_setting():
 
     def _set(key, value):
         deep_set(Settings.settings, key, value)
+        # Settings.Set bumps this on every write; consumers that cache a
+        # normalized subtree against it would otherwise never see a
+        # fixture-written setting.
+        Settings.revision += 1
 
     return _set

@@ -35,6 +35,39 @@ Critical semantics:
   the unset variants). Overlays get this for free via `OverlayBase.init`;
   anything hand-rolled must implement all four.
 
+## Write-path hooks (`State.hooks` / `State.unset_hooks`)
+
+A hook is `async (entries) -> [(key, value), ...]`. It runs **after** the write
+has landed in `state` (so it reads the post-write world) and **before** the
+socket emit, and whatever it returns is folded into the **same** batch — one
+frame, one diff cycle, the latency of the triggering write.
+
+```python
+State.hooks.append(Automations.on_write)          # may add entries
+State.unset_hooks.append(Automations.on_unset)    # observe only
+```
+
+Rules for a hook:
+
+- **Never call `Set`/`SetBatch` from inside one** — return entries instead. That
+  is what keeps the path non-reentrant. A follow-up write (an unset can't carry
+  a fold-in) is scheduled as its own task.
+- A hook that raises is logged and skipped: **an automation must never be able to
+  lose a state write** — one bad hook doesn't stop the rest either. Pinned by
+  the write-path-hook block at the end of `tests/unit/test_state.py`.
+- This is the HUD hot path. Return early on a cheap check when nothing is
+  configured, and cache any normalized settings subtree against
+  `Settings.revision` (bumped on every settings write) rather than re-deriving
+  per call.
+- A hook whose own writes come back through the hook must recognise them, or it
+  reads its own output as somebody else's input.
+- Anything class-level a hook keeps must be added to `reset_singletons` in
+  `tests/conftest.py`, **and `State.hooks` cleared there** — a hook registered in
+  one test otherwise runs inside every later test's writes.
+
+Prefer a hook to a polling loop whenever the decision is a *function of a write*
+— that co-location is the difference between "same frame" and "a round-trip".
+
 ## Settings vs State — which store does a key belong in?
 
 | Store | Persisted to | Broadcast | Belongs there |

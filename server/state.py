@@ -18,6 +18,18 @@ class State:
     last_state = {}
     changed_keys = []
     queue = asyncio.Queue()
+    # Write-path hooks. Each is `async (entries) -> [(key, value), ...]`: it sees
+    # the entries of a write that has ALREADY been applied to `state` and may
+    # return further entries to fold into the SAME batch — same socket frame,
+    # same diff cycle, same latency as the write that triggered it. That is what
+    # lets the automation engine decide a container's feed off a HUD change
+    # without a round-trip (see server/automations.py). Empty by default, so a
+    # server with no hooks pays one falsy check per write.
+    hooks: list = []
+    # Unset observers: `async (keys) -> None`. Unsets can't carry a fold-in (a
+    # clear and a set are different frames), so an observer that wants to write
+    # schedules its own follow-up.
+    unset_hooks: list = []
     # Output paths resolve lazily (first use, cached) rather than at import
     # time, so a PRSH_USER_DATA_DIR override set for the process is honored
     # and tests can inject temp paths by assigning these directly.
@@ -165,9 +177,55 @@ class State:
         cls.last_state = copy.deepcopy(cls.state)
 
     @classmethod
+    async def _augment(cls, entries: list[tuple[str, object]]) -> list[tuple[str, object]]:
+        """Run the write-path hooks and apply whatever they add.
+
+        Hooks run AFTER the triggering entries have landed in `state`, so a hook
+        reads the post-write world — the whole reason a rule can resolve content
+        out of the same batch that changed it. A hook that raises is logged and
+        skipped: an automation must never be able to lose a state write.
+
+        Hooks must NOT call Set/SetBatch themselves; they return entries. That is
+        what keeps this non-reentrant.
+        """
+        if not cls.hooks:
+            return []
+        added: list[tuple[str, object]] = []
+        for hook in cls.hooks:
+            try:
+                extra = await hook(entries)
+            except Exception:
+                logger.exception("state write hook errored")
+                continue
+            for key, value in (extra or []):
+                deep_set(cls.state, key, value)
+                cls.changed_keys.append(key)
+                added.append((key, value))
+        return added
+
+    @classmethod
+    async def _notify_unset(cls, keys: list[str]) -> None:
+        for hook in cls.unset_hooks:
+            try:
+                await hook(keys)
+            except Exception:
+                logger.exception("state unset hook errored")
+
+    @classmethod
     async def Set(cls, key: str, value, session_id: str | None = None):
         deep_set(cls.state, key, value)
         cls.changed_keys.append(key)
+        added = await cls._augment([(key, value)])
+        if added:
+            # A hook folded work into a single Set, so the wire shape becomes the
+            # batch one — every consumer handles both, and splitting it into two
+            # frames would put the trigger on air a frame before its consequence.
+            await socketio.emit('v1.state.set_batch', {
+                "items": [{"key": key, "value": value}]
+                         + [{"key": k, "value": v} for k, v in added],
+                "sid": session_id
+            })
+            return
         await socketio.emit('v1.state.set', {
             "key": key,
             "value": value,
@@ -182,10 +240,15 @@ class State:
             entries: list of (key, value) tuples
             session_id: optional session ID to echo-filter on the frontend
         """
+        entries = list(entries)
         items = []
         for key, value in entries:
             deep_set(cls.state, key, value)
             cls.changed_keys.append(key)
+            items.append({"key": key, "value": value})
+
+        # Anything a hook decides off this write rides the SAME frame.
+        for key, value in await cls._augment(entries):
             items.append({"key": key, "value": value})
 
         await socketio.emit('v1.state.set_batch', {
@@ -201,6 +264,7 @@ class State:
             "key": key,
             "sid": session_id
         })
+        await cls._notify_unset([key])
 
     @classmethod
     async def UnsetBatch(cls, keys: list[str], session_id: str | None = None):
@@ -209,6 +273,7 @@ class State:
         Mirrors SetBatch — collapses N socket frames + N disk writes into one.
         """
         items = []
+        keys = list(keys)
         for key in keys:
             deep_unset(cls.state, key)
             cls.changed_keys.append(key)
@@ -218,6 +283,7 @@ class State:
             "items": items,
             "sid": session_id
         })
+        await cls._notify_unset(keys)
 
     @classmethod
     async def Get(cls, key: str, default=None):
