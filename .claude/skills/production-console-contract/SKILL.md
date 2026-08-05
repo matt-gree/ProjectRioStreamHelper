@@ -249,6 +249,19 @@ position, not an identity).
   section, so nothing is stranded on a tab and nothing doubles up. Per-board
   layouts (Scorecard, Scoreboard) write `overlays.{type}.{N}.{key}`; the Style
   section takes the board from the element's `scope`.
+- **A setting the active design package can't honour is not shown.** A def marked
+  `appPalette: true` in `LAYOUT_SETTINGS` reaches its overlay through the app's
+  CSS palette, which a **full-art** theme's mount *clears* rather than honours
+  (`clearDesignSettings`) — so it is dead, and dead controls come off the panel
+  (`useLiveDefs` + `routes/layouts/designPackage.js`). Three rules hold it
+  together: the tier is **per element, never per package** (`classic` is a token
+  skin that still ships a full-art callout, and an element a package omits falls
+  back to full-art `default`); the answer is read from the **shipped SVG's**
+  `data-design-vars`, reported by the server as `appVarElements`, never from a
+  manifest; and **anything unknown shows the row** — a knob that turns out inert
+  is a confusion, a knob that silently vanished is a control with no way back.
+  A type is gated only if `THEME_ELEMENT` names its theme file, which is why
+  `stats` isn't: two renderers share that namespace and only one is themed.
 - **The reveal-animation toggle is a stage row too** (`stage/intro.jsx`, "On
   show"). It renders only for animated overlays (`ANIMATED_ELEMENT_TYPES`) and
   is a source BEHAVIOUR, not a `LAYOUT_SETTINGS` knob: it writes

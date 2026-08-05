@@ -3,7 +3,8 @@ import { useShallow } from 'zustand/react/shallow';
 import { useSettingsStore } from '../../../context/store';
 import { usePending } from '../../../context/staging';
 import { Text } from '../../../components/ui/primitives';
-import { LAYOUT_SETTINGS } from '../../layouts/designConstants';
+import { LAYOUT_SETTINGS, THEME_ELEMENT } from '../../layouts/designConstants';
+import { usePaintedByApp } from '../../layouts/designPackage';
 import { SegmentedRow, ToggleRow, TextRow, NumberRow, ColorRow } from '../kit';
 import { stageSettingsSet } from '../controls';
 
@@ -39,6 +40,19 @@ export function defsFor(type, keys) {
     return keys
         .map(k => all.find(d => d.key === k))
         .filter(d => d && RENDERABLE.has(d.type));
+}
+
+/*
+ * A setting that reaches its overlay through the app's palette is DEAD under a
+ * design package that paints that element itself — the mount clears those CSS
+ * vars rather than honouring them (see ../../layouts/designPackage.js). It is
+ * dropped rather than dimmed: switching packages is a deliberate act, and a
+ * producer who does it should read the new look as the new look, not go hunting
+ * for the customisations that no longer come with it.
+ */
+export function useLiveDefs(type, defs) {
+    const painted = usePaintedByApp(THEME_ELEMENT[type]);
+    return painted ? defs : defs.filter(d => !d.appPalette);
 }
 
 /*
@@ -117,7 +131,8 @@ export const OverlaySettingRow = memo(function OverlaySettingRow({ os, def }) {
 
 // Convenience: a run of rows from a key list.
 export const OverlaySettingRows = memo(function OverlaySettingRows({ os, type, keys }) {
-    return defsFor(type, keys).map(def => <OverlaySettingRow key={def.key} os={os} def={def} />);
+    const defs = useLiveDefs(type, defsFor(type, keys));
+    return defs.map(def => <OverlaySettingRow key={def.key} os={os} def={def} />);
 });
 
 /*
@@ -134,9 +149,9 @@ export const OverlaySettingRows = memo(function OverlaySettingRows({ os, type, k
 export const ElementStyleSettings = memo(function ElementStyleSettings({ type, board, label, exclude }) {
     const ns = board != null ? `${type}.${board}` : type;
     const os = useOverlaySettings(type, ns, label ?? type, board ?? null);
-    const defs = (LAYOUT_SETTINGS[type] ?? []).filter(
+    const defs = useLiveDefs(type, (LAYOUT_SETTINGS[type] ?? []).filter(
         def => RENDERABLE.has(def.type) && !exclude?.includes(def.key),
-    );
+    ));
     if (defs.length === 0) return null;
     return (
         <div className="mt-1 flex flex-col gap-1.5 border-t border-border/60 pt-2">

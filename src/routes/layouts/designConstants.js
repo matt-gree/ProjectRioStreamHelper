@@ -19,8 +19,12 @@ const STAT_CARD_SETTINGS = [
     { key: 'transitionType', type: 'select', label: 'Batter Transition', description: 'Animation when switching to a new batter', options: [{ value: 'fade', label: 'Fade' }, { value: 'none', label: 'None' }], defaultValue: 'fade' },
     { key: 'subLine', type: 'select', label: 'Bottom Line', description: 'What the bottom row shows: the live game line, your own text, or nothing (the card shrinks)', options: [{ value: 'gameLine', label: 'Game Line' }, { value: 'custom', label: 'Custom Text' }, { value: 'off', label: 'Off' }], defaultValue: 'gameLine' },
     { key: 'subLineText', type: 'text', label: 'Custom Bottom Text', description: 'Shown when Bottom Line is set to Custom Text', placeholder: 'e.g. Season Stats' },
-    { key: 'statValueColor', type: 'color-override', label: 'Stat Value Color', description: 'Color of the main stat numbers (e.g. AVG, ERA)' },
-    { key: 'subtextColor',   type: 'color-override', label: 'Subtext Color',    description: 'Color of stat labels and the game line text' },
+    // appPalette: reaches the card through --stat-value-color / --stat-subtext-color,
+    // which a full-art theme's mount CLEARS along with the rest of the app palette
+    // (clearDesignSettings in overlay-base.js). Dead under such a theme, so the UI
+    // drops the row — see THEME_ELEMENT below and ./designPackage.js.
+    { key: 'statValueColor', type: 'color-override', appPalette: true, label: 'Stat Value Color', description: 'Color of the main stat numbers (e.g. AVG, ERA)' },
+    { key: 'subtextColor',   type: 'color-override', appPalette: true, label: 'Subtext Color',    description: 'Color of stat labels and the game line text' },
 ];
 
 // The 2x2 Stat Card's HEADER band, above the grid — the caption that names what
@@ -124,6 +128,20 @@ export const LAYOUT_SETTINGS = {
         { key: 'bgStyle',       type: 'select', label: 'Band Background', description: 'Optional readability plate behind each row', options: [{ value: 'none', label: 'None (transparent)' }, { value: 'scrim', label: 'Soft Scrim' }, { value: 'bar', label: 'Solid Bar' }], defaultValue: 'none' },
         { key: 'separator',     type: 'text',   label: 'Field Separator', description: 'Character drawn between fields in a row', placeholder: '◆' },
     ],
+};
+
+// ── Which design-package file draws a layout type ──
+// Only types that carry an `appPalette: true` setting need an entry: the map's
+// single job is to ask the active package whether that element is painted by the
+// app's knobs or brings its own palette (see ./designPackage.js). Adding a type
+// with no such setting would gate nothing.
+//
+// `stats` is deliberately ABSENT even though `stats.svg` exists. The type is
+// shared by two renderers — the fed Stats bar (stats-mount.js) is plain HTML and
+// always honours the app palette, while the standalone stats.html source is the
+// themed SVG — so there is no single answer, and the safe one is not to gate.
+export const THEME_ELEMENT = {
+    statscard: 'statscard',
 };
 
 // ── Global design keys eligible for per-layout override ──

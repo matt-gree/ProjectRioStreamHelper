@@ -17,6 +17,7 @@ import { useSettingsStore } from '../../context/store';
 import { useShallow } from 'zustand/react/shallow';
 import ScaledIframe from '../../components/ScaledIframe';
 import { COLOR_SWATCHES, ColorWithOpacity, LabeledColor, DebouncedColorInput } from './shared';
+import { invalidateDesignPackages } from './designPackage';
 import { PresetsPanel } from './presets';
 
 // ── Live preview grid for the Design tab ──
@@ -137,6 +138,9 @@ const DesignPackageSection = memo(function DesignPackageSection() {
     const [report, setReport] = useState(null);
 
     const refresh = useCallback(async () => {
+        // The session-wide cache the Production stage reads is keyed off the same
+        // endpoint; an install or uninstall is the only thing that can change it.
+        invalidateDesignPackages();
         try {
             const r = await fetch('/api/v1/design/packages');
             setPackages(r.ok ? await r.json() : []);
@@ -183,6 +187,12 @@ const DesignPackageSection = memo(function DesignPackageSection() {
 
     const list = packages ?? [];
     const selected = list.find(p => p.id === designPackage) || null;
+    // Elements the package paints ITSELF — the knobs below never reach them, so
+    // the panel says which ones rather than letting the user find out by
+    // dragging a colour and watching nothing happen. Per element, not per
+    // package: a token skin can still carry one fixed-palette element.
+    const fixedPalette = (selected?.elements ?? [])
+        .filter(e => !(selected?.appVarElements ?? []).includes(e));
     const selectData = list.map(p => ({ value: p.id, label: p.builtin ? p.name : `${p.name} (installed)` }));
     // Keep an orphaned selection (package deleted on disk) visible so the user
     // understands why overlays fell back to Default.
@@ -217,6 +227,12 @@ const DesignPackageSection = memo(function DesignPackageSection() {
                         ? `${selected.description || 'No description.'}${selected.elements?.length ? ` Themes: ${selected.elements.join(', ')}.` : ''} Elements a package doesn't theme fall back to Default.`
                         : 'Themes every SVG element (commentary, lower third, stat callout). Install a package as a .zip, or drop a folder into user_data/design_packages/.'}
                 </Text>
+                {fixedPalette.length > 0 && (
+                    <Text size="xs" dimmed>
+                        Brings its own palette on {fixedPalette.join(', ')} — the colour,
+                        border, shadow and font controls below don’t reach those.
+                    </Text>
+                )}
                 {report && <InstallReport report={report} onDismiss={() => setReport(null)} />}
             </div>
         </div>

@@ -68,8 +68,37 @@ def _read_manifest(folder: Path) -> dict:
         return {}
 
 
+# The root <svg> tag — the first element in the file, and the only one that
+# carries the palette declaration. Matched against a bounded read: a themed SVG
+# can be hundreds of KB of pixel art we have no reason to load to answer this.
+_SVG_TAG_RE = re.compile(r"<svg\b[^>]*>", re.IGNORECASE)
+_APP_VARS_RE = re.compile(r"""data-design-vars\s*=\s*["']app["']""", re.IGNORECASE)
+
+
+def _uses_app_vars(svg: Path) -> bool:
+    """Whether this theme file opts into the user's Design-tab palette.
+
+    A theme declares ``data-design-vars="app"`` on its root ``<svg>`` to be
+    painted by the app's colour/typography knobs (a *token skin*); without it it
+    brings a fixed palette and the mount CLEARS those vars instead — the
+    ``usesAppVars`` branch in svg-theme-engine.js. So for a full-art element the
+    app-palette settings are dead, and the UI hides them.
+
+    Read from the shipped FILE, not the manifest: ``palette`` there is only an
+    input to the theme compiler, and a folder dropped in by hand never runs it.
+    """
+    try:
+        with svg.open("r", encoding="utf-8", errors="replace") as fh:
+            head = fh.read(8192)
+    except OSError:
+        return False
+    tag = _SVG_TAG_RE.search(head)
+    return bool(tag and _APP_VARS_RE.search(tag.group(0)))
+
+
 def _package_info(folder: Path, builtin: bool) -> dict:
     manifest = _read_manifest(folder)
+    svgs = sorted(folder.glob("*.svg"))
     return {
         "id": folder.name,
         "name": manifest.get("name") or folder.name,
@@ -78,7 +107,12 @@ def _package_info(folder: Path, builtin: bool) -> dict:
         "version": manifest.get("version") or "",
         "builtin": builtin,
         # Which elements this package themes = which theme SVGs exist.
-        "elements": sorted(p.stem for p in folder.glob("*.svg")),
+        "elements": [p.stem for p in svgs],
+        # ...and which of those are painted by the user's Design-tab knobs. The
+        # tier is per ELEMENT, never per package: `classic` is a token skin that
+        # still ships a full-art callout.svg and no statscard at all, and an
+        # element a package omits falls back to `default`, which is full-art.
+        "appVarElements": [p.stem for p in svgs if _uses_app_vars(p)],
     }
 
 

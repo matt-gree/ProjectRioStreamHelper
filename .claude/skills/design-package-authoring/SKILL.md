@@ -29,6 +29,15 @@ seams** the mounts set per element (`--side1`/`--side2` controller-port
 colors, `--accent`, callouts' `--port-color`/`--well`/`--accent-neutral`) —
 these are data, not theme choices.
 
+**The tier is a per-file fact that the UI reads back.** `_package_info` reports
+`appVarElements` by parsing each shipped SVG's root `data-design-vars` (the
+file, never the manifest — `palette` there is only an input to the compiler,
+and a hand-dropped folder never runs it). The app uses it to drop settings a
+full-art element can't honour, and the Design tab names those elements under
+the package selector. So a theme that forgets `data-design-vars="app"` doesn't
+just render with the wrong palette — it takes its own colour controls off the
+Production stage.
+
 ## Package anatomy + install rules (`server/design_packages.py`)
 
 - A package = folder of per-element SVGs + optional `package.json`
