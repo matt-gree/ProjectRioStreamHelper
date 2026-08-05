@@ -18,7 +18,15 @@ export const PanelShell = memo(function PanelShell({
         <section className={cn('flex min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-card', className)}>
             <header className="flex h-9 shrink-0 items-center gap-2 border-b border-border/60 px-2.5">
                 <StateChip state={state} />
-                <Text size="sm" truncate className="label-display min-w-0 flex-1 font-semibold text-foreground">
+                {/* A third type step, for the one thing on the panel that says
+                    WHAT the panel is. The whole stage ran on text-sm and
+                    text-xs — two sizes for five levels — so the title carried
+                    no more weight than the source name beside it or the rows
+                    below it, and a panel with nothing louder than its own
+                    contents has no entry point. One step (15px against the
+                    body's 12px), not a headline: this is a dense work surface
+                    and the controls are why anyone is here. */}
+                <Text truncate className="label-display min-w-0 flex-1 text-[0.9375rem] font-semibold text-foreground">
                     {title}
                 </Text>
                 {meta != null && <Text size="xs" span truncate dimmed className="min-w-0">{meta}</Text>}

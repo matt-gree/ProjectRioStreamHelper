@@ -6,7 +6,7 @@ import { SegmentedControl } from '../../../components/ui/segmented-control';
 import { Text } from '../../../components/ui/primitives';
 import { SimpleTooltip } from '../../../components/ui/simple-tooltip';
 import { cn } from '../../../lib/utils';
-import { KIT_INPUT } from './tokens';
+import { KIT_INPUT, KIT_LABEL } from './tokens';
 
 /*
  * The row kit — the shapes every console surface (rack rows, rail cards,
@@ -57,9 +57,12 @@ export const SubjectRow = memo(function SubjectRow({ text, meta, tone, title, cl
     if (!text) return null;
     return (
         <div className={cn(ROW, 'gap-1.5', className)} title={title || undefined}>
+            {/* tabular-nums: a subject is the one row that changes UNDER the
+                producer — a score, a count, an inning — and proportional digits
+                reflow the whole line every time one ticks over. */}
             <Text
                 size="xs" span truncate
-                className={cn('min-w-0', tone === 'warn' ? 'text-amber-500/90' : 'text-foreground')}
+                className={cn('tabular-nums min-w-0', tone === 'warn' ? 'text-amber-500/90' : 'text-foreground')}
             >
                 {text}
             </Text>
@@ -92,7 +95,7 @@ export const SelectRow = memo(function SelectRow({
     return (
         <div className={cn(ROW, className)}>
             {label != null && (
-                <Text size="xs" span truncate className={cn('w-16 shrink-0', staged ? 'text-amber-400' : 'text-muted-foreground')}>
+                <Text size="xs" span truncate className={cn(KIT_LABEL, staged ? 'text-amber-400' : 'text-muted-foreground')}>
                     {label}
                 </Text>
             )}
@@ -121,7 +124,7 @@ export const NumberRow = memo(function NumberRow({
     return (
         <div className={cn(ROW, className)}>
             {label != null && (
-                <Text size="xs" span truncate className={cn('w-16 shrink-0', staged ? 'text-amber-400' : 'text-muted-foreground')}>
+                <Text size="xs" span truncate className={cn(KIT_LABEL, staged ? 'text-amber-400' : 'text-muted-foreground')}>
                     {label}
                 </Text>
             )}
@@ -205,7 +208,7 @@ export const TextRow = memo(function TextRow({
     return (
         <div className={cn(ROW, className)}>
             {label != null && (
-                <Text size="xs" span truncate className={cn('w-16 shrink-0', staged ? 'text-amber-400' : 'text-muted-foreground')}>
+                <Text size="xs" span truncate className={cn(KIT_LABEL, staged ? 'text-amber-400' : 'text-muted-foreground')}>
                     {label}
                 </Text>
             )}
@@ -232,7 +235,7 @@ export const ColorRow = memo(function ColorRow({
     return (
         <div className={cn(ROW, className)}>
             {label != null && (
-                <Text size="xs" span truncate className={cn('w-16 shrink-0', staged ? 'text-amber-400' : 'text-muted-foreground')}>
+                <Text size="xs" span truncate className={cn(KIT_LABEL, staged ? 'text-amber-400' : 'text-muted-foreground')}>
                     {label}
                 </Text>
             )}
@@ -312,7 +315,7 @@ export const FieldRow = memo(function FieldRow({ label, staged, stacked, childre
     return (
         <div className={cn(ROW, className)}>
             {label != null && (
-                <Text size="xs" span truncate className={cn('w-16 shrink-0', labelTone)}>{label}</Text>
+                <Text size="xs" span truncate className={cn(KIT_LABEL, labelTone)}>{label}</Text>
             )}
             <div className="flex min-w-0 flex-1 items-center gap-1.5">{children}</div>
         </div>
@@ -326,7 +329,7 @@ export const SegmentedRow = memo(function SegmentedRow({
     return (
         <div className={cn(ROW, className)}>
             {label != null && (
-                <Text size="xs" span truncate className="w-16 shrink-0 text-muted-foreground">{label}</Text>
+                <Text size="xs" span truncate className={cn(KIT_LABEL, 'text-muted-foreground')}>{label}</Text>
             )}
             <SegmentedControl
                 size="xs" fullWidth data={data} value={value}

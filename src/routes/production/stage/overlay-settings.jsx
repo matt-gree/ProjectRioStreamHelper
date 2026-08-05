@@ -198,8 +198,16 @@ export const SettingGroups = memo(function SettingGroups({ os, defs }) {
     if (groups.length === 1 && groups[0].group == null) {
         return groups[0].defs.map(def => <OverlaySettingRow key={def.key} os={os} def={def} />);
     }
+    /*
+     * Two columns once the PANEL is wide enough (PanelShell's body is the
+     * `@container`), one below that. A stage panel is ~950px and a settings row
+     * is a label and a control, so a single column left most of that width empty
+     * beside every row — the "sparsely populated" read. Groups are the grid
+     * items, so each region stays a top-to-bottom run and only the regions sit
+     * side by side.
+     */
     return (
-        <div className="flex flex-col gap-3">
+        <div className="grid gap-x-6 gap-y-3 @3xl:grid-cols-2">
             {groups.map(({ group, defs: rows }) => (
                 <div key={group ?? '_'} data-setting-group={group ?? ''} className="flex flex-col gap-1.5">
                     {group && (

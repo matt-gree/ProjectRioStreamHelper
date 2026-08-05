@@ -25,6 +25,13 @@ contract.
 | **Stage** (center, flexible) | Work on one thing | The selected item's full controls (its *stage body*), under the *source strip* its header always carries. Content-sized. Replaces all gear popovers, MatchCard, and PostGameBar. |
 | **Quick rail** (right, ~252px) | Fly the broadcast | Producer-pinned cards: header (chip · name · click-through) + the element's *quick face* (≤ 2 kit rows). Drag-ordered, never auto-reorders, persists across restarts. |
 
+Above the three, one **band** (`production.jsx`): the OBS connection on the
+left, scene transport and the demo switch on the right, hairline underneath.
+The left anchor is deliberate — connectivity is the one fact true of the whole
+console, and the band had everything pushed right, which read as a hole between
+the tabs and the columns rather than as a bar. **The band is also where the
+Match fixture is headed**, so weigh anything you add to it against that.
+
 Status vocabulary is ONE language everywhere: `AIR` (emerald, program scene) /
 `PVW` (sky, studio preview) / `OFF` (bound, hidden) / `—` (dashed, unbound) /
 `DESK` (rio red, content workflow — not an OBS source). Rack chips and rail
@@ -249,6 +256,14 @@ position, not an identity).
   section, so nothing is stranded on a tab and nothing doubles up. Per-board
   layouts (Scorecard, Scoreboard) write `overlays.{type}.{N}.{key}`; the Style
   section takes the board from the element's `scope`.
+- **A kit row is sized against its PANEL, not once for all three surfaces.**
+  `KIT_LABEL` is `w-16 @lg:w-32`: 64px is right on a 252px rail card and a 278px
+  rack row, and it was the only width, so on a ~950px stage the same column
+  clipped "Bottom Offset" to "Bottom O…" with 800px empty beside the input.
+  Container queries measure `PanelShell`'s body; the rail and rack are not
+  containers, so they never match and keep 64. Same reason `SettingGroups` goes
+  two-column at `@3xl` — a stage panel is wide, and one column of label-plus-
+  control is most of what "sparsely populated" meant.
 - **A settings panel is a scale model of the element it configures.** A def may
   carry a `group` in `LAYOUT_SETTINGS`, and a group is a **visible region of the
   overlay** — "Top band", never "Switches" or "Geometry". `OverlaySettingGroups`

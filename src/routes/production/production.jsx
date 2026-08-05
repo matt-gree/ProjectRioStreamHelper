@@ -61,8 +61,8 @@ const ConnectionPill = memo(function ConnectionPill() {
     const meta = STATUS_META[status] ?? STATUS_META.disconnected;
 
     return (
-        <Group gap="sm" className="items-center">
-            <Group gap="xs" className="items-center rounded-full border border-border bg-card px-3 py-1.5">
+        <Group gap="sm" className="min-w-0 items-center">
+            <Group gap="xs" className="shrink-0 items-center rounded-full border border-border bg-card px-3 py-1.5">
                 <span className={cn('size-2 rounded-full', meta.dot)} />
                 <Text size="sm" className="text-foreground">{meta.label}</Text>
                 {status === 'connected' && obsVersion && (
@@ -262,11 +262,23 @@ export default function Production() {
 
     return (
         <Stack gap="md">
-            <Group className="flex-wrap items-center justify-end gap-4">
-                <Group gap="md" className="flex-wrap items-center">
+            {/* The console band. Everything used to be pushed to the right,
+                which left the left two-thirds empty with no surface, no rule
+                and no baseline — a hole between the tabs above and the bounded
+                columns below rather than a bar.
+
+                OBS connectivity anchors the left because it is the one fact
+                that is true of the WHOLE console: the rack, the stage and the
+                rail each change shape when it goes, and each was left saying so
+                for itself. Scene transport and the demo switch stay right —
+                they are things you do, and a producer reaches for them, not for
+                the readout. The hairline gives the band a floor so the space
+                between the two is a gap on purpose. */}
+            <Group className="flex-wrap items-center justify-between gap-4 border-b border-border/60 pb-3">
+                <ConnectionPill />
+                <Group gap="md" className="min-w-0 flex-wrap items-center">
                     <TopBarSceneControls />
                     <SampleModeSwitch />
-                    <ConnectionPill />
                 </Group>
             </Group>
 
