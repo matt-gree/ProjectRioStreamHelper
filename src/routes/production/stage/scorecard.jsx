@@ -1,8 +1,9 @@
 import { memo } from 'react';
 import { Text } from '../../../components/ui/primitives';
+import { LAYOUT_SETTINGS } from '../../layouts/designConstants';
 import { useBoardLabel } from '../boards';
 import { DirectStage } from './generic';
-import { OverlaySettingRow, OverlaySettingRows, defsFor, useOverlaySettings } from './overlay-settings';
+import { OverlaySettingGroups, OverlaySettingRow, defsFor, useOverlaySettings } from './overlay-settings';
 
 /*
  * Vertical Scorecard stage.
@@ -14,17 +15,18 @@ import { OverlaySettingRow, OverlaySettingRows, defsFor, useOverlaySettings } fr
  * sources can be driven independently.
  *
  * The score block leads because it's the headline decision (full block /
- * condensed bar / off); the bands follow in the order they stack on screen.
- * Header title and phase text are authored per event, not flipped live, so
- * they render in the stage's catch-all Style section below rather than up here
- * among the live bands. Colours come from the active design package.
+ * condensed bar / off) and the one control the rail's quick face carries.
+ * Everything else follows grouped by where it sits on the card — top bars,
+ * score block, lower bars — which puts the header title and the phase text
+ * beside the switches that turn those bars on. They used to sit in the stage's
+ * catch-all Style section, a scroll below the switch they belong to, with a
+ * sentence in this panel explaining where they had gone. Colours come from the
+ * active design package.
  */
 
 const MODE_KEY = 'mainMode';
-const BAND_KEYS = [
-    'showHeader', 'showPhase', 'showGameMode', 'showRosters',
-    'showBases', 'showAtBat', 'showBoxScore', 'showStadium',
-];
+// Everything but the headline mode, which renders flat above the groups.
+const GROUPED_KEYS = LAYOUT_SETTINGS.scorecard.map(d => d.key).filter(k => k !== MODE_KEY);
 
 /*
  * `board` is the INSTANCE's board, handed down by whichever surface is
@@ -55,21 +57,21 @@ export default function ScorecardStage({ element, board }) {
         <>
             <DirectStage element={element} board={board} />
 
-            <div className="mt-1 flex flex-col gap-1.5 border-t border-border/60 pt-2">
+            <div className="mt-1 flex flex-col gap-3 border-t border-border/60 pt-2">
                 <ScorecardModeRow sc={sc} />
-                <OverlaySettingRows os={sc.os} type="scorecard" keys={BAND_KEYS} />
+                <OverlaySettingGroups os={sc.os} type="scorecard" keys={GROUPED_KEYS} />
             </div>
 
             <Text size="xs" className="border-t border-border/60 pt-2 text-muted-foreground">
                 Bands animate in and out as you flip them, and apply to{' '}
-                <b>{sc.boardLabel(sc.board)}</b> only. Header title and phase text
-                are below; colours come from the active design package.
+                <b>{sc.boardLabel(sc.board)}</b> only. Colours come from the active
+                design package.
             </Text>
         </>
     );
 }
 
-// The live bands this body already shows — excluded from the stage's Style
-// section (which then renders the authored text fields: header title, phase
-// text). Config is per board, so Style writes to overlays.scorecard.{N}.* too.
-ScorecardStage.surfacedKeys = [MODE_KEY, ...BAND_KEYS];
+// Everything, so the Style section renders nothing: the groups above already
+// cover the card end to end, and a "Style" heading under them would be a fourth
+// region the card doesn't have. Config is per board (overlays.scorecard.{N}.*).
+ScorecardStage.surfacedKeys = LAYOUT_SETTINGS.scorecard.map(d => d.key);

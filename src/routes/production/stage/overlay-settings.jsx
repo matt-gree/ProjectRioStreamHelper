@@ -80,13 +80,38 @@ export function useOverlaySettings(type, ns, label, board = null) {
         (def, value) => stageSettingsSet(settingKey(ns, def.key), value, `${label}: ${def.label}`),
         [ns, label],
     );
-    return { bag, ns, board, set };
+    return { bag, ns, board, type, set };
+}
+
+/*
+ * A detail row whose master says it has no job — the Stat Card's "Custom Bottom
+ * Text" while the bottom line is showing the game line. Nothing it holds reaches
+ * the overlay, which is the bar for hiding a control rather than disabling one:
+ * a disabled row still costs a line and still has to be read past.
+ *
+ * Only for INERT details. A field that is merely hidden right now (a band's
+ * title while the band is switched off) stays, because authoring it ahead of
+ * turning the band on is a real workflow.
+ */
+function useShowWhen(os, def) {
+    const gate = def.showWhen;
+    // Unconditional, and undefined is a safe key — a hook may not be skipped.
+    const staged = usePending(gate ? `settings:${settingKey(os.ns, gate.key)}` : undefined);
+    if (!gate) return true;
+    const masterDef = (LAYOUT_SETTINGS[os.type] ?? []).find(d => d.key === gate.key) ?? gate;
+    // Read the STAGED value too, so choosing the mode reveals the field now
+    // rather than after Go Live.
+    const v = staged ? staged.value : resolveSetting(os.bag, masterDef, os.board);
+    return 'is' in gate ? v === gate.is : !!v;
 }
 
 // One setting as a row, showing the staged value while it waits on confirm.
 export const OverlaySettingRow = memo(function OverlaySettingRow({ os, def }) {
     const pending = usePending(`settings:${settingKey(os.ns, def.key)}`);
+    const shown = useShowWhen(os, def);
     const value = pending ? pending.value : resolveSetting(os.bag, def, os.board);
+
+    if (!shown) return null;
 
     if (def.type === 'select') {
         return (

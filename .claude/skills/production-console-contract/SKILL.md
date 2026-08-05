@@ -260,6 +260,19 @@ position, not an identity).
   **always open, never accordions**, same rule as the Lower Third's five columns.
   `OverlaySettingRows` stays flat on purpose: it also builds rail quick faces,
   where a group eyebrow would blow the two-row cap.
+- **A detail follows its master, but only when it is INERT.** A def may carry
+  `showWhen: { key, is }` and renders only while its master satisfies it (the
+  Stat Card's custom bottom text, on a card whose bottom line is showing the game
+  line instead). The gate reads the STAGED value too, so choosing the mode
+  reveals the field before Go Live. The bar is *inert*, not *inactive*: a band's
+  title while the band is switched off stays, because authoring it ahead of
+  turning the band on is a real workflow.
+- **A switch's label names the PART, not the verb.** "Team Logos", not "Show
+  Team Logos" — a column of "Show …" repeats the switch's own affordance once per
+  line and pushes the distinguishing word rightwards, which is most of what makes
+  a settings panel read as a wall. Same for a prefix the group already says
+  ("Field: Location" under a *Top band* heading). The description carries the
+  sentence.
 - **A setting the active design package can't honour is not shown.** A def marked
   `appPalette: true` in `LAYOUT_SETTINGS` reaches its overlay through the app's
   CSS palette, which a **full-art** theme's mount *clears* rather than honours

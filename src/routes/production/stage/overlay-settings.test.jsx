@@ -54,7 +54,7 @@ describe('ElementStyleSettings — every setting type is stage-renderable (phase
 
     it('excludes keys a body already surfaced, keeps the rest', () => {
         render(<ElementStyleSettings type="eventheader" label="Event header" exclude={['showHeader']} />);
-        expect(screen.queryByText('Show Header')).not.toBeInTheDocument();
+        expect(screen.queryByText('Header Band')).not.toBeInTheDocument();
         expect(screen.getByText('Band Width')).toBeInTheDocument(); // number, not excluded
     });
 
@@ -90,6 +90,45 @@ describe('groupDefs', () => {
         expect(groupDefs([def('a'), def('b')])).toEqual([
             { group: null, defs: [def('a'), def('b')] },
         ]);
+    });
+});
+
+/*
+ * A detail whose master gives it no job is INERT, not merely inactive: the Stat
+ * Card's custom bottom text reaches nothing at all while the bottom line is
+ * showing the game line. That is the bar for hiding a control — a disabled row
+ * still costs a line and still has to be read past.
+ */
+describe('ElementStyleSettings — a detail follows its master', () => {
+    const card = () => render(<ElementStyleSettings type="statscard" label="Stat Card" />);
+
+    it('hides the custom text while another mode owns the line', () => {
+        card();
+        expect(screen.getByText('Bottom Line')).toBeInTheDocument();   // the master
+        expect(screen.queryByText('Custom Bottom Text')).not.toBeInTheDocument();
+        expect(screen.queryByText('Custom Top Text')).not.toBeInTheDocument();
+    });
+
+    it('shows it once that mode is chosen', () => {
+        useSettingsStore.setState({ overlays: { statscard: { subLine: 'custom' } }, production: {} });
+        card();
+        expect(screen.getByText('Custom Bottom Text')).toBeInTheDocument();
+        // topLine is untouched, so its own detail stays away.
+        expect(screen.queryByText('Custom Top Text')).not.toBeInTheDocument();
+    });
+
+    /*
+     * Staged, not yet live: the field has to appear when the producer picks the
+     * mode, not after Go Live — otherwise choosing "Custom Text" looks like it
+     * did nothing.
+     */
+    it('reveals it from a staged master, before the change goes live', () => {
+        useStagingStore.setState({
+            pending: { 'settings:overlays.statscard.subLine': { value: 'custom' } },
+            order: ['settings:overlays.statscard.subLine'],
+        });
+        card();
+        expect(screen.getByText('Custom Bottom Text')).toBeInTheDocument();
     });
 });
 

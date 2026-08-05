@@ -83,12 +83,12 @@ describe('Event Header stage', () => {
     it('keeps a band’s offset in the same group as its switch', () => {
         ui();
         const top = document.querySelector('[data-setting-group="Top band"]');
-        expect(top).toHaveTextContent('Show Header');
-        expect(top).toHaveTextContent('Header Top Offset');
-        expect(top).not.toHaveTextContent('Footer Bottom Offset');
+        expect(top).toHaveTextContent('Header Band');
+        expect(top).toHaveTextContent('Top Offset');
+        expect(top).not.toHaveTextContent('Bottom Offset');
     });
 
-    it('writes a geometry number to the shared namespace via the Style section', () => {
+    it('writes a geometry number to the shared namespace', () => {
         ui();
         const sep = LAYOUT_SETTINGS.eventheader.find(d => d.key === 'separator');
         const input = screen.getByPlaceholderText(sep.placeholder); // '◆'
@@ -108,7 +108,7 @@ describe('Event Header stage', () => {
 
     it('writes to the shared (not per-board) namespace', () => {
         ui();
-        fireEvent.click(screen.getByText('Show Footer'));
+        fireEvent.click(screen.getByText('Footer Band'));
         expect(useSettingsStore.getState()?.overlays?.eventheader?.showFooter).toBe(false);
     });
 });

@@ -42,11 +42,38 @@ describe('Scorecard stage', () => {
         }
     });
 
-    it('surfaces the authored text fields in the Style section (phase 7)', () => {
+    it('surfaces the authored text fields too — nothing lands on Setup only', () => {
         ui();
         for (const def of LAYOUT_SETTINGS.scorecard.filter(d => d.type === 'text')) {
             expect(screen.getByText(def.label), def.key).toBeInTheDocument();
         }
+    });
+
+    /*
+     * The panel reads down the card: top bars, score block, lower bars. The
+     * header title and the phase text used to sit in the catch-all Style
+     * section, a scroll below the switch each one belongs to — with a sentence
+     * in the panel explaining where they had gone.
+     */
+    it('groups the bands down the card, with each bar’s text beside its switch', () => {
+        ui();
+        const groups = [...document.querySelectorAll('[data-setting-group]')]
+            .map(e => e.dataset.settingGroup);
+        expect(groups).toEqual(['Top bars', 'Score block', 'Lower bars']);
+        const top = document.querySelector('[data-setting-group="Top bars"]');
+        expect(top).toHaveTextContent('Header Bar');
+        expect(top).toHaveTextContent('Header Title');
+        expect(screen.queryByText('Style')).not.toBeInTheDocument();
+    });
+
+    // The headline decision stays flat above the groups — it is also the rail
+    // card's one quick-face row, and the card has no room for a group eyebrow.
+    it('keeps the score block mode out of the groups', () => {
+        ui();
+        for (const g of document.querySelectorAll('[data-setting-group]')) {
+            expect(g).not.toHaveTextContent('Score Block');
+        }
+        expect(screen.getByText('Score Block')).toBeInTheDocument();
     });
 
     it('writes an authored text field to the per-board namespace', () => {

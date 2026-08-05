@@ -18,7 +18,10 @@
 const STAT_CARD_SETTINGS = [
     { key: 'transitionType', type: 'select', label: 'Batter Transition', description: 'Animation when switching to a new batter', options: [{ value: 'fade', label: 'Fade' }, { value: 'none', label: 'None' }], defaultValue: 'fade' },
     { key: 'subLine', type: 'select', label: 'Bottom Line', description: 'What the bottom row shows: the live game line, your own text, or nothing (the card shrinks)', options: [{ value: 'gameLine', label: 'Game Line' }, { value: 'custom', label: 'Custom Text' }, { value: 'off', label: 'Off' }], defaultValue: 'gameLine' },
-    { key: 'subLineText', type: 'text', label: 'Custom Bottom Text', description: 'Shown when Bottom Line is set to Custom Text', placeholder: 'e.g. Season Stats' },
+    // showWhen: the mode that gives this field a job. On any other mode nothing
+    // it holds reaches the card, so it is INERT rather than merely inactive —
+    // which is the bar for hiding a control instead of disabling it.
+    { key: 'subLineText', type: 'text', showWhen: { key: 'subLine', is: 'custom' }, label: 'Custom Bottom Text', description: 'Shown when Bottom Line is set to Custom Text', placeholder: 'e.g. Season Stats' },
     // appPalette: reaches the card through --stat-value-color / --stat-subtext-color,
     // which a full-art theme's mount CLEARS along with the rest of the app palette
     // (clearDesignSettings in overlay-base.js). Dead under such a theme, so the UI
@@ -37,22 +40,26 @@ const STAT_CARD_SETTINGS = [
 // container member, which DOES render the 2x2 card, takes it below.
 const TOP_LINE_SETTINGS = [
     { key: 'topLine', type: 'select', label: 'Top Line', description: 'A caption above the stats: your own text, the game mode ("Stars On Showdown XXI Stats"), or nothing (the card shrinks)', options: [{ value: 'off', label: 'Off' }, { value: 'custom', label: 'Custom Text' }, { value: 'auto', label: 'Game Mode' }], defaultValue: 'off' },
-    { key: 'topLineText', type: 'text', label: 'Custom Top Text', description: 'Shown when Top Line is set to Custom Text', placeholder: 'e.g. Tournament Stats' },
+    { key: 'topLineText', type: 'text', showWhen: { key: 'topLine', is: 'custom' }, label: 'Custom Top Text', description: 'Shown when Top Line is set to Custom Text', placeholder: 'e.g. Tournament Stats' },
 ];
 
 export const LAYOUT_SETTINGS = {
+    // A switch's label names the PART, not the verb: a row of "Show …" repeats
+    // the control's own affordance once per line and pushes the word that
+    // distinguishes it rightwards, which is most of why a settings column reads
+    // as a wall. The description still carries the sentence.
     scoreboard: [
-        { key: 'showElo', type: 'switch', label: 'Show ELO', description: 'Display ELO ratings on completed games' },
-        { key: 'showTeamLogos', type: 'switch', label: 'Show Team Logos', description: 'Display MSB team logos' },
+        { key: 'showElo', type: 'switch', label: 'ELO', description: 'Display ELO ratings on completed games' },
+        { key: 'showTeamLogos', type: 'switch', label: 'Team Logos', description: 'Display MSB team logos' },
         // Segment toggles honoured by melded themes (e.g. Small Scoreboard); a
         // theme without those segments ignores them.
-        { key: 'showLive', type: 'switch', label: 'Show Live Cluster', description: 'The live count + base diamond. Off keeps it hidden even during a live game (the card stays compact).', defaultValue: true },
-        { key: 'showInning', type: 'switch', label: 'Show Inning', description: 'The inning number segment during a live game', defaultValue: true },
+        { key: 'showLive', type: 'switch', label: 'Live Cluster', description: 'The live count + base diamond. Off keeps it hidden even during a live game (the card stays compact).', defaultValue: true },
+        { key: 'showInning', type: 'switch', label: 'Inning', description: 'The inning number segment during a live game', defaultValue: true },
     ],
     roster: [
-        { key: 'showSuperstars', type: 'switch', label: 'Show Superstar Icons', description: 'Display superstar badge on starred characters' },
-        { key: 'showRoleIcon', type: 'switch', label: 'Show Batting/Fielding Icon', description: 'Display the bat or glove icon indicating the team role' },
-        { key: 'showTeamLogo', type: 'switch', label: 'Show Team Logo', description: 'Display the team logo next to the roster' },
+        { key: 'showSuperstars', type: 'switch', label: 'Superstar Icons', description: 'Display superstar badge on starred characters' },
+        { key: 'showRoleIcon', type: 'switch', label: 'Batting / Fielding Icon', description: 'Display the bat or glove icon indicating the team role' },
+        { key: 'showTeamLogo', type: 'switch', label: 'Team Logo', description: 'Display the team logo next to the roster' },
     ],
     stats: [...STAT_CARD_SETTINGS],
     // Stat Card — the compact 2x2 card as a CONTAINER MEMBER (no standalone
@@ -96,18 +103,22 @@ export const LAYOUT_SETTINGS = {
     // mount (scorecard-mount.js) animates each group in/out. mainMode chooses
     // the full score block, the condensed bar, or neither. The theme SVG comes
     // from the active Design Package (scorecard.svg).
+    // Grouped down the card the way it stacks on screen (the descriptions'
+    // "element N" is that order). `mainMode` carries no group: it is the
+    // scorecard's headline decision and the stage renders it flat above the
+    // groups, so it is also the rail's quick-face row.
     scorecard: [
-        { key: 'showHeader',   type: 'switch', label: 'Header Bar',    description: 'Branding logo + title bar (element 0)', defaultValue: true },
-        { key: 'titleText',    type: 'text',   label: 'Header Title',   description: 'Centered next to the logo. Blank uses the branding logo alone.', placeholder: 'Project Rio' },
-        { key: 'showPhase',    type: 'switch', label: 'Bracket Phase',  description: 'Bracket-phase bar (element 1)', defaultValue: true },
-        { key: 'phaseText',    type: 'text',   label: 'Phase Text',     description: 'Overrides the bracket-phase bar. Leave blank to use the assigned match’s phase; the bar hides when neither is set.', placeholder: 'Winners Final' },
-        { key: 'showGameMode', type: 'switch', label: 'Game Mode',      description: 'Game-mode bar (element 2)', defaultValue: true },
+        { key: 'showHeader',   group: 'Top bars', type: 'switch', label: 'Header Bar',    description: 'Branding logo + title bar (element 0)', defaultValue: true },
+        { key: 'titleText',    group: 'Top bars', type: 'text',   label: 'Header Title',   description: 'Centered next to the logo. Blank uses the branding logo alone.', placeholder: 'Project Rio' },
+        { key: 'showPhase',    group: 'Top bars', type: 'switch', label: 'Bracket Phase',  description: 'Bracket-phase bar (element 1)', defaultValue: true },
+        { key: 'phaseText',    group: 'Top bars', type: 'text',   label: 'Phase Text',     description: 'Overrides the bracket-phase bar. Leave blank to use the assigned match’s phase; the bar hides when neither is set.', placeholder: 'Winners Final' },
+        { key: 'showGameMode', group: 'Top bars', type: 'switch', label: 'Game Mode',      description: 'Game-mode bar (element 2)', defaultValue: true },
         { key: 'mainMode',     type: 'select', label: 'Score Block',    description: 'Full score block (3), condensed bar (3a), or neither', options: [{ value: 'full', label: 'Full' }, { value: 'condensed', label: 'Condensed' }, { value: 'off', label: 'Off' }], defaultValue: 'full' },
-        { key: 'showRosters',  type: 'switch', label: 'Rosters',        description: 'Both teams’ 9-character rosters in the full block', defaultValue: true },
-        { key: 'showBases',    type: 'switch', label: 'Bases / Diamond', description: 'The base diamond and on-base runners', defaultValue: true },
-        { key: 'showAtBat',    type: 'switch', label: 'At-Bat Lines',   description: 'Current batter + pitcher game lines (element 4)', defaultValue: true },
-        { key: 'showBoxScore', type: 'switch', label: 'Box Score',      description: 'Per-inning linescore (element 5)', defaultValue: true },
-        { key: 'showStadium',  type: 'switch', label: 'Stadium',        description: 'Stadium bar (element 6)', defaultValue: true },
+        { key: 'showRosters',  group: 'Score block', type: 'switch', label: 'Rosters',        description: 'Both teams’ 9-character rosters in the full block', defaultValue: true },
+        { key: 'showBases',    group: 'Score block', type: 'switch', label: 'Bases / Diamond', description: 'The base diamond and on-base runners', defaultValue: true },
+        { key: 'showAtBat',    group: 'Lower bars', type: 'switch', label: 'At-Bat Lines',   description: 'Current batter + pitcher game lines (element 4)', defaultValue: true },
+        { key: 'showBoxScore', group: 'Lower bars', type: 'switch', label: 'Box Score',      description: 'Per-inning linescore (element 5)', defaultValue: true },
+        { key: 'showStadium',  group: 'Lower bars', type: 'switch', label: 'Stadium',        description: 'Stadium bar (element 6)', defaultValue: true },
     ],
     // The event header is two single-row strips (baselines y=45 top, y=1078
     // bottom), and its settings are ORDERED AND GROUPED BY WHICH STRIP THEY
@@ -115,21 +126,21 @@ export const LAYOUT_SETTINGS = {
     // by control kind instead (all the switches, then all the numbers), the
     // band's own offset sat five rows away from the switch that turns it on.
     eventheader: [
-        { key: 'showHeader',    group: 'Top band', type: 'switch', label: 'Show Header',  description: 'Top row: Event / Location / Dates', defaultValue: true },
-        { key: 'headerOffsetY', group: 'Top band', type: 'number-override', label: 'Header Top Offset', description: 'Nudge the header band down from the top (baseline default y=45)', defaultValue: 0, min: 0, max: 480, step: 1, suffix: 'px' },
+        { key: 'showHeader',    group: 'Top band', type: 'switch', label: 'Header Band',  description: 'Top row: Event / Location / Dates', defaultValue: true },
+        { key: 'headerOffsetY', group: 'Top band', type: 'number-override', label: 'Top Offset', description: 'Nudge the header band down from the top (baseline default y=45)', defaultValue: 0, min: 0, max: 480, step: 1, suffix: 'px' },
         // Per-field visibility (a field also drops out automatically when blank)
-        { key: 'showLocation',  group: 'Top band', type: 'switch', label: 'Field: Location',    description: 'Header row only', defaultValue: true },
-        { key: 'showDates',     group: 'Top band', type: 'switch', label: 'Field: Dates',       description: 'Header row only', defaultValue: true },
+        { key: 'showLocation',  group: 'Top band', type: 'switch', label: 'Location',    description: 'Header row only', defaultValue: true },
+        { key: 'showDates',     group: 'Top band', type: 'switch', label: 'Dates',       description: 'Header row only', defaultValue: true },
 
-        { key: 'showFooter',    group: 'Bottom band', type: 'switch', label: 'Show Footer',  description: 'Bottom row: Message / Event / Phase / Round', defaultValue: true },
-        { key: 'footerOffsetY', group: 'Bottom band', type: 'number-override', label: 'Footer Bottom Offset', description: 'Nudge the footer band up from the bottom (baseline default y=1078)', defaultValue: 2, min: 0, max: 480, step: 1, suffix: 'px' },
-        { key: 'showMessage',   group: 'Bottom band', type: 'switch', label: 'Field: Message',     description: 'Free-text banner line (footer row)', defaultValue: true },
-        { key: 'showPhase',     group: 'Bottom band', type: 'switch', label: 'Field: Phase',       description: 'Competition phase (footer row; match, else global)', defaultValue: true },
-        { key: 'showRound',     group: 'Bottom band', type: 'switch', label: 'Field: Round',       description: 'Round name from the bound match (footer row)', defaultValue: true },
+        { key: 'showFooter',    group: 'Bottom band', type: 'switch', label: 'Footer Band',  description: 'Bottom row: Message / Event / Phase / Round', defaultValue: true },
+        { key: 'footerOffsetY', group: 'Bottom band', type: 'number-override', label: 'Bottom Offset', description: 'Nudge the footer band up from the bottom (baseline default y=1078)', defaultValue: 2, min: 0, max: 480, step: 1, suffix: 'px' },
+        { key: 'showMessage',   group: 'Bottom band', type: 'switch', label: 'Message',     description: 'Free-text banner line (footer row)', defaultValue: true },
+        { key: 'showPhase',     group: 'Bottom band', type: 'switch', label: 'Phase',       description: 'Competition phase (footer row; match, else global)', defaultValue: true },
+        { key: 'showRound',     group: 'Bottom band', type: 'switch', label: 'Round',       description: 'Round name from the bound match (footer row)', defaultValue: true },
 
         // Last, and that is the ranking: these are set once for an event, where
         // everything above is flipped during one.
-        { key: 'showEvent',     group: 'Both bands', type: 'switch', label: 'Field: Event Name', description: 'Competition name (both rows)', defaultValue: true },
+        { key: 'showEvent',     group: 'Both bands', type: 'switch', label: 'Event Name', description: 'Competition name (both rows)', defaultValue: true },
         { key: 'bgStyle',       group: 'Both bands', type: 'select', label: 'Band Background', description: 'Optional readability plate behind each row', options: [{ value: 'none', label: 'None (transparent)' }, { value: 'scrim', label: 'Soft Scrim' }, { value: 'bar', label: 'Solid Bar' }], defaultValue: 'none' },
         { key: 'bandWidth',     group: 'Both bands', type: 'number-override', label: 'Band Width', description: 'Centered content width for both rows', defaultValue: 1263, min: 600, max: 1920, step: 1, suffix: 'px' },
         { key: 'fontScale',     group: 'Both bands', type: 'number-override', label: 'Font Scale', description: 'Scales all text up or down', defaultValue: 100, min: 50, max: 200, step: 5, suffix: '%' },
