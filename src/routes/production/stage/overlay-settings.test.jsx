@@ -3,7 +3,7 @@ import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/re
 import { useSettingsStore } from '../../../context/store';
 import { useStagingStore } from '../../../context/staging';
 import { invalidateDesignPackages } from '../../layouts/designPackage';
-import { ElementStyleSettings, RENDERABLE } from './overlay-settings';
+import { ElementStyleSettings, RENDERABLE, groupDefs } from './overlay-settings';
 
 // The package list the session cache fetches. Same shape the server reports.
 const packages = (list) => {
@@ -61,6 +61,35 @@ describe('ElementStyleSettings — every setting type is stage-renderable (phase
     it('renders nothing for an element with no settings', () => {
         const { container } = render(<ElementStyleSettings type="matchuphistory" label="Matchup" />);
         expect(container).toBeEmptyDOMElement();
+    });
+});
+
+describe('groupDefs', () => {
+    const def = (key, group) => ({ key, group });
+
+    it('orders groups by first appearance, not alphabetically or by size', () => {
+        expect(groupDefs([def('a', 'Z'), def('b', 'A'), def('c', 'Z')])).toEqual([
+            { group: 'Z', defs: [def('a', 'Z'), def('c', 'Z')] },
+            { group: 'A', defs: [def('b', 'A')] },
+        ]);
+    });
+
+    /*
+     * A def can be filtered out between the registry and here (a body's
+     * `exclude`, an app-palette gate), which splits a group's run. Collecting by
+     * name rather than by consecutive run means the survivors still render as
+     * one region instead of as two identically-titled ones.
+     */
+    it('rejoins a group whose run was broken by a filtered-out def', () => {
+        const [first, ...rest] = groupDefs([def('a', 'X'), def('b', 'Y'), def('c', 'X')]);
+        expect(first.defs.map(d => d.key)).toEqual(['a', 'c']);
+        expect(rest).toHaveLength(1);
+    });
+
+    it('keeps ungrouped defs in one run, so untouched types render flat', () => {
+        expect(groupDefs([def('a'), def('b')])).toEqual([
+            { group: null, defs: [def('a'), def('b')] },
+        ]);
     });
 });
 

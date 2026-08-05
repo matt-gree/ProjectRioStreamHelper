@@ -249,6 +249,17 @@ position, not an identity).
   section, so nothing is stranded on a tab and nothing doubles up. Per-board
   layouts (Scorecard, Scoreboard) write `overlays.{type}.{N}.{key}`; the Style
   section takes the board from the element's `scope`.
+- **A settings panel is a scale model of the element it configures.** A def may
+  carry a `group` in `LAYOUT_SETTINGS`, and a group is a **visible region of the
+  overlay** — "Top band", never "Switches" or "Geometry". `OverlaySettingGroups`
+  renders them in the order they first appear in the registry array, which is the
+  order they appear on screen; `groupDefs` collects by name rather than by
+  consecutive run, so a filtered-out def can't split one region into two. The
+  Event Header is the reference (14 settings, three regions, no Style section
+  left). Ranking is by ORDER — the set-once group sits last — and groups are
+  **always open, never accordions**, same rule as the Lower Third's five columns.
+  `OverlaySettingRows` stays flat on purpose: it also builds rail quick faces,
+  where a group eyebrow would blow the two-row cap.
 - **A setting the active design package can't honour is not shown.** A def marked
   `appPalette: true` in `LAYOUT_SETTINGS` reaches its overlay through the app's
   CSS palette, which a **full-art** theme's mount *clears* rather than honours

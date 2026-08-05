@@ -57,14 +57,35 @@ describe('Event Header stage', () => {
         }
     });
 
-    it('surfaces the geometry knobs in the Style section (phase 7)', () => {
+    it('surfaces the geometry knobs too — nothing is stranded on the Setup tab', () => {
         ui();
-        // Number + text settings that used to have no kit row now render below
-        // the live band/field switches, so nothing is stranded on the Setup tab.
         for (const key of ['headerOffsetY', 'footerOffsetY', 'bandWidth', 'fontScale', 'separator']) {
             const def = LAYOUT_SETTINGS.eventheader.find(d => d.key === key);
             expect(screen.getByText(def.label), key).toBeInTheDocument();
         }
+    });
+
+    /*
+     * The panel is laid out as the overlay is — top strip, bottom strip, then
+     * what applies to both — so a control sits with the thing it changes. The
+     * failure this replaces: sorted by control KIND, a band's offset rendered in
+     * a "Style" section five rows below the switch that turns that band on.
+     */
+    it('groups every setting under the band it changes, in on-screen order', () => {
+        ui();
+        const groups = [...document.querySelectorAll('[data-setting-group]')]
+            .map(e => e.dataset.settingGroup);
+        expect(groups).toEqual(['Top band', 'Bottom band', 'Both bands']);
+        // No leftovers: the body covers all fourteen, so the catch-all is empty.
+        expect(screen.queryByText('Style')).not.toBeInTheDocument();
+    });
+
+    it('keeps a band’s offset in the same group as its switch', () => {
+        ui();
+        const top = document.querySelector('[data-setting-group="Top band"]');
+        expect(top).toHaveTextContent('Show Header');
+        expect(top).toHaveTextContent('Header Top Offset');
+        expect(top).not.toHaveTextContent('Footer Bottom Offset');
     });
 
     it('writes a geometry number to the shared namespace via the Style section', () => {

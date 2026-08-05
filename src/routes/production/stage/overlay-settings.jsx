@@ -129,10 +129,71 @@ export const OverlaySettingRow = memo(function OverlaySettingRow({ os, def }) {
     );
 });
 
-// Convenience: a run of rows from a key list.
+// Convenience: a run of rows from a key list. Always flat — a body asking for
+// named keys has already decided their order, and the rail's quick face is built
+// from this too, where a group eyebrow would blow the two-row cap.
 export const OverlaySettingRows = memo(function OverlaySettingRows({ os, type, keys }) {
     const defs = useLiveDefs(type, defsFor(type, keys));
     return defs.map(def => <OverlaySettingRow key={def.key} os={os} def={def} />);
+});
+
+/*
+ * Defs split by the REGION of the overlay they change, in the order those
+ * regions first appear in the registry — which is the order they appear on
+ * screen, top to bottom.
+ *
+ * A group is a VISIBLE PART OF THE ELEMENT, never a kind of control: "Top band",
+ * not "Switches" or "Geometry". Sorted by kind, an event header's band offset
+ * ended up five rows from the switch that turns that band on, and a producer
+ * whose top strip sits too high had to know which of three sections to look in.
+ * Grouped by region there is one place to look, and the panel reads as a scale
+ * model of the thing it configures — the same rule the Lower Third stage's five
+ * always-open columns already follow.
+ *
+ * First appearance rather than a sort, so the registry array stays the single
+ * statement of order; and a def with no `group` keeps its place in an ungrouped
+ * run, so adding groups to one type never disturbs another.
+ */
+export function groupDefs(defs) {
+    const order = [];
+    const byGroup = new Map();
+    for (const def of defs) {
+        const group = def.group ?? null;
+        if (!byGroup.has(group)) { byGroup.set(group, []); order.push(group); }
+        byGroup.get(group).push(def);
+    }
+    return order.map(group => ({ group, defs: byGroup.get(group) }));
+}
+
+// Always open, never an accordion: the stage is wide, and a producer mid-
+// broadcast should not have to remember which collapsed section holds the
+// control they need. Ranking is done by ORDER — the set-once group sits last.
+export const SettingGroups = memo(function SettingGroups({ os, defs }) {
+    const groups = groupDefs(defs);
+    if (groups.length === 1 && groups[0].group == null) {
+        return groups[0].defs.map(def => <OverlaySettingRow key={def.key} os={os} def={def} />);
+    }
+    return (
+        <div className="flex flex-col gap-3">
+            {groups.map(({ group, defs: rows }) => (
+                <div key={group ?? '_'} data-setting-group={group ?? ''} className="flex flex-col gap-1.5">
+                    {group && (
+                        <Text size="xs" className="label-display text-muted-foreground">{group}</Text>
+                    )}
+                    {rows.map(def => <OverlaySettingRow key={def.key} os={os} def={def} />)}
+                </div>
+            ))}
+        </div>
+    );
+});
+
+// Every renderable setting for a type, grouped by region. `keys` narrows the set
+// (and its order is ignored — the registry's is what the groups follow).
+export const OverlaySettingGroups = memo(function OverlaySettingGroups({ os, type, keys }) {
+    const defs = useLiveDefs(type, (LAYOUT_SETTINGS[type] ?? []).filter(
+        def => RENDERABLE.has(def.type) && (!keys || keys.includes(def.key)),
+    ));
+    return <SettingGroups os={os} defs={defs} />;
 });
 
 /*
@@ -156,7 +217,7 @@ export const ElementStyleSettings = memo(function ElementStyleSettings({ type, b
     return (
         <div className="mt-1 flex flex-col gap-1.5 border-t border-border/60 pt-2">
             <Text size="xs" className="label-display text-muted-foreground">Style</Text>
-            {defs.map(def => <OverlaySettingRow key={def.key} os={os} def={def} />)}
+            <SettingGroups os={os} defs={defs} />
         </div>
     );
 });

@@ -2,27 +2,30 @@ import { memo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useStateStore } from '../../../context/store';
 import { Text } from '../../../components/ui/primitives';
+import { LAYOUT_SETTINGS } from '../../layouts/designConstants';
 import { DirectStage } from './generic';
-import { OverlaySettingRows, useOverlaySettings } from './overlay-settings';
+import { OverlaySettingGroups, OverlaySettingRows, useOverlaySettings } from './overlay-settings';
 
 /*
  * Event Header stage — the two persistent bands (top: competition · location ·
  * dates; bottom: message · event · phase · round).
  *
- * Both bands and each field inside them are switches the producer flips live,
- * so the body leads with them. The geometry knobs (offsets, band width, font
- * scale, separator) are set once per event, not flipped live — they render in
- * the stage's catch-all Style section below (ElementStyleSettings), so they're
- * reachable on the console but sit apart from the live switches.
+ * The panel is laid out as the OVERLAY is: top band, bottom band, then what
+ * applies to both. Every one of its fourteen settings renders here, grouped by
+ * the strip it changes (`group` in LAYOUT_SETTINGS.eventheader), so nothing
+ * falls through to the stage's catch-all Style section.
+ *
+ * It used to be three sections sorted by control kind — bands, then fields, then
+ * the numbers in Style — which put a band's own offset five rows below the
+ * switch that turns that band on, and split the six field switches away from the
+ * strip each one appears in. Both are the same mistake: grouping by what a
+ * control IS rather than by what it CHANGES.
  *
  * A field also drops out automatically when its source text is blank, which is
- * invisible from a switch alone — so the field rows carry the live value as
- * their meta, and a blank one says so.
+ * invisible from a switch alone — the note at the foot says which.
  */
 
 const BAND_KEYS = ['showHeader', 'showFooter'];
-const BG_KEY = 'bgStyle';
-const FIELD_KEYS = ['showEvent', 'showLocation', 'showDates', 'showMessage', 'showPhase', 'showRound'];
 // Fields fed purely from tournamentInfo, so "on but blank" is knowable here.
 // Phase and Round are deliberately absent: both fall back to the bound match,
 // which this panel can't resolve without knowing the board.
@@ -51,14 +54,8 @@ export default function EventHeaderStage({ element }) {
         <>
             <DirectStage element={element} />
 
-            <div className="mt-1 flex flex-col gap-1.5 border-t border-border/60 pt-2">
-                <EventHeaderBandRows os={os} />
-                <OverlaySettingRows os={os} type="eventheader" keys={[BG_KEY]} />
-            </div>
-
-            <div className="mt-1 flex flex-col gap-1.5 border-t border-border/60 pt-2">
-                <Text size="xs" className="label-display text-muted-foreground">Fields</Text>
-                <OverlaySettingRows os={os} type="eventheader" keys={FIELD_KEYS} />
+            <div className="mt-1 border-t border-border/60 pt-2">
+                <OverlaySettingGroups os={os} type="eventheader" />
             </div>
 
             {empties.length > 0 && (
@@ -72,8 +69,7 @@ export default function EventHeaderStage({ element }) {
     );
 }
 
-// The switches this body already shows as headline live controls — excluded
-// from the stage's Style section so they don't render twice. The geometry knobs
-// (offsets, band width, font scale, separator) are left OUT of this list, so
-// they fall through to Style.
-EventHeaderStage.surfacedKeys = [...BAND_KEYS, BG_KEY, ...FIELD_KEYS];
+// Everything, so the Style section renders nothing. A catch-all is for settings
+// a body chose not to lead with; this body's grouping IS the whole panel, and a
+// "Style" heading under it would be a fourth region the overlay does not have.
+EventHeaderStage.surfacedKeys = LAYOUT_SETTINGS.eventheader.map(d => d.key);

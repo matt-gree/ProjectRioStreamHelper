@@ -109,24 +109,31 @@ export const LAYOUT_SETTINGS = {
         { key: 'showBoxScore', type: 'switch', label: 'Box Score',      description: 'Per-inning linescore (element 5)', defaultValue: true },
         { key: 'showStadium',  type: 'switch', label: 'Stadium',        description: 'Stadium bar (element 6)', defaultValue: true },
     ],
+    // The event header is two single-row strips (baselines y=45 top, y=1078
+    // bottom), and its settings are ORDERED AND GROUPED BY WHICH STRIP THEY
+    // CHANGE — the panel is a scale model of the overlay, top band first. Sorted
+    // by control kind instead (all the switches, then all the numbers), the
+    // band's own offset sat five rows away from the switch that turns it on.
     eventheader: [
-        // Bands — two single-row strips (baseline at y=45 top, y=1078 bottom).
-        { key: 'showHeader',    type: 'switch', label: 'Show Header',  description: 'Top row: Event / Location / Dates', defaultValue: true },
-        { key: 'headerOffsetY', type: 'number-override', label: 'Header Top Offset', description: 'Nudge the header band down from the top (baseline default y=45)', defaultValue: 0, min: 0, max: 480, step: 1, suffix: 'px' },
-        { key: 'showFooter',    type: 'switch', label: 'Show Footer',  description: 'Bottom row: Message / Event / Phase / Round', defaultValue: true },
-        { key: 'footerOffsetY', type: 'number-override', label: 'Footer Bottom Offset', description: 'Nudge the footer band up from the bottom (baseline default y=1078)', defaultValue: 2, min: 0, max: 480, step: 1, suffix: 'px' },
+        { key: 'showHeader',    group: 'Top band', type: 'switch', label: 'Show Header',  description: 'Top row: Event / Location / Dates', defaultValue: true },
+        { key: 'headerOffsetY', group: 'Top band', type: 'number-override', label: 'Header Top Offset', description: 'Nudge the header band down from the top (baseline default y=45)', defaultValue: 0, min: 0, max: 480, step: 1, suffix: 'px' },
         // Per-field visibility (a field also drops out automatically when blank)
-        { key: 'showEvent',     type: 'switch', label: 'Field: Event Name', description: 'Competition name (both rows)', defaultValue: true },
-        { key: 'showLocation',  type: 'switch', label: 'Field: Location',    description: 'Header row only', defaultValue: true },
-        { key: 'showDates',     type: 'switch', label: 'Field: Dates',       description: 'Header row only', defaultValue: true },
-        { key: 'showMessage',   type: 'switch', label: 'Field: Message',     description: 'Free-text banner line (footer row)', defaultValue: true },
-        { key: 'showPhase',     type: 'switch', label: 'Field: Phase',       description: 'Competition phase (footer row; match, else global)', defaultValue: true },
-        { key: 'showRound',     type: 'switch', label: 'Field: Round',       description: 'Round name from the bound match (footer row)', defaultValue: true },
-        // Look & layout
-        { key: 'bandWidth',     type: 'number-override', label: 'Band Width', description: 'Centered content width for both rows', defaultValue: 1263, min: 600, max: 1920, step: 1, suffix: 'px' },
-        { key: 'fontScale',     type: 'number-override', label: 'Font Scale', description: 'Scales all text up or down', defaultValue: 100, min: 50, max: 200, step: 5, suffix: '%' },
-        { key: 'bgStyle',       type: 'select', label: 'Band Background', description: 'Optional readability plate behind each row', options: [{ value: 'none', label: 'None (transparent)' }, { value: 'scrim', label: 'Soft Scrim' }, { value: 'bar', label: 'Solid Bar' }], defaultValue: 'none' },
-        { key: 'separator',     type: 'text',   label: 'Field Separator', description: 'Character drawn between fields in a row', placeholder: '◆' },
+        { key: 'showLocation',  group: 'Top band', type: 'switch', label: 'Field: Location',    description: 'Header row only', defaultValue: true },
+        { key: 'showDates',     group: 'Top band', type: 'switch', label: 'Field: Dates',       description: 'Header row only', defaultValue: true },
+
+        { key: 'showFooter',    group: 'Bottom band', type: 'switch', label: 'Show Footer',  description: 'Bottom row: Message / Event / Phase / Round', defaultValue: true },
+        { key: 'footerOffsetY', group: 'Bottom band', type: 'number-override', label: 'Footer Bottom Offset', description: 'Nudge the footer band up from the bottom (baseline default y=1078)', defaultValue: 2, min: 0, max: 480, step: 1, suffix: 'px' },
+        { key: 'showMessage',   group: 'Bottom band', type: 'switch', label: 'Field: Message',     description: 'Free-text banner line (footer row)', defaultValue: true },
+        { key: 'showPhase',     group: 'Bottom band', type: 'switch', label: 'Field: Phase',       description: 'Competition phase (footer row; match, else global)', defaultValue: true },
+        { key: 'showRound',     group: 'Bottom band', type: 'switch', label: 'Field: Round',       description: 'Round name from the bound match (footer row)', defaultValue: true },
+
+        // Last, and that is the ranking: these are set once for an event, where
+        // everything above is flipped during one.
+        { key: 'showEvent',     group: 'Both bands', type: 'switch', label: 'Field: Event Name', description: 'Competition name (both rows)', defaultValue: true },
+        { key: 'bgStyle',       group: 'Both bands', type: 'select', label: 'Band Background', description: 'Optional readability plate behind each row', options: [{ value: 'none', label: 'None (transparent)' }, { value: 'scrim', label: 'Soft Scrim' }, { value: 'bar', label: 'Solid Bar' }], defaultValue: 'none' },
+        { key: 'bandWidth',     group: 'Both bands', type: 'number-override', label: 'Band Width', description: 'Centered content width for both rows', defaultValue: 1263, min: 600, max: 1920, step: 1, suffix: 'px' },
+        { key: 'fontScale',     group: 'Both bands', type: 'number-override', label: 'Font Scale', description: 'Scales all text up or down', defaultValue: 100, min: 50, max: 200, step: 5, suffix: '%' },
+        { key: 'separator',     group: 'Both bands', type: 'text',   label: 'Field Separator', description: 'Character drawn between fields in a row', placeholder: '◆' },
     ],
 };
 
