@@ -49,6 +49,56 @@ def test_deep_merge_does_not_mutate_defaults():
     assert defaults == {"a": {"b": 1}}
 
 
+# --- _USER_OWNED_MAPS: the exemption, at the helper ---
+#
+# What the exemption means for the producer-built collections is pinned against
+# a real settings file in test_settings_containers.py. These pin the MECHANISM:
+# it keys off the dotted path, so it is a property of where a map sits rather
+# than of the key's name or its contents.
+
+@pytest.fixture
+def exempt_path(monkeypatch):
+    monkeypatch.setattr(server.settings, "_USER_OWNED_MAPS",
+                        frozenset({"production.container_defs"}))
+
+
+def test_deep_merge_replaces_a_user_owned_map_wholesale(exempt_path):
+    # The seeded entry is absent from loaded — a deletion, not an unset override.
+    out = _deep_merge(
+        {"production": {"container_defs": {"seeded": {"w": 1}, "other": {"w": 2}}}},
+        {"production": {"container_defs": {"other": {"w": 2}}}},
+    )
+    assert out["production"]["container_defs"] == {"other": {"w": 2}}
+
+
+def test_deep_merge_seeds_a_user_owned_map_that_is_absent(exempt_path):
+    # Absent is the only state meaning "never configured", so the seed lands.
+    out = _deep_merge(
+        {"production": {"container_defs": {"seeded": {"w": 1}}, "overrides": {}}},
+        {"production": {"overrides": {"stats": "Src"}}},
+    )
+    assert out["production"]["container_defs"] == {"seeded": {"w": 1}}
+
+
+def test_deep_merge_exemption_is_keyed_on_path_not_name(exempt_path):
+    # Same leaf name, different parent: merges like anything else.
+    out = _deep_merge(
+        {"elsewhere": {"container_defs": {"seeded": {"w": 1}}}},
+        {"elsewhere": {"container_defs": {"other": {"w": 2}}}},
+    )
+    assert out["elsewhere"]["container_defs"] == {"seeded": {"w": 1}, "other": {"w": 2}}
+
+
+def test_deep_merge_exemption_leaves_sibling_keys_merging(exempt_path):
+    out = _deep_merge(
+        {"production": {"container_defs": {"seeded": {}}, "spotlight": {"holdMs": 1500,
+                                                                        "enabled": False}}},
+        {"production": {"container_defs": {}, "spotlight": {"enabled": True}}},
+    )
+    assert out["production"]["container_defs"] == {}
+    assert out["production"]["spotlight"] == {"holdMs": 1500, "enabled": True}
+
+
 # --- redact_value ---
 
 def test_redact_value_secret_with_value(fake_secret):

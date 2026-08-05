@@ -136,3 +136,96 @@ async def test_legacy_per_element_membership_is_dropped(isolate_user_data):
     assert "containers" not in Settings.settings["production"]
     # …and the seed is intact, so nothing lost its home in the process.
     assert _defs()["stats-feed"]["members"] == ["stats"]
+
+
+# --- The seed is a seed, not a default ---------------------------------------
+#
+# `_deep_merge` exists so a new default KNOB reaches an existing user without
+# migration code, which means every default key is a value the app supplies and
+# the file may override. Applied to a producer-built COLLECTION that is exactly
+# backwards: a deletion is not an absent override to be filled in, it is the
+# edit. These pin the exemption (`_USER_OWNED_MAPS`) that makes the two maps
+# below authoritative once they exist on disk.
+
+
+async def test_deleting_a_seeded_container_survives_a_restart(isolate_user_data):
+    """The console writes the whole map back; the map it wrote is what loads.
+
+    `useContainerActions` removes an entry and PUTs the remaining map, so a
+    deleted container is represented by its ABSENCE from a key that exists.
+    Merging the seed under that reads the absence as "never configured" and
+    hands the container back on the next launch — with no way for the producer
+    to make it stick, since the app rewrites the file they would hand-edit.
+    """
+    kept = {k: v for k, v in Settings.settings["production"]["container_defs"].items()
+            if k != "split-screen"}
+    _write_settings(isolate_user_data, {"production": {"container_defs": kept}})
+    await Settings.Load()
+    assert set(_defs()) == SEEDED - {"split-screen"}
+
+
+async def test_deleting_a_seeded_automation_rule_survives_a_restart(isolate_user_data):
+    """Deleting a rule and suspending one are both durable dispositions.
+
+    `enabled: False` always survived — it is a per-key value the merge keeps.
+    Deletion did not, which made the switch on the stage panel the only disposal
+    that held, and the difference was an artifact of the merge rather than a
+    decision anyone made.
+    """
+    _write_settings(isolate_user_data, {
+        "production": {"automations": {}},
+    })
+    await Settings.Load()
+    assert Settings.settings["production"]["automations"] == {}
+
+
+async def test_an_edited_container_is_not_backfilled_from_the_seed(isolate_user_data):
+    """Replace, not merge, per ENTRY as well as per map.
+
+    A producer who renames a container and trims its roster has expressed both;
+    a per-entry merge would keep the rename (a key they wrote) while restoring
+    the member they removed (a key they didn't), which is the same resurrection
+    one level down and harder to spot because the container is still there.
+    """
+    _write_settings(isolate_user_data, {"production": {"container_defs": {
+        "roster-stats-1": {
+            "name": "Left Card", "width": 452, "height": 240,
+            "members": ["statscard"],
+        },
+    }}})
+    await Settings.Load()
+    defs = _defs()
+    assert set(defs) == {"roster-stats-1"}
+    d = defs["roster-stats-1"]
+    assert d["name"] == "Left Card"
+    assert d["members"] == ["statscard"]
+    # `resting` and `scope` were on the seeded def and are gone from theirs.
+    assert "resting" not in d
+    assert "scope" not in d
+
+
+async def test_the_exemption_does_not_leak_to_the_rest_of_production(
+    isolate_user_data,
+):
+    """Only the two collections are exempt; every other knob still merges.
+
+    The merge is load-bearing for defaults that ARE defaults — a new field on
+    `spotlight` or `confirm` has to reach a user who has the section already,
+    and that is the behavior the exemption is carved out of, not replaced.
+    """
+    _write_settings(isolate_user_data, {
+        "production": {
+            "container_defs": {},
+            "spotlight": {"enabled": True},
+            "confirm": {"hotkey": "F12"},
+        },
+    })
+    await Settings.Load()
+    production = Settings.settings["production"]
+    assert production["container_defs"] == {}
+    # Their value where they set one…
+    assert production["spotlight"]["enabled"] is True
+    assert production["confirm"]["hotkey"] == "F12"
+    # …the default everywhere they didn't.
+    assert production["spotlight"]["holdMs"] == 1500
+    assert production["confirm"]["enabled"] is False

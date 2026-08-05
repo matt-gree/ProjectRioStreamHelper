@@ -86,18 +86,56 @@ def redact_settings(settings_dict: dict) -> dict:
     return out
 
 
-def _deep_merge(defaults: dict, loaded: dict) -> dict:
+# Settings subtrees the PRODUCER owns outright, exempt from the defaults merge.
+#
+# The merge below exists so a new default KNOB reaches an existing user without
+# migration code — it treats every default key as a value the app supplies and
+# the file may override. That is exactly wrong for a producer-built COLLECTION,
+# where the defaults are a one-time SEED and deleting an entry is a real edit:
+# merging the seed back over the file resurrects every deleted container and
+# rule on the next launch, and the producer has no way to make a deletion stick
+# short of hand-editing a file the app then overwrites.
+#
+# So for these paths the stored map is authoritative the moment it exists: the
+# seed lands only when the key is ABSENT (fresh install, or an upgrade from
+# before the key existed), and after that the file is the whole truth — no
+# resurrection, and no per-entry back-fill of a def the producer has edited.
+#
+# The cost is that a NEW seeded entry can never reach an existing user
+# implicitly — it lands on fresh installs, or in an explicit one-time migration
+# in Load() alongside the others there, which can seed a single id without
+# touching anything the producer built. Cheap either way while 2.0.0 is
+# unreleased, and the right trade regardless for content that sits in a live
+# show: a producer who deleted a container did so on purpose.
+#
+# Only maps with a non-empty seed are listed. `production.overrides`,
+# `scoreboards.aliases` and friends are producer-owned in the same sense, but
+# their default is `{}` — merging nothing under a loaded map is a no-op, so
+# listing them would assert intent without changing behavior.
+_USER_OWNED_MAPS = frozenset({
+    "production.container_defs",
+    "production.automations",
+})
+
+
+def _deep_merge(defaults: dict, loaded: dict, path: str = "") -> dict:
     """Merge loaded settings on top of defaults.
 
     Loaded values take precedence, but any keys present in defaults
     that are missing from loaded are preserved. This ensures new
     default keys are automatically available after upgrades without
     needing explicit migration code.
+
+    Exception: a path in `_USER_OWNED_MAPS` is replaced wholesale rather than
+    merged, so a producer's deletion survives a restart. See that constant.
     """
     result = dict(defaults)
     for key, value in loaded.items():
-        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-            result[key] = _deep_merge(result[key], value)
+        dotted = f"{path}.{key}" if path else key
+        if dotted in _USER_OWNED_MAPS and isinstance(value, dict):
+            result[key] = value
+        elif key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            result[key] = _deep_merge(result[key], value, dotted)
         else:
             result[key] = value
     return result
@@ -202,6 +240,14 @@ class Settings:
             #              feeds, which is what makes a mirrored pair of
             #              containers flash the batter on one and the pitcher on
             #              the other.
+            #
+            # SEEDED, NOT DEFAULTED. This map is in `_USER_OWNED_MAPS`, so it
+            # is written once into a settings file that lacks the key and is
+            # never merged over again: a container the producer deletes stays
+            # deleted, and one they edit keeps their fields rather than having
+            # the seed's grafted back. Adding an entry here therefore reaches
+            # new installs only; a settings file that already has this key needs
+            # a one-time migration in Load() to pick it up.
             #
             # These three are seeded so a fresh install has the containers the
             # app already shipped with. Both non-full-canvas ones were sized
@@ -458,6 +504,7 @@ class Settings:
         if "containers" in production:
             production.pop("containers", None)
             await cls.Save()
+
 
         # One-time binding migration: unify the per-scoreboard source-type enum
         # (manual | hud | live_game) + orthogonal rotation feed into a single
