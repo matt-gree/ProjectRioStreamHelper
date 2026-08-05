@@ -283,7 +283,22 @@ export const useObsStore = create((set) => ({
         return changed;
     },
 
-    connect: async () => {
+    /*
+     * `background: true` marks an attempt nobody asked for — the reconnect
+     * timer's. Those must be SILENT: they don't publish 'connecting' and they
+     * don't rewrite an unchanged error.
+     *
+     * The status is not cosmetic. 'connecting' is not offline (see
+     * useConsoleOffline), so publishing it tears the rack's catalog tier down
+     * and rebuilds it when the attempt fails — and a refused ws:// handshake
+     * takes about a second, so with OBS closed the whole console blanked for a
+     * beat every 30s (the backoff cap). A retry the producer didn't ask for
+     * should be invisible until it changes something.
+     *
+     * A connect the producer DID ask for (Connect/Retry, a settings change)
+     * still shows 'connecting' — there the flicker is the feedback.
+     */
+    connect: async ({ background = false } = {}) => {
         const s = useSettingsStore.getState();
         const host = s?.obs?.host || '127.0.0.1';
         const port = s?.obs?.port || 4455;
@@ -298,7 +313,7 @@ export const useObsStore = create((set) => ({
         const client = new OBSWebSocket();
         obs = client;
         wireEvents(client, myGen);
-        set({ status: 'connecting', error: null });
+        if (!background) set({ status: 'connecting', error: null });
 
         try {
             const { obsWebSocketVersion } = await client.connect(
@@ -311,7 +326,13 @@ export const useObsStore = create((set) => ({
             await refreshAll(myGen);
         } catch (e) {
             if (myGen !== generation) return;
-            set({ status: 'error', error: friendlyError(e) });
+            const error = friendlyError(e);
+            // Same failure as last time on a background retry — writing it
+            // again would only churn subscribers.
+            const prev = useObsStore.getState();
+            if (!background || prev.status !== 'error' || prev.error !== error) {
+                set({ status: 'error', error });
+            }
             scheduleReconnect();
         }
     },
@@ -542,7 +563,7 @@ function scheduleReconnect() {
     const delay = Math.min(1000 * 2 ** Math.min(reconnectAttempts, 5), 30000);
     reconnectTimer = setTimeout(() => {
         reconnectTimer = null;
-        useObsStore.getState().connect();
+        useObsStore.getState().connect({ background: true });
     }, delay);
 }
 

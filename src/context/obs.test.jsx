@@ -533,6 +533,54 @@ describe('events + reconnect', () => {
         expect(h.instances.length).toBe(before);
     });
 
+    /*
+     * The console blanked every 30s with OBS closed: each backoff retry
+     * published 'connecting', which useConsoleOffline does not count as
+     * offline, so the rack's catalog tier was torn down and rebuilt around a
+     * refused handshake that takes about a second. A retry nobody asked for
+     * must not touch the status until it changes something.
+     */
+    it('a background reconnect stays silent while it retries', async () => {
+        h.nextConnectImpl = async () => { throw new Error('refused'); };
+        vi.useFakeTimers();
+        await useObsStore.getState().connect();
+        expect(useObsStore.getState().status).toBe('error');
+
+        const seen = [];
+        const unsub = useObsStore.subscribe(s => seen.push(s.status));
+
+        // Hold the retry's handshake open, so a 'connecting' publish would be
+        // plainly observable rather than a race we might miss.
+        let release;
+        const gate = new Promise(r => { release = r; });
+        h.nextConnectImpl = async () => { await gate; throw new Error('refused'); };
+
+        await vi.advanceTimersByTimeAsync(2100);   // first backoff step is 2s
+        expect(useObsStore.getState().status).toBe('error');   // mid-handshake
+
+        release();
+        await vi.advanceTimersByTimeAsync(0);
+        unsub();
+
+        expect(seen).not.toContain('connecting');
+        // Same failure as before, so the identical error isn't republished either.
+        expect(seen).toEqual([]);
+        expect(useObsStore.getState().status).toBe('error');
+    });
+
+    it('a producer-initiated connect still shows "connecting"', async () => {
+        let release;
+        const gate = new Promise(r => { release = r; });
+        h.nextConnectImpl = async () => { await gate; throw new Error('refused'); };
+        useSettingsStore.setState({ obs: { auto_connect: false } });   // no retry loop
+
+        const pending = useObsStore.getState().connect();
+        expect(useObsStore.getState().status).toBe('connecting');
+        release();
+        await pending;
+        expect(useObsStore.getState().status).toBe('error');
+    });
+
     it('a superseded connection cannot clobber the store (generation guard)', async () => {
         let release;
         const gate = new Promise(r => { release = r; });

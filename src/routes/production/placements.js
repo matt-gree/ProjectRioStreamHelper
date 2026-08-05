@@ -85,7 +85,7 @@ const FED_ELEMENTS = ELEMENTS.filter(el => el.flavor === 'fed');
 
 /*
  * A PRSH source the element registry doesn't know — a roster, a team logo, a
- * fourcam frame. Setup has always been able to add these and Production has
+ * player name. Setup has always been able to add these and Production has
  * always been blind to them; now that the Add picker offers the whole layout
  * catalog, being blind to them would mean adding something you then can't find.
  *
@@ -352,6 +352,11 @@ export function catalogPlacements({ defs = {}, boards = [1], feeds = {} } = {}) 
  * `connecting` deliberately does NOT count: scenes are empty then too, and
  * swapping the rack to the catalog for the third of a second before the mirror
  * lands would read as a glitch. The rack says "Connecting…" instead.
+ *
+ * That only holds because a BACKGROUND reconnect never publishes 'connecting'
+ * (see obs.jsx `connect`). When it did, the reconnect timer's 30s retry against
+ * a closed OBS flipped this false→true on every attempt, blanking the console
+ * for the second the refused handshake took.
  */
 export function useConsoleOffline() {
     const status = useObsStore(s => s.status);
