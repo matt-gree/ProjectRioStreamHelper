@@ -91,7 +91,7 @@ const MEMBERS = {
   // things that can be on screen, and these two are different pictures at
   // different sizes; a container holds whichever one its look calls for.
   statscard: {
-    size: [380, 220],
+    size: [380, 240],
     // Binds its side at MOUNT time (mountStatsCard closes over sb/team and
     // resolves the line itself), so it takes `sel` here and declares an
     // identity below — a scope change is a new layer, not an update.
@@ -205,6 +205,60 @@ async function fetchDef(id) {
   }
 }
 
+/*
+ * Make a container shell obey the same contract every other PRSH Layout does:
+ * lay out against your viewport.
+ *
+ * A container renders its members at their NATIVE size and centers them —
+ * deliberately, because scaling members relative to one another is what a
+ * roster must never do (see container-layers.js). On air that is exactly right:
+ * the OBS source is the container's own size, so native IS the viewport.
+ *
+ * A PREVIEW is the one place those two numbers differ on purpose. The console's
+ * preview panel renders the source into a much smaller iframe as a scale model
+ * (ScaledIframe), and a shell that ignores its viewport drew a 1920×1080 frame
+ * into a 480×270 box — the producer saw a crop of the middle, not the overlay.
+ *
+ * So in PREVIEW_MODE only, the whole host is scaled uniformly to fit, which is
+ * precisely what OBS itself does with an under-sized source: one transform over
+ * the entire container, every member keeping its authored geometry and its
+ * position relative to every other member. It is not a member scaling system
+ * and must not become one — the roster's "smaller members center, nothing ever
+ * scales" rule is untouched, because this scales the frame they all sit in.
+ *
+ * Left alone outside preview so nothing about the on-air path changes.
+ */
+function fitHostForPreview(host, container) {
+  if (!host || !OverlayBase.PREVIEW_MODE) return host;
+  const { width: cw, height: ch } = container;
+  if (!(cw > 0 && ch > 0)) return host;
+  /*
+   * The scale goes on an INSERTED wrapper, never on `#host` itself. Every shell
+   * styles #host `position: fixed`, and a transform on a fixed element makes it
+   * a containing block — in that state the whole subtree (these scenes are
+   * heavy on backdrop-filter) can fail to paint and the preview renders solid
+   * black. Verified: at native size the same page draws fine, scaled it went
+   * black. A plain absolutely-positioned child transforms without that hazard.
+   *
+   * The wrapper is the container's true size, so it is what createLayers and
+   * the member mounts' own PREVIEW_MODE autoScale measure — they see native and
+   * scale(1), and this one transform does all the fitting. One authority.
+   */
+  const fitBox = document.createElement('div');
+  fitBox.className = 'fc-fit';
+  fitBox.style.cssText = `position:absolute;left:0;top:0;width:${cw}px;height:${ch}px;transform-origin:top left;`;
+  host.appendChild(fitBox);
+  const fit = () => {
+    const s = Math.min(window.innerWidth / cw, window.innerHeight / ch) || 1;
+    const dx = Math.round((window.innerWidth - cw * s) / 2);
+    const dy = Math.round((window.innerHeight - ch * s) / 2);
+    fitBox.style.transform = `translate(${dx}px, ${dy}px) scale(${s})`;
+  };
+  fit();
+  window.addEventListener('resize', fit);
+  return fitBox;
+}
+
 export async function initFedContainer({
   host, perf = false, sample = null, forceElement = null, previewSel = null,
   containerId = null, scope = null,
@@ -236,7 +290,9 @@ export async function initFedContainer({
       height: document.body.clientHeight || window.innerHeight,
     };
 
-  const layers = createLayers({ host, registry: MEMBERS, container });
+  const layerHost = fitHostForPreview(host, container);
+
+  const layers = createLayers({ host: layerHost, registry: MEMBERS, container });
 
   // A definition-backed container resolves its own sample from its roster; the
   // legacy named shells still pass theirs in literally.
@@ -267,7 +323,7 @@ export async function initFedContainer({
     // tournamentInfo feeds the Game Summary's top match strip.
     shouldRender: (key) => key.startsWith(FEED_KEY) || /^score\.\d+\./.test(key)
       || /^postgame\.\d+\./.test(key) || key.startsWith('tournamentInfo.'),
-    shouldRenderSettings: (key) => key.startsWith('overlays.') || key.startsWith('scoreboards.sources.'),
+    shouldRenderSettings: (key) => key.startsWith('overlays.') || key === 'project_rio.hud_enabled',
   });
 
   // Auto-play when this OBS source/scene comes ON screen (scene cut or the

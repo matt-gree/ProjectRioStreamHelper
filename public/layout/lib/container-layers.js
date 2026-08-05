@@ -110,7 +110,14 @@ const CSS = `
   transition: opacity var(--fc-fade, ${DEFAULT_FADE_MS}ms) ease;
 }
 .fc-layer[data-active="1"] { opacity: 1; }
-.fc-box { position: relative; }
+/* "flex: none" is load-bearing, not tidying. The layer is a flex box, so a
+   sized .fc-box is a flex ITEM and inherits flex-shrink: 1 — in any viewport
+   narrower than the member, its declared width silently collapsed to the
+   viewport's while its height stayed native, and the member was drawn into a
+   squashed box that overflowed top and bottom. On air the source is the
+   container's own size so it never bit; a scaled-down preview is exactly the
+   case where the viewport IS narrower. */
+.fc-box { position: relative; flex: none; }
 .fc-box.fc-fill { position: absolute; inset: 0; }
 `;
 /*

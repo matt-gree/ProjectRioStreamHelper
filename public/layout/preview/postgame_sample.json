@@ -312,7 +312,7 @@
               "pitching": null
             }
           ],
-          "teamName": "",
+          "teamName": "Mario Fireballs",
           "totals": {
             "runs": 3,
             "hits": 14,
@@ -614,7 +614,7 @@
               }
             }
           ],
-          "teamName": "",
+          "teamName": "Birdo Beauties",
           "totals": {
             "runs": 4,
             "hits": 6,
@@ -650,14 +650,12 @@
       }
     },
     "score.1": {
-      "1": {
-        "player": {
-          "1": {
-            "port": 0
-          },
-          "2": {
-            "port": 1
-          }
+      "player": {
+        "1": {
+          "port": 0
+        },
+        "2": {
+          "port": 1
         }
       }
     }

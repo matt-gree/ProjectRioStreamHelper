@@ -120,7 +120,10 @@ export function createTheater({ stage }) {
       el.querySelector('.r').textContent = score;
       el.querySelector('.bx').textContent = bxLine(p?.totals);
       el.querySelector('.wtag').textContent = won ? 'Winner' : '';
-      el.classList.toggle('win', won);
+      // !! by house rule: an undefined force makes toggle flip rather than
+      // clear (overlay-class-toggle.test.js). `won` is a comparison today, but
+      // the safety has to be visible at the call site, not two lines up.
+      el.classList.toggle('win', !!won);
     }
     q('#cs-final-ctx').textContent = ctx.stadium || '';
   }
@@ -370,7 +373,7 @@ export function createTheater({ stage }) {
     const q = (s) => stage.querySelector(s);
     const meta = RESULT_META[ab.resultCode] || {};
 
-    // the previous chip's rainbow emphasis retires the moment the next
+    // the previous chip's live emphasis retires the moment the next
     // at-bat begins — only the current AB ever carries the live ring
     stage.querySelectorAll('.cs-abchip.live').forEach((el) => el.classList.remove('live'));
     // the inning transition card establishes the new at-bat FIRST — the bar

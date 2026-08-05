@@ -20,12 +20,170 @@
     COLOUR: CSS variables resolve in SVG ONLY through inline style="", never via
     presentation attributes. The accent var is overridden by the mount at
     runtime; the rest inherit from rio-theme/tokens.css.
+
+    ATMOSPHERE: this card already shared the lower third's bed (the band token
+    over a border hairline, an 18px radius, a brand glow behind it); what it
+    lacked was the weather. It now carries the same two-plane mushroom field,
+    back plane just inside the rim and near plane over the content, both clipped
+    to muBand. See the notes at each plane for what changed on the way across.
   -->
+
+  <!-- Motion for the mushroom field. Bob and sway are separate elements on
+       purpose: one shared period would read as a mechanical bounce, while two
+       co-prime-ish periods drift in and out of phase and read as floating.
+       will-change puts each sprite on its own compositor layer.
+       Class names are element-scoped (mu-) so two themed elements sharing a page
+       in the Production preview can't animate each other's marks. -->
+  <style>
+    .mu-mush      { animation: mu-mush-bob  var(--bob-dur)  ease-in-out var(--bob-delay)  infinite alternate; will-change: transform; }
+    .mu-mush-sway { animation: mu-mush-sway var(--sway-dur) ease-in-out var(--sway-delay) infinite alternate; will-change: transform; }
+    @keyframes mu-mush-bob  { from { transform: translateY(calc(var(--bob-amp)  * -0.5)); } to { transform: translateY(calc(var(--bob-amp)  * 0.5)); } }
+    @keyframes mu-mush-sway { from { transform: translateX(calc(var(--sway-amp) * -0.5)); } to { transform: translateX(calc(var(--sway-amp) * 0.5)); } }
+    /* NOTE: never write a raw angle bracket in here. The mount injects this file
+       with innerHTML, and inside SVG the style element is NOT raw text - the
+       parser tokenises tags in it, so one in a comment silently truncates every
+       rule below it. Pinned by tests/unit/test_design_package_svgs.py. */
+    @media (prefers-reduced-motion: reduce) {
+      .mu-mush, .mu-mush-sway { animation: none; will-change: auto; }
+    }
+  </style>
+
   <defs>
     <filter id="muGlow" x="-20%" y="-50%" width="140%" height="200%">
       <feGaussianBlur stdDeviation="22"/>
     </filter>
     <clipPath id="muBand"><rect x="48" y="632" width="1824" height="392" rx="18"/></clipPath>
+
+    <!-- .. THE PROJECT RIO MARK ..................................... -->
+    <!-- Verbatim pixel data from public/game_assets/ProjectRio.svg, inlined so
+         the package stays self-contained (the same call lowerthird.svg makes).
+         Used both as the no-logo brand cap above and as the field sprite below. -->
+    <symbol id="rio-mark" viewBox="0 0 16 16" shape-rendering="crispEdges">
+        <rect x="5" y="0" width="6" height="1" fill="#000000"/>
+        <rect x="3" y="1" width="2" height="1" fill="#000000"/>
+        <rect x="5" y="1" width="1" height="1" fill="#ff0000"/>
+        <rect x="6" y="1" width="1" height="1" fill="#ffffff"/>
+        <rect x="7" y="1" width="1" height="1" fill="#ff0000"/>
+        <rect x="8" y="1" width="2" height="1" fill="#ffffff"/>
+        <rect x="10" y="1" width="1" height="1" fill="#ff0000"/>
+        <rect x="11" y="1" width="2" height="1" fill="#000000"/>
+        <rect x="2" y="2" width="1" height="1" fill="#000000"/>
+        <rect x="3" y="2" width="2" height="1" fill="#ff0000"/>
+        <rect x="5" y="2" width="2" height="1" fill="#ffffff"/>
+        <rect x="7" y="2" width="1" height="1" fill="#ff0000"/>
+        <rect x="8" y="2" width="3" height="1" fill="#ffffff"/>
+        <rect x="11" y="2" width="2" height="1" fill="#ff0000"/>
+        <rect x="13" y="2" width="1" height="1" fill="#000000"/>
+        <rect x="1" y="3" width="1" height="1" fill="#000000"/>
+        <rect x="2" y="3" width="2" height="1" fill="#ff0000"/>
+        <rect x="4" y="3" width="4" height="1" fill="#ffffff"/>
+        <rect x="8" y="3" width="1" height="1" fill="#ff0000"/>
+        <rect x="9" y="3" width="3" height="1" fill="#ffffff"/>
+        <rect x="12" y="3" width="2" height="1" fill="#ff0000"/>
+        <rect x="14" y="3" width="1" height="1" fill="#000000"/>
+        <rect x="1" y="4" width="1" height="1" fill="#000000"/>
+        <rect x="2" y="4" width="4" height="1" fill="#ff0000"/>
+        <rect x="6" y="4" width="3" height="1" fill="#ffffff"/>
+        <rect x="9" y="4" width="1" height="1" fill="#ff0000"/>
+        <rect x="10" y="4" width="2" height="1" fill="#ffffff"/>
+        <rect x="12" y="4" width="2" height="1" fill="#ff0000"/>
+        <rect x="14" y="4" width="1" height="1" fill="#000000"/>
+        <rect x="0" y="5" width="1" height="1" fill="#000000"/>
+        <rect x="1" y="5" width="1" height="1" fill="#ffffff"/>
+        <rect x="2" y="5" width="2" height="1" fill="#ff0000"/>
+        <rect x="4" y="5" width="2" height="1" fill="#ffffff"/>
+        <rect x="6" y="5" width="1" height="1" fill="#ff0000"/>
+        <rect x="7" y="5" width="3" height="1" fill="#ffffff"/>
+        <rect x="10" y="5" width="4" height="1" fill="#ff0000"/>
+        <rect x="14" y="5" width="1" height="1" fill="#ffffff"/>
+        <rect x="15" y="5" width="1" height="1" fill="#000000"/>
+        <rect x="0" y="6" width="1" height="1" fill="#000000"/>
+        <rect x="1" y="6" width="2" height="1" fill="#ffffff"/>
+        <rect x="3" y="6" width="1" height="1" fill="#ff0000"/>
+        <rect x="4" y="6" width="3" height="1" fill="#ffffff"/>
+        <rect x="7" y="6" width="1" height="1" fill="#ff0000"/>
+        <rect x="8" y="6" width="4" height="1" fill="#ffffff"/>
+        <rect x="12" y="6" width="1" height="1" fill="#ff0000"/>
+        <rect x="13" y="6" width="2" height="1" fill="#ffffff"/>
+        <rect x="15" y="6" width="1" height="1" fill="#000000"/>
+        <rect x="0" y="7" width="1" height="1" fill="#000000"/>
+        <rect x="1" y="7" width="2" height="1" fill="#ffffff"/>
+        <rect x="3" y="7" width="2" height="1" fill="#ff0000"/>
+        <rect x="5" y="7" width="3" height="1" fill="#ffffff"/>
+        <rect x="8" y="7" width="1" height="1" fill="#ff0000"/>
+        <rect x="9" y="7" width="2" height="1" fill="#ffffff"/>
+        <rect x="11" y="7" width="2" height="1" fill="#ff0000"/>
+        <rect x="13" y="7" width="2" height="1" fill="#ffffff"/>
+        <rect x="15" y="7" width="1" height="1" fill="#000000"/>
+        <rect x="0" y="8" width="1" height="1" fill="#000000"/>
+        <rect x="1" y="8" width="2" height="1" fill="#ffffff"/>
+        <rect x="3" y="8" width="3" height="1" fill="#ff0000"/>
+        <rect x="6" y="8" width="2" height="1" fill="#ffffff"/>
+        <rect x="8" y="8" width="1" height="1" fill="#ff0000"/>
+        <rect x="9" y="8" width="1" height="1" fill="#ffffff"/>
+        <rect x="10" y="8" width="3" height="1" fill="#ff0000"/>
+        <rect x="13" y="8" width="2" height="1" fill="#ffffff"/>
+        <rect x="15" y="8" width="1" height="1" fill="#000000"/>
+        <rect x="0" y="9" width="1" height="1" fill="#000000"/>
+        <rect x="1" y="9" width="1" height="1" fill="#ffffff"/>
+        <rect x="2" y="9" width="4" height="1" fill="#ff0000"/>
+        <rect x="6" y="9" width="4" height="1" fill="#000000"/>
+        <rect x="10" y="9" width="4" height="1" fill="#ff0000"/>
+        <rect x="14" y="9" width="1" height="1" fill="#ffffff"/>
+        <rect x="15" y="9" width="1" height="1" fill="#000000"/>
+        <rect x="0" y="10" width="1" height="1" fill="#000000"/>
+        <rect x="1" y="10" width="3" height="1" fill="#ff0000"/>
+        <rect x="4" y="10" width="2" height="1" fill="#000000"/>
+        <rect x="6" y="10" width="4" height="1" fill="#ffffff"/>
+        <rect x="10" y="10" width="2" height="1" fill="#000000"/>
+        <rect x="12" y="10" width="3" height="1" fill="#ff0000"/>
+        <rect x="15" y="10" width="1" height="1" fill="#000000"/>
+        <rect x="1" y="11" width="1" height="1" fill="#000000"/>
+        <rect x="2" y="11" width="1" height="1" fill="#ff0000"/>
+        <rect x="3" y="11" width="1" height="1" fill="#000000"/>
+        <rect x="4" y="11" width="2" height="1" fill="#ffffff"/>
+        <rect x="6" y="11" width="1" height="1" fill="#000000"/>
+        <rect x="7" y="11" width="2" height="1" fill="#ffffff"/>
+        <rect x="9" y="11" width="1" height="1" fill="#000000"/>
+        <rect x="10" y="11" width="2" height="1" fill="#ffffff"/>
+        <rect x="12" y="11" width="1" height="1" fill="#000000"/>
+        <rect x="13" y="11" width="1" height="1" fill="#ff0000"/>
+        <rect x="14" y="11" width="1" height="1" fill="#000000"/>
+        <rect x="2" y="12" width="2" height="1" fill="#000000"/>
+        <rect x="4" y="12" width="2" height="1" fill="#ffffff"/>
+        <rect x="6" y="12" width="1" height="1" fill="#000000"/>
+        <rect x="7" y="12" width="2" height="1" fill="#ffffff"/>
+        <rect x="9" y="12" width="1" height="1" fill="#000000"/>
+        <rect x="10" y="12" width="2" height="1" fill="#ffffff"/>
+        <rect x="12" y="12" width="2" height="1" fill="#000000"/>
+        <rect x="3" y="13" width="1" height="1" fill="#000000"/>
+        <rect x="4" y="13" width="2" height="1" fill="#ffffff"/>
+        <rect x="6" y="13" width="1" height="1" fill="#000000"/>
+        <rect x="7" y="13" width="2" height="1" fill="#ffffff"/>
+        <rect x="9" y="13" width="1" height="1" fill="#000000"/>
+        <rect x="10" y="13" width="2" height="1" fill="#ffffff"/>
+        <rect x="12" y="13" width="1" height="1" fill="#000000"/>
+        <rect x="4" y="14" width="1" height="1" fill="#000000"/>
+        <rect x="5" y="14" width="6" height="1" fill="#ffffff"/>
+        <rect x="11" y="14" width="1" height="1" fill="#000000"/>
+        <rect x="5" y="15" width="6" height="1" fill="#000000"/>
+    </symbol>
+
+    <!-- Only the NEAR plane is masked. The back plane sits under everything at
+         0.11 and below, on a card 392 tall, which is a texture on a panel and
+         wants no help. The near plane crosses the win counts and the game cards,
+         so it is held back to a third of itself across the middle and left at
+         full strength on the top and bottom rims - where a mark entering or
+         leaving the card is the whole point of it being there. -->
+    <linearGradient id="mu-field-fade" x1="0" y1="632" x2="0" y2="1024" gradientUnits="userSpaceOnUse">
+      <stop offset="0"    stop-color="#ffffff" stop-opacity="1"/>
+      <stop offset="0.10" stop-color="#ffffff" stop-opacity="0.34"/>
+      <stop offset="0.90" stop-color="#ffffff" stop-opacity="0.34"/>
+      <stop offset="1"    stop-color="#ffffff" stop-opacity="1"/>
+    </linearGradient>
+    <mask id="mu-field-mask" maskUnits="userSpaceOnUse" x="0" y="632" width="1920" height="392">
+      <rect x="0" y="632" width="1920" height="392" fill="url(#mu-field-fade)"/>
+    </mask>
   </defs>
 
   <!-- soft brand glow behind the band -->
@@ -40,120 +198,55 @@
     <rect x="48" y="632" width="10" height="392" style="fill:var(--accent)"/>
     <rect x="48" y="632" width="1824" height="2" fill="#ffffff" opacity="0.05"/>
 
+    <!-- .. MUSHROOM FIELD, back plane .............................. -->
+    <!-- The lower third's field on the biggest card in the package. Same system,
+         same generator, same rules - SIZE IS A LADDER of whole 16px grid steps,
+         DEPTH IS ONE SYSTEM (brighter, further and quicker all move with size),
+         THE RIM IS A HORIZON. The reasoning is written out in
+         default/lowerthird.svg and not repeated here.
+
+         The ladder climbs rather than drops, because the card does: 48/64/80/96
+         behind, 112/128 in front, against the band's 32/96. What does NOT climb
+         is opacity - the ceiling falls to 0.11 from the band's 0.13. A lower
+         third is a name and a score on an empty strip; this card is two names,
+         two win counts and five game cards, and the denser the content the less
+         the atmosphere may take.
+
+         No mask on this plane: it is behind every other thing on the card, and
+         at these levels on a 392px panel it reads as the panel's own texture.
+         The near plane at the foot of this file is the one that needs holding
+         back. Both are inside the muBand clip, so a mark leaves behind the
+         card's rounded edge rather than at a straight line in mid-air. -->
+    <g transform="translate(29,825)"><g class="mu-mush" style="--bob-dur:8.19s;--bob-amp:64.63px;--bob-delay:-7.85s"><use class="mu-mush-sway" href="#rio-mark" width="96" height="96" opacity="0.11" style="--sway-dur:11.75s;--sway-amp:101.15px;--sway-delay:-9.15s"/></g></g>  <!-- 96, mid-card -->
+    <g transform="translate(119,996)"><g class="mu-mush" style="--bob-dur:17.54s;--bob-amp:26.87px;--bob-delay:-6.48s"><use class="mu-mush-sway" href="#rio-mark" width="48" height="48" opacity="0.05" style="--sway-dur:25.61s;--sway-amp:32.46px;--sway-delay:-8.36s"/></g></g>  <!-- 48, under the bottom rim -->
+    <g transform="translate(207,615)"><g class="mu-mush" style="--bob-dur:16.26s;--bob-amp:22.93px;--bob-delay:-5.49s"><use class="mu-mush-sway" href="#rio-mark" width="48" height="48" opacity="0.06" style="--sway-dur:25.71s;--sway-amp:37.84px;--sway-delay:-0.89s"/></g></g>  <!-- 48, over the top rim -->
+    <g transform="translate(351,570)"><g class="mu-mush" style="--bob-dur:10.57s;--bob-amp:61.51px;--bob-delay:-8.23s"><use class="mu-mush-sway" href="#rio-mark" width="80" height="80" opacity="0.09" style="--sway-dur:13.06s;--sway-amp:67.67px;--sway-delay:-2.96s"/></g></g>  <!-- 80, over the top rim, clears it -->
+    <g transform="translate(441,987)"><g class="mu-mush" style="--bob-dur:14.53s;--bob-amp:36.56px;--bob-delay:-8.72s"><use class="mu-mush-sway" href="#rio-mark" width="64" height="64" opacity="0.07" style="--sway-dur:18.44s;--sway-amp:57.48px;--sway-delay:-7.95s"/></g></g>  <!-- 64, under the bottom rim -->
+    <g transform="translate(562,576)"><g class="mu-mush" style="--bob-dur:12.75s;--bob-amp:35.67px;--bob-delay:-8.76s"><use class="mu-mush-sway" href="#rio-mark" width="64" height="64" opacity="0.08" style="--sway-dur:19.22s;--sway-amp:58.39px;--sway-delay:-1.57s"/></g></g>  <!-- 64, over the top rim, clears it -->
+    <g transform="translate(713,1007)"><g class="mu-mush" style="--bob-dur:8.18s;--bob-amp:67.98px;--bob-delay:-11.6s"><use class="mu-mush-sway" href="#rio-mark" width="96" height="96" opacity="0.11" style="--sway-dur:11.53s;--sway-amp:101.27px;--sway-delay:-9.8s"/></g></g>  <!-- 96, under the bottom rim, clears it -->
+    <g transform="translate(768,844)"><g class="mu-mush" style="--bob-dur:9.52s;--bob-amp:56.76px;--bob-delay:-9.41s"><use class="mu-mush-sway" href="#rio-mark" width="80" height="80" opacity="0.1" style="--sway-dur:15.03s;--sway-amp:71.47px;--sway-delay:-1.19s"/></g></g>  <!-- 80, mid-card -->
+    <g transform="translate(871,969)"><g class="mu-mush" style="--bob-dur:11.54s;--bob-amp:53.71px;--bob-delay:-6.16s"><use class="mu-mush-sway" href="#rio-mark" width="80" height="80" opacity="0.09" style="--sway-dur:14.7s;--sway-amp:71.01px;--sway-delay:-3.93s"/></g></g>  <!-- 80, under the bottom rim -->
+    <g transform="translate(1007,610)"><g class="mu-mush" style="--bob-dur:15.47s;--bob-amp:25.93px;--bob-delay:-0.31s"><use class="mu-mush-sway" href="#rio-mark" width="48" height="48" opacity="0.06" style="--sway-dur:25.29s;--sway-amp:31.84px;--sway-delay:-6.6s"/></g></g>  <!-- 48, over the top rim -->
+    <g transform="translate(1062,547)"><g class="mu-mush" style="--bob-dur:7.57s;--bob-amp:75.35px;--bob-delay:-11.28s"><use class="mu-mush-sway" href="#rio-mark" width="96" height="96" opacity="0.11" style="--sway-dur:11.66s;--sway-amp:89.77px;--sway-delay:-13.3s"/></g></g>  <!-- 96, over the top rim, clears it -->
+    <g transform="translate(1200,969)"><g class="mu-mush" style="--bob-dur:9.99s;--bob-amp:58.87px;--bob-delay:-6.83s"><use class="mu-mush-sway" href="#rio-mark" width="80" height="80" opacity="0.1" style="--sway-dur:14.51s;--sway-amp:85.17px;--sway-delay:-10.88s"/></g></g>  <!-- 80, under the bottom rim -->
+    <g transform="translate(1301,566)"><g class="mu-mush" style="--bob-dur:9.03s;--bob-amp:74.55px;--bob-delay:-2.94s"><use class="mu-mush-sway" href="#rio-mark" width="96" height="96" opacity="0.1" style="--sway-dur:12.55s;--sway-amp:110.44px;--sway-delay:-4.95s"/></g></g>  <!-- 96, over the top rim, clears it -->
+    <g transform="translate(1399,988)"><g class="mu-mush" style="--bob-dur:12.22s;--bob-amp:38.25px;--bob-delay:-5.98s"><use class="mu-mush-sway" href="#rio-mark" width="64" height="64" opacity="0.08" style="--sway-dur:19.13s;--sway-amp:57.3px;--sway-delay:-1.05s"/></g></g>  <!-- 64, under the bottom rim -->
+    <g transform="translate(1566,849)"><g class="mu-mush" style="--bob-dur:16.85s;--bob-amp:26.97px;--bob-delay:-4.46s"><use class="mu-mush-sway" href="#rio-mark" width="48" height="48" opacity="0.05" style="--sway-dur:22.12s;--sway-amp:37.54px;--sway-delay:-5.71s"/></g></g>  <!-- 48, mid-card -->
+    <g transform="translate(1642,1019)"><g class="mu-mush" style="--bob-dur:12.52s;--bob-amp:34.52px;--bob-delay:-2.95s"><use class="mu-mush-sway" href="#rio-mark" width="64" height="64" opacity="0.06" style="--sway-dur:18.74s;--sway-amp:54.02px;--sway-delay:-9.22s"/></g></g>  <!-- 64, under the bottom rim, clears it -->
+    <g transform="translate(1743,587)"><g class="mu-mush" style="--bob-dur:17.73s;--bob-amp:25.73px;--bob-delay:-5.21s"><use class="mu-mush-sway" href="#rio-mark" width="48" height="48" opacity="0.05" style="--sway-dur:20.48s;--sway-amp:34.45px;--sway-delay:-11.19s"/></g></g>  <!-- 48, over the top rim, clears it -->
+    <g transform="translate(1829,618)"><g class="mu-mush" style="--bob-dur:7.63s;--bob-amp:84.31px;--bob-delay:-2.07s"><use class="mu-mush-sway" href="#rio-mark" width="96" height="96" opacity="0.08" style="--sway-dur:12.35s;--sway-amp:97.47px;--sway-delay:-11.07s"/></g></g>  <!-- 96, over the top rim -->
+
     <!-- ░░ BRAND CAP ░░ -->
     <image data-slot="logo" x="84" y="664" width="110" height="110" preserveAspectRatio="xMidYMid meet" opacity="0"/>
     <g data-slot="logo-default">
-      <!-- Project Rio pixel mark (public/game_assets/ProjectRio.svg), scaled into the 110x110 brand-cap slot. -->
-      <g transform="translate(84,664) scale(6.875)" shape-rendering="crispEdges">
-        <rect x="5" y="0" width="6" height="1" fill="#000000"></rect>
-        <rect x="3" y="1" width="2" height="1" fill="#000000"></rect>
-        <rect x="5" y="1" width="1" height="1" fill="#ff0000"></rect>
-        <rect x="6" y="1" width="1" height="1" fill="#ffffff"></rect>
-        <rect x="7" y="1" width="1" height="1" fill="#ff0000"></rect>
-        <rect x="8" y="1" width="2" height="1" fill="#ffffff"></rect>
-        <rect x="10" y="1" width="1" height="1" fill="#ff0000"></rect>
-        <rect x="11" y="1" width="2" height="1" fill="#000000"></rect>
-        <rect x="2" y="2" width="1" height="1" fill="#000000"></rect>
-        <rect x="3" y="2" width="2" height="1" fill="#ff0000"></rect>
-        <rect x="5" y="2" width="2" height="1" fill="#ffffff"></rect>
-        <rect x="7" y="2" width="1" height="1" fill="#ff0000"></rect>
-        <rect x="8" y="2" width="3" height="1" fill="#ffffff"></rect>
-        <rect x="11" y="2" width="2" height="1" fill="#ff0000"></rect>
-        <rect x="13" y="2" width="1" height="1" fill="#000000"></rect>
-        <rect x="1" y="3" width="1" height="1" fill="#000000"></rect>
-        <rect x="2" y="3" width="2" height="1" fill="#ff0000"></rect>
-        <rect x="4" y="3" width="4" height="1" fill="#ffffff"></rect>
-        <rect x="8" y="3" width="1" height="1" fill="#ff0000"></rect>
-        <rect x="9" y="3" width="3" height="1" fill="#ffffff"></rect>
-        <rect x="12" y="3" width="2" height="1" fill="#ff0000"></rect>
-        <rect x="14" y="3" width="1" height="1" fill="#000000"></rect>
-        <rect x="1" y="4" width="1" height="1" fill="#000000"></rect>
-        <rect x="2" y="4" width="4" height="1" fill="#ff0000"></rect>
-        <rect x="6" y="4" width="3" height="1" fill="#ffffff"></rect>
-        <rect x="9" y="4" width="1" height="1" fill="#ff0000"></rect>
-        <rect x="10" y="4" width="2" height="1" fill="#ffffff"></rect>
-        <rect x="12" y="4" width="2" height="1" fill="#ff0000"></rect>
-        <rect x="14" y="4" width="1" height="1" fill="#000000"></rect>
-        <rect x="0" y="5" width="1" height="1" fill="#000000"></rect>
-        <rect x="1" y="5" width="1" height="1" fill="#ffffff"></rect>
-        <rect x="2" y="5" width="2" height="1" fill="#ff0000"></rect>
-        <rect x="4" y="5" width="2" height="1" fill="#ffffff"></rect>
-        <rect x="6" y="5" width="1" height="1" fill="#ff0000"></rect>
-        <rect x="7" y="5" width="3" height="1" fill="#ffffff"></rect>
-        <rect x="10" y="5" width="4" height="1" fill="#ff0000"></rect>
-        <rect x="14" y="5" width="1" height="1" fill="#ffffff"></rect>
-        <rect x="15" y="5" width="1" height="1" fill="#000000"></rect>
-        <rect x="0" y="6" width="1" height="1" fill="#000000"></rect>
-        <rect x="1" y="6" width="2" height="1" fill="#ffffff"></rect>
-        <rect x="3" y="6" width="1" height="1" fill="#ff0000"></rect>
-        <rect x="4" y="6" width="3" height="1" fill="#ffffff"></rect>
-        <rect x="7" y="6" width="1" height="1" fill="#ff0000"></rect>
-        <rect x="8" y="6" width="4" height="1" fill="#ffffff"></rect>
-        <rect x="12" y="6" width="1" height="1" fill="#ff0000"></rect>
-        <rect x="13" y="6" width="2" height="1" fill="#ffffff"></rect>
-        <rect x="15" y="6" width="1" height="1" fill="#000000"></rect>
-        <rect x="0" y="7" width="1" height="1" fill="#000000"></rect>
-        <rect x="1" y="7" width="2" height="1" fill="#ffffff"></rect>
-        <rect x="3" y="7" width="2" height="1" fill="#ff0000"></rect>
-        <rect x="5" y="7" width="3" height="1" fill="#ffffff"></rect>
-        <rect x="8" y="7" width="1" height="1" fill="#ff0000"></rect>
-        <rect x="9" y="7" width="2" height="1" fill="#ffffff"></rect>
-        <rect x="11" y="7" width="2" height="1" fill="#ff0000"></rect>
-        <rect x="13" y="7" width="2" height="1" fill="#ffffff"></rect>
-        <rect x="15" y="7" width="1" height="1" fill="#000000"></rect>
-        <rect x="0" y="8" width="1" height="1" fill="#000000"></rect>
-        <rect x="1" y="8" width="2" height="1" fill="#ffffff"></rect>
-        <rect x="3" y="8" width="3" height="1" fill="#ff0000"></rect>
-        <rect x="6" y="8" width="2" height="1" fill="#ffffff"></rect>
-        <rect x="8" y="8" width="1" height="1" fill="#ff0000"></rect>
-        <rect x="9" y="8" width="1" height="1" fill="#ffffff"></rect>
-        <rect x="10" y="8" width="3" height="1" fill="#ff0000"></rect>
-        <rect x="13" y="8" width="2" height="1" fill="#ffffff"></rect>
-        <rect x="15" y="8" width="1" height="1" fill="#000000"></rect>
-        <rect x="0" y="9" width="1" height="1" fill="#000000"></rect>
-        <rect x="1" y="9" width="1" height="1" fill="#ffffff"></rect>
-        <rect x="2" y="9" width="4" height="1" fill="#ff0000"></rect>
-        <rect x="6" y="9" width="4" height="1" fill="#000000"></rect>
-        <rect x="10" y="9" width="4" height="1" fill="#ff0000"></rect>
-        <rect x="14" y="9" width="1" height="1" fill="#ffffff"></rect>
-        <rect x="15" y="9" width="1" height="1" fill="#000000"></rect>
-        <rect x="0" y="10" width="1" height="1" fill="#000000"></rect>
-        <rect x="1" y="10" width="3" height="1" fill="#ff0000"></rect>
-        <rect x="4" y="10" width="2" height="1" fill="#000000"></rect>
-        <rect x="6" y="10" width="4" height="1" fill="#ffffff"></rect>
-        <rect x="10" y="10" width="2" height="1" fill="#000000"></rect>
-        <rect x="12" y="10" width="3" height="1" fill="#ff0000"></rect>
-        <rect x="15" y="10" width="1" height="1" fill="#000000"></rect>
-        <rect x="1" y="11" width="1" height="1" fill="#000000"></rect>
-        <rect x="2" y="11" width="1" height="1" fill="#ff0000"></rect>
-        <rect x="3" y="11" width="1" height="1" fill="#000000"></rect>
-        <rect x="4" y="11" width="2" height="1" fill="#ffffff"></rect>
-        <rect x="6" y="11" width="1" height="1" fill="#000000"></rect>
-        <rect x="7" y="11" width="2" height="1" fill="#ffffff"></rect>
-        <rect x="9" y="11" width="1" height="1" fill="#000000"></rect>
-        <rect x="10" y="11" width="2" height="1" fill="#ffffff"></rect>
-        <rect x="12" y="11" width="1" height="1" fill="#000000"></rect>
-        <rect x="13" y="11" width="1" height="1" fill="#ff0000"></rect>
-        <rect x="14" y="11" width="1" height="1" fill="#000000"></rect>
-        <rect x="2" y="12" width="2" height="1" fill="#000000"></rect>
-        <rect x="4" y="12" width="2" height="1" fill="#ffffff"></rect>
-        <rect x="6" y="12" width="1" height="1" fill="#000000"></rect>
-        <rect x="7" y="12" width="2" height="1" fill="#ffffff"></rect>
-        <rect x="9" y="12" width="1" height="1" fill="#000000"></rect>
-        <rect x="10" y="12" width="2" height="1" fill="#ffffff"></rect>
-        <rect x="12" y="12" width="2" height="1" fill="#000000"></rect>
-        <rect x="3" y="13" width="1" height="1" fill="#000000"></rect>
-        <rect x="4" y="13" width="2" height="1" fill="#ffffff"></rect>
-        <rect x="6" y="13" width="1" height="1" fill="#000000"></rect>
-        <rect x="7" y="13" width="2" height="1" fill="#ffffff"></rect>
-        <rect x="9" y="13" width="1" height="1" fill="#000000"></rect>
-        <rect x="10" y="13" width="2" height="1" fill="#ffffff"></rect>
-        <rect x="12" y="13" width="1" height="1" fill="#000000"></rect>
-        <rect x="4" y="14" width="1" height="1" fill="#000000"></rect>
-        <rect x="5" y="14" width="6" height="1" fill="#ffffff"></rect>
-        <rect x="11" y="14" width="1" height="1" fill="#000000"></rect>
-        <rect x="5" y="15" width="6" height="1" fill="#000000"></rect>
-      </g>
+      <!-- The BOX stays 110: it is a slot for whatever logo the user uploaded,
+           and that is arbitrary artwork with no grid. The MARK inside it is not
+           arbitrary — it is a 16px pixel grid painted with crispEdges, so at a
+           size that is not a whole multiple the renderer snaps its rows to uneven
+           widths and the baseball stitching reads as a corrupted asset. 112 is
+           7 x 16, centred on the same box. Drawn at 110 (6.875 grid pixels)
+           through a hand-written scale factor until 2026-08-01. -->
+      <use href="#rio-mark" x="83" y="663" width="112" height="112"/>
     </g>
 
     <!-- ░░ SERIES SUMMARY ░░ -->
@@ -251,6 +344,26 @@
       <image data-slot="game5-side2-logo" x="1776" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="0"/>
       <text data-slot="game5-mode" data-maxw="296" x="1528" y="948" style="fill:var(--ink-dim);font-family:var(--font-body)" font-size="19" font-weight="500">Game mode</text>
       <text data-slot="game5-stadium" data-maxw="296" x="1528" y="980" style="fill:var(--ink-dim);font-family:var(--font-body)" font-size="19" font-weight="500">Stadium</text>
+    </g>
+
+    <!-- .. MUSHROOM FIELD, near plane .............................. -->
+    <!-- The same field, in FRONT of the content. One plane of marks all drifting
+         underneath is a texture; two planes with the card between them is depth -
+         something has to pass in front for the card to have an inside. Five
+         marks, not eighteen: this plane is an event, not a surface. It holds the
+         top of the ladder and the top of the travel range, so a mark arriving in
+         front is bigger, quicker and further-moving than anything behind it.
+
+         Opacity is the one place near does not win. It tops out at 0.06, half the
+         back plane, because this is the only plane that crosses a player's name
+         and a game's score. A mark over the copy has to be a passing tint, never
+         a smudge. -->
+    <g mask="url(#mu-field-mask)">
+    <g transform="translate(223,965)"><g class="mu-mush" style="--bob-dur:8.01s;--bob-amp:89.28px;--bob-delay:-0.85s"><use class="mu-mush-sway" href="#rio-mark" width="112" height="112" opacity="0.06" style="--sway-dur:10.6s;--sway-amp:119.62px;--sway-delay:-7.71s"/></g></g>  <!-- 112, under the bottom rim -->
+    <g transform="translate(525,738)"><g class="mu-mush" style="--bob-dur:8.78s;--bob-amp:83.68px;--bob-delay:-7.43s"><use class="mu-mush-sway" href="#rio-mark" width="112" height="112" opacity="0.04" style="--sway-dur:10.18s;--sway-amp:127px;--sway-delay:-2.67s"/></g></g>  <!-- 112, mid-card -->
+    <g transform="translate(912,925)"><g class="mu-mush" style="--bob-dur:7.59s;--bob-amp:86.35px;--bob-delay:-0.26s"><use class="mu-mush-sway" href="#rio-mark" width="112" height="112" opacity="0.06" style="--sway-dur:11.08s;--sway-amp:132.28px;--sway-delay:-1.73s"/></g></g>  <!-- 112, under the bottom rim -->
+    <g transform="translate(1456,539)"><g class="mu-mush" style="--bob-dur:6.73s;--bob-amp:106.48px;--bob-delay:-7.15s"><use class="mu-mush-sway" href="#rio-mark" width="128" height="128" opacity="0.05" style="--sway-dur:9.29s;--sway-amp:152.25px;--sway-delay:-13.4s"/></g></g>  <!-- 128, over the top rim, clears it -->
+    <g transform="translate(1652,620)"><g class="mu-mush" style="--bob-dur:6.84s;--bob-amp:110.4px;--bob-delay:-10.74s"><use class="mu-mush-sway" href="#rio-mark" width="128" height="128" opacity="0.05" style="--sway-dur:9.24s;--sway-amp:168.56px;--sway-delay:-3.59s"/></g></g>  <!-- 128, over the top rim -->
     </g>
   </g>
 </svg>

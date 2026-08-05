@@ -102,9 +102,15 @@ export const ELEMENTS = [
         id: 'statscard',
         name: 'Stat Card',
         // The same stat line as Stats, wearing the design package's `statscard`
-        // element — the compact 2x2 card, 380x220. It is a CONTAINER MEMBER and
+        // element — the compact 2x2 card, 380x240. It is a CONTAINER MEMBER and
         // nothing else: it has no standalone layout, which is why its canonical
         // url is the generic container shell.
+        //
+        // 380x240 rather than the original 380x220 since the card grew its two
+        // optional caption bands (a header naming the stat set, a footer carrying
+        // the live game line): both open is 236 units of card. A container has to
+        // be at least this tall to hold it — the stock Roster + Stats containers
+        // are 452x240, which is where the height comes from.
         //
         // Not pickable, deliberately. It resolves the side's current batter or
         // pitcher itself (RioData.getStatsLine, the same resolution the engine's
@@ -114,7 +120,7 @@ export const ELEMENTS = [
         feed: 'statscard',
         url: '/layout/shared/container.html',
         width: 380,
-        height: 220,
+        height: 240,
         match: (url) => /shared\/container/i.test(url),
         // Its frame of reference is the container's, not a board picker's: a
         // manual Push takes scoreboard AND team from the container definition,
@@ -154,14 +160,15 @@ export const ELEMENTS = [
         // Commentary tab. Span 4 to fit up to four caster rows.
         // Its own dedicated source: the caster strip. Slots are projected to
         // commentary.{i}.* server-side from the authored commentary.slots.
-        // Native 1920×1080 — a full-canvas overlay like matchup and plates, not
-        // a cropped strip: the layout's body is 1920×1080, `.cm-host` is
-        // `position: fixed; inset: 0`, and the theme SVG is a
-        // `viewBox="0 0 1920 1080"`. It was registered 1280×200, which made
-        // `addBrowserSource` create the OBS source at the wrong size.
+        // Native 1920×240 — full stream width (the row's spacing is measured
+        // against the frame) but only as tall as the card, so the producer
+        // decides how high up the scene it sits. Keep this in step with the
+        // layout's `body { width/height }`, which is what addBrowserSource
+        // sizes the OBS source from; it was 1920×1080 while the theme owned a
+        // whole canvas, and 1280×200 before that, which sized the source wrong.
         url: '/layout/commentary/commentary.html',
         width: 1920,
-        height: 1080,
+        height: 240,
         match: (url) => /\/layout\/commentary\//i.test(url) || /commentary\.html/i.test(url),
     },
     {
@@ -173,11 +180,13 @@ export const ELEMENTS = [
         // → name + a chosen address-book field) or typed manually. Relevant
         // pre-game/intro (draft), on the desk (live), and over breaks. Direct
         // element (own dedicated source); the face is the mode + per-plate
-        // content, projected to playerplates.* server-side. Native 1920×1080.
+        // content, projected to playerplates.* server-side. Native 1920×240 —
+        // the Commentary box, for the same reasons; keep it in step with the
+        // layout's `body { width/height }`.
         flavor: 'direct',
         url: '/layout/playerplates/playerplates.html',
         width: 1920,
-        height: 1080,
+        height: 240,
         match: (url) => /\/layout\/playerplates\//i.test(url) || /playerplates\.html/i.test(url),
     },
     {

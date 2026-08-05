@@ -7,8 +7,14 @@
   This file is a thin shell: the look lives in the active DESIGN PACKAGE's
   theme SVG (/design/{package}/commentary.svg — picked by the global Design
   Package selector), and the rendering/data-binding lives in the reusable mount
-  (commentary-mount.js). Drop this in OBS as a full-canvas (1920×1080) browser
-  source, like the Lower Third — the plate row sits near the bottom.
+  (commentary-mount.js). Drop this in OBS as a 1920×240 browser source and put
+  it where you want it in the scene — the source is the size of the card, not of
+  the canvas, so vertical placement is yours rather than the theme's. Full
+  stream width, because the row's spacing is measured against the frame.
+
+  A theme that still authors a full 1920×1080 canvas (Classic, Slice26) keeps
+  working: the mount bottom-anchors whatever box the theme declares inside the
+  source and crops the empty part.
 -->
 <head>
   <meta charset="utf-8" />
@@ -17,14 +23,14 @@
        fixed-palette themes (Default/Rio, Slice26) ignore them. -->
   <meta name="overlay-settings" content="accentColor, cardBg, textColor, borderColor, borderRadius, borderWidth, fontFamily, cardShadow, textShadow, showShadow" />
   <!-- Rio design tokens: brand palette + display/mono webfonts used by
-       fixed-palette themes (the Default package's Rajdhani/JetBrains type). -->
+       fixed-palette themes (the Default package's Rajdhani/Chivo type). -->
   <link rel="stylesheet" href="/layout/lib/rio-theme/tokens.css" />
   <style>
     /* Inter is the app's baseline overlay font — bundled locally and injected by
        overlay-base.js (no Google Fonts dependency). A theme that wants a
        different face should @import it inside its own SVG. */
     html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
-    body { width: 1920px; height: 1080px; }
+    body { width: 1920px; height: 240px; }
     #host { position: fixed; inset: 0; }
   </style>
 </head>

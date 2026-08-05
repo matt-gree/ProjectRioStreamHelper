@@ -69,20 +69,31 @@ function builtinThemeSvg() {
   return `
   <svg viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
     <defs>
-      <radialGradient id="csA" cx="14%" cy="24%" r="80%">
-        <stop offset="0" style="stop-color:var(--port-color);stop-opacity:0.36"/>
-        <stop offset="0.62" style="stop-color:var(--port-color);stop-opacity:0"/>
+      <radialGradient id="csA" cx="4%" cy="6%" r="46%">
+        <stop offset="0" style="stop-color:var(--port-color);stop-opacity:0.32"/>
+        <stop offset="0.6" style="stop-color:var(--port-color);stop-opacity:0"/>
       </radialGradient>
-      <radialGradient id="csB" cx="86%" cy="82%" r="80%">
-        <stop offset="0" style="stop-color:var(--port-2);stop-opacity:0.28"/>
-        <stop offset="0.62" style="stop-color:var(--port-2);stop-opacity:0"/>
+      <radialGradient id="csB" cx="96%" cy="6%" r="46%">
+        <stop offset="0" style="stop-color:var(--port-2);stop-opacity:0.32"/>
+        <stop offset="0.6" style="stop-color:var(--port-2);stop-opacity:0"/>
       </radialGradient>
+      <linearGradient id="csFootA" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" style="stop-color:var(--port-color);stop-opacity:0.6"/>
+        <stop offset="0.26" style="stop-color:var(--port-color);stop-opacity:0.6"/>
+        <stop offset="0.44" style="stop-color:var(--port-color);stop-opacity:0"/>
+      </linearGradient>
+      <linearGradient id="csFootB" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0.56" style="stop-color:var(--port-2);stop-opacity:0"/>
+        <stop offset="0.74" style="stop-color:var(--port-2);stop-opacity:0.6"/>
+        <stop offset="1" style="stop-color:var(--port-2);stop-opacity:0.6"/>
+      </linearGradient>
     </defs>
-    <rect width="1920" height="1080" fill="#0b0d14"/>
-    <rect width="1920" height="1080" fill="url(#csA)"/>
-    <rect width="1920" height="1080" fill="url(#csB)"/>
-    <rect x="0" y="0" width="1920" height="10" style="fill:var(--port-color)" opacity="0.9"/>
-    <rect x="0" y="1070" width="1920" height="10" style="fill:var(--port-2)" opacity="0.7"/>
+    <rect width="1920" height="1080" fill="#08080e"/>
+    <rect width="1920" height="1080" fill="url(#csA)" style="opacity:var(--side-a-weight,1)"/>
+    <rect width="1920" height="1080" fill="url(#csB)" style="opacity:var(--side-b-weight,1)"/>
+    <rect x="0" y="0" width="1920" height="10" fill="#e60012" opacity="0.9"/>
+    <rect x="0" y="1070" width="1920" height="10" fill="url(#csFootA)" style="opacity:var(--side-a-weight,1)"/>
+    <rect x="0" y="1070" width="1920" height="10" fill="url(#csFootB)" style="opacity:var(--side-b-weight,1)"/>
   </svg>`;
 }
 
@@ -154,8 +165,35 @@ export function mountPostgameCallout({ host }) {
     set('--side', side, ctx.side === 1 ? '197, 247, 7' : '87, 224, 231');
     set('--accent', accent, '249, 63, 145');
     if (well) stage.style.setProperty('--well', well);
-    stage.style.setProperty('--port-color', s1);
-    stage.style.setProperty('--port-2', s2);
+    // THE BACKDROP IS ONE COLOUR, ENTERING FROM ONE SIDE, and these three lines
+    // are what do it. callout.svg is authored as an A side and a B side, and
+    // the Game Summary feeds it the two players. This scene is about ONE
+    // player, so it takes their colour AND SWITCHES THE OTHER SIDE OFF.
+    //
+    // Mirroring the colour into both sides was the obvious first move and it
+    // was wrong: a symmetrically tinted frame reads as a vignette, as lighting,
+    // as anything except a person. Colour entering from the side the player
+    // occupies and falling away across the frame reads as their light. The
+    // spotlight's player is always in the left column whichever side they
+    // batted on, so A is always the lit side.
+    //
+    // The two-colour palette survives where two colours mean something - the
+    // score strip and the final card still read - -s1 / - -s2.
+    stage.style.setProperty('--port-color', side);
+    stage.style.setProperty('--port-2', side);
+    stage.style.setProperty('--side-b-weight', '0');
+    // ...and the backdrop's brand bloom comes with them. It is Rio red by
+    // default, which is right for the Game Summary - the centre of a two-player
+    // frame belongs to neither side. Here it was the last thing in the frame
+    // carrying a second hue, and behind a BLUE player a red glow in the middle
+    // read as the other player's colour leaking into their own callout. One
+    // player, one chroma. (The Rio-red ACCENT stays red: it marks moments -
+    // WINNER, FINAL, star pips - and never stands for a player.)
+    stage.style.setProperty('--brand-color', side);
+    // ...and the halftone comes down a step: three of this frame's four corners
+    // are covered by cards, so at the Game Summary's weight the dots only ever
+    // showed as a rind around the content. See - -dot-weight in callout.svg.
+    stage.style.setProperty('--dot-weight', '0.34');
   }
 
   // ── DOM builders ──────────────────────────────────────────────────────────
@@ -197,10 +235,14 @@ export function mountPostgameCallout({ host }) {
     if (ctx.phase) ctxBits.push(escapeHtml(ctx.phase));
     if (ctx.round) ctxBits.push(`<b>${escapeHtml(ctx.round)}</b>`);
     const ctxLine = ctxBits.length ? `<div class="ctx">${ctxBits.join(' · ')}</div>` : '';
-    const statusCol = (sideData.isWinner || char.isStarred || char.isCaptain) ? `
+    // status column — WINNER and CAPTAIN only. "★ Superstar" came out: every
+    // starred character in a game carries it, so on a busy plate it was a
+    // near-constant third line of text saying something the hero art already
+    // shows. The star pips in the game-state bar are where stars mean
+    // something here.
+    const statusCol = (sideData.isWinner || char.isCaptain) ? `
       <div class="cs-status">
         ${sideData.isWinner ? '<span class="st win">Winner</span>' : ''}
-        ${char.isStarred ? '<span class="st star">★ Superstar</span>' : ''}
         ${char.isCaptain ? '<span class="st">Captain</span>' : ''}
       </div>` : '';
 
@@ -261,7 +303,7 @@ export function mountPostgameCallout({ host }) {
           <div class="cs-id">
             ${metaLine}
             <div class="char">${escapeHtml(char.name || '')}</div>
-            <div class="rio">${escapeHtml(sideData.rioName || '')}${sideData.teamName ? ' · ' + escapeHtml(sideData.teamName) : ''}</div>
+            <div class="rio">${escapeHtml(sideData.rioName || '')}</div>
             ${ctxLine}
           </div>
           ${statusCol}
@@ -349,9 +391,151 @@ export function mountPostgameCallout({ host }) {
       </div>
       <div class="cs-ticker" id="cs-ticker"></div>`;
     resolvePalette(ctx);
+    fitPlateText();
+    alignHeroGlow();
 
     const font = OverlayBase.deepGet(OverlayBase.settings, 'overlays.global.fontFamily', 'Inter');
     root.style.setProperty('--cs-font', `'${font}', sans-serif`);
+  }
+
+  // Shrink the two identity lines to fit the plate instead of overflowing it
+  // (the character name had nowrap and no overflow rule at all, so a long one
+  // simply ran out of the card) or ellipsing it (the rio name did, and a
+  // player's name truncated to "SuperLongPlayerNa..." is worse than a smaller
+  // one that still reads). Step down by the measured overflow ratio, floor at
+  // a size that is still broadcast-legible, never grow past the design size.
+  //
+  // MEASURED WITH A RANGE, NOT scrollWidth, and that is not interchangeable
+  // here. Both of these lines carry text-overflow: ellipsis as a backstop, and
+  // an ellipsed line reports scrollWidth === clientWidth — the browser has
+  // already thrown the overflow away by the time you ask. The fitter would
+  // then see every name as fitting and never shrink anything. A Range over the
+  // text nodes measures what the text actually WANTS, ellipsis or not. (The
+  // Game Summary's fitPlateNames can use scrollWidth because its names don't
+  // ellipse; don't copy that idiom back over here.) Range rects are in screen
+  // pixels, so divide out the stage's scale before comparing to clientWidth.
+  function fitPlateText() {
+    const fit = (sel, max, min) => {
+      const el = stage.querySelector(sel);
+      if (!el) return;
+      const room = el.clientWidth;
+      if (!room) return;
+      const scale = el.getBoundingClientRect().width / room;
+      const wanted = () => {
+        const r = document.createRange();
+        r.selectNodeContents(el);
+        return r.getBoundingClientRect().width / (scale || 1);
+      };
+      let size = max;
+      el.style.fontSize = `${size}px`;
+      for (let guard = 0; guard < 12 && size > min; guard += 1) {
+        const w = wanted();
+        if (w <= room) break;
+        size = Math.max(min, Math.floor(size * Math.min(0.94, room / w)));
+        el.style.fontSize = `${size}px`;
+      }
+    };
+    fit('.cs-id .char', 56, 30);
+    fit('.cs-id .rio', 21, 14);
+  }
+
+  // Put the hero's ground glow under the character's ACTUAL feet.
+  //
+  // The MSB renders are not centred in their own PNGs — each one carries a
+  // different amount of transparent margin on the left than on the right, and a
+  // different amount of air under the feet. A glow centred on the img BOX
+  // therefore sits off to one side for most characters and floats above or
+  // below the feet, and it lands somewhere different every time the producer
+  // pushes a new spotlight. Nothing in CSS can see where the pixels are, so we
+  // look: draw the art small, scan the alpha channel, and place the glow on the
+  // opaque bounding box instead of on the element box.
+  //
+  // 96px wide is plenty — we need a centre and a baseline, not an outline — and
+  // the result is cached per source so a replay costs nothing. Same-origin
+  // images only (they are; game_assets is served by this server), and a taint
+  // error just falls back to the CSS centring.
+  const heroBoxCache = new Map();
+  function heroOpaqueBox(img) {
+    const src = img.currentSrc || img.src;
+    if (heroBoxCache.has(src)) return heroBoxCache.get(src);
+    let box = null;
+    try {
+      const w = 96;
+      const h = Math.max(1, Math.round(w * img.naturalHeight / img.naturalWidth));
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const c2d = canvas.getContext('2d', { willReadFrequently: true });
+      c2d.drawImage(img, 0, 0, w, h);
+      const data = c2d.getImageData(0, 0, w, h).data;
+      let minX = w, maxX = -1, maxY = -1;
+      for (let y = 0; y < h; y += 1) {
+        for (let x = 0; x < w; x += 1) {
+          if (data[(y * w + x) * 4 + 3] > 24) {
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y > maxY) maxY = y;
+          }
+        }
+      }
+      // fractions of the natural image, so they survive any later resize
+      if (maxX >= minX && maxY >= 0) {
+        box = {
+          cx: (minX + maxX + 1) / 2 / w,
+          w: (maxX - minX + 1) / w,
+          bottom: (maxY + 1) / h,
+        };
+      }
+    } catch { box = null; }
+    heroBoxCache.set(src, box);
+    return box;
+  }
+
+  function alignHeroGlow() {
+    const hero = stage.querySelector('.cs-hero');
+    const img = hero && hero.querySelector('img');
+    const bloom = hero && hero.querySelector('.bloom');
+    if (!hero || !img || !bloom) return;
+    if (!img.complete || !img.naturalWidth) {
+      img.addEventListener('load', alignHeroGlow, { once: true });
+      return;
+    }
+    const box = heroOpaqueBox(img);
+    if (!box) return;
+
+    // Work in hero-local UNSCALED px: rects come back through the stage's
+    // transform, so divide it out. offsetWidth/Height are already unscaled,
+    // which is what makes the result independent of the OBS source size.
+    const hr = hero.getBoundingClientRect();
+    const ir = img.getBoundingClientRect();
+    const k = (hr.width / hero.offsetWidth) || 1;
+    const iw = ir.width / k, ih = ir.height / k;
+    // where object-fit: contain actually put the pixels inside that box —
+    // centred horizontally, flush to the bottom (object-position: bottom)
+    const fit = Math.min(iw / img.naturalWidth, ih / img.naturalHeight);
+    const dw = img.naturalWidth * fit, dh = img.naturalHeight * fit;
+    const dx = (ir.left - hr.left) / k + (iw - dw) / 2;
+    const dy = (ir.top - hr.top) / k + (ih - dh);
+
+    const cx = dx + box.cx * dw;
+    const feet = dy + box.bottom * dh;
+    // WIDTH IS THE ONE THAT ACTUALLY BIT. Across the roster the renders are all
+    // horizontally centred, but their silhouettes span anywhere from 29% to 88%
+    // of the image width and their feet sit anywhere from 88% to 99% of the way
+    // down it. A glow at a fixed 84% of the ELEMENT box therefore ran ~3x wider
+    // than a small character and barely wider than a big one, and floated in
+    // mid-air for the ones with room under their feet — so it landed somewhere
+    // different on every push. Sized off the silhouette it hugs all of them.
+    const gw = Math.min(hero.offsetWidth * 1.05, Math.max(140, box.w * dw * 1.3));
+    // shallow, and capped: the pool is centred ON the feet line, so half its
+    // height hangs below the hero box and a tall one runs off the bottom of the
+    // 1080 canvas. The outer third of the gradient is near-zero alpha under a
+    // 24px blur, so a small overrun is invisible — a 180px one is not.
+    const gh = Math.min(140, Math.round(gw * 0.22));
+    bloom.style.left = `${Math.round(cx)}px`;
+    bloom.style.width = `${Math.round(gw)}px`;
+    bloom.style.height = `${gh}px`;
+    // centre the pool ON the feet line, not under it
+    bloom.style.bottom = `${Math.round(hero.offsetHeight - feet - gh / 2)}px`;
   }
 
   // ── element contract ──────────────────────────────────────────────────────

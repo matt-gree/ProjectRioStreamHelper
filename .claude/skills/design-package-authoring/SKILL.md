@@ -92,6 +92,12 @@ package family via fixed CSS in its HTML).
    - `rx` cannot be a CSS variable.
    - XML comments must not contain `--` (em-dashes in designer notes break
      the parser).
+   - **No angle bracket anywhere inside a `<style>` block**, comments included.
+     The mounts inject theme SVGs with `innerHTML`, and inside SVG a `<style>`
+     is *not* raw text — the parser tokenises tags in it, so one `<defs>` in a
+     CSS comment silently drops every rule below it. Symptom: the first few
+     rules work and the rest are absent from `style.sheet.cssRules`. Pinned by
+     `tests/unit/test_design_package_svgs.py`.
    - Root `width`/`height` are stripped by the engine — size must come from
      the viewBox.
    - Gradients that must track geometry use `gradientUnits="userSpaceOnUse"`
@@ -106,7 +112,41 @@ package family via fixed CSS in its HTML).
      only *during* an animation and drops it at rest — an authored theme must
      not add its own (see overlay-authoring for the full pattern).
    - Fonts aren't embedded: use fonts the element shells load (Rio tokens'
-     `--font-display` etc.) or web-safe stacks with fallbacks.
+     `--font-display` etc.) or web-safe stacks with fallbacks. The tokens'
+     `--font-mono` is **Chivo Mono** — a display mono, sized to be read across
+     a room. Don't reach for a code face (JetBrains, SF Mono) for numerals a
+     viewer sees at 44–76px.
+   - **`data-maxw` on any text slot whose content the producer or the clock
+     controls**, not just the ones that look long in the mock. Authored sample
+     text is the *short* case: a lower third's clock slot is drawn as "5:00"
+     and renders "11:11 AM ET", a status chip is drawn "UP NEXT" and renders
+     "GRAND FINAL RESET". Without a fit bound those run straight off the bed —
+     nothing downstream clips them, and it's the last segment on the band that
+     shows it worst.
+   - **Pixel art has a grid, and the grid sets the sizes you may draw it at.**
+     `#rio-mark` is a 16×16 field painted with `shape-rendering="crispEdges"`;
+     at any size that isn't a whole multiple of 16 the renderer snaps rows to
+     uneven widths and the baseball stitching reads as a corrupted asset. So a
+     scattered field of marks can't vary size *continuously* — and shouldn't
+     want to: a few px of spread reads as sloppiness, not as depth. Vary it on
+     a ladder of whole grid steps (the lower third's field uses 32/48/64/80/96)
+     and move opacity, travel and speed with it, so the depth lands on four
+     cues at once. Pinned by `tests/unit/test_design_package_svgs.py`.
+
+     The same rule bit three themes a *second* way: a mark pasted as
+     `<g transform="scale(6.875)">` rather than `<use width= height=>`. A scale
+     factor is a free number, so it lands off-grid silently and nothing checks
+     it. Always `<symbol id="rio-mark">` in `<defs>` + `<use>` at a grid size —
+     also pinned. And keep the *slot* box (an `<image>` for the user's uploaded
+     logo) at whatever size the layout wants; only the mark is on a grid. Centre
+     the on-grid mark in the box rather than resizing the box to suit it.
+   - **A coloured drop-shadow only works where nothing is underneath it.** The
+     lower third's Rio-red glow is beautiful over video and became a maroon
+     stain the moment the card grew a second surface: Commentary's sub drawer is
+     painted *before* the plate, so the plate's shadow lands on it, strongest at
+     the seam, and one card read as two colours. If a card is two stacked
+     surfaces, the lift has to be neutral — put the brand colour somewhere
+     opaque (a rail, a label) instead.
 7. **Manifest + folder**: `package.json` with at least `id` + `name`; put raw
    design exports in `sources/` (served-suffix files only; it's for humans).
 
@@ -163,6 +203,62 @@ grammar / `data-*` markers, so a designer authors it and the compiler wires it:
   on an independent per-row clock. Author segment content to the RIGHT of the
   compact edge, ordered left→right; a hidden *middle* segment can't be
   edge-wiped (it just snaps). Mount details: overlay-authoring.
+
+## Atmosphere fields (the mushroom field, and porting it to a new card)
+
+The `default` package gives its cards a drifting field of Rio marks. The system
+is written out in `public/design/default/lowerthird.svg` — read it there, it is
+the reference. What matters when carrying it onto a *different* card:
+
+- **Scale the ladder to the card, and drop the near plane if the card can't
+  afford it.** The near plane (marks passing in FRONT of the copy) is what gives
+  a card an inside, and it costs legibility. A 232px band or a 392px panel can
+  pay; a 96px name plate that is almost entirely one name cannot, so Commentary
+  and Player Plates run one plane and a lower ceiling. Depth on those comes from
+  the sub drawer instead.
+- **Clip to the card, never to a rectangle**, so a mark can leave through a
+  rounded corner. Who owns the clip follows who owns the geometry: fixed cards
+  (Player Plates, Matchup) carry their own `clipPath`; Commentary's plates
+  resize per count, so the mount builds the clip and drives it off the same
+  layout entry as the plate.
+- **A clip hides a mark and keeps paying for it.** Prune. `display: none` takes
+  the sprite out of layout, paint and the compositor — but Chromium leaves the
+  CSS animations on the hidden subtree *running*, ticking styles every frame for
+  something with no box. You need `.host .off * { animation: none }` as well;
+  host-qualify it or the theme's own rule, injected later in document order,
+  ties on specificity and wins. Measured on Commentary: 56 authored sprite
+  instances, 13 shown, and the running-animation count only fell 112 → 26 once
+  the descendant rule was added.
+- **Two cards side by side must not share a scatter.** Identical marks in
+  identical places read as a copy-paste, which is the one thing atmosphere may
+  never look like. Either author across the whole canvas and let each card clip
+  its own slice (Commentary), or seed each card separately (Player Plates).
+- **On a full-canvas backdrop, the band the marks travel in IS the cost.**
+  `callout.svg` (Game Summary + Character Spotlight) has no card to clip to, so
+  nothing bounds the field except where you place it. Its 12 marks are all held
+  in the floor — a 248px band at the foot of a 1080px frame — and the ladder is
+  pinned to the frame instead of scattered through it: small marks ride high and
+  barely move, big ones sit low and swing out of shot. Depth reads *better* that
+  way and the compositor repaints a strip rather than a canvas. Never mask or
+  clip a field on a backdrop like this; a mask makes its whole region redraw,
+  which is the cost you were avoiding.
+- **Crop what sits UNDER a field, and count the rects in it.** The mark is 108
+  crisp-edged rects, so mark count is a raster multiplier, not a taste knob —
+  and a backdrop's other layers are habitually authored as full-canvas rects
+  because it costs nothing when everything is static. Under something moving it
+  costs on every frame. `callout.svg` shipped laggy at 20 marks × 2 animations
+  over uncropped masked layers and is fine at 12 × 1 with every masked and
+  patterned layer cropped to where its gradient already hits zero alpha. Note
+  the trap when cropping: a gradient in default `objectBoundingBox` units is
+  measured against the rect that fills it, so shrinking the rect silently
+  squashes the gradient. Convert it to `userSpaceOnUse` first (a
+  `gradientTransform` matrix reproduces the 16:9 ellipse), then crop.
+- **Never put a CSS transform animation on an element that also carries
+  `transform="translate(x,y)"`.** The animation *replaces* the presentation
+  attribute rather than composing with it, so every sprite snaps to the origin
+  and drifts in a pile in the corner. Position on an outer static group, animate
+  the inner one — which is what the lower third's bob/sway nesting is doing
+  before it is doing anything about phase.
 
 ## Keep a Figma-reimport template (a real workflow win)
 

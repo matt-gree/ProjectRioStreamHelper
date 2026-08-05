@@ -4,7 +4,8 @@
     "playerplates.1": {
       "active": true,
       "name": "Baltor33",
-      "subLabel": "NP6",
+      "subField": "pronoun",
+      "subLabel": "Pronouns",
       "subValue": "he/him",
       "subVisible": true,
       "location": "left"
@@ -12,8 +13,9 @@
     "playerplates.2": {
       "active": true,
       "name": "MattGree",
-      "subLabel": "GAMK",
-      "subValue": "he/him",
+      "subField": "twitter",
+      "subLabel": "Twitter",
+      "subValue": "@mattgree",
       "subVisible": true,
       "location": "right"
     }

@@ -64,7 +64,7 @@ A theme chooses one of two palettes:
 
 * **Fixed** (the default): the SVG brings its own colors as literal hexes. The
   user's Design-tab knobs never repaint it, so it always looks the way its
-  designer intended (`default`, `slice26`, `chalk`).
+  designer intended (`default`, `slice26`).
 * **App-vars**: add `data-design-vars="app"` to the root `<svg>` and paint with
   the Design-tab CSS variables. The mount then applies the user's design
   settings before rendering (`classic`).
@@ -80,11 +80,20 @@ App-vars themes may use: `--accent`, `--card-bg`, `--text-primary`,
 * Corner radius (`rx`) cannot be a CSS variable.
 * **XML comments cannot contain `--`** (breaks the parser) — watch for this in
   authored notes and em-dashes.
-* Author at `viewBox="0 0 1920 1080"`. Bottom-anchored elements (commentary,
-  lower third) use `preserveAspectRatio="xMidYMax meet"`; full-bleed backdrops
-  (callout) use `xMidYMid slice`. Exception: the sized elements (scoreboard
-  variants, ticker, stats) are authored at their native OBS-source canvas
-  (e.g. `viewBox="0 0 800 460"`) with `xMidYMid meet`.
+* Author at `viewBox="0 0 1920 1080"`. Bottom-anchored elements (lower third)
+  use `preserveAspectRatio="xMidYMax meet"`; full-bleed backdrops (callout) use
+  `xMidYMid slice`. Exception: the sized elements (scoreboard variants, ticker,
+  stats) are authored at their native OBS-source canvas (e.g.
+  `viewBox="0 0 800 460"`) with `xMidYMid meet`.
+* **The two band elements (`commentary`, `playerplates`) are `1920 × 240`** —
+  full stream width, because their horizontal placement is measured against the
+  frame, but only as tall as the card, because how high up the scene a name band
+  sits is a decision for whoever is building the scene, not for the theme. Their
+  mounts pin the theme's box to the **bottom** of the source and crop what
+  overflows, so a theme authored on the old full `1920 × 1080` canvas with the
+  row parked near the bottom still lands correctly (Classic and Slice26 do).
+  Keep `xMidYMax meet` either way. `server/theme_contracts.py` records both
+  canvases as valid (`alt_canvases`) so the compiler doesn't warn.
 
 The Rio token layer (`/layout/lib/rio-theme/tokens.css`) is linked by the
 element shells, so fixed-palette themes may also reference the brand token vars
@@ -97,6 +106,38 @@ element shells, so fixed-palette themes may also reference the brand token vars
 The mounts bind data into elements marked `data-slot="<name>"`. Any slot a
 theme omits is skipped — a minimal theme can use just a few. `<text>` slots may
 carry `data-maxw="<svg-units>"`: long values shrink uniformly to fit.
+
+#### Atmosphere (optional, three elements)
+
+The built-in `default` package gives its cards a drifting field of Project Rio
+marks — see the notes in `default/lowerthird.svg`, which are the reference for
+the whole system (size ladder, depth cues, the rim as a horizon). Two rules
+matter to anyone porting it:
+
+* **Marks are clipped to the card**, never to a rectangle in mid-air, so one
+  can leave through a rounded corner and come back.
+* **A clip hides a mark but keeps its animation ticking.** PRSH runs alongside
+  the game, so a field authored wider than the card it shows in has to be
+  prunable — hence `data-l` / `data-r` below.
+
+Who owns the clip depends on who owns the geometry:
+
+| Element | Field lives | Clipped by |
+|---------|-------------|------------|
+| `lowerthird` | `<defs>`, `band-field` / `band-field-near`, authored across the strip | the mount, per bed island |
+| `commentary` | `<defs>`, `data-slot="field"` (plate) and `"sub-field"` (drawer), authored across the canvas | the mount, per surface — the plate's width is the mount's (it changes per count) |
+| `playerplates` / `matchup` | inline, in the group it belongs to, marked `data-part="field"` / `"sub-field"` | the theme, with its own `clipPath` — the geometry is fixed |
+
+Marked-up inline fields (`playerplates`) still get one thing from the mount:
+it stops them ticking while their surface is off air or their drawer is closed.
+Opacity 0 doesn't stop a CSS animation, and a hidden plate would otherwise
+animate its marks for the rest of the broadcast.
+
+**A drawer's field is rebindable.** On `commentary` and `playerplates` the
+sprites inside a `sub-field` are authored as the house mark and marked
+`data-part="sub-glyph"`; the mount repoints them at whichever mark the slot's
+address-book field resolves to, so an X drawer drifts X marks. See
+`public/layout/lib/sub-glyph.js`.
 
 ### `lowerthird.svg`
 
@@ -114,6 +155,7 @@ Structure the theme provides:
 | `data-band` + `data-x` / `data-w` / `data-h` / `data-gap` / `data-align` | `<g>` | The row container the clones go into. `data-align`: `center` (default) / `left` / `right`. If the picked segments overflow `data-w`, the whole row scales down uniformly (vertically centred within `data-h`). |
 | `data-slot="band-bg"` + `data-pad` | `<rect>` | Optional bed. The mount clones it **once per content island** (a `space` slot splits the band into islands), sizing each clone's `x`/`width` to that island (inset by `data-pad`); `y`/`height`/`rx`/paints are yours. With no `space` slot there is one island == the whole row. |
 | `data-tpl="{type}"` + `data-w` | `<g>` in `<defs>` | One template per content type, authored at a local `(0,0)` origin at band height. A missing template makes that type unavailable in this theme. The `space` slot is structural (no template needed). |
+| `data-slot="band-field"` / `"band-field-near"` | `<g>` in `<defs>` | Optional **atmosphere** (see below). The mount clones each plane once per island and clips it to that island's bed, `band-field` under the segment content and `band-field-near` over it. |
 
 Content types and their sub-slots (inside the template; any may be omitted):
 
@@ -140,6 +182,12 @@ caster "plates" and **reflows** (GSAP-animated) to the active count, so a theme
 defines one complete arrangement **per count** — 4 always-present position
 groups plus an embedded layout JSON.
 
+Spacing across the counts is the theme's call, and the `default` package's
+choice is documented in its own header: plates shrink as the row fills *and* the
+gap between them collapses, so a full row closes ranks into one strip while a
+pair reads as two separate people. The row is a centred cluster that never
+reaches the frame edges.
+
 Each position `i` (0–3) is a `<g data-slot="slot{i}">` (the mount toggles its
 opacity). Inside it:
 
@@ -151,7 +199,9 @@ opacity). Inside it:
 | Divider bar (optional) | `data-part="sub-divider"` on a `<rect>` inside `slot{i}-sub` | Extent auto-derived from the `sub` geometry, drawn middle-out on reveal. Author `y`/`height`/`fill` freely. |
 | Caster name | `data-slot="slot{i}-name"` on a `<text>` | |
 | Sub-info wrapper | `data-slot="slot{i}-sub"` on a `<g>` | The show/hide target. Start hidden (`style="opacity:0"`); the mount slides+fades it. No `clip-path`. |
-| Sub-info label / value | `data-slot="slot{i}-sub-label"` / `-sub-value"` on `<text>` | The producer-chosen address-book field + its value. |
+| Sub-info label / value | `data-slot="slot{i}-sub-label"` / `-sub-value"` on `<text>` | The producer-chosen address-book field + its value. The **label is optional and the `default` package omits it** — a field name is something the producer needs in the app, not on the stream. See the badge below, and `sub-glyph.js` for the reasoning. |
+| Sub-info badge (optional) | `data-part="sub-icon"` on a `<use>` inside `slot{i}-sub` | The mark that says which platform a bare handle belongs to. `x` tweened from `subIcon` in the layout JSON; the mount sets its `href` and shows it only for fields that map to a mark it can draw. Declaring it means declaring all of `sub-glyph-x`, `sub-glyph-youtube` and `rio-mark` — a missing symbol is indistinguishable from a field that wears no mark. |
+| Atmosphere (optional) | `data-slot="field"` / `"sub-field"` on a `<g>` in `<defs>` | One field per surface, authored across the whole canvas; the mount clones each into every plate and clips it to that plate's `main-rect` / `sub-rect`, so four plates show four slices of one scatter. Each direct child is one sprite and must declare `data-l` / `data-r` — the exact horizontal extremes of its own motion — or it stays animating in plates that can't show it. `sub-field` sprites also carry `data-part="sub-glyph"` (rebindable — see above). |
 
 The layout JSON is a `<script type="application/json" data-layouts="1">` block:
 
@@ -187,7 +237,9 @@ offsets.
 
 Two position groups, `<g data-slot="side1">` and `<g data-slot="side2">`, are
 **both authored at the `left` anchor** (they overlap at rest; the mount moves and
-reveals them). Inside each `side{n}`:
+reveals them). The `default` package puts `left` and `right` exactly where
+Commentary's two-caster row puts its plates, so cutting between the desk and the
+matchup doesn't shift the lower band sideways. Inside each `side{n}`:
 
 | Element | Marked with | Notes |
 |---------|-------------|-------|
@@ -196,7 +248,9 @@ reveals them). Inside each `side{n}`:
 | Divider bar (optional) | `data-part="sub-divider"` on a `<rect>` inside `side{n}-sub` | Extent auto-derived from its authored width, drawn middle-out on reveal. |
 | Player name | `data-slot="side{n}-name"` on a `<text>` | |
 | Sub-info wrapper | `data-slot="side{n}-sub"` on a `<g>` | Show/hide target. Start hidden (`style="opacity:0"`); the mount slides+fades it. No `clip-path`. |
-| Sub-info label / value | `data-slot="side{n}-sub-label"` / `-sub-value"` on `<text>` | |
+| Sub-info label / value | `data-slot="side{n}-sub-label"` / `-sub-value"` on `<text>` | As Commentary: the label is optional and the `default` package omits it in favour of the badge. |
+| Sub-info badge (optional) | `data-part="sub-icon"` on a `<use>` inside `side{n}-sub` | As Commentary, but at a fixed `x` — this band never reflows. Also reads a MANUAL side's typed label when there's no `subField` to resolve. |
+| Atmosphere (optional) | a clipped `<g>` inside `side{n}`, marked `data-part="field"` / `"sub-field"` | The theme carries its own `clipPath` and the field travels with the card — the plate never resizes, only the whole group translates. The mount only stops the marks ticking while the surface is hidden, and rebinds `sub-field`'s sprites. Give the two sides **different** scatters — identical marks in identical places on adjacent plates read as a copy-paste. |
 
 The layout JSON is a `<script type="application/json" data-layouts="1">` block
 mapping each anchor to an **X offset** (svg units) from the authored `left`
@@ -248,16 +302,50 @@ it. No data slots — instead it recolors via inherited vars:
 | `--port-2` | Stat Callout: a complementary port colour. Game Summary: side 2's colour. |
 | `--accent` | The global design accent. |
 
-A package may also **declare** its fixed palette in a `<style>` block on the
-SVG root (slice26 does); the Game Summary mount reads these off the injected
-`<svg>` via `getComputedStyle` and keys its rails, glass wells and numerals to
-them. When absent it falls back to live controller-port colours:
+A package may also **declare** its palette on the SVG root (inline `style=`, or
+a `<style>` block); both callout mounts read these off the injected `<svg>` via
+`getComputedStyle` and key their rails, glass wells and numerals to them. Each
+is independent — declare only what you want to pin, and anything you leave out
+falls back to the live controller-port colours / the producer's global accent:
 
 | Declared variable | Meaning |
 |-------------------|---------|
-| `--side1` / `--side2` | Fixed side colours (side 1 = left, side 2 = right). |
-| `--well` | Glass-well tint for the shared data card (any CSS color). |
-| `--accent-neutral` | Neutral accent (FINAL badge, winner pill, footer dots). |
+| `--side1` / `--side2` | Fixed side colours (side 1 = left, side 2 = right). slice26 pins these; **default deliberately does not**, so sides stay bound to each player's controller port. |
+| `--well` | Glass-well tint for every card surface (any CSS color). |
+| `--accent-neutral` | Neutral accent (FINAL, winner mark, star pips). Overrides `overlays.global.accentColor` for these two elements. |
+
+**Do not make `--well` white.** A white/near-white well is the neutral that sits
+between the two side colours, and with the default port palette (port 1 red,
+port 2 blue) a white neutral turns the whole scene into a flag. The default
+package pins a smoked night glass and keys all remaining chrome — borders,
+label chips, bar tracks, captions — to the fog/night scale in
+`layout/lib/rio-theme/tokens.css`. Both mounts expose that chrome as a named
+set (`--ink`/`--ink-2`/`--ink-3`/`--ink-4`, `--edge`, `--edge-soft`, `--sheen`,
+`--slab`, `--scrim`) so a package restyling one restyles the other identically.
+
+**Where the two side colours meet, don't let them touch.** A rule split at
+x=960 with one port's colour on each half draws a hard red-against-blue seam
+across the bottom of the frame, which is the same flag problem in miniature.
+The default fades each half out well before centre and lets Rio red carry the
+rule across the middle, so it reads as one continuous line changing hands.
+
+**Everything in this backdrop is static except a floor-height mushroom field.**
+It is full-canvas and it sits under a scene whose every card is a large
+translucent surface animated by GSAP, on a machine that is also running the game
+— so a continuously animating layer here is re-composited on every one of those
+frames. Motion has to stay a **small, unmasked, transform-only group**: never a
+full-canvas layer, never `patternTransform` or gradient offsets (they re-tile
+the whole 1920×1080 every frame), and never anything inside a `<mask>`. The
+default spends its whole budget in one place — 12 marks of the same drifting
+field the lower third uses, one animation each, all of them held in the bottom
+of the frame so the union of their travel is a 248px band rather than the
+canvas — and it **crops every masked and patterned layer to where it actually
+paints** so that nothing but two plain gradient rects sits underneath that band.
+Both halves matter: the first cut of this field ran 20 marks on two animations
+each over uncropped full-canvas masked layers, and it was laggy on air.
+Everything else rasterises once. For the same reason
+neither mount uses `backdrop-filter` any more: the wells are ~82% opaque, so
+there was no visible backdrop to blur and every card was forcing a readback.
 
 Keep important shapes away from the extreme edges (the reveal wipe clips it).
 
@@ -291,12 +379,42 @@ region with a `<clipPath>` so cards don't escape the bar.
 
 ### `stats.svg`
 
-The per-team stat card (`public/layout/lib/stats-card-mount.js`), 325×120:
+The per-team stat card (`public/layout/lib/stats-card-mount.js`), 452×118:
 `char-icon`, `stat-{0..5}-value` / `stat-{0..5}-label` (four filled today),
 and a `line-group` bottom row (`line-label` + `line-text`) that hides when
 empty — declare `data-h-full` / `data-h-compact` on `card-bg` so the card
 shrinks with it. Wrap everything bindable in `<g data-slot="content">` (the
 batter-change dissolve target).
+
+### `statscard.svg`
+
+**The same element at a different aspect** — same mount, same slots, same
+`RioData.getStatsLine` resolution as `stats.svg`, authored 380×240 as a 2×2
+grid instead of a four-across bar. It is what the **Stat Card** container member
+renders (`fed-container.js`) — including what a container flashes over its
+resting roster on a batter change; there is no standalone Stats Card source. A package that themes `stats` and not `statscard` gets the
+`default` 2×2 card next to its own bar, so theme both or neither.
+
+It adds two **optional caption bands** the wide bar has no room for: a header
+(`head-group` + `head-text`) naming the stat set, and the footer `line-group`.
+Each owns one edge of the card, so all four on/off combinations come from one
+pair of authored positions rather than four layouts — declare them on `card-bg`:
+
+| attribute | the card's… |
+|---|---|
+| `data-top-open` / `data-top-closed` | `y`, with and without the header |
+| `data-bot-open` / `data-bot-closed` | bottom edge, with and without the line |
+
+The mount animates between them at the scorecard's 0.45s `power3.out`, fading
+each band clear of its travelling edge. A theme with a footer and no header may
+declare `data-h-full` / `data-h-compact` (heights, fixed top edge) instead; a
+theme declaring neither keeps its authored geometry. A theme still authored at
+the older 380×220 renders at natural size, centred in the taller box — nothing
+scales — which is how `slice26`'s card keeps working untouched.
+
+One more difference from `stats.svg`: the mount stamps `data-team` on the root
+`<svg>`, so a theme can paint per side with `svg[data-team="1"] …` (the built-in
+doesn't; `slice26` does on its bar).
 
 ### Bracket (no SVG)
 

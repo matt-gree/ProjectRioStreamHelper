@@ -33,6 +33,14 @@ class Slot:
 class Contract:
     canvas: tuple[int, int]
     preserve_aspect_ratio: str
+    # Other canvases this element's mount handles without complaint. Only the
+    # bottom-anchored band elements have one: their layout is the height of the
+    # card, and the mount pins whatever box the theme declares to the BOTTOM of
+    # the source and crops the overflow, so a theme authored on the old full
+    # 1920x1080 canvas still lands correctly instead of being scaled to fit.
+    # Not a general escape hatch — an element whose mount does not crop should
+    # leave this empty so the size mismatch keeps warning.
+    alt_canvases: tuple[tuple[int, int], ...] = ()
     # data-slot name -> Slot. None = slot lint not transcribed for this element.
     # {} = the element takes NO data slots (callout is a pure backdrop).
     slots: dict[str, Slot] | None = None
@@ -209,9 +217,13 @@ CONTRACTS: dict[str, Contract] = {
     "scoreboard-l": Contract((800, 460), "xMidYMid meet", slots=_scoreboard_slots(),
                              parts={"div": Slot("any")}),
     # --- canvas checks only (slot lint not transcribed yet) ---
-    "commentary": Contract((1920, 1080), "xMidYMax meet"),
-    "playerplates": Contract((1920, 1080), "xMidYMax meet"),
+    # The two band elements: 1920 wide (spacing is measured against the stream
+    # frame) by the height of the card, so the producer places them vertically
+    # in OBS. Their mounts bottom-anchor and crop, so the old full canvas is
+    # still valid — see alt_canvases.
+    "commentary": Contract((1920, 240), "xMidYMax meet", alt_canvases=((1920, 1080),)),
+    "playerplates": Contract((1920, 240), "xMidYMax meet", alt_canvases=((1920, 1080),)),
     "lowerthird": Contract((1920, 1080), "xMidYMax meet"),
     "scorecard": Contract((1920, 1080), "xMidYMid meet"),
-    "statscard": Contract((380, 220), "xMidYMid meet"),
+    "statscard": Contract((380, 240), "xMidYMid meet"),
 }

@@ -11,6 +11,14 @@
 //     usable row; templates are cloned in and translated to their x offset.
 //   <rect data-slot="band-bg">   optional continuous bed; the mount sets its
 //     x/width to the laid-out row (respecting data-pad), keeps y/height/rx.
+//   <g data-slot="band-field">   optional atmosphere layer authored across the
+//     WHOLE band strip in absolute coords and kept inside <defs>. The mount
+//     clips one copy to each bed island, above the bed and under the content —
+//     so a space slot shows two slices of one field, not the scatter twice.
+//     Needs a bed: the island geometry is the bed's, so no bed = no field.
+//   <g data-slot="band-field-near">  the same, drawn OVER the content — the
+//     near plane of a two-plane field, with the copy between them. Optional and
+//     independent: a theme may declare either, both, or neither.
 //   <g data-tpl="{type}" data-w="{px}">   one content template per type,
 //     authored at LOCAL x-origin 0 at band height, kept inside <defs> so the
 //     original never renders. Missing template = type unavailable in theme.
@@ -100,7 +108,7 @@ const FALLBACK_SVG = `
     </g>
     <g data-tpl="clock" data-w="280">
       <text data-slot="clock-label" x="0" y="40" style="fill:var(--ink-dim,#aaa)" font-size="20" font-weight="700"></text>
-      <text data-slot="clock" x="0" y="105" style="fill:var(--ink,#fff);font-family:var(--font-mono,monospace)" font-size="56" font-weight="700">5:00</text>
+      <text data-slot="clock" data-maxw="280" x="0" y="105" style="fill:var(--ink,#fff);font-family:var(--font-mono,monospace)" font-size="56" font-weight="700">5:00</text>
     </g>
     <g data-tpl="message" data-w="480">
       <text data-slot="title" data-maxw="460" x="0" y="72" style="fill:var(--ink,#fff)" font-size="36" font-weight="700"></text>
@@ -181,6 +189,7 @@ export function mountLowerThird({ host }) {
   let structureKey = '';         // identity of the laid-out segment row
   let segs = [];                 // [{ i, type, node, slots: {name: el}, refit: [el] }]
   let bedClones = [];            // per-group band-bg clones (space splits the bed)
+  let fieldClones = [];          // per-group band-field copies, clipped to the bed
   let clockTimer = null;
   let disposed = false;
 
@@ -293,6 +302,8 @@ export function mountLowerThird({ host }) {
     segs = [];
     bedClones.forEach((n) => n.remove());
     bedClones = [];
+    fieldClones.forEach((n) => n.remove());
+    fieldClones = [];
     if (!band) return;
     band.querySelectorAll('[data-row]').forEach((n) => n.remove());
 
@@ -385,15 +396,96 @@ export function mountLowerThird({ host }) {
       bg.setAttribute('opacity', '0'); // original is the clone template only
       const padAttr = bg.getAttribute('data-pad');
       const pad = padAttr != null ? (parseFloat(padAttr) || 0) : 0;
-      for (const gr of groups) {
+      const field = engine.slots['band-field'];
+      const near = engine.slots['band-field-near'];
+      groups.forEach((gr, k) => {
+        /*
+         * Pad outward, but never past half the slack to the next island. A
+         * space slot only gets the width the content leaves it, and when that
+         * is less than two pads (a full band with a space wedged in), two beds
+         * padded blindly OVERLAP — and two rounded rects with the same border
+         * and the same drop shadow, overlapping by a few px, paint as one bed
+         * with a bright seam down it. Which is the exact opposite of what a
+         * split slot is for. Clamped, a tight space closes to a hairline and
+         * the two cards still read as two.
+         */
+        const prev = groups[k - 1];
+        const next = groups[k + 1];
+        const padL = prev ? Math.min(pad, ((gr.start - prev.end) * scale) / 2) : pad;
+        const padR = next ? Math.min(pad, ((next.start - gr.end) * scale) / 2) : pad;
+        const bedX = rowX + gr.start * scale - padL;
+        const bedW = (gr.end - gr.start) * scale + padL + padR;
         const bed = bg.cloneNode(true);
         bed.removeAttribute('data-slot');
         bed.setAttribute('data-bed-clone', '1');
-        bed.setAttribute('x', String(rowX + gr.start * scale - pad));
-        bed.setAttribute('width', String((gr.end - gr.start) * scale + pad * 2));
+        bed.setAttribute('x', String(bedX));
+        bed.setAttribute('width', String(bedW));
         bed.setAttribute('opacity', '1');
         bg.parentNode.insertBefore(bed, bg.nextSibling);
         bedClones.push(bed);
+        if (field) addField(band, field, bed, bedX, bedW, `${k}`, false);
+        if (near) addField(band, near, bed, bedX, bedW, `${k}n`, true);
+      });
+    }
+  }
+
+  // One copy of the theme's atmosphere layer per bed island, clipped to that
+  // island's rounded rect. The field is authored across the whole strip in
+  // absolute coords, so each island reveals its own slice of the same scatter —
+  // cloning is what puts it under two beds, not what repeats it.
+  //
+  // `front` picks the plane. A theme may declare two: `band-field` goes just
+  // before the band group (above the beds, under the segment content) and
+  // `band-field-near` just after it (over the content), so the copy sits
+  // BETWEEN them. Both are clipped to the same island, so a near mark can never
+  // escape the card it belongs to.
+  function addField(band, field, bed, bedX, bedW, k, front) {
+    const NS = 'http://www.w3.org/2000/svg';
+    const clipId = `lt-band-field-${k}`;
+    const clip = document.createElementNS(NS, 'clipPath');
+    clip.setAttribute('id', clipId);
+    const shape = document.createElementNS(NS, 'rect');
+    shape.setAttribute('x', String(bedX));
+    shape.setAttribute('width', String(bedW));
+    // y/height/rx come from the bed itself, so the field can never bleed past
+    // the corner radius the theme drew.
+    for (const attr of ['y', 'height', 'rx', 'ry']) {
+      const v = bed.getAttribute(attr);
+      if (v != null) shape.setAttribute(attr, v);
+    }
+    clip.appendChild(shape);
+
+    // clipPath is a non-rendering child, so parking it inside the wrapper keeps
+    // teardown to a single node.
+    const wrap = document.createElementNS(NS, 'g');
+    wrap.setAttribute('clip-path', `url(#${clipId})`);
+    wrap.appendChild(clip);
+    const copy = field.cloneNode(true);
+    copy.removeAttribute('data-slot'); // the original in <defs> stays the one slot
+    wrap.appendChild(copy);
+    band.parentNode.insertBefore(wrap, front ? band.nextSibling : band);
+    fieldClones.push(wrap);
+
+    // Drop the sprites this island clips away. A clip hides them but keeps
+    // their animations ticking, and most of a whole-strip field falls outside
+    // any one island — this app renders alongside the game, so pay for what
+    // shows. Compared in client rects, not getBBox: a bbox is in the element's
+    // OWN user space and so excludes its own transform, which is exactly where
+    // a scattered field puts its position.
+    //
+    // The slack is one sprite-width on each side, because a client rect is a
+    // snapshot of wherever the animation happens to be at mount and a sprite
+    // sways well past its own box. Sprite width is the right proxy for how far:
+    // in this field travel scales with size on purpose (bigger reads as nearer,
+    // so it must also move further), and a mark pruned for sitting just outside
+    // the island is exactly the mark that would have slid in through the card's
+    // edge — the entrance the field is built around.
+    const bedBox = bed.getBoundingClientRect();
+    for (const sprite of [...copy.children]) {
+      const box = sprite.getBoundingClientRect();
+      const slack = box.width;
+      if (!box.width || box.right + slack < bedBox.left || box.left - slack > bedBox.right) {
+        sprite.remove();
       }
     }
   }
@@ -405,10 +497,11 @@ export function mountLowerThird({ host }) {
     return id === undefined ? '' : `${OverlayBase.BASE_URL}/game_assets/msb/characterIcons/${id}.png`;
   }
 
-  // Swap a logo image between its authored (with-caption) box and a larger
-  // no-caption box declared via data-full="x y w h" — so a caption-less logo
-  // can grow into the space the caption would occupy. Themes without data-full
-  // are untouched (always the authored box).
+  // Swap a logo between its authored (with-caption) box and the no-caption box
+  // declared as data-full="x y w h" — so a caption-less logo is centred in the
+  // band and grown into the space the caption would have taken, instead of
+  // floating high over a bar of empty band. Themes without data-full are
+  // untouched (always the authored box).
   function applyLogoGeom(imgEl, full) {
     if (!imgEl) return;
     if (!imgEl.hasAttribute('data-basegeom')) {
@@ -424,10 +517,21 @@ export function mountLowerThird({ host }) {
   function bindLogo(seg, slot) {
     const hasTitle = !!(slot.title && String(slot.title).trim());
     segText(seg, 'title', slot.title || '', { optional: true });
-    // Grow both the branding image and the theme-default mark when caption-less.
+    // Both the branding image and the theme's own default mark, or a package
+    // with no logo uploaded still sits high.
+    //
+    // The theme names its own geometry node with data-full, which is the only
+    // reliable way to find it: the default package's mark is a <use> of an
+    // inlined <symbol>, Classic's is a nested <svg> wrapping a three-node
+    // placard, and the original `querySelector('image')` matched neither — which
+    // is why data-full had never once run in either package. The image/use
+    // fallback is for a theme that supplies default art but no caption-less box;
+    // it re-applies the authored geometry, so it is a no-op that keeps the call
+    // honest rather than a guess at what to resize.
     const defG = seg.slots['logo-default'];
     applyLogoGeom(seg.slots['logo'], !hasTitle);
-    applyLogoGeom(defG ? defG.querySelector('image') : null, !hasTitle);
+    applyLogoGeom(defG && (defG.querySelector('[data-full]')
+      || defG.querySelector('image, use')), !hasTitle);
     const logoUrl = OverlayBase.brandingLogoUrl();
     const imgSlot = seg.slots['logo'];
     if (!imgSlot) return;
@@ -571,7 +675,13 @@ export function mountLowerThird({ host }) {
           ? (c.endsAt || 0) - Date.now()
           : (c.remainingMs != null ? c.remainingMs : (c.durationSec || 300) * 1000);
         text = fmtDur(ms);
-        warn = warn || (c.running && ms > 0 && ms < 10000);
+        // !! is load-bearing. `c.running` is undefined on a countdown the
+        // producer has configured but never started, and `undefined && …` is
+        // undefined, not false — which classList.toggle below reads as "no
+        // force argument given" and so FLIPS the class every 250ms tick. The
+        // symptom was a break clock strobing on air in exactly the state it
+        // spends most of its life in: set up, counting nothing, waiting.
+        warn = warn || !!(c.running && ms > 0 && ms < 10000);
       } else if (mode === 'countup') {
         const ms = c.running ? Date.now() - (c.startedAt || Date.now()) : (c.elapsedMs || 0);
         text = fmtDur(ms);
@@ -588,7 +698,8 @@ export function mountLowerThird({ host }) {
         || clockEl.getAttribute('data-basey');
       if (clockEl.getAttribute('y') !== targetY) clockEl.setAttribute('y', targetY);
     }
-    host.classList.toggle('lt-warn', warn);
+    // Never pass a possibly-undefined force here — see the !! above.
+    host.classList.toggle('lt-warn', !!warn);
   }
 
   // ── reveal ────────────────────────────────────────────────────────────────

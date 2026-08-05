@@ -177,7 +177,7 @@ size. Regions, in stage coordinates:
 │  │ (claims freed space)   │   AB TICKER (x=720, y=878, h=118)          │
 │  │                        │   [ chips build progressively, →→→ ]       │
 │  └────────────────────────┘                                            │
-│  (team logo ghosted full-height behind the left column)                 │
+│  (team logo ghosted behind the left column, high — see §3)              │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -187,7 +187,32 @@ collapses and its neighbors reflow to fill. Concretely:
 - **Left column is a flex stack**: identity plate → stat cards → hero art. The
   hero has `flex: 1` and claims *whatever vertical room the stat cards don't
   need* — a pitcher's taller card stack means a smaller hero; a bench position
-  player's short stack means a bigger hero. Never a fixed gap.
+  player's short stack means a bigger hero. Never a fixed gap. **The hero art
+  actually uses that room**: it fits at `max-width/max-height: 100%` (it used to
+  cap at 92%/96%, which meant it could never fill the slot the flex column gave
+  it) and then scales `1.08` about its **bottom centre** — the MSB renders carry
+  a lot of transparent margin, so a strictly fitted image leaves the character
+  occupying about half the box. 1.08 is a **clearance** number, not a taste one:
+  the 650px column centres at x=365 and the theater starts at x=720, so the
+  scaled half-width must stay under 355. 1.08 lands at 350; 1.18 — what filling
+  the slot vertically would need — lands at 383 and drives the art both off the
+  left of the stage and under the theater.
+- **The no-start.gg case is the same mechanism.** With no event, no bracket and
+  no round the plate loses two lines (177px → 133px) and the hero simply gets
+  44px taller. Nothing is reserved for tournament context.
+- **The hero's ground glow is measured from the ARTWORK, not the element box**
+  (`alignHeroGlow`). Across the roster the renders are all horizontally centred,
+  but their silhouettes span **29%–88% of the image width** and their feet sit
+  **88%–99%** of the way down it. A glow at a fixed 84% of the element box was
+  therefore ~3× wider than a small character, barely wider than a big one, and
+  floated in mid-air for the ones with room under their feet — so it landed in a
+  visibly different place on every push. The mount draws the art into a 96px
+  canvas, scans the alpha channel for the opaque bounding box, and sizes and
+  places the pool on that: centred on the silhouette, 1.3× its width (capped at
+  the column), vertically centred on the feet line. Cached per source, so a
+  replay costs nothing; a same-origin failure falls back to the CSS centring.
+  **Nothing in CSS can see where the pixels are** — don't try to solve this with
+  percentages again.
 - **Pitching / Defense are optional half-width cards** under Batting. Their row
   share is **proportional to how many stats each records** (inline flex weights
   + a `max-width` cap from `halfBoxHtml`): a lone single-stat defense card hugs
@@ -204,36 +229,77 @@ collapses and its neighbors reflow to fill. Concretely:
 - Stolen Bases mini appears **only when > 0**. Strikeouts removed (already in the
   AB history). AVG replaced by OBP + SLG.
 
-**Identity plate** — the header. Event name (small tracked caps) → character
-name (56px, 900) → rio name · team → `bracket · phase · **round**`. Empty pieces
-simply don't render. The four context sources, most→least general:
+**Identity plate** — the header, and **the one card in the frame that is the
+player's colour rather than neutral**. Event name (small tracked caps) →
+character name (56px, 900) → rio name → `bracket · phase · **round**`. Empty
+pieces simply don't render. The four context sources, most→least general:
 `tournamentInfo.name` (Event) · `tournamentInfo.event_name` (Bracket) ·
 `tournamentInfo.phase` (Phase) · `score.{N}.phase` (Round, bold). **No team
-logo badge** here — team identity lives in the ghosted background logo.
+logo badge and no team name** here — team identity lives in the ghosted
+background logo, and a text repeat of it was a third line competing with the
+player's own name.
 
-**Team logo** — a full-frame-height *background* graphic anchoring the left side
-(`.cs-bglogo`, over the theme SVG, under every card, `opacity: 0.2`). Clipped at
-the theme's 28px rainbow border on the **left/top/bottom only**; the right side
-bleeds freely behind the frame content, so it reads as a background element
-rather than competing with the character.
+Port colour on this plate is not a tint: the side gradient runs `0.5 → 0.2 →
+well` across the card, the border is the side colour, and the rail is a
+full-height spine welded to the card's left edge (`left: 0`, 10px, glowing) —
+not the floating 6px pip it used to be. Everything else in the frame stays
+neutral so this reads as *the player's card*.
+
+**Long names are fitted, not truncated** (`fitPlateText`). Both the character
+line and the rio line step down from their design size (56 / 21) until the text
+fits the plate, flooring at 30 / 14. The width is measured with a **`Range`, not
+`scrollWidth`** — both lines carry `text-overflow: ellipsis` as a backstop, and
+an ellipsed element reports `scrollWidth === clientWidth`, so a `scrollWidth`
+fitter would conclude every name fits and never shrink anything. (The Game
+Summary's `fitPlateNames` *can* use `scrollWidth`, because its names don't
+ellipse. Don't copy that idiom over.)
+
+**Team logo** — a big ghosted *background* graphic behind the left column
+(`.cs-bglogo`, over the theme SVG, under every card, 560×560 at `left: 40px`,
+`top: 190px`, `opacity: 0.17`).
+
+Three things about it are load-bearing:
+
+- **Whole.** No `clip-path`. It used to be a full-height band clipped at a 28px
+  frame border so a wide logo could "bleed right"; what that produced was a
+  mark sliced flat down its left side, which reads as a rendering bug.
+- **Hard-edged.** No `mask-image` feather either. A radial fade on a team mark
+  looks like a smudge. If it is in the wrong place, move the box — don't
+  dissolve the logo.
+- **High, and brightened.** Centred on the column it landed exactly concentric
+  with the hero art and became a halo around the character; anchored high, its
+  lower half falls behind the shoulders and its upper half fills the one part of
+  the column that is genuinely empty. And team marks are mostly *dark* artwork —
+  ghosted over a dark backdrop without `brightness(1.4)` it reads as a stain on
+  the frame rather than a watermark.
 
 ---
 
 ## 4. Visual design language — "Slice 26"
 
 The spotlight speaks the **Slice 26** vocabulary (the tournament's house style),
-shared with the Game Summary and the matchup band. The non-negotiable rules:
+shared with the Game Summary and the matchup band. The vocabulary is Slice 26's;
+the *palette* is whatever the active design package resolves (§4.1) — on the
+default package that is the Project Rio night arena. The non-negotiable rules:
 
-- **No pill / chip labels.** Statuses (Winner, ★ Superstar, Captain) are a bare
-  right-aligned **tracked-text column** on the plate, never rounded badges. Stamp
+- **No pill / chip labels.** Statuses (**Winner, Captain** — see below) are a
+  bare right-aligned **tracked-text column** on the plate, never badges. Stamp
   subs, swing tags, and the finale banner use small-radius or bar-prefixed text,
-  not badge boxes.
+  not badge boxes. **"★ Superstar" is not one of the statuses** — every starred
+  character in a game carries the flag, so it was a near-permanent third line
+  saying something the hero art already shows. Stars mean something in the
+  game-state bar's pip meter and in the AB chips; they don't need a label here.
 - **Tracked uppercase text**, heavy weights (700–900), tight letter-spacing on
   big numerals.
-- **Glass wells**: `--well` background, `1.5px` translucent white border, inner
-  top highlight, `backdrop-filter: blur(6px)`. The theater and game-state bar
-  add `.cs-rim` — an animated trail-gradient border (`--s1 → --accent → --s2`,
-  7s crawl).
+- **Glass wells**: `--well` background, `1.5px` translucent border, inner
+  top highlight. **No `backdrop-filter`** — see §4.1. The theater and game-state bar
+  carry `.cs-rim`, now just a brighter `--edge` — the animated trail-gradient
+  border (`--s1 → --accent → --s2`, 7s crawl) that used to ring them is
+  **removed**. It ran for the whole show around the one surface that is
+  supposed to hold attention, and once the palette went back to controller
+  ports its gradient re-read as red-to-blue. `.cs-rim` is kept as a hook so a
+  package can give the framed surfaces their own edge; the same removal applies
+  to the Game Summary's board / linescore / match card.
 - **Monospace numerals** (`Chivo Mono`, `--mono`) with `tabular-nums` for every
   score, count, distance, and rate — they must not jitter as they tick.
 
@@ -241,26 +307,164 @@ shared with the Game Summary and the matchup band. The non-negotiable rules:
 
 The stage defines CSS custom properties resolved by `resolvePalette()`:
 
-| Var | Meaning | Slice 26 default |
-|-----|---------|------------------|
-| `--s1` / `--s1-rgb` | side 1 color | lime `#c5f707` |
-| `--s2` / `--s2-rgb` | side 2 color | teal `#57e0e7` |
+| Var | Meaning | Default package |
+|-----|---------|-----------------|
+| `--s1` / `--s1-rgb` | side 1 color | side 1's **controller port** colour |
+| `--s2` / `--s2-rgb` | side 2 color | side 2's **controller port** colour |
 | `--side` | the **featured** character's own side color | (s1 or s2) |
-| `--accent` | neutral accent | pink `#f93f91` |
-| `--well` | glass surface fill | `rgba(255,255,255,0.08)` |
+| `--accent` | neutral accent | Rio red `#ff3d4e` |
+| `--well` | glass surface fill | night glass `rgba(14,14,22,0.74)` |
+| `--port-color` / `--port-2` | what the backdrop SVG *paints* its A and B sides with | **both set to `--side`** |
+| `--side-a-weight` / `--side-b-weight` | whether each backdrop side paints **at all** (0–1) | A `1`, **B `0`** |
+| `--brand-color` | the backdrop's centre bloom | **`--side`** (defaults to Rio red `#e60012`) |
+| `--dot-weight` | the backdrop halftone's opacity | `0.34` (Game Summary uses the `0.5` default) |
+
+**The backdrop is ONE colour, ENTERING FROM ONE SIDE, and that is the whole
+point.** `callout.svg` is authored as an A side and a B side; the Game Summary
+feeds it the two players at full weight. The spotlight is about *one* player, so
+`resolvePalette` gives both sides that player's colour **and switches the B side
+off**.
+
+Mirroring the colour into both sides was the obvious first move and it was
+wrong. A symmetrically tinted frame reads as a vignette, as a lighting rig, as
+anything except a person. Colour that enters from the side the player occupies
+and falls away across the frame reads as *their* light. The spotlight's player
+is always in the left column whichever side they batted on, so A is always the
+lit side. `--s1` / `--s2` survive where two colours still mean something: the
+score strip and the FINAL card.
+
+**The centre bloom goes with them.** `callout.svg`'s brand bloom is Rio red by
+default, which is right for the Game Summary — the centre of a two-player frame
+belongs to neither side, so the brand is the natural thing to put there. On a
+one-player frame it was the last layer carrying a second hue, and behind a
+**blue** player a red glow in the middle read as the other player's colour
+leaking into their own callout. The spotlight retints it via `--brand-color`, so
+the backdrop carries exactly one chroma. The Rio-red **accent** does *not* move —
+it marks moments (WINNER, FINAL, star pips) and never stands for a player.
+
+Two consequences worth knowing before you tune anything:
+
+- **Side-coloured glows stop reading**, because they no longer have a
+  differently-coloured backdrop to be brighter than. The hero's ground glow
+  needs a pale core (`rgba(232,236,255,0.3)`) to show at all; the colour tints
+  the light, the light is what you see.
+- **The halftone comes down** to `--dot-weight: 0.34`. Three of this frame's
+  four corners are covered by cards, so at the Game Summary's weight the dots
+  only ever appeared as a rind around the content.
+- **The identity plate's own type had to be re-graded.** When the plate was a
+  neutral well with a 0.26 tint, the event line could be side-coloured and the
+  context line could sit at `--ink-3` and both still read. On a card that is now
+  the player's colour at 0.55, side-coloured type is colour-on-colour and
+  fog-500 is mid-grey on mid-saturation. Every line moved up one step of the fog
+  scale, the event line stopped being side-coloured, WINNER took the Rio accent
+  instead of the side colour, and the plate gradient was **concentrated at the
+  rail end** (falling away by 34% instead of 42%) so the type sits on dark
+  glass while the card still reads as the player's. Strengthen the plate again
+  and you have to walk these with it.
 
 Resolution order (per `resolvePalette`): the **active design package's
 `callout.svg`** may declare `--side1 / --side2 / --well / --accent-neutral` on
-its SVG root (slice26 does) → else the per-port controller colors
-(`PORT_COLORS`, overridable via `overlays.postgamecallout.port{N}Color`) → else
+its SVG root → else the per-port controller colors (`PORT_COLORS`, overridable
+via `overlays.postgamecallout.port{N}Color`) → else
 `overlays.global.accentColor`. The mount fetches `/design/{pkg}/callout.svg` as
 the backdrop and falls back to `default`, then to a built-in radial-gradient SVG
 (`builtinThemeSvg`) keyed on port colors. This is the **same theme contract as
 the Game Summary** (`postgame-vs-mount.js`); see `public/design/README.md`.
 
+**Default vs Slice 26 — what each pins.** slice26 declares a fixed side pair
+(the sides are the tournament's colours). The **default** package deliberately
+declares only `--well` and `--accent-neutral`: sides stay bound to whoever's on
+which controller port, which is what the producer sees in gc-overlay and in
+game. That leaves the *neutral* carrying the whole look, so:
+
+> **Never give the default package a white neutral.** These scenes were ported
+> out of Slice 26 with its white-glass wells intact; against the default port
+> palette (port 1 red, port 2 blue) a white well, white border and white label
+> chip put a white stripe between a red side and a blue side and the whole
+> scene read as a flag rather than as Project Rio. The chrome is now the
+> **night/fog scale** from `lib/rio-theme/tokens.css`, exposed as a named set at
+> the top of `postgame-callout-css.js` and mirrored name-for-name in
+> `postgame-vs-mount.js`: `--ink` / `--ink-2` / `--ink-3` / `--ink-4` (fog text,
+> brightest to dimmest), `--edge` / `--edge-soft` (borders, dividers),
+> `--sheen` (inner top highlight), `--slab` (inset chips + bar tracks),
+> `--scrim` (stamp/badge backing over the 3D). Restyle these, not raw
+> `rgba(255,255,255,…)`.
+
+The **accent is Rio brand red**, and it is the only fixed chroma in the frame —
+it marks moments (FINAL, the winner mark, star pips, the HR stamp, the backdrop's
+brand bloom), never a player. Because a player on port 1 is also red, accent-red
+is kept to *chrome* roles: rules, glows, outlines and type. The two places it used
+to be a filled lozenge (the Game Summary's FINAL badge and WINNER pill) are now
+tracked text over a rule — a solid red pill dead-centre between a red side and
+a blue side was the third stripe.
+
 > **Slice 26 palette** (theme SVGs are gitignored `user_data`, so this lives
 > only here): lime `#C5F707` · teal `#57E0E7` · pink `#F93F91` accent · plum
 > well `rgba(118,36,92,0.4)`.
+
+**The backdrop.** `default/callout.svg` is a full-canvas layer under a scene
+whose every card is a large translucent surface animated by GSAP, on a machine
+that is also running the game. As of **August 2026 it animates nothing at all**,
+which is the cheapest it has ever been.
+
+Composition, bottom to top: night base → the wall (a bare square grid fading out
+as it reaches the floor) → horizon air → floor haze → the floor pool → the
+Rio-red brand bloom → the port edge columns → the port corner blooms → the port
+halftone in the four corners. Gradients, one masked grid, one masked dot field.
+The **centre column stays neutral by the gradients' own stops** — every
+port-carrying layer reaches zero alpha before the middle of the frame, so the
+two sides read as two players and not as two halves of a flag. That used to be
+enforced by masking every port layer; the masks are gone.
+
+**What was deleted, and why it should not come back.** The frame had accumulated
+eight systems talking at once — the grid, crosshair register nodes punctuating
+it, the halftone, a horizon hairline, two port washes, a Rio-red rule across the
+top, a three-part foot rule across the bottom, and a drifting field of twelve
+Rio marks — under a scene whose own cards are already dense with numbers.
+
+- **The register nodes.** The grid alone is texture; the nodes made it a HUD,
+  and this scene already carries a diamond, a count, an out meter and a star
+  meter.
+- **The horizon hairline.** A drawn line across the middle of the frame is the
+  single most attention-grabbing thing you can put behind content. The horizon
+  *air* gradient survives and says the same thing softly.
+- **The top brand rule and the foot rule.** They framed the canvas like a card,
+  and a full-screen broadcast scene is a *space*, not a card. The port edge
+  columns replace what the foot rule was doing — a side owns its whole edge of
+  the frame now — and the composition closes at the bottom without a rule.
+- **The Rio mark field**, and this is the tempting one to re-add. Both scenes
+  already ghost a big **team logo** into this exact plane at 0.14–0.2, and a
+  second scatter of marks at a similar weight didn't read as brand — it read as
+  dirt on the lens over the logo that was carrying meaning. Animated, it also
+  had to be crammed into a 248px band at the foot to keep its damage rect small,
+  which made it a row of stamps rather than atmosphere. **The brand's home in
+  these scenes is the team logo and the Rio-red accent, not a wallpaper of
+  marks.**
+
+**The halftone was the one worth keeping**, and it came back stronger: four
+corners instead of two, each side owning its top *and* bottom corner, so the
+lower half of the frame has texture and the port colour holds an entire edge.
+`r=0.34` is the number to be careful with — it reaches zero at x≈653 / y≈367
+from its corner, well before the 650–1270 centre column. Widen it and the two
+sides start to touch.
+
+**The motion budget is real, and it is currently unspent.** A moving full-canvas
+layer forces the whole 1920×1080 composite to re-rasterise on every GSAP frame.
+The old drifting field cost 20 marks on two nested animations each (2160
+crisp-edged rects, 40 running animations) over uncropped masked layers and was
+visibly laggy on air. Trimmed to 12 marks in a band it was affordable but
+compositionally wrong (above). Every layer in the file is now cropped to where
+its own gradient already reaches zero, so the only things under the foot of the
+frame are two plain gradient rects. If you add motion here you are spending from
+zero — keep it **small, unmasked and transform-only**, and don't let a masked or
+patterned layer grow back into the bottom of the frame.
+
+The `backdrop-filter: blur(6px)` that every card above used to carry is also
+gone for good — the wells carry their own alpha (~82%) instead, which at that
+opacity was all the blur was ever worth.
+
+See the header comment in `public/design/default/callout.svg` for the
+composition order and the rules a replacement package has to keep.
 
 ---
 
@@ -291,7 +495,8 @@ const BEAT = {
    fetched *during* the intro so the field is ready.
 
 2. **Per AB** (`playAb`), for each plate appearance:
-   - The previous chip's `.live` rainbow ring retires. The bar **morphs into the
+   - The previous chip's `.live` marker retires (a solid accent edge + glow —
+     it was a crawling rainbow ring). The bar **morphs into the
      inning transition card** ("▼ BOTTOM 9TH" / "2 OUTS"). This card
      **establishes the new at-bat first** — before any game-state numbers
      appear (the bar starts hidden; the very first thing it ever shows is this
@@ -473,7 +678,10 @@ or refactoring the spotlight, satisfy *these*, not just a feature list:
 8. **Motion is motivated, unified, and never draws attention to itself.** One
    camera language across all batted balls; the spray cam is a presentation, not
    a performance.
-9. **Stay in Slice 26.** No pill chips; tracked caps; glass wells; mono numerals.
+9. **Stay in the Slice 26 vocabulary.** No pill chips; tracked caps; glass
+   wells; mono numerals. The *colours* come from the package — never hard-code
+   a hex where a `--side` / `--accent` / `--ink*` / `--edge*` token exists, and
+   never let the neutral go white (§4.1).
 
 ---
 

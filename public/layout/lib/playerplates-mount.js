@@ -23,13 +23,19 @@
 //
 // THEME CONTRACT — see public/design/README.md. Short version: two position
 // groups data-slot="side1"/"side2", each with data-part="main-rect" (and
-// optionally "rail"), data-slot="side{n}-name" / "side{n}-sub" (the GSAP wipe
-// target) / "side{n}-sub-label" / "side{n}-sub-value". BOTH plates authored at
-// the LEFT anchor; a `<script data-layouts>` block maps each anchor name
-// (left/center/right) to an X OFFSET the mount tweens the plate's transform to.
+// optionally "rail" / "sub-icon"), data-slot="side{n}-name" / "side{n}-sub"
+// (the GSAP wipe target) / "side{n}-sub-label" / "side{n}-sub-value". BOTH
+// plates authored at the LEFT anchor; a `<script data-layouts>` block maps each
+// anchor name (left/center/right) to an X OFFSET the mount tweens the plate's
+// transform to. Atmosphere is the theme's own clipped group(s) marked
+// data-part="field" / "sub-field" — the mount never builds or moves them, it
+// only stops them ticking while their surface is hidden, and points the drawer's
+// sprites (data-part="sub-glyph") and badge (data-part="sub-icon") at whichever
+// mark the side's address-book field resolves to (see sub-glyph.js).
 
 import { createThemeEngine } from './svg-theme-engine.js';
 import { ensureGsap } from './gsap-loader.js';
+import { SUB_GLYPHS, FALLBACK_GLYPH, glyphKeyFor, setHref } from './sub-glyph.js';
 
 const ELEMENT = 'playerplates';
 const DEFAULT_PACKAGE = 'default';
@@ -52,6 +58,8 @@ const INTRO_STAGGER = 0.06; // s between the two plates on a whole-group reveal
 const REVEAL_SETTLE_MS = 120; // ms to let an OBS visibility on→off→on burst settle
 const INTRO = new URLSearchParams(location.search).get('intro') !== '0'; // `?intro=0` disables the reveal: plates snap in with no cascade. Paired with shutdown:false on the OBS source (obs.jsx) so it stays resident.
 const SUB_DIVIDER_INSET = 22; // svg units the optional sub-divider is inset from each end
+const SUB_ICON_GUTTER = 76;   // svg units the drawer's platform badge occupies at its right end (mark + margin). Comes off the value's fit bound ONLY while a badge is showing.
+const SUB_ICON_OPACITY = 0.8; // the badge is a caption, not a logo placement
 const DIVIDER_REF_WIDTH = 560; // sub-divider width whose draw speed is the reference
 const MOVE_EASE    = 'power3.inOut';
 const ENTER_EASE   = 'back.out(1.5)';
@@ -62,29 +70,42 @@ const SUB_OUT_EASE = 'power3.in';
 // Minimal inline fallback if a theme SVG can't be fetched (offline / typo) — same
 // slot/part names as a real theme, so binding never silently no-ops.
 const FALLBACK_SVG = `
-<svg viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMax meet" xmlns="http://www.w3.org/2000/svg">
+<svg viewBox="0 0 1920 240" preserveAspectRatio="xMidYMax meet" xmlns="http://www.w3.org/2000/svg">
   <g data-slot="side1" opacity="0">
-    <rect data-part="main-rect" x="48" y="896" width="660" height="168" rx="12" style="fill:var(--card-bg,#1a1a1a);stroke:var(--border-color,#444)"/>
-    <text data-slot="side1-name" data-maxw="572" x="84" y="972" style="fill:var(--text-primary,#fff)" font-size="36" font-weight="800"></text>
+    <rect data-part="main-rect" x="200" y="56" width="550" height="168" rx="12" style="fill:var(--card-bg,#1a1a1a);stroke:var(--border-color,#444)"/>
+    <text data-slot="side1-name" data-maxw="482" x="236" y="142" style="fill:var(--text-primary,#fff)" font-size="36" font-weight="800"></text>
     <g data-slot="side1-sub" style="opacity:0">
-      <text data-slot="side1-sub-label" x="84" y="1008" style="fill:var(--accent,#f59e0b)" font-size="14" font-weight="700"></text>
-      <text data-slot="side1-sub-value" data-maxw="486" x="170" y="1008" style="fill:var(--text-primary,#fff)" font-size="18" font-weight="600"></text>
+      <text data-slot="side1-sub-label" x="236" y="178" style="fill:var(--accent,#f59e0b)" font-size="14" font-weight="700"></text>
+      <text data-slot="side1-sub-value" data-maxw="396" x="322" y="178" style="fill:var(--text-primary,#fff)" font-size="18" font-weight="600"></text>
     </g>
   </g>
   <g data-slot="side2" opacity="0">
-    <rect data-part="main-rect" x="48" y="896" width="660" height="168" rx="12" style="fill:var(--card-bg,#1a1a1a);stroke:var(--border-color,#444)"/>
-    <text data-slot="side2-name" data-maxw="572" x="84" y="972" style="fill:var(--text-primary,#fff)" font-size="36" font-weight="800"></text>
+    <rect data-part="main-rect" x="200" y="56" width="550" height="168" rx="12" style="fill:var(--card-bg,#1a1a1a);stroke:var(--border-color,#444)"/>
+    <text data-slot="side2-name" data-maxw="482" x="236" y="142" style="fill:var(--text-primary,#fff)" font-size="36" font-weight="800"></text>
     <g data-slot="side2-sub" style="opacity:0">
-      <text data-slot="side2-sub-label" x="84" y="1008" style="fill:var(--accent,#f59e0b)" font-size="14" font-weight="700"></text>
-      <text data-slot="side2-sub-value" data-maxw="486" x="170" y="1008" style="fill:var(--text-primary,#fff)" font-size="18" font-weight="600"></text>
+      <text data-slot="side2-sub-label" x="236" y="178" style="fill:var(--accent,#f59e0b)" font-size="14" font-weight="700"></text>
+      <text data-slot="side2-sub-value" data-maxw="396" x="322" y="178" style="fill:var(--text-primary,#fff)" font-size="18" font-weight="600"></text>
     </g>
   </g>
-  <script type="application/json" data-layouts="1">{ "anchors": { "left": 0, "center": 582, "right": 1164 } }</script>
+  <script type="application/json" data-layouts="1">{ "anchors": { "left": 0, "center": 485, "right": 970 } }</script>
 </svg>`;
 
 const CSS = `
-.pp-host { position: fixed; inset: 0; }
-.pp-host svg { width: 100%; height: 100%; display: block; }
+.pp-host { position: fixed; inset: 0; overflow: hidden; }
+/* Bottom-anchored, theme-sized — see the matching note in commentary-mount.js.
+   The default package authors a 1920x240 card; a package that still authors a
+   full 1920x1080 canvas hangs its empty upper half out of the top of the source
+   and gets cropped, instead of being "meet"-fitted down to a fifth scale. */
+.pp-host svg { position: absolute; left: 0; bottom: 0; width: 100%; height: auto; display: block; }
+/* A field on a surface nobody can see. display:none takes it out of layout,
+   paint and — because the marks carry will-change:transform — the compositor,
+   but Chromium leaves the CSS animations on a hidden subtree RUNNING, still
+   ticking styles every frame for something with no box. The descendant rule is
+   what actually cancels them. Host-qualified deliberately: the theme's own
+   .pp-mush rule is injected inside the host and so comes later in document
+   order, and one class would tie on specificity and lose. */
+.pp-host .pp-field-off { display: none; }
+.pp-host .pp-field-off * { animation: none; will-change: auto; }
 `;
 
 let _cssInjected = false;
@@ -108,6 +129,11 @@ export function mountPlayerPlates({ host }) {
   const prevLocation = ['left', 'right'];        // per side: anchor last laid out
   const prevName = ['', ''];                     // per side: name last bound
   const prevSub = [false, false];                // per side: sub-visibility last update
+  const prevGlyph = [undefined, undefined];      // per side: sub-glyph key the drawer is wearing
+  const badgeShown = [false, false];             // per side: whether that glyph resolved to a badge this theme has
+  const subValueMaxw = [null, null];             // per side: authored fit bound, before the badge gutter
+  const fields = [null, null];                   // per side: the plate's atmosphere group (theme-authored)
+  const subFields = [null, null];                // per side: the drawer's
   const subTweens = [null, null];                // in-flight GSAP sub tween per side
   let presented = false;        // whether the band is currently revealed on screen
   let wantShown = true;         // desired shown-state; OBS visibility drives it
@@ -131,6 +157,85 @@ export function mountPlayerPlates({ host }) {
   }
 
   const offsetFor = (loc) => (anchors[loc] != null ? anchors[loc] : (anchors.left || 0));
+
+  // ── atmosphere ─────────────────────────────────────────────────────────────
+  // Unlike Commentary the mount does not build these: the plate never resizes,
+  // only the whole group translates, so the theme carries its own clipPaths and
+  // the fields travel with the card (see playerplates.svg). All the mount owns
+  // is whether they're allowed to COST anything — opacity 0 does not stop a CSS
+  // animation, and a hidden plate or a closed drawer would otherwise tick its
+  // marks for the rest of the broadcast.
+  function attachFields() {
+    for (let i = 0; i < SIDES.length; i++) {
+      const g = engine.slots[SIDES[i]];
+      const sub = engine.slots[`${SIDES[i]}-sub`];
+      fields[i] = g ? g.querySelector('[data-part="field"]') : null;
+      subFields[i] = sub ? sub.querySelector('[data-part="sub-field"]') : null;
+      setFieldRunning(fields[i], false);      // both surfaces start hidden; the
+      setFieldRunning(subFields[i], false);   // reveal turns their weather on
+    }
+  }
+
+  function setFieldRunning(group, on) {
+    if (!group) return;
+    // The `!` is not decoration: an undefined force makes toggle FLIP the class
+    // rather than clear it (see overlay-class-toggle.test.js).
+    for (const s of group.children) s.classList.toggle('pp-field-off', !on);
+  }
+
+  // The delayed form re-checks the state it was queued for: a producer can
+  // re-open a drawer inside the slide's own duration, and an unguarded callback
+  // would then stop the weather on a drawer that is open.
+  function syncSubField(i, shown, delay = 0) {
+    const group = subFields[i];
+    if (!group) return;
+    const apply = () => {
+      // prevSub is written after the call that scheduled this, so it reads back
+      // as `shown` unless a NEWER toggle has since replaced it.
+      if (disposed || (delay && prevSub[i] !== shown)) return;
+      setFieldRunning(group, shown);
+    };
+    if (delay && gsapInstance) gsapInstance.delayedCall(delay, apply);
+    else apply();
+  }
+
+  // ── the drawer's mark ──────────────────────────────────────────────────────
+  // One address-book field decides the badge at the drawer's right end AND what
+  // the drawer's own atmosphere is made of — an X drawer drifts X marks. Same
+  // contract as commentary-mount's setSubGlyph; see sub-glyph.js for why the
+  // drawer wears a mark instead of printing the field's name.
+  function setSubGlyph(i, key) {
+    const sub = engine.slots[`${SIDES[i]}-sub`];
+    if (!sub) return;
+    const id = key ? SUB_GLYPHS[key] : null;
+    const has = !!(id && host.querySelector(`#${id}`));   // a package need not draw every platform
+    badgeShown[i] = has;
+
+    const badge = sub.querySelector('[data-part="sub-icon"]');
+    if (badge) {
+      if (has) setHref(badge, `#${id}`);
+      badge.setAttribute('opacity', has ? String(SUB_ICON_OPACITY) : '0');
+    }
+    const glyph = `#${has ? id : FALLBACK_GLYPH}`;
+    for (const use of sub.querySelectorAll('[data-part="sub-glyph"]')) setHref(use, glyph);
+    applyBadgeFit(i);
+  }
+
+  // The value and the badge share the drawer, so the value's fit bound loses the
+  // badge's gutter — but only while a badge is there.
+  function applyBadgeFit(i) {
+    const el = engine.slots[`${SIDES[i]}-sub-value`];
+    if (!el) return;
+    if (subValueMaxw[i] == null) {
+      const authored = parseFloat(el.getAttribute('data-maxw'));
+      if (!Number.isFinite(authored)) return;
+      subValueMaxw[i] = authored;
+    }
+    const want = String(Math.max(0, subValueMaxw[i] - (badgeShown[i] ? SUB_ICON_GUTTER : 0)));
+    if (el.getAttribute('data-maxw') === want) return;
+    el.setAttribute('data-maxw', want);
+    engine.invalidateFit(el);   // the fit cache keys on the TEXT; this changed under it
+  }
 
   // ── plate position + show/hide ─────────────────────────────────────────────
   function snapPlate(i, visible, offset) {
@@ -196,6 +301,7 @@ export function mountPlayerPlates({ host }) {
     if (gsapInstance) gsapInstance.set(el, { opacity: visible ? 1 : 0, y: visible ? 0 : -SUB_RISE });
     else el.style.opacity = visible ? '1' : '0';
     drawDivider(i, visible, false);
+    syncSubField(i, visible);
   }
 
   function animateSub(i, visible, onDone) {
@@ -204,6 +310,9 @@ export function mountPlayerPlates({ host }) {
     if (!gsapInstance) { snapSub(i, visible); onDone?.(); return; }
     if (subTweens[i]) { subTweens[i].kill(); subTweens[i] = null; }
     drawDivider(i, visible, true);
+    // Opening: the field starts drifting as the drawer slides out. Closing: it
+    // keeps drifting until the drawer is gone, then stops.
+    syncSubField(i, visible, visible ? 0 : SUB_DURATION);
     if (visible) {
       subTweens[i] = gsapInstance.to(el, {
         opacity: 1, y: 0, duration: SUB_DURATION, ease: SUB_IN_EASE,
@@ -228,9 +337,13 @@ export function mountPlayerPlates({ host }) {
     else OverlayBase.clearDesignSettings();
     if (themeChanged) {
       anchors = parseAnchors();
+      attachFields();
       firstPaint = true;
       prevActive[0] = prevActive[1] = false;
       prevSub[0] = prevSub[1] = false;
+      prevGlyph[0] = prevGlyph[1] = undefined;   // the new theme may draw a different set of marks
+      badgeShown[0] = badgeShown[1] = false;
+      subValueMaxw[0] = subValueMaxw[1] = null;
       presented = false;   // new SVG injected → next first paint re-reveals
     }
     if (disposed) return;
@@ -238,13 +351,18 @@ export function mountPlayerPlates({ host }) {
     // Read the two projected sides.
     const sides = [1, 2].map((t) => {
       const base = `playerplates.${t}`;
+      const subLabel = OverlayBase.deepGet(state, `${base}.subLabel`, '');
       return {
         active: !!OverlayBase.deepGet(state, `${base}.active`, false),
         name: OverlayBase.deepGet(state, `${base}.name`, ''),
-        subLabel: OverlayBase.deepGet(state, `${base}.subLabel`, ''),
+        subLabel,
         subValue: OverlayBase.deepGet(state, `${base}.subValue`, ''),
         subVisible: !!OverlayBase.deepGet(state, `${base}.subVisible`, false),
         location: OverlayBase.deepGet(state, `${base}.location`, t === 1 ? 'left' : 'right'),
+        // Which address-book field the drawer is showing, resolved to the mark
+        // that stands for it. The manual source has no subField, so this also
+        // reads the label the producer typed (glyphKeyFor).
+        glyph: glyphKeyFor(OverlayBase.deepGet(state, `${base}.subField`, ''), subLabel),
       };
     });
 
@@ -272,17 +390,33 @@ export function mountPlayerPlates({ host }) {
       const wasActive = prevActive[i];
 
       if (!d.active) {
-        if (wasActive && live) exitPlate(i);
-        else snapPlate(i, false, offset);
+        if (wasActive && live) {
+          exitPlate(i);
+          // ...then stop paying for its weather, once the drop has finished.
+          if (gsapInstance) {
+            gsapInstance.delayedCall(EXIT_DURATION, () => {
+              if (disposed || prevActive[i]) return;   // came back mid-exit
+              setFieldRunning(fields[i], false);
+              setFieldRunning(subFields[i], false);
+            });
+          }
+        } else {
+          snapPlate(i, false, offset);
+          setFieldRunning(fields[i], false);
+          setFieldRunning(subFields[i], false);
+        }
         if (subTweens[i]) { subTweens[i].kill(); subTweens[i] = null; }
         prevActive[i] = false;
         prevSub[i] = false;
+        prevGlyph[i] = undefined;
         prevLocation[i] = d.location;
         prevName[i] = '';
         continue;
       }
 
       engine.setText(`${SIDES[i]}-name`, d.name);
+      setFieldRunning(fields[i], true);
+      if (prevGlyph[i] !== d.glyph) { setSubGlyph(i, d.glyph); prevGlyph[i] = d.glyph; }
 
       const nameChanged = d.name !== prevName[i];
       if (firstPaint) {
@@ -361,6 +495,8 @@ export function mountPlayerPlates({ host }) {
       if (prevActive[i]) {
         if (INTRO) enterPlate(i, offsetFor(prevLocation[i]), (order++) * INTRO_STAGGER);
         else snapPlate(i, true, offsetFor(prevLocation[i]));   // intro disabled: snap shown
+        setFieldRunning(fields[i], true);       // back on air → the weather resumes
+        syncSubField(i, prevSub[i]);
       } else snapPlate(i, false, offsetFor(prevLocation[i]));
     }
     presented = true;
@@ -370,6 +506,9 @@ export function mountPlayerPlates({ host }) {
     presented = false;
     for (let i = 0; i < SIDES.length; i++) {
       if (subTweens[i]) { subTweens[i].kill(); subTweens[i] = null; }
+      // Off air is the longest a source is ever hidden for; stop the marks.
+      setFieldRunning(fields[i], false);
+      setFieldRunning(subFields[i], false);
       const g = engine.slots[SIDES[i]];
       if (!g) continue;
       if (gsapInstance) { gsapInstance.killTweensOf(g); gsapInstance.set(g, { opacity: 0, y: 0 }); }

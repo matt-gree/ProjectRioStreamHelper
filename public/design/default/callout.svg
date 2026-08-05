@@ -1,47 +1,369 @@
-<svg viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
-  <!-- DEFAULT package - Stat Callout backdrop: the Project Rio night arena.
-       Dark night-scale base with the featured player's PORT COLOUR washing the
-       scene (the callout's port colours are integral - the mount sets
-       - -port-color / - -port-2 on the stage) and a fixed Rio-red top rule.
+<svg viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg"
+     style="--well: rgba(13,13,21,0.82); --accent-neutral: #ff3d4e">
+  <!-- DEFAULT package - Callout backdrop: the Project Rio night ballpark.
+       Shared by the Game Summary (postgame-vs-mount.js) and the Character
+       Spotlight (postgame-callout-mount.js).
+
+       PALETTE CONTRACT. The root style above declares two of the four values a
+       package may pin (see public/design/README.md):
+         - -well            smoked night glass for every card surface. NOT white:
+                            a white well between a red side and a blue side reads
+                            as a flag rather than as a broadcast.
+         - -accent-neutral  Rio brand red, the "moment" colour (FINAL, winner,
+                            star pips). Deliberately the only fixed chroma here.
+       - -side1 / - -side2 are deliberately NOT declared: the sides stay bound to
+       the players' live controller-port colours (- -port-color / - -port-2, set
+       by the mounts). Declare them only in a package that wants a fixed pair.
+
+       COMPOSITION, bottom to top: night base, the wall (a bare grid, fading out
+       as it reaches the floor), the horizon air, floor haze, the floor pool,
+       brand bloom, the port edge columns, the corner blooms, and the port
+       halftone in the four corners. That is the whole file - gradients, one
+       masked grid and one masked dot field. NOTHING HERE MOVES, and that is the
+       design.
+
+       WHAT WAS DELETED IN AUGUST 2026, AND WHY IT SHOULD NOT COME BACK. This
+       backdrop had accumulated eight systems talking at once - a grid, crosshair
+       register nodes punctuating it, a port halftone dot field in each top
+       corner, a horizon hairline, two port washes, a red brand rule across the
+       top, a three-part foot rule across the bottom, and a field of twelve
+       drifting Project Rio marks - under a scene whose own cards are already
+       dense with numbers. Read together they were noise, and the noise competed
+       with the two things this frame exists to show: the players and the replay.
+
+       The halftone was the one worth keeping, and it came back stronger (four
+       corners instead of two, see its own note). Everything below is gone:
+         - the register nodes (crosshairs). The grid alone is texture; the nodes
+           made it a HUD, and the scene already has enough instrumentation.
+         - the horizon HAIRLINE. A drawn line across the middle of the frame is
+           the single most attention-grabbing thing you can put behind content.
+           The horizon AIR gradient survives and says the same thing softly:
+           where the wall lets go, the floor takes over.
+         - the top brand rule and the foot rule. They framed the canvas like a
+           card, and a full-screen broadcast scene is a SPACE, not a card. With
+           them gone the washes run off the edges and the frame reads open.
+         - THE RIO MARK FIELD, and this one is worth being explicit about because
+           it is the tempting one to re-add. It was there to put the brand in the
+           frame. But both scenes already ghost a big TEAM LOGO into this exact
+           plane at 0.16-0.2, and a second scatter of marks at a similar weight
+           did not read as brand, it read as dirt on the lens over the logo that
+           was carrying meaning. Animated, it also had to be crammed into a band
+           at the foot to keep its damage rect small, which made it look like a
+           row of stamps rather than atmosphere. Static and spread out, it was
+           simply unnecessary - the port colour and the team logos carry this
+           frame on their own. THE BRAND'S HOME IN THESE SCENES IS THE TEAM LOGO
+           AND THE RIO-RED ACCENT, NOT A WALLPAPER OF MARKS. If you want the mark
+           back, put it somewhere it means something, not everywhere.
+
+       ONE SURFACE PER REGION. The wall carries the top of the frame; the floor
+       carries the bottom, and carries it with light (the pool) rather than with
+       objects. Nothing is drawn across something else that is already textured.
+
+       THE CENTRE COLUMN STAYS NEUTRAL, AND IT IS NOW THE GRADIENTS' OWN JOB.
+       Everything carrying a PORT colour dies out before the middle of the frame
+       so the two sides read as two players rather than as two halves of a flag.
+       This used to be enforced by masking every port layer through
+       -rioSidesOnly-; the stops are baked into the gradients themselves now, so
+       those masks are gone.
+
+       PORT COLOUR DOMINATES. Each side's identity is a corner bloom AND a
+       full-height edge column, both stronger than they were, because they are
+       now the only thing in the backdrop that carries a player. If a side reads
+       as "a bit of tint in the corner", this file has regressed.
+
+       TWO SIDES OR ONE IS THE SCENE'S CALL, NOT THIS FILE'S, and there are two
+       independent knobs for it. Everything here is written as an A side and a B
+       side; nothing requires them to differ, and nothing requires both to exist.
+
+         - -port-color / - -port-2   what each side is PAINTED with.
+         - -side-a-weight / - -side-b-weight   whether each side paints AT ALL
+                                     (0..1, default 1; multiplies edge, wash and
+                                     halftone alike).
+
+       The Game Summary is a two-player frame: two colours, both weights at 1.
+       The Character Spotlight is about ONE player, and it turns the B side OFF
+       entirely rather than mirroring the A side. Both were tried. Feeding one
+       colour into both sides gives a frame that is symmetrically tinted, and
+       symmetric tint reads as a vignette or a lighting rig - it does not read as
+       a person. Colour that ENTERS FROM THE SIDE THE PLAYER IS ON and falls away
+       across the frame reads as their light. The spotlight's player always lives
+       in the left column regardless of which side they batted on, so A is always
+       the lit side there.
+
+       Do not "fix" the symmetry by hardcoding two hues in here. The symmetry is
+       what makes both the one-colour and the one-sided case expressible.
+
+       MOTION BUDGET - STILL TRUE, CURRENTLY UNSPENT. Every card above this file
+       is a large translucent surface animated by GSAP, on a machine that is also
+       running the game, so a moving FULL-CANVAS layer forces the whole 1920x1080
+       composite to re-rasterise on every one of those frames. An earlier drifting
+       mark field cost twenty marks on two nested animations each (2160 crisp-edged
+       rects, 40 running animations) over uncropped masked layers and was visibly
+       laggy on air; trimmed to twelve marks in a 248px band it was affordable but
+       compositionally wrong (above). It is all gone now and this file animates
+       nothing at all, which is the cheapest it has ever been. If you add motion
+       here, you are spending a budget that is currently at zero - read this
+       paragraph again first, and keep it SMALL, UNMASKED and transform-only.
+
        NOTE: var() only resolves in SVG via inline style="", never through
        presentation attributes. -->
+
   <defs>
+
     <linearGradient id="rioBase" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#0b0b12"/>
-      <stop offset="1" stop-color="#07070b"/>
+      <stop offset="0" stop-color="#0d0d15"/>
+      <stop offset="0.55" stop-color="#08080e"/>
+      <stop offset="1" stop-color="#05050a"/>
     </linearGradient>
-    <radialGradient id="rioWashA" cx="18%" cy="28%" r="85%">
-      <stop offset="0" style="stop-color:var(--port-color);stop-opacity:0.50"/>
-      <stop offset="0.6" style="stop-color:var(--port-color);stop-opacity:0"/>
-    </radialGradient>
-    <radialGradient id="rioWashB" cx="86%" cy="86%" r="75%">
-      <stop offset="0" style="stop-color:var(--port-2);stop-opacity:0.34"/>
-      <stop offset="0.7" style="stop-color:var(--port-2);stop-opacity:0"/>
-    </radialGradient>
-    <linearGradient id="rioBeam" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" style="stop-color:var(--port-color);stop-opacity:0.45"/>
-      <stop offset="1" style="stop-color:var(--port-color);stop-opacity:0"/>
-    </linearGradient>
+
+    <!-- the back wall: the fine square grid the whole scene is built on. It is
+         texture and nothing more - the crosshair register nodes that used to
+         punctuate it every fourth cell are gone. They read as instrumentation,
+         and a scene that already carries a diamond, a count, an out meter and a
+         star meter does not need its wallpaper to look like a HUD too. -->
     <pattern id="rioGrid" width="64" height="64" patternUnits="userSpaceOnUse">
-      <path d="M64 0 L0 0 0 64" fill="none" stroke="#f5f5f8" stroke-opacity="0.045" stroke-width="1.5"/>
+      <path d="M64 0 L0 0 0 64" fill="none" stroke="#8f8fa3" stroke-opacity="0.045" stroke-width="1.5"/>
     </pattern>
+
+    <!-- ...and where the wall ENDS. The grid is a back wall, not wallpaper: it
+         holds the frame and thins as it recedes.
+
+         IT REACHES FURTHER DOWN THAN IT USED TO (zero at y~864, was y~756).
+         When the register nodes and the two framing rules came out, the honest
+         result was a frame whose lower half had nothing in it - "clean" had
+         turned into "empty". The answer was not to put the clutter back; it was
+         to let the surviving textures do more of the frame, this one downward
+         and the halftone into the bottom corners. It still stops above the foot
+         of the frame, where the floor pool wants clean air. -->
+    <linearGradient id="rioWallFadeFill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0"    stop-color="#ffffff" stop-opacity="0.8"/>
+      <stop offset="0.30" stop-color="#ffffff" stop-opacity="1"/>
+      <stop offset="0.58" stop-color="#ffffff" stop-opacity="0.85"/>
+      <stop offset="0.80" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <mask id="rioWallFade">
+      <rect width="1920" height="1080" fill="url(#rioWallFadeFill)"/>
+    </mask>
+
+    <!-- PORT HALFTONE: the frame's texture, and the second half of "port colour
+         dominates". A dot field in each player's own colour, burning strongest
+         in that player's CORNERS and fading to nothing as it travels inward.
+
+         FOUR CORNERS, NOT TWO. It used to live in the top corners only, which
+         left the whole lower half of the frame with no texture at all - the
+         thing that read as empty once the register nodes and the framing rules
+         came out. Each side now owns its top AND bottom corner, so a player's
+         colour holds their entire edge of the frame and the composition closes
+         at the bottom without a rule drawn across it.
+
+         THE FADE IS THE WHOLE EFFECT. r=0.34 on a 1920x1080 box reaches zero at
+         x~653 / y~367 from its corner, so the field is gone long before the
+         centre column (650-1270) - which is what keeps two saturated dot fields
+         from meeting in the middle and turning the frame into a flag. That, and
+         not the dot size, is the number to be careful with: widen r and the two
+         sides start to touch. There is no -rioSidesOnly- mask backstopping this
+         any more; the corner radials ARE the containment.
+
+         A FULL-CANVAS MASKED PATTERN IS SAFE HERE, AND ONLY BECAUSE NOTHING IN
+         THIS FILE MOVES. It paints once. The old warning against exactly this
+         shape was about what sat UNDER a drifting layer, repainting forever; see
+         the motion budget up top before you reintroduce anything animated. -->
+    <pattern id="rioDotsA" width="26" height="26" patternUnits="userSpaceOnUse">
+      <circle cx="6.5" cy="6.5" r="3.2" style="fill:var(--port-color)"/>
+      <circle cx="19.5" cy="19.5" r="3.2" style="fill:var(--port-color)"/>
+    </pattern>
+    <pattern id="rioDotsB" width="26" height="26" patternUnits="userSpaceOnUse">
+      <circle cx="6.5" cy="6.5" r="3.2" style="fill:var(--port-2)"/>
+      <circle cx="19.5" cy="19.5" r="3.2" style="fill:var(--port-2)"/>
+    </pattern>
+    <radialGradient id="rioDotTL" cx="0%" cy="0%" r="34%">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="1"/>
+      <stop offset="0.5" stop-color="#ffffff" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="rioDotBL" cx="0%" cy="100%" r="34%">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="1"/>
+      <stop offset="0.5" stop-color="#ffffff" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="rioDotTR" cx="100%" cy="0%" r="34%">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="1"/>
+      <stop offset="0.5" stop-color="#ffffff" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="rioDotBR" cx="100%" cy="100%" r="34%">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="1"/>
+      <stop offset="0.5" stop-color="#ffffff" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <!-- one mask per side, two corners each. The rects overlap only where both
+         gradients are already near zero, so they read as two separate corners
+         rather than as a lit left edge. -->
+    <mask id="rioDotMaskA">
+      <rect width="1920" height="1080" fill="url(#rioDotTL)"/>
+      <rect width="1920" height="1080" fill="url(#rioDotBL)"/>
+    </mask>
+    <mask id="rioDotMaskB">
+      <rect width="1920" height="1080" fill="url(#rioDotTR)"/>
+      <rect width="1920" height="1080" fill="url(#rioDotBR)"/>
+    </mask>
+
+    <!-- THE FLOOR POOL: stadium light landing on the field, low and centre.
+         Luminance, not an object - it fills the empty middle of the lower frame
+         without putting anything there to look at, and it is one plain radial
+         gradient. cy is below the frame so only the top of the ellipse shows. -->
+    <radialGradient id="rioPool" gradientUnits="userSpaceOnUse"
+                    cx="960" cy="1120" r="980" gradientTransform="matrix(1,0,0,0.42,0,649.6)">
+      <stop offset="0" stop-color="#aab0d8" stop-opacity="0.13"/>
+      <stop offset="0.55" stop-color="#8f8fa3" stop-opacity="0.045"/>
+      <stop offset="1" stop-color="#8f8fa3" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- THE HORIZON, and it is air only. There used to be a hairline drawn
+         across the frame at y=662 as well; a literal line behind the content is
+         the loudest thing a backdrop can do, and this one ran the full 1920.
+         The soft band says where the wall lets go on its own. It fades at the
+         frame edges through its own fill, not through a mask. -->
+    <linearGradient id="rioHorizonAir" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0"   stop-color="#c9c9d6" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#c9c9d6" stop-opacity="0.09"/>
+      <stop offset="1"   stop-color="#c9c9d6" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- SIDE IDENTITY, PART 1: the corner bloom.
+
+         userSpaceOnUse ON PURPOSE. As percentages these were measured against
+         whatever rect happened to fill them, so the rect could not be cropped to
+         where the gradient actually paints without silently squashing it. In
+         user units the geometry is fixed to the 1920x1080 canvas and the rect is
+         free to be any height - which is what lets the blooms be 440px tall
+         instead of full-canvas. The matrix squashes the circle to the 16:9
+         ellipse the percentage form gave, about the gradient's own centre:
+         k = 1080/1920 = 0.5625, ty = cy * (1 - k).
+
+         r=760, not 883: the bloom now REACHES ZERO AT x=837, i.e. before the
+         centre column, all by itself. That is what let the -rioSidesOnly- mask
+         die - the neutral middle is a property of the gradient now, not of a
+         full-canvas masked rect sitting under everything. Peak is up from 0.34
+         to 0.52 because port colour is meant to dominate this frame. -->
+    <radialGradient id="rioWashA" gradientUnits="userSpaceOnUse"
+                    cx="76.8" cy="64.8" r="760" gradientTransform="matrix(1,0,0,0.5625,0,28.35)">
+      <stop offset="0" style="stop-color:var(--port-color);stop-opacity:0.52"/>
+      <stop offset="0.5" style="stop-color:var(--port-color);stop-opacity:0.13"/>
+      <stop offset="1" style="stop-color:var(--port-color);stop-opacity:0"/>
+    </radialGradient>
+    <radialGradient id="rioWashB" gradientUnits="userSpaceOnUse"
+                    cx="1843.2" cy="64.8" r="760" gradientTransform="matrix(1,0,0,0.5625,0,28.35)">
+      <stop offset="0" style="stop-color:var(--port-2);stop-opacity:0.52"/>
+      <stop offset="0.5" style="stop-color:var(--port-2);stop-opacity:0.13"/>
+      <stop offset="1" style="stop-color:var(--port-2);stop-opacity:0"/>
+    </radialGradient>
+
+    <!-- SIDE IDENTITY, PART 2: the edge column. New, and it is what replaces
+         the deleted foot rule: a colour that ran along the bottom edge.
+
+         The corner bloom alone left each player's colour living in the top 400px
+         and the bottom of the frame ending on a drawn rule. A full-height column
+         down each outer edge means a side owns its whole edge of the frame, top
+         to bottom, and the frame can simply run off the bottom with no rule to
+         close it. The stops die at 0.34 / 0.66 - comfortably outside the centre
+         column - so, like the bloom, this needs no mask, and being a plain
+         gradient rect it is safe to let it reach the floor.
+
+         SIDE-ON-SIDE, NOT SIDE-ON-CENTRE, IS THE FLAG RISK. Keep both halves
+         zeroed well before the middle. Two saturated columns that MEET are the
+         thing every palette note in this package is trying to prevent. -->
+    <linearGradient id="rioEdgeA" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" style="stop-color:var(--port-color);stop-opacity:0.30"/>
+      <stop offset="0.11" style="stop-color:var(--port-color);stop-opacity:0.13"/>
+      <stop offset="0.22" style="stop-color:var(--port-color);stop-opacity:0.04"/>
+      <stop offset="0.34" style="stop-color:var(--port-color);stop-opacity:0"/>
+    </linearGradient>
+    <linearGradient id="rioEdgeB" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0.66" style="stop-color:var(--port-2);stop-opacity:0"/>
+      <stop offset="0.78" style="stop-color:var(--port-2);stop-opacity:0.04"/>
+      <stop offset="0.89" style="stop-color:var(--port-2);stop-opacity:0.13"/>
+      <stop offset="1" style="stop-color:var(--port-2);stop-opacity:0.30"/>
+    </linearGradient>
+
+    <!-- the brand: a bloom rising behind the centre column, Rio red by default.
+         Red is right for a TWO-PLAYER frame, where the centre belongs to
+         neither side and the brand is the natural thing to put there.
+
+         IT IS A VAR BECAUSE IT IS WRONG FOR A ONE-PLAYER FRAME. On the Character
+         Spotlight the whole backdrop is the featured player's colour, and a
+         fixed red bloom sitting in the middle of it is a second hue with no
+         owner - behind a blue player it reads as the OTHER player's colour
+         leaking into their own callout. The Spotlight retints this to the
+         player instead, so the frame carries exactly one chroma.
+         - -brand-color defaults to Rio red, so the Game Summary is unchanged. -->
+    <radialGradient id="rioBrand" gradientUnits="userSpaceOnUse"
+                    cx="960" cy="129.6" r="1190.4" gradientTransform="matrix(1,0,0,0.5625,0,56.7)">
+      <stop offset="0" style="stop-color:var(--brand-color,#e60012);stop-opacity:0.20"/>
+      <stop offset="0.5" style="stop-color:var(--brand-color,#e60012);stop-opacity:0.05"/>
+      <stop offset="1" style="stop-color:var(--brand-color,#e60012);stop-opacity:0"/>
+    </radialGradient>
+
+    <!-- floor haze keeps the lower third from going flat black -->
+    <linearGradient id="rioFloor" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#1f1f30" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#1f1f30" stop-opacity="0"/>
+    </linearGradient>
+
   </defs>
 
   <rect width="1920" height="1080" fill="url(#rioBase)"/>
-  <rect width="1920" height="1080" fill="url(#rioGrid)"/>
-  <rect width="1920" height="1080" fill="url(#rioWashA)"/>
-  <rect width="1920" height="1080" fill="url(#rioWashB)"/>
 
-  <!-- angled arena beams in the featured player's colour -->
-  <g opacity="0.75">
-    <polygon points="0,1080 720,0 1010,0 290,1080" fill="url(#rioBeam)"/>
-    <polygon points="360,1080 1080,0 1180,0 460,1080" fill="url(#rioBeam)" opacity="0.5"/>
+  <!-- EVERY LAYER BELOW IS CROPPED TO WHERE IT ACTUALLY PAINTS, and the heights
+       are not arbitrary: each one is where its own gradient has already reached
+       zero alpha, so cropping changes nothing on screen. It changes what sits
+       UNDERNEATH THE FIELD'S BAND (y 832 down). These were all authored as
+       full-canvas rects, several of them patterns inside masks - the most
+       expensive thing you can put under something that moves, because the strip
+       the marks dirty has to be recomposited through all of it. Cropped, the
+       only things left under the field are two plain gradient rects: the night
+       base and the floor haze. Do not let a masked or patterned layer grow back
+       into the bottom of this frame. -->
+
+  <!-- THE WALL. One texture, masked to nothing by y=756; the rect stops just
+       past it. This is the only mask left in the file. -->
+  <g mask="url(#rioWallFade)">
+    <rect width="1920" height="760" fill="url(#rioGrid)"/>
   </g>
 
-  <!-- the Rio clip edge: a brand-red angled slash off the right shoulder -->
-  <polygon points="1580,0 1636,0 1436,1080 1380,1080" fill="#e60012" opacity="0.16"/>
+  <!-- THE HORIZON: where the wall lets go and the floor takes over. Air, no
+       line - see the note on rioHorizonAir. -->
+  <rect x="0" y="566" width="1920" height="192" fill="url(#rioHorizonAir)"/>
 
-  <!-- fixed Rio-red top rule + port-coloured foot -->
-  <rect x="0" y="0" width="1920" height="8" fill="#e60012" opacity="0.92"/>
-  <rect x="0" y="1072" width="1920" height="8" style="fill:var(--port-2)" opacity="0.7"/>
+  <!-- floor haze keeps the lower third of the frame from going flat black -->
+  <rect x="0" y="740" width="1920" height="340" fill="url(#rioFloor)"/>
+
+  <!-- the floor pool: stadium light, low and centre. This is what fills the
+       lower middle of the frame now that no rule closes the bottom. -->
+  <rect x="0" y="640" width="1920" height="440" fill="url(#rioPool)"/>
+
+  <!-- brand bloom: cy 12%, r 62% - zero by y~800 -->
+  <rect width="1920" height="820" fill="url(#rioBrand)"/>
+
+  <!-- SIDE IDENTITY, in three tiers, weakest to strongest.
+       1 · the edge columns, full height (plain gradients, no mask).
+       2 · the corner blooms, cropped at y=440 where their own 0.5625-squashed
+           radius has already reached zero.
+       3 · the halftone, which is the one you actually read as texture.
+       All three die before the centre on their own stops - nothing here is
+       masked away from the middle, it simply never gets there. -->
+  <rect width="1920" height="1080" fill="url(#rioEdgeA)" style="opacity:var(--side-a-weight,1)"/>
+  <rect width="1920" height="1080" fill="url(#rioEdgeB)" style="opacity:var(--side-b-weight,1)"/>
+  <rect width="1920" height="440" fill="url(#rioWashA)" style="opacity:var(--side-a-weight,1)"/>
+  <rect width="1920" height="440" fill="url(#rioWashB)" style="opacity:var(--side-b-weight,1)"/>
+  <!-- - -dot-weight lets a SCENE dial the halftone without forking the file. The
+       Game Summary is a sparse frame and wants the full 0.5; the Character
+       Spotlight covers three of its four corners with cards and asks for less,
+       or the dots only ever show as a rind around the content. Same texture,
+       tuned to how much bare frame each scene actually has. -->
+  <rect width="1920" height="1080" fill="url(#rioDotsA)" mask="url(#rioDotMaskA)"
+        style="opacity:calc(var(--dot-weight,0.5) * var(--side-a-weight,1))"/>
+  <rect width="1920" height="1080" fill="url(#rioDotsB)" mask="url(#rioDotMaskB)"
+        style="opacity:calc(var(--dot-weight,0.5) * var(--side-b-weight,1))"/>
+
 </svg>

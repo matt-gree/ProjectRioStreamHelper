@@ -37,14 +37,42 @@
   }
 
   // ── Number formatting ────────────────────────────────────────────────────
-  function fmt3(v) { return Number(v).toFixed(3); }
+  /*
+   * A rate to three places, written the way baseball writes one: no leading
+   * zero below 1 (".417"), and the whole number kept once there is one
+   * ("1.667"). AVG, SLG and opponent AVG all read this way on a scoreboard, and
+   * the Character Spotlight has always formatted them like this
+   * (postgame-callout-mount.js) — this is the same convention reaching the stat
+   * cards, not a new one.
+   *
+   * It buys real room as well as correctness: a leading zero is a whole glyph
+   * in the widest cell on the 2x2 stat card, where three of the four values are
+   * rates and the neighbouring column is one grid divider away.
+   */
+  function fmt3(v) { return Number(v).toFixed(3).replace(/^0\./, '.'); }
   function fmt2(v) { return Number(v).toFixed(2); }
   function fmt1(v) { return Number(v).toFixed(1); }
 
-  // ── Source detection ─────────────────────────────────────────────────────
+  // ── Transport detection ──────────────────────────────────────────────────
+  /*
+   * Which transport a board carries. DERIVED, never picked — the same rule the
+   * server derives it by (server/bindings.py `transport`): board 1 carries the
+   * local HUD iff the global project_rio.hud_enabled toggle is on, and every
+   * other board is API.
+   *
+   * This used to read `scoreboards.sources.{sb}.type === 'hud'`, a settings key
+   * that the binding model retired: it is a read-only migration fallback that
+   * nothing writes any more, so it sits frozen at whatever it was before the
+   * migration ('manual' on a board that has carried the HUD ever since). The
+   * cost was silent and specific — every HUD-only field went dark while the
+   * card still rendered. `current_game.batting_line` / `pitching_line` are only
+   * offered on a HUD board, so the stat card's game line never populated and
+   * its bottomLabel fell through to the API caption ("Tournament Stats") on a
+   * live HUD game.
+   */
   function isHudSource(sb) {
-    const type = deepGet(OverlayBase.settings, `scoreboards.sources.${sb}.type`, 'manual');
-    return type === 'hud';
+    return Number(sb) === 1 &&
+      !!deepGet(OverlayBase.settings, 'project_rio.hud_enabled', true);
   }
 
   // ── Role detection ───────────────────────────────────────────────────────
@@ -210,7 +238,29 @@
       stats,
       gameLine,
       bottomLabel,
+      gameMode: gameMode(state, sb),
     };
+  }
+
+  /*
+   * The game mode these stats are FOR, by name — "Stars On Showdown XXI",
+   * "Mario Baseball (Base Game + QoL)".
+   *
+   * It arrives by two different roads depending on transport, which is why this
+   * is a helper and not a state read at the call site: an API game carries the
+   * mode on the game record (`score.{sb}.game_mode`), while a HUD game carries
+   * only a numeric TagSetID that the server resolves to a name and stores on the
+   * board's binding (`scoreboards.binding.{sb}.stats_tag`, written by
+   * provider._apply_hud_game_mode). Board-scoped either way, so a card on board
+   * 2 names board 2's mode.
+   *
+   * Returns '' when neither is known — a caller building a caption out of this
+   * should hide the caption rather than print a bare "Stats".
+   */
+  function gameMode(state, sb) {
+    return deepGet(state, `score.${sb}.game_mode`, '')
+      || deepGet(OverlayBase.settings, `scoreboards.binding.${sb}.stats_tag`, '')
+      || '';
   }
 
   window.RioData = {
@@ -219,6 +269,7 @@
     teamLogoUrl,
     fmt1, fmt2, fmt3,
     isHudSource,
+    gameMode,
     getTeamRole,
     findCharIndex,
     getRosterSlots,

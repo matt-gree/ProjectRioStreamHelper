@@ -32,7 +32,18 @@
     the mount honours (the whitelist is what the Production stage's Style
     section filters against; see designConstants.js).
   -->
-  <meta name="overlay-settings" content="accentColor, cardBg, borderRadius, borderColor, borderWidth, fontFamily, cardShadow, textShadow, statValueColor, subtextColor, transitionType, subLine, subLineText, showSuperstars, showRoleIcon, showTeamLogo, port0Color, port1Color, port2Color, port3Color" />
+  <meta name="overlay-settings" content="accentColor, cardBg, borderRadius, borderColor, borderWidth, fontFamily, cardShadow, textShadow, statValueColor, subtextColor, transitionType, subLine, subLineText, topLine, topLineText, showSuperstars, showRoleIcon, showTeamLogo, port0Color, port1Color, port2Color, port3Color" />
+  <!--
+    The Rio token layer, same as every standalone themed layout links. A member
+    that renders a DESIGN PACKAGE SVG (Stat Card) paints with --band / --border /
+    --ink / --accent / --font-*, and an unresolved var() in a presentation style
+    computes to the property's initial value — black fill, black stroke — so the
+    card renders as a black rectangle with black text on it and no error
+    anywhere. Every other themed layout links this; the shell that hosts themed
+    members has to as well. Safe for the callout occupants: they declare the same
+    names on .cs-stage / .pv-root, which beats :root for their own subtree.
+  -->
+  <link rel="stylesheet" href="/layout/lib/rio-theme/tokens.css" />
   <!-- three.js vendored locally; addons resolve bare 'three' via this map (for the hit element). -->
   <script type="importmap">
   {

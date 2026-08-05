@@ -17,17 +17,24 @@
 //
 // THEME CONTRACT — see public/design/README.md. Short version:
 // 4 position groups data-slot="slot{0-3}", each with data-part="main-rect" (and
-// optionally "rail" / "sub-rect"), data-slot="slot{i}-name" / "slot{i}-sub"
-// (wrapper — the GSAP wipe target) / "slot{i}-sub-label" / "slot{i}-sub-value".
+// optionally "rail" / "sub-rect" / "sub-icon"), data-slot="slot{i}-name" /
+// "slot{i}-sub" (wrapper — the GSAP wipe target) / "slot{i}-sub-label" /
+// "slot{i}-sub-value".
 // A `<script type="application/json" data-layouts>` block maps caster COUNT
 // (1-4, as a string key) to an array of per-position geometry/gradient/text
 // targets; the mount GSAP-tweens between them when the active count changes
-// (never a hard cut). First paint — and any time the OBS source goes active
-// (see setActive()) — plays a staggered group reveal instead of snapping; a
-// theme swap re-snaps to the new theme and the next reveal cascades in.
+// (never a hard cut). Optional `data-slot="field"` / `"sub-field"` groups in
+// <defs> are the plate's and the drawer's atmosphere: authored once across the
+// canvas, cloned and clipped into every plate — see attachFields(). The drawer's
+// sprites (data-part="sub-glyph") and its badge (data-part="sub-icon") are both
+// pointed at whichever mark the slot's address-book field resolves to — see
+// setSubGlyph() and sub-glyph.js. First paint — and any time the OBS source
+// goes active (see setActive()) — plays a staggered group reveal instead of
+// snapping; a theme swap re-snaps and the next reveal cascades in.
 
 import { createThemeEngine } from './svg-theme-engine.js';
 import { ensureGsap } from './gsap-loader.js';
+import { SUB_GLYPHS, FALLBACK_GLYPH, glyphKeyFor, setHref } from './sub-glyph.js';
 
 const ELEMENT = 'commentary';
 const DEFAULT_PACKAGE = 'default';
@@ -53,6 +60,8 @@ const INTRO_STAGGER = 0.06; // s between adjacent plates on a whole-group reveal
 const REVEAL_SETTLE_MS = 120; // ms to let an OBS visibility toggle's on→off→on burst settle before revealing, so one toggle = one clean cascade (not a start/reset/start stutter)
 const INTRO = new URLSearchParams(location.search).get('intro') !== '0'; // `?intro=0` disables the reveal animation entirely: plates snap in with no cascade. Paired with shutdown:false on the OBS source (obs.jsx) for persistent, non-reloading sources.
 const SUB_DIVIDER_INSET = 22; // svg units the optional sub-divider is inset from each end of the sub width
+const SUB_ICON_GUTTER = 76;   // svg units the drawer's platform badge occupies at its right end (mark + margin). Subtracted from the value's fit bound ONLY while a badge is actually showing, so a drawer without one keeps the full width.
+const SUB_ICON_OPACITY = 0.8; // the badge is a caption, not a logo placement — it sits just under the value's weight
 const DIVIDER_REF_WIDTH = 181; // sub-divider width whose draw speed is the reference (count-4); wider bars scale their duration up to keep px/s (and the feel) constant across counts
 const REFLOW_EASE  = 'power3.inOut';
 const ENTER_EASE   = 'back.out(1.5)';
@@ -68,13 +77,13 @@ const RESHUFFLE_DELAY = EXIT_DURATION * 0.7;   // survivors wait for exit (shrin
 // same slot/part names as a real theme, with a trivial 1-count layout, so
 // binding doesn't silently no-op and a missing theme never goes blank.
 const FALLBACK_SVG = `
-<svg viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMax meet" xmlns="http://www.w3.org/2000/svg">
+<svg viewBox="0 0 1920 240" preserveAspectRatio="xMidYMax meet" xmlns="http://www.w3.org/2000/svg">
   <g data-slot="slot0" opacity="0">
-    <rect data-part="main-rect" x="16" y="896" width="1888" height="168" rx="16" style="fill:var(--card-bg, #1a1a1a);stroke:var(--border-color, #444)" />
-    <text data-slot="slot0-name" data-maxw="1836" x="48" y="972" style="fill:var(--text-primary, #fff);font-family:var(--font-family, sans-serif)" font-size="30" font-weight="800"></text>
+    <rect data-part="main-rect" x="16" y="56" width="1888" height="168" rx="16" style="fill:var(--card-bg, #1a1a1a);stroke:var(--border-color, #444)" />
+    <text data-slot="slot0-name" data-maxw="1836" x="48" y="132" style="fill:var(--text-primary, #fff);font-family:var(--font-family, sans-serif)" font-size="30" font-weight="800"></text>
     <g data-slot="slot0-sub" style="opacity:0">
-      <text data-slot="slot0-sub-label" x="48" y="1002" style="fill:var(--accent, #f59e0b)" font-size="13" font-weight="700"></text>
-      <text data-slot="slot0-sub-value" data-maxw="1760" x="124" y="1002" style="fill:var(--text-primary, #fff)" font-size="18" font-weight="600"></text>
+      <text data-slot="slot0-sub-label" x="48" y="162" style="fill:var(--accent, #f59e0b)" font-size="13" font-weight="700"></text>
+      <text data-slot="slot0-sub-value" data-maxw="1760" x="124" y="162" style="fill:var(--text-primary, #fff)" font-size="18" font-weight="600"></text>
     </g>
   </g>
   <g data-slot="slot1" opacity="0"></g>
@@ -86,8 +95,28 @@ const FALLBACK_SVG = `
 </svg>`;
 
 const CSS = `
-.cm-host { position: fixed; inset: 0; }
-.cm-host svg { width: 100%; height: 100%; display: block; }
+.cm-host { position: fixed; inset: 0; overflow: hidden; }
+/* The theme's own box decides the height, and it is pinned to the BOTTOM of the
+   source. The default package authors a 1920x240 card (see its header: vertical
+   placement is a scene decision, so the source is the size of the thing in it),
+   while Classic and Slice26 author a full 1920x1080 canvas with the row parked
+   near the bottom. Bottom-anchoring serves both: a short theme fills the source
+   exactly, and a tall one hangs its empty upper canvas out of the top where
+   overflow crops it. Height 100% would instead have made preserveAspectRatio
+   "meet"-fit a 1080-tall theme into a 240-tall source and shrink it to a fifth
+   of its size. */
+.cm-host svg { position: absolute; left: 0; bottom: 0; width: 100%; height: auto; display: block; }
+/* A pruned atmosphere sprite (see pruneField). display:none is what takes it out
+   of layout, paint and — because the marks carry will-change:transform — out of
+   the compositor. It is NOT enough on its own: Chromium leaves the CSS
+   animations on the hidden subtree in the running state, still ticking styles
+   every frame for something with no box. The descendant rule below actually
+   cancels them, which is the whole point of pruning.
+   The selector is host-qualified deliberately. The theme's own .{el}-mush rule
+   is injected INSIDE the host and so comes later in document order; one class
+   would tie on specificity and lose. Two wins outright. */
+.cm-host .cm-field-off { display: none; }
+.cm-host .cm-field-off * { animation: none; will-change: auto; }
 `;
 
 let _cssInjected = false;
@@ -107,12 +136,21 @@ const GEOMETRY_PARTS = [
   ['main-rect', 'main', ['x', 'width']],
   ['rail', 'rail', ['x']],
   ['sub-rect', 'sub', ['x', 'width']],
+  ['sub-icon', 'subIcon', ['x']],
+  // The atmosphere clips. Not authored by the theme — the mount builds them in
+  // attachFields() from the plate's / drawer's own rect, then drives each off
+  // the SAME entry as the rect it was cut from, so a field's window and the
+  // surface it belongs to can never drift apart, including mid-tween.
+  ['field-clip', 'main', ['x', 'width']],
+  ['subfield-clip', 'sub', ['x', 'width']],
 ];
 // Text slots (relative to slot{i}): JSON key, slot-name suffix, whether maxw applies.
+// `subValue`'s maxw is NOT applied here — it depends on whether a badge is
+// sharing the drawer, so it goes through applyBadgeFit().
 const TEXT_PARTS = [
   ['name', 'name', true],
   ['subLabel', 'sub-label', false],
-  ['subValue', 'sub-value', true],
+  ['subValue', 'sub-value', false],
 ];
 
 export function mountCommentary({ host }) {
@@ -125,6 +163,12 @@ export function mountCommentary({ host }) {
   let prevSlotCaster = new Array(MAX_SLOTS).fill(undefined); // caster NAME occupying each PHYSICAL slot (stable per caster across reflows)
   let prevLayoutPos  = new Array(MAX_SLOTS).fill(-1);    // layout-position (rank) each slot was rendered at last update
   let prevSub = new Array(MAX_SLOTS).fill(undefined);    // diffed sub-visibility per slot
+  let fieldCopies = new Array(MAX_SLOTS).fill(null);     // per-plate atmosphere clone (see attachFields)
+  let subFieldCopies = new Array(MAX_SLOTS).fill(null);  // per-drawer atmosphere clone
+  let prevMain = new Array(MAX_SLOTS).fill(null);        // last `main` geometry each slot was laid out at
+  let prevGlyph = new Array(MAX_SLOTS).fill(undefined);  // sub-glyph key each slot's drawer is currently wearing
+  const badgeShown = new Array(MAX_SLOTS).fill(false);   // whether that glyph resolved to a badge this theme has
+  const subValueMaxw = new Array(MAX_SLOTS).fill(null);  // authored fit bound for the drawer's value, before the badge gutter
   const subTweens = new Array(MAX_SLOTS).fill(null);     // in-flight GSAP wipe tween per position
   let presented = false;        // whether the strip is currently revealed on screen (OBS active / first paint)
   let wantShown = true;         // desired shown-state; OBS visibility drives it, defaults shown for a plain browser
@@ -137,6 +181,175 @@ export function mountCommentary({ host }) {
     const script = host.querySelector('script[data-layouts]');
     if (!script) return null;
     try { return JSON.parse(script.textContent); } catch { return null; }
+  }
+
+  // ── atmosphere (optional `data-slot="field"` / `"sub-field"`) ─────────────
+  // A theme may declare drifting fields, authored across the whole canvas in
+  // <defs>: one for the name plate and one for the drawer under it. Every plate
+  // gets its own clipped copy, so four plates are four different slices of one
+  // scatter rather than four copies of the same corner — and because the copy
+  // lives inside the plate (or drawer) group, the field rises, slides and drops
+  // with the surface it belongs to.
+  //
+  // The theme does not author the clip. The rect's x/width are the MOUNT's (they
+  // change per count), so the mount owns the window and derives everything else —
+  // y, height, corner radius — from the rect itself, which is what stops the
+  // field bleeding past the corners the theme drew.
+  function cloneFieldInto(g, slotName, partName, clipId, clipPart) {
+    const field = engine.slots[slotName];
+    const rect = field && g.querySelector(`[data-part="${partName}"]`);
+    if (!rect) return null;
+    const NS = 'http://www.w3.org/2000/svg';
+
+    const clip = document.createElementNS(NS, 'clipPath');
+    clip.setAttribute('id', clipId);
+    const shape = document.createElementNS(NS, 'rect');
+    shape.setAttribute('data-part', clipPart);
+    for (const a of ['x', 'y', 'width', 'height', 'rx', 'ry']) {
+      const v = rect.getAttribute(a);
+      if (v != null) shape.setAttribute(a, v);
+    }
+    clip.appendChild(shape);
+
+    // clipPath is a non-rendering child, so parking it inside the wrapper keeps
+    // teardown (and a theme swap, which rewrites host.innerHTML) to one node.
+    const wrap = document.createElementNS(NS, 'g');
+    wrap.setAttribute('clip-path', `url(#${clipId})`);
+    wrap.appendChild(clip);
+    const copy = field.cloneNode(true);
+    copy.removeAttribute('data-slot');  // the original in <defs> stays the one slot
+    wrap.appendChild(copy);
+    // Over the surface, under the copy: the text has to win.
+    rect.parentNode.insertBefore(wrap, rect.nextSibling);
+    return copy;
+  }
+
+  function attachFields() {
+    fieldCopies = new Array(MAX_SLOTS).fill(null);
+    subFieldCopies = new Array(MAX_SLOTS).fill(null);
+    for (let s = 0; s < MAX_SLOTS; s++) {
+      const g = engine.slots[`slot${s}`];
+      if (!g) continue;
+      fieldCopies[s] = cloneFieldInto(g, 'field', 'main-rect', `cm-field-clip-${s}`, 'field-clip');
+      subFieldCopies[s] = cloneFieldInto(g, 'sub-field', 'sub-rect', `cm-subfield-clip-${s}`, 'subfield-clip');
+      // Drawers start closed, and a closed drawer must not tick (see hideCopy).
+      hideCopy(subFieldCopies[s]);
+    }
+  }
+
+  // ── the drawer's mark ──────────────────────────────────────────────────────
+  // One address-book field decides two things at once: the badge at the drawer's
+  // right end, and what the drawer's own atmosphere is MADE of. Binding them
+  // together is the point — an X drawer drifts X marks — so this is one call and
+  // the theme authors its field once, as the house mark, for the mount to
+  // rewrite. See sub-glyph.js for why a mark and not a label.
+  function setSubGlyph(pos, key) {
+    const sub = engine.slots[`slot${pos}-sub`];
+    if (!sub) return;
+    const id = key ? SUB_GLYPHS[key] : null;
+    // A package need not draw every platform. Check before binding, so a partial
+    // theme shows no badge rather than a broken reference.
+    const has = !!(id && host.querySelector(`#${id}`));
+    badgeShown[pos] = has;
+
+    const badge = sub.querySelector('[data-part="sub-icon"]');
+    if (badge) {
+      if (has) setHref(badge, `#${id}`);
+      badge.setAttribute('opacity', has ? String(SUB_ICON_OPACITY) : '0');
+    }
+    const glyph = `#${has ? id : FALLBACK_GLYPH}`;
+    for (const use of sub.querySelectorAll('[data-part="sub-glyph"]')) setHref(use, glyph);
+    applyBadgeFit(pos);
+  }
+
+  // The value and the badge share the drawer, so the value's fit bound loses the
+  // badge's gutter — but only while a badge is there. A drawer showing pronouns
+  // keeps the full width.
+  function applyBadgeFit(pos) {
+    const el = engine.slots[`slot${pos}-sub-value`];
+    const base = subValueMaxw[pos];
+    if (!el || base == null) return;
+    const want = String(Math.max(0, base - (badgeShown[pos] ? SUB_ICON_GUTTER : 0)));
+    if (el.getAttribute('data-maxw') === want) return;
+    el.setAttribute('data-maxw', want);
+    engine.invalidateFit(el);   // the fit cache keys on the TEXT; this changed under it
+  }
+
+  // Drop the sprites this plate clips away. A clip hides them but keeps their
+  // animations ticking, and most of a canvas-wide field falls outside any one
+  // plate — this app renders alongside the game, so pay for what shows.
+  //
+  // Unlike the lower third's field this compares AUTHORED bounds, not client
+  // rects: data-l/data-r are the exact horizontal extremes of a sprite's sway, so
+  // there is no in-flight snapshot to leave slack for. During a reflow the window
+  // is the union of where the plate is and where it's going, so a sprite the new
+  // width will need is already ticking when the clip arrives; tightening waits
+  // for the tween to land.
+  function pruneField(copy, box) {
+    if (!copy || !box) return;
+    const l = box.x;
+    const r = box.x + box.width;
+    for (const sprite of copy.children) {
+      const sl = parseFloat(sprite.getAttribute('data-l'));
+      const sr = parseFloat(sprite.getAttribute('data-r'));
+      // A sprite with no declared bounds is always kept — a theme that forgot
+      // them renders slow, not wrong. The !! is not decoration: an undefined
+      // force makes toggle FLIP the class rather than clear it, which would
+      // blink such a sprite in and out on successive reflows.
+      const off = Number.isFinite(sl) && Number.isFinite(sr) && (sr < l || sl > r);
+      sprite.classList.toggle('cm-field-off', !!off);
+    }
+  }
+
+  function union(a, b) {
+    if (!a) return b;
+    if (!b) return a;
+    const x = Math.min(a.x, b.x);
+    return { x, width: Math.max(a.x + a.width, b.x + b.width) - x };
+  }
+
+  // A surface nobody can see pays nothing. Opacity 0 does NOT stop a CSS
+  // animation, so an emptied slot would go on ticking its whole field for the
+  // rest of the broadcast — and slots stay emptied for a long time (three of the
+  // four are, in the common two-caster show). `display:none` does stop it. The
+  // surface's own exit has to finish first, hence the delays at the call sites;
+  // a prune restores the field when the surface comes back.
+  function hideCopy(copy) {
+    if (!copy) return;
+    for (const s of copy.children) s.classList.add('cm-field-off');
+  }
+
+  // EVERY delayed field callback below re-checks the state it was queued for
+  // before acting. The producer can change the lineup faster than these delays
+  // (they are exit/slide durations, and a mis-click is quicker than a third of
+  // a second), so a callback can easily land in a world that has moved on. An
+  // unguarded one either hides a plate that has come back or wakes one that has
+  // gone — both silent, both costing frames for the rest of the broadcast.
+  function hideField(pos, delay = 0) {
+    const hide = () => {
+      if (disposed || prevSlotCaster[pos] !== undefined) return;  // re-filled mid-exit
+      hideCopy(fieldCopies[pos]);
+      hideCopy(subFieldCopies[pos]);
+    };
+    if (delay && gsapInstance) gsapInstance.delayedCall(delay, hide);
+    else hide();
+  }
+
+  // The drawer is closed far more often than it's open (it's one optional line
+  // under a name), so its field gets the same treatment as an emptied plate's,
+  // keyed on the drawer's own slide rather than the plate's exit.
+  function syncSubField(pos, shown, delay = 0) {
+    const copy = subFieldCopies[pos];
+    if (!copy) return;
+    const apply = () => {
+      // prevSub is written after the call that scheduled this, so it reads back
+      // as `shown` unless a NEWER toggle has since replaced it.
+      if (disposed || (delay && !!prevSub[pos] !== shown)) return;
+      if (shown) pruneField(copy, prevMain[pos]);
+      else hideCopy(copy);
+    };
+    if (delay && gsapInstance) gsapInstance.delayedCall(delay, apply);
+    else apply();
   }
 
   // ensureGsap dedupes in-flight loads itself, so a concurrent caller awaits
@@ -172,6 +385,32 @@ export function mountCommentary({ host }) {
       tweenOrSet(el, attrs, animate, delay);
     }
 
+    if (entry.main) {
+      // The drawer shares the plate's x/width in every theme that has one, so
+      // both fields prune on the same window. Only prune the drawer's while it
+      // is actually open — a closed drawer stays fully off (syncSubField).
+      const settle = (box) => {
+        pruneField(fieldCopies[pos], box);
+        if (subShown) pruneField(subFieldCopies[pos], box);
+      };
+      if (animate && gsapInstance) {
+        settle(union(prevMain[pos], entry.main));
+        gsapInstance.delayedCall(delay + REFLOW_DURATION, () => {
+          // A reflow's tighten can outlive the layout that queued it: drop two
+          // casters in quick succession and this slot reflows, then EXITS, and
+          // an unguarded tighten lands after the exit's hide and wakes the whole
+          // field back up on a plate nobody can see. prevMain identifies the
+          // layout still in force; prevSlotCaster, whether anyone is on it.
+          if (disposed || prevMain[pos] !== entry.main) return;
+          if (prevSlotCaster[pos] === undefined) return;
+          settle(entry.main);
+        });
+      } else {
+        settle(entry.main);
+      }
+      prevMain[pos] = entry.main;
+    }
+
     // Optional sub-divider: a theme drops a <rect data-part="sub-divider"> in the
     // sub group; the mount stores its centre (_cx) + full width (_fw), derived
     // from the sub geometry inset from each end (never edge-to-edge). The mount
@@ -197,6 +436,10 @@ export function mountCommentary({ host }) {
       if (!data || !el) continue;
       if (hasMaxw && data.maxw != null) el.setAttribute('data-maxw', String(data.maxw));
       if (data.x != null) tweenOrSet(el, { x: data.x }, animate, delay);
+    }
+    if (entry.subValue && entry.subValue.maxw != null) {
+      subValueMaxw[pos] = entry.subValue.maxw;
+      applyBadgeFit(pos);   // the badge's gutter comes off whatever this count authored
     }
 
     if (entry.grad) {
@@ -260,6 +503,7 @@ export function mountCommentary({ host }) {
     if (gsapInstance) gsapInstance.set(el, { opacity: visible ? 1 : 0, y: visible ? 0 : -SUB_RISE });
     else { el.style.opacity = visible ? '1' : '0'; }
     drawDivider(pos, visible, false);
+    syncSubField(pos, visible);
   }
 
   function animateSub(pos, visible, onDone) {
@@ -268,6 +512,9 @@ export function mountCommentary({ host }) {
     if (!gsapInstance) { snapSub(pos, visible); onDone?.(); return; }
     if (subTweens[pos]) { subTweens[pos].kill(); subTweens[pos] = null; }
     drawDivider(pos, visible, true);
+    // Opening: the field starts drifting as the drawer slides out. Closing: it
+    // keeps drifting until the drawer is gone, then stops.
+    syncSubField(pos, visible, visible ? 0 : SUB_DURATION);
     if (visible) {
       subTweens[pos] = gsapInstance.to(el, {
         opacity: 1, y: 0, duration: SUB_DURATION, ease: SUB_IN_EASE,
@@ -333,10 +580,15 @@ export function mountCommentary({ host }) {
     else OverlayBase.clearDesignSettings();
     if (themeChanged) {
       layoutData = parseLayoutData();
+      attachFields();
       prevN = undefined;
+      prevMain = new Array(MAX_SLOTS).fill(null);
       prevSlotCaster = new Array(MAX_SLOTS).fill(undefined);
       prevLayoutPos  = new Array(MAX_SLOTS).fill(-1);
       prevSub = new Array(MAX_SLOTS).fill(undefined);
+      prevGlyph = new Array(MAX_SLOTS).fill(undefined);   // the new theme may draw a different set of marks
+      badgeShown.fill(false);
+      subValueMaxw.fill(null);
       presented = false;  // new SVG injected → next first paint re-reveals
     }
     if (disposed) return;
@@ -349,11 +601,15 @@ export function mountCommentary({ host }) {
       const name = OverlayBase.deepGet(state, `${base}.name`, '');
       const visible = OverlayBase.deepGet(state, `${base}.visible`, false);
       if (!name || !visible) continue;
+      const subLabel = OverlayBase.deepGet(state, `${base}.subLabel`, '');
       active.push({
         name,
-        subLabel: OverlayBase.deepGet(state, `${base}.subLabel`, ''),
+        subLabel,
         subValue: OverlayBase.deepGet(state, `${base}.subValue`, ''),
         subVisible: OverlayBase.deepGet(state, `${base}.subVisible`, false),
+        // Which address-book field this drawer is showing, resolved to the mark
+        // that stands for it (or '' — most fields wear none).
+        glyph: glyphKeyFor(OverlayBase.deepGet(state, `${base}.subField`, ''), subLabel),
       });
     }
     const N = active.length;
@@ -425,18 +681,27 @@ export function mountCommentary({ host }) {
       const wasActive = !firstPaint && prevSlotCaster[s] !== undefined;
 
       if (!isActive) {
-        if (wasActive && live) exitPlate(s);     // drop + fade THIS slot's own leaver away
-        else snapPlate(s, false);
+        if (wasActive && live) {
+          exitPlate(s);                          // drop + fade THIS slot's own leaver away
+          hideField(s, EXIT_DURATION);           // ...then stop paying for its weather
+        } else {
+          snapPlate(s, false);
+          hideField(s);
+        }
         if (subTweens[s]) { subTweens[s].kill(); subTweens[s] = null; }
         prevSlotCaster[s] = undefined;
         prevLayoutPos[s] = -1;
         prevSub[s] = undefined;
+        prevGlyph[s] = undefined;
         continue;
       }
 
       const layoutPos = slotLayoutPos[s];
       const entry = countLayout[layoutPos];
       engine.setText(`slot${s}-name`, d.name);
+      // Before applyLayout: the badge decides the value's fit bound, and
+      // applyLayout is what re-applies it for the new count.
+      if (prevGlyph[s] !== d.glyph) { setSubGlyph(s, d.glyph); prevGlyph[s] = d.glyph; }
 
       // A caster staying in this slot REFLOWS (glide); a slot changing who it
       // holds SNAPS its identity — either a brand-new plate (rise in) or a
@@ -547,6 +812,8 @@ export function mountCommentary({ host }) {
       if (prevSlotCaster[s] !== undefined) {
         if (INTRO) enterPlate(s, Math.max(0, prevLayoutPos[s]) * INTRO_STAGGER);
         else snapPlate(s, true);   // intro disabled: snap shown, no cascade
+        pruneField(fieldCopies[s], prevMain[s]);   // back on air → the weather resumes
+        syncSubField(s, !!prevSub[s]);
       } else snapPlate(s, false);
     }
     presented = true;
@@ -561,6 +828,7 @@ export function mountCommentary({ host }) {
     presented = false;
     for (let s = 0; s < MAX_SLOTS; s++) {
       if (subTweens[s]) { subTweens[s].kill(); subTweens[s] = null; }
+      hideField(s);   // off air is the longest a source is ever hidden for; stop the marks
       const g = engine.slots[`slot${s}`];
       if (!g) continue;
       if (gsapInstance) { gsapInstance.killTweensOf(g); gsapInstance.set(g, { opacity: 0, y: 0 }); }

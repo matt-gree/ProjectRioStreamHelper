@@ -3,7 +3,7 @@
    "Project Rio Design System", token layer only).
    The Rio look: red mushroom cap (#e60012) + star gold, on a dark
    "night arena" scale, Rajdhani display caps + Inter body +
-   JetBrains Mono for tabular numerals.
+   Chivo Mono for tabular numerals.
 
    This is the shared theming foundation for re-themable overlay
    elements. An overlay <link>s this, then theme SVGs inherit the
@@ -11,8 +11,20 @@
    accent vars at runtime (port colours, global accent).
    ============================================================ */
 /* Inter is bundled locally (injected by overlay-base.js); only the display/mono
-   faces are fetched from Google Fonts here. */
-@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=JetBrains+Mono:wght@500;700&display=swap');
+   faces are fetched from Google Fonts here.
+
+   The numeral face is CHIVO MONO, not JetBrains Mono. JetBrains is a code face
+   — its slashed zero, its wide serifed one and its low-contrast strokes are
+   tuned to be unambiguous in a 13px editor, and at broadcast sizes (a 76px
+   clock, a 44px score) that reads as a terminal dump rather than as a
+   scoreboard. Chivo Mono is a display mono: the same tabular grid, but built to
+   be read large. It is also what PRSH already uses everywhere the tokens don't
+   reach (container.html, postgame-callout-css.js, Slice26), so this is one
+   numeral face across the whole broadcast instead of two.
+
+   NOTE for retuning: both faces are 0.6em advance, so this swap does not move
+   any x-anchored numeral. A future face that isn't will. */
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Chivo+Mono:wght@500;600;700;800&display=swap');
 
 :root {
 	/* --- Rio red — the brand core (the mushroom cap) --- */
@@ -42,7 +54,7 @@
 	/* --- Type --- */
 	--font-display: 'Rajdhani', 'Arial Narrow', sans-serif;
 	--font-body: 'Inter', system-ui, -apple-system, sans-serif;
-	--font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+	--font-mono: 'Chivo Mono', ui-monospace, 'SF Mono', monospace;
 
 	/* ============================================================
 	   Re-themable element aliases — theme SVGs paint with these.

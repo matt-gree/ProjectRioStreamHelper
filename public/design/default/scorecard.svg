@@ -52,6 +52,120 @@
        overrides the per-side colour vars from each player's controller port
        (P1/P2 fallback when unassigned) so the bar tint matches the box dots. -->
   <defs>
+    <!-- .. THE PROJECT RIO MARK ..................................... -->
+    <!-- Verbatim pixel data from public/game_assets/ProjectRio.svg, inlined so
+         the package stays self-contained (the same call lowerthird.svg makes). -->
+    <symbol id="rio-mark" viewBox="0 0 16 16" shape-rendering="crispEdges">
+        <rect x="5" y="0" width="6" height="1" fill="#000000"/>
+        <rect x="3" y="1" width="2" height="1" fill="#000000"/>
+        <rect x="5" y="1" width="1" height="1" fill="#ff0000"/>
+        <rect x="6" y="1" width="1" height="1" fill="#ffffff"/>
+        <rect x="7" y="1" width="1" height="1" fill="#ff0000"/>
+        <rect x="8" y="1" width="2" height="1" fill="#ffffff"/>
+        <rect x="10" y="1" width="1" height="1" fill="#ff0000"/>
+        <rect x="11" y="1" width="2" height="1" fill="#000000"/>
+        <rect x="2" y="2" width="1" height="1" fill="#000000"/>
+        <rect x="3" y="2" width="2" height="1" fill="#ff0000"/>
+        <rect x="5" y="2" width="2" height="1" fill="#ffffff"/>
+        <rect x="7" y="2" width="1" height="1" fill="#ff0000"/>
+        <rect x="8" y="2" width="3" height="1" fill="#ffffff"/>
+        <rect x="11" y="2" width="2" height="1" fill="#ff0000"/>
+        <rect x="13" y="2" width="1" height="1" fill="#000000"/>
+        <rect x="1" y="3" width="1" height="1" fill="#000000"/>
+        <rect x="2" y="3" width="2" height="1" fill="#ff0000"/>
+        <rect x="4" y="3" width="4" height="1" fill="#ffffff"/>
+        <rect x="8" y="3" width="1" height="1" fill="#ff0000"/>
+        <rect x="9" y="3" width="3" height="1" fill="#ffffff"/>
+        <rect x="12" y="3" width="2" height="1" fill="#ff0000"/>
+        <rect x="14" y="3" width="1" height="1" fill="#000000"/>
+        <rect x="1" y="4" width="1" height="1" fill="#000000"/>
+        <rect x="2" y="4" width="4" height="1" fill="#ff0000"/>
+        <rect x="6" y="4" width="3" height="1" fill="#ffffff"/>
+        <rect x="9" y="4" width="1" height="1" fill="#ff0000"/>
+        <rect x="10" y="4" width="2" height="1" fill="#ffffff"/>
+        <rect x="12" y="4" width="2" height="1" fill="#ff0000"/>
+        <rect x="14" y="4" width="1" height="1" fill="#000000"/>
+        <rect x="0" y="5" width="1" height="1" fill="#000000"/>
+        <rect x="1" y="5" width="1" height="1" fill="#ffffff"/>
+        <rect x="2" y="5" width="2" height="1" fill="#ff0000"/>
+        <rect x="4" y="5" width="2" height="1" fill="#ffffff"/>
+        <rect x="6" y="5" width="1" height="1" fill="#ff0000"/>
+        <rect x="7" y="5" width="3" height="1" fill="#ffffff"/>
+        <rect x="10" y="5" width="4" height="1" fill="#ff0000"/>
+        <rect x="14" y="5" width="1" height="1" fill="#ffffff"/>
+        <rect x="15" y="5" width="1" height="1" fill="#000000"/>
+        <rect x="0" y="6" width="1" height="1" fill="#000000"/>
+        <rect x="1" y="6" width="2" height="1" fill="#ffffff"/>
+        <rect x="3" y="6" width="1" height="1" fill="#ff0000"/>
+        <rect x="4" y="6" width="3" height="1" fill="#ffffff"/>
+        <rect x="7" y="6" width="1" height="1" fill="#ff0000"/>
+        <rect x="8" y="6" width="4" height="1" fill="#ffffff"/>
+        <rect x="12" y="6" width="1" height="1" fill="#ff0000"/>
+        <rect x="13" y="6" width="2" height="1" fill="#ffffff"/>
+        <rect x="15" y="6" width="1" height="1" fill="#000000"/>
+        <rect x="0" y="7" width="1" height="1" fill="#000000"/>
+        <rect x="1" y="7" width="2" height="1" fill="#ffffff"/>
+        <rect x="3" y="7" width="2" height="1" fill="#ff0000"/>
+        <rect x="5" y="7" width="3" height="1" fill="#ffffff"/>
+        <rect x="8" y="7" width="1" height="1" fill="#ff0000"/>
+        <rect x="9" y="7" width="2" height="1" fill="#ffffff"/>
+        <rect x="11" y="7" width="2" height="1" fill="#ff0000"/>
+        <rect x="13" y="7" width="2" height="1" fill="#ffffff"/>
+        <rect x="15" y="7" width="1" height="1" fill="#000000"/>
+        <rect x="0" y="8" width="1" height="1" fill="#000000"/>
+        <rect x="1" y="8" width="2" height="1" fill="#ffffff"/>
+        <rect x="3" y="8" width="3" height="1" fill="#ff0000"/>
+        <rect x="6" y="8" width="2" height="1" fill="#ffffff"/>
+        <rect x="8" y="8" width="1" height="1" fill="#ff0000"/>
+        <rect x="9" y="8" width="1" height="1" fill="#ffffff"/>
+        <rect x="10" y="8" width="3" height="1" fill="#ff0000"/>
+        <rect x="13" y="8" width="2" height="1" fill="#ffffff"/>
+        <rect x="15" y="8" width="1" height="1" fill="#000000"/>
+        <rect x="0" y="9" width="1" height="1" fill="#000000"/>
+        <rect x="1" y="9" width="1" height="1" fill="#ffffff"/>
+        <rect x="2" y="9" width="4" height="1" fill="#ff0000"/>
+        <rect x="6" y="9" width="4" height="1" fill="#000000"/>
+        <rect x="10" y="9" width="4" height="1" fill="#ff0000"/>
+        <rect x="14" y="9" width="1" height="1" fill="#ffffff"/>
+        <rect x="15" y="9" width="1" height="1" fill="#000000"/>
+        <rect x="0" y="10" width="1" height="1" fill="#000000"/>
+        <rect x="1" y="10" width="3" height="1" fill="#ff0000"/>
+        <rect x="4" y="10" width="2" height="1" fill="#000000"/>
+        <rect x="6" y="10" width="4" height="1" fill="#ffffff"/>
+        <rect x="10" y="10" width="2" height="1" fill="#000000"/>
+        <rect x="12" y="10" width="3" height="1" fill="#ff0000"/>
+        <rect x="15" y="10" width="1" height="1" fill="#000000"/>
+        <rect x="1" y="11" width="1" height="1" fill="#000000"/>
+        <rect x="2" y="11" width="1" height="1" fill="#ff0000"/>
+        <rect x="3" y="11" width="1" height="1" fill="#000000"/>
+        <rect x="4" y="11" width="2" height="1" fill="#ffffff"/>
+        <rect x="6" y="11" width="1" height="1" fill="#000000"/>
+        <rect x="7" y="11" width="2" height="1" fill="#ffffff"/>
+        <rect x="9" y="11" width="1" height="1" fill="#000000"/>
+        <rect x="10" y="11" width="2" height="1" fill="#ffffff"/>
+        <rect x="12" y="11" width="1" height="1" fill="#000000"/>
+        <rect x="13" y="11" width="1" height="1" fill="#ff0000"/>
+        <rect x="14" y="11" width="1" height="1" fill="#000000"/>
+        <rect x="2" y="12" width="2" height="1" fill="#000000"/>
+        <rect x="4" y="12" width="2" height="1" fill="#ffffff"/>
+        <rect x="6" y="12" width="1" height="1" fill="#000000"/>
+        <rect x="7" y="12" width="2" height="1" fill="#ffffff"/>
+        <rect x="9" y="12" width="1" height="1" fill="#000000"/>
+        <rect x="10" y="12" width="2" height="1" fill="#ffffff"/>
+        <rect x="12" y="12" width="2" height="1" fill="#000000"/>
+        <rect x="3" y="13" width="1" height="1" fill="#000000"/>
+        <rect x="4" y="13" width="2" height="1" fill="#ffffff"/>
+        <rect x="6" y="13" width="1" height="1" fill="#000000"/>
+        <rect x="7" y="13" width="2" height="1" fill="#ffffff"/>
+        <rect x="9" y="13" width="1" height="1" fill="#000000"/>
+        <rect x="10" y="13" width="2" height="1" fill="#ffffff"/>
+        <rect x="12" y="13" width="1" height="1" fill="#000000"/>
+        <rect x="4" y="14" width="1" height="1" fill="#000000"/>
+        <rect x="5" y="14" width="6" height="1" fill="#ffffff"/>
+        <rect x="11" y="14" width="1" height="1" fill="#000000"/>
+        <rect x="5" y="15" width="6" height="1" fill="#000000"/>
+    </symbol>
+
     <linearGradient id="sc-name-1" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" style="stop-color:var(--side1)" stop-opacity="0.24"/>
       <stop offset="1" style="stop-color:var(--side1)" stop-opacity="0.09"/>
@@ -71,117 +185,14 @@
     <g data-slot="header-logo" transform="translate(112,0)">
       <image data-slot="logo" x="0" y="13" width="40" height="40" preserveAspectRatio="xMidYMid meet" opacity="0"/>
       <g data-slot="logo-default">
-        <!-- Project Rio pixel mark (public/game_assets/ProjectRio.svg), scaled into the 40x40 logo slot. -->
-        <g transform="translate(0,13) scale(2.5)" shape-rendering="crispEdges">
-          <rect x="5" y="0" width="6" height="1" fill="#000000"></rect>
-          <rect x="3" y="1" width="2" height="1" fill="#000000"></rect>
-          <rect x="5" y="1" width="1" height="1" fill="#ff0000"></rect>
-          <rect x="6" y="1" width="1" height="1" fill="#ffffff"></rect>
-          <rect x="7" y="1" width="1" height="1" fill="#ff0000"></rect>
-          <rect x="8" y="1" width="2" height="1" fill="#ffffff"></rect>
-          <rect x="10" y="1" width="1" height="1" fill="#ff0000"></rect>
-          <rect x="11" y="1" width="2" height="1" fill="#000000"></rect>
-          <rect x="2" y="2" width="1" height="1" fill="#000000"></rect>
-          <rect x="3" y="2" width="2" height="1" fill="#ff0000"></rect>
-          <rect x="5" y="2" width="2" height="1" fill="#ffffff"></rect>
-          <rect x="7" y="2" width="1" height="1" fill="#ff0000"></rect>
-          <rect x="8" y="2" width="3" height="1" fill="#ffffff"></rect>
-          <rect x="11" y="2" width="2" height="1" fill="#ff0000"></rect>
-          <rect x="13" y="2" width="1" height="1" fill="#000000"></rect>
-          <rect x="1" y="3" width="1" height="1" fill="#000000"></rect>
-          <rect x="2" y="3" width="2" height="1" fill="#ff0000"></rect>
-          <rect x="4" y="3" width="4" height="1" fill="#ffffff"></rect>
-          <rect x="8" y="3" width="1" height="1" fill="#ff0000"></rect>
-          <rect x="9" y="3" width="3" height="1" fill="#ffffff"></rect>
-          <rect x="12" y="3" width="2" height="1" fill="#ff0000"></rect>
-          <rect x="14" y="3" width="1" height="1" fill="#000000"></rect>
-          <rect x="1" y="4" width="1" height="1" fill="#000000"></rect>
-          <rect x="2" y="4" width="4" height="1" fill="#ff0000"></rect>
-          <rect x="6" y="4" width="3" height="1" fill="#ffffff"></rect>
-          <rect x="9" y="4" width="1" height="1" fill="#ff0000"></rect>
-          <rect x="10" y="4" width="2" height="1" fill="#ffffff"></rect>
-          <rect x="12" y="4" width="2" height="1" fill="#ff0000"></rect>
-          <rect x="14" y="4" width="1" height="1" fill="#000000"></rect>
-          <rect x="0" y="5" width="1" height="1" fill="#000000"></rect>
-          <rect x="1" y="5" width="1" height="1" fill="#ffffff"></rect>
-          <rect x="2" y="5" width="2" height="1" fill="#ff0000"></rect>
-          <rect x="4" y="5" width="2" height="1" fill="#ffffff"></rect>
-          <rect x="6" y="5" width="1" height="1" fill="#ff0000"></rect>
-          <rect x="7" y="5" width="3" height="1" fill="#ffffff"></rect>
-          <rect x="10" y="5" width="4" height="1" fill="#ff0000"></rect>
-          <rect x="14" y="5" width="1" height="1" fill="#ffffff"></rect>
-          <rect x="15" y="5" width="1" height="1" fill="#000000"></rect>
-          <rect x="0" y="6" width="1" height="1" fill="#000000"></rect>
-          <rect x="1" y="6" width="2" height="1" fill="#ffffff"></rect>
-          <rect x="3" y="6" width="1" height="1" fill="#ff0000"></rect>
-          <rect x="4" y="6" width="3" height="1" fill="#ffffff"></rect>
-          <rect x="7" y="6" width="1" height="1" fill="#ff0000"></rect>
-          <rect x="8" y="6" width="4" height="1" fill="#ffffff"></rect>
-          <rect x="12" y="6" width="1" height="1" fill="#ff0000"></rect>
-          <rect x="13" y="6" width="2" height="1" fill="#ffffff"></rect>
-          <rect x="15" y="6" width="1" height="1" fill="#000000"></rect>
-          <rect x="0" y="7" width="1" height="1" fill="#000000"></rect>
-          <rect x="1" y="7" width="2" height="1" fill="#ffffff"></rect>
-          <rect x="3" y="7" width="2" height="1" fill="#ff0000"></rect>
-          <rect x="5" y="7" width="3" height="1" fill="#ffffff"></rect>
-          <rect x="8" y="7" width="1" height="1" fill="#ff0000"></rect>
-          <rect x="9" y="7" width="2" height="1" fill="#ffffff"></rect>
-          <rect x="11" y="7" width="2" height="1" fill="#ff0000"></rect>
-          <rect x="13" y="7" width="2" height="1" fill="#ffffff"></rect>
-          <rect x="15" y="7" width="1" height="1" fill="#000000"></rect>
-          <rect x="0" y="8" width="1" height="1" fill="#000000"></rect>
-          <rect x="1" y="8" width="2" height="1" fill="#ffffff"></rect>
-          <rect x="3" y="8" width="3" height="1" fill="#ff0000"></rect>
-          <rect x="6" y="8" width="2" height="1" fill="#ffffff"></rect>
-          <rect x="8" y="8" width="1" height="1" fill="#ff0000"></rect>
-          <rect x="9" y="8" width="1" height="1" fill="#ffffff"></rect>
-          <rect x="10" y="8" width="3" height="1" fill="#ff0000"></rect>
-          <rect x="13" y="8" width="2" height="1" fill="#ffffff"></rect>
-          <rect x="15" y="8" width="1" height="1" fill="#000000"></rect>
-          <rect x="0" y="9" width="1" height="1" fill="#000000"></rect>
-          <rect x="1" y="9" width="1" height="1" fill="#ffffff"></rect>
-          <rect x="2" y="9" width="4" height="1" fill="#ff0000"></rect>
-          <rect x="6" y="9" width="4" height="1" fill="#000000"></rect>
-          <rect x="10" y="9" width="4" height="1" fill="#ff0000"></rect>
-          <rect x="14" y="9" width="1" height="1" fill="#ffffff"></rect>
-          <rect x="15" y="9" width="1" height="1" fill="#000000"></rect>
-          <rect x="0" y="10" width="1" height="1" fill="#000000"></rect>
-          <rect x="1" y="10" width="3" height="1" fill="#ff0000"></rect>
-          <rect x="4" y="10" width="2" height="1" fill="#000000"></rect>
-          <rect x="6" y="10" width="4" height="1" fill="#ffffff"></rect>
-          <rect x="10" y="10" width="2" height="1" fill="#000000"></rect>
-          <rect x="12" y="10" width="3" height="1" fill="#ff0000"></rect>
-          <rect x="15" y="10" width="1" height="1" fill="#000000"></rect>
-          <rect x="1" y="11" width="1" height="1" fill="#000000"></rect>
-          <rect x="2" y="11" width="1" height="1" fill="#ff0000"></rect>
-          <rect x="3" y="11" width="1" height="1" fill="#000000"></rect>
-          <rect x="4" y="11" width="2" height="1" fill="#ffffff"></rect>
-          <rect x="6" y="11" width="1" height="1" fill="#000000"></rect>
-          <rect x="7" y="11" width="2" height="1" fill="#ffffff"></rect>
-          <rect x="9" y="11" width="1" height="1" fill="#000000"></rect>
-          <rect x="10" y="11" width="2" height="1" fill="#ffffff"></rect>
-          <rect x="12" y="11" width="1" height="1" fill="#000000"></rect>
-          <rect x="13" y="11" width="1" height="1" fill="#ff0000"></rect>
-          <rect x="14" y="11" width="1" height="1" fill="#000000"></rect>
-          <rect x="2" y="12" width="2" height="1" fill="#000000"></rect>
-          <rect x="4" y="12" width="2" height="1" fill="#ffffff"></rect>
-          <rect x="6" y="12" width="1" height="1" fill="#000000"></rect>
-          <rect x="7" y="12" width="2" height="1" fill="#ffffff"></rect>
-          <rect x="9" y="12" width="1" height="1" fill="#000000"></rect>
-          <rect x="10" y="12" width="2" height="1" fill="#ffffff"></rect>
-          <rect x="12" y="12" width="2" height="1" fill="#000000"></rect>
-          <rect x="3" y="13" width="1" height="1" fill="#000000"></rect>
-          <rect x="4" y="13" width="2" height="1" fill="#ffffff"></rect>
-          <rect x="6" y="13" width="1" height="1" fill="#000000"></rect>
-          <rect x="7" y="13" width="2" height="1" fill="#ffffff"></rect>
-          <rect x="9" y="13" width="1" height="1" fill="#000000"></rect>
-          <rect x="10" y="13" width="2" height="1" fill="#ffffff"></rect>
-          <rect x="12" y="13" width="1" height="1" fill="#000000"></rect>
-          <rect x="4" y="14" width="1" height="1" fill="#000000"></rect>
-          <rect x="5" y="14" width="6" height="1" fill="#ffffff"></rect>
-          <rect x="11" y="14" width="1" height="1" fill="#000000"></rect>
-          <rect x="5" y="15" width="6" height="1" fill="#000000"></rect>
-        </g>
+        <!-- The BOX stays 40x40: it is a slot for whatever logo the user
+             uploaded, and that is arbitrary artwork with no grid. The MARK is
+             not — it is a 16px pixel grid painted with crispEdges, so at a size
+             that is not a whole multiple the renderer snaps its rows to uneven
+             widths and the baseball stitching reads as a corrupted asset. 32 is
+             2 x 16, centred in the box. Drawn at 40 (2.5 grid pixels) through a
+             hand-written scale factor until 2026-08-01. -->
+        <use href="#rio-mark" x="4" y="17" width="32" height="32"/>
       </g>
     </g>
     <text data-slot="header-title" data-maxw="360" x="164" y="42" class="sc-ink" font-size="26" font-weight="700" letter-spacing="0.5">Project Rio</text>

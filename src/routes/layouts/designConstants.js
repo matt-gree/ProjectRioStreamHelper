@@ -23,6 +23,20 @@ const STAT_CARD_SETTINGS = [
     { key: 'subtextColor',   type: 'color-override', label: 'Subtext Color',    description: 'Color of stat labels and the game line text' },
 ];
 
+// The 2x2 Stat Card's HEADER band, above the grid — the caption that names what
+// the four numbers are while the bottom line carries what just happened.
+//
+// Not part of STAT_CARD_SETTINGS, because it is not part of every card: the
+// header is a band in `statscard.svg`, and the standalone Stats source renders
+// the wide `stats.svg`, which has no room for one. Offering the knob there would
+// put a control on the stage that cannot change anything. The two elements that
+// DO render the 2x2 card — the Stat Card container member and Roster + Stats —
+// take it below.
+const TOP_LINE_SETTINGS = [
+    { key: 'topLine', type: 'select', label: 'Top Line', description: 'A caption above the stats: your own text, the game mode ("Stars On Showdown XXI Stats"), or nothing (the card shrinks)', options: [{ value: 'off', label: 'Off' }, { value: 'custom', label: 'Custom Text' }, { value: 'auto', label: 'Game Mode' }], defaultValue: 'off' },
+    { key: 'topLineText', type: 'text', label: 'Custom Top Text', description: 'Shown when Top Line is set to Custom Text', placeholder: 'e.g. Tournament Stats' },
+];
+
 export const LAYOUT_SETTINGS = {
     scoreboard: [
         { key: 'showElo', type: 'switch', label: 'Show ELO', description: 'Display ELO ratings on completed games' },
@@ -43,7 +57,7 @@ export const LAYOUT_SETTINGS = {
     // own namespace, so a container's card and a dedicated stats source are
     // configured independently; the Production stage reaches these from the Stat
     // Card row nested under its container.
-    statscard: [...STAT_CARD_SETTINGS],
+    statscard: [...STAT_CARD_SETTINGS, ...TOP_LINE_SETTINGS],
     teamlogo: [],
     // Roster + Stats — the combined auto-cycling source. Roster look shares
     // overlays.roster.*, the stat card shares overlays.stats.* + the active
@@ -54,6 +68,7 @@ export const LAYOUT_SETTINGS = {
         { key: 'showTeamLogo', type: 'switch', label: 'Show Team Logo', description: 'Display the team logo next to the roster' },
         { key: 'dwellSeconds', type: 'number-override', label: 'Stat Card Dwell', description: 'Seconds the batter/pitcher stat card stays up before returning to the roster', defaultValue: 7, min: 2, max: 20, step: 1, suffix: 's' },
         ...STAT_CARD_SETTINGS,
+        ...TOP_LINE_SETTINGS,
     ],
     bracket: [
         { key: 'connectorColor', type: 'color-override', label: 'Connector Line Color', description: 'Color of bracket connector lines' },
@@ -79,12 +94,11 @@ export const LAYOUT_SETTINGS = {
     // (lowerthird.svg — overlays.global.designPackage picks the package),
     // accentColor pins a per-layout accent, and the port colours tint each
     // player's side.
-    lowerthird: [
-        { key: 'port0Color', type: 'color-override', label: 'Port 1 Color', description: 'Side colour for a player on controller port 1' },
-        { key: 'port1Color', type: 'color-override', label: 'Port 2 Color', description: 'Side colour for a player on controller port 2' },
-        { key: 'port2Color', type: 'color-override', label: 'Port 3 Color', description: 'Side colour for a player on controller port 3' },
-        { key: 'port3Color', type: 'color-override', label: 'Port 4 Color', description: 'Side colour for a player on controller port 4' },
-    ],
+    // The break band carries no per-port controls: controller ports are a
+    // live-game idea, and the lower third is a between-games surface. The
+    // mount still tints match/scorebox sides from its own PORT_COLORS
+    // defaults — only the four overrides are gone, so nothing on air changes.
+    lowerthird: [],
     // Vertical Scorecard — each numbered design element is an independent
     // switch the producer flips live (broadcast over the settings socket); the
     // mount (scorecard-mount.js) animates each group in/out. mainMode chooses

@@ -245,7 +245,8 @@ def compile_svg(
     elif contract:
         try:
             _, _, w, h = (float(v) for v in vb.replace(",", " ").split())
-            if (round(w), round(h)) != contract.canvas:
+            size = (round(w), round(h))
+            if size != contract.canvas and size not in contract.alt_canvases:
                 report.add(
                     "warn",
                     f"canvas is {w:g}x{h:g}, this element is authored at "

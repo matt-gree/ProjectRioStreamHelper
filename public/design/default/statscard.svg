@@ -1,69 +1,135 @@
-<svg viewBox="0 0 380 220" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+<svg viewBox="0 0 380 240" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
   <!--
-    DEFAULT package - Stat CARD (landscape, 380x220): the compact 2x2 stat card
-    used by the combined Roster + Stats element (rosterstats-mount.js via
-    stats-card-mount.js with svgElement:'statscard'). Fixed PLUM-GLASS palette
-    (does NOT opt into the Design-tab app vars). Character icon on the LEFT in a
-    plum well with a pink accent rail; a 2x2 grid of value/label cells (roomy row
-    spacing) spread across the right; a tight bottom caption line ("Tournament
-    Stats" for API games, or the live game line for HUD games). Equal top/bottom
-    edge padding. Fonts use the font-body token (Inter) for numerals and labels,
-    matching the dedicated Stats card on Inter-based packages (slice26) rather
-    than mono. Values/labels are bound by the mount from RioData.getStatsLine -
-    batting: AB / AVG over SLG / SO%; pitching: IP / ERA over K% / AVG.
-  -->
-  <defs>
-    <linearGradient id="sc-plum" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0"   stop-color="#7c2c5c" stop-opacity="0.60"/>
-      <stop offset="0.5" stop-color="#521d40" stop-opacity="0.60"/>
-      <stop offset="1"   stop-color="#37142d" stop-opacity="0.68"/>
-    </linearGradient>
-    <linearGradient id="sc-sheen" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0"    stop-color="#ffffff" stop-opacity="0.16"/>
-      <stop offset="0.12" stop-color="#ffffff" stop-opacity="0"/>
-    </linearGradient>
-  </defs>
+    DEFAULT package - Stat CARD (landscape, 380x240): the compact 2x2 stat card
+    used by the combined Roster + Stats element (rosterstats-mount.js) and by the
+    Stat Card container member, both via stats-card-mount.js with
+    svgElement:'statscard'. Character icon on the LEFT in a soft well with an
+    accent rail; a 2x2 grid of value/label cells (roomy row spacing) spread
+    across the right; an optional header caption above it and an optional caption
+    line below it. Values/labels are bound by the mount from RioData.getStatsLine
+    - batting: AB / AVG over SLG / SO%; pitching: IP / ERA over K% / AVG.
 
+    THIS CARD IS default/stats.svg AT A DIFFERENT ASPECT. Same band, same border,
+    same well and accent rail, same Rajdhani labels - it is the four-across stats
+    bar folded into two rows because it has to sit inside a container slot rather
+    than across a roster's width. A producer running the Stats source in one
+    scene and the Stat Card member in another is looking at one object, so the
+    two files stay in step: change one, look at the other. (stats.svg is still on
+    Chivo Mono numerals; see below.)
+
+    NO MONO ON THIS CARD - the numerals are Inter with tabular figures. A mono
+    face gives the decimal point a full 0.6em advance, the same width as a digit,
+    and three of the four stats on this card are decimals: ".417" spends a third
+    of its width on a dot. That is affordable on a 452-wide bar with four cells
+    in a row and expensive in a 106-unit cell. Inter's tabular figures keep the
+    property that actually matters here - digits on a fixed advance, so a value
+    ticking 8 to 12 mid-at-bat doesn't shuffle the numerals around it - while the
+    dot goes back to being punctuation. The caption lines are sentences and were
+    never candidates for mono; the labels keep the display face.
+
+    Fixed RIO palette from rio-theme/tokens.css (no data-design-vars, so the
+    Design-tab knobs never repaint it). The card before this one was drawn in
+    Slice 26's plum glass; that design now lives in the slice26 package, which is
+    where its palette came from.
+
+    EVERY var() CARRIES A LITERAL FALLBACK, and that is not decoration. An
+    unresolved custom property in a presentation style computes to the property's
+    initial value - black fill, black stroke - so a card whose shell forgot the
+    token layer renders as a black rectangle with black text on it, silently.
+    That is exactly what shipped for a few minutes on the container shell
+    (shared/container.html now links the tokens; the fallbacks are the belt).
+
+    NO ATMOSPHERE FIELD, unlike the default lower third / plates / matchup. This
+    card cross-fades on every batter change, many times a game, and its height is
+    almost entirely numerals - a drifting field would be paying a per-frame
+    raster cost to decorate the one card that redraws most and has the least room
+    to hide a mark behind. Depth here comes from the well and rail.
+
+    == TWO MOVING EDGES ======================================================
+    The stat block NEVER MOVES. Both captions are optional, and rather than
+    reflow the card around them, each one owns an edge: turning the header on
+    moves the card's TOP edge up over a band that is already drawn there, and
+    turning the footer on moves its BOTTOM edge down. card-bg declares all four
+    positions and the mount animates between them (0.45s power3.out, the
+    scorecard's easing):
+
+      data-top-open    2    header shown, card opens over the header band
+      data-top-closed  30   header hidden, 28 units of padding above the well
+      data-bot-open    238  footer shown
+      data-bot-closed  206  footer hidden, the same 28 units below the well
+
+    So all four combinations come from one pair of edges rather than four
+    authored layouts, and a card with both captions off is exactly the card that
+    shipped before they existed. (data-h-full / data-h-compact are still honoured
+    for a theme that declares only a footer, which is how slice26's card,
+    authored before the header existed, keeps working.)
+
+    28 UNITS IS THE CARD'S PADDING CONSTANT on a closed edge; on an open one the
+    divider sits about 12 from the well and the caption is centred in the band
+    below/above it. The header is the smaller voice of the two - 19px display
+    caps against the footer's 23px body - because it names the stat set ("Stars
+    On Showdown XXI Stats") while the footer carries the live line, and a title
+    that outweighs the live number is the wrong way round.
+
+    Measured at 23px Inter: an ordinary footer line ("2 for 4, HR, 3 RBI") is 185
+    units, so the common case renders at full size; a heavy one ("3 for 5, 2B,
+    HR, 4 RBI, 2 SB") is 289 and auto-fits down to about 19. line-text carries
+    data-maxw 244, not the full width: the line is centred on the card while the
+    "Game" label ends at x=55, so a caption allowed the full width grows out from
+    the centre until it runs underneath the label. 244 is the widest a centred
+    line can be and still start clear of it (190 - 244/2 = 68). The header has no
+    label beside it, so it gets the full 330.
+  -->
   <style>
-    .sc-num  { fill: var(--ink, #f6f2f6); font-family: var(--font-body, 'Inter', system-ui, sans-serif); font-variant-numeric: tabular-nums; }
-    .sc-lab  { fill: rgba(255,255,255,0.66); font-family: var(--font-body, 'Inter', system-ui, sans-serif); }
-    .sc-cap  { fill: rgba(255,255,255,0.82); font-family: var(--font-body, 'Inter', system-ui, sans-serif); }
-    .sc-rule { stroke: rgba(255,255,255,0.10); stroke-width: 1; }
+    .sc-num  { fill: var(--ink, #f5f5f8); font-family: var(--font-body, 'Inter', system-ui, sans-serif); font-variant-numeric: tabular-nums; }
+    .sc-lab  { fill: var(--ink-dim, #8f8fa3); font-family: var(--font-display, 'Rajdhani', 'Arial Narrow', sans-serif); }
+    .sc-cap  { fill: var(--ink, #f5f5f8); font-family: var(--font-body, 'Inter', system-ui, sans-serif); }
+    .sc-capl { fill: var(--ink-dim, #8f8fa3); font-family: var(--font-display, 'Rajdhani', 'Arial Narrow', sans-serif); }
+    .sc-head { fill: var(--ink, #f5f5f8); font-family: var(--font-display, 'Rajdhani', 'Arial Narrow', sans-serif); }
   </style>
 
-  <!-- Glass panel -->
-  <rect data-slot="card-bg" x="2" y="2" width="376" height="216" rx="22"
-        fill="url(#sc-plum)" stroke="rgba(255,255,255,0.18)" stroke-width="1.25"/>
-  <rect x="2" y="2" width="376" height="216" rx="22" fill="url(#sc-sheen)" pointer-events="none"/>
+  <!-- Card. Authored in its commonest state: header off, footer on. -->
+  <rect data-slot="card-bg" x="2" y="30" width="376" height="208" rx="16"
+        data-top-open="2" data-top-closed="30"
+        data-bot-open="238" data-bot-closed="206"
+        data-h-full="208" data-h-compact="176"
+        style="fill:var(--band,#0b0b12);stroke:var(--border,#1f1f30);stroke-width:1.5"/>
 
   <g data-slot="content">
-    <!-- Character icon (left) in a soft plum well with a pink accent rail -->
-    <rect x="20" y="30" width="110" height="120" rx="16" fill="rgba(255,255,255,0.05)"/>
-    <rect x="20" y="30" width="4" height="120" rx="2" fill="#ff5fa2"/>
-    <image data-slot="char-icon" x="29" y="42" width="96" height="96"
+    <!-- Header caption: band 2..44.25, caption centred on a 30 baseline -->
+    <g data-slot="head-group" opacity="0">
+      <text data-slot="head-text" data-maxw="330" x="190" y="30" text-anchor="middle"
+            class="sc-head" font-size="19" font-weight="700" letter-spacing="0.6"></text>
+      <rect x="20" y="44.25" width="340" height="1.5" style="fill:var(--border,#1f1f30)"/>
+    </g>
+
+    <!-- Character icon (left) in a soft well with an accent rail -->
+    <rect x="20" y="58" width="110" height="120" rx="14" fill="rgba(255,255,255,0.045)"/>
+    <rect x="20" y="58" width="4" height="120" rx="2" style="fill:var(--accent,#e60012)"/>
+    <image data-slot="char-icon" x="29" y="70" width="96" height="96"
            preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
 
     <!-- 2x2 grid dividers -->
-    <line class="sc-rule" x1="258" y1="34" x2="258" y2="150"/>
-    <line class="sc-rule" x1="150" y1="90" x2="372" y2="90"/>
+    <rect x="257.25" y="62" width="1.5" height="116" style="fill:var(--border,#1f1f30)"/>
+    <rect x="150" y="117.25" width="222" height="1.5" style="fill:var(--border,#1f1f30)"/>
 
     <!-- Row 1: top-left / top-right -->
-    <text data-slot="stat-0-value" data-maxw="106" x="204" y="60" text-anchor="middle" class="sc-num" font-size="34" font-weight="700">0</text>
-    <text data-slot="stat-0-label" x="204" y="78" text-anchor="middle" class="sc-lab" font-size="16" font-weight="600" letter-spacing="0.5">AB</text>
-    <text data-slot="stat-1-value" data-maxw="106" x="316" y="60" text-anchor="middle" class="sc-num" font-size="34" font-weight="700">.000</text>
-    <text data-slot="stat-1-label" x="316" y="78" text-anchor="middle" class="sc-lab" font-size="16" font-weight="600" letter-spacing="0.5">AVG</text>
+    <text data-slot="stat-0-value" data-maxw="106" x="204" y="88" text-anchor="middle" class="sc-num" font-size="34" font-weight="700">0</text>
+    <text data-slot="stat-0-label" x="204" y="106" text-anchor="middle" class="sc-lab" font-size="16" font-weight="600" letter-spacing="0.8">AB</text>
+    <text data-slot="stat-1-value" data-maxw="106" x="316" y="88" text-anchor="middle" class="sc-num" font-size="34" font-weight="700">.000</text>
+    <text data-slot="stat-1-label" x="316" y="106" text-anchor="middle" class="sc-lab" font-size="16" font-weight="600" letter-spacing="0.8">AVG</text>
 
     <!-- Row 2: bottom-left / bottom-right -->
-    <text data-slot="stat-2-value" data-maxw="106" x="204" y="130" text-anchor="middle" class="sc-num" font-size="34" font-weight="700">.000</text>
-    <text data-slot="stat-2-label" x="204" y="148" text-anchor="middle" class="sc-lab" font-size="16" font-weight="600" letter-spacing="0.5">SLG</text>
-    <text data-slot="stat-3-value" data-maxw="106" x="316" y="130" text-anchor="middle" class="sc-num" font-size="34" font-weight="700">0%</text>
-    <text data-slot="stat-3-label" x="316" y="148" text-anchor="middle" class="sc-lab" font-size="16" font-weight="600" letter-spacing="0.5">SO%</text>
+    <text data-slot="stat-2-value" data-maxw="106" x="204" y="158" text-anchor="middle" class="sc-num" font-size="34" font-weight="700">.000</text>
+    <text data-slot="stat-2-label" x="204" y="176" text-anchor="middle" class="sc-lab" font-size="16" font-weight="600" letter-spacing="0.8">SLG</text>
+    <text data-slot="stat-3-value" data-maxw="106" x="316" y="158" text-anchor="middle" class="sc-num" font-size="34" font-weight="700">0%</text>
+    <text data-slot="stat-3-label" x="316" y="176" text-anchor="middle" class="sc-lab" font-size="16" font-weight="600" letter-spacing="0.8">SO%</text>
 
-    <!-- Bottom caption / game line (tight) -->
+    <!-- Footer caption / game line: band 190.75..238, centred on a 222 baseline -->
     <g data-slot="line-group">
-      <line class="sc-rule" x1="20" y1="162" x2="360" y2="162"/>
-      <text data-slot="line-label" x="20" y="187" class="sc-cap" font-size="15" font-weight="700"></text>
-      <text data-slot="line-text" data-maxw="344" x="190" y="188" text-anchor="middle" class="sc-cap" font-size="22" font-weight="700"></text>
+      <rect x="20" y="189.25" width="340" height="1.5" style="fill:var(--border,#1f1f30)"/>
+      <text data-slot="line-label" x="20" y="222" class="sc-capl" font-size="16" font-weight="700"></text>
+      <text data-slot="line-text" data-maxw="244" x="190" y="222" text-anchor="middle" class="sc-cap" font-size="23" font-weight="700"></text>
     </g>
   </g>
 </svg>

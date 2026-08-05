@@ -2,20 +2,23 @@
   "state": {
     "commentary.0": {
       "name": "MattGree",
-      "subLabel": "PLAY-BY-PLAY",
+      "subField": "twitter",
+      "subLabel": "Twitter",
       "subValue": "@mattgree",
       "subVisible": true,
       "visible": true
     },
     "commentary.1": {
       "name": "SteelyDad",
-      "subLabel": "COLOR",
+      "subField": "youtube",
+      "subLabel": "YouTube",
       "subValue": "@steelydad",
       "subVisible": true,
       "visible": true
     },
     "commentary.2": {
       "name": "",
+      "subField": "",
       "subLabel": "",
       "subValue": "",
       "subVisible": false,

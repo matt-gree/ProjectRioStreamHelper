@@ -21,12 +21,34 @@
   <g data-band="1" data-x="76" data-w="1768" data-h="232" data-gap="56" data-align="center" transform="translate(0,792)"></g>
 
   <defs>
+    <!--
+      CAPTION-LESS GEOMETRY (data-full="x y w h", read by the mount) — the same
+      rule as the default package: with no caption there is nothing under the
+      logo, so holding that space open leaves it floating above a bar of empty
+      band. data-full is the box to use instead, centred in the 232-high band.
+
+      The VS placard is three nodes and the mount swaps ONE box, so the nodes
+      are wrapped in a nested <svg> that is that one box. Its viewBox repeats
+      the placard's own template coordinates, which means the children below
+      keep their authored x/y untouched — nothing was re-derived, re-centred or
+      "tidied" to make this fit. Growing the box scales the whole placard as
+      drawn: corner radius and hairline stay in proportion, which is the point
+      of scaling it rather than nudging the pieces around.
+
+      overflow="visible" because the 2px stroke straddles the placard's edge,
+      and a nested <svg> clips to its viewport by default — without it the
+      outer half of that hairline is shaved off.
+    -->
     <g data-tpl="logo" data-w="240">
-      <image data-slot="logo" x="46" y="26" width="148" height="148" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+      <image data-slot="logo" data-full="32 28 176 176"
+             x="46" y="26" width="148" height="148" preserveAspectRatio="xMidYMid meet" opacity="0"/>
       <g data-slot="logo-default">
-        <rect x="52" y="32" width="136" height="136" rx="20" style="fill:var(--accent, #f59e0b)" opacity="0.16"/>
-        <rect x="52" y="32" width="136" height="136" rx="20" fill="none" style="stroke:var(--accent, #f59e0b)" stroke-width="2"/>
-        <text x="120" y="124" text-anchor="middle" style="fill:var(--accent, #f59e0b);font-family:var(--font-family, 'Inter', sans-serif)" font-size="56" font-weight="800">VS</text>
+        <svg data-full="32 28 176 176" x="52" y="32" width="136" height="136"
+             viewBox="52 32 136 136" overflow="visible">
+          <rect x="52" y="32" width="136" height="136" rx="20" style="fill:var(--accent, #f59e0b)" opacity="0.16"/>
+          <rect x="52" y="32" width="136" height="136" rx="20" fill="none" style="stroke:var(--accent, #f59e0b)" stroke-width="2"/>
+          <text x="120" y="124" text-anchor="middle" style="fill:var(--accent, #f59e0b);font-family:var(--font-family, 'Inter', sans-serif)" font-size="56" font-weight="800">VS</text>
+        </svg>
       </g>
       <text data-slot="title" data-maxw="220" x="120" y="212" text-anchor="middle"
             style="fill:var(--text-primary, #ffffff);font-family:var(--font-family, 'Inter', sans-serif)" font-size="22" font-weight="600" opacity="0.75"></text>

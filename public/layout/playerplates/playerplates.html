@@ -7,8 +7,11 @@
   A thin shell, like the Commentary strip: the look lives in the active DESIGN
   PACKAGE's theme SVG (/design/{package}/playerplates.svg — picked by the global
   Design Package selector), and the rendering/data-binding lives in the reusable
-  mount (playerplates-mount.js). Drop this in OBS as a full-canvas (1920×1080)
-  browser source — the plate(s) sit near the bottom.
+  mount (playerplates-mount.js). Drop this in OBS as a 1920×240 browser source
+  and place it in the scene yourself — same box, and the same reasoning, as the
+  Commentary strip. Full stream width, because the left/center/right anchors are
+  measured against the frame. A theme that still authors a full 1920×1080 canvas
+  is bottom-anchored inside the source and cropped.
 -->
 <head>
   <meta charset="utf-8" />
@@ -17,12 +20,12 @@
        (Default/Rio) ignore them. -->
   <meta name="overlay-settings" content="accentColor, cardBg, textColor, borderColor, borderRadius, borderWidth, fontFamily, cardShadow, textShadow, showShadow" />
   <!-- Rio design tokens: brand palette + display/mono webfonts used by
-       fixed-palette themes (the Default package's Rajdhani/JetBrains type). -->
+       fixed-palette themes (the Default package's Rajdhani/Chivo type). -->
   <link rel="stylesheet" href="/layout/lib/rio-theme/tokens.css" />
   <style>
     /* Inter is bundled locally and injected by overlay-base.js. */
     html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
-    body { width: 1920px; height: 1080px; }
+    body { width: 1920px; height: 240px; }
     #host { position: fixed; inset: 0; }
   </style>
 </head>

@@ -126,6 +126,11 @@ export function createThemeEngine({ host, element, fallbackSvg }) {
   // processed in write→read→write phases so all getComputedTextLength() calls
   // share one layout flush instead of forcing one reflow per slot.
   const lastFit = new WeakMap();   // el -> { text, fontsLoaded } at last fit
+  // Drop a slot's cached fit. The skip above keys on the TEXT, so a caller that
+  // changes a slot's data-maxw without changing its content (the Commentary /
+  // Player Plates drawer narrows its value's fit bound when a platform badge
+  // appears beside it) would otherwise keep the stale, too-wide size.
+  function invalidateFit(el) { if (el) lastFit.delete(el); }
   function refitText() {
     const fontsLoaded = !!(document.fonts && document.fonts.status === 'loaded');
     const dirty = [];
@@ -160,6 +165,7 @@ export function createThemeEngine({ host, element, fallbackSvg }) {
     setText,
     setImage,
     refitText,
+    invalidateFit,
     get slots() { return slots; },
     get usesAppVars() { return usesAppVars; },
     get absoluteLayout() { return absoluteLayout; },

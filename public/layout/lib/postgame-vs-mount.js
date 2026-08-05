@@ -59,12 +59,29 @@ const CSS = `
 .pv-root { position: absolute; inset: 0; overflow: hidden; font-family: var(--pv-font, 'Inter', sans-serif); }
 .pv-stage {
   position: absolute; top: 0; left: 0; width: ${REF_W}px; height: ${REF_H}px;
-  transform-origin: top left; color: #fff;
-  --s1: #c5f707; --s1-rgb: 197, 247, 7;
-  --s2: #57e0e7; --s2-rgb: 87, 224, 231;
-  --well: rgba(255, 255, 255, 0.08);
-  --accent: #f93f91; --accent-rgb: 249, 63, 145;
+  transform-origin: top left; color: var(--ink);
+  --s1: #e53935; --s1-rgb: 229, 57, 53;
+  --s2: #1e88e5; --s2-rgb: 30, 136, 229;
+  /* Fallback well, for a package that declares no - -well. Opaque enough to
+     stand on its own: nothing here blurs the backdrop behind it any more —
+     see the backdrop-filter note in postgame-callout-css.js. */
+  --well: rgba(13, 13, 21, 0.82);
+  --accent: #ff3d4e; --accent-rgb: 255, 61, 78;
   --mono: 'Chivo Mono', ui-monospace, 'SF Mono', monospace;
+  /* Neutral vocabulary — the Rio night/fog scale (lib/rio-theme/tokens.css),
+     NOT white. Every card edge, chip, track and caption keys to these. A
+     white neutral sitting between two saturated side colours is what made
+     this scene read as a flag instead of as a broadcast; keep the chrome
+     cool-grey and let the only saturated things on screen be the two
+     players and the Rio-red accent. */
+  --ink: #f5f5f8;                        /* fog-100 — headline numerals/names */
+  --ink-2: #c9c9d6;                      /* fog-300 — secondary values */
+  --ink-3: #8f8fa3;                      /* fog-500 — labels, captions */
+  --ink-4: #5a5a70;                      /* dimmed — zeros, struck cells */
+  --edge: rgba(143, 143, 163, 0.26);     /* card border */
+  --edge-soft: rgba(143, 143, 163, 0.14);/* hairline dividers */
+  --sheen: rgba(201, 201, 214, 0.10);    /* inner top highlight */
+  --slab: rgba(31, 31, 48, 0.62);        /* inset chips + bar tracks */
 }
 .pv-backdrop { position: absolute; inset: 0; clip-path: inset(0% 50% 0% 50%); }
 .pv-theme-svg, .pv-theme-svg svg { position: absolute; inset: 0; width: 100%; height: 100%; }
@@ -89,63 +106,103 @@ const CSS = `
 .pv-hero.s1 .bloom { background: radial-gradient(circle, rgba(var(--s1-rgb), 0.5) 0%, transparent 62%); }
 .pv-hero.s2 .bloom { background: radial-gradient(circle, rgba(var(--s2-rgb), 0.5) 0%, transparent 62%); }
 /* Big dimmed team logo behind the captain — centered on the art so wide
-   (short-rendering) captains don't leave it floating overhead. The clip
-   container hugs the theme frame's inner edge so logos never paint over the
-   rim: they clip against it instead. */
+   (short-rendering) captains don't leave it floating overhead.
+
+   THE LOGO IS BIG, WHOLE, AND HARD-EDGED. All three, and the way to get all
+   three is geometry — not a mask, and not a smaller logo.
+
+   It used to sit at left/right: -36px inside an overflow-hidden container,
+   i.e. deliberately hung over the edge and chopped there, which is exactly
+   what it looked like: a logo with a straight slice taken off its outer side.
+   Two wrong fixes were tried on the way here, both worth naming so they don't
+   come back: shrinking it (weak — this is one of the two things carrying team
+   identity in the frame, it is supposed to read big), and feathering its edge
+   with a radial mask (a soft-edged team logo is not the same graphic — the
+   mark has its own silhouette and dissolving it is a worse crime than cropping
+   it).
+
+   The actual fix is that the 720px box sits FULLY INSIDE the clip container,
+   so there is no geometry hanging over an edge for anything to cut. The logo
+   renders whole, at full size, with its own edges. The clip container stays
+   only as a backstop for a package that moves things. */
 .pv-logo-clip {
   position: absolute; inset: 30px; overflow: hidden; border-radius: 26px;
   z-index: 1; pointer-events: none;
 }
 .pv-logo {
-  position: absolute; top: 220px; width: 700px; height: 700px;
+  position: absolute; top: 200px; width: 720px; height: 720px;
   display: flex; align-items: center; justify-content: center;
 }
-.pv-logo.s1 { left: -36px; }
-.pv-logo.s2 { right: -36px; }
+.pv-logo.s1 { left: 8px; }
+.pv-logo.s2 { right: 8px; }
 .pv-logo img {
-  width: 100%; height: 100%; object-fit: contain; opacity: 0.16;
+  width: 100%; height: 100%; object-fit: contain; opacity: 0.17;
   filter: blur(1px) saturate(0.85);
 }
 
-/* ── identity plates (port glass + outer rail), top corners ── */
-.pv-plate { position: absolute; top: 96px; max-width: 520px; z-index: 3; }
+/* ── identity plates (port glass + outer rail), top corners ──
+
+   BOTH PLATES ARE THE SAME WIDTH, ALWAYS. They used to be inline-block under a
+   max-width, i.e. shrink-to-fit: with a long name on one side and a short one
+   on the other you got a 737px card facing a 182px card, and because the name
+   never wraps the long one didn't even stop at the max-width — it overflowed
+   its own card and ran into the match strip in the middle of the frame. A fixed box plus fitPlateName() (which steps the type down until it
+   fits) means the composition is symmetric for every pair of names, and the
+   only thing that varies is the size of the type. */
+.pv-plate { position: absolute; top: 96px; width: 520px; z-index: 3; }
 .pv-plate.s1 { left: 76px; }
 .pv-plate.s2 { right: 76px; text-align: right; }
 .pv-plate .card {
-  position: relative; display: inline-block; padding: 18px 30px; border-radius: 13px;
-  border: 1.5px solid rgba(255,255,255,0.18);
-  box-shadow: inset 0 2px 0 rgba(255,255,255,0.14);
-  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+  position: relative; display: block; padding: 18px 30px; border-radius: 13px;
+  border: 1.5px solid var(--edge);
+  box-shadow: inset 0 2px 0 var(--sheen);
 }
-.pv-plate.s1 .card { background: rgba(var(--s1-rgb), 0.20); padding-left: 40px; }
-.pv-plate.s2 .card { background: rgba(var(--s2-rgb), 0.25); padding-right: 40px; }
+/* the plate tints toward its side, but over night glass rather than over
+   nothing — a flat 20% side wash on a dark backdrop is what made these read
+   as two solid colour blocks */
+.pv-plate.s1 .card { background: linear-gradient(100deg, rgba(var(--s1-rgb), 0.26), var(--well) 78%); padding-left: 40px; }
+.pv-plate.s2 .card { background: linear-gradient(260deg, rgba(var(--s2-rgb), 0.26), var(--well) 78%); padding-right: 40px; }
 .pv-plate .rail { position: absolute; top: 8px; bottom: 8px; width: 6px; border-radius: 3px; }
 .pv-plate.s1 .rail { left: 12px; background: var(--s1); transform-origin: center top; }
 .pv-plate.s2 .rail { right: 12px; background: var(--s2); transform-origin: center top; }
+/* font-size is set by fitPlateName() at build time; 52px is the ceiling it
+   starts from. Still nowrap — a player name breaking across two lines looks
+   like a bug, so we shrink instead of wrap. */
 .pv-plate .rio { font-size: 52px; font-weight: 900; line-height: 1; letter-spacing: -0.5px; text-shadow: 0 3px 18px rgba(0,0,0,0.55); white-space: nowrap; }
-.pv-plate .team { margin-top: 7px; font-size: 19px; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase; color: rgba(255,255,255,0.72); white-space: nowrap; }
-.pv-plate.s1 .team { color: rgba(var(--s1-rgb), 0.95); }
-.pv-plate.s2 .team { color: rgba(var(--s2-rgb), 0.95); }
+/* WINNER is brand-red text and nothing else. It was a filled accent pill once
+   (it fought the side colour for attention, and on a red port merged with it
+   outright), then tracked text next to a short solid accent rule. The rule is
+   gone too: the word is already the only accent-coloured thing on the plate,
+   so a bar beside it was decoration marking something that was not ambiguous. */
 .pv-plate .winner {
-  display: inline-flex; align-items: center; gap: 8px; margin-top: 14px; padding: 7px 20px;
-  border-radius: 999px; background: var(--accent); color: #fff;
-  font-size: 21px; font-weight: 800; letter-spacing: 2.5px; text-transform: uppercase;
-  box-shadow: 0 0 26px rgba(var(--accent-rgb), 0.55);
+  display: inline-block; margin-top: 14px;
+  font-size: 21px; font-weight: 900; letter-spacing: 4px; text-transform: uppercase;
+  color: var(--accent); text-shadow: 0 0 18px rgba(var(--accent-rgb), 0.55);
 }
 
-/* ── match context, top center ── */
-.pv-match { position: absolute; top: 64px; left: 50%; transform: translateX(-50%); width: 700px; text-align: center; z-index: 3; }
+/* ── match context, top center ──
+   THE CARD IS SIZED BY ITS CONTENT, not by a fixed width. It was 700px flat,
+   which is right for "MUSHROOM KINGDOM CHAMPIONSHIP / Winners Semifinal / Best
+   of 5" and absurd for the no-event case, where the card holds the two words
+   "Game Summary" and the other 500px are empty glass. Shrink-to-fit with a
+   floor and a ceiling: the floor keeps the short case from reading as a chip,
+   the ceiling keeps a long tournament name from reaching the identity plates
+   (which end at x=596 / start at x=1324, so ~700px is all the room there is). */
+.pv-match { position: absolute; top: 64px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 3; }
 .pv-match .card {
-  position: relative; padding: 20px 34px 22px; border-radius: 16px;
-  background: var(--well); border: 1.5px solid rgba(255,255,255,0.18);
-  box-shadow: inset 0 2px 0 rgba(255,255,255,0.14);
-  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+  position: relative; display: inline-block; box-sizing: border-box;
+  min-width: 330px; max-width: 700px;
+  padding: 20px 34px 22px; border-radius: 16px;
+  background: var(--well); border: 1.5px solid var(--edge);
+  box-shadow: inset 0 2px 0 var(--sheen);
 }
-.pv-match .tourney { font-size: 19px; font-weight: 700; letter-spacing: 3.5px; text-transform: uppercase; color: rgba(255,255,255,0.66); }
-.pv-match .round { margin-top: 6px; font-size: 40px; font-weight: 900; line-height: 1.05; letter-spacing: -0.3px; }
+.pv-match .tourney, .pv-match .round { overflow: hidden; text-overflow: ellipsis; }
+.pv-match .tourney { font-size: 19px; font-weight: 700; letter-spacing: 3.5px; text-transform: uppercase; color: var(--ink-3); }
+.pv-match .round { margin-top: 6px; font-size: 40px; font-weight: 900; line-height: 1.05; letter-spacing: -0.3px; color: var(--ink); }
 .pv-match .series { margin-top: 12px; display: flex; align-items: center; justify-content: center; }
 .pv-match .bo {
-  padding: 4px 14px; border-radius: 7px; background: rgba(255,255,255,0.12);
+  padding: 4px 14px; border-radius: 7px; background: var(--slab);
+  border: 1px solid var(--edge-soft); color: var(--ink-2);
   font-size: 16px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase;
 }
 
@@ -156,25 +213,18 @@ const CSS = `
   position: absolute; left: 50%; top: 268px; width: 960px; margin-left: -480px;
   box-sizing: border-box; opacity: 0; z-index: 3;
   border-radius: 18px; background: var(--well);
-  border: 1.5px solid rgba(255,255,255,0.18);
-  box-shadow: inset 0 2px 0 rgba(255,255,255,0.14), 0 18px 60px rgba(0,0,0,0.45),
-              0 0 44px rgba(var(--accent-rgb), 0.22);
+  border: 1.5px solid var(--edge);
+  box-shadow: inset 0 2px 0 var(--sheen), 0 18px 60px rgba(0,0,0,0.55),
+              0 0 44px rgba(var(--accent-rgb), 0.18);
   transform-origin: center center; overflow: hidden;
   padding: 30px 42px 26px;
-  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
 }
-/* Moving trail-gradient rim: the spine's gradient lives on as the card edge
-   (shared by the data well, the linescore band and the match card). */
-.pv-board::before, .pv-line::before, .pv-match .card::before {
-  content: ''; position: absolute; inset: 0; border-radius: inherit; padding: 2.5px;
-  background: linear-gradient(90deg, var(--s1), var(--accent), var(--s2), var(--accent), var(--s1));
-  background-size: 300% 100%;
-  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor; mask-composite: exclude;
-  animation: pv-rim 7s linear infinite;
-  opacity: 0.85; pointer-events: none;
-}
-@keyframes pv-rim { to { background-position: -300% 0; } }
+/* The moving trail-gradient rim these three cards carried is GONE (same in
+   postgame-callout-css.js). Three crawling s1-accent-s2 borders running for
+   the whole hold is a lot of motion around a card whose own numbers are the
+   event, and the gradient re-read as red-to-blue once the palette went back to
+   port colours — i.e. it was drawing the flag around the board. A plain
+   --edge border and the accent glow already in the box-shadow do the framing. */
 .pv-board .inner { display: flex; flex-direction: column; }
 
 /* hero RUNS row */
@@ -186,14 +236,22 @@ const CSS = `
 .pv-runs .v.s1 { color: var(--s1); text-align: left; }
 .pv-runs .v.s2 { color: var(--s2); text-align: right; }
 .pv-runs .tag { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 0 30px; }
+/* FINAL is a dark slab with brand-red type + a red underscore, not a filled
+   red pill — a filled accent lozenge dead-centre between a red side and a
+   blue side was the third stripe of the flag. */
 .pv-runs .final {
-  padding: 6px 22px; border-radius: 999px; background: var(--accent); color: #fff;
-  font-size: 22px; font-weight: 900; letter-spacing: 3px; text-transform: uppercase;
-  box-shadow: 0 0 24px rgba(var(--accent-rgb), 0.5);
+  position: relative; padding: 7px 24px 10px; border-radius: 9px;
+  background: var(--slab); border: 1px solid var(--edge-soft); color: var(--accent);
+  font-size: 22px; font-weight: 900; letter-spacing: 5px; text-transform: uppercase;
+  text-shadow: 0 0 18px rgba(var(--accent-rgb), 0.55);
+}
+.pv-runs .final::after {
+  content: ''; position: absolute; left: 24px; right: 24px; bottom: 5px; height: 3px;
+  border-radius: 2px; background: var(--accent); box-shadow: 0 0 14px rgba(var(--accent-rgb), 0.8);
 }
 .pv-runs .meta {
   font-size: 15px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase;
-  color: rgba(255,255,255,0.55); white-space: nowrap;
+  color: var(--ink-3); white-space: nowrap;
 }
 .pv-runs .meta .dot { color: var(--accent); padding: 0 7px; }
 
@@ -202,23 +260,25 @@ const CSS = `
 .pv-row { display: grid; grid-template-columns: 96px 1fr 254px 1fr 96px; align-items: center; column-gap: 16px; padding: 15px 0; position: relative; }
 .pv-row + .pv-row::before {
   content: ''; position: absolute; top: 0; left: 6px; right: 6px; height: 1.5px;
-  background: rgba(255,255,255,0.10);
+  background: var(--edge-soft);
 }
 .pv-row .v {
   font-family: var(--mono); font-variant-numeric: tabular-nums;
-  font-size: 52px; font-weight: 700; line-height: 1;
+  font-size: 52px; font-weight: 700; line-height: 1; color: var(--ink-2);
 }
 .pv-row .v.s1 { text-align: left; }
 .pv-row .v.s2 { text-align: right; }
 .pv-row .v.lead.s1 { color: var(--s1); }
 .pv-row .v.lead.s2 { color: var(--s2); }
+/* the centre label column is the widest neutral on screen — as a white chip
+   it was the flag's white stripe. Dark slab, fog type. */
 .pv-row .label {
-  padding: 9px 8px; border-radius: 9px; background: rgba(255,255,255,0.10);
-  border: 1px solid rgba(255,255,255,0.14); text-align: center;
+  padding: 9px 8px; border-radius: 9px; background: var(--slab);
+  border: 1px solid var(--edge-soft); text-align: center;
   font-size: 15.5px; font-weight: 800; letter-spacing: 1.4px; text-transform: uppercase;
-  color: rgba(255,255,255,0.92); white-space: nowrap;
+  color: var(--ink-2); white-space: nowrap;
 }
-.pv-row .track { position: relative; height: 11px; border-radius: 5.5px; background: rgba(255,255,255,0.10); overflow: hidden; }
+.pv-row .track { position: relative; height: 11px; border-radius: 5.5px; background: var(--slab); overflow: hidden; }
 .pv-row .fill { position: absolute; inset: 0; border-radius: 5.5px; transform: scaleX(0); }
 .pv-row .track.s1 .fill { transform-origin: right center; background: linear-gradient(270deg, rgba(var(--s1-rgb),0.95), rgba(var(--s1-rgb),0.35)); }
 .pv-row .track.s2 .fill { transform-origin: left center; background: linear-gradient(90deg, rgba(var(--s2-rgb),0.95), rgba(var(--s2-rgb),0.35)); }
@@ -231,22 +291,21 @@ const CSS = `
   position: absolute; left: 0; right: 0; bottom: 76px; margin: 0 auto;
   width: fit-content; z-index: 3; box-sizing: border-box;
   border-radius: 18px; background: var(--well);
-  border: 1.5px solid rgba(255,255,255,0.18);
-  box-shadow: inset 0 2px 0 rgba(255,255,255,0.14), 0 12px 40px rgba(0,0,0,0.4),
-              0 0 44px rgba(var(--accent-rgb), 0.22);
+  border: 1.5px solid var(--edge);
+  box-shadow: inset 0 2px 0 var(--sheen), 0 12px 40px rgba(0,0,0,0.5),
+              0 0 44px rgba(var(--accent-rgb), 0.18);
   padding: 22px 38px 24px;
-  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
 }
 .pv-line .lgrid { display: grid; align-items: center; row-gap: 9px; }
 .pv-line .c { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: center; }
-.pv-line .c.hd { font-size: 16px; font-weight: 700; letter-spacing: 1px; color: rgba(255,255,255,0.5); }
-.pv-line .c.v { font-size: 33px; font-weight: 700; color: rgba(255,255,255,0.92); }
-.pv-line .c.v.zero { color: rgba(255,255,255,0.38); }
-.pv-line .c.v.x { font-size: 25px; color: rgba(255,255,255,0.35); }
+.pv-line .c.hd { font-size: 16px; font-weight: 700; letter-spacing: 1px; color: var(--ink-3); }
+.pv-line .c.v { font-size: 33px; font-weight: 700; color: var(--ink-2); }
+.pv-line .c.v.zero { color: var(--ink-4); }
+.pv-line .c.v.x { font-size: 25px; color: var(--ink-4); }
 .pv-line .c.tot { font-size: 36px; font-weight: 800; }
 .pv-line .c.tot.r.s1 { color: var(--s1); }
 .pv-line .c.tot.r.s2 { color: var(--s2); }
-.pv-line .c.tot.h { color: rgba(255,255,255,0.8); font-weight: 700; font-size: 33px; }
+.pv-line .c.tot.h { color: var(--ink); font-weight: 700; font-size: 33px; }
 .pv-line .name {
   text-align: left; padding-right: 30px; white-space: nowrap; overflow: hidden;
   text-overflow: ellipsis; max-width: 290px;
@@ -254,7 +313,7 @@ const CSS = `
 }
 .pv-line .name.s1 { color: var(--s1); }
 .pv-line .name.s2 { color: var(--s2); }
-.pv-line .rule { width: 1.5px; height: 44px; margin: 0 auto; background: rgba(255,255,255,0.16); }
+.pv-line .rule { width: 1.5px; height: 44px; margin: 0 auto; background: var(--edge); }
 .pv-line .rule.hd { height: 17px; }
 `;
 
@@ -273,20 +332,31 @@ function builtinThemeSvg() {
   return `
   <svg viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
     <defs>
-      <radialGradient id="pvA" cx="12%" cy="20%" r="80%">
-        <stop offset="0" style="stop-color:var(--port-color);stop-opacity:0.38"/>
-        <stop offset="0.62" style="stop-color:var(--port-color);stop-opacity:0"/>
+      <radialGradient id="pvA" cx="4%" cy="6%" r="46%">
+        <stop offset="0" style="stop-color:var(--port-color);stop-opacity:0.32"/>
+        <stop offset="0.6" style="stop-color:var(--port-color);stop-opacity:0"/>
       </radialGradient>
-      <radialGradient id="pvB" cx="88%" cy="80%" r="80%">
-        <stop offset="0" style="stop-color:var(--port-2);stop-opacity:0.30"/>
-        <stop offset="0.62" style="stop-color:var(--port-2);stop-opacity:0"/>
+      <radialGradient id="pvB" cx="96%" cy="6%" r="46%">
+        <stop offset="0" style="stop-color:var(--port-2);stop-opacity:0.32"/>
+        <stop offset="0.6" style="stop-color:var(--port-2);stop-opacity:0"/>
       </radialGradient>
+      <linearGradient id="pvFootA" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" style="stop-color:var(--port-color);stop-opacity:0.6"/>
+        <stop offset="0.26" style="stop-color:var(--port-color);stop-opacity:0.6"/>
+        <stop offset="0.44" style="stop-color:var(--port-color);stop-opacity:0"/>
+      </linearGradient>
+      <linearGradient id="pvFootB" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0.56" style="stop-color:var(--port-2);stop-opacity:0"/>
+        <stop offset="0.74" style="stop-color:var(--port-2);stop-opacity:0.6"/>
+        <stop offset="1" style="stop-color:var(--port-2);stop-opacity:0.6"/>
+      </linearGradient>
     </defs>
-    <rect width="1920" height="1080" fill="#0b0d14"/>
+    <rect width="1920" height="1080" fill="#08080e"/>
     <rect width="1920" height="1080" fill="url(#pvA)"/>
     <rect width="1920" height="1080" fill="url(#pvB)"/>
-    <rect x="0" y="0" width="1920" height="10" style="fill:var(--port-color)" opacity="0.9"/>
-    <rect x="0" y="1070" width="1920" height="10" style="fill:var(--port-2)" opacity="0.7"/>
+    <rect x="0" y="0" width="1920" height="10" fill="#e60012" opacity="0.9"/>
+    <rect x="0" y="1070" width="1920" height="10" fill="url(#pvFootA)"/>
+    <rect x="0" y="1070" width="1920" height="10" fill="url(#pvFootB)"/>
   </svg>`;
 }
 
@@ -386,6 +456,11 @@ export function mountPostgameVs({ host }) {
     stage.style.setProperty('--port-2', s2);
   }
 
+  // The plate carries the player's NAME and nothing else. The team name line
+  // that used to sit under it is gone: the team is already on screen as the
+  // large ghosted logo behind that side's captain, and printing it again in
+  // 19px caps was the second-widest thing in a box that has to hold a long rio
+  // name. One fact, one place.
   function sidePlate(side, p, winnerSide) {
     const cls = side === 1 ? 's1' : 's2';
     const isWin = winnerSide === side;
@@ -394,7 +469,6 @@ export function mountPostgameVs({ host }) {
         <div class="card">
           <div class="rail"></div>
           <div class="rio">${escapeHtml(p?.rioName || `Player ${side}`)}</div>
-          ${p?.teamName ? `<div class="team">${escapeHtml(p.teamName)}</div>` : ''}
         </div>
         ${isWin ? '<div><span class="winner">Winner</span></div>' : ''}
       </div>`;
@@ -420,6 +494,13 @@ export function mountPostgameVs({ host }) {
 
   // Single-game card: no series record here — just tournament/round context
   // and the format pill.
+  //
+  // THE CARD ALWAYS RENDERS, and "Game Summary" is the deliberate headline when
+  // there is no round to name. A game played outside a start.gg event still
+  // wants something holding the top centre of the frame between the two
+  // identity plates — dropping the card there leaves a visible hole in the
+  // composition, which is worse than a generic title. Producer's call; don't
+  // "clean this up" by making it conditional again.
   function matchStrip(ctx) {
     const bits = [ctx.tournament, ctx.eventName].filter(Boolean);
     return `
@@ -525,6 +606,33 @@ export function mountPostgameVs({ host }) {
 
     const font = OverlayBase.deepGet(OverlayBase.settings, 'overlays.global.fontFamily', 'Inter');
     root.style.setProperty('--pv-font', `'${font}', sans-serif`);
+    fitPlateNames();
+  }
+
+  // Shrink a plate name until it fits its fixed-width card.
+  //
+  // The plates are equal-width boxes now (see the .pv-plate note), so the name
+  // is the one thing that has to give. Measuring beats guessing a character
+  // count: rio names are arbitrary, the font is a producer setting, and "how
+  // wide is this string" is a question only layout can answer. Runs after the
+  // DOM is in place and before GSAP touches anything, so the reveal animates
+  // type that is already the right size.
+  function fitPlateNames() {
+    const MAX = 52, MIN = 24;
+    stage.querySelectorAll('.pv-plate .rio').forEach((el) => {
+      const room = el.parentElement.clientWidth
+        - parseFloat(getComputedStyle(el.parentElement).paddingLeft || 0)
+        - parseFloat(getComputedStyle(el.parentElement).paddingRight || 0);
+      if (!room) return;
+      let size = MAX;
+      el.style.fontSize = `${size}px`;
+      // scrollWidth is the un-wrapped text width (the name is nowrap), so this
+      // converges in a handful of steps rather than one per pixel.
+      while (size > MIN && el.scrollWidth > room) {
+        size = Math.max(MIN, Math.floor(size * Math.min(0.94, room / el.scrollWidth)));
+        el.style.fontSize = `${size}px`;
+      }
+    });
   }
 
   function snapVisible() {
@@ -608,8 +716,10 @@ export function mountPostgameVs({ host }) {
     if (winner) {
       t.fromTo(winner, { scale: 0, autoAlpha: 0 },
         { scale: 1, autoAlpha: 1, duration: 0.5, ease: 'back.out(2.2)' }, '-=0.1');
-      t.fromTo(winner, { boxShadow: '0 0 60px rgba(var(--accent-rgb), 0.9)' },
-        { boxShadow: '0 0 26px rgba(var(--accent-rgb), 0.55)', duration: 0.7, ease: 'power2.out' }, '<+=0.15');
+      // WINNER is text on a rule now, not a filled pill — the flare-out lands
+      // on the glyphs' own glow rather than on a box shadow.
+      t.fromTo(winner, { textShadow: '0 0 40px rgba(var(--accent-rgb), 0.95)' },
+        { textShadow: '0 0 18px rgba(var(--accent-rgb), 0.55)', duration: 0.7, ease: 'power2.out' }, '<+=0.15');
     }
   }
 

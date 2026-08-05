@@ -6,6 +6,12 @@
   <!-- Inter is bundled locally and injected by overlay-base.js. -->
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    /* A transform doesn't change the layout box, so a container sized to the
+       viewport and then scaled UP sticks out of the body — scrollbars on any
+       source bigger than native. autoScale() sizes it in PRE-scale units for
+       exactly that reason; this is the backstop, and what every sibling layout
+       already does. */
+    html, body { overflow: hidden; }
     body {
       width: 400px;
       height: 100px;
@@ -66,11 +72,20 @@
         const scale = Math.min(window.innerWidth / REF_W, window.innerHeight / REF_H);
         document.body.style.width = window.innerWidth + 'px';
         document.body.style.height = window.innerHeight + 'px';
+        // PRE-scale size: the container still fills the source (so side 2 keeps
+        // hugging its right edge on a source that isn't the native aspect), but
+        // it is laid out at the size that BECOMES the viewport once scaled.
+        // Sizing it to the viewport and then scaling by >1 — which is what a
+        // preview or an oversized OBS source does — overflowed the body.
+        el.style.width = (window.innerWidth / scale) + 'px';
+        el.style.height = (window.innerHeight / scale) + 'px';
         el.style.transform = `scale(${scale})`;
         el.style.transformOrigin = 'top left';
       } else {
         document.body.style.width = REF_W + 'px';
         document.body.style.height = REF_H + 'px';
+        el.style.width = '';
+        el.style.height = '';
         el.style.transform = '';
       }
     }
