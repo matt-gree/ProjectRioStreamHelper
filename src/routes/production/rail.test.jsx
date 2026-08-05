@@ -72,6 +72,46 @@ describe('Rail', () => {
         expect(document.querySelectorAll('header').length).toBe(1);
     });
 
+    /*
+     * The rail is the surface built for flying the broadcast, and it was
+     * reorderable only by HTML5 drag — which needs a mouse: it does not fire from
+     * a keyboard, and it does not fire on touch at all, on a page this project
+     * documents as also being driven from a tablet at the venue. The buttons are
+     * the real control (see MoveButtons in ./controls); drag stays as an
+     * accelerator on top.
+     */
+    it('reorders from the card header, so the rail is not mouse-only', () => {
+        const onReorder = vi.fn();
+        ui(<Rail pins={['stats', 'scoreboard']} onReorder={onReorder} onUnpin={noop} onOpen={noop} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Move Scoreboard up' }));
+        expect(onReorder).toHaveBeenCalledWith(['scoreboard', 'stats']);
+    });
+
+    it('disables the move that would run off the end of the rail', () => {
+        ui(<Rail pins={['stats', 'scoreboard']} onReorder={noop} onUnpin={noop} onOpen={noop} />);
+        expect(screen.getByRole('button', { name: 'Move Stats up' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Move Scoreboard down' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Move Stats down' })).toBeEnabled();
+    });
+
+    /*
+     * `entries` drops pins that no longer resolve, so its indices stop matching
+     * `pins` the moment one goes stale. Reordering by rendered index moved
+     * whichever pin happened to sit at that index — here the dead one — and left
+     * the card the producer actually pressed exactly where it was.
+     */
+    it('reorders the card the producer pressed even when a stale pin sits between', () => {
+        const onReorder = vi.fn();
+        ui(
+            <Rail
+                pins={['stats', 'gone-in-a-later-build', 'scoreboard']}
+                onReorder={onReorder} onUnpin={noop} onOpen={noop}
+            />,
+        );
+        fireEvent.click(screen.getByRole('button', { name: 'Move Scoreboard up' }));
+        expect(onReorder).toHaveBeenCalledWith(['scoreboard', 'stats', 'gone-in-a-later-build']);
+    });
+
     it('opens a card on the stage and unpins from its header', () => {
         const onOpen = vi.fn();
         const onUnpin = vi.fn();

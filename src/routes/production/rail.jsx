@@ -4,6 +4,7 @@ import { ScrollArea } from '../../components/ui/scroll-area';
 import { Text } from '../../components/ui/primitives';
 import { cn } from '../../lib/utils';
 import { isPinnable } from './elements';
+import { MoveButtons } from './controls';
 import { QuickCard, chipFor } from './kit';
 import {
     resolvePlacement, useConsolePlacements, useConsoleScenes, usePlacementLabel,
@@ -22,8 +23,18 @@ import { DESK_QUICK_FACES, QuickFace } from './quickface';
  *   - Each card is a header + the element's quick face, capped at two rows by
  *     QuickCard itself.
  *
- * Drag ordering is pointer-based (HTML5 drag) with the ▲/▼ fallback that the
- * list rows use elsewhere, since the page is also driven from a tablet.
+ * Reordering is ▲/▼ buttons (the kit's MoveButtons, exactly as the list rows use
+ * elsewhere), with pointer drag as an accelerator on top. The buttons are the
+ * REAL control, not a fallback: HTML5 drag needs a mouse — it does not fire from
+ * a keyboard, and it does not fire on touch at all — and this page is also
+ * driven from a tablet at the venue. This file claimed the buttons for a long
+ * time without having them, which left the one surface built for flying the
+ * broadcast reorderable only by mouse.
+ *
+ * Both paths move a card past its VISIBLE neighbour and reorder `pins` by id.
+ * They must not use the rendered index: `entries` drops pins that no longer
+ * resolve, so one dead pin desynchronises entry indices from `pins` and an
+ * index-based move reorders a different card than the producer pressed.
  */
 
 /*
@@ -35,26 +46,26 @@ import { DESK_QUICK_FACES, QuickFace } from './quickface';
  * of a card flying the Game scene's copy while showing the Break scene's state.
  */
 const ElementRailCard = memo(function ElementRailCard({
-    placement, title, onOpen, onUnpin, drag,
+    placement, title, onOpen, onUnpin, move,
 }) {
     const { element, board } = placement;
     return (
         <QuickCard
             state={chipFor(placement)} title={title}
-            onOpen={onOpen} onUnpin={onUnpin} dragHandleProps={drag}
+            onOpen={onOpen} onUnpin={onUnpin} move={move}
         >
             <QuickFace element={element} placement={placement} board={board} />
         </QuickCard>
     );
 });
 
-const RailCard = memo(function RailCard({ entry, onOpen, onUnpin, drag }) {
+const RailCard = memo(function RailCard({ entry, onOpen, onUnpin, move }) {
     const DeskFace = DESK_QUICK_FACES[entry.id];
     if (DeskFace) {
         return (
             <QuickCard
                 state="desk" title={entry.title} onOpen={onOpen} onUnpin={onUnpin}
-                dragHandleProps={drag}
+                move={move}
             >
                 <DeskFace />
             </QuickCard>
@@ -63,7 +74,7 @@ const RailCard = memo(function RailCard({ entry, onOpen, onUnpin, drag }) {
     return (
         <ElementRailCard
             placement={entry.placement} title={entry.title}
-            onOpen={onOpen} onUnpin={onUnpin} drag={drag}
+            onOpen={onOpen} onUnpin={onUnpin} move={move}
         />
     );
 });
@@ -89,12 +100,24 @@ export const Rail = memo(function Rail({ pins, onReorder, onUnpin, onOpen }) {
         return { id, placement, title: detail ? `${name} · ${detail}` : name };
     }).filter(Boolean), [pins, placements, label]);
 
-    const moveTo = (from, to) => {
-        if (from === to || from < 0 || to < 0 || from >= pins.length || to >= pins.length) return;
+    // Reorder by pin ID. `pins` holds every stored pin; `entries` holds only the
+    // ones that still resolve, so the two index differently the moment a pin goes
+    // stale — see the note at the top of this file.
+    const moveToId = (fromId, toId) => {
+        const from = pins.indexOf(fromId);
+        const to = pins.indexOf(toId);
+        if (from < 0 || to < 0 || from === to) return;
         const next = pins.slice();
         const [moved] = next.splice(from, 1);
         next.splice(to, 0, moved);
         onReorder(next);
+    };
+
+    // Step a card past its visible neighbour — what the producer sees, rather
+    // than past a stale pin that draws no card.
+    const moveBy = (i, delta) => {
+        const target = entries[i + delta];
+        if (target) moveToId(entries[i].id, target.id);
     };
 
     return (
@@ -113,20 +136,27 @@ export const Rail = memo(function Rail({ pins, onReorder, onUnpin, onOpen }) {
                         <div
                             key={entry.id}
                             draggable
-                            onDragStart={() => setDragging(i)}
+                            onDragStart={() => setDragging(entry.id)}
                             onDragEnd={() => setDragging(null)}
                             onDragOver={(e) => e.preventDefault()}
                             onDrop={(e) => {
                                 e.preventDefault();
-                                if (dragging != null) moveTo(dragging, i);
+                                if (dragging != null) moveToId(dragging, entry.id);
                                 setDragging(null);
                             }}
-                            className={cn('cursor-grab', dragging === i && 'opacity-50')}
+                            className={cn('cursor-grab', dragging === entry.id && 'opacity-50')}
                         >
                             <RailCard
                                 entry={entry}
                                 onOpen={() => onOpen(entry.id)}
                                 onUnpin={() => onUnpin(entry.id)}
+                                move={(
+                                    <MoveButtons
+                                        canUp={i > 0} canDown={i < entries.length - 1}
+                                        onUp={() => moveBy(i, -1)} onDown={() => moveBy(i, 1)}
+                                        label={entry.title}
+                                    />
+                                )}
                             />
                         </div>
                     ))}

@@ -1,7 +1,9 @@
-import { memo, useMemo } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { Check, Plus, Trash2 } from 'lucide-react';
-import { Text } from '../../../components/ui/primitives';
-import { ActionRow, IconToggle, ListRow, TextRow } from '../kit';
+import { Group, Stack, Text } from '../../../components/ui/primitives';
+import { Button } from '../../../components/ui/button';
+import { Popover, PopoverTrigger, PopoverContent } from '../../../components/ui/popover';
+import { IconToggle, ListRow, TextRow } from '../kit';
 import {
     CONTAINER_MEMBERS, fitsContainer, isSharedMember, useContainerActions,
     useContainerDefs,
@@ -94,6 +96,7 @@ export default function ContainerStage({ element, placement }) {
     const def = id ? defs[id] : null;
     const holders = useHolders(defs);
     const { rename, remove, setMember } = useContainerActions();
+    const [confirmDel, setConfirmDel] = useState(false);
 
     /*
      * A source pointing at a container with no definition — a pre-2.0 named
@@ -152,18 +155,37 @@ export default function ContainerStage({ element, placement }) {
 
             <AutomationSection def={def} />
 
-            <div className="mt-1 border-t border-border/60 pt-2">
-                <ActionRow
-                    actions={[{
-                        label: 'Delete container', icon: Trash2, variant: 'destructive',
-                        onClick: () => remove(def.id),
-                        // Deleting the definition does NOT delete the OBS source
-                        // — the console never removes a source the producer
-                        // watched appear. It clears the feed and stops offering
-                        // the container; the source is theirs to remove.
-                        title: 'Removes the definition and clears its feed. The OBS source stays — delete it in OBS.',
-                    }]}
-                />
+            {/* Two-step, the same Popover confirm the Match desk uses on its own
+                delete — and this one has the LARGER blast radius: removing a
+                definition takes its feed, its resting occupant and every
+                automation rule that drove one of its members (`detach`/`dropRules`
+                in ../containers). A producer who has wired a container up cannot
+                rebuild that from the undo they don't have. */}
+            <div className="mt-1 flex min-h-7 items-center border-t border-border/60 pt-2">
+                <Popover open={confirmDel} onOpenChange={setConfirmDel}>
+                    <PopoverTrigger asChild>
+                        <Button size="xs" variant="destructive" className="h-7 min-w-0 flex-1">
+                            <Trash2 />
+                            <span className="truncate">Delete container</span>
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent align="end" className="w-60">
+                        <Stack gap="xs">
+                            <Text size="sm" className="text-foreground">Delete “{def.name || def.id}”?</Text>
+                            {/* Deleting the definition does NOT delete the OBS
+                                source — the console never removes a source the
+                                producer watched appear. */}
+                            <Text size="xs" className="text-muted-foreground">
+                                Clears its feed and drops its members’ automation rules.
+                                The OBS source stays — delete that in OBS.
+                            </Text>
+                            <Group gap="xs" className="justify-end">
+                                <Button size="xs" variant="ghost" onClick={() => setConfirmDel(false)}>Cancel</Button>
+                                <Button size="xs" variant="destructive" onClick={() => remove(def.id)}>Delete</Button>
+                            </Group>
+                        </Stack>
+                    </PopoverContent>
+                </Popover>
             </div>
         </>
     );

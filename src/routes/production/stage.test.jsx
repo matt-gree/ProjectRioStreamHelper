@@ -1,10 +1,13 @@
-import { describe, it, expect, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { describe, it, expect, afterEach, beforeEach } from 'vitest';
+import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import { TooltipProvider } from '../../components/ui/tooltip';
+import { useSettingsStore } from '../../context/store';
 import { ELEMENTS, isPinnable } from './elements';
 import { Stage, stageBodyComponent } from './stage';
 import { DirectStage, FedStage } from './stage/generic';
+import { withContainers } from '../../test/containers';
 
+beforeEach(() => useSettingsStore.setState({ production: withContainers() }));
 afterEach(cleanup);
 
 const ui = (node) => render(<TooltipProvider>{node}</TooltipProvider>);
@@ -77,5 +80,28 @@ describe('stageBodyComponent', () => {
         const el = pinnable[0];
         ui(<Stage selection={el.id} />);
         expect(screen.getByRole('button', { name: /quick rail/ })).toBeInTheDocument();
+    });
+});
+
+/*
+ * Deleting a container definition takes its feed, its resting occupant and every
+ * automation rule driving one of its members with it (`detach`/`dropRules` in
+ * ./containers) — a larger blast radius than the match delete one page over,
+ * which has always confirmed. It must not be reachable in one click.
+ */
+describe('Container delete', () => {
+    it('confirms before it deletes, and the first click deletes nothing', () => {
+        ui(<Stage selection="container:callout-stage" />);
+        fireEvent.click(screen.getByRole('button', { name: /Delete container/ }));
+        // Still defined — the first click only opened the confirm.
+        expect(useSettingsStore.getState().production.container_defs['callout-stage']).toBeTruthy();
+        expect(screen.getByText(/drops its members’ automation rules/)).toBeInTheDocument();
+    });
+
+    it('deletes on the second click', () => {
+        ui(<Stage selection="container:callout-stage" />);
+        fireEvent.click(screen.getByRole('button', { name: /Delete container/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+        expect(useSettingsStore.getState().production.container_defs['callout-stage']).toBeFalsy();
     });
 });

@@ -141,8 +141,14 @@ const PinToggle = memo(function PinToggle({ pinned, onToggle }) {
                 type="button" onClick={onToggle} aria-pressed={pinned}
                 aria-label={pinned ? 'Unpin from quick rail' : 'Pin to quick rail'}
                 className={cn(
+                    // Full-strength when unpinned, like PanelShell's copy of this
+                    // control: the dimmed variant this used to carry put the
+                    // console's most-repeated glyph (once per rack row) under the
+                    // 3:1 floor for UI components, and "which rows are already
+                    // pinned" is exactly the scan it exists to serve. The pinned
+                    // state is distinguished by colour, not by the other being faint.
                     'shrink-0 text-xs leading-none transition-colors',
-                    pinned ? 'text-rio-400' : 'text-muted-foreground/60 hover:text-foreground',
+                    pinned ? 'text-rio-400' : 'text-muted-foreground hover:text-foreground',
                 )}
             >
                 {pinned ? '◆' : '◇'}
@@ -308,7 +314,7 @@ const AddButton = memo(function AddButton({ scene, onAdd, label }) {
             <button
                 type="button" onClick={() => onAdd(scene ?? null)}
                 aria-label={label ?? `Add an overlay to ${scene}`}
-                className="shrink-0 text-muted-foreground/70 transition-colors hover:text-foreground"
+                className="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
             >
                 <Plus size={13} />
             </button>
