@@ -123,8 +123,8 @@ async def test_the_feed_lands_in_the_same_batch_as_its_trigger(rule, mock_socket
 async def test_the_mirrored_side_shows_the_pitcher(container, set_setting):
     """One trigger, two containers: the side in the field flashes its pitcher.
 
-    This is what makes the rosterstats mirror expressible as two containers —
-    the rule is identical, the container's scope is not.
+    This is what makes the old Roster + Stats mirror expressible as two
+    containers — the rule is identical, the container's scope is not.
     """
     set_setting("production.container_defs", {
         CONTAINER: {

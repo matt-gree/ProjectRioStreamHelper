@@ -260,11 +260,11 @@ screenshot; get the user's eyes or reason from first principles.
 
 ## Catalog + registration (`server/api/v1/layouts.py`, `src/routes/layouts/designConstants.js`)
 
-- **Layout type** is derived from filename stem + group folder (`scenes/*` →
-  `scene`, `bracket/*` → `bracket`, else stem minus trailing digits).
+- **Layout type** is derived from filename stem + group folder (`bracket/*` →
+  `bracket`, else stem minus trailing digits).
 - Variant expansion: `?size=s|m|l` (scoreboard type only; legacy xs/xl fall
-  back to l), `?team=1|2` (stats, roster, rosterstats, teamlogo, controller,
-  playername), `?dir=` (fourcam). `?scoreboard=N` binds board data —
+  back to l), `?team=1|2` (stats, roster, teamlogo, controller,
+  playername). `?scoreboard=N` binds board data —
   **missing param defaults to board 1**.
 - `controller/` is **macOS-only** (omitted from the catalog off-Darwin) —
   platform-gate any test that asserts on it.

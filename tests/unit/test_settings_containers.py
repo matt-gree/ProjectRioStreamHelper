@@ -69,8 +69,8 @@ async def test_rosters_are_mutually_exclusive_across_containers(isolate_user_dat
 async def test_the_mirrored_pair_replaces_the_roster_stats_element(isolate_user_data):
     """Two scoped containers ARE the combined Roster + Stats source.
 
-    452x240 is that element's own stage: the roster (452x140) and the stat card
-    (380x220) both center inside it. Each container rests on the roster — its
+    452x240 is that element's own stage: the roster (452x140) centers inside it
+    and the stat card (380x240) fills its height. Each container rests on the roster — its
     steady state and its boot state — and differs from its twin only by side,
     which is what makes one flash the batter and the other the pitcher off ONE
     rule.
@@ -84,10 +84,36 @@ async def test_the_mirrored_pair_replaces_the_roster_stats_element(isolate_user_
         assert d["resting"] == "roster", cid
         assert d["scope"] == {"scoreboard": 1, "team": team}, cid
 
-    # Deliberately NOT seeded: the flip is the half that has to be proven
-    # against real HUD traffic, so the producer adds it from the quick-add
-    # library and can suspend it with one switch.
-    assert Settings.settings["production"]["automations"] == {}
+
+async def test_the_pair_ships_the_flip_that_made_it_that_element(isolate_user_data):
+    """The rule is seeded WITH the pair, because it is the half that flips.
+
+    A container resting on a roster is only half of what the deleted Roster +
+    Stats element did; the other half was cross-fading to a stat card on every
+    new batter. Seeding the containers without the rule would hand a producer
+    two sources that rest and never flash — a worse version of what they had —
+    so the migration ships both. This is the ONLY seeded rule: everything else
+    in the quick-add library stays opt-in.
+
+    One template, two containers, and the id carries the container precisely so
+    that is expressible. `{sb}` and the side both resolve from the container's
+    own scope, which is what makes the mirror one rule twice rather than two.
+    """
+    await Settings.Load()
+    rules = Settings.settings["production"]["automations"]
+    assert sorted(rules) == [
+        "roster-stats-1:batter-card", "roster-stats-2:batter-card",
+    ]
+    for cid in ("roster-stats-1", "roster-stats-2"):
+        r = rules[f"{cid}:batter-card"]
+        assert r["container"] == cid
+        assert r["trigger"] == "score.{sb}.batter"
+        # The member has to be ON that container's roster or the rule is inert.
+        assert r["member"] == "statscard"
+        assert r["member"] in _defs()[cid]["members"]
+        assert r["guard"] == "content"
+        assert r["enabled"] is True
+        assert r["dwell"] > 0
 
 
 async def test_callout_stage_holds_both_post_game_callouts(isolate_user_data):
@@ -179,6 +205,21 @@ async def test_deleting_a_seeded_automation_rule_survives_a_restart(isolate_user
     assert Settings.settings["production"]["automations"] == {}
 
 
+async def test_suspending_a_seeded_rule_still_persists(isolate_user_data):
+    """The exemption must not cost the disposal that already worked."""
+    rules = {
+        rid: {**r, "enabled": False}
+        for rid, r in Settings.settings["production"]["automations"].items()
+    }
+    _write_settings(isolate_user_data, {"production": {"automations": rules}})
+    await Settings.Load()
+    stored = Settings.settings["production"]["automations"]
+    assert sorted(stored) == [
+        "roster-stats-1:batter-card", "roster-stats-2:batter-card",
+    ]
+    assert all(r["enabled"] is False for r in stored.values())
+
+
 async def test_an_edited_container_is_not_backfilled_from_the_seed(isolate_user_data):
     """Replace, not merge, per ENTRY as well as per map.
 
@@ -202,6 +243,27 @@ async def test_an_edited_container_is_not_backfilled_from_the_seed(isolate_user_
     # `resting` and `scope` were on the seeded def and are gone from theirs.
     assert "resting" not in d
     assert "scope" not in d
+
+
+async def test_a_file_without_the_key_still_gets_the_seed(isolate_user_data):
+    """Absent is the only state that means "never configured".
+
+    This is what makes it a seed-ONCE rather than a seed-never: a settings file
+    written before either map existed still gets the containers and the pair's
+    rule on the upgrade that introduces them.
+    """
+    _write_settings(isolate_user_data, {
+        "production": {"spotlight": {"enabled": True, "scene": "Replay",
+                                     "holdMs": 1500}},
+    })
+    await Settings.Load()
+    assert set(_defs()) == SEEDED
+    assert sorted(Settings.settings["production"]["automations"]) == [
+        "roster-stats-1:batter-card", "roster-stats-2:batter-card",
+    ]
+    # …without disturbing the neighbouring keys, which still merge normally.
+    assert Settings.settings["production"]["spotlight"]["scene"] == "Replay"
+    assert Settings.settings["production"]["overrides"] == {}
 
 
 async def test_the_exemption_does_not_leak_to_the_rest_of_production(

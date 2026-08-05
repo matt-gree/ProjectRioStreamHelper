@@ -284,19 +284,18 @@ class Settings:
                     "height": 720,
                     "members": ["hitvisualizer"],
                 },
-                # The mirrored pair that REPLACES the Roster + Stats element
-                # (rosterstats.html): one container per side, each resting on
-                # that side's roster, each able to flash that side's stat card
-                # over it. 452x240 is the element's own stage — the roster
-                # (452x140) and the card (380x220) both center inside it.
+                # The mirrored pair that REPLACED the Roster + Stats element:
+                # one container per side, each resting on that side's roster,
+                # each able to flash that side's stat card over it. 452x240 was
+                # that element's own stage — the roster (452x140) centers inside
+                # it, and the card (380x240) fills its height now that it carries
+                # two optional caption bands.
                 #
-                # Seeded because they are a MIGRATION, not a new feature: a
-                # producer replaces two browser-source URLs and gets what they
-                # had. What is deliberately NOT seeded is the automation — the
-                # flip is the part that has to be proven against real HUD
-                # traffic, so the producer adds "Batter change -> stat card"
-                # from the quick-add library once, per side, and can suspend it
-                # with one switch if it misbehaves on air.
+                # Seeded because they are a MIGRATION, not a new feature: the
+                # element they replace is gone, so a producer replaces two
+                # browser-source URLs and gets what they had — which is only
+                # true if the FLIP comes with them. The two rules that do it are
+                # seeded below, in `automations`.
                 #
                 # Scope is board 1 / left and board 1 / right. A rig running
                 # more boards re-points the Board picker on each container's
@@ -332,10 +331,49 @@ class Settings:
             # the trigger resolves from the container's own scope, so the rule
             # itself is board-agnostic and reads the same on every board.
             #
-            # Empty by default: a producer adds one from the quick-add library
-            # (the templates live with the console, src/routes/production/
-            # automations.js — the engine only interprets rules).
-            "automations": {},
+            # A producer adds rules from the quick-add library (the templates
+            # live with the console, src/routes/production/automations.js — the
+            # engine only interprets rules). The rule id is
+            # `{container}:{template}`, which is `ruleIdFor` over there: two
+            # containers running one canned rule is exactly how the mirrored pair
+            # below is built, so the container has to be part of the id.
+            #
+            # Only the pair is seeded, and only because it is a MIGRATION. The
+            # flip WAS the Roster + Stats element — that element is deleted, so
+            # shipping its containers without its rule would hand a producer two
+            # sources that rest on a roster and never flash, which is a worse
+            # version of what they had. Everything else in the library stays
+            # opt-in. A rule that misbehaves on air is suspended with the switch
+            # on its container's stage panel, and either disposal survives a
+            # restart: this map is in `_USER_OWNED_MAPS` alongside the container
+            # defs above, so `enabled: false` persists as a value and a DELETED
+            # rule stays deleted rather than being merged back from here.
+            "automations": {
+                "roster-stats-1:batter-card": {
+                    "enabled": True,
+                    "template": "batter-card",
+                    "name": "Batter change → stat card",
+                    "container": "roster-stats-1",
+                    "member": "statscard",
+                    "trigger": "score.{sb}.batter",
+                    "guard": "content",
+                    "dwell": 7,
+                },
+                # Same rule, other scope. `{sb}` and the SIDE both resolve from
+                # the container, which is why the mirror is one rule twice and
+                # not two rules: side 1 shows the batter while it is batting,
+                # side 2 shows the pitcher it is facing.
+                "roster-stats-2:batter-card": {
+                    "enabled": True,
+                    "template": "batter-card",
+                    "name": "Batter change → stat card",
+                    "container": "roster-stats-2",
+                    "member": "statscard",
+                    "trigger": "score.{sb}.batter",
+                    "guard": "content",
+                    "dwell": 7,
+                },
+            },
             # Hit-visualizer "spotlight": on Fire, cut to `scene`, play the
             # animation, then cut back to the previous program scene. `holdMs`
             # is extra time held on the landing before returning.
@@ -399,10 +437,6 @@ class Settings:
                 "subtextColor": None,
             },
             "teamlogo": {},
-            "scene": {
-                "team1ShowYouTube": False,
-                "team2ShowYouTube": False,
-            },
             "ticker": {
                 "tickerSpeed": 60,
                 "tickerGap": 16,
@@ -505,6 +539,20 @@ class Settings:
             production.pop("containers", None)
             await cls.Save()
 
+        # The combined Roster + Stats element is gone (a container resting on a
+        # roster with a batter-change rule over it IS that element, built from
+        # parts), so its settings namespace has nothing left that reads it. Its
+        # look now lives under the two namespaces the parts already had —
+        # overlays.roster.* for the roster, overlays.statscard.* for the card —
+        # and there is no honest way to translate a third copy into either: the
+        # producer configured them apart on purpose, and picking a winner would
+        # silently repaint a card they had already themed. Dropped rather than
+        # left to rot, on the same reasoning as `production.containers` above:
+        # nothing reads it, and a settings file people hand-edit should not
+        # carry a section that does nothing.
+        if "rosterstats" in cls.settings.get("overlays", {}):
+            cls.settings["overlays"].pop("rosterstats", None)
+            await cls.Save()
 
         # One-time binding migration: unify the per-scoreboard source-type enum
         # (manual | hud | live_game) + orthogonal rotation feed into a single

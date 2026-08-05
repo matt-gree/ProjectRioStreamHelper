@@ -63,9 +63,11 @@ export const AUTOMATION_LIBRARY = [
         guardLabel: 'a stat line resolves for this side',
         dwell: 7,
         /*
-         * The case study this engine was built from. rosterstats did exactly
-         * this inside one mount: on every new batter, cross-fade from the roster
-         * to a stat card and back. Because the card resolves per SIDE, the same
+         * The case study this engine was built from, and the element it
+         * replaced: the old Roster + Stats source did exactly this inside one
+         * mount — on every new batter, cross-fade from the roster to a stat card
+         * and back — with the trigger, the dwell and the pair of layers all
+         * welded shut. Because the card resolves per SIDE, the same
          * trigger shows the batter on the side at bat and the pitcher on the
          * side in the field — so a mirrored pair is two scoped containers
          * running this one rule, not two rules.

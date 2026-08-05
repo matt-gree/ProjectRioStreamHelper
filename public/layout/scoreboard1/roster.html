@@ -19,7 +19,7 @@
         drop-shadow(0 -1px 2px rgba(0, 0, 0, 0.1));
     }
     /* Grid CSS lives in roster-mount.js (injected) so it stays identical here
-       and in the combined Roster + Stats source. */
+       and in the roster as a container member. */
   </style>
 </head>
 <body>
@@ -84,7 +84,7 @@
         || key === `score.${SCOREBOARD}.game_completed`,
       shouldRenderSettings: (key) =>
         key.startsWith('overlays.roster.')
-        || key.startsWith('scoreboards.sources.'),
+        || key === 'project_rio.hud_enabled',
     });
   </script>
 </body>

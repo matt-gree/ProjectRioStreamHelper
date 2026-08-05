@@ -52,12 +52,12 @@ These terms have specific meanings in this codebase. Use them precisely; correct
 | **Container scope** | `container_defs.{id}.scope` = `{scoreboard, team}` — a container's frame of reference. Resolves `{sb}` in a rule's trigger and picks the side of the content the engine feeds; a mirrored pair is two scoped containers running one canned rule. |
 | **Layout** | An HTML file under `public/layout/`, served as an OBS Browser Source. Declares its style contract via `<meta name="overlay-settings">` and its native size via `body { width/height }`. |
 | **Layout type** | Derived from filename + group folder (`server/api/v1/layouts.py`). Drives `?size=` / `?team=` variant expansion. |
-| **Scene** | A full 1920×1080 Layout under `public/layout/scenes/` designed to drop into an OBS scene as the entire stream canvas. |
+| **Scene** | An **OBS** scene — the Production rack's grouping axis. PRSH has no scene *Layout*: the "full scene" group (a 1920×1080 layout that was the entire stream canvas) was dropped, because a canvas built from placed elements is what the console is for. |
 | **Overlay** | Generic OBS Browser Source terminology. Not PRSH-specific; do not use as a synonym for any of the terms above. |
 | **Sample bundle** | A Layout's canned state fragment under `public/layout/preview/*_sample.json`, declared via `OverlayBase.init({ sample })`. Every Layout has one. Keys carry `{sb}`/`{team}` tokens resolved from the page URL. |
 | **Demo mode** | State `production.sample` — the app-wide switch that makes every overlay render its sample bundle instead of live state, for building OBS scenes with no game running. Global, never self-enabling, guarded by an app-wide banner. |
 | **Size variant** | `?size=s\|m\|l` query param, scoreboard layouts only (`xs`/`xl` retired with the SVG conversion; legacy URLs fall back to `l`). |
-| **Team variant** | `?team=1\|2` query param. Applies to stats, roster, rosterstats, teamlogo, controller, playername. |
+| **Team variant** | `?team=1\|2` query param. Applies to stats, roster, teamlogo, controller, playername. |
 | **Rotation / Rotating** | A board whose playback mode is `rotate`, cycling its pool at an interval. Managed by `PoolManager` (`server/rio/rotation.py`). No other meaning — there is no "player rotation" concept. |
 | **Rotator (layout group)** | `public/layout/rotator/*.html` — standalone layouts (e.g. the results ticker) that display rotating content. Distinct from rotate playback. |
 | **Design package / Theme** | A swappable SVG theme set under `public/design/{package}/` (default, classic, + user packages in `user_data`). Elements mount theme SVGs via `svg-theme-engine.js` data-slot binding. |

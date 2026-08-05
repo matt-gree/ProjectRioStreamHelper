@@ -19,7 +19,7 @@
  *                            picking "Stats — Team 2" has already chosen one.
  *
  * The variant axis is not optional bookkeeping. Team-variant layouts (stats,
- * roster, rosterstats, teamlogo, playername) are unregistered, so they row
+ * roster, teamlogo, playername) are unregistered, so they row
  * through `genericElement`, which keys on the PATHNAME — and left at that,
  * team 1's and team 2's sources produce the same id. Two rows with one identity
  * means duplicate React keys in the rack and a stage that drives whichever
@@ -61,6 +61,10 @@ const ORIGIN = typeof window !== 'undefined' && window.location
 const VARIANT_PARAMS = [
     ['team', 't', (v) => `Team ${v}`],
     ['size', 'z', (v) => ({ s: 'Small', m: 'Medium', l: 'Large' }[v] ?? String(v).toUpperCase())],
+    // `dir` outlives the only layout that ever offered it (the 4-cam scorecard,
+    // deleted with the full-scene group). Kept because it costs nothing and it
+    // is what keeps a producer's leftover ?dir=left / ?dir=right sources two
+    // rows instead of two rows sharing one id.
     ['dir', 'd', (v) => ({ left: 'Point Left', right: 'Point Right' }[v] ?? v)],
     ['port', 'p', (v) => `Port ${v}`],
 ];

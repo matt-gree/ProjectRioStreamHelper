@@ -12,9 +12,9 @@
 // Supported control types: 'switch', 'color-override', 'number-override', 'select', 'text'.
 
 // The re-themable stat card's element-only settings. Shared verbatim by the
-// standalone Stats source and the combined Roster + Stats element, which each
-// read them under their own namespace (overlays.stats.* vs overlays.rosterstats.*)
-// so the two cards are configured independently.
+// standalone Stats source and the Stat Card container member, which each read
+// them under their own namespace (overlays.stats.* vs overlays.statscard.*) so
+// the two cards are configured independently.
 const STAT_CARD_SETTINGS = [
     { key: 'transitionType', type: 'select', label: 'Batter Transition', description: 'Animation when switching to a new batter', options: [{ value: 'fade', label: 'Fade' }, { value: 'none', label: 'None' }], defaultValue: 'fade' },
     { key: 'subLine', type: 'select', label: 'Bottom Line', description: 'What the bottom row shows: the live game line, your own text, or nothing (the card shrinks)', options: [{ value: 'gameLine', label: 'Game Line' }, { value: 'custom', label: 'Custom Text' }, { value: 'off', label: 'Off' }], defaultValue: 'gameLine' },
@@ -29,9 +29,8 @@ const STAT_CARD_SETTINGS = [
 // Not part of STAT_CARD_SETTINGS, because it is not part of every card: the
 // header is a band in `statscard.svg`, and the standalone Stats source renders
 // the wide `stats.svg`, which has no room for one. Offering the knob there would
-// put a control on the stage that cannot change anything. The two elements that
-// DO render the 2x2 card — the Stat Card container member and Roster + Stats —
-// take it below.
+// put a control on the stage that cannot change anything. The Stat Card
+// container member, which DOES render the 2x2 card, takes it below.
 const TOP_LINE_SETTINGS = [
     { key: 'topLine', type: 'select', label: 'Top Line', description: 'A caption above the stats: your own text, the game mode ("Stars On Showdown XXI Stats"), or nothing (the card shrinks)', options: [{ value: 'off', label: 'Off' }, { value: 'custom', label: 'Custom Text' }, { value: 'auto', label: 'Game Mode' }], defaultValue: 'off' },
     { key: 'topLineText', type: 'text', label: 'Custom Top Text', description: 'Shown when Top Line is set to Custom Text', placeholder: 'e.g. Tournament Stats' },
@@ -59,17 +58,6 @@ export const LAYOUT_SETTINGS = {
     // Card row nested under its container.
     statscard: [...STAT_CARD_SETTINGS, ...TOP_LINE_SETTINGS],
     teamlogo: [],
-    // Roster + Stats — the combined auto-cycling source. Roster look shares
-    // overlays.roster.*, the stat card shares overlays.stats.* + the active
-    // Design Package; the only element-only knob is how long the card stays up.
-    rosterstats: [
-        { key: 'showSuperstars', type: 'switch', label: 'Show Superstar Icons', description: 'Display superstar badge on starred characters' },
-        { key: 'showRoleIcon', type: 'switch', label: 'Show Batting/Fielding Icon', description: 'Display the bat or glove icon indicating the team role' },
-        { key: 'showTeamLogo', type: 'switch', label: 'Show Team Logo', description: 'Display the team logo next to the roster' },
-        { key: 'dwellSeconds', type: 'number-override', label: 'Stat Card Dwell', description: 'Seconds the batter/pitcher stat card stays up before returning to the roster', defaultValue: 7, min: 2, max: 20, step: 1, suffix: 's' },
-        ...STAT_CARD_SETTINGS,
-        ...TOP_LINE_SETTINGS,
-    ],
     bracket: [
         { key: 'connectorColor', type: 'color-override', label: 'Connector Line Color', description: 'Color of bracket connector lines' },
         { key: 'activeColor', type: 'color-override', label: 'Active Match Color', description: 'Highlight color for active/in-progress matches' },

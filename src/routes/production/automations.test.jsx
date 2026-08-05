@@ -50,7 +50,7 @@ function harness(hook) {
 }
 
 describe('the quick-add library', () => {
-    it('ships the rosterstats case study as its first entry', () => {
+    it('ships the Roster + Stats case study as its first entry', () => {
         const t = libraryEntry('batter-card');
         expect(t).toBeTruthy();
         // Either card, in preference order: the themed 2x2 Stat Card when the

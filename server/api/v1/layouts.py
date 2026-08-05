@@ -73,19 +73,11 @@ _SIZE_VARIANTS = {
     ],
 }
 
-# Direction variants for layouts that support ?dir= param (each is a distinct
-# aim the producer places, so it's a URL variant, not a live toggle).
-# Each: (dir_code, label)
-_DIR_VARIANTS = {
-    "fourcam": [("left", "Point Left"), ("right", "Point Right")],
-}
-
 # Team variants for layouts that support ?team= param.
 # Each: (team_num, label)
 _TEAM_VARIANTS = {
     "stats":       [(1, "Team 1"), (2, "Team 2")],
     "roster":      [(1, "Team 1"), (2, "Team 2")],
-    "rosterstats": [(1, "Team 1"), (2, "Team 2")],
     "teamlogo":    [(1, "Team 1"), (2, "Team 2")],
     "controller":  [(1, "Team 1"), (2, "Team 2")],
     "playername":  [(1, "Team 1"), (2, "Team 2")],
@@ -95,11 +87,9 @@ _TEAM_VARIANTS = {
 _DISPLAY_NAMES = {
     "stats":       "Stats",
     "roster":      "Roster",
-    "rosterstats": "Roster + Stats",
     "teamlogo":    "Team Logo",
     "controller":  "Controller",
     "playername":  "Player Name",
-    "fourcam":     "4-Cam Scorecard",
 }
 
 # Fallback dimensions for layouts whose body is fluid (e.g. body { width: 100%
@@ -148,11 +138,7 @@ def _derive_type(stem: str, group: str = "") -> str:
         teamlogo                -> "teamlogo"
         index (group=bracket)   -> "bracket"
         winners_only (bracket)  -> "bracket"
-        gameplay (group=scenes) -> "scene"
     """
-    # For scenes folder, all files are scene type
-    if group == "scenes":
-        return "scene"
     # For bracket folder, all files are bracket type
     if group == "bracket":
         return "bracket"
@@ -225,25 +211,7 @@ async def list_layouts(request: Request):
 
             size_variants = _SIZE_VARIANTS.get(layout_type)
             team_variants = _TEAM_VARIANTS.get(layout_type)
-            dir_variants = _DIR_VARIANTS.get(layout_type)
-            if dir_variants:
-                display_name = _DISPLAY_NAMES.get(layout_type, layout_type.capitalize())
-                for dir_code, dir_label in dir_variants:
-                    entry = {
-                        "group": group,
-                        "name": f"{display_name} — {dir_label}",
-                        "type": layout_type,
-                        "url": f"{base_url}?dir={dir_code}",
-                        "dirVariant": dir_code,
-                        "dirLabel": dir_label,
-                    }
-                    if w is not None and h is not None:
-                        entry["width"] = w
-                        entry["height"] = h
-                    if supported is not None:
-                        entry["supportedSettings"] = supported
-                    layouts.append(entry)
-            elif size_variants:
+            if size_variants:
                 for size_code, size_label, sw, sh in size_variants:
                     entry = {
                         "group": group,

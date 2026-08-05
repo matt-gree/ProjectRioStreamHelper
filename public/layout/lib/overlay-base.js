@@ -561,10 +561,7 @@
   };
   const LAYOUT_VAR_MAP = {
     scoreboard: { ...CARD_OVERRIDE_VARS, textColor: { prop: '--text-primary' } },
-    // The combined Roster + Stats element hosts the same stat card under its
-    // own 'rosterstats' namespace, so it resolves the same overrides.
     stats: STATS_VARS,
-    rosterstats: STATS_VARS,
     bracket: {
       connectorColor: { prop: '--connector-color', dedicated: true },
       activeColor:    { prop: '--active-color',    dedicated: true },

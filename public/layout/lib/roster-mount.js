@@ -2,11 +2,9 @@
 //
 // Extracted from public/layout/scoreboard1/roster.html so more than one overlay
 // can draw the same captain-first 9-character roster: the standalone Roster
-// source, the combined Roster + Stats source (rosterstats-mount.js) and — via
-// mountRoster() at the bottom — the roster as a shared-CONTAINER member, which
-// is what replaces that combined source. Data comes from RioData.getRosterSlots;
-// visibility toggles from overlays.roster.* — a single source of truth for all
-// three surfaces.
+// source and — via mountRoster() at the bottom — the roster as a shared-CONTAINER
+// member. Data comes from RioData.getRosterSlots; visibility toggles from
+// overlays.roster.* — a single source of truth for both surfaces.
 //
 //   import { renderRoster } from '/layout/lib/roster-mount.js';
 //   renderRoster(gridContainer, { state, settings, sb, team });
@@ -74,21 +72,24 @@ function rosterFitScale(trailingCount) {
 /**
  * Render the captain-first roster grid for one side into `container`.
  * Behavior-preserving port of roster.html's render(): reads RioData.getRosterSlots
- * and the show* toggles. `settingsPrefix` selects which settings namespace holds
- * those toggles — the standalone Roster source uses overlays.roster.*, the
- * combined Roster + Stats source passes overlays.rosterstats.* for independent
- * control.
+ * and the show* toggles.
+ *
+ * The toggles come from overlays.roster.* wherever this is drawn. There used to
+ * be a `settingsPrefix` here so the combined Roster + Stats source could carry
+ * its own copy of the same three switches; that element is gone, and a container
+ * resting on a roster is the SAME roster the standalone source shows — one look
+ * to configure, not one per host.
  */
-export function renderRoster(container, { state, settings, sb, team, settingsPrefix = 'overlays.roster' }) {
+export function renderRoster(container, { state, settings, sb, team }) {
   injectCss();
   if (!container) return;
   container.classList.add('roster-container');
   const { deepGet } = OverlayBase;
   container.innerHTML = '';
 
-  const showSuperstars = deepGet(settings, `${settingsPrefix}.showSuperstars`, true) !== false;
-  const showRole = deepGet(settings, `${settingsPrefix}.showRoleIcon`, true) !== false;
-  const showTeamLogo = deepGet(settings, `${settingsPrefix}.showTeamLogo`, true) !== false;
+  const showSuperstars = deepGet(settings, 'overlays.roster.showSuperstars', true) !== false;
+  const showRole = deepGet(settings, 'overlays.roster.showRoleIcon', true) !== false;
+  const showTeamLogo = deepGet(settings, 'overlays.roster.showTeamLogo', true) !== false;
 
   const slots = RioData.getRosterSlots(state, sb, team, {
     includeRole: showRole,
@@ -153,7 +154,8 @@ export const ROSTER_REF_H = REF_H;
  * `renderRoster` is a draw call; a container member is an object with a
  * lifecycle (`fed-container.js`'s MEMBERS registry — mount · update · dispose).
  * This is the adapter between the two, and it is what lets a container REST on a
- * roster, which is the steady state the combined Roster + Stats source had.
+ * roster — the steady state the combined Roster + Stats source used to own
+ * internally, now the container's `resting` occupant.
  *
  * The drop-shadow lives here rather than on the host page for the same reason
  * the grid CSS does: roster.html applies it to its own <body>, and a member

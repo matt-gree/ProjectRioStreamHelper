@@ -247,8 +247,15 @@ function layoutFiles(dir = 'public/layout', prefix = '') {
 describe('sample coverage — every Layout declares a bundle', () => {
     const files = layoutFiles();
 
+    // A floor, not a census: it catches the scan silently walking the wrong
+    // tree (which would pass every per-file assertion below by having none).
+    // Dropped from 26 when the full-scene group and the 4-cam aim variants were
+    // deleted, and again when the combined Roster + Stats source went (a
+    // container resting on a roster with a batter-change rule over it is that
+    // element, so the Layout had nothing left to be) — four Layouts, no bundles
+    // lost, since every one of them shared a bundle with a sibling.
     it('finds every Layout', () => {
-        expect(files.length).toBeGreaterThanOrEqual(26);
+        expect(files.length).toBeGreaterThanOrEqual(23);
     });
 
     for (const [name, path] of files) {

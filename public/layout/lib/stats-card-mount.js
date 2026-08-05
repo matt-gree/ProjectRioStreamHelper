@@ -88,15 +88,14 @@ export function mountStatsCard({ host, sb, team, settingsType = 'stats',
   const SB = sb || 1;
   const TEAM = team === 2 ? 2 : 1;
   // Which settings namespace this card reads (overlays.{SETTINGS_TYPE}.*). The
-  // standalone Stats source uses 'stats'; the combined Roster + Stats element
-  // passes 'rosterstats' and the container MEMBER that replaces it passes
+  // standalone Stats source uses 'stats' and the container MEMBER passes
   // 'statscard', so each card is configured independently.
   const SETTINGS_TYPE = settingsType || 'stats';
 
   // Which design-package SVG this card renders. The standalone Stats source uses
-  // the wide 4-across 'stats' card; the Roster + Stats element passes 'statscard'
-  // for the compact 2x2 plum-glass card, so the two look independent even though
-  // they share this mount and the same RioData resolution.
+  // the wide 4-across 'stats' card; the Stat Card container member passes
+  // 'statscard' for the compact 2x2 card, so the two are themed independently
+  // even though they share this mount and the same RioData resolution.
   const engine = createThemeEngine({ host, element: svgElement, fallbackSvg });
 
   let disposed = false;

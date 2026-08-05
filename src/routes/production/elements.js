@@ -111,8 +111,8 @@ export const ELEMENTS = [
         // 380x240 rather than the original 380x220 since the card grew its two
         // optional caption bands (a header naming the stat set, a footer carrying
         // the live game line): both open is 236 units of card. A container has to
-        // be at least this tall to hold it — the stock Roster + Stats containers
-        // are 452x240, which is where the height comes from.
+        // be at least this tall to hold it — the seeded "Roster + Stats" pair is
+        // 452x240, which is where the height comes from.
         //
         // Not pickable, deliberately. It resolves the side's current batter or
         // pitcher itself (RioData.getStatsLine, the same resolution the engine's
@@ -135,8 +135,10 @@ export const ELEMENTS = [
         name: 'Roster',
         // The captain-first 9-character roster for one side. A dedicated source
         // (?scoreboard=N&team=T) like any direct element, AND a container member
-        // — a container RESTING on a roster and flashing a stat card over it is
-        // the combined Roster + Stats source, rebuilt out of parts.
+        // — a container RESTING on a roster and flashing a stat card over it IS
+        // the combined Roster + Stats element, which is why that element no
+        // longer exists: it was one mount hard-coding one rule, and the parts
+        // compose into the same thing plus every arrangement it couldn't reach.
         //
         // No `scope: 'board'`: its settings are global (overlays.roster.*, which
         // is what roster.html reads), and its two sources differ by ?team=, which
@@ -146,8 +148,8 @@ export const ELEMENTS = [
         url: '/layout/scoreboard1/roster.html',
         width: 452,
         height: 140,
-        // Narrow on purpose: rosterstats.html sits in the same folder and must
-        // not bind here while the two run in parallel.
+        // Anchored to the full path so a sibling in the same folder whose stem
+        // merely STARTS with "roster" can't bind here.
         match: (url) => /\/layout\/scoreboard\d*\/roster\.html/i.test(url),
         containerHostable: true,
         containerScoped: true,
