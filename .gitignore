@@ -310,3 +310,8 @@ public/design/slice26*
 # Design masters (.fig + raw Figma exports) — local workspace, never committed.
 # Only the compiled theme SVGs under public/design/ or user_data/ ship.
 /design-sources/
+
+# impeccable runtime output — a per-machine hook cache (absolute paths, session
+# ids) plus generated critique reports. The tool itself is checked in under
+# .claude/skills/ and .github/.
+.impeccable/
