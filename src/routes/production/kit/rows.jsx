@@ -35,6 +35,41 @@ const named = (label) => (typeof label === 'string' && label ? label : undefined
 const normalize = (opts = []) =>
     opts.map((o) => (typeof o === 'string' ? { label: o, value: o } : o));
 
+/*
+ * The SUBJECT row — what the element is currently drawing. A readout, not a
+ * control, and the only row in the kit with no interaction at all.
+ *
+ * It exists because every other row in this file answers "what can I do to
+ * this", and the console had nothing that answered "what is this showing".
+ * Five stage bodies had each invented their own version of it (the hit
+ * visualizer's latest-hit line, the matchup's fetched series, the bracket's
+ * drawing-phase note, the capture desk's score, the controller's status); this
+ * is that pattern named, so the rail can carry it too.
+ *
+ * No dot and no colour by default. The console's hues are spoken for (emerald
+ * AIR · sky PVW · rio DESK · amber staged) and a sixth meaning would either
+ * collide or dilute, so the tiering is type: the subject in foreground, its
+ * qualifier dimmed beside it. `tone="warn"` is the one exception and means the
+ * same thing amber means in the bodies — something is off and you'd want to
+ * know before it's on air.
+ */
+export const SubjectRow = memo(function SubjectRow({ text, meta, tone, title, className }) {
+    if (!text) return null;
+    return (
+        <div className={cn(ROW, 'gap-1.5', className)} title={title || undefined}>
+            <Text
+                size="xs" span truncate
+                className={cn('min-w-0', tone === 'warn' ? 'text-amber-500/90' : 'text-foreground')}
+            >
+                {text}
+            </Text>
+            {meta != null && meta !== '' && (
+                <Text size="xs" span truncate dimmed className="min-w-0 shrink-0">{meta}</Text>
+            )}
+        </div>
+    );
+});
+
 // label · switch — source visibility, sub-plate toggles.
 export const ToggleRow = memo(function ToggleRow({
     label, checked, onChange, disabled, staged, className,

@@ -4,7 +4,6 @@ import { useStateStore } from '../../../context/store';
 import { stageOrRun, usePending } from '../../../context/staging';
 import { clearMatchup, fetchMatchup } from '../../../context/match';
 import { Text } from '../../../components/ui/primitives';
-import { cn } from '../../../lib/utils';
 import { ActionRow, SelectRow } from '../kit';
 import { matchDisplayLabel, matchIds } from '../matches';
 import { DirectStage } from './generic';
@@ -61,16 +60,18 @@ const MatchupContent = memo(function MatchupContent() {
                 { label: 'Fetch', onClick: doFetch, disabled: !sel, variant: 'default' },
                 { label: 'Clear', onClick: doClear, disabled: !mu.present && !pending, variant: 'ghost' },
             ]} />
-            {mu.present ? (
-                <Text size="xs" truncate className={cn(stale ? 'text-amber-400' : 'text-muted-foreground')}>
-                    {mu.side1?.rioName} {mu.side1?.wins}–{mu.side2?.wins} {mu.side2?.rioName}
-                    {' · '}{mu.totalGames} game{mu.totalGames === 1 ? '' : 's'}
-                    {stale ? ' (other match)' : ''}
+            {/* The fetched series itself is the panel's SUBJECT and the stage
+                draws it above this body (../subject). What stays here is what
+                the subject can't know: that the band on air was fetched for a
+                DIFFERENT match than the one selected above. */}
+            {stale ? (
+                <Text size="xs" truncate className="text-amber-400">
+                    On air for another match — Fetch to replace it.
                 </Text>
-            ) : (
+            ) : !mu.present && (
                 <Text size="xs" className="text-muted-foreground">
-                    Nothing fetched yet — both sides need Rio names. All-time series + last
-                    five games; fetch again after new games finish.
+                    Both sides need Rio names. All-time series + last five games;
+                    fetch again after new games finish.
                 </Text>
             )}
         </>

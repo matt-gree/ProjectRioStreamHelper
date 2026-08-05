@@ -51,16 +51,80 @@ Every broadcast element registers in `src/routes/production/elements.js` with:
 }
 ```
 
+### The subject — what the element is DRAWING
+
+`src/routes/production/subject.jsx`. Every other row in the console answers
+*what can I do to this*; the subject is the one that answers *what is this
+showing*. Before it, a panel could describe a source completely — its OBS name,
+its scene, its air state, its transport verbs — and never once say what was on
+it, and a panel titled "Roster · Team 2" could not tell a producer whether team
+2 was the player they meant (Rio reassigns away/home every game, so a side is a
+position, not an identity).
+
+- **It renders in exactly two places.** The **stage**, above the body: subject
+  before knobs. The **rail**, as row one of the direct flavor's default quick
+  face. Not the rack — that is a dense scannable monitor and already carries the
+  board/variant detail; a second line per row costs the density that makes it
+  one.
+- **It is a readout, never a control** — the only row in the kit with no
+  interaction (`SubjectRow`). No dot and no colour: the console's hues are spoken
+  for, so the tiering is type (subject in foreground, qualifier dimmed).
+  `tone="warn"` is the single exception and means what amber means everywhere
+  else — you would want to know before it is on air.
+- **It reads LIVE STATE, never settings or a stored preference.** The one
+  deliberate exception is a fed element, whose subject is explicitly the standing
+  intent (`resolveIntent` — what Push would show) and says so. If you want to
+  show a configured value, that is a stage row.
+- **Dispatch is by COMPONENT, not a map of hooks** (`SUBJECTS`), same as
+  `ELEMENT_QUICK_FACES` and `STAGE_BODIES` and for the same reason: choosing a
+  resolver by id would be a conditional hook call.
+- **Resolution runs most-specific, then by SHAPE**: a declared subject → container
+  → fed *and* container-scoped → fed → board scope → team variant → nothing.
+  The `containerScoped` branch is gated on `flavor === 'fed'` because **Roster is
+  both** a container member and a direct element with its own `?team=` source;
+  only a fed member ever rows under a container, so an ungated check handed the
+  Roster's own source the container's frame of reference and drew the wrong side.
+- **A scoped member takes its container from the PLACEMENT, not from
+  `useContainerOf`.** A container-scoped member may sit on several rosters — that
+  exception is what makes a mirrored pair buildable — so a lookup from the
+  element answers with whichever it finds first, which on a mirrored pair is a
+  coin flip between the two sides.
+- **The board for a variant source comes off the SOURCE's url** (`boardOfUrl`),
+  not the placement: `?team=` layouts are unregistered and take `scope: 'board'`
+  from nobody, so the placement's board is null while the URL still carries the
+  `?scoreboard=` the overlay itself reads.
+- **There is deliberately no `hasSubject()`.** The rail looks like it wants one —
+  budget a row before rendering it — and a first cut had one, which promptly
+  disagreed with `Subject` over a Stat Card on no roster. One fact, two homes,
+  and a predicate that cannot read the store can never be the second. It is also
+  unnecessary: a component rendering null produces no flex item, so a card with
+  no subject collapses to its single toggle. **The two-row cap is a budget, not a
+  quota.**
+- `battingSide` is a **third runtime** of `_team_role` (server/automations.py) /
+  `RioData.getTeamRole` (public/layout/lib/rio-data.js) — the same split the
+  scoreboard's blank-reason predicate lives with, pinned by `subject.test.jsx`.
+  Change one, change all three.
+- **It is five existing ideas named, not a new one.** The hit visualizer's
+  latest-hit line, the matchup's fetched series, the bracket's drawing-phase
+  note and the capture desk's score were each a hand-rolled subject in a stage
+  body, in four shapes, reachable from nowhere else. When a body wants to state
+  its content, that is this row — and if the statement is only true on the stage
+  (the matchup's "on air for another match"), that is what stays in the body.
+
 ### Quick face rules
 
 - **Every element must declare a quick face — or explicitly `null`.** Defaults
   are derivable, so most elements write nothing:
-  - `direct` → one toggle row (show/hide its source)
+  - `direct` → **subject + toggle row** (what it's drawing, then show/hide). A
+    card carrying only a visibility switch is a worse copy of the rack row it was
+    pinned from — the same control, minus the scene — and eleven of the console's
+    elements defaulted to exactly that, which made the rail look like a surface
+    for the two elements with custom faces that everything else was tolerated on.
   - `fed` with pickable content → the content pick + push/clear (picking ARMS
     the element's intent; Push airs it — see "Pick vs air" below)
   - `fed` with nothing to pick → container toggle + push/clear
-- Row vocabulary: `visibility` · `content` · `push` · `setting` (one of the
-  element's own live overlay settings). An element deviating from its flavor
+- Row vocabulary: `subject` · `visibility` · `content` · `push` · `setting` (one
+  of the element's own live overlay settings). An element deviating from its flavor
   default declares `quickFace` in the registry *and* a component in
   `ELEMENT_QUICK_FACES` (`quickface.jsx`) — both, or the two surfaces disagree.
 - **The two-row cap is hard.** No custom blocks on rail cards, ever — the rail
@@ -704,6 +768,7 @@ from. 28px control rhythm. Primitives:
 
 | Row | Shape | Typical use |
 |-----|-------|-------------|
+| Subject row | text + dimmed qualifier | what the element is drawing (readout only — see above) |
 | Toggle row | label + switch | source visibility, sub-plates, overlay band switches |
 | Select row | label + dropdown | board pick, content pick, spotlight scene |
 | Number row | label + number + suffix | spotlight hold, countdown minutes, gap width, band geometry |

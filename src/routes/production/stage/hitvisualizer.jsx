@@ -1,9 +1,8 @@
-import { memo, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { RotateCcw, Sparkles, Columns2 } from 'lucide-react';
 import { useObsStore } from '../../../context/obs';
 import { useSettingsStore, useStateStore } from '../../../context/store';
-import { Text } from '../../../components/ui/primitives';
 import { notifications } from '../../../lib/notify';
 import { ActionRow, NumberRow, SelectRow, ToggleRow } from '../kit';
 import { runObs } from '../controls';
@@ -107,24 +106,13 @@ function useHitViz(scoreboard = 1) {
     };
 }
 
-// What the latest captured hit was, so the actions below have a subject.
-const HitSummary = memo(function HitSummary({ v }) {
-    return (
-        <>
-            <Text size="xs" truncate className="text-muted-foreground">
-                {v.hasHit
-                    ? `Latest: ${v.hit.batter || '—'}${v.hit.result ? ` · ${v.hit.result}` : ''}${v.hit.distance != null ? ` · ${v.hit.distance}m` : ''}`
-                    : 'No hit captured yet'}
-            </Text>
-            {v.hit && v.hit.valid === false && v.hit.warning && (
-                <Text size="xs" truncate className="text-amber-500" title={v.hit.warning}>
-                    ⚠ Sim diverges
-                </Text>
-            )}
-        </>
-    );
-});
-
+/*
+ * The latest-hit line this body used to render as its own `HitSummary` is now
+ * the panel's SUBJECT (../subject), drawn above every body by the stage — which
+ * is also what puts it on a pinned rail card, where "is there a hit to replay"
+ * is the whole question. Four bodies had each invented that line separately;
+ * this was one of them.
+ */
 export default function HitVisualizerStage({ board, placement, scoreboard = board ?? 1 }) {
     // One hook instance for the whole panel: the actions and the config below
     // are the same decision surface and must not drift apart.
@@ -132,7 +120,6 @@ export default function HitVisualizerStage({ board, placement, scoreboard = boar
 
     return (
         <>
-            <HitSummary v={v} />
             <ActionRow actions={[
                 { label: 'Replay', icon: RotateCcw, disabled: !v.hasHit, onClick: v.replay },
                 {

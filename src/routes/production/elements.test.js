@@ -46,7 +46,7 @@ describe('element registry invariants', () => {
 });
 
 describe('console contract (production-console-contract skill)', () => {
-    const KNOWN_ROWS = new Set(['visibility', 'content', 'push', 'setting']);
+    const KNOWN_ROWS = new Set(['subject', 'visibility', 'content', 'push', 'setting']);
 
     it('every element resolves a quick face or an explicit null — never undefined', () => {
         for (const e of ELEMENTS) {
@@ -65,8 +65,15 @@ describe('console contract (production-console-contract skill)', () => {
         }
     });
 
-    it('flavor defaults: direct → visibility toggle, fed → content pick + push', () => {
-        expect(quickFaceFor({ flavor: 'direct' })).toEqual({ rows: ['visibility'] });
+    /*
+     * The direct default leads with the SUBJECT (../subject): a card carrying
+     * only a visibility switch is a worse copy of the rack row it was pinned
+     * from — the same control, minus the scene. An element with no live content
+     * renders no subject row and degrades to the toggle alone, so two rows
+     * stays a budget rather than a quota.
+     */
+    it('flavor defaults: direct → subject + visibility, fed → content pick + push', () => {
+        expect(quickFaceFor({ flavor: 'direct' })).toEqual({ rows: ['subject', 'visibility'] });
         expect(quickFaceFor({ flavor: 'fed' })).toEqual({ rows: ['content', 'push'] });
     });
 

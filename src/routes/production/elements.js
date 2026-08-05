@@ -1,23 +1,24 @@
 /*
  * Production page — the dev-curated set of ELEMENTS (no authoring UI yet).
  *
- * Vocabulary (memory: production-elements-glossary):
+ * Vocabulary (production-console-contract skill):
  *   - Element        : a pre-designed thing the producer puts on the broadcast,
  *                      listed on the Production page under the OBS scene its
  *                      source lives in.
  *   - Direct element : owns a DEDICATED source; fire = show/hide it.
- *   - Fed element    : its content is fed to a SHARED source (the TARGET);
- *                      default target + streamer override. Fed elements with a
- *                      `feed` kind also render a content picker (e.g. 'stats' =
- *                      choose which roster character), writing the pick to
- *                      `production.feed.<id>` in live State for the shared
- *                      overlay to render. Without a `feed` kind, the card just
- *                      shows/hides the target.
+ *   - Fed element    : has no source of its own — its content is pushed into a
+ *                      CONTAINER, the one whose roster names it (./containers).
+ *                      Membership lives on the container and is exclusive; an
+ *                      element on no roster has nowhere to be pushed, which is a
+ *                      real state every surface reports rather than defaulting
+ *                      around. A `feed` kind additionally names a content picker
+ *                      ('stats' = which roster character), and the pick is
+ *                      written to `production.feed.container.{id}`.
  *
  * Binding is by URL: each element matches the streamer's OBS browser source(s)
- * whose URL is its PRSH layout ("set the layout with them"), so there's no
- * manual wiring in the common case. Matching is scoped to the current PROGRAM
- * scene, which is also where firing happens.
+ * whose URL is its PRSH layout, so there's no manual wiring in the common case.
+ * Rows are derived SOURCE → ROW, per scene (./placements) — matching is not
+ * scoped to the program scene, and nothing searches from an element to a source.
  *
  * Console contract (production-console-contract skill) — the registry also
  * carries each element's console declaration:
@@ -35,12 +36,13 @@
  * bolted on:
  *
  *   URL-scoped  — the board is fixed by the source (`?scoreboard=N`). These get
- *                 `scope: 'board'`, a board picker, and per-board settings.
+ *                 `scope: 'board'` and per-board settings, and two of them in
+ *                 one scene are two instances (./instances). There is no board
+ *                 picker inside a panel: switching board means selecting the
+ *                 other rack row.
  *   Feed-scoped — the board is fixed by the pushed CONTENT ({ element,
  *                 scoreboard } in the feed payload). The shared container is
  *                 board-agnostic on purpose, so fed elements never take `scope`.
- *
- * Which is why `boundIn` discriminates instances for direct elements only.
  */
 
 export const ELEMENTS = [
@@ -375,13 +377,21 @@ export const ELEMENTS = [
 
 // ── Console contract resolvers ─────────────────────────────────────────────
 // Quick-face row vocabulary (interpreted by the rail when it renders a card):
+//   'subject'    — what the element is currently DRAWING, read from live state
+//                  (../subject). A readout, never a control.
 //   'visibility' — toggle the element's source (direct default)
 //   'content'    — pick what feeds the shared container (uses el.feed)
 //   'push'       — push the picked content to the container
 //   'setting'    — one of the element's own live overlay settings (a band
 //                  switch, the scorecard's score block)
+//
+// The direct default leads with the subject because a card carrying only a
+// visibility switch is a worse copy of the rack row it was pinned from — the
+// same control, minus the scene. An element with no live content of its own
+// renders no subject row and degrades to the toggle alone; two rows is the
+// budget, not the quota.
 const QUICK_FACE_DEFAULTS = {
-    direct: { rows: ['visibility'] },
+    direct: { rows: ['subject', 'visibility'] },
     fed: { rows: ['content', 'push'] },
 };
 

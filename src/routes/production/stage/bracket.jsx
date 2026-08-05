@@ -11,21 +11,18 @@ import { useBracketDesk } from '../desks/bracket';
  * leaving the producer to discover it in the program feed.
  */
 
-const BRACKET_TYPES = {
-    DOUBLE_ELIMINATION: 'Double elimination',
-    SINGLE_ELIMINATION: 'Single elimination',
-    ROUND_ROBIN: 'Round robin',
-};
-
 export default function BracketStage({ element }) {
     const d = useBracketDesk();
     return (
         <>
             <DirectStage element={element} />
+            {/* WHICH phase is drawn is the panel's subject and the stage draws
+                it above this body (../subject). What is left to say is where to
+                change it — one workflow, one place. */}
             <Text size="xs" className="border-t border-border/60 pt-2 text-muted-foreground">
                 {d.loaded
-                    ? <>Drawing <b>{d.phaseName}</b>{d.type ? ` · ${BRACKET_TYPES[d.type] || d.type}` : ''}. Switch phase or re-pull from the Bracket desk.</>
-                    : <>No bracket loaded — this source will render empty. Pick a phase on the Bracket desk.</>}
+                    ? 'Switch phase or re-pull from the Bracket desk.'
+                    : 'Pick a phase on the Bracket desk to give this source something to draw.'}
             </Text>
         </>
     );

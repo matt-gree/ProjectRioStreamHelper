@@ -5,6 +5,7 @@ import { FEED_OPTION_HOOKS, flattenGroups } from './feed-pickers';
 import { quickFaceFor } from './elements';
 import { useContainerPush } from './feeds';
 import { useConsoleOffline } from './placements';
+import { Subject } from './subject';
 import { SourceToggleRow } from './stage/generic';
 import { ScorecardModeRow, useScorecard } from './stage/scorecard';
 import { EventHeaderBandRows, useEventHeader } from './stage/eventheader';
@@ -31,7 +32,12 @@ function whereLabel(placement, what) {
     return what ? `${what} ${where}` : where[0].toUpperCase() + where.slice(1);
 }
 
-// Direct element: the one decision that matters live — is it on the broadcast.
+/*
+ * Direct element, row 2: the one decision that matters live — is it on the
+ * broadcast. Kept as its own single-row component because the custom faces
+ * (Scorecard) compose it as their state row and must not inherit a subject on
+ * top of their own second row.
+ */
 const DirectQuickFace = memo(function DirectQuickFace({ element: _element, placement }) {
     const offline = useConsoleOffline();
     if (!placement?.item) {
@@ -138,6 +144,31 @@ const FedQuickFace = memo(function FedQuickFace({ element, placement }) {
         : <PushOnlyFedQuickFace element={element} placement={placement} />;
 });
 
+/*
+ * The direct flavor's DEFAULT face: what it's drawing, then whether it's on.
+ *
+ * A card that is only an on/off switch is a worse copy of the rack row it was
+ * pinned from — same control, minus the scene it sits in. Eleven of the
+ * console's elements defaulted to exactly that, which made the rail look like a
+ * surface for one kind of element (Scorecard, Event Header) that everything
+ * else was tolerated on. The subject is what the rail can say that the rack
+ * deliberately won't: the rack is a dense scannable monitor and a second line
+ * per row would cost it that, while a card has the height and is already
+ * opt-in.
+ *
+ * `Subject` renders nothing for an element with no live content of its own, so
+ * those cards degrade to the single toggle they were, rather than carrying an
+ * empty row — the two-row cap is a budget, not a quota.
+ */
+const DefaultDirectQuickFace = memo(function DefaultDirectQuickFace({ element, placement }) {
+    return (
+        <>
+            <Subject placement={placement} />
+            <DirectQuickFace element={element} placement={placement} />
+        </>
+    );
+});
+
 // Capture desk: pick the board, capture. The only desk with a compliant face.
 const CaptureQuickFace = memo(function CaptureQuickFace() {
     const d = useCaptureDesk();
@@ -219,5 +250,5 @@ export const QuickFace = memo(function QuickFace({ element, placement, board }) 
     if (Custom) return <Custom element={element} placement={placement} board={board} />;
     return element.flavor === 'fed'
         ? <FedQuickFace element={element} placement={placement} />
-        : <DirectQuickFace element={element} placement={placement} />;
+        : <DefaultDirectQuickFace element={element} placement={placement} />;
 });

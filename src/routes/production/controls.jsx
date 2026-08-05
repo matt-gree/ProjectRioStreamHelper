@@ -2,17 +2,20 @@ import { memo } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { useSettingsStore, useStateStore } from '../../context/store';
 import { stageOrRun } from '../../context/staging';
-import { Stack, Group, Text } from '../../components/ui/primitives';
-import { Switch } from '../../components/ui/switch';
+import { Stack, Group } from '../../components/ui/primitives';
 import { SimpleTooltip } from '../../components/ui/simple-tooltip';
 import { notifications } from '../../lib/notify';
 import { cn } from '../../lib/utils';
-import { setSourceVisibility, useDisplayedEnabled } from './bindings';
 
 /*
- * Staging-aware controls shared by the Production page's surfaces (stage
- * bodies, desk panels, and the legacy grid faces). Moved verbatim out of
- * production.jsx (console slice 4).
+ * Staging-aware controls shared by the Production page's surfaces (stage bodies
+ * and desk panels).
+ *
+ * A `VisibilityRow` lived here too — a pre-kit label+switch from the card-grid
+ * era, superseded twice over by the kit's ToggleRow (via `SourceToggleRow`) and
+ * by the source strip's Air slot, and referenced by nothing. Show/hide is the
+ * header strip's job for every element; if you need it in a body, you are
+ * writing a row the contract says belongs in the header.
  */
 
 // Run an OBS control action, surfacing failures as a toast (e.g. transition
@@ -88,23 +91,3 @@ export const StagedDot = memo(function StagedDot({ show, className }) {
     );
 });
 
-// Show/hide an OBS source (staging-aware). The console's toggle-row shape:
-// label (+ optional sub) · staged dot · switch.
-export const VisibilityRow = memo(function VisibilityRow({ label, sub, item, sceneName }) {
-    const { enabled, staged } = useDisplayedEnabled(sceneName, item);
-    return (
-        <label className="flex items-center justify-between gap-3">
-            <Stack gap="none">
-                <Group gap="xs" className="items-center">
-                    <Text size="sm" className="text-foreground">{label}</Text>
-                    <StagedDot show={staged} />
-                </Group>
-                {sub && <Text size="xs" className="text-muted-foreground">{sub}</Text>}
-            </Stack>
-            <Switch
-                checked={enabled}
-                onCheckedChange={(v) => setSourceVisibility(sceneName, item, v)}
-            />
-        </label>
-    );
-});

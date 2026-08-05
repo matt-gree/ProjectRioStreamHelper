@@ -156,12 +156,21 @@ export const ContainerHostNote = memo(function ContainerHostNote({ element }) {
     );
 });
 
-// Fed element: the content decision (what to push) over the target config.
+/*
+ * Fed element: the content decision (what to push) over the target config.
+ *
+ * An element with no picker is NOT an unfinished one. A container-scoped member
+ * (Stat Card) has nothing to choose — it draws whoever the container's own scope
+ * has on the field — so the honest thing to render is what it will draw, which
+ * the panel's SUBJECT already says (../subject), and nothing here. "No content
+ * options yet" described the absence of a control and read as a missing feature.
+ */
 export const FedStage = memo(function FedStage({ element }) {
     const picker = element.feed === 'stats' ? <StatsFeedPicker element={element} />
         : element.feed === 'postgamecallout' ? <PostgameCalloutPicker element={element} />
             : element.feed === 'postgamevs' ? <PostgameVsPicker element={element} />
-                : <Text size="xs" className="text-muted-foreground">No content options yet.</Text>;
+                : element.containerScoped ? null
+                    : <Text size="xs" className="text-muted-foreground">No content options yet.</Text>;
     return (
         <>
             {picker}

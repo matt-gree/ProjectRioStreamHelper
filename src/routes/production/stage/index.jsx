@@ -7,6 +7,7 @@ import {
     usePlacementLabel,
 } from '../placements';
 import { SourceStrip } from '../sourcestrip';
+import { Subject } from '../subject';
 import { DirectStage, FedStage } from './generic';
 import { ElementStyleSettings } from './overlay-settings';
 import { IntroRow } from './intro';
@@ -99,6 +100,11 @@ const ElementStage = memo(function ElementStage({ placement, title, pinned, onPi
                 the stage's own column is the widest space on the page. Width is
                 what a preview is worth; a side-by-side split spends it. */}
             <div className="flex min-w-0 flex-col gap-1.5">
+                {/* WHAT this is drawing, before WHAT you can do to it. Every
+                    other row on the panel is a control and the header strip is
+                    transport; without this the stage could describe a source
+                    fully and never once say what was on it (../subject). */}
+                <Subject placement={placement} />
                 <Body element={element} board={board} placement={placement} />
                 {/* The body surfaces the settings a producer reaches for live;
                     this is the catch-all so every remaining element setting is
