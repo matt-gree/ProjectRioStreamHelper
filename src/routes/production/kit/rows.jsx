@@ -1,4 +1,4 @@
-import { memo, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, RotateCcw } from 'lucide-react';
 import { Switch } from '../../../components/ui/switch';
 import { Button } from '../../../components/ui/button';
@@ -18,9 +18,19 @@ import { KIT_INPUT } from './tokens';
  * Rows are presentational: callers own state and the staging gateway
  * (stageOrRun) and pass plain values/handlers down. `staged` renders the
  * amber pending tint used app-wide.
+ *
+ * A row's label is drawn beside its control, not wired to it — the label is a
+ * <Text> span, so nothing associates the two. `named()` closes that: the
+ * control takes the label as its accessible name, which is what makes a field
+ * findable by what it is (by a screen reader, and by a test) rather than only
+ * by the placeholder it loses the moment it holds a value.
  */
 
 const ROW = 'flex min-h-7 items-center gap-2';
+
+// Only a string label can be an accessible name; a node label (an icon, a
+// composed fragment) is left to the caller's own aria-label.
+const named = (label) => (typeof label === 'string' && label ? label : undefined);
 
 const normalize = (opts = []) =>
     opts.map((o) => (typeof o === 'string' ? { label: o, value: o } : o));
@@ -54,6 +64,7 @@ export const SelectRow = memo(function SelectRow({
             <select
                 className={cn(KIT_INPUT, 'min-w-0 flex-1', staged && 'border-amber-400/60 text-amber-400')}
                 value={value ?? ''}
+                aria-label={named(label)}
                 disabled={disabled}
                 onChange={(e) => onChange?.(e.target.value)}
             >
@@ -81,6 +92,7 @@ export const NumberRow = memo(function NumberRow({
             )}
             <input
                 type="number" min={min} max={max} step={step} disabled={disabled}
+                aria-label={named(label)}
                 value={value ?? ''}
                 onChange={(e) => onChange?.(e.target.value === '' ? null : Number(e.target.value))}
                 className={cn(KIT_INPUT, 'w-20', staged && 'border-amber-400/60 text-amber-400')}
@@ -90,13 +102,71 @@ export const NumberRow = memo(function NumberRow({
     );
 });
 
+/*
+ * Keystrokes are LOCAL; commits are not.
+ *
+ * A console text field writes to State or Settings, and both broadcast to every
+ * overlay in the rig. Committing per keystroke meant typing "Winners Final"
+ * sent thirteen writes — and on the receiving end each one changed the lower
+ * third's content identity, so its intro animation replayed on every letter
+ * (user report, 2026-08-01). It also spends the socket budget of an app whose
+ * whole job is to stay out of the game's way.
+ *
+ * So the input echoes what you type immediately and the write lands once you
+ * stop. Three rules keep that from eating an edit:
+ *   • blur commits now — tabbing away is done typing;
+ *   • unmount commits now — selecting another lower-third slot mid-word
+ *     destroys this field, and the keystrokes still have to land;
+ *   • an upstream change is only adopted while nothing is pending, so a
+ *     reorder or another surface's edit still reaches the field, but never
+ *     overwrites a half-typed word.
+ */
+function useDebouncedText(value, onChange, ms) {
+    const [draft, setDraft] = useState(value ?? '');
+    const draftRef = useRef(draft);
+    const timer = useRef(null);
+    const pending = useRef(false);
+    const cb = useRef(onChange);
+    cb.current = onChange;
+
+    useEffect(() => {
+        if (pending.current) return;
+        draftRef.current = value ?? '';
+        setDraft(value ?? '');
+    }, [value]);
+
+    const commit = useCallback(() => {
+        if (timer.current) { clearTimeout(timer.current); timer.current = null; }
+        if (!pending.current) return;
+        pending.current = false;
+        cb.current?.(draftRef.current);
+    }, []);
+
+    useEffect(() => commit, [commit]);
+
+    const type = useCallback((v) => {
+        draftRef.current = v;
+        setDraft(v);
+        pending.current = true;
+        if (timer.current) clearTimeout(timer.current);
+        timer.current = setTimeout(() => {
+            timer.current = null;
+            pending.current = false;
+            cb.current?.(v);
+        }, ms);
+    }, [ms]);
+
+    return [draft, type, commit];
+}
+
 // label · text input — a short authored string (header title, field separator,
-// a card's custom bottom line). Commits on change like the rest of the kit;
-// the settings tier that feeds it keys writes by the same key each keystroke,
-// so a staged edit is one pending entry that updates in place, not a storm.
+// a card's custom bottom line). Debounced by default (see useDebouncedText);
+// pass `debounceMs={0}` for a field that must land on the keystroke.
 export const TextRow = memo(function TextRow({
-    label, value, onChange, placeholder, disabled, staged, className,
+    label, value, onChange, placeholder, disabled, staged, debounceMs = 300, className,
 }) {
+    const [draft, type, commit] = useDebouncedText(value, onChange, debounceMs);
+    const deferred = debounceMs > 0;
     return (
         <div className={cn(ROW, className)}>
             {label != null && (
@@ -106,8 +176,10 @@ export const TextRow = memo(function TextRow({
             )}
             <input
                 type="text" disabled={disabled} placeholder={placeholder}
-                value={value ?? ''}
-                onChange={(e) => onChange?.(e.target.value)}
+                aria-label={named(label)}
+                value={deferred ? draft : (value ?? '')}
+                onChange={(e) => (deferred ? type(e.target.value) : onChange?.(e.target.value))}
+                onBlur={deferred ? commit : undefined}
                 className={cn(KIT_INPUT, 'min-w-0 flex-1', staged && 'border-amber-400/60 text-amber-400')}
             />
         </div>

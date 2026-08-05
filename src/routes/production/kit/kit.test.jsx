@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import { TooltipProvider } from '../../../components/ui/tooltip';
 import { Eye, EyeOff } from 'lucide-react';
-import { chipFor, StateChip, ListRow, QuickCard, IconToggle, NumberRow } from './index';
+import { chipFor, StateChip, ListRow, QuickCard, IconToggle, NumberRow, TextRow } from './index';
 
 afterEach(cleanup);
 
@@ -195,6 +195,69 @@ describe('NumberRow', () => {
         expect(onChange).toHaveBeenCalledWith(2000);
         fireEvent.change(input, { target: { value: '' } });
         expect(onChange).toHaveBeenLastCalledWith(null);
+    });
+});
+
+/*
+ * A console text field writes to State or Settings, and both broadcast to every
+ * overlay. Committing per keystroke sent one write per letter — which the lower
+ * third read as a content change and answered by replaying its intro animation,
+ * so the band re-animated on every character the producer typed.
+ *
+ * The field therefore echoes locally and writes once you stop. What these pin
+ * is the part that makes that safe: nothing typed is ever lost.
+ */
+describe('TextRow debounce', () => {
+    afterEach(() => vi.useRealTimers());
+
+    it('writes once the typing stops, not once per keystroke', () => {
+        vi.useFakeTimers();
+        const onChange = vi.fn();
+        ui(<TextRow label="Title" value="" onChange={onChange} />);
+        const input = screen.getByLabelText('Title');
+        for (const v of ['W', 'Wi', 'Win']) fireEvent.change(input, { target: { value: v } });
+
+        expect(onChange).not.toHaveBeenCalled();
+        expect(input).toHaveValue('Win');       // the field still keeps up
+
+        vi.advanceTimersByTime(400);
+        expect(onChange).toHaveBeenCalledTimes(1);
+        expect(onChange).toHaveBeenCalledWith('Win');
+    });
+
+    it('commits on blur rather than making you wait', () => {
+        vi.useFakeTimers();
+        const onChange = vi.fn();
+        ui(<TextRow label="Title" value="" onChange={onChange} />);
+        const input = screen.getByLabelText('Title');
+        fireEvent.change(input, { target: { value: 'Finals' } });
+        fireEvent.blur(input);
+        expect(onChange).toHaveBeenCalledWith('Finals');
+    });
+
+    // Selecting another lower-third slot mid-word destroys this field. The
+    // keystrokes still have to land, or the debounce quietly eats edits.
+    it('commits a pending edit when the field is unmounted', () => {
+        vi.useFakeTimers();
+        const onChange = vi.fn();
+        const { unmount } = ui(<TextRow label="Title" value="" onChange={onChange} />);
+        fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Half typed' } });
+        unmount();
+        expect(onChange).toHaveBeenCalledWith('Half typed');
+    });
+
+    // An upstream change (a slot reorder, another surface) must reach the field
+    // — but never over the top of a word in progress.
+    it('takes an upstream value, unless something is pending', () => {
+        vi.useFakeTimers();
+        const onChange = vi.fn();
+        const { rerender } = ui(<TextRow label="Title" value="one" onChange={onChange} />);
+        rerender(<TooltipProvider><TextRow label="Title" value="two" onChange={onChange} /></TooltipProvider>);
+        expect(screen.getByLabelText('Title')).toHaveValue('two');
+
+        fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'typing' } });
+        rerender(<TooltipProvider><TextRow label="Title" value="three" onChange={onChange} /></TooltipProvider>);
+        expect(screen.getByLabelText('Title')).toHaveValue('typing');
     });
 });
 

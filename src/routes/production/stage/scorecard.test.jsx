@@ -54,6 +54,7 @@ describe('Scorecard stage', () => {
         ui('scorecard:2');
         const input = screen.getByPlaceholderText('Project Rio'); // titleText placeholder
         fireEvent.change(input, { target: { value: 'Finals' } });
+        fireEvent.blur(input); // kit text rows debounce; blur commits now
         expect(useSettingsStore.getState()?.overlays?.scorecard?.[2]?.titleText).toBe('Finals');
         expect(useSettingsStore.getState()?.overlays?.scorecard?.[1]).toBeUndefined();
     });

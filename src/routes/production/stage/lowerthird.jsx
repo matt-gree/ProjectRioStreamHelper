@@ -1,15 +1,14 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import { RotateCcw } from 'lucide-react';
+import { Eye, EyeOff, RotateCcw } from 'lucide-react';
 import { useStateStore } from '../../../context/store';
 import { useStagingStore, confirmModeEnabled } from '../../../context/staging';
 import { Stack, Group, Text } from '../../../components/ui/primitives';
 import { Button } from '../../../components/ui/button';
-import { Switch } from '../../../components/ui/switch';
 import { notifications } from '../../../lib/notify';
 import { cn } from '../../../lib/utils';
 import {
-    ActionRow, KIT_INPUT, KIT_INPUT_FLOW, NumberRow, SegmentedRow, SelectRow,
+    ActionRow, FieldRow, IconToggle, KIT_INPUT, NumberRow, SegmentedRow, SelectRow, TextRow,
 } from '../kit';
 import { MoveButtons, StagedDot, stageStateSet } from '../controls';
 import { matchDisplayLabel } from '../matches';
@@ -18,17 +17,37 @@ import { BracketPhasePicker, useBracketDesk } from '../desks/bracket';
 import { DirectStage } from './generic';
 
 /*
+ * DIRECTION CONTRACT
+ *
+ * THESIS: The break band is a rundown, and this panel is its sheet. It refuses
+ * the card-grid arrangement — five bespoke cards reflowing 1→2→3→5 columns,
+ * which lied about the band's unequal theme-owned widths and lost slot order
+ * at every narrow width.
+ * OWN-WORLD: The console's existing dark row kit, unchanged. One ruled sheet,
+ * not five cards; strict column rails; mono position numerals and mono timing.
+ * STORY: The producer reads the band's shape off the ribbon, picks the segment
+ * they mean, and edits it in place beneath.
+ * FIRST VIEWPORT: A proportional band ribbon carrying all five slots — lit on
+ * air, dimmed when off, dashed when empty — flanked by ◀ ▶ that move the
+ * selected slot; beneath it, that slot's editor.
+ * FORM: Rundown sheet; candidate 4 of the grounded list; seed key 40048ccf.
+ * The ribbon-as-selector and its ◀ ▶ are USER-PINNED (2026-07-31), which beats
+ * the roll: the sheet of five open rows became this master/detail.
+ * FINISH: unreviewed and undocumented is unfinished; this build ends with the
+ * finish review, the verdict, and DESIGN.md.
+ */
+
+/*
  * Lower Third (Break) stage — a direct element with rich authoring: the band
  * is FIVE independently toggleable SLOTS (lowerthird.slots.1..5, left→right),
  * each carrying one content type — logo · match · scorebox · merch · clock ·
- * message · bracket.
+ * message · bracket, plus the structural `space`.
  *
- * The stage lays those slots out as five COLUMNS in the same left→right order
- * the band renders, so the editor is a scale model of what goes on air: slot 3
- * sits where slot 3 sits. Every slot's editor is open at all times — the panel
- * has the width to show them, and a producer mid-break should never have to
- * remember which collapsed row holds the countdown. Reorder is ◀ ▶ for the
- * same reason: the arrows point the way the content moves on screen.
+ * Rows are the authoring surface and they never wrap: a row's fields live in
+ * its own content cell, so a taller row shares the sheet's column rails
+ * instead of ragging the row beside it. Every slot's editor is open at all
+ * times — a producer mid-break should never have to remember which collapsed
+ * row holds the countdown — which the full row width now affords honestly.
  *
  * Values are written (through the staging gateway) to lowerthird.* state,
  * which the SVG overlay renders; segment widths/looks belong to the active
@@ -36,7 +55,6 @@ import { DirectStage } from './generic';
  * toggle. Clock START/PAUSE/RESET are transport — momentary, always immediate
  * — while slot content/config stages like other content.
  */
-const LT_INPUT = KIT_INPUT_FLOW;
 
 const LT_SLOT_COUNT = 5;
 const LT_TYPE_OPTIONS = [
@@ -50,6 +68,24 @@ const LT_TYPE_OPTIONS = [
     { value: 'bracket', label: 'Bracket' },
     { value: 'space', label: 'Space (split)' },
 ];
+
+const LT_TYPE_SHORT = {
+    logo: 'Logo', match: 'Match', scorebox: 'Scorebox', merch: 'Merch',
+    clock: 'Clock', message: 'Message', bracket: 'Bracket', space: 'Space',
+};
+
+/*
+ * Ribbon proportions ONLY. Read off the segment templates in
+ * lowerthird-mount.js (a match segment's names run to data-maxw 420 with
+ * scores at x=500; a logo's title stops around 215), they put the five slots
+ * in roughly the ratio the band gives them. The THEME owns the real widths —
+ * so this is orientation, never a promise of pixels, and the caption under the
+ * ribbon says so.
+ */
+const TYPE_WEIGHT = {
+    logo: 1.4, match: 3.4, scorebox: 2.8, merch: 2.7,
+    clock: 1.4, message: 3, bracket: 2.6,
+};
 
 // Curated time zones for the time-of-day clock. '' = the streaming machine's
 // local zone (the default). IANA ids are passed straight to Intl; the overlay
@@ -130,6 +166,149 @@ function fmtRemaining(ms) {
     return h > 0 ? `${h}:${p(m)}:${p(ss)}` : `${m}:${p(ss)}`;
 }
 
+/*
+ * One line saying what a segment is actually carrying — the thing that makes a
+ * taller ribbon worth its height. A type name alone ("Merch", "Clock") is the
+ * same on a band with four slots as on a band with one; the CONTENT is what a
+ * producer is checking when they glance at the rundown mid-break.
+ */
+function slotSummary(slot, type, ctx) {
+    const t = (v) => (v == null ? '' : String(v).trim());
+    switch (type) {
+        case 'logo': return t(slot.title) || 'No caption';
+        case 'match': return slot.matchId != null && slot.matchId !== ''
+            ? matchDisplayLabel(ctx.matches, String(slot.matchId)) : 'No match picked';
+        case 'scorebox': return ctx.boardLabel(parseInt(slot.scoreboard) || ctx.firstBoard);
+        case 'merch': return t(slot.title) || t(slot.image) || 'Nothing picked';
+        case 'clock': return CLOCK_MODE_SHORT[(slot.clock || {}).mode || 'off'];
+        case 'message': return t(slot.title) || 'No title';
+        case 'bracket': return t(slot.title) || 'Loaded phase';
+        case 'space': return slot.width ? `${slot.width}px gap` : 'Flexible';
+        default: return 'Pick a type';
+    }
+}
+
+const CLOCK_MODE_SHORT = {
+    off: 'Off', countdown: 'Countdown', countup: 'Count up', clock: 'Time of day',
+};
+
+/*
+ * The band ribbon — the panel's control surface, and a scale model of the band.
+ *
+ * Every one of the five slots has a segment here, because the ribbon is how a
+ * slot is REACHED: an empty slot with no segment would be a slot the producer
+ * could never fill. A segment is lit when it is typed AND on (the mount's own
+ * gate, `slots.filter(s => s.enabled && s.type)`), dimmed when it is filled but
+ * off, and dashed when it is empty. A Space segment renders as the flexible gap
+ * it is, so the split into corner-pushed islands still reads at a glance.
+ *
+ * THE EYE LIVES HERE, not in the editor below. Two reasons it moved (user,
+ * 2026-08-01): a switch in the panel put the STATE (lit/dim, on the ribbon) and
+ * its CONTROL on opposite sides of the page; and calling it "on air" borrowed
+ * the phrase that already means something else here — the band's OBS source is
+ * what goes on air, and a slot only decides whether it is in the band. Show and
+ * hide is the honest verb, and the ribbon is where you can see the result.
+ *
+ * Selecting a segment is what opens its editor below; the ◀ ▶ at the ribbon's
+ * ends move the selected slot along the band, so reordering happens on the
+ * picture of the band rather than in a list beside it.
+ */
+const BandRibbon = memo(function BandRibbon({ selected, onSelect }) {
+    const { matches, slot, val, isStaged, setKey, swap } = useLowerThird();
+    const active = useActiveBoards();
+    const boardLabel = useBoardLabel();
+    const ctx = { matches, boardLabel, firstBoard: active[0] };
+
+    const segs = [];
+    for (let i = 1; i <= LT_SLOT_COUNT; i++) {
+        const s = slot(i);
+        const type = val(`slots.${i}.type`, s.type) || '';
+        const on = !!val(`slots.${i}.enabled`, s.enabled);
+        segs.push({
+            i,
+            type,
+            on,
+            live: !!type && on,
+            summary: slotSummary(s, type, ctx),
+            staged: isStaged(`slots.${i}`) || isStaged(`slots.${i}.enabled`) || isStaged(`slots.${i}.type`),
+        });
+    }
+
+    return (
+        <Group gap="xs" className="flex-nowrap items-center">
+            <MoveButtons
+                axis="x" label={`slot ${selected}`}
+                canUp={selected > 1} canDown={selected < LT_SLOT_COUNT}
+                onUp={() => swap(selected, selected - 1)}
+                onDown={() => swap(selected, selected + 1)}
+            />
+            <div
+                role="tablist" aria-label="Band preview"
+                className="flex min-w-0 flex-1 items-stretch gap-1 rounded-md border border-border bg-card/40 p-1"
+            >
+                {segs.map(({ i, type, on, live, summary, staged }) => {
+                    const isSpace = type === 'space';
+                    const isSel = i === selected;
+                    return (
+                        // A card, not a button: the eye is a control of its own
+                        // and a button inside a button is invalid — so the tab
+                        // takes the card's body and the eye sits beside it.
+                        <div
+                            key={i}
+                            style={{ flex: isSpace ? 1.2 : (TYPE_WEIGHT[type] || 1.2) }}
+                            className={cn(
+                                'flex min-w-0 items-center gap-1 rounded pr-1 transition-colors',
+                                isSpace && 'border border-dashed border-border/70',
+                                !type && !isSpace && 'border border-dashed border-border/50',
+                                type && !isSpace && (live ? 'bg-rio-500/15' : 'bg-card'),
+                                isSel && 'ring-1 ring-rio-400',
+                            )}
+                        >
+                            <button
+                                type="button" role="tab" aria-selected={isSel}
+                                aria-label={`Slot ${i}${type ? ` — ${LT_TYPE_SHORT[type]}` : ' — empty'}`}
+                                onClick={() => onSelect(i)}
+                                className="flex min-h-12 min-w-0 flex-1 flex-col justify-center gap-0.5 rounded py-1 pl-2 text-left"
+                            >
+                                <Group gap="none" className="min-w-0 flex-nowrap items-center gap-1.5">
+                                    {/* The position, so a segment maps to the
+                                        "Slot 3" the editor below names. */}
+                                    <Text
+                                        size="xs" span
+                                        className="shrink-0 font-mono tabular-nums text-[10px] text-muted-foreground/70"
+                                    >
+                                        {i}
+                                    </Text>
+                                    <Text
+                                        size="xs" span truncate
+                                        className={cn(
+                                            'min-w-0',
+                                            !type && 'text-muted-foreground',
+                                            type && (live ? 'text-rio-300' : 'text-muted-foreground'),
+                                        )}
+                                    >
+                                        {type ? LT_TYPE_SHORT[type] : 'Empty'}
+                                    </Text>
+                                    <StagedDot show={staged} />
+                                </Group>
+                                <Text span truncate className="min-w-0 text-[10px] text-muted-foreground/80">
+                                    {summary}
+                                </Text>
+                            </button>
+                            <IconToggle
+                                icon={Eye} offIcon={EyeOff} on={on} disabled={!type}
+                                label={type ? `${on ? 'Hide' : 'Show'} slot ${i}` : `Slot ${i} is empty`}
+                                onClick={() => setKey(`slots.${i}.enabled`, !on,
+                                    `Lower third: slot ${i} ${!on ? 'shown' : 'hidden'}`)}
+                            />
+                        </div>
+                    );
+                })}
+            </div>
+        </Group>
+    );
+});
+
 // Transport for slot i's clock (lowerthird.slots.{i}.clock.*). Transport acts
 // on the LIVE clock — you can't run a countdown that isn't live yet, so a
 // staged mode change doesn't surface here until committed.
@@ -178,16 +357,16 @@ const ClockControl = memo(function ClockControl({ i }) {
 
     if (mode === 'off') return null;
     if (mode === 'clock') {
-        return <Text size="xs" className="text-muted-foreground">Showing time of day.</Text>;
+        return <Text size="xs" className="text-muted-foreground">Time of day</Text>;
     }
     const isDown = mode === 'countdown';
     // Transport is momentary — clock control never stages (see staging.js).
     return (
-        <div className="flex min-h-7 items-center gap-2">
-            <Text size="sm" className="min-w-[64px] font-mono tabular-nums text-foreground">
+        <Stack gap="none" className="min-w-0">
+            <Text size="sm" className="font-mono tabular-nums text-foreground">
                 {fmtRemaining(isDown ? remaining : elapsed)}
             </Text>
-            <ActionRow className="min-w-0 flex-1" actions={[
+            <ActionRow className="min-w-0" actions={[
                 c.running
                     ? { label: 'Pause', onClick: isDown ? pauseCountdown : pauseCountup }
                     : { label: 'Start', variant: 'default', onClick: isDown ? startCountdown : startCountup },
@@ -196,87 +375,89 @@ const ClockControl = memo(function ClockControl({ i }) {
                     onClick: isDown ? resetCountdown : resetCountup,
                 },
             ]} />
-        </div>
+        </Stack>
     );
 });
 
 /*
- * One slot column — a card standing where its content stands on the band.
- * Header: position numeral · ◀ ▶ reorder · staged dot · on/off. Then the type
- * picker, then that type's fields, always visible.
+ * The selected slot's editor — the panel below the ribbon.
  *
- * The card's border carries the slot's state, so the row of five reads as the
- * band itself: a filled slot that's on is solid and lit, a filled slot that's
- * off is solid and dimmed, an empty slot is dashed. Custom block
- * (contract-sanctioned): per-slot authoring is typed text, uploads and clock
- * transport — shapes no kit row expresses. Kept on kit tokens and spacing.
+ * One slot at a time, because the ribbon above is the selector: the editor is
+ * the detail half of a master/detail, and it names the slot it is editing so
+ * the pairing is never ambiguous. Type and the on-air switch head the panel
+ * (they are what the ribbon segment shows), then that type's own fields.
  */
-const LowerThirdSlotCard = memo(function LowerThirdSlotCard({ i }) {
-    const { slot, val, isStaged, setKey, swap } = useLowerThird();
+const SlotEditor = memo(function SlotEditor({ i }) {
+    const { slot, val, isStaged, setKey } = useLowerThird();
     const s = slot(i);
     const type = val(`slots.${i}.type`, s.type) || '';
     const enabled = !!val(`slots.${i}.enabled`, s.enabled);
-    const staged = isStaged(`slots.${i}`) || isStaged(`slots.${i}.enabled`) || isStaged(`slots.${i}.type`);
+    const staged = isStaged(`slots.${i}`) || isStaged(`slots.${i}.enabled`);
 
     return (
-        <section
-            className={cn(
-                'flex min-w-0 flex-col gap-1.5 rounded-md border p-2 transition-colors',
-                !type && 'border-dashed border-border/50',
-                type && !enabled && 'border-border bg-card/40',
-                type && enabled && 'border-border bg-card',
-            )}
-        >
-            <div className="flex min-h-6 items-center gap-1.5">
-                <Text
-                    size="xs" span
-                    className={cn('font-mono tabular-nums', enabled ? 'text-rio-400' : 'text-muted-foreground')}
-                >
-                    {i}
+        // The accent ring the selected ribbon segment wears, repeated on the
+        // panel: it is the only thing that says THIS panel belongs to THAT
+        // segment, and without it the pairing is left to the producer's memory
+        // of which one they clicked.
+        <div className="flex flex-col gap-2 rounded-md border border-rio-400/35 p-3">
+            <Group gap="sm" className="min-h-7 flex-nowrap items-center">
+                <Text size="xs" span className="label-display shrink-0 text-muted-foreground">
+                    Slot {i}
                 </Text>
-                <MoveButtons
-                    axis="x" label={`slot ${i}`}
-                    canUp={i > 1} canDown={i < LT_SLOT_COUNT}
-                    onUp={() => swap(i, i - 1)}
-                    onDown={() => swap(i, i + 1)}
-                />
-                <span className="flex-1" />
+                {/* Beside the position, not banished to the right margin: the
+                    type IS what the segment is, so the two read as one phrase
+                    ("Slot 1 · Logo + Title") rather than as unrelated controls
+                    at opposite ends of a rule. Show/hide is NOT here — it lives
+                    on the ribbon segment, where its result is visible. */}
+                <select
+                    className={cn(KIT_INPUT, 'w-44 min-w-0 shrink-0', !type && 'text-muted-foreground')}
+                    value={type}
+                    aria-label={`Slot ${i} content type`}
+                    onChange={(e) => setKey(`slots.${i}.type`, e.target.value, `Lower third: slot ${i} type`)}
+                >
+                    {LT_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
                 <StagedDot show={staged} />
-                <Switch
-                    size="sm" checked={enabled} disabled={!type}
-                    aria-label={`Slot ${i} on air`}
-                    onCheckedChange={(v) => setKey(`slots.${i}.enabled`, v, `Lower third: slot ${i} ${v ? 'on' : 'off'}`)}
-                />
-            </div>
+                {/* A slot can be filled and still not in the band. Saying so
+                    beats leaving the producer to wonder why their edits aren't
+                    on the picture. */}
+                {type && !enabled && (
+                    <Text size="xs" span className="text-muted-foreground">
+                        Hidden — not in the band
+                    </Text>
+                )}
+            </Group>
 
-            <select
-                className={cn(KIT_INPUT, 'min-w-0', !type && 'text-muted-foreground')} value={type}
-                aria-label={`Slot ${i} content type`}
-                onChange={(e) => setKey(`slots.${i}.type`, e.target.value, `Lower third: slot ${i} type`)}
-            >
-                {LT_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-
-            {type && <LowerThirdSlotFields i={i} />}
-        </section>
+            {type
+                ? <LowerThirdSlotFields i={i} />
+                : (
+                    <Text size="xs" className="flex min-h-7 items-center text-muted-foreground">
+                        Empty — pick a content type to fill this position on the band.
+                    </Text>
+                )}
+        </div>
     );
 });
 
 export default function LowerThirdStage({ element }) {
+    // Which slot the editor below is showing. Transient view state, not a
+    // broadcast value — it never goes near State or the staging gateway.
+    const [selected, setSelected] = useState(1);
+
     return (
         <Stack gap="sm">
             <DirectStage element={element} />
-            {/* Five columns in band order once the panel is wide enough to
-                hold them; two, then one, as it narrows. */}
-            <div className="grid grid-cols-1 items-start gap-2 @xl:grid-cols-2 @2xl:grid-cols-3 @5xl:grid-cols-5">
-                {Array.from({ length: LT_SLOT_COUNT }, (_, k) => k + 1).map((i) => (
-                    <LowerThirdSlotCard key={i} i={i} />
-                ))}
-            </div>
-            <Text size="xs" className="text-muted-foreground">
-                Slots render left → right, in this order; widths come from the design
-                package. A Space slot splits the band and pushes content to the corners.
-            </Text>
+
+            <Stack gap="none">
+                <BandRibbon selected={selected} onSelect={setSelected} />
+                <Text size="xs" className="pt-1 text-muted-foreground">
+                    The band, left → right. Pick a segment to edit it below; ◀ ▶ move it.
+                    Lit means on air, and widths are indicative — the design package owns
+                    the real ones.
+                </Text>
+            </Stack>
+
+            <SlotEditor i={selected} />
         </Stack>
     );
 }
@@ -308,7 +489,7 @@ const MerchImagePicker = memo(function MerchImagePicker({ value, onChange }) {
     };
     return (
         <Group gap="xs" className="flex-nowrap items-center">
-            <select className={LT_INPUT} value={value || ''} onChange={(e) => onChange(e.target.value)}>
+            <select className={cn(KIT_INPUT, 'min-w-0 flex-1')} value={value || ''} onChange={(e) => onChange(e.target.value)}>
                 <option value="">— No image —</option>
                 {images.map(im => <option key={im.name} value={im.name}>{im.name}</option>)}
             </select>
@@ -316,7 +497,7 @@ const MerchImagePicker = memo(function MerchImagePicker({ value, onChange }) {
                 ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden"
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(f); e.target.value = ''; }}
             />
-            <Button size="sm" variant="secondary" onClick={() => fileRef.current?.click()}>Upload</Button>
+            <Button size="xs" variant="secondary" className="h-7 shrink-0" onClick={() => fileRef.current?.click()}>Upload</Button>
         </Group>
     );
 });
@@ -326,18 +507,33 @@ const MerchImagePicker = memo(function MerchImagePicker({ value, onChange }) {
 // disagree about what's on screen.
 const BracketSlotPicker = memo(function BracketSlotPicker() {
     const desk = useBracketDesk();
-    return (
-        <Stack gap="none">
-            <Text size="xs" className="text-muted-foreground">
-                Load phase{desk.phaseName ? ` (showing: ${desk.phaseName})` : ''}
-            </Text>
-            <BracketPhasePicker desk={desk} label={null} />
-        </Stack>
-    );
+    // The picker's own select shows which phase is loaded, so the label stays
+    // short — SelectRow's label column is a fixed w-16 that truncates.
+    return <BracketPhasePicker desk={desk} label="Phase" />;
 });
 
-// One slot's content editor (expanded in place under the face row). Every
-// field routes through the staging gateway with the slot's key prefix.
+/*
+ * One slot's content editor. Every field routes through the staging gateway
+ * with the slot's key prefix.
+ *
+ * TWO RULES, both learned from the panel this replaces (user report,
+ * 2026-08-01: "unclear what they're representing… super spaced out"):
+ *
+ * 1. EVERY FIELD IS LABELLED. The old fields were bare inputs carrying their
+ *    only description in the placeholder — which the value erases. A producer
+ *    coming back to a filled band saw an unlabelled box with "hjkhjknjk" in it
+ *    and no way to know it was the logo caption. Placeholders are examples now;
+ *    the label column is what names the field.
+ *
+ * 2. FIELDS DO NOT STRETCH. They were `flex-1`, so a slot with one field gave
+ *    that field the whole ~1000px stage — a caption box wide enough for a
+ *    paragraph, and three fields spread so far apart they stopped reading as a
+ *    set. The track caps at 340px and the grid packs left, so a field is the
+ *    size of its content whatever else is in the slot.
+ */
+const FIELD_GRID = 'grid min-w-0 items-start gap-x-4 gap-y-1 '
+    + '[grid-template-columns:repeat(auto-fill,minmax(240px,340px))]';
+
 const LowerThirdSlotFields = memo(function LowerThirdSlotFields({ i }) {
     const { matches, slot, val, isStaged, setKey } = useLowerThird();
     const active = useActiveBoards();
@@ -350,30 +546,20 @@ const LowerThirdSlotFields = memo(function LowerThirdSlotFields({ i }) {
     const c = s.clock || {};
     const clockMode = val(p('clock.mode'), c.mode) || 'off';
 
-    // Plain render helpers (NOT nested components): a component defined inside
+    // Plain render helper (NOT a nested component): a component defined inside
     // render gets a new identity every pass, which remounts the <input> and
     // drops focus mid-keystroke. Function calls keep the element type stable.
-    const fieldLabel = (k, children) => (
-        <Group gap="xs" className="items-center">
-            <Text size="xs" className="text-muted-foreground">{children}</Text>
-            <StagedDot show={isStaged(p(k))} />
-        </Group>
-    );
-    const textField = (k, placeholder, live) => (
-        <input
-            className={LT_INPUT} value={val(p(k), live) || ''} placeholder={placeholder}
-            onChange={(e) => setKey(p(k), e.target.value, `Lower third: slot ${i} ${k}`)}
+    const textField = (k, label, placeholder, live) => (
+        <TextRow
+            label={label} placeholder={placeholder} staged={isStaged(p(k))}
+            value={val(p(k), live) || ''}
+            onChange={(v) => setKey(p(k), v, `Lower third: slot ${i} ${k}`)}
         />
     );
 
     return (
-        <Stack gap="xs">
-            {type === 'logo' && (
-                <label className="flex flex-col gap-1">
-                    {fieldLabel('title', 'Caption (optional; logo comes from Branding)')}
-                    {textField('title', 'e.g. NNL Season 7', s.title)}
-                </label>
-            )}
+        <div className={FIELD_GRID}>
+            {type === 'logo' && textField('title', 'Caption', 'Under the logo — optional', s.title)}
 
             {type === 'match' && (
                 <>
@@ -392,7 +578,7 @@ const LowerThirdSlotFields = memo(function LowerThirdSlotFields({ i }) {
                         value={val(p('role'), s.role) === 'current' ? 'current' : 'upnext'}
                         onChange={(v) => setKey(p('role'), v, `Lower third: slot ${i} role`)}
                     />
-                    {textField('status', 'Status override (e.g. LIVE)', s.status)}
+                    {textField('status', 'Status', 'Overrides UP NEXT', s.status)}
                 </>
             )}
 
@@ -407,17 +593,14 @@ const LowerThirdSlotFields = memo(function LowerThirdSlotFields({ i }) {
 
             {type === 'merch' && (
                 <>
-                    <Group gap="xs" className="items-center">
-                        <div className="min-w-0 flex-1">
-                            <MerchImagePicker
-                                value={val(p('image'), s.image) || ''}
-                                onChange={(name) => setKey(p('image'), name, `Lower third: slot ${i} merch image`)}
-                            />
-                        </div>
-                        <StagedDot show={isStaged(p('image'))} />
-                    </Group>
-                    {textField('title', 'Title (e.g. New tees in the shop)', s.title)}
-                    {textField('subtitle', 'Subtitle (e.g. shop.example.com)', s.subtitle)}
+                    <FieldRow label="Image" staged={isStaged(p('image'))}>
+                        <MerchImagePicker
+                            value={val(p('image'), s.image) || ''}
+                            onChange={(name) => setKey(p('image'), name, `Lower third: slot ${i} merch image`)}
+                        />
+                    </FieldRow>
+                    {textField('title', 'Title', 'New tees in the shop', s.title)}
+                    {textField('subtitle', 'Subtitle', 'shop.example.com', s.subtitle)}
                 </>
             )}
 
@@ -448,30 +631,29 @@ const LowerThirdSlotFields = memo(function LowerThirdSlotFields({ i }) {
                                 onChange={(v) => setKey(p('clock.timezone'), v, `Lower third: slot ${i} clock time zone`)}
                                 options={CLOCK_TIMEZONES}
                             />
-                            <label className="flex flex-col gap-1">
-                                {fieldLabel('clock.suffix', 'Suffix (e.g. ET)')}
-                                {textField('clock.suffix', 'e.g. ET', c.suffix)}
-                            </label>
+                            {textField('clock.suffix', 'Suffix', 'ET', c.suffix)}
                         </>
                     )}
                     {(clockMode === 'countdown' || clockMode === 'clock')
-                        && textField('clock.label', 'Clock label (e.g. BACK IN)', c.label)}
+                        && textField('clock.label', 'Label', 'BACK IN', c.label)}
+                    {/* Transport rides with the clock's own fields — a running
+                        countdown is this slot's content, not a separate rail. */}
                     {enabled && clockMode !== 'off' && <ClockControl i={i} />}
                 </>
             )}
 
             {type === 'message' && (
                 <>
-                    {textField('title', 'Title (e.g. Winners Final)', s.title)}
-                    {textField('subtitle', 'Subtitle (e.g. NNL Season 7)', s.subtitle)}
+                    {textField('title', 'Title', 'Winners Final', s.title)}
+                    {textField('subtitle', 'Subtitle', 'NNL Season 7', s.subtitle)}
                 </>
             )}
 
             {type === 'bracket' && (
                 <>
                     <BracketSlotPicker />
-                    {textField('title', 'Title override (defaults to phase name)', s.title)}
-                    {textField('subtitle', 'Subtitle (optional)', s.subtitle)}
+                    {textField('title', 'Title', 'Defaults to the phase name', s.title)}
+                    {textField('subtitle', 'Subtitle', 'Optional', s.subtitle)}
                 </>
             )}
 
@@ -482,13 +664,15 @@ const LowerThirdSlotFields = memo(function LowerThirdSlotFields({ i }) {
                         value={val(p('width'), s.width) || null}
                         onChange={(n) => setKey(p('width'), n == null ? 0 : Math.max(0, n), `Lower third: slot ${i} gap width`)}
                     />
-                    <Text size="xs" className="text-muted-foreground">
-                        Blank fills the space and splits the band into two cards — content
-                        before and after this slot separates into its own corner.
+                    {/* The only slot type whose behaviour isn't visible in its
+                        own fields, so it explains itself here rather than in a
+                        standing caption every other slot type has to scroll past. */}
+                    <Text size="xs" className="min-w-0 self-center text-muted-foreground">
+                        Leave blank and it absorbs the leftover width, splitting the band
+                        into two cards pushed to the corners.
                     </Text>
                 </>
             )}
-        </Stack>
+        </div>
     );
 });
-

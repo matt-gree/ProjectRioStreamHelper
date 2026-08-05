@@ -72,6 +72,9 @@ describe('Event Header stage', () => {
         const sep = LAYOUT_SETTINGS.eventheader.find(d => d.key === 'separator');
         const input = screen.getByPlaceholderText(sep.placeholder); // '◆'
         fireEvent.change(input, { target: { value: '·' } });
+        // Kit text rows debounce (a settings write broadcasts to every overlay,
+        // so one per keystroke is a storm). Blur is the immediate-commit path.
+        fireEvent.blur(input);
         expect(useSettingsStore.getState()?.overlays?.eventheader?.separator).toBe('·');
     });
 
