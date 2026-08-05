@@ -15,8 +15,6 @@ from server.settings import Settings
 # --- _derive_type ---
 
 @pytest.mark.parametrize("stem,group,expected", [
-    ("gameplay", "scenes", "scene"),       # scenes folder → always scene
-    ("rivalry", "scenes", "scene"),
     ("index", "bracket", "bracket"),       # bracket folder → always bracket
     ("winners_only", "bracket", "bracket"),
     ("losers_only", "bracket", "bracket"),

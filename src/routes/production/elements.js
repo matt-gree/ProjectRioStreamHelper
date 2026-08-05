@@ -75,8 +75,8 @@ export const ELEMENTS = [
         url: '/layout/scorecard/scorecard.html',
         width: 1920,
         height: 1080,
-        // Deliberately narrow: fourcam.html shares the folder and must NOT bind
-        // here, and 'scorecard' must not be swallowed by the Scoreboard matcher.
+        // Deliberately narrow so 'scorecard' is not swallowed by the Scoreboard
+        // matcher (which also answers to a bare *.html stem).
         match: (url) => /scorecard\/scorecard/i.test(url) || /scorecard\.html/i.test(url),
         // Two rows: is it on air, and which score block is showing — the pair a
         // producer reaches for mid-game. Everything else is stage work.

@@ -45,9 +45,6 @@ export const LAYOUT_SETTINGS = {
     // Card row nested under its container.
     statscard: [...STAT_CARD_SETTINGS],
     teamlogo: [],
-    // Simple 4-Cam Scorecard — self-contained, fixed slice26 look. Aim (left/
-    // right) is a URL variant (?dir=), so there are no live element settings.
-    fourcam: [],
     // Roster + Stats — the combined auto-cycling source. Roster look shares
     // overlays.roster.*, the stat card shares overlays.stats.* + the active
     // Design Package; the only element-only knob is how long the card stays up.
@@ -57,10 +54,6 @@ export const LAYOUT_SETTINGS = {
         { key: 'showTeamLogo', type: 'switch', label: 'Show Team Logo', description: 'Display the team logo next to the roster' },
         { key: 'dwellSeconds', type: 'number-override', label: 'Stat Card Dwell', description: 'Seconds the batter/pitcher stat card stays up before returning to the roster', defaultValue: 7, min: 2, max: 20, step: 1, suffix: 's' },
         ...STAT_CARD_SETTINGS,
-    ],
-    scene: [
-        { key: 'team1ShowYouTube', type: 'switch', label: 'Player 1: Show YouTube', description: 'When on, shows the YouTube handle. When off, shows the Twitter/X handle.' },
-        { key: 'team2ShowYouTube', type: 'switch', label: 'Player 2: Show YouTube', description: 'When on, shows the YouTube handle. When off, shows the Twitter/X handle.' },
     ],
     bracket: [
         { key: 'connectorColor', type: 'color-override', label: 'Connector Line Color', description: 'Color of bracket connector lines' },
