@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
-import { render, cleanup } from '@testing-library/react';
+import { render, cleanup, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { TooltipProvider } from '../../../components/ui/tooltip';
 import { useStateStore } from '../../../context/store';
 import { ELEMENTS } from '../elements';
@@ -122,6 +123,34 @@ describe('previewUrl — a fed element names the occupant it wants', () => {
 });
 
 /*
+ * The Intro toggle writes a preference and then asks OBS to rewrite its
+ * sources. The preference is the half that always lands, so the preview follows
+ * it rather than the bound url — otherwise toggling Intro changed nothing on
+ * screen with OBS closed, which is the case where the preview is the only way
+ * to see it. Since the param is part of the src, this is also what remounts the
+ * iframe and replays (or skips) the reveal.
+ */
+describe('previewUrl — the intro preference beats the source url', () => {
+    const SB = 'http://localhost:5260/layout/scoreboard1/scoreboard.html?scoreboard=1';
+
+    it('adds intro=0 when the preference is off, even on a url without it', () => {
+        expect(previewUrl(el('scoreboard'), 1, bind(SB), 0, null, true)).toContain('intro=0');
+    });
+
+    it('strips intro=0 when the preference is on, even if the source still has it', () => {
+        expect(previewUrl(el('scoreboard'), 1, bind(`${SB}&intro=0`), 0, null, false))
+            .not.toContain('intro=');
+    });
+
+    // No preference (an element with no intro animation) must not touch the url
+    // — that is what keeps a bound source's own ?intro=0 honest.
+    it('leaves the url alone when there is no preference', () => {
+        expect(previewUrl(el('scoreboard'), 1, bind(`${SB}&intro=0`), 0, null, null))
+            .toContain('intro=0');
+    });
+});
+
+/*
  * A pickable fed element (Character Spotlight) has no live selection until the
  * producer picks — and picking is on-air. So its preview draws the STANDING
  * INTENT (the character Push would show) via ?feedsel=, without a live pick.
@@ -174,5 +203,29 @@ describe('StagePreview renders', () => {
         const src = document.querySelector('iframe').getAttribute('src');
         expect(src).toContain('feed=postgamecallout');
         expect(src).not.toContain('feedsel=');
+    });
+
+    /*
+     * Reload NAVIGATES the iframe; it does not replace it.
+     *
+     * Keying the ScaledIframe on the nonce remounted it, and a fresh one has no
+     * derived height yet — so its box collapsed to `minHeight` for as long as it
+     * took the layout effect to measure. Nothing PAINTS at that height, but the
+     * layout effect calls getBoundingClientRect, so layout does happen, and the
+     * browser clamps scrollTop against the shorter page right then: hitting
+     * Reload threw the whole console back to the top. Same element + a new src
+     * reloads the document just as thoroughly and never resizes the box.
+     */
+    it('reloads by changing the url, keeping the same iframe element', async () => {
+        const user = userEvent.setup();
+        ui(<StagePreview element={el('postgamevs')} board={null} binding={fedBinding('postgamecallout')} />);
+        const before = document.querySelector('iframe');
+        const srcBefore = before.getAttribute('src');
+
+        await user.click(screen.getByLabelText('Reload preview'));
+
+        const after = document.querySelector('iframe');
+        expect(after).toBe(before);                          // never remounted
+        expect(after.getAttribute('src')).not.toBe(srcBefore); // but did navigate
     });
 });

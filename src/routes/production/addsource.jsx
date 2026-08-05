@@ -1,6 +1,7 @@
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import { Plus, Search, Copy, Check } from 'lucide-react';
-import { useObsStore } from '../../context/obs';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Plus, Search, Copy, Check, X } from 'lucide-react';
+import { useMirrorScene, useObsStore } from '../../context/obs';
+import { urlsMatch } from '../../lib/obs-binding';
 import { CopyButton } from '../../components/ui/copy-button';
 import {
     Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
@@ -47,9 +48,23 @@ import {
  * ticker and an event header — five trips through a modal that names the same
  * scene every time. So selection is MULTI, and a pick is keyed on **url + board**
  * rather than url: Scoreboard on board 1 and on board 2 are two different
- * sources from one catalog row, which is exactly why the board control is on the
- * row (as per-board chips) and not in the footer. A row click still checks and
- * previews in one go, so the one-element case costs no more than it used to.
+ * sources from one catalog row.
+ *
+ * ── Looking is not choosing ──
+ *
+ * Row click PREVIEWS. The checkbox SELECTS. Nothing else does either.
+ *
+ * They used to be the same gesture, which made browsing the catalog — the thing
+ * a producer does most in here — silently build a batch they then had to undo.
+ * Two questions ("what is this?" and "does it go in?") get two controls, and the
+ * cheap, reversible one is the one the big target fires.
+ *
+ * WHICH BOARD is a third question, and it belongs to neither: it is a property
+ * of a pick, not of the catalog. So it lives in the PREVIEW pane, beside the
+ * thing it describes — tick board 2 there and that row is picked twice. The row
+ * keeps one checkbox (picked on ≥1 board) and states the boards inline, so the
+ * list still reads honestly without carrying the control. A single-board rig
+ * never sees the question at all.
  */
 
 /*
@@ -117,9 +132,9 @@ export function pickerPreviewUrl(layout, board) {
 }
 
 // How a catalog row names itself: the layout, plus the variant that makes this
-// row different from its siblings (size / team / direction).
+// row different from its siblings (size / team).
 export const rowLabel = (l) => {
-    const variant = l.sizeLabel || (l.team ? `Team ${l.team}` : '') || l.dirLabel || '';
+    const variant = l.sizeLabel || (l.team ? `Team ${l.team}` : '') || '';
     const name = l.parentName || l.name;
     return variant ? `${name} — ${variant}` : name;
 };
@@ -179,12 +194,29 @@ const GROUP_LABELS = {
     lowerthird: 'Break',
     rotator: 'Rotators',
     bracket: 'Bracket',
-    scenes: 'Full scenes',
     hitvisualizer: 'Hit Visualizer',
     schedule: 'Schedule',
     eventheader: 'Event Header',
     controller: 'Controller',
     ungrouped: 'Other',
+};
+
+/*
+ * The order the shelves are read in — deliberate, because the alternative is
+ * the order `rglob` happened to walk the folders, which put the bracket at the
+ * top and the scoreboard two thirds of the way down. A producer opening this
+ * from a game scene wants the scoreboard; the ones you add once a tournament
+ * (bracket, controller) sit at the bottom. Anything unlisted follows, in
+ * catalog order.
+ */
+const GROUP_ORDER = [
+    'Scoreboard', 'Scorecard', 'Shared containers', 'Talent', 'Break',
+    'Rotators', 'Event Header', 'Schedule', 'Hit Visualizer', 'Bracket',
+    'Controller', 'Other',
+];
+const groupRank = (label) => {
+    const at = GROUP_ORDER.indexOf(label);
+    return at < 0 ? GROUP_ORDER.length : at;
 };
 
 /*
@@ -200,40 +232,62 @@ const nativeH = (l) => l?.height || 1080;
 // Stable identity — a fresh Set per render would defeat CatalogRow's memo.
 const EMPTY_SET = new Set();
 
+// The commit chord, written the way the producer's own keyboard says it.
+const MOD = typeof navigator !== 'undefined'
+    && /Mac|iPhone|iPad/.test(navigator?.platform || navigator?.userAgent || '')
+    ? '⌘' : 'Ctrl+';
+
 /*
- * The catalog list's height, in px, and the preview's ceiling — the SAME
- * number on purpose.
+ * The boards a row is going in on, as the row states them: "1", "1, 2".
  *
- * The preview shapes its own box from the layout's aspect (a 16:9 scene gets a
- * 16:9 frame; a tall split-screen gets a tall one), which is what makes the
- * checkerboard read as the source's actual bounds rather than a window it
- * floats in. Left to itself that would resize the dialog every time the
- * producer moved down the list. Capping it at the list's height means the list
- * is always the taller column, so the dialog's height never moves.
+ * Only ever a NOTE — the control is the preview pane's. A single-board rig
+ * gets nothing, because "1" there is a fact with no alternative.
+ */
+export function boardsNote(layout, picked, boards) {
+    if (!picked?.size || boards.length < 2 || !isBoardScoped(layout)) return '';
+    return [...picked]
+        .filter(b => b != null)
+        .sort((a, b) => a - b)
+        .join(', ');
+}
+
+/*
+ * The list's height and the preview's height — one number, and both FIXED.
+ *
+ * The preview used to shape its own box from the layout's aspect, which read
+ * beautifully and moved the dialog every time the producer stepped down the
+ * list: a 1920×80 ticker, a 360×360 team logo and a 16:9 scene are three
+ * different dialog heights, and the footer walked up and down the screen under
+ * the cursor. A stage that resizes around its content is not a stage.
+ *
+ * So the frame is a fixed viewport and the overlay is letterboxed inside it.
+ * The source's real bounds are still drawn — the checkerboard is sized to the
+ * FITTED BOX rather than the frame (see PickerPreview), so it remains a scale
+ * model of the OBS source, with the surround honestly reading as empty space.
  */
 const PANE_HEIGHT = 416;
-const PREVIEW_MIN_HEIGHT = 140;
 
 /*
  * The preview pane — the real overlay in an iframe, drawn against its own sample
  * bundle, at the size OBS will give it.
  *
- * ScaledIframe owns the box: it derives the height from the width and the
- * layout's own aspect (`minHeight`/`maxHeight`), so a 16:9 scene gets a 16:9
- * frame and an 800×460 band gets a letterbox. Nothing here is zoomed or
- * transformed, and nothing else is allowed to compute that height — two
- * authorities on one dimension is the oscillation the stage preview documents.
+ * ScaledIframe is handed a FIXED `height` here, which is its documented "the
+ * caller owns the box" mode: it stops deriving a height and just fits the
+ * largest box of the layout's aspect inside the frame, centred. One sizing
+ * authority, as ever — but now it is a constant, so nothing about the dialog
+ * moves as the producer walks the list.
  */
-const PickerPreview = memo(function PickerPreview({ layout, board, boardLabel, boards }) {
+const PickerPreview = memo(function PickerPreview({
+    layout, board, boardLabel, boards, pickedBoards, sceneBoards, onToggleBoard,
+}) {
     const [fit, setFit] = useState(null);
     const onFit = useCallback((f) => {
         setFit(prev => (prev && prev.w === f.w && prev.scale === f.scale ? prev : f));
     }, []);
 
     const src = layout ? pickerPreviewUrl(layout, board) : null;
-    const detail = layout && isBoardScoped(layout) && board != null && boards.length > 1
-        ? ` · ${boardLabel(board)}`
-        : '';
+    const askBoards = !!layout && isBoardScoped(layout) && boards.length > 1;
+    const detail = askBoards && board != null ? ` · ${boardLabel(board)}` : '';
 
     return (
         <div className="flex min-w-0 flex-col gap-1.5 overflow-hidden">
@@ -251,39 +305,128 @@ const PickerPreview = memo(function PickerPreview({ layout, board, boardLabel, b
                 )}
             </div>
 
-            {/* Checkerboard: overlays are authored on transparency, and a flat
-                backdrop makes a fully-transparent overlay indistinguishable from
-                one that failed to load. It wraps the render's own box, so its
-                edges are the source's edges. */}
+            {/* WHICH BOARD, asked beside the thing it describes.
+                It is a property of the PICK, not of the catalog row: one row
+                ticked on two boards is two sources, so these are checkboxes and
+                not a chooser. The row keeps the single "does it go in" box and
+                mirrors whatever is ticked here. A single-board rig is never
+                asked — there is no choice to make.
+
+                Toggles rather than native checkboxes, and NEVER WRAPPING: a
+                13px box with a label beside it is the smallest hit target in the
+                dialog for a decision that costs a source in OBS, and a rig with
+                four boards wrapped them onto a second line, which moved the
+                frame below. A row that can't fit scrolls sideways instead.
+
+                On a multi-board rig the strip is ALWAYS here, even for rows
+                that have no board to ask about — appearing and disappearing as
+                the producer stepped between a scoreboard and a lower third
+                moved the frame under the cursor by its own height. When there
+                is nothing to ask it says so, which is worth a line anyway. */}
+            {boards.length > 1 && (
+                <div className="flex h-10 items-center gap-2 overflow-x-auto rounded-md border border-border/60 bg-secondary/30 px-2">
+                    <Text size="xs" span dimmed className="shrink-0">Add on</Text>
+                    {!askBoards && (
+                        <Text size="xs" span dimmed className="truncate">
+                            {layout
+                                ? 'this overlay isn’t tied to a board — one source covers the rig.'
+                                : 'pick an overlay first.'}
+                        </Text>
+                    )}
+                    {askBoards && boards.map(b => {
+                        const on = pickedBoards.has(b);
+                        return (
+                            <SimpleTooltip
+                                key={b}
+                                label={sceneBoards.has(b)
+                                    ? `${boardLabel(b)} — already a source in this scene`
+                                    : `Add a source for ${boardLabel(b)}`}
+                            >
+                                <button
+                                    type="button"
+                                    role="checkbox"
+                                    aria-checked={on}
+                                    aria-label={boardLabel(b)}
+                                    onClick={() => onToggleBoard(layout, b)}
+                                    className={cn(
+                                        'flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2.5 transition-colors',
+                                        on
+                                            ? 'border-primary bg-primary/15 text-foreground'
+                                            : 'border-border text-muted-foreground hover:text-foreground',
+                                    )}
+                                >
+                                    <span
+                                        aria-hidden="true"
+                                        className={cn(
+                                            'grid size-3.5 place-content-center rounded-[4px] border',
+                                            on
+                                                ? 'border-primary bg-primary text-primary-foreground'
+                                                : 'border-input',
+                                        )}
+                                    >
+                                        {on && <Check size={10} strokeWidth={3} />}
+                                    </span>
+                                    <Text size="xs" span className="whitespace-nowrap">
+                                        {boardLabel(b)}
+                                    </Text>
+                                    {/* Already in the scene — a dot, not a
+                                        sentence: the pills have to stay the
+                                        width of a board name. */}
+                                    {sceneBoards.has(b) && (
+                                        <span
+                                            aria-hidden="true"
+                                            className="size-1.5 shrink-0 rounded-full bg-muted-foreground"
+                                        />
+                                    )}
+                                </button>
+                            </SimpleTooltip>
+                        );
+                    })}
+                </div>
+            )}
+
+            {/* The frame is FIXED (see PANE_HEIGHT) and the overlay letterboxes
+                inside it. The checkerboard is drawn at the FITTED BOX rather
+                than on the frame, so its edges are still the source's edges —
+                overlays are authored on transparency, and a flat backdrop makes
+                a fully-transparent overlay indistinguishable from one that
+                failed to load. Everything outside it reads as what it is: room
+                the source doesn't occupy. */}
             <div
-                className="w-full overflow-hidden rounded-md border border-border/60"
-                style={{
-                    height: src ? undefined : PREVIEW_MIN_HEIGHT,
-                    backgroundColor: '#15151c',
-                    backgroundImage:
-                        'linear-gradient(45deg,#20202a 25%,transparent 25%,transparent 75%,#20202a 75%),'
-                        + 'linear-gradient(45deg,#20202a 25%,transparent 25%,transparent 75%,#20202a 75%)',
-                    backgroundSize: '16px 16px',
-                    backgroundPosition: '0 0, 8px 8px',
-                }}
+                className="relative flex w-full items-center justify-center overflow-hidden rounded-md border border-border/60 bg-background/40"
+                style={{ height: PANE_HEIGHT }}
             >
+                {src && fit && (
+                    <div
+                        aria-hidden="true"
+                        className="absolute"
+                        style={{
+                            width: fit.w,
+                            height: fit.h,
+                            backgroundColor: '#15151c',
+                            backgroundImage:
+                                'linear-gradient(45deg,#20202a 25%,transparent 25%,transparent 75%,#20202a 75%),'
+                                + 'linear-gradient(45deg,#20202a 25%,transparent 25%,transparent 75%,#20202a 75%)',
+                            backgroundSize: '16px 16px',
+                            backgroundPosition: '0 0, 8px 8px',
+                        }}
+                    />
+                )}
                 {src ? (
                     <ScaledIframe
                         key={src}
                         src={src}
                         nativeWidth={nativeW(layout)}
                         nativeHeight={nativeH(layout)}
-                        minHeight={PREVIEW_MIN_HEIGHT}
-                        maxHeight={PANE_HEIGHT}
+                        height={PANE_HEIGHT}
                         onFit={onFit}
                         title={`${rowLabel(layout)} preview`}
+                        className="absolute inset-0"
                     />
                 ) : (
-                    <div className="flex h-full items-center justify-center px-4">
-                        <Text size="xs" dimmed className="text-center">
-                            Pick an overlay to see it here.
-                        </Text>
-                    </div>
+                    <Text size="xs" dimmed className="px-4 text-center">
+                        Click an overlay to see it here.
+                    </Text>
                 )}
             </div>
 
@@ -416,91 +559,84 @@ const NewContainerForm = memo(function NewContainerForm({ onCreate, onCancel }) 
 });
 
 /*
- * One catalog row.
+ * One catalog row: a checkbox, and a body that previews.
  *
- * Two shapes, decided by whether the row can be picked more than one way:
- *   • a plain row gets a checkbox — one pick, one state;
- *   • a board-scoped row on a MULTI-BOARD rig gets a board chip each, because
- *     the same row is genuinely several sources. The chips ARE its check state;
- *     a checkbox beside them would be a third reading of the same fact and
- *     would go ambiguous the moment only board 2 was picked.
- * A single-board rig never sees chips: there is no choice to make, so it isn't
- * asked (the pick still carries board 1, exactly as before).
+ * The body is the big target and it is the CHEAP, reversible act — browsing the
+ * catalog is what a producer does most in here, and it must not quietly build a
+ * batch. The checkbox is the whole of "this goes in", on every row, board-scoped
+ * or not: a board-scoped row ticks on the primary board and the preview pane is
+ * where a second board gets added (see PickerPreview). Untick clears every board
+ * at once, which is the only reading of an unchecked box that isn't a lie.
  *
- * Clicking the row body checks/unchecks the primary board AND focuses the
- * preview, so the fast path stays one click per element. Clicking a checked row
- * unchecks it but leaves it previewed — focus and check are different questions.
+ * The picked boards are STATED on the row rather than controlled from it, so a
+ * producer scanning the list can still see that the scoreboard is going in
+ * twice without the row carrying a control per board.
  */
 const CatalogRow = memo(function CatalogRow({
-    layout, boards, boardLabel, focused, pickedBoards, onToggle,
+    layout, focused, picked, boardsNote, inScene, onFocus, onToggle,
 }) {
-    const scoped = isBoardScoped(layout);
-    const chips = scoped && boards.length > 1;
-    const primary = scoped ? (boards[0] ?? 1) : null;
-    const picked = pickedBoards.size > 0;
     const label = rowLabel(layout);
 
     return (
         <div
+            data-row={layout.url}
             className={cn(
-                'flex h-8 items-center gap-1 rounded-md pr-1 transition-colors',
+                'flex h-8 items-center rounded-md pr-1 transition-colors',
                 focused ? 'bg-secondary/70' : 'hover:bg-secondary/40',
             )}
         >
             <button
                 type="button"
-                onClick={() => onToggle(layout, primary)}
-                aria-pressed={chips ? undefined : picked}
-                className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left"
+                role="checkbox"
+                aria-checked={picked}
+                aria-label={`Select ${label}`}
+                onClick={() => onToggle(layout)}
+                className="grid h-8 w-7 shrink-0 place-content-center rounded-md"
             >
-                {!chips && (
-                    <span
-                        aria-hidden="true"
-                        className={cn(
-                            'grid size-3.5 shrink-0 place-content-center rounded-[4px] border',
-                            picked
-                                ? 'border-primary bg-primary text-primary-foreground'
-                                : 'border-input',
-                        )}
-                    >
-                        {picked && <Check size={10} strokeWidth={3} />}
-                    </span>
-                )}
+                <span
+                    aria-hidden="true"
+                    className={cn(
+                        'grid size-3.5 place-content-center rounded-[4px] border transition-colors',
+                        picked
+                            ? 'border-primary bg-primary text-primary-foreground'
+                            : 'border-input',
+                    )}
+                >
+                    {picked && <Check size={10} strokeWidth={3} />}
+                </span>
+            </button>
+
+            <button
+                type="button"
+                onClick={() => onFocus(layout)}
+                aria-label={`Preview ${label}`}
+                className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md pr-1 text-left"
+            >
                 <Text size="xs" span truncate className="min-w-0 flex-1 text-foreground">
                     {label}
                 </Text>
+                {/* Which boards this row is going in on — the preview pane's
+                    answer, restated where the list can see it. */}
+                {boardsNote && (
+                    <Text size="xs" span className="shrink-0 tabular-nums text-primary">
+                        {boardsNote}
+                    </Text>
+                )}
+                {/* Already a source in this scene. Not a block — a producer may
+                    genuinely want two — but adding a duplicate by accident and
+                    finding it in OBS an hour later is the failure this prevents. */}
+                {inScene && (
+                    <Text size="xs" span dimmed className="shrink-0">in scene</Text>
+                )}
                 {/* shrink-0: the label is the flexible half. Without it the
                     dimensions are what the flexbox eats first, and "1920×1080"
-                    clips to "192" — a number that reads as a real one.
-                    Dropped entirely on a chipped row: a five-board rig spends
-                    that width on chips, and squeezing both leaves "Scoreboard
-                    —…" three times over, which is the one thing the row has to
-                    tell apart. The size is still stated — once, authoritatively
-                    — in the preview header. */}
-                {!chips && layout.width && layout.height && (
+                    clips to "192" — a number that reads as a real one. */}
+                {layout.width && layout.height && (
                     <Text size="xs" span dimmed className="shrink-0 tabular-nums">
                         {layout.width}×{layout.height}
                     </Text>
                 )}
             </button>
-
-            {chips && boards.map(b => (
-                <button
-                    key={b}
-                    type="button"
-                    onClick={() => onToggle(layout, b)}
-                    aria-pressed={pickedBoards.has(b)}
-                    aria-label={`${label} on ${boardLabel(b)}`}
-                    className={cn(
-                        'h-5 min-w-5 shrink-0 rounded border px-1 text-[10px] leading-none tabular-nums transition-colors',
-                        pickedBoards.has(b)
-                            ? 'border-primary bg-primary text-primary-foreground'
-                            : 'border-border text-muted-foreground hover:text-foreground',
-                    )}
-                >
-                    {b}
-                </button>
-            ))}
         </div>
     );
 });
@@ -524,9 +660,12 @@ export const AddSourceDialog = memo(function AddSourceDialog({ scene, open: open
     const [query, setQuery] = useState('');
     // Ordered picks, so a batch is added in the order the producer built it.
     const [picks, setPicks] = useState([]);
-    // What the preview is showing — independent of what's checked.
+    // The catalog row being previewed — a LAYOUT, not a pick. Looking at
+    // something is not choosing it, so focus carries no board and no state
+    // beyond "this is what's on the right".
     const [focus, setFocus] = useState(null);
     const [adding, setAdding] = useState(false);
+    const listRef = useRef(null);
     // The left pane swaps to the container builder rather than opening a second
     // dialog: building one is part of this transaction, and the preview beside
     // it keeps showing whatever is focused.
@@ -573,9 +712,14 @@ export const AddSourceDialog = memo(function AddSourceDialog({ scene, open: open
             width: size.width, height: size.height,
         };
         setPicks(prev => [...prev, { layout: row, board: null }]);
-        setFocus({ layout: row, board: null });
+        setFocus(row);
     }, [create]);
 
+    /*
+     * The catalog, filtered. A query matches the ROW or its GROUP, so "talent"
+     * and "break" find their whole shelf — the producer's own vocabulary for
+     * these is the group heading at least as often as the layout's name.
+     */
     const groups = useMemo(() => {
         const q = query.toLowerCase().trim();
         const out = new Map();
@@ -584,15 +728,20 @@ export const AddSourceDialog = memo(function AddSourceDialog({ scene, open: open
         // than shown twice.
         const rows = [...layouts.filter(l => l.group !== 'shared'), ...containerRows];
         for (const l of rows) {
-            if (q && !rowLabel(l).toLowerCase().includes(q)) continue;
             const key = GROUP_LABELS[l.group] ?? l.group;
+            if (q
+                && !rowLabel(l).toLowerCase().includes(q)
+                && !key.toLowerCase().includes(q)) continue;
             if (!out.has(key)) out.set(key, []);
             out.get(key).push(l);
         }
-        return [...out.entries()];
+        return [...out.entries()].sort(([a], [b]) => groupRank(a) - groupRank(b));
     }, [layouts, containerRows, query]);
 
-    // url → the set of boards picked from that row, for the chips and the check.
+    // The visible rows in list order — what the arrow keys walk.
+    const flatRows = useMemo(() => groups.flatMap(([, rows]) => rows), [groups]);
+
+    // url → the set of boards picked from that row, for the check and the note.
     const pickedByUrl = useMemo(() => {
         const m = new Map();
         for (const p of picks) {
@@ -602,15 +751,73 @@ export const AddSourceDialog = memo(function AddSourceDialog({ scene, open: open
         return m;
     }, [picks]);
 
-    const onToggle = useCallback((layout, board) => {
+    /*
+     * What is ALREADY in the scene we're adding to — url → the set of boards
+     * that already have a source.
+     *
+     * `urlsMatch` is the console's own answer to "is this overlay that source":
+     * pathname plus the params that distinguish an instance, so a dual-machine
+     * rig's host-qualified source still matches, and a board-less URL matches a
+     * `?scoreboard=1` source (the documented default). Kept as a map rather than
+     * asked per render: the rows and the preview both need it.
+     */
+    const { items: sceneItems } = useMirrorScene(scene);
+    const inSceneByUrl = useMemo(() => {
+        const m = new Map();
+        if (!sceneItems.length) return m;
+        for (const l of flatRows) {
+            const set = new Set();
+            for (const b of (isBoardScoped(l) ? boards : [null])) {
+                const url = overlayUrl(l, b);
+                if (sceneItems.some(it => urlsMatch(url, it.url))) set.add(b);
+            }
+            if (set.size) m.set(l.url, set);
+        }
+        return m;
+    }, [flatRows, sceneItems, boards]);
+
+    /*
+     * Ticking the box: the row goes in, on the primary board if it is
+     * board-scoped. Unticking clears EVERY board it was picked on — an unchecked
+     * box that left a board 2 pick behind would be a lie, and the preview pane
+     * is where a per-board answer is given.
+     */
+    const onToggle = useCallback((layout) => {
+        setPicks(prev => (prev.some(p => p.layout.url === layout.url)
+            ? prev.filter(p => p.layout.url !== layout.url)
+            : [...prev, {
+                layout,
+                board: isBoardScoped(layout) ? (boards[0] ?? 1) : null,
+            }]));
+        // Selecting previews too — you should be able to see what you just
+        // agreed to put on the broadcast.
+        setFocus(layout);
+    }, [boards]);
+
+    // The preview pane's per-board checkbox: one exact pick, on or off.
+    const onToggleBoard = useCallback((layout, board) => {
         const key = pickKey(layout, board);
         setPicks(prev => (prev.some(p => pickKey(p.layout, p.board) === key)
             ? prev.filter(p => pickKey(p.layout, p.board) !== key)
             : [...prev, { layout, board }]));
-        // Focus follows the click either way: unchecking is not a reason to
-        // stop showing what you were just looking at.
-        setFocus({ layout, board });
     }, []);
+
+    const removePick = useCallback((key) => {
+        setPicks(prev => prev.filter(p => pickKey(p.layout, p.board) !== key));
+    }, []);
+
+    const focusPicked = focus ? (pickedByUrl.get(focus.url) ?? EMPTY_SET) : EMPTY_SET;
+
+    /*
+     * Which board the PREVIEW draws. The lowest board this row is picked on, so
+     * ticking board 2 shows board 2's data; falling back to the rig's primary
+     * when nothing is picked yet, because a preview has to render as something.
+     */
+    const previewBoard = useMemo(() => {
+        if (!focus || !isBoardScoped(focus)) return null;
+        const picked = [...focusPicked].filter(b => b != null).sort((a, b) => a - b);
+        return picked[0] ?? boards[0] ?? 1;
+    }, [focus, focusPicked, boards]);
 
     /*
      * Copy follows the SELECTION — several picks copy as one URL per line, which
@@ -620,8 +827,8 @@ export const AddSourceDialog = memo(function AddSourceDialog({ scene, open: open
      */
     const copyValue = useMemo(() => {
         if (picks.length) return picks.map(p => overlayUrl(p.layout, p.board)).join('\n');
-        return focus ? overlayUrl(focus.layout, focus.board) : '';
-    }, [picks, focus]);
+        return focus ? overlayUrl(focus, previewBoard) : '';
+    }, [picks, focus, previewBoard]);
 
     /*
      * Sequential, never parallel: the OBS mirror reconciles one event at a time
@@ -679,23 +886,83 @@ export const AddSourceDialog = memo(function AddSourceDialog({ scene, open: open
         setPicks(prev => prev.filter(p => keep.has(pickKey(p.layout, p.board))));
     };
 
+    // Keep the previewed row visible when the arrows moved it rather than a
+    // click. `scrollIntoView` is absent in jsdom, hence the optional call.
+    useEffect(() => {
+        if (!focus || !listRef.current) return;
+        const el = listRef.current.querySelector(`[data-row="${focus.url}"]`);
+        el?.scrollIntoView?.({ block: 'nearest' });
+    }, [focus]);
+
+    /*
+     * Keyboard, on the model the panel now has: ↑↓ LOOK, Enter CHOOSE,
+     * ⌘/Ctrl+Enter commit.
+     *
+     * Enter rather than Space is the select key on purpose — the search box has
+     * autofocus and holds it while the producer filters, so a Space binding
+     * would either eat spaces out of a query or never fire. Space still works
+     * once the keyboard has left the field, where it is what a checkbox expects.
+     * A real button target keeps its own Enter/Space: whatever is focused wins
+     * over the panel's shortcut, so tabbing to Add and pressing Enter adds.
+     */
+    const onKeyDown = (e) => {
+        if (building) return;
+        const tag = e.target?.tagName;
+        const typing = tag === 'INPUT' || tag === 'TEXTAREA';
+
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            if (!flatRows.length) return;
+            e.preventDefault();
+            const at = flatRows.findIndex(l => l.url === focus?.url);
+            const next = e.key === 'ArrowDown'
+                ? Math.min(at + 1, flatRows.length - 1)
+                : (at < 0 ? flatRows.length - 1 : Math.max(at - 1, 0));
+            setFocus(flatRows[next]);
+            return;
+        }
+        if (tag === 'BUTTON') return;
+        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+            if (scene && picks.length && !adding) { e.preventDefault(); add(); }
+            return;
+        }
+        if ((e.key === 'Enter' || (e.key === ' ' && !typing)) && focus) {
+            e.preventDefault();
+            onToggle(focus);
+        }
+    };
+
     return (
         <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-            <DialogContent className="max-h-[90vh] overflow-hidden sm:max-w-4xl">
+            {/* Wide enough that a 1920×1080 overlay fills the fixed frame at a
+                readable size — the preview is the point of this dialog, and at
+                4xl a 16:9 sample was a postage stamp beside the list. */}
+            <DialogContent className="max-h-[90vh] overflow-hidden sm:max-w-[72rem]" onKeyDown={onKeyDown}>
                 <DialogHeader>
                     <DialogTitle className="label-display">
                         {scene ? `Add to “${scene}”` : 'Overlays'}
                     </DialogTitle>
+                    {/* The keyboard model lives here rather than in the footer:
+                        it is the same sentence every time, and the footer is
+                        where the batch goes — a line that alternates between
+                        instructions and content is a line that moves. */}
                     <DialogDescription>
                         {scene
-                            ? 'Pick as many as you like — they all go in hidden, and you turn them '
-                              + 'on from the rack.'
+                            ? 'Click an overlay to preview it; tick its box to add it — or '
+                              + `↑↓ to preview, ⏎ to select, ${MOD}⏎ to add. Everything goes in `
+                              + 'hidden, and you turn it on from the rack.'
                             : 'OBS isn’t connected, so there’s no scene to add to. You can still '
                               + 'preview anything here, copy its source URL, and build a container.'}
                     </DialogDescription>
                 </DialogHeader>
 
-                <Stack gap="sm">
+                {/* `min-w-0` on the body, because the footer's chip ribbon is a
+                    row of NOWRAP chips: its min-content width is the whole
+                    batch laid end to end, and a grid item's default
+                    `min-width: auto` hands that straight to the dialog, which
+                    then renders wider than the screen with its buttons off the
+                    right edge. Same family as the preview-column note below —
+                    content must never size the box that sizes the content. */}
+                <Stack gap="sm" className="min-w-0">
                     {/* `minmax(0,1fr)` for the preview column, not `flex-1`.
                         ScaledIframe sizes the iframe in PIXELS, and a px-wide
                         descendant becomes its ancestors' min-content width — the
@@ -727,6 +994,7 @@ export const AddSourceDialog = memo(function AddSourceDialog({ scene, open: open
                                 the pane's definite width, which is what the
                                 label needs to truncate against. */}
                             <div
+                                ref={listRef}
                                 className="overflow-y-auto overflow-x-hidden"
                                 style={{ height: PANE_HEIGHT }}
                             >
@@ -768,10 +1036,11 @@ export const AddSourceDialog = memo(function AddSourceDialog({ scene, open: open
                                                 <CatalogRow
                                                     key={l.url}
                                                     layout={l}
-                                                    boards={boards}
-                                                    boardLabel={boardLabel}
-                                                    focused={focus?.layout?.url === l.url}
-                                                    pickedBoards={pickedByUrl.get(l.url) ?? EMPTY_SET}
+                                                    focused={focus?.url === l.url}
+                                                    picked={(pickedByUrl.get(l.url) ?? EMPTY_SET).size > 0}
+                                                    boardsNote={boardsNote(l, pickedByUrl.get(l.url), boards)}
+                                                    inScene={inSceneByUrl.has(l.url)}
+                                                    onFocus={setFocus}
                                                     onToggle={onToggle}
                                                 />
                                             ))}
@@ -783,20 +1052,73 @@ export const AddSourceDialog = memo(function AddSourceDialog({ scene, open: open
                         </div>
 
                         <PickerPreview
-                            layout={focus?.layout ?? null}
-                            board={focus?.board ?? null}
+                            layout={focus}
+                            board={previewBoard}
                             boardLabel={boardLabel}
                             boards={boards}
+                            pickedBoards={focusPicked}
+                            sceneBoards={(focus && inSceneByUrl.get(focus.url)) || EMPTY_SET}
+                            onToggleBoard={onToggleBoard}
                         />
                     </div>
 
-                    <Group gap="sm" className="items-center justify-between border-t border-border/60 pt-2">
-                        <Text size="xs" dimmed>
-                            {picks.length
-                                ? `${picks.length} selected`
-                                : 'Nothing selected yet.'}
-                        </Text>
-                        <Group gap="xs">
+                    {/* ONE row, fixed height. The batch, named — "3 selected" is
+                        a number a producer has to scroll the list to verify,
+                        where the tray is the thing itself: each pick removable
+                        where it is read, and clickable to bring it back into the
+                        preview. It shares the button row and scrolls sideways
+                        rather than wrapping, because a footer that grows a
+                        second line as you select walks the buttons down the
+                        screen under the cursor. */}
+                    <Group gap="sm" className="min-w-0 items-center justify-between border-t border-border/60 pt-2">
+                        <div className="flex h-6 min-w-0 flex-1 items-center gap-2">
+                            <Text size="xs" dimmed className="shrink-0">
+                                {picks.length ? `${picks.length} selected` : 'Nothing selected yet.'}
+                            </Text>
+                            {/* The scrollbar is hidden, not absent: a 6px-tall
+                                track inside a 24px strip lands on top of the
+                                chips it is supposed to help with. The ribbon
+                                still scrolls by wheel, trackpad and keyboard. */}
+                            <div
+                                className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto [&::-webkit-scrollbar]:hidden"
+                                style={{ scrollbarWidth: 'none' }}
+                            >
+                                {picks.map((p) => {
+                                    const key = pickKey(p.layout, p.board);
+                                    const label = rowLabel(p.layout)
+                                        + (p.board != null && boards.length > 1
+                                            ? ` · ${p.board}` : '');
+                                    return (
+                                        <span
+                                            key={key}
+                                            // shrink-0: a flex child's default is
+                                            // to shrink, which folded each chip's
+                                            // label onto two lines and burst it
+                                            // out of the strip.
+                                            className="flex h-5 shrink-0 items-center gap-1 whitespace-nowrap rounded border border-border bg-secondary/50 pl-1.5 pr-0.5"
+                                        >
+                                            <button
+                                                type="button"
+                                                onClick={() => setFocus(p.layout)}
+                                                className="whitespace-nowrap text-[10px] leading-none text-foreground"
+                                            >
+                                                {label}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                aria-label={`Remove ${label}`}
+                                                onClick={() => removePick(key)}
+                                                className="grid size-4 place-content-center rounded text-muted-foreground hover:text-foreground"
+                                            >
+                                                <X size={10} />
+                                            </button>
+                                        </span>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        <Group gap="xs" className="shrink-0">
                             {/* Copy the exact URLs Add would create — the escape
                                 hatch for a producer whose OBS is on another
                                 machine or who wires sources by hand. No OBS
@@ -818,7 +1140,7 @@ export const AddSourceDialog = memo(function AddSourceDialog({ scene, open: open
                                 goes honestly grey rather than vanishing — same
                                 rule as the source strip's Push slot. */}
                             <SimpleTooltip label={scene
-                                ? `Add to “${scene}”, hidden`
+                                ? `Add to “${scene}”, hidden (${MOD}⏎)`
                                 : 'OBS isn’t connected — copy the URL instead'}>
                                 <span>
                                     <Button

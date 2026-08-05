@@ -270,7 +270,16 @@ export default function Production() {
                 </Group>
             </Group>
 
-            <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[280px_1fr] xl:grid-cols-[280px_1fr_252px]">
+            {/* The stage gets a floor and the two side columns yield to it.
+                With plain `280px 1fr 252px` the fixed tracks are satisfied
+                first, so on a window that is merely wide enough to earn three
+                columns the WORK SURFACE ends up the narrowest of the three —
+                measured at 990px of grid, the stage got 402px while the rack
+                and rail took 532 between them, and the preview inside it
+                rendered its 1920×1080 source at 21%. A min on the middle track
+                inverts that: the rack and rail give up their last ~90px each
+                before the thing the producer is actually looking at does. */}
+            <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,280px)_minmax(0,1fr)] xl:grid-cols-[minmax(0,280px)_minmax(560px,1fr)_minmax(0,252px)]">
                 <Rack
                     selection={selection} onSelect={setSelection}
                     pins={pins} onPinToggle={togglePin}

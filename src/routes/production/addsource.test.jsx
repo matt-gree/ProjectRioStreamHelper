@@ -5,6 +5,7 @@ import { useSettingsStore } from '../../context/store';
 import { useObsStore } from '../../context/obs';
 import {
     AddSourceDialog, addName, overlayUrl, isBoardScoped, pickKey, pickerPreviewUrl,
+    boardsNote,
 } from './addsource';
 
 /*
@@ -16,6 +17,12 @@ import {
  * Building a scene is a batch, so it also has to hold them for SEVERAL picks at
  * once: keyed on url + board (one catalog row, two boards, two sources), added
  * one at a time, and honest when only some of them land.
+ *
+ * And LOOKING IS NOT CHOOSING: the row body previews, the checkbox selects, and
+ * which board a board-scoped pick lands on is asked in the preview pane beside
+ * the thing it describes. Tests below pin all three, because the failure they
+ * replaced — browsing the catalog quietly building a batch — was invisible until
+ * the producer read the footer.
  */
 
 const layout = (over = {}) => ({
@@ -122,12 +129,34 @@ describe('addName', () => {
     });
 });
 
+describe('boardsNote — the row states its boards, it does not control them', () => {
+    it('lists the picked boards on a multi-board rig', () => {
+        expect(boardsNote(layout(), new Set([2, 1]), [1, 2])).toBe('1, 2');
+        expect(boardsNote(layout(), new Set([2]), [1, 2])).toBe('2');
+    });
+
+    // A "1" on a rig with one board is a fact with no alternative — noise.
+    it('says nothing on a single-board rig, or for a board-less row', () => {
+        expect(boardsNote(layout(), new Set([1]), [1])).toBe('');
+        expect(boardsNote(lowerthird, new Set([null]), [1, 2])).toBe('');
+        expect(boardsNote(layout(), undefined, [1, 2])).toBe('');
+    });
+});
+
 describe('AddSourceDialog', () => {
     const addBrowserSource = vi.fn();
 
+    // The two gestures the panel now separates.
+    const preview = (label) => fireEvent.click(
+        screen.getByRole('button', { name: `Preview ${label}` }));
+    const select = (label) => fireEvent.click(
+        screen.getByRole('checkbox', { name: `Select ${label}` }));
+
     beforeEach(() => {
         useSettingsStore.setState({ scoreboards: {}, production: {} });
-        useObsStore.setState({ status: 'connected', addBrowserSource });
+        useObsStore.setState({
+            status: 'connected', addBrowserSource, sceneItems: {}, mirroredScenes: [],
+        });
         // Reset the implementation too — several tests below install their own
         // (a failing OBS, an overlap detector).
         addBrowserSource.mockReset();
@@ -159,7 +188,8 @@ describe('AddSourceDialog', () => {
      */
     it('adds hidden, into the scene the picker was opened from', async () => {
         ui('Break');
-        fireEvent.click(await screen.findByText('Lower Third'));
+        await screen.findByText('Lower Third');
+        select('Lower Third');
         fireEvent.click(screen.getByRole('button', { name: /add hidden/i }));
         await waitFor(() => expect(addBrowserSource).toHaveBeenCalledTimes(1));
         expect(addBrowserSource).toHaveBeenCalledWith(expect.objectContaining({
@@ -188,40 +218,49 @@ describe('AddSourceDialog', () => {
         useObsStore.setState({ status: 'disconnected' });
 
         ui('Break');
-        fireEvent.click(await screen.findByText('Lower Third'));
+        await screen.findByText('Lower Third');
+        preview('Lower Third');
         fireEvent.click(screen.getByRole('button', { name: /copy url/i }));
         await waitFor(() => expect(writeText).toHaveBeenCalledWith(lowerthird.url));
         expect(addBrowserSource).not.toHaveBeenCalled();
     });
 
-    // One board means no choice to make, so the row isn't asked — the pick
-    // still carries board 1, exactly as it always did.
-    it('shows board chips only when the rig has more than one', async () => {
+    /*
+     * WHICH BOARD is a property of the pick, not of the catalog row — so it is
+     * asked in the preview pane, beside the thing it describes, and only when
+     * there is a choice to make. One board means the pick silently carries board
+     * 1, exactly as it always did.
+     */
+    it('asks which board only when the rig has more than one', async () => {
         ui('Break');
         await screen.findByText('Scoreboard — Large');
-        expect(screen.queryByRole('button', { name: /on Scoreboard 1$/ })).not.toBeInTheDocument();
+        preview('Scoreboard — Large');
+        expect(screen.queryByRole('checkbox', { name: /^Scoreboard 1/ })).not.toBeInTheDocument();
 
         cleanup();
         useSettingsStore.setState({ scoreboards: { active: [1, 2] } });
         ui('Break');
         await screen.findByText('Scoreboard — Large');
-        expect(screen.getByRole('button', { name: 'Scoreboard — Large on Scoreboard 1' }))
-            .toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Scoreboard — Large on Scoreboard 2' }))
-            .toBeInTheDocument();
+        preview('Scoreboard — Large');
+        expect(screen.getByRole('checkbox', { name: 'Scoreboard 1' })).toBeInTheDocument();
+        expect(screen.getByRole('checkbox', { name: 'Scoreboard 2' })).toBeInTheDocument();
+
+        // A board-less row is never asked, however many boards the rig has.
+        preview('Lower Third');
+        expect(screen.queryByRole('checkbox', { name: 'Scoreboard 2' })).not.toBeInTheDocument();
     });
 
     /*
      * One catalog row, two boards, two sources. This is why a pick is keyed on
-     * url + board and why the board control sits on the ROW rather than in the
-     * footer: a single footer dropdown can only describe one of them.
+     * url + board: the row's own checkbox answers "does it go in", and the
+     * preview pane's per-board boxes answer "how many times".
      */
-    it('adds one catalog row twice when two boards are chipped', async () => {
+    it('adds one catalog row twice when two boards are ticked', async () => {
         useSettingsStore.setState({ scoreboards: { active: [1, 2] } });
         ui('Break');
         await screen.findByText('Scoreboard — Large');
-        fireEvent.click(screen.getByRole('button', { name: 'Scoreboard — Large on Scoreboard 1' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Scoreboard — Large on Scoreboard 2' }));
+        select('Scoreboard — Large');
+        fireEvent.click(screen.getByRole('checkbox', { name: 'Scoreboard 2' }));
         fireEvent.click(screen.getByRole('button', { name: /add 2 hidden/i }));
 
         await waitFor(() => expect(addBrowserSource).toHaveBeenCalledTimes(2));
@@ -252,8 +291,9 @@ describe('AddSourceDialog', () => {
         });
 
         ui('Break');
-        fireEvent.click(await screen.findByText('Lower Third'));
-        fireEvent.click(screen.getByText('Scoreboard — Large'));
+        await screen.findByText('Lower Third');
+        select('Lower Third');
+        select('Scoreboard — Large');
         fireEvent.click(screen.getByRole('button', { name: /add 2 hidden/i }));
 
         await waitFor(() => expect(addBrowserSource).toHaveBeenCalledTimes(2));
@@ -273,13 +313,16 @@ describe('AddSourceDialog', () => {
         });
 
         ui('Break');
-        fireEvent.click(await screen.findByText('Lower Third'));
-        fireEvent.click(screen.getByText('Scoreboard — Large'));
+        await screen.findByText('Lower Third');
+        select('Lower Third');
+        select('Scoreboard — Large');
         fireEvent.click(screen.getByRole('button', { name: /add 2 hidden/i }));
 
         await waitFor(() => expect(addBrowserSource).toHaveBeenCalledTimes(2));
-        // Still open, one pick left — the one that failed.
-        expect(await screen.findByText('1 selected')).toBeInTheDocument();
+        // Still open, one pick left — the one that failed, named in the tray.
+        expect(await screen.findByText(/^1 selected/)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Remove Scoreboard — Large' }))
+            .toBeInTheDocument();
 
         addBrowserSource.mockClear();
         fireEvent.click(screen.getByRole('button', { name: /add hidden/i }));
@@ -288,29 +331,138 @@ describe('AddSourceDialog', () => {
     });
 
     /*
-     * Focus and check are different questions. Clicking a checked row unchecks
-     * it but keeps it previewed — the producer is still looking at it.
+     * THE RULE. Browsing the catalog is what a producer does most in here, and
+     * it must not quietly build a batch they then have to undo. The row body is
+     * the big target and it is the cheap, reversible act.
      */
-    it('previews the row it was told about, checked or not', async () => {
+    it('previews on a row click and selects nothing', async () => {
         ui('Break');
-        fireEvent.click(await screen.findByText('Lower Third'));
-        expect(screen.getByTitle('Lower Third preview')).toBeInTheDocument();
+        await screen.findByText('Lower Third');
+        preview('Lower Third');
 
-        // By role — once it's previewed, its name is on screen twice (the row
-        // and the preview's header).
-        fireEvent.click(screen.getByRole('button', { name: /^Lower Third/ }));
-        expect(screen.getByText('Nothing selected yet.')).toBeInTheDocument();
         expect(screen.getByTitle('Lower Third preview')).toBeInTheDocument();
+        expect(screen.getByText(/^Nothing selected yet/)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /add hidden/i })).toBeDisabled();
+    });
+
+    // The other half: the checkbox is the whole of "this goes in" — and it
+    // previews too, because you should see what you just agreed to put on air.
+    it('selects on the checkbox, and previews what it selected', async () => {
+        ui('Break');
+        await screen.findByText('Lower Third');
+        select('Lower Third');
+
+        expect(screen.getByRole('checkbox', { name: 'Select Lower Third' }))
+            .toHaveAttribute('aria-checked', 'true');
+        expect(screen.getByText(/^1 selected/)).toBeInTheDocument();
+        expect(screen.getByTitle('Lower Third preview')).toBeInTheDocument();
+    });
+
+    // Unticking clears EVERY board it was picked on: a box that left a board 2
+    // pick behind would be a lie, and the tray would disagree with the row.
+    it('untick clears every board the row was picked on', async () => {
+        useSettingsStore.setState({ scoreboards: { active: [1, 2] } });
+        ui('Break');
+        await screen.findByText('Scoreboard — Large');
+        select('Scoreboard — Large');
+        fireEvent.click(screen.getByRole('checkbox', { name: 'Scoreboard 2' }));
+        expect(screen.getByText(/^2 selected/)).toBeInTheDocument();
+
+        select('Scoreboard — Large');
+        expect(screen.getByText(/^Nothing selected yet/)).toBeInTheDocument();
+        expect(screen.getByRole('checkbox', { name: 'Scoreboard 2' }))
+            .not.toBeChecked();
     });
 
     // The preview has to work on a machine with no game running, which is what
     // every Layout's sample bundle is for.
     it('previews with sample data, not live state', async () => {
         ui('Break');
-        fireEvent.click(await screen.findByText('Lower Third'));
+        await screen.findByText('Lower Third');
+        preview('Lower Third');
         const src = screen.getByTitle('Lower Third preview').getAttribute('src');
         expect(src).toContain('preview=1');
         expect(src).toContain('sample=1');
+    });
+
+    /*
+     * Adding a duplicate by accident and finding it in OBS an hour later is the
+     * failure this prevents. Not a block — a producer may genuinely want two.
+     */
+    it('marks a row already in the scene', async () => {
+        useObsStore.setState({
+            mirroredScenes: ['Break'],
+            sceneItems: {
+                Break: [{ sourceName: 'LT', url: lowerthird.url, isPrsh: true }],
+            },
+        });
+        ui('Break');
+        await screen.findByText('Lower Third');
+        expect(screen.getByText('in scene')).toBeInTheDocument();
+
+        // …and only that row.
+        expect(screen.getAllByText('in scene')).toHaveLength(1);
+    });
+
+    /*
+     * ↑↓ LOOK, Enter CHOOSE. Enter rather than Space because the search box has
+     * autofocus and holds it while the producer filters.
+     */
+    it('walks the list with the arrows and selects with Enter', async () => {
+        ui('Break');
+        await screen.findByText('Lower Third');
+        const dialog = screen.getByRole('dialog');
+
+        // Scoreboard first — the shelf order is deliberate, not folder order.
+        fireEvent.keyDown(dialog, { key: 'ArrowDown' });
+        expect(screen.getByTitle('Scoreboard — Large preview')).toBeInTheDocument();
+
+        fireEvent.keyDown(dialog, { key: 'ArrowDown' });
+        expect(screen.getByTitle('Lower Third preview')).toBeInTheDocument();
+
+        fireEvent.keyDown(dialog, { key: 'Enter' });
+        expect(screen.getByText(/^1 selected/)).toBeInTheDocument();
+        expect(screen.getByRole('checkbox', { name: 'Select Lower Third' }))
+            .toHaveAttribute('aria-checked', 'true');
+    });
+
+    it('commits the batch on ⌘/Ctrl+Enter', async () => {
+        ui('Break');
+        await screen.findByText('Lower Third');
+        select('Lower Third');
+        fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Enter', metaKey: true });
+        await waitFor(() => expect(addBrowserSource).toHaveBeenCalledTimes(1));
+    });
+
+    // Folder-walk order put the bracket at the top and the scoreboard two
+    // thirds of the way down; the shelf a producer opens this for goes first.
+    it('orders the shelves deliberately, not by folder', async () => {
+        ui('Break');
+        await screen.findByText('Lower Third');
+        const headings = screen.getAllByText(/^(Scoreboard|Break)$/)
+            .map(el => el.textContent);
+        expect(headings).toEqual(['Scoreboard', 'Break']);
+    });
+
+    // The producer's word for a shelf is the heading at least as often as the
+    // layout's own name — "talent" has to find Commentary.
+    it('searches group names as well as row names', async () => {
+        ui('Break');
+        await screen.findByText('Lower Third');
+        fireEvent.change(screen.getByPlaceholderText('Search overlays…'), {
+            target: { value: 'break' },
+        });
+        expect(screen.getByText('Lower Third')).toBeInTheDocument();
+        expect(screen.queryByText('Scoreboard — Large')).not.toBeInTheDocument();
+    });
+
+    // The tray is the batch itself, not a count of it: removable where it's read.
+    it('drops a pick from the tray', async () => {
+        ui('Break');
+        await screen.findByText('Lower Third');
+        select('Lower Third');
+        fireEvent.click(screen.getByRole('button', { name: 'Remove Lower Third' }));
+        expect(screen.getByText(/^Nothing selected yet/)).toBeInTheDocument();
     });
 
     /*
@@ -322,8 +474,9 @@ describe('AddSourceDialog', () => {
         vi.stubGlobal('navigator', { clipboard: { writeText } });
 
         ui('Break');
-        fireEvent.click(await screen.findByText('Lower Third'));
-        fireEvent.click(screen.getByText('Scoreboard — Large'));
+        await screen.findByText('Lower Third');
+        select('Lower Third');
+        select('Scoreboard — Large');
         fireEvent.click(screen.getByRole('button', { name: /copy urls/i }));
         await waitFor(() => expect(writeText).toHaveBeenCalledWith(
             `${lowerthird.url}\n${layout().url}&scoreboard=1`,

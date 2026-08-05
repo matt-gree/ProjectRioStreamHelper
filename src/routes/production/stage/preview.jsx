@@ -5,9 +5,10 @@ import { Text } from '../../../components/ui/primitives';
 import { SimpleTooltip } from '../../../components/ui/simple-tooltip';
 import ScaledIframe from '../../../components/ScaledIframe';
 import { usePersistentState } from '../../../hooks/usePersistentState';
-import { useStateStore } from '../../../context/store';
+import { useSettingsStore, useStateStore } from '../../../context/store';
 import { instanceUrl } from '../bindings';
 import { resolveIntent } from '../suggest';
+import { introTypeFor } from './intro';
 
 // Stable empty intent — a fresh {} each render would defeat useShallow.
 const NO_SEL = Object.freeze({});
@@ -65,8 +66,17 @@ function useFeedSel(element, board) {
  * or it stays blank until, and only until, it's too late. Instead it sends the
  * standing intent (suggest.js) — the character Push would show — and the
  * container draws it without touching live state. `feedSel` is that intent.
+ *
+ * `introDisabled` is the Intro-animation PREFERENCE, and it beats whatever the
+ * bound source's url says. The toggle writes the preference and then asks OBS
+ * to rewrite its sources; the preference is the part that always lands, so
+ * reading the url instead meant the preview didn't budge when OBS was closed —
+ * i.e. exactly when the preview is the only way to see the change. Because the
+ * param is part of the src, changing it remounts the iframe, which is what
+ * makes the difference visible: intro on plays the reveal, intro off doesn't.
+ * `null`/undefined means "this element has no intro" — leave the url alone.
  */
-export function previewUrl(element, board, binding, nonce = 0, feedSel = null) {
+export function previewUrl(element, board, binding, nonce = 0, feedSel = null, introDisabled = null) {
     const base = binding?.item?.url || instanceUrl(element, board);
     if (!base) return null;
     try {
@@ -80,6 +90,8 @@ export function previewUrl(element, board, binding, nonce = 0, feedSel = null) {
             : (binding?.container ? binding.carrying : null);
         if (feed) u.searchParams.set('feed', feed);
         if (feed && feedSel) u.searchParams.set('feedsel', encodeURIComponent(JSON.stringify(feedSel)));
+        if (introDisabled === true) u.searchParams.set('intro', '0');
+        else if (introDisabled === false) u.searchParams.delete('intro');
         // Reload has to change the URL, not just remount. Layouts are static
         // files with no build step, so the browser holds them on an etag with no
         // Cache-Control; remounting an iframe at the SAME src can be answered
@@ -110,15 +122,21 @@ export function previewUrl(element, board, binding, nonce = 0, feedSel = null) {
  * engaged (a stage wider than ~995px) and then oscillated — the preview clipped
  * at the bottom and right, and the renderer could hang. One authority only.
  */
-const MAX_PREVIEW_HEIGHT = 560;
+// The cap only bites once the stage is wide enough that a 16:9 source would be
+// taller than this (~995px of column). Below that the preview is width-limited
+// and the cap is irrelevant; above it, 560 was leaving most of a tall window
+// empty under the panel for no reason.
+const MAX_PREVIEW_HEIGHT = 720;
 const MIN_PREVIEW_HEIGHT = 140;
 
 const StagePreview = memo(function StagePreview({ element, board, binding: maybe, width, height }) {
     // Same rule as BindingNote: no item, no binding.
     const binding = maybe?.item ? maybe : null;
     const [open, setOpen] = usePersistentState('prsh.ui.production.preview', true);
-    // Bumped to force a remount — overlays are static files behind a browser
-    // cache, and a producer who just edited a theme wants to see it.
+    // Bumped to change the url — overlays are static files behind a browser
+    // cache, and a producer who just edited a theme wants to see it. A NEW url
+    // is what forces the fetch; the iframe itself is deliberately NOT remounted
+    // (see the note on the ScaledIframe below).
     const [nonce, setNonce] = useState(0);
     const reload = useCallback(() => setNonce(n => n + 1), []);
 
@@ -136,7 +154,16 @@ const StagePreview = memo(function StagePreview({ element, board, binding: maybe
     // no intent — nothing captured/rostered yet — so send no override and let
     // the container render its own empty state.
     const feedSel = useFeedSel(element, board);
-    const src = previewUrl(element, board, binding, nonce, feedSel.team != null ? feedSel : null);
+    // The Intro toggle's preference, not the source url's — see previewUrl.
+    // `null` for an element with no intro, so the url is left untouched.
+    const introDisabled = useSettingsStore(s => (introTypeFor(element)
+        ? !!s?.overlays?.[introTypeFor(element)]?.disableIntro
+        : null));
+    const src = previewUrl(
+        element, board, binding, nonce,
+        feedSel.team != null ? feedSel : null,
+        introDisabled,
+    );
     if (!src) return null;
 
     return (
@@ -191,9 +218,26 @@ const StagePreview = memo(function StagePreview({ element, board, binding: maybe
                             backgroundPosition: '0 0, 8px 8px',
                         }}
                     >
+                        {/* No `key` on the nonce. Keying this remounted the
+                            whole ScaledIframe, and a fresh one starts with no
+                            derived height — so the box collapsed from up to
+                            560px to `minHeight` for exactly as long as it took
+                            the layout effect to measure. No paint happens at
+                            that height, but LAYOUT does, and the browser clamps
+                            scrollTop against the shorter page the instant it
+                            does: hitting Reload threw the console back to the
+                            top. Assigning a new `src` to a mounted iframe
+                            navigates it just as thoroughly, and the box never
+                            changes size. */}
                         <ScaledIframe
-                            key={`${src}#${nonce}`}
                             src={src}
+                            // Reload also re-measures. Remounting used to do
+                            // that as a side effect; now that it doesn't, a box
+                            // left small by a measurement taken while the panel
+                            // was mid-layout would have no way back — and the
+                            // reshape threshold means a later resize under 24px
+                            // won't fix it either.
+                            measureKey={nonce}
                             // The registry's dimensions are the SAME numbers
                             // addBrowserSource gives OBS, so the preview's
                             // viewport is the source's viewport — which is what

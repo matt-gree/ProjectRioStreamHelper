@@ -128,7 +128,7 @@ export function boxHeight(width, native, minHeight, maxHeight) {
 const ScaledIframe = memo(function ScaledIframe({
     src, nativeWidth, nativeHeight, fallbackWidth, fallbackHeight,
     height, minHeight, maxHeight, title = 'Layout preview',
-    className = '', onLoad, onFit,
+    className = '', onLoad, onFit, measureKey,
 }) {
     const containerRef = useRef(null);
     const iframeRef = useRef(null);
@@ -192,6 +192,17 @@ const ScaledIframe = memo(function ScaledIframe({
     useLayoutEffect(() => {
         if (native) recalc(native);
     }, [native, recalc]);
+
+    // An escape hatch from the drift threshold. `shapedAtRef` deliberately
+    // holds the box still through small width changes, which also means a
+    // height measured at a bad moment (a panel opening, a collapsed tab) sticks
+    // until something moves the width by more than RESHAPE_THRESHOLD. Bumping
+    // `measureKey` forgets the last shaping width and re-derives from scratch.
+    useLayoutEffect(() => {
+        if (measureKey === undefined) return;
+        shapedAtRef.current = null;
+        if (native) recalc(native);
+    }, [measureKey, native, recalc]);
 
     useEffect(() => {
         const el = containerRef.current;
