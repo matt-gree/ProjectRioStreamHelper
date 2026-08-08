@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
-import { render, screen, cleanup, fireEvent } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, within } from '@testing-library/react';
 import { TooltipProvider } from '../../../components/ui/tooltip';
 import { useSettingsStore } from '../../../context/store';
 import { useStagingStore } from '../../../context/staging';
@@ -42,10 +42,16 @@ describe('Scorecard stage', () => {
         }
     });
 
+    /*
+     * A paired field draws no label of its own — the chip beside it names the
+     * band — so its label lives on as the input's ACCESSIBLE name. By name is
+     * how it must stay findable: the placeholder is the only other clue, and
+     * that disappears the moment the field holds a value.
+     */
     it('surfaces the authored text fields too — nothing lands on Setup only', () => {
         ui();
         for (const def of LAYOUT_SETTINGS.scorecard.filter(d => d.type === 'text')) {
-            expect(screen.getByText(def.label), def.key).toBeInTheDocument();
+            expect(screen.getByLabelText(def.label), def.key).toBeInTheDocument();
         }
     });
 
@@ -53,17 +59,42 @@ describe('Scorecard stage', () => {
      * The panel reads down the card: top bars, score block, lower bars. The
      * header title and the phase text used to sit in the catch-all Style
      * section, a scroll below the switch each one belongs to — with a sentence
-     * in the panel explaining where they had gone.
+     * in the panel explaining where they had gone. They are now on the SAME ROW
+     * as that bar's toggle, which is what lets the toggle be a chip like every
+     * other band toggle without stranding the text it draws.
      */
-    it('groups the bands down the card, with each bar’s text beside its switch', () => {
+    it('groups the bands down the card, with each bar’s text beside its toggle', () => {
         ui();
         const groups = [...document.querySelectorAll('[data-setting-group]')]
             .map(e => e.dataset.settingGroup);
         expect(groups).toEqual(['Top bars', 'Score block', 'Lower bars']);
         const top = document.querySelector('[data-setting-group="Top bars"]');
-        expect(top).toHaveTextContent('Header Bar');
-        expect(top).toHaveTextContent('Header Title');
+        expect(within(top).getByRole('button', { name: 'Header Bar' })).toBeInTheDocument();
+        expect(within(top).getByLabelText('Header Title')).toBeInTheDocument();
         expect(screen.queryByText('Style')).not.toBeInTheDocument();
+    });
+
+    // The pair is one row: the bar's toggle and the text it draws, together.
+    it('puts a bar’s toggle and its text field on the same row', () => {
+        ui();
+        const chip = screen.getByRole('button', { name: 'Bracket Phase' });
+        const field = screen.getByLabelText('Phase Text');
+        expect(chip.parentElement).toBe(field.closest('div').parentElement);
+    });
+
+    /*
+     * Game Mode is the only Top bar with no title field, and it rendered at its
+     * own content width beside two toggles sized to the label column — one
+     * region, two chip widths. A toggle with no field is still a bar in the
+     * list, so it takes the same column.
+     */
+    it('gives every toggle in a paired region the same width', () => {
+        ui();
+        const width = (name) => screen.getByRole('button', { name }).className;
+        expect(width('Game Mode')).toBe(width('Header Bar'));
+        expect(width('Game Mode')).toBe(width('Bracket Phase'));
+        // Regions with no pairs still pack: a strip chip is not column-sized.
+        expect(width('Box Score')).not.toBe(width('Game Mode'));
     });
 
     // The headline decision stays flat above the groups — it is also the rail
@@ -89,7 +120,7 @@ describe('Scorecard stage', () => {
     it('writes per board, so two scorecard sources stay independent', () => {
         useSettingsStore.setState({ scoreboards: { active: [1, 2] } });
         ui('scorecard:2');
-        // Clicking a toggle row's label flips its switch (default true → false).
+        // A band toggle is a chip; clicking it flips it (default true → false).
         fireEvent.click(screen.getByText('Box Score'));
         expect(useSettingsStore.getState()?.overlays?.scorecard?.[2]?.showBoxScore).toBe(false);
         expect(useSettingsStore.getState()?.overlays?.scorecard?.[1]).toBeUndefined();

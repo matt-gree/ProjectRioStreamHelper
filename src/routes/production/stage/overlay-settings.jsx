@@ -5,7 +5,10 @@ import { usePending } from '../../../context/staging';
 import { Text } from '../../../components/ui/primitives';
 import { LAYOUT_SETTINGS, THEME_ELEMENT } from '../../layouts/designConstants';
 import { usePaintedByApp } from '../../layouts/designPackage';
-import { SegmentedRow, ToggleRow, TextRow, NumberRow, ColorRow } from '../kit';
+import {
+    SegmentedRow, ToggleRow, ToggleChip, ToggleChips, TextRow, NumberRow, ColorRow, KIT_LABEL,
+} from '../kit';
+import { cn } from '../../../lib/utils';
 import { stageSettingsSet } from '../controls';
 
 /*
@@ -154,12 +157,148 @@ export const OverlaySettingRow = memo(function OverlaySettingRow({ os, def }) {
     );
 });
 
-// Convenience: a run of rows from a key list. Always flat — a body asking for
-// named keys has already decided their order, and the rail's quick face is built
-// from this too, where a group eyebrow would blow the two-row cap.
+// The same setting as a chip, for a def that `chunkDefs` put in a part set.
+// Same reads as the row (staged value wins, showWhen gates) — only the shape
+// differs, so the two can never disagree about what a setting says.
+export const OverlaySettingChip = memo(function OverlaySettingChip({ os, def, className }) {
+    const pending = usePending(`settings:${settingKey(os.ns, def.key)}`);
+    const shown = useShowWhen(os, def);
+    const value = pending ? pending.value : resolveSetting(os.bag, def, os.board);
+
+    if (!shown) return null;
+    return (
+        <ToggleChip
+            label={def.label} checked={!!value} staged={!!pending}
+            title={def.description} className={className}
+            onChange={(v) => os.set(def, v)}
+        />
+    );
+});
+
+/*
+ * EVERY registry `switch` is a chip. The only question is how it is laid out.
+ *
+ * The line this draws is between a PART OF THE OVERLAY and a BEHAVIOUR. A
+ * registry switch always answers "is this piece drawn" — the header bar, the
+ * box score, the dates — and that is a multi-select over the element's anatomy,
+ * so it gets the one idiom. A switch survives only for things that are not
+ * parts: the intro animation, a spotlight auto-cut, a source's on-air state.
+ * Those are hand-written ToggleRows and stay switches, which now MEANS
+ * something instead of being arbitrary.
+ *
+ * This replaced a rule that chipped only runs of two or more adjacent
+ * switches. It read well on the event header but broke on the scorecard, whose
+ * Top bars alternate switch/text because each bar owns a title field: Header
+ * Bar, Bracket Phase and Game Mode are the same kind of thing as Rosters and
+ * Box Score, but every one of them was a run of one, so the same panel drew one
+ * concept two different ways.
+ *
+ * Layout, in registry order:
+ *   pair  — a switch immediately followed by a `text` def: the chip IS that
+ *           field's label, on one row. Keeps a bar's title beside the bar
+ *           (LAYOUT_SETTINGS.scorecard fought to put it there) while making
+ *           the toggle match every other band toggle in the panel.
+ *   chips — adjacent switches with no field of their own, packed into a strip.
+ *   row   — everything else.
+ */
+export function chunkDefs(defs) {
+    const out = [];
+    for (let i = 0; i < defs.length; i += 1) {
+        const def = defs[i];
+        if (def.type !== 'switch') {
+            out.push({ kind: 'row', defs: [def] });
+            continue;
+        }
+        const next = defs[i + 1];
+        if (next?.type === 'text') {
+            out.push({ kind: 'pair', defs: [def, next] });
+            i += 1;
+            continue;
+        }
+        const last = out[out.length - 1];
+        if (last?.kind === 'chips') last.defs.push(def);
+        else out.push({ kind: 'chips', defs: [def] });
+    }
+    /*
+     * Once ANY bar in a region owns a text field, the region is a list of bars
+     * and every toggle in it lines up in the same column — an unpaired one
+     * becomes a pair with an empty field rather than a content-width chip in a
+     * strip. Without this the scorecard's Top bars drew Header Bar and Bracket
+     * Phase at the label column's width and Game Mode, which has no title, at
+     * its own, so one region had two chip widths.
+     *
+     * A region with no pairs at all (Score block, Lower bars) is untouched:
+     * there is no column to line up with, and packed chips are the point.
+     */
+    if (out.some(seg => seg.kind === 'pair')) {
+        return out.flatMap(seg => (seg.kind === 'chips'
+            ? seg.defs.map(d => ({ kind: 'pair', defs: [d] }))
+            : seg));
+    }
+    return out;
+}
+
+/*
+ * The text half of a paired row. Same reads as OverlaySettingRow — staged value
+ * wins, showWhen gates — but it draws no label, because the chip beside it
+ * already names the band. The label survives as the input's accessible name:
+ * a placeholder vanishes the moment the field holds a value, so it cannot be
+ * the only thing identifying what the field is.
+ */
+const PairedField = memo(function PairedField({ os, def }) {
+    const pending = usePending(`settings:${settingKey(os.ns, def.key)}`);
+    const shown = useShowWhen(os, def);
+    const value = pending ? pending.value : resolveSetting(os.bag, def, os.board);
+
+    if (!shown) return null;
+    return (
+        <TextRow
+            label={null} ariaLabel={def.label} value={value} placeholder={def.placeholder}
+            staged={!!pending} className="min-w-0 flex-1"
+            onChange={(v) => os.set(def, v)}
+        />
+    );
+});
+
+// A def list as pairs, chip strips and rows, in registry order.
+export const SettingSegments = memo(function SettingSegments({ os, defs }) {
+    return chunkDefs(defs).map((seg) => {
+        const key = seg.defs[0].key;
+        if (seg.kind === 'pair') {
+            const [sw, field] = seg.defs;
+            return (
+                <div key={key} className="flex min-h-7 items-center gap-2">
+                    {/* The label column's width, so a paired field starts where
+                        every other row's control does. */}
+                    <OverlaySettingChip os={os} def={sw} className={cn(KIT_LABEL, 'justify-center')} />
+                    {field && <PairedField os={os} def={field} />}
+                </div>
+            );
+        }
+        if (seg.kind === 'chips') {
+            return (
+                <ToggleChips key={key}>
+                    {seg.defs.map(def => <OverlaySettingChip key={def.key} os={os} def={def} />)}
+                </ToggleChips>
+            );
+        }
+        return seg.defs.map(def => <OverlaySettingRow key={def.key} os={os} def={def} />);
+    });
+});
+
+/*
+ * Convenience: a run from a key list. Always flat — a body asking for named
+ * keys has already decided their order, and the rail's quick face is built from
+ * this too, where a group eyebrow would blow the two-row cap.
+ *
+ * Flat means UNGROUPED, not un-chipped: it goes through the same segments as
+ * the stage so a band toggle is the same control on both surfaces. The rail
+ * gains from it twice — the event header's two bands become one strip, which
+ * gives a card back a row of its two-row budget.
+ */
 export const OverlaySettingRows = memo(function OverlaySettingRows({ os, type, keys }) {
     const defs = useLiveDefs(type, defsFor(type, keys));
-    return defs.map(def => <OverlaySettingRow key={def.key} os={os} def={def} />);
+    return <SettingSegments os={os} defs={defs} />;
 });
 
 /*
@@ -196,24 +335,35 @@ export function groupDefs(defs) {
 export const SettingGroups = memo(function SettingGroups({ os, defs }) {
     const groups = groupDefs(defs);
     if (groups.length === 1 && groups[0].group == null) {
-        return groups[0].defs.map(def => <OverlaySettingRow key={def.key} os={os} def={def} />);
+        return <SettingSegments os={os} defs={groups[0].defs} />;
     }
     /*
      * Two columns once the PANEL is wide enough (PanelShell's body is the
      * `@container`), one below that. A stage panel is ~950px and a settings row
      * is a label and a control, so a single column left most of that width empty
-     * beside every row — the "sparsely populated" read. Groups are the grid
-     * items, so each region stays a top-to-bottom run and only the regions sit
-     * side by side.
+     * beside every row — the "sparsely populated" read. Regions stay whole
+     * (`break-inside-avoid`); only the regions sit side by side.
+     *
+     * CSS columns rather than a 2-col GRID, because regions differ wildly in
+     * height and a grid gives every row the height of its tallest cell. The
+     * Scorecard is the worst case: Top bars is five rows deep and Score block is
+     * a single chip strip, so the grid left ~400px of dead panel under Score
+     * block and pushed Lower bars onto a third row. Columns pack and balance
+     * instead, and the reading order stays the registry's — down column one,
+     * then column two — which is the order the regions appear on screen.
      */
     return (
-        <div className="grid gap-x-6 gap-y-3 @3xl:grid-cols-2">
+        <div className="columns-1 gap-x-6 @3xl:columns-2">
             {groups.map(({ group, defs: rows }) => (
-                <div key={group ?? '_'} data-setting-group={group ?? ''} className="flex flex-col gap-1.5">
+                <div
+                    key={group ?? '_'}
+                    data-setting-group={group ?? ''}
+                    className="mb-3 flex break-inside-avoid flex-col gap-1.5 last:mb-0"
+                >
                     {group && (
                         <Text size="xs" className="label-display text-muted-foreground">{group}</Text>
                     )}
-                    {rows.map(def => <OverlaySettingRow key={def.key} os={os} def={def} />)}
+                    <SettingSegments os={os} defs={rows} />
                 </div>
             ))}
         </div>

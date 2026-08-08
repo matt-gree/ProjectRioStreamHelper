@@ -168,11 +168,6 @@ export default function PlayerPlatesStage({ element }) {
             {showSide(1) && <PlayerPlateSide t={1} pp={pp} />}
             {showSide(2) && <PlayerPlateSide t={2} pp={pp} />}
 
-            <Text size="xs" className="border-t border-border/60 pt-2 text-muted-foreground">
-                Match-fed plates resolve names + the chosen field from the match’s
-                participants; switch to Manual to type them. In Both mode the two plates
-                pin to left/right; single modes place the plate at the chosen location.
-            </Text>
         </>
     );
 }

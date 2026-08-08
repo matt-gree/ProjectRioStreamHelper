@@ -65,12 +65,11 @@ export const IntroRow = memo(function IntroRow({ element }) {
     return (
         <div className="mt-1 flex flex-col gap-1.5 border-t border-border/60 pt-2">
             <Text size="xs" className="label-display text-muted-foreground">On show</Text>
+            {/* The switch says it. The caption under it described the MECHANISM
+                (reload on show vs stay resident), which is how PRSH delivers a
+                clean reveal, not a decision the producer makes — and it sat on
+                every animated element's panel, permanently. */}
             <ToggleRow label="Intro animation" checked={!disabled} onChange={onChange} />
-            <Text size="xs" className="text-muted-foreground">
-                {disabled
-                    ? 'Off — the source stays resident in OBS (no reload on show).'
-                    : 'On — the source reloads on show for a clean reveal from a blank frame.'}
-            </Text>
         </div>
     );
 });

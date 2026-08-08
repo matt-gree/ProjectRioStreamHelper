@@ -22,7 +22,7 @@ export const SourceToggleRow = memo(function SourceToggleRow({ label, item, scen
     const { enabled, staged } = useDisplayedEnabled(sceneName, item);
     return (
         <ToggleRow
-            label={label} checked={enabled} staged={staged}
+            label={label} checked={enabled} staged={staged} spread
             onChange={(v) => setSourceVisibility(sceneName, item, v)}
         />
     );
@@ -42,13 +42,18 @@ export const BindingNote = memo(function BindingNote({ binding, what = 'This ove
          * and the two ways out it named (the header's Bind, a scene's +) are both
          * gone, since neither exists without a connection. Say what IS available:
          * the panel works, and the header hands over the URL.
+         *
+         * Kept to ONE LINE at panel width. It ran to two, which on a note this
+         * incidental read as a paragraph to be got through rather than a caption.
+         * The two clauses it lost were both already on screen: that PRSH can't
+         * see your scenes is what the absent scene name says, and the page's own
+         * banner announces the disconnection above every panel.
          */
         return (
             <Text size="xs" className="text-muted-foreground">
                 {offline
-                    ? `OBS isn’t connected, so PRSH can’t see your scenes. Everything on this
-                       panel still works — Copy URL in the header gives you the source to paste
-                       in by hand.`.replace(/\s+/g, ' ')
+                    ? `OBS isn’t connected, but this panel still works — Copy URL in the header
+                       to add the source.`.replace(/\s+/g, ' ')
                     : `${what} isn’t in any scene we can see — add it from the header, or with
                        the + beside a scene in the rack.`.replace(/\s+/g, ' ')}
             </Text>

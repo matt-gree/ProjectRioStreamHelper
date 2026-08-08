@@ -1,7 +1,5 @@
 import { memo } from 'react';
-import { Text } from '../../../components/ui/primitives';
 import { LAYOUT_SETTINGS } from '../../layouts/designConstants';
-import { useBoardLabel } from '../boards';
 import { DirectStage } from './generic';
 import { OverlaySettingGroups, OverlaySettingRow, defsFor, useOverlaySettings } from './overlay-settings';
 
@@ -38,9 +36,8 @@ const GROUPED_KEYS = LAYOUT_SETTINGS.scorecard.map(d => d.key).filter(k => k !==
  * means picking the other Scorecard row in the rack.
  */
 export function useScorecard(board = 1) {
-    const boardLabel = useBoardLabel();
     const os = useOverlaySettings('scorecard', `scorecard.${board}`, `Scorecard ${board}`, board);
-    return { boardLabel, board, os };
+    return { board, os };
 }
 
 // The scorecard's headline live control — also its rail quick-face row.
@@ -61,12 +58,6 @@ export default function ScorecardStage({ element, board }) {
                 <ScorecardModeRow sc={sc} />
                 <OverlaySettingGroups os={sc.os} type="scorecard" keys={GROUPED_KEYS} />
             </div>
-
-            <Text size="xs" className="border-t border-border/60 pt-2 text-muted-foreground">
-                Bands animate in and out as you flip them, and apply to{' '}
-                <b>{sc.boardLabel(sc.board)}</b> only. Colours come from the active
-                design package.
-            </Text>
         </>
     );
 }

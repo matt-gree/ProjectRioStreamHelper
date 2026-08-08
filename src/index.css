@@ -65,7 +65,16 @@
   --color-night-700: #1a1a2e;
   --color-night-600: #24243d;
 
-  /* Brand accents */
+  /* Brand accents.
+     rio-300 is the ON / MINE / LIVE accent worn by small console controls —
+     IconToggle, the rack's container-push button, the lower third's live slot —
+     where it sits beside amber (staged) and muted (inactive). It is a stop of
+     its own rather than a reuse of rio-400 because those controls are 12px text
+     and 13px icons on surfaces up to night-600: rio-400 measures 4.41:1 on
+     night-700 and 3.90:1 on night-600, so it misses AA for small text on the
+     two lighter panels. rio-300 clears 4.5:1 against every surface in the
+     scale, and stays on the ramp's own line (hue 356, sat 100%, L 40/45/55/66). */
+  --color-rio-300: #ff525d;
   --color-rio-400: #ff1a2a;
   --color-rio-500: #e60012;
   --color-rio-600: #cc0010;

@@ -112,3 +112,54 @@ describe('Event Header stage', () => {
         expect(useSettingsStore.getState()?.overlays?.eventheader?.showFooter).toBe(false);
     });
 });
+
+/*
+ * A registry switch is a PART of the overlay, and every part is a chip.
+ *
+ * The event header is eight booleans — two band masters and six fields inside
+ * them — and all eight answer "is this piece drawn". Rendered as eight switch
+ * rows they cost ~224px and read as eight unrelated settings. The earlier rule
+ * chipped only runs of two or more, which left the two masters as switches;
+ * that read fine here but drew one concept two ways on the scorecard, whose
+ * band toggles are each separated by their own title field.
+ */
+describe('every part toggle is a chip', () => {
+    const pressed = (label) => screen.getByRole('button', { name: label, pressed: true });
+
+    it('chips the per-field switches inside each band', () => {
+        ui();
+        for (const label of ['Location', 'Dates', 'Message', 'Phase', 'Round']) {
+            expect(pressed(label), label).toBeInTheDocument();
+        }
+    });
+
+    // The masters too — a band's own on/off is still a part of the overlay, so
+    // it takes the same control as the fields it governs. Its rank shows in
+    // position (first, on its own row above the offset), not in control type.
+    it('chips each band’s own master', () => {
+        ui();
+        for (const label of ['Header Band', 'Footer Band']) {
+            expect(pressed(label), label).toBeInTheDocument();
+        }
+    });
+
+    // Alone in its group ('Both bands' is switch · select · number), and still a
+    // chip: consistency is the point, so a lone part does not get a lone switch.
+    it('chips a part toggle that has no siblings', () => {
+        ui();
+        expect(pressed('Event Name')).toBeInTheDocument();
+    });
+
+    // Nothing in this panel should be left drawing a part as a switch.
+    it('leaves no switch behind on the panel', () => {
+        ui();
+        expect(screen.queryAllByRole('switch')).toHaveLength(0);
+    });
+
+    it('writes through a chip the same way a row does', () => {
+        ui();
+        fireEvent.click(pressed('Dates'));
+        expect(useSettingsStore.getState()?.overlays?.eventheader?.showDates).toBe(false);
+        expect(screen.getByRole('button', { name: 'Dates', pressed: false })).toBeInTheDocument();
+    });
+});

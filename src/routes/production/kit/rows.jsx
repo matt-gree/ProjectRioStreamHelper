@@ -73,17 +73,89 @@ export const SubjectRow = memo(function SubjectRow({ text, meta, tone, title, cl
     );
 });
 
-// label · switch — source visibility, sub-plate toggles.
+/*
+ * label · switch — source visibility, sub-plate toggles.
+ *
+ * The switch sits in the SAME control column as every other row's control
+ * (KIT_LABEL), not pinned to the far right. It was the one kit row using
+ * `justify-between`, which on a stage panel threw the switch ~550px from its
+ * own label and stranded it in a second column nothing else used: a Scorecard's
+ * three band switches lined up on the right edge while every input beside them
+ * started on the left. Aligned, a panel reads as one column of controls.
+ *
+ * `spread` restores the pinned-right layout for NARROW surfaces — the rail card
+ * and rack row, which are not `@container`s, so KIT_LABEL stays at its 64px
+ * floor there and would clip a label like "Container on air". Those rows carry
+ * one toggle and no input to align with, so there is no column to join.
+ */
 export const ToggleRow = memo(function ToggleRow({
-    label, checked, onChange, disabled, staged, className,
+    label, checked, onChange, disabled, staged, spread, className,
 }) {
+    const tone = staged ? 'text-amber-400' : 'text-foreground';
     return (
-        <label className={cn(ROW, 'justify-between', className)}>
-            <Text size="xs" span truncate className={cn('min-w-0', staged ? 'text-amber-400' : 'text-foreground')}>
+        <label className={cn(ROW, spread && 'justify-between', className)}>
+            <Text
+                size="xs" span truncate
+                className={cn('min-w-0', spread ? tone : cn(KIT_LABEL, tone))}
+            >
                 {label}
             </Text>
             <Switch size="sm" checked={!!checked} onCheckedChange={onChange} disabled={disabled} />
         </label>
+    );
+});
+
+/*
+ * A run of booleans as pressed chips — for a set of PARTS OF ONE ELEMENT,
+ * where ToggleRow is for a setting that stands on its own.
+ *
+ * A switch spends a 28px full-width row on one bit, with the label pinned left
+ * and the control pinned right. Eight of them (the event header's bands and
+ * fields) cost ~224px, and reading "what is showing" means crossing that empty
+ * gutter eight times. But the deeper problem is that those eight are not eight
+ * settings: they are one multi-select over the overlay's anatomy. A chip strip
+ * renders it as one — state IS the fill, so the answer is a single glance, and
+ * the set reads as a set.
+ *
+ * NOT a replacement for ToggleRow. A lone consequential boolean (a band's own
+ * on/off, the intro animation) keeps its row: the switch's size is an
+ * affordance there, and one chip alone in a strip reads as a fragment rather
+ * than a set. The rule that picks between them lives in
+ * ../stage/overlay-settings (`chunkDefs`).
+ *
+ * Tiered by WEIGHT, not by a new hue — the same reasoning as SubjectRow above.
+ * The console's colours are spoken for (emerald AIR · sky PVW · rio DESK ·
+ * amber staged) and "this part is drawn" is not any of them, so on is
+ * foreground + fill and off is muted + hairline. Amber still means staged.
+ */
+export const ToggleChip = memo(function ToggleChip({
+    label, checked, onChange, disabled, staged, title, className,
+}) {
+    return (
+        <button
+            type="button" onClick={() => onChange?.(!checked)} disabled={disabled}
+            aria-pressed={!!checked} title={title || undefined}
+            className={cn(
+                'flex h-6 shrink-0 items-center rounded-md border px-2 text-xs transition-colors',
+                'disabled:cursor-not-allowed disabled:opacity-40',
+                staged ? 'border-amber-400/60 bg-amber-400/10 text-amber-400'
+                    : checked ? 'border-foreground/25 bg-foreground/10 text-foreground'
+                        : 'border-border text-muted-foreground hover:text-foreground',
+                className,
+            )}
+        >
+            <span className="min-w-0 truncate">{label}</span>
+        </button>
+    );
+});
+
+// The strip a run of ToggleChips sits in. `empty:hidden` so a run whose every
+// chip is gated out by showWhen collapses instead of leaving the group's gap.
+export const ToggleChips = memo(function ToggleChips({ children, className }) {
+    return (
+        <div className={cn('flex min-h-7 flex-wrap items-center gap-1 empty:hidden', className)}>
+            {children}
+        </div>
     );
 });
 
@@ -200,8 +272,12 @@ function useDebouncedText(value, onChange, ms) {
 // label · text input — a short authored string (header title, field separator,
 // a card's custom bottom line). Debounced by default (see useDebouncedText);
 // pass `debounceMs={0}` for a field that must land on the keystroke.
+// `ariaLabel` names the input when the row draws no label of its own — the
+// paired chip rows, where the chip beside the field is what names the band.
+// Without it a labelless field would be reachable only by its placeholder,
+// which disappears the moment it holds a value.
 export const TextRow = memo(function TextRow({
-    label, value, onChange, placeholder, disabled, staged, debounceMs = 300, className,
+    label, value, onChange, placeholder, disabled, staged, debounceMs = 300, ariaLabel, className,
 }) {
     const [draft, type, commit] = useDebouncedText(value, onChange, debounceMs);
     const deferred = debounceMs > 0;
@@ -214,7 +290,7 @@ export const TextRow = memo(function TextRow({
             )}
             <input
                 type="text" disabled={disabled} placeholder={placeholder}
-                aria-label={named(label)}
+                aria-label={ariaLabel || named(label)}
                 value={deferred ? draft : (value ?? '')}
                 onChange={(e) => (deferred ? type(e.target.value) : onChange?.(e.target.value))}
                 onBlur={deferred ? commit : undefined}
