@@ -13,6 +13,11 @@ from server.settings import Settings
 from server.utils.deep_dict import deep_set, deep_unset, deep_get
 from server.utils import json
 
+# Distinguishes "key is absent" from "key is present and None" when diffing.
+# State legitimately holds None values, so it cannot be the missing marker.
+_MISSING = object()
+
+
 class State:
     state = {}
     last_state = {}
@@ -136,7 +141,16 @@ class State:
 
     @classmethod
     def _compute_changes(cls, tracked: list[str]) -> list[dict]:
-        """Build a list of changes by comparing tracked keys between last_state and state."""
+        """Build a list of changes by comparing tracked keys between last_state and state.
+
+        A key that is GONE from `state` is reported as an unset, not as a
+        set-to-None. The distinction matters twice: Export removes the label file
+        instead of writing "None", and Save drops the key from `last_state`
+        instead of leaving a None behind. That None was not inert — `deep_set`
+        descends through `last_state`, so the next write to anything *under* an
+        unset path (board and match ids are reused, so this is routine) walked
+        into it and raised TypeError out of Save.
+        """
         changes = []
         seen = set()
         for key in tracked:
@@ -144,9 +158,22 @@ class State:
                 continue
             seen.add(key)
 
-            old_val = deep_get(cls.last_state, key)
-            new_val = deep_get(cls.state, key)
+            old_val = deep_get(cls.last_state, key, _MISSING)
+            new_val = deep_get(cls.state, key, _MISSING)
 
+            if old_val is _MISSING and new_val is _MISSING:
+                continue
+
+            if new_val is _MISSING:
+                changes.append({
+                    "key": key,
+                    "old": None if old_val is _MISSING else old_val,
+                    "new": None,
+                    "action": "unset",
+                })
+                continue
+
+            old_val = None if old_val is _MISSING else old_val
             if old_val != new_val:
                 changes.append({
                     "key": key,
@@ -172,7 +199,7 @@ class State:
         try:
             async with cls._state_file().open(mode='rb', encoding='utf-8') as f:
                 cls.state = await json.loads(await f.read())
-        except:
+        except Exception:
             logger.warning("unable to load state.json, using default dict")
         cls.last_state = copy.deepcopy(cls.state)
 
@@ -307,7 +334,7 @@ class State:
                             format="png"
                         )
                         await dlpath.unlink(missing_ok=True)
-        except:
+        except Exception:
             logger.exception("unable to download image")
 
     @classmethod
@@ -331,14 +358,14 @@ class State:
             if await _p.exists() == True:
                 try:
                     await _p.unlink()
-                except:
+                except Exception:
                     logger.exception("unable to remove file")
         elif isinstance(di, str) and di.startswith("http") and (di.endswith(".png") or di.endswith("jpg")):
             try:
                 _p = AsyncPath(f"{cls._labels_dir()}/{path}" + "." + di.rsplit(".", 1)[-1])
                 if await _p.exists() == True:
                     await _p.unlink()
-            except:
+            except Exception:
                 logger.exception("error in create_files_dict")
             finally:
                 await cls.queue.put(partial(
@@ -361,19 +388,19 @@ class State:
                 _p = AsyncPath(f"{cls._labels_dir()}/{path}." + di.rsplit(".", 1)[-1])
                 if await _p.exists() == True:
                     await _p.unlink()
-            except:
+            except Exception:
                 logger.exception("unable to remove file")
         else:
             try:
                 _p = AsyncPath(f"{cls._labels_dir()}/{path}.txt")
                 if await _p.exists() == True:
                     await _p.unlink()
-            except:
+            except Exception:
                 logger.exception("unable to remove file")
 
         try:
             _p = AsyncPath(f"{cls._labels_dir()}/{path}")
             if await _p.exists() == True:
                 await asyncio.to_thread(rmtree, str(_p))
-        except:
+        except Exception:
             logger.exception("unable to remove directory")

@@ -489,7 +489,7 @@ class Settings:
                 file_existed = isinstance(loaded, dict)
                 loaded_server = (loaded.get("server") or {}) if isinstance(loaded, dict) else {}
                 cls.settings = _deep_merge(cls.settings, loaded)
-        except:
+        except Exception:
             logger.debug("using default settings dict")
 
         # Migrate legacy `server.host` to `server.allow_lan`. Prior versions

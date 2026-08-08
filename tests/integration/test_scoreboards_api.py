@@ -74,6 +74,26 @@ async def test_remove_board_clears_state_binding_and_alias(client, set_setting):
     assert Settings.Get("scoreboards.aliases.2") is None
 
 
+async def test_board_removed_then_re_added_can_be_written_to(client, set_setting):
+    """Remove a board and add one back — `_lowest_available_id` hands out the
+    same id — then write live state into it. The Save after that write used to
+    raise TypeError, because removing the board left a None at `score.2` in
+    last_state and deep_set cannot descend through it."""
+    set_setting("scoreboards.active", [1, 2])
+    await State.Set("score.2.player.1.rioName", "A")
+    await State.Save()
+
+    client.delete("/api/v1/scoreboards/2")
+    await State.Save()
+
+    assert client.post("/api/v1/scoreboards").json()["id"] == 2   # id reused
+
+    await State.SetBatch([("score.2.player.1.rioName", "B")])
+    await State.Save()
+
+    assert State.state["score"]["2"]["player"]["1"]["rioName"] == "B"
+
+
 # --- alias ---
 
 def test_alias_set_and_clear(client, set_setting):

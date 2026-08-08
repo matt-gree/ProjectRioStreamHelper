@@ -60,6 +60,21 @@ def test_deep_set_top_level():
     assert d == {"x": 1}
 
 
+@pytest.mark.parametrize("blocker", [None, "scalar", 7, ["a"]])
+def test_deep_set_replaces_a_nondict_on_the_path(blocker):
+    # The deeper write wins: descending into the blocker used to raise
+    # (TypeError / 'str' object does not support item assignment).
+    d = {"a": {"b": blocker}}
+    deep_set(d, "a.b.c", 1)
+    assert d == {"a": {"b": {"c": 1}}}
+
+
+def test_deep_set_through_a_nondict_keeps_siblings():
+    d = {"a": {"b": None, "keep": 1}}
+    deep_set(d, "a.b.c", 2)
+    assert d == {"a": {"b": {"c": 2}, "keep": 1}}
+
+
 # --- deep_unset ---
 
 def test_deep_unset_removes_leaf():
@@ -84,3 +99,11 @@ def test_deep_unset_top_level():
     d = {"x": 1, "y": 2}
     deep_unset(d, "x")
     assert d == {"y": 2}
+
+
+@pytest.mark.parametrize("blocker", [None, "scalar", 7, ["a"]])
+def test_deep_unset_through_a_nondict_is_noop(blocker):
+    # Nothing can exist under a non-dict, so there is nothing to remove.
+    d = {"a": {"b": blocker}}
+    deep_unset(d, "a.b.c")  # must not raise
+    assert d == {"a": {"b": blocker}}
