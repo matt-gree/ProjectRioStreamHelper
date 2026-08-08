@@ -99,6 +99,9 @@ def reset_singletons():
     # test would otherwise run inside every later test's writes.
     State.hooks = []
     State.unset_hooks = []
+    # Same loop-binding hazard as the queue: an Event/Lock binds on first await.
+    State._persist_dirty = None
+    State._save_lock = None
     Automations.reset()
 
     Provider._prev_player_sides = {}
@@ -108,6 +111,9 @@ def reset_singletons():
     Provider._user_overridden = False
     Provider._hud_targets = []
     Provider.hud_watcher = None
+    # Sticky across games by design (it drives the next frame's mode retry), so
+    # a test that leaves it raised makes the next one retry a mode it never set.
+    Provider._game_mode_unresolved = False
     # asyncio.Lock binds to the loop it first awaits under — each test gets a
     # fresh event loop, so drop any lock created under a previous test's loop.
     Provider._update_lock = None

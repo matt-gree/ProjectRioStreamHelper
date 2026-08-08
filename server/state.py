@@ -46,6 +46,19 @@ def _safe_segment(name) -> str:
     return seg
 
 
+# How often state.json may be rewritten, in seconds.
+#
+# Every Save() used to write the WHOLE file. With a real broadcast state (~270
+# KB) and Rio's HUD debounce (300 ms), that is ~2.7 MB/s of continuous disk
+# writes for the length of a stream — and on Windows every one of them goes
+# through the AV filter driver. But state.json is read at BOOT and nowhere else,
+# so it only has to be RECENT, not current: a coalescing writer bounds it to one
+# write per interval, and the shutdown path takes the last one unconditionally.
+# The worst case is a hard kill losing under a second of a file the next HUD
+# frame rewrites anyway.
+PERSIST_INTERVAL = 1.0
+
+
 class State:
     state = {}
     last_state = {}
@@ -68,6 +81,12 @@ class State:
     # and tests can inject temp paths by assigning these directly.
     _stream_labels_out: AsyncPath | None = None
     _program_state_out: AsyncPath | None = None
+    # state.json persistence. The flag is what Export raises instead of writing;
+    # Persister is what turns it back into a write. Both the flag and the lock
+    # are created lazily because an Event/Lock binds to the loop it is first
+    # awaited under, and tests get a fresh loop each.
+    _persist_dirty: asyncio.Event | None = None
+    _save_lock: asyncio.Lock | None = None
 
     @classmethod
     def _labels_dir(cls) -> AsyncPath:
@@ -109,7 +128,9 @@ class State:
         Args:
             changes: list of {"key": dot.path, "old": old_value, "new": new_value, "action": "set"|"unset"}
         """
-        await cls.SaveImmediately()
+        # Raise the flag rather than write. Persister owns the file; see
+        # PERSIST_INTERVAL for why a write per change is not affordable.
+        cls.MarkDirty()
 
         disable_export = Settings.Get("general.disable_export", True)
         # Setting may come in as a string ("1"/"") from query-param PUTs; coerce to bool.
@@ -141,6 +162,37 @@ class State:
                             await cls._create_files_dict(filename, new_val)
                 except Exception:
                     logger.exception("[State] stream-label export failed for {}", key)
+
+    @classmethod
+    def MarkDirty(cls):
+        """Note that state.json is behind. Cheap, sync, safe from any context."""
+        if cls._persist_dirty is None:
+            cls._persist_dirty = asyncio.Event()
+        cls._persist_dirty.set()
+
+    @classmethod
+    async def Persister(cls):
+        """Write state.json at most once per PERSIST_INTERVAL.
+
+        Leading write then a trailing one: the first change after a quiet period
+        lands immediately, and everything inside the following interval collapses
+        into a single write at the end of it. Nothing is dropped — the flag is
+        cleared BEFORE the write, so a change that arrives during one is still
+        pending afterwards.
+        """
+        try:
+            while True:
+                if cls._persist_dirty is None:
+                    cls._persist_dirty = asyncio.Event()
+                await cls._persist_dirty.wait()
+                cls._persist_dirty.clear()
+                try:
+                    await cls.SaveImmediately()
+                except Exception:
+                    logger.exception("[State] could not persist state.json")
+                await asyncio.sleep(PERSIST_INTERVAL)
+        except asyncio.CancelledError:
+            return
 
     @classmethod
     async def Consumer(cls):
@@ -225,11 +277,20 @@ class State:
         # Write to a sibling .tmp file then atomically rename. Without this,
         # a kill mid-write leaves state.json truncated and Load() silently
         # falls back to {}, losing all persisted state.
-        tmp = AsyncPath(str(cls._state_file()) + ".tmp")
-        async with tmp.open(mode='wb') as f:
-            d = await json.dumps(cls.state)
-            await f.write(d)
-        await tmp.replace(cls._state_file())
+        #
+        # Under a lock (as Settings.Save and Participants.Save are) because the
+        # atomicity is only as good as the tmp file: two writers share one .tmp
+        # path, and there is an await between the open that truncates it and the
+        # write that fills it. Shutdown is exactly where that happens — the
+        # explicit final save runs alongside whatever the persister had going.
+        if cls._save_lock is None:
+            cls._save_lock = asyncio.Lock()
+        async with cls._save_lock:
+            tmp = AsyncPath(str(cls._state_file()) + ".tmp")
+            async with tmp.open(mode='wb') as f:
+                d = await json.dumps(cls.state)
+                await f.write(d)
+            await tmp.replace(cls._state_file())
 
     @classmethod
     async def Load(cls):

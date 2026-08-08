@@ -184,12 +184,20 @@ async def test_export_coerces_string_disable_flag(set_setting, isolate_user_data
     assert (isolate_user_data / "stream_labels" / "x.txt").exists() is should_write
 
 
-async def test_export_always_writes_state_json(set_setting, isolate_user_data):
-    # SaveImmediately runs regardless of the export flag.
+async def test_export_marks_state_json_dirty_without_writing_it(
+    set_setting, isolate_user_data
+):
+    """Export raises the flag; Persister owns the file.
+
+    Regression: Export wrote the WHOLE of state.json itself, so every one of the
+    2-3 Save() calls a single HUD frame makes rewrote ~270 KB. See
+    test_persister_collapses_a_burst for what that costs.
+    """
     set_setting("general.disable_export", True)
     State.state = {"a": 1}
     await State.Export([])
-    assert (isolate_user_data / "state.json").exists()
+    assert not (isolate_user_data / "state.json").exists()
+    assert State._persist_dirty is not None and State._persist_dirty.is_set()
 
 
 async def test_http_image_dest_includes_key_path():
@@ -378,3 +386,105 @@ async def test_one_unwritable_label_does_not_lose_the_rest_of_the_batch(
     assert (labels / "first.txt").read_text() == "A"
     assert (labels / "last.txt").read_text() == "C"
     assert not (labels / "bad.txt").exists()
+
+
+# --- state.json persistence -------------------------------------------------
+#
+# state.json is read at boot and nowhere else, so it has to be RECENT rather
+# than current. What it must never be is rewritten per change: at ~270 KB of
+# real broadcast state and Rio's 300 ms HUD debounce, a write per Save() is
+# megabytes a second of disk traffic for the length of a stream.
+
+async def test_persister_collapses_a_burst_into_one_write(
+    isolate_user_data, monkeypatch
+):
+    import asyncio
+    from server import state as state_mod
+
+    monkeypatch.setattr(state_mod, "PERSIST_INTERVAL", 0.2)
+
+    writes = []
+    real = State.SaveImmediately
+
+    async def counted():
+        writes.append(1)
+        await real()
+
+    monkeypatch.setattr(State, "SaveImmediately", counted)
+
+    persister = asyncio.create_task(State.Persister())
+    consumer = asyncio.create_task(State.Consumer())
+    try:
+        # A burst the size of a few HUD frames' worth of Save() calls.
+        for i in range(30):
+            await State.SetBatch([(f"score.1.k{i}", i)])
+            await State.Save()
+        await State.queue.join()
+        await asyncio.sleep(0.05)
+        # Regression: this was 30 full-file writes, one per Save().
+        assert len(writes) == 1, f"{len(writes)} writes for one burst"
+
+        # And the burst is not merely dropped — the trailing write lands.
+        await asyncio.sleep(0.3)
+        assert len(writes) == 1
+        assert (isolate_user_data / "state.json").exists()
+    finally:
+        persister.cancel()
+        consumer.cancel()
+
+
+async def test_the_last_change_before_going_quiet_is_still_written(
+    isolate_user_data, monkeypatch
+):
+    """Coalescing must not mean losing the tail. A change made inside the
+    interval has to reach disk once the interval is over, with nothing further
+    to trigger it."""
+    import asyncio
+    from server import state as state_mod
+
+    monkeypatch.setattr(state_mod, "PERSIST_INTERVAL", 0.2)
+    persister = asyncio.create_task(State.Persister())
+    consumer = asyncio.create_task(State.Consumer())
+    try:
+        State.state = {}
+        await State.SetBatch([("first", 1)])
+        await State.Save()
+        await State.queue.join()
+        await asyncio.sleep(0.05)          # leading write: {"first": 1}
+
+        await State.SetBatch([("second", 2)])
+        await State.Save()
+        await State.queue.join()
+        await asyncio.sleep(0.4)           # nothing else happens after this
+
+        import orjson
+        on_disk = orjson.loads((isolate_user_data / "state.json").read_bytes())
+        assert on_disk.get("second") == 2, "the trailing change never reached disk"
+    finally:
+        persister.cancel()
+        consumer.cancel()
+
+
+async def test_concurrent_saves_cannot_interleave_on_the_shared_tmp_file(
+    isolate_user_data,
+):
+    """Shutdown runs an explicit SaveImmediately while the persister may have
+    one in flight. Both build the same `state.json.tmp`, and there is an await
+    between the open that truncates it and the write that fills it — so without
+    a lock the atomic rename publishes a file neither writer wrote."""
+    import asyncio
+    import orjson
+
+    State.state = {"big": "x" * 200_000}
+    small = {"small": "y"}
+
+    async def switch_then_save():
+        await asyncio.sleep(0)
+        State.state = small
+        await State.SaveImmediately()
+
+    await asyncio.gather(State.SaveImmediately(), switch_then_save())
+
+    raw = (isolate_user_data / "state.json").read_bytes()
+    loaded = orjson.loads(raw)             # must parse at all
+    assert loaded in ({"big": "x" * 200_000}, small), "state.json is a blend"

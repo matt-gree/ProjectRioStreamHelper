@@ -72,6 +72,10 @@ async def lifespan(app: FastAPI):
     # on_startup
     ensure_game_data()
     consumer = asyncio.create_task(State.Consumer())
+    # Owns state.json: the queue raises a dirty flag, this turns it back into a
+    # write, at most once per State.PERSIST_INTERVAL. Started before Load() so
+    # the very first boot projection is already covered.
+    persister = asyncio.create_task(State.Persister())
     await State.Load()
     # Load the participant registry back into memory before anything that reads
     # it (resurface, Match projection). Without this the address book starts
@@ -131,6 +135,9 @@ async def lifespan(app: FastAPI):
     # queue closes under it, then is cancelled.
     await drain(timeout=3.0)
     consumer.cancel()
+    # Cancelled, not awaited: the unconditional SaveImmediately below is the
+    # trailing write, so whatever the persister was waiting out is superseded.
+    persister.cancel()
 
     shutdown_tasks = [
         asyncio.create_task(Settings.Save()),
