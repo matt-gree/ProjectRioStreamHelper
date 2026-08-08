@@ -90,7 +90,7 @@ def load_rio_key() -> str | None:
     """Read the Rio API key from user_data/.env (format: RIO_KEY=<value>)."""
     if not _ENV_PATH.exists():
         return None
-    for line in _ENV_PATH.read_text().splitlines():
+    for line in _ENV_PATH.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if line.startswith("RIO_KEY=") and len(line) > 8:
             return line[8:]
@@ -100,7 +100,7 @@ def load_rio_key() -> str | None:
 def save_rio_key(key: str) -> None:
     """Write the Rio API key to user_data/.env."""
     _ENV_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _ENV_PATH.write_text(f"RIO_KEY={key}\n")
+    _ENV_PATH.write_text(f"RIO_KEY={key}\n", encoding="utf-8")
 
 
 def reset_client() -> None:

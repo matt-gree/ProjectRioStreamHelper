@@ -102,8 +102,16 @@ class HudWatcher:
             logger.error(f"[HudWatcher] Watch loop fatal error: {e}")
 
     def _read_and_parse(self) -> dict | None:
-        """Read the HUD file and convert to flat game dict. Runs in thread."""
-        with open(self.hud_file, "r") as f:
+        """Read the HUD file and convert to flat game dict. Runs in thread.
+
+        Read as BYTES, never text. Project Rio writes this file as UTF-8, but a
+        text-mode open decodes with the locale codec — UTF-8 on macOS, the ANSI
+        code page on Windows — so a player whose Rio name is not pure ASCII made
+        every read raise UnicodeDecodeError there, and the board stayed frozen
+        for the whole game. orjson takes bytes and assumes UTF-8 per the JSON
+        spec, which is both correct and one decode cheaper.
+        """
+        with open(self.hud_file, "rb") as f:
             data = orjson.loads(f.read())
 
         hud = HudObj(data)

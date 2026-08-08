@@ -57,3 +57,40 @@ def test_game2_is_a_new_game_with_swapped_sides():
     # back-to-back layer of the side cascade
     assert g2["entrants"][0][0]["rioName"] == mid["entrants"][1][0]["rioName"]
     assert g2["entrants"][1][0]["rioName"] == mid["entrants"][0][0]["rioName"]
+
+
+# --- the read itself ------------------------------------------------------
+
+def test_hud_file_is_read_as_bytes_so_the_locale_cannot_decode_it(tmp_path, monkeypatch):
+    """Project Rio writes decoded.hud.json as UTF-8, and PRSH is the only reader.
+
+    A text-mode open decodes with the LOCALE codec: UTF-8 on macOS, the ANSI
+    code page on Windows. A Rio name outside ASCII therefore raised
+    UnicodeDecodeError on Windows for EVERY frame — reload() caught it, logged,
+    and returned None, so the board simply never updated for that game. Reading
+    bytes takes the locale out of the path entirely.
+
+    Asserting the round-trip alone cannot fail on a UTF-8 dev machine, so this
+    also pins the mode: no text-mode read of the HUD file, on any platform.
+    """
+    import builtins
+
+    raw = orjson.loads((FIXTURE_DIR / "game1_start.json").read_bytes())
+    raw["Away Player"] = "Ryū・さくら"
+    hud_file = tmp_path / "decoded.hud.json"
+    hud_file.write_bytes(orjson.dumps(raw))
+
+    modes = []
+    real_open = builtins.open
+
+    def spy(path, mode="r", *args, **kwargs):
+        modes.append(mode)
+        return real_open(path, mode, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "open", spy)
+
+    watcher = HudWatcher(hud_file, on_update=None)
+    game = watcher._read_and_parse()
+
+    assert modes and all("b" in m for m in modes), f"HUD read used text mode: {modes}"
+    assert game["away_player"] == "Ryū・さくら"
