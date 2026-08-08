@@ -295,3 +295,56 @@ async def test_unset_observers_see_the_cleared_keys(mock_socket):
     await State.UnsetBatch(["b", "c"])
 
     assert seen == [["a"], ["b", "c"]]
+
+
+# --- stream-label filenames must be legal on Windows too ---
+
+@pytest.mark.parametrize("raw,expected", [
+    ("Mario", "Mario"),                 # ordinary names are untouched
+    ("score", "score"),
+    ('a<b>c:d"e|f?g*h', "a_b_c_d_e_f_g_h"),
+    ("back\\slash", "back_slash"),
+    ("fwd/slash", "fwd_slash"),
+    ("trailing.", "trailing"),          # Windows silently drops these
+    ("trailing ", "trailing"),
+    ("", "_"),
+    ("...", "_"),
+    ("nul", "_nul"),                    # DOS device names, with or without ext
+    ("CON", "_CON"),
+    ("com1", "_com1"),
+    ("LPT9", "_LPT9"),
+    ("console", "console"),             # only the exact device names
+])
+def test_safe_segment(raw, expected):
+    from server.state import _safe_segment
+    assert _safe_segment(raw) == expected
+
+
+async def test_export_sanitizes_user_text_in_a_label_path(set_setting, isolate_user_data):
+    """A dict key can carry user text — a participant's name, a tag — and it
+    becomes a real filename. `?` and `:` are legal on macOS and rejected by
+    Windows, where the raw name raised OSError and aborted the rest of the
+    export batch."""
+    set_setting("general.disable_export", False)
+    await State.Export([{
+        "key": "roster.by_name",
+        "old": None,
+        "new": {'Who? <the:one>': "Mario"},
+        "action": "set",
+    }])
+    written = list((isolate_user_data / "stream_labels" / "roster" / "by_name").glob("*.txt"))
+    assert [p.name for p in written] == ["Who_ _the_one_.txt"]
+    assert written[0].read_text() == "Mario"
+
+
+async def test_a_sanitized_label_is_removed_by_the_same_name(set_setting, isolate_user_data):
+    # Create and remove must sanitize identically, or an unset leaves the file
+    # on air forever.
+    set_setting("general.disable_export", False)
+    payload = {'Who? <the:one>': "Mario"}
+    await State.Export([{"key": "roster.by_name", "old": None, "new": payload, "action": "set"}])
+    label = isolate_user_data / "stream_labels" / "roster" / "by_name" / "Who_ _the_one_.txt"
+    assert label.exists()
+
+    await State.Export([{"key": "roster.by_name", "old": payload, "new": None, "action": "unset"}])
+    assert not label.exists()

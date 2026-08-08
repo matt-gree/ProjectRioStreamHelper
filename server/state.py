@@ -1,5 +1,7 @@
 import asyncio
 import copy
+import re
+
 import httpx
 
 from aiopath import AsyncPath
@@ -16,6 +18,32 @@ from server.utils import json
 # Distinguishes "key is absent" from "key is present and None" when diffing.
 # State legitimately holds None values, so it cannot be the missing marker.
 _MISSING = object()
+
+# Stream labels turn state paths into real files, and a path segment can carry
+# user text (a participant's name, a tag) — so the segment has to survive being
+# a FILENAME on the strictest platform we ship to. Windows rejects these
+# characters outright, silently drops trailing dots/spaces, and still treats the
+# old DOS device names as devices even with an extension: `nul.txt` is not a
+# file. Sanitizing only "/" (as this did) is enough on macOS and raises OSError
+# on Windows, aborting the rest of that export batch.
+_ILLEGAL_SEGMENT_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+_WIN_RESERVED_NAMES = {
+    "CON", "PRN", "AUX", "NUL",
+    *(f"COM{i}" for i in range(1, 10)),
+    *(f"LPT{i}" for i in range(1, 10)),
+}
+
+
+def _safe_segment(name) -> str:
+    """One path component, safe to use as a filename on macOS and Windows."""
+    seg = _ILLEGAL_SEGMENT_CHARS.sub("_", str(name))
+    seg = seg.rstrip(". ")
+    if not seg:
+        return "_"
+    # The extension is appended by the caller, and CON.txt is still CON.
+    if seg.split(".", 1)[0].upper() in _WIN_RESERVED_NAMES:
+        seg = "_" + seg
+    return seg
 
 
 class State:
@@ -71,7 +99,7 @@ class State:
         if not await cls._is_export_enabled():
             return
         for key, value in cls.state.items():
-            await cls._create_files_dict(key, value)
+            await cls._create_files_dict(_safe_segment(key), value)
         logger.info("[State] Full stream-labels export complete")
 
     @classmethod
@@ -90,7 +118,7 @@ class State:
         if not disable_export:
             for change in changes:
                 key = change["key"]
-                filename = key.replace(".", "/")
+                filename = "/".join(_safe_segment(p) for p in key.split("."))
                 action = change["action"]
 
                 if action == "unset":
@@ -352,7 +380,7 @@ class State:
 
         if isinstance(di, dict):
             for k, i in di.items():
-                await cls._create_files_dict(path+"/"+str(k).replace("/","_"), i)
+                await cls._create_files_dict(path + "/" + _safe_segment(k), i)
         elif isinstance(di, str) and di.startswith("./"):
             _p = AsyncPath(f"{cls._labels_dir()}/{path}" + "." + di.rsplit(".", 1)[-1])
             if await _p.exists() == True:
@@ -382,7 +410,7 @@ class State:
 
         if isinstance(di, dict):
             for k, i in di.items():
-                await cls._remove_files_dict(path+"/"+str(k).replace("/", "_"), i)
+                await cls._remove_files_dict(path + "/" + _safe_segment(k), i)
         elif isinstance(di, str) and (di.startswith("./") or di.startswith("http")):
             try:
                 _p = AsyncPath(f"{cls._labels_dir()}/{path}." + di.rsplit(".", 1)[-1])
