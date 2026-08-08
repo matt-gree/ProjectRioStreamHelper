@@ -275,6 +275,7 @@ If the app fails to launch due to corrupt `user_data/state.json`: `echo '{}' > u
 | Production OBS control / staging | `src/context/obs.jsx`, `src/context/staging.js` |
 | Participant registry | `server/participants.py`, `src/routes/player_list/` |
 | Post-game capture | `server/postgame.py` (+ StatFiles path gating) |
+| Game Summary captain hero art (size/placement/mirror) | `public/layout/lib/captain-framing.js` (measured art + per-side frames) + `src/routes/layouts/captain-framing.test.js` (pins the no-clip / face-clear / one-size contract) |
 | Tournament integration | `server/startgg/`, `server/api/v1/startgg.py` |
 | Update character data | `user_data/games/msb/base_files/config.json` |
 | Add team logo | drop `.png` into `user_data/game_assets/msb/teamLogos/` named after the MSB team |

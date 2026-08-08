@@ -27,6 +27,7 @@
 // live controller-port colours, so the element works on every package.
 
 import { ensureGsap } from './gsap-loader.js';
+import { captainFrame } from './captain-framing.js';
 
 const REF_W = 1920, REF_H = 1080;
 // Port-colour knobs are shared with the Stat Callout — one set of overrides
@@ -89,18 +90,33 @@ const CSS = `
 
 /* ── captain heroes + ghosted team logos ──
    Stacking: logo (1) < hero (2) < every data surface (3), so captains can
-   never block the board and the logo always reads as backdrop texture. The
-   hero box stays inside the theme's rim frame (44px+ inset all around). */
+   never block the board and the logo always reads as backdrop texture.
+
+   THE HERO BOX IS SIZED AND PLACED PER CAPTAIN, PER SIDE — width, height,
+   left/right and the mirror all arrive as inline style from
+   captain-framing.js, which is where the reasoning lives. There is no shared
+   box here on purpose: one box plus object-fit:contain is what put half the
+   cast's face under the data well and rendered Daisy nearly twice Luigi's
+   size. Don't put a width/height back on this rule.
+
+   contain stays on the IMAGE as the mismatched-pack fallback: the captain art
+   is user-supplied, so a pack with different proportions than the frames were
+   measured against letterboxes inside its box rather than stretching. */
 .pv-hero {
-  position: absolute; bottom: 130px; width: 520px; height: 760px;
+  position: absolute;
   display: flex; align-items: flex-end; justify-content: center;
   filter: drop-shadow(0 24px 44px rgba(0,0,0,0.65)); z-index: 2;
 }
-.pv-hero.s1 { left: 84px; }
-.pv-hero.s2 { right: 84px; }
-.pv-hero img { max-width: 100%; max-height: 100%; object-fit: contain; object-position: bottom; }
+.pv-hero img { width: 100%; height: 100%; object-fit: contain; object-position: bottom center; }
+/* The mirror rides the IMG, never the hero box — GSAP owns the box's transform
+   for the stride-in (x / scale) and the two would fight. */
+.pv-hero img.mirror { transform: scaleX(-1); }
+/* Centred on the hero box explicitly — it used to fall wherever its static
+   position landed in the flex line, which was harmless under one shared box
+   and is not now that the box is cut to each captain. */
 .pv-hero .bloom {
-  position: absolute; bottom: 70px; width: 500px; height: 500px; border-radius: 50%;
+  position: absolute; bottom: 70px; left: 50%; transform: translateX(-50%);
+  width: 500px; height: 500px; border-radius: 50%;
   filter: blur(22px); z-index: -1;
 }
 .pv-hero.s1 .bloom { background: radial-gradient(circle, rgba(var(--s1-rgb), 0.5) 0%, transparent 62%); }
@@ -480,14 +496,21 @@ export function mountPostgameVs({ host }) {
     return `<div class="pv-logo ${cls}">${logo ? `<img src="${logo}" onerror="this.style.display='none'" alt="" />` : ''}</div>`;
   }
 
+  // Every captain is framed individually — see captain-framing.js for why, and
+  // for the measurements behind the numbers. The frame decides the box's size
+  // and its distance from THIS side's stage edge; all twelve then stand on one
+  // ground line, so a tall pose and a diving one still share a floor.
   function sideHero(side, p) {
     const cls = side === 1 ? 's1' : 's2';
     const art = captainArtUrl(p?.captain);
     const fallback = charArtUrl(p?.captain);
+    const f = captainFrame(p?.captain, side);
+    const edge = side === 1 ? 'left' : 'right';
+    const box = `width:${f.w}px;height:${f.h}px;${edge}:${f.out}px;bottom:${f.bottom}px;`;
     return `
-      <div class="pv-hero ${cls}">
+      <div class="pv-hero ${cls}" style="${box}">
         <div class="bloom"></div>
-        ${art ? `<img src="${art}" data-fb="${fallback}"
+        ${art ? `<img class="${f.flip ? 'mirror' : ''}" src="${art}" data-fb="${fallback}"
           onerror="if(this.dataset.fb){this.src=this.dataset.fb;this.dataset.fb='';}else{this.style.opacity=0;}" alt="" />` : ''}
       </div>`;
   }
