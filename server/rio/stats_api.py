@@ -402,17 +402,11 @@ async def fetch_game_modes(force: bool = False) -> dict[str, int]:
 
 
 async def refresh_completer_cache() -> None:
-    """Rebuild pyrio's disk-persisted completer cache (tags/users/modes).
+    """Force-rebuild every section of pyrio's completer cache.
 
-    A separate concern on a separate lock from `_game_modes`, which is what
-    anything live actually waits on. Holding the game-modes lock across this is
-    what used to put a ~42s Project Rio round-trip in front of the first HUD
-    frame.
-
-    Be aware of what this costs even off that lock: it is CPU-bound inside pyrio
-    (pickle + pandas), so `to_thread` hands off the work but NOT the GIL, and it
-    measurably starves the event loop while it runs. That is why startup defers
-    it rather than racing the producer's first frames with it.
+    For an explicit "refresh" the producer asked for. Startup uses
+    `warm_completer_cache` instead — the cache manages its own staleness now, so
+    launching is not an occasion to re-fetch everything.
     """
     client = _get_client()
     async with _get_cache_refresh_lock():
@@ -422,20 +416,41 @@ async def refresh_completer_cache() -> None:
             logger.warning(f"[StatsAPI] Failed to refresh completer cache: {e}")
 
 
+async def warm_completer_cache() -> None:
+    """Pull the one section PRSH actually reads into the completer cache.
+
+    PRSH never calls a completer accessor itself; the cache exists here so
+    pyrio's `_process_games` can turn a completed game's mode id into a name.
+    That is `game_mode_dictionary()` and nothing else — so warming the whole
+    cache meant fetching 9,600 users and a tag table to populate a 195-entry
+    map.
+
+    Reading the accessor IS the warm-up now: fresh costs nothing, stale answers
+    from disk and refreshes behind itself, and only a section we have never seen
+    goes to the network. No `force`, because forcing is what turned a launch
+    into three round-trips whether or not anything had changed.
+    """
+    client = _get_client()
+    async with _get_cache_refresh_lock():
+        try:
+            await asyncio.to_thread(lambda: client.cache.game_mode_dictionary())
+        except Exception as e:
+            logger.warning(f"[StatsAPI] Failed to warm completer cache: {e}")
+
+
 async def prime_caches() -> None:
     """Launch-time cache warmup, ordered so the board is never behind it.
 
     The mode list first: it is ~2s, and a HUD frame resolving a new game's tag
-    blocks on it. The completer-cache rebuild after a delay: it is ~40s cold and
-    starves the loop, and its whole purpose (not trusting a cache.pkl timestamp
-    that can be a day stale) is served just as well a minute in as at second
-    zero. Nothing on air reads it — it backs game-mode names in the COMPLETED
-    games browser.
+    blocks on it. The completer warm-up after a delay, because the first ever
+    fetch of the full mode table is ~14s and CPU-heavy enough inside pyrio to
+    compete with the producer bringing a board up. It is nothing on air — it
+    backs game-mode names in the COMPLETED games browser.
     """
     await fetch_game_modes()
     await asyncio.sleep(STARTUP_CACHE_REFRESH_DELAY)
-    await refresh_completer_cache()
-    logger.debug("[StatsAPI] deferred completer-cache refresh complete")
+    await warm_completer_cache()
+    logger.debug("[StatsAPI] deferred completer-cache warm-up complete")
 
 
 async def resolve_tag_set_name(tag_set_id, timeout: float | None = None) -> str:

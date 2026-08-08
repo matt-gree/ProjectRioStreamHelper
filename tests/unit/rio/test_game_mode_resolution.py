@@ -33,7 +33,12 @@ class _Client:
         self.refresh_delay = refresh_delay
         self.list_delay = list_delay
         self.refreshed = 0
+        self.warmed = 0
         self.cache = self
+
+    def game_mode_dictionary(self):
+        self.warmed += 1
+        return {"Ranked": 7}
 
     def refresh_cache(self):
         import time
@@ -211,7 +216,7 @@ async def test_prime_caches_publishes_modes_before_the_slow_rebuild(monkeypatch)
         order.append("refresh")
 
     monkeypatch.setattr(stats_api, "fetch_game_modes", fake_fetch)
-    monkeypatch.setattr(stats_api, "refresh_completer_cache", fake_refresh)
+    monkeypatch.setattr(stats_api, "warm_completer_cache", fake_refresh)
     monkeypatch.setattr(stats_api, "STARTUP_CACHE_REFRESH_DELAY", 0.05)
 
     task = asyncio.create_task(stats_api.prime_caches())
@@ -224,10 +229,12 @@ async def test_prime_caches_publishes_modes_before_the_slow_rebuild(monkeypatch)
     assert order == ["modes", "refresh"]
 
 
-async def test_the_completer_refresh_still_happens(monkeypatch):
-    # Deferred, not dropped — the stale-cache.pkl problem it exists for is real.
+async def test_the_completer_warmup_still_happens(monkeypatch):
+    """Deferred, not dropped. And it reads the ONE accessor PRSH depends on
+    rather than force-refreshing all three sections."""
     client = _Client(refresh_delay=0.0)
     stats_api._get_client = lambda: client
     monkeypatch.setattr(stats_api, "STARTUP_CACHE_REFRESH_DELAY", 0.01)
     await stats_api.prime_caches()
-    assert client.refreshed == 1
+    assert client.warmed == 1
+    assert client.refreshed == 0, "startup must not force a full rebuild"
