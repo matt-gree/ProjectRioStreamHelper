@@ -109,7 +109,16 @@ def get_default_hud_file_path() -> Path:
     if system == "Darwin":
         return Path.home() / "Library" / "Application Support" / "Project Rio" / "HudFiles" / "decoded.hud.json"
     elif system == "Windows":
-        return Path.home() / "AppData" / "Roaming" / "Project Rio" / "HudFiles" / "decoded.hud.json"
+        # %APPDATA%, not a hardcoded ~/AppData/Roaming. They are the same on a
+        # stock install and different on any machine with a roaming profile or
+        # folder redirection, where AppData lives on a network share — and
+        # Project Rio writes to the variable, so guessing the literal path is
+        # how PRSH ends up watching a file nothing will ever write. This also
+        # feeds the StatFiles dir for post-game capture (server/postgame_files),
+        # so the guess costs the producer two features, not one.
+        # Same resolution order as server/paths.py:_frozen_writable_root.
+        base = os.environ.get("APPDATA") or str(Path.home() / "AppData" / "Roaming")
+        return Path(base) / "Project Rio" / "HudFiles" / "decoded.hud.json"
     else:
         return Path("/invalid/path")
 
