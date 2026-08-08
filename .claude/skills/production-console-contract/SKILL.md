@@ -41,8 +41,14 @@ the same binding so they cannot disagree.
 **Depth rule** (hard, no per-element judgment calls):
 - **Rack row / rail card** = state + quick face.
 - **Stage** = full live controls + basic settings.
-- **Tab** = heavy authoring (commentary roster, brackets, participants, board
-  bindings). The stage links out; it never embeds these.
+- **Tab** = heavy authoring (brackets, participants, board bindings). The stage
+  links out; it never embeds these.
+
+A tab has to earn its place: if a tab's controls are the same decisions the
+element's stage already carries, the tab is duplication and the stage wins. The
+Commentary tab was removed for exactly this — its six per-caster controls were
+the stage's controls in a taller form, and the casters' identity fields were
+always Address Book's job.
 
 ## The element contract
 

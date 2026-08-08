@@ -6,7 +6,6 @@ import SampleModeBanner from './production/sample';
 
 import Production from './production/production';
 import Competition from './competition/competition';
-import Commentary from './commentary/commentary';
 import PlayerList from './player_list/player_list';
 import ScoreboardManager from './scoreboard_manager/scoreboard_manager';
 import DesignTab from "./layouts/layouts";
@@ -16,7 +15,6 @@ const allTabs = [
   { name: "Production", path: "/" },
   { name: "Match", path: "/scoreboard" },
   { name: "Competition", path: "/competition" },
-  { name: "Commentary", path: "/commentary" },
   { name: "Address Book", path: "/player_list" },
   { name: "Design", path: "/layouts" },
 ];
@@ -36,7 +34,9 @@ export default function Root() {
           {/* Back-compat: old separate routes now resolve to the merged tab. */}
           <Route path="/tournament_info" element={<Competition />} />
           <Route path="/bracket" element={<Competition />} />
-          <Route path="/commentary" element={<Commentary />} />
+          {/* The caster desk is authored on its Production stage; the old
+              standalone tab duplicated it exactly and is gone. */}
+          <Route path="/commentary" element={<Production />} />
           <Route path="/player_list" element={<PlayerList />} />
           <Route path="/layouts" element={<DesignTab />} />
         </Routes>

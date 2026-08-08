@@ -160,8 +160,10 @@ export const ELEMENTS = [
         // Registry-bound caster desk.
         flavor: 'direct',
         // The condensed face is per-caster on-air toggles + sub-field quick switch
-        // + sub-plate toggle; the in-depth roster authoring lives on the
-        // Commentary tab. Span 4 to fit up to four caster rows.
+        // + sub-plate toggle; the stage carries the whole desk (there is no
+        // Commentary tab — it duplicated the stage and was removed), and the
+        // casters' identity fields live on Address Book. Span 4 to fit up to
+        // four caster rows.
         // Its own dedicated source: the caster strip. Slots are projected to
         // commentary.{i}.* server-side from the authored commentary.slots.
         // Native 1920×240 — full stream width (the row's spacing is measured

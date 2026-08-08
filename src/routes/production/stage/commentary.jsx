@@ -12,10 +12,12 @@ import { DirectStage } from './generic';
 
 /*
  * Commentary desk stage — ONE row per caster: move ▲/▼ (reorder) · on-air eye
- * · person picker · sub-plate field · sub-plate toggle · remove. The in-depth
- * roster authoring (contact fields, socials) lives on the Commentary tab; this
- * stage covers the live decisions. Reorder is buttons, not drag, so it works
- * from a phone at the venue (see MoveButtons).
+ * · person picker · sub-plate field · sub-plate toggle · remove. This is the
+ * ONLY place the desk is authored: a standalone Commentary tab used to carry
+ * the same six controls in a taller form and was removed as pure duplication.
+ * Each caster is a person in the address book, so the identity fields (real
+ * name, socials, pronouns) are edited on Address Book, not here. Reorder is
+ * buttons, not drag, so it works from a phone at the venue (see MoveButtons).
  */
 
 const blankCasterSlot = () => ({ participantId: null, subField: '', visible: true, subVisible: true });
@@ -154,9 +156,6 @@ export default function CommentaryStage({ element }) {
                 disabled: desk.slots.length >= MAX_COMMENTATORS,
                 onClick: desk.add,
             }]} />
-            <Text size="xs" className="border-t border-border/60 pt-2 text-muted-foreground">
-                Assign commentators and edit their details on the Commentary tab.
-            </Text>
         </>
     );
 }
