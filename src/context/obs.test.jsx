@@ -581,6 +581,58 @@ describe('events + reconnect', () => {
         expect(useObsStore.getState().status).toBe('error');
     });
 
+    /*
+     * "The app hangs on Connecting to OBS if I don't have OBS open."
+     *
+     * With OBS closed on loopback the SYN is refused and connect() rejects at
+     * once, so the console lands on 'error' and the catalog tier takes over. A
+     * DROPPED SYN — host firewall, VPN, obs.host pointed at a machine that is
+     * off — resolves and rejects never, and obs-websocket-js has no connect
+     * timeout of its own. The status stayed 'connecting', which
+     * useConsoleOffline deliberately does not count as offline, so the rack sat
+     * on "Connecting to OBS…" with neither scenes nor catalog, forever.
+     */
+    it('a handshake that never lands fails instead of hanging', async () => {
+        h.nextConnectImpl = () => new Promise(() => { /* never settles */ });
+        useSettingsStore.setState({ obs: { auto_connect: false } });   // no retry loop
+        vi.useFakeTimers();
+
+        const pending = useObsStore.getState().connect();
+        expect(useObsStore.getState().status).toBe('connecting');
+
+        // Still pending well into the attempt — the timeout is a ceiling, not a
+        // delay it waits out on every connect.
+        await vi.advanceTimersByTimeAsync(4000);
+        expect(useObsStore.getState().status).toBe('connecting');
+
+        await vi.advanceTimersByTimeAsync(1100);
+        await pending;
+
+        expect(useObsStore.getState().status).toBe('error');
+        expect(useObsStore.getState().error).toMatch(/within 5s/);
+    });
+
+    // The ceiling must not clip a slow-but-real handshake, and must not leave a
+    // timer armed to reject a connection that already succeeded.
+    it('does not time out a handshake that lands inside the window', async () => {
+        let release;
+        const gate = new Promise(r => { release = r; });
+        h.nextConnectImpl = async () => {
+            await gate;
+            return { obsWebSocketVersion: '5.3.0' };
+        };
+        vi.useFakeTimers();
+
+        const pending = useObsStore.getState().connect();
+        await vi.advanceTimersByTimeAsync(4000);
+        release();
+        await pending;
+        expect(useObsStore.getState().status).toBe('connected');
+
+        await vi.advanceTimersByTimeAsync(10000);
+        expect(useObsStore.getState().status).toBe('connected');
+    });
+
     it('a superseded connection cannot clobber the store (generation guard)', async () => {
         let release;
         const gate = new Promise(r => { release = r; });

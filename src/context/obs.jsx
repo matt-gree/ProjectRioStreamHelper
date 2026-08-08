@@ -316,15 +316,21 @@ export const useObsStore = create((set) => ({
         if (!background) set({ status: 'connecting', error: null });
 
         try {
-            const { obsWebSocketVersion } = await client.connect(
+            const { obsWebSocketVersion } = await withConnectTimeout(client.connect(
                 `ws://${host}:${port}`,
                 password || undefined,
-            );
+            ));
             if (myGen !== generation) return; // superseded while connecting
             reconnectAttempts = 0;
             set({ status: 'connected', error: null, obsVersion: obsWebSocketVersion });
             await refreshAll(myGen);
         } catch (e) {
+            // A timed-out handshake leaves a socket still trying: drop it so it
+            // can't land later behind the store's back. Events are already
+            // generation-guarded, but the socket itself is not.
+            if (e?.name === TIMED_OUT) {
+                Promise.resolve(client.disconnect()).catch(() => { /* already gone */ });
+            }
             if (myGen !== generation) return;
             const error = friendlyError(e);
             // Same failure as last time on a background retry — writing it
@@ -353,10 +359,50 @@ export const useObsStore = create((set) => ({
     },
 }));
 
+/*
+ * A handshake that never settles is the one connect failure the status machine
+ * cannot absorb on its own.
+ *
+ * With OBS simply closed on loopback the SYN is REFUSED, so client.connect()
+ * rejects in milliseconds and the console lands on 'error' — which
+ * useConsoleOffline counts, so the catalog tier takes over. But a SYN that is
+ * DROPPED rather than refused (a host firewall, a VPN, obs.host pointed at a
+ * LAN machine that is off) never produces either outcome: obs-websocket-js
+ * has no connect timeout of its own, so the promise stays pending, the status
+ * stays 'connecting' — which useConsoleOffline deliberately does NOT count —
+ * and the rack sits on "Connecting to OBS…" with neither scenes nor catalog.
+ *
+ * That exclusion is right (see placements.js: publishing 'connecting' on every
+ * backoff retry blanked the console every 30s), but it rests on 'connecting'
+ * being short-lived. This is what makes that true by construction: a handshake
+ * that hasn't landed in CONNECT_TIMEOUT_MS fails like a refused one — same
+ * error status, same backoff — so the console always reaches a tier it can
+ * actually work in.
+ */
+const CONNECT_TIMEOUT_MS = 5000;
+const TIMED_OUT = 'ObsConnectTimeout';
+
+function withConnectTimeout(promise) {
+    let timer;
+    const limit = new Promise((_, reject) => {
+        timer = setTimeout(() => {
+            const e = new Error(`No response from OBS within ${CONNECT_TIMEOUT_MS / 1000}s.`);
+            e.name = TIMED_OUT;
+            reject(e);
+        }, CONNECT_TIMEOUT_MS);
+    });
+    return Promise.race([promise, limit]).finally(() => clearTimeout(timer));
+}
+
 function friendlyError(e) {
     const msg = e?.message || String(e);
     // obs-websocket auth failure code is 4009.
     if (e?.code === 4009) return 'Authentication failed — check the OBS WebSocket password.';
+    // A drop reads as a hang, so name the likely causes rather than the symptom.
+    if (e?.name === TIMED_OUT) {
+        return `${msg} Check the host and port in Settings → OBS, and that a firewall `
+            + 'or VPN is not blocking the connection.';
+    }
     return msg;
 }
 
