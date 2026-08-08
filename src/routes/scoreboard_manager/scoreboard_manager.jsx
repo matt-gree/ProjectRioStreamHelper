@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { Pencil, Check, X, Plus } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../components/ui/tabs';
-import { Stack, Text } from '../../components/ui/primitives';
+import { Text } from '../../components/ui/primitives';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -11,10 +11,7 @@ import { cn } from '../../lib/utils';
 import { useShallow } from 'zustand/react/shallow';
 import { useSettingsStore, useStateStore } from '../../context/store';
 import MatchPanel from './MatchPanel';
-import TeamPanel from '../../components/scoreboard/TeamPanel';
 import ScoreControls from '../../components/scoreboard/ScoreControls';
-import ActiveMatchupStats from '../../components/scoreboard/ActiveMatchupStats';
-import DiamondPanel from '../../components/scoreboard/DiamondPanel';
 import PoolBrowser from '../../components/scoreboard/PoolBrowser';
 
 // Stable fallback references. Zustand v5's useStore uses the raw
@@ -28,7 +25,12 @@ const DEFAULT_ACTIVE = [1];
 const EMPTY_OBJ = {};
 
 /**
- * A single scoreboard instance (team panels + score controls).
+ * A single scoreboard: game state + its game pool.
+ *
+ * The roster grid, per-character stat editing and manual runner/fielder
+ * placement used to live here too. All three were read-only under HUD, nobody
+ * used them, and they were ~1,400 lines of surface between the producer and the
+ * two controls on this tab that earn their place. Deleted rather than moved.
  */
 function ScoreboardTab({ scoreboardNumber }) {
     const setItems = useStateStore(s => s.setItems);
@@ -38,25 +40,6 @@ function ScoreboardTab({ scoreboardNumber }) {
     // API transport. See server/bindings.py.
     const hudEnabled = useSettingsStore(s => s?.project_rio?.hud_enabled ?? true);
     const transport = (scoreboardNumber === 1 && hudEnabled) ? 'hud' : 'api';
-
-    // Binding: playback.mode (single | rotate) + the currently-followed gameId.
-    const mode = useSettingsStore(
-        s => s?.scoreboards?.binding?.[scoreboardNumber]?.playback?.mode
-            ?? s?.scoreboards?.binding?.[String(scoreboardNumber)]?.playback?.mode
-            ?? 'single'
-    );
-    const gameId = useSettingsStore(
-        s => s?.scoreboards?.binding?.[scoreboardNumber]?.playback?.gameId
-            ?? s?.scoreboards?.binding?.[String(scoreboardNumber)]?.playback?.gameId
-            ?? null
-    );
-
-    // Effective read-only mode for the editor components (they still key off a
-    // "sourceType" string): HUD and a loaded single game are read-only; an
-    // empty single board and a rotating pool stay editable.
-    const effectiveSourceType = transport === 'hud'
-        ? 'hud'
-        : (mode === 'single' && gameId != null ? 'live_game' : 'manual');
 
     const handleSwapTeams = useCallback(async () => {
         const state = useStateStore.getState();
@@ -93,42 +76,21 @@ function ScoreboardTab({ scoreboardNumber }) {
 
     return (
         <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-10">
-            <div className="md:col-span-4">
-                <Stack gap="md">
-                    <TeamPanel
-                        scoreboardNumber={scoreboardNumber}
-                        teamNumber={1}
-                        playerCount={1}
-                        sourceType={effectiveSourceType}
-                    />
-                    <ActiveMatchupStats scoreboardNumber={scoreboardNumber} />
-                </Stack>
+            <div className="md:col-span-3">
+                <ScoreControls
+                    scoreboardNumber={scoreboardNumber}
+                    onSwapTeams={handleSwapTeams}
+                    transport={transport}
+                />
             </div>
 
-            <div className="md:col-span-2">
-                <Stack gap="md">
-                    <ScoreControls
-                        scoreboardNumber={scoreboardNumber}
-                        onSwapTeams={handleSwapTeams}
-                        transport={transport}
-                    />
-                    <DiamondPanel scoreboardNumber={scoreboardNumber} />
-                </Stack>
-            </div>
-
-            <div className="md:col-span-4">
-                <Stack gap="md">
-                    <TeamPanel
-                        scoreboardNumber={scoreboardNumber}
-                        teamNumber={2}
-                        playerCount={1}
-                        sourceType={effectiveSourceType}
-                    />
-                    {transport !== 'hud' && (
-                        <PoolBrowser scoreboardNumber={scoreboardNumber} />
-                    )}
-                </Stack>
-            </div>
+            {/* A HUD board has no pool to browse — its game is whatever Project
+                Rio is playing locally. */}
+            {transport !== 'hud' && (
+                <div className="md:col-span-7">
+                    <PoolBrowser scoreboardNumber={scoreboardNumber} />
+                </div>
+            )}
         </div>
     );
 }

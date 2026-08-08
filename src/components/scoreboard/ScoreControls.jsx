@@ -1,16 +1,14 @@
 import { useCallback, useEffect, useState, useRef } from 'react';
-import { Info, ChevronDown, ChevronUp, RotateCw } from 'lucide-react';
+import { Info, RotateCw } from 'lucide-react';
 import { Stack, Text, Divider, Loader } from '../ui/primitives';
 import { Panel } from '../ui/panel';
 import { NumberInput } from '../ui/number-input';
-import { TextField } from '../ui/text-field';
 import { SimpleSelect } from '../ui/simple-select';
 import { Combobox } from '../ui/combobox';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Label } from '../ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
-import { Collapsible, CollapsibleContent } from '../ui/collapsible';
 import { cn } from '../../lib/utils';
 import { useStateStore, useSettingsStore } from '../../context/store';
 import { useSocketSubscribe } from '../../context/socket';
@@ -71,16 +69,6 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, trans
     const strikes     = useStateStore(s => num(s?.score?.[scoreboardNumber]?.strikes, 0));
     const balls       = useStateStore(s => num(s?.score?.[scoreboardNumber]?.balls, 0));
 
-    // Match info
-    const bestOf   = useStateStore(s => {
-        const raw = s?.score?.[scoreboardNumber]?.best_of;
-        if (typeof raw === 'string') {
-            const m = raw.match(/\d+/);
-            return m ? Number(m[0]) : 3;
-        }
-        return num(raw, 3);
-    });
-    const match    = useStateStore(s => s?.score?.[scoreboardNumber]?.match ?? '');
     const stadium  = useStateStore(s => s?.score?.[scoreboardNumber]?.stadium ?? '');
 
     // Game mode is per-scoreboard. No global fallback — empty means "don't
@@ -93,7 +81,6 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, trans
     const [gameModes, setGameModes] = useState([]);
     const [diagOpen, setDiagOpen] = useState(false);
     const [diagnostics, setDiagnostics] = useState(null);
-    const [matchOpen, setMatchOpen] = useState(false);
     const [fetchingStats, setFetchingStats] = useState(false);
     const [refreshingHud, setRefreshingHud] = useState(false);
     const prevTagRef = useRef(statsTag);
@@ -183,17 +170,6 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, trans
         for (const pos of ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF']) {
             setItem(`${base}.field.${pos}`, '');
         }
-    }, [base, setItem]);
-
-    const clearTournamentData = useCallback(() => {
-        const tagFields = ['name', 'team', 'full_name', 'country', 'state', 'pronoun'];
-        for (const t of [1, 2]) {
-            for (const f of tagFields) {
-                setItem(`${base}.player.${t}.${f}`, '');
-            }
-        }
-        setItem(`${base}.phase`, '');
-        setItem(`${base}.match`, '');
     }, [base, setItem]);
 
     const resetBaseballState = useCallback(() => {
@@ -450,37 +426,14 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, trans
                     Reset Game State
                 </Button>
 
-                <Divider />
-
-                {/* ---- Match Info ---- */}
-                <button type="button" onClick={() => setMatchOpen(o => !o)}>
-                    <div className="flex items-center justify-between">
-                        <Text size="sm" fw={700}>Bracket Match Info</Text>
-                        {matchOpen ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
-                    </div>
-                </button>
-                <Collapsible open={matchOpen}>
-                    <CollapsibleContent>
-                        <Stack gap="xs">
-                            <div className="flex flex-col gap-1.5">
-                                <Label className="field-label">Best Of</Label>
-                                <NumberInput
-                                    value={bestOf}
-                                    onChange={val => set('best_of', `Best Of ${val === '' ? 3 : Number(val)}`)}
-                                    min={1} max={99} step={2}
-                                />
-                            </div>
-                            <TextField
-                                label="Match"
-                                value={match}
-                                onChange={e => set('match', e.currentTarget.value)}
-                            />
-                            <Button variant="outline" size="sm" className="w-full border-destructive/40 text-destructive hover:bg-destructive/10" onClick={clearTournamentData}>
-                                Clear Tags
-                            </Button>
-                        </Stack>
-                    </CollapsibleContent>
-                </Collapsible>
+                {/* There is deliberately no match / best-of / phase editor here.
+                    `score.{N}.match` is the board→match BINDING id (an int), owned
+                    by bindScoreboard / Match.clear_scoreboard; `best_of` and
+                    `phase` are owned by the Match projector (server/match.py),
+                    which rewrites them on every re-projection. This panel used to
+                    offer a free-text field for the first and a "Clear Tags" that
+                    blanked it — editing a binding out from under the projector.
+                    Author all three on the Match desk. */}
             </Stack>
             </div>
         </Panel>
