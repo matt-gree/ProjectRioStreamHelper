@@ -16,13 +16,22 @@ class FakeSocket {
         this.id = 'self-sid';
         this.connected = false;
         this.rpc = { 'v1.state.get': {}, 'v1.settings.get': {}, 'v1.config.get': {} };
+        this.defer = new Set();   // events whose callback the test will resolve
+        this.held = {};
     }
     on(e, fn) { (this.handlers[e] ||= []).push(fn); }
     off(e, fn) { if (this.handlers[e]) this.handlers[e] = this.handlers[e].filter(x => x !== fn); }
     removeAllListeners() { this.handlers = {}; }
     connect() { this.connected = true; }
     close() { this.connected = false; }
-    emit(e, _data, cb) { if (cb) cb(this.rpc[e] ?? {}); }
+    emit(e, _data, cb) {
+        if (!cb) return;
+        // A held RPC models the real thing: v1.state.get is a round trip, and
+        // the server keeps pushing while it is in flight.
+        if (this.defer.has(e)) { this.held[e] = cb; return; }
+        cb(this.rpc[e] ?? {});
+    }
+    resolve(e, payload) { const cb = this.held[e]; delete this.held[e]; cb(payload ?? this.rpc[e] ?? {}); }
     server(e, payload) { (this.handlers[e] || []).forEach(fn => fn(payload)); }
 }
 
@@ -184,5 +193,66 @@ describe('SocketProvider settings + config channels', () => {
         await renderProvider();
         await waitFor(() => expect(useConfigStore.getState().loaded).toBe(true));
         expect(useConfigStore.getState().version).toBe('2.0.0');
+    });
+});
+
+
+describe('SocketProvider handshake window', () => {
+    it('keeps state pushed while the initial v1.state.get is in flight', async () => {
+        // The snapshot is a round trip, and PRSH pushes continuously — a HUD
+        // frame lands mid-handshake on every page load during a live game.
+        // Registering the listeners inside the response callback dropped those
+        // events outright: the key stayed at its snapshot value until something
+        // happened to write it again, which for a rarely-written key (a match
+        // binding, a container feed, a name override) is indefinitely.
+        h.socket.defer.add('v1.state.get');
+        render(<SocketProvider><div /></SocketProvider>);
+
+        h.socket.server('v1.state.set', { key: 'score.1.batter', value: 'Mario' });
+        h.socket.server('v1.state.set_batch', {
+            items: [{ key: 'score.1.inning', value: 7 }],
+        });
+
+        h.socket.resolve('v1.state.get', { score: { 1: { batter: '', inning: 1 } } });
+
+        await waitFor(() =>
+            expect(useStateStore.getState().getItem('score.1.batter')).toBe('Mario'));
+        expect(useStateStore.getState().getItem('score.1.inning')).toBe(7);
+    });
+
+    it('keeps settings pushed while the initial v1.settings.get is in flight', async () => {
+        h.socket.defer.add('v1.settings.get');
+        render(<SocketProvider><div /></SocketProvider>);
+
+        h.socket.server('v1.settings.set', { key: 'obs.port', value: 4460 });
+        h.socket.resolve('v1.settings.get', { obs: { port: 4455 } });
+
+        await waitFor(() =>
+            expect(useSettingsStore.getState().getItem('obs.port')).toBe(4460));
+    });
+
+    it('applies a set and an unset of the same key in arrival order', async () => {
+        // The flush used to apply every pending set and only then every pending
+        // unset, so an unset followed by a set of the same key inside one frame
+        // came out backwards — the key vanished though the server had a value.
+        h.socket.rpc['v1.state.get'] = { score: { 1: { match: 4 } } };
+        await renderProvider();
+
+        h.socket.server('v1.state.unset', { key: 'score.1' });
+        h.socket.server('v1.state.set', { key: 'score.1.match', value: 9 });
+
+        await waitFor(() =>
+            expect(useStateStore.getState().getItem('score.1.match')).toBe(9));
+    });
+
+    it('unmounting mid-handshake leaves nothing behind', async () => {
+        h.socket.defer.add('v1.state.get');
+        const { unmount } = render(<SocketProvider><div /></SocketProvider>);
+        unmount();
+        h.socket.resolve('v1.state.get', { score: { 1: { inning: 3 } } });
+        await new Promise(r => setTimeout(r, 10));
+        // The late response must not resurrect a store the provider let go of.
+        expect(useStateStore.getState().loaded).toBe(false);
+        expect(useStateStore.getState().getItem('score.1.inning')).toBeUndefined();
     });
 });

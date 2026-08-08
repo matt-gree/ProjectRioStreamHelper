@@ -406,23 +406,64 @@
     // SocketIO connection
     const socket = io(BASE_URL, { transports: ['websocket', 'polling'] });
 
+    /*
+     * The snapshot is a ROUND TRIP, and PRSH pushes throughout it. `refill`
+     * clears the target and repopulates it from a response that was assembled
+     * before those pushes happened, so anything arriving in that window is
+     * erased by the very reply that was supposed to bring us up to date. Buffer
+     * those events and replay them on top of the snapshot.
+     *
+     * This is not a launch-only edge: the OBS animation contract gives every
+     * animated source `shutdown`, so a source RELOADS each time it is shown,
+     * and a reconnect after a network blip runs `connect` again. A score key
+     * heals on the next HUD frame; a match binding, a container feed or a name
+     * override just stays wrong.
+     */
+    let statePending = false;
+    let stateBuffer = [];
+    let settingsPending = false;
+    let settingsBuffer = [];
+
+    function applyStateOp(op) {
+      if (op.kind === 'set') deepSet(liveTarget(), op.key, op.value);
+      else deepUnset(liveTarget(), op.key);
+    }
+
+    function applySettingsOp(op) {
+      if (op.kind === 'set') deepSet(settings, op.key, op.value);
+      else deepUnset(settings, op.key);
+      forgetSeed(op.key);
+    }
+
     socket.on('connect', () => {
       console.log('[OverlayBase] SocketIO connected');
 
+      statePending = true;
+      stateBuffer = [];
       socket.emit('v1.state.get', {}, (fullState) => {
+        statePending = false;
+        const buffered = stateBuffer;
+        stateBuffer = [];
         if (fullState && !fullState.error) {
           // Clear and repopulate (preserves object reference)
           refill(liveTarget(), fullState);
+          for (const op of buffered) applyStateOp(op);
           syncDemo();
           render();
         }
       });
 
       if (fetchSettings) {
+        settingsPending = true;
+        settingsBuffer = [];
         socket.emit('v1.settings.get', {}, (fullSettings) => {
+          settingsPending = false;
+          const buffered = settingsBuffer;
+          settingsBuffer = [];
           if (fullSettings && !fullSettings.error) {
             refill(settings, fullSettings);
             applySeeds();
+            for (const op of buffered) applySettingsOp(op);
             render();
           }
         });
@@ -448,7 +489,9 @@
 
     socket.on('v1.state.set', (msg) => {
       if (msg.sid === socket.id) return;
-      deepSet(liveTarget(), msg.key, msg.value);
+      const op = { kind: 'set', key: msg.key, value: msg.value };
+      if (statePending) stateBuffer.push(op);
+      applyStateOp(op);
       if (liveKeyChanged(msg.key)) render();
     });
 
@@ -456,7 +499,9 @@
       if (msg.sid === socket.id) return;
       let needs = false;
       for (const item of msg.items) {
-        deepSet(liveTarget(), item.key, item.value);
+        const op = { kind: 'set', key: item.key, value: item.value };
+        if (statePending) stateBuffer.push(op);
+        applyStateOp(op);
         if (liveKeyChanged(item.key)) needs = true;
       }
       if (needs) render();
@@ -464,7 +509,9 @@
 
     socket.on('v1.state.unset', (msg) => {
       if (msg.sid === socket.id) return;
-      deepUnset(liveTarget(), msg.key);
+      const op = { kind: 'unset', key: msg.key };
+      if (statePending) stateBuffer.push(op);
+      applyStateOp(op);
       if (liveKeyChanged(msg.key)) render();
     });
 
@@ -475,7 +522,9 @@
       if (msg.sid === socket.id) return;
       let needs = false;
       for (const item of msg.items) {
-        deepUnset(liveTarget(), item.key);
+        const op = { kind: 'unset', key: item.key };
+        if (statePending) stateBuffer.push(op);
+        applyStateOp(op);
         if (liveKeyChanged(item.key)) needs = true;
       }
       if (needs) render();
@@ -499,15 +548,17 @@
     if (fetchSettings) {
       socket.on('v1.settings.set', (msg) => {
         if (msg.sid === socket.id) return;
-        deepSet(settings, msg.key, msg.value);
-        forgetSeed(msg.key);
+        const op = { kind: 'set', key: msg.key, value: msg.value };
+        if (settingsPending) settingsBuffer.push(op);
+        applySettingsOp(op);
         if (shouldRenderSettings(msg.key)) render();
       });
 
       socket.on('v1.settings.unset', (msg) => {
         if (msg.sid === socket.id) return;
-        deepUnset(settings, msg.key);
-        forgetSeed(msg.key);
+        const op = { kind: 'unset', key: msg.key };
+        if (settingsPending) settingsBuffer.push(op);
+        applySettingsOp(op);
         if (shouldRenderSettings(msg.key)) render();
       });
     }
