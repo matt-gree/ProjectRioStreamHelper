@@ -10,6 +10,8 @@ which is the one failure a screenshot can't show.
 
 import json
 
+import pytest
+
 from server import design_packages
 
 
@@ -63,3 +65,59 @@ def test_a_hand_dropped_package_is_read_from_its_files_not_its_manifest(tmp_path
     info = _pkg("liar")
     assert info["elements"] == ["stats", "ticker"]
     assert info["appVarElements"] == ["ticker"]
+
+
+# --- install_zip containment ---------------------------------------------
+#
+# A design package is a bundle a user gets from a designer and installs, so the
+# archive is untrusted input by design. Extraction must not be able to write
+# outside the package folder.
+
+def _zip_bytes(entries: dict[str, str]) -> bytes:
+    import io, zipfile
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        for name, body in entries.items():
+            zf.writestr(name, body)
+    return buf.getvalue()
+
+
+@pytest.mark.parametrize("hostile", [
+    "../../evil.svg",
+    "a/../../evil.svg",
+    "..\\..\\evil.svg",
+    # The one that got through: split("/") saw a single part, so no component
+    # equalled ".." — inert on POSIX, a real separator on Windows.
+    "a\\..\\..\\evil.svg",
+    "/etc/cron.d/evil.svg",
+])
+def test_install_zip_never_writes_outside_the_package_dir(tmp_path, monkeypatch, hostile):
+    root = tmp_path / "design_packages"
+    root.mkdir(parents=True)
+    monkeypatch.setattr(design_packages, "user_packages_dir", lambda: root)
+
+    data = _zip_bytes({
+        "package.json": json.dumps({"id": "hostile"}),
+        "stats.svg": '<svg viewBox="0 0 10 10"></svg>',
+        hostile: '<svg viewBox="0 0 10 10"></svg>',
+    })
+    design_packages.install_zip(data, fallback_id="hostile")
+
+    # The invariant is containment, not rejection: an absolute entry is fine to
+    # keep once it has been made relative (it just lands inside the package),
+    # while a traversing one must not produce a file at all. Either way nothing
+    # may exist outside the package folder.
+    pkg = (root / "hostile").resolve()
+    written = [p for p in tmp_path.rglob("*") if p.is_file()]
+    escaped = [p for p in written if not p.resolve().is_relative_to(pkg)]
+    assert not escaped, f"{hostile!r} escaped to {escaped}"
+
+    # The backslash case only ESCAPES on Windows, so containment alone cannot
+    # pin it from a POSIX CI run — there it merely lands as a file literally
+    # named `a\..\..\evil.svg`. The portable statement of the same bug is that
+    # no separator and no traversal survives sanitization, which is true on
+    # every platform and false on the code that shipped this.
+    for p in written:
+        parts = p.relative_to(pkg).parts
+        assert "\\" not in str(p.relative_to(pkg)), f"separator survived: {parts}"
+        assert ".." not in parts, f"traversal survived: {parts}"

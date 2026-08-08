@@ -193,7 +193,12 @@ def install_zip(data: bytes, fallback_id: str | None = None) -> dict:
     def rel(name: str) -> str | None:
         """Sanitized path inside the package, or None to skip the entry."""
         r = name[len(root) + 1 :] if root and name.startswith(root + "/") else name
-        parts = [p for p in r.split("/") if p]
+        # A zip entry is spec'd to use "/" only, so a backslash is either a
+        # broken writer or an attempt to smuggle a separator past this check.
+        # Splitting on "/" alone let `a\..\..\x.svg` through as ONE part, which
+        # is inert on POSIX but is a real separator on Windows — pathlib joins
+        # it unchanged and the OS resolves it outside the package.
+        parts = [p for p in r.replace("\\", "/").split("/") if p]
         if (
             not parts
             or any(p in ("..", "") or p.startswith(".") for p in parts)
@@ -230,8 +235,14 @@ def install_zip(data: bytes, fallback_id: str | None = None) -> dict:
     if dest.exists():
         shutil.rmtree(dest)
     dest.mkdir(parents=True)
+    dest_resolved = dest.resolve()
     for name, r in kept:
         target = dest / r
+        # Belt and braces: `rel` already sanitized this, but an extraction that
+        # writes wherever the archive says is the one bug worth failing closed
+        # on. Resolve and prove containment rather than trusting the sanitizer.
+        if not target.resolve().is_relative_to(dest_resolved):
+            raise ValueError(f"archive entry escapes the package directory: {name!r}")
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(zf.read(name))
 
