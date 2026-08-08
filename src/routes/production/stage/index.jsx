@@ -2,6 +2,7 @@ import { memo, useMemo } from 'react';
 import { Text } from '../../../components/ui/primitives';
 import { PanelShell, chipFor } from '../kit';
 import { isPinnable } from '../elements';
+import { DESK_PREFIX } from '../instances';
 import { placementDims } from '../bindings';
 import {
     placementTarget, resolvePlacement, useConsolePlacements, useConsoleScenes,
@@ -152,7 +153,24 @@ export const Stage = memo(function Stage({ selection, deskBodies = {}, pins = []
         [pins, placements],
     );
 
+    /*
+     * A stored selection naming a desk that no longer exists — a board since
+     * removed — must not fall through to placement resolution: no source has a
+     * `desk:` id, so it would resolve to a sourceless placement and offer to bind
+     * an OBS source for a board that is gone. A desk id answers here or not at
+     * all.
+     */
     const desk = deskBodies[selection];
+    if (!desk && String(selection ?? '').startsWith(DESK_PREFIX)) {
+        return (
+            <PanelShell state="unbound" title="Stage" pinnable={false}>
+                <Text size="xs" className="text-muted-foreground">
+                    That desk is gone — the board it belonged to was removed. Pick
+                    another row in the rack.
+                </Text>
+            </PanelShell>
+        );
+    }
     if (desk) {
         return (
             <PanelShell

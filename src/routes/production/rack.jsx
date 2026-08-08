@@ -1,4 +1,4 @@
-import { memo, useMemo } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { Eye, EyeOff, ChevronDown, ChevronRight, Plus, Circle, CircleDot } from 'lucide-react';
 import { useObsStore, useMirrorScene } from '../../context/obs';
@@ -17,6 +17,9 @@ import {
 import { StateChip, chipFor } from './kit';
 import { setSourceVisibility, useDisplayedEnabled } from './bindings';
 import { useContainerPush } from './feeds';
+import { boardDeskId, useActiveBoards, useBoardLabel } from './boards';
+import { useBoardDeskMeta } from './desks/board';
+import { notifications } from '../../lib/notify';
 
 /*
  * The rack — the console's left surface (production-console-contract skill):
@@ -269,6 +272,35 @@ export const DESKS = [
     { id: 'desk:bracket', name: 'Bracket', useMeta: useBracketDeskMeta },
 ];
 
+/*
+ * The desk rows, boards first.
+ *
+ * A board is a desk too — see ../boards for why — but unlike the three above it
+ * is not a fixed workflow: the rig has one to three of them and the producer
+ * adds and removes them. So the section is DERIVED from `scoreboards.active`,
+ * which is finally the online reader that settings key never had. (`instances.js`
+ * used to union the declared boards into source discovery for the same reason
+ * and lost that reader when rows became source-derived; a board's row belongs on
+ * the desk tier, not among the sources.)
+ *
+ * Boards come first because they are the rig: the fixture, the capture and the
+ * bracket all act ON a board. Bounded, permanent, one row each — the treatment
+ * matches are deliberately NOT given, since matches accumulate all night and
+ * belong in a list inside one row.
+ */
+export function useDeskRows() {
+    const boards = useActiveBoards();
+    const label = useBoardLabel();
+    return useMemo(() => [
+        ...boards.map(sb => ({ id: boardDeskId(sb), board: sb, name: label(sb) })),
+        ...DESKS,
+    ], [boards, label]);
+}
+
+// A row that takes its meta from the desk's own hook. Boards use the sibling
+// below instead of a `useMeta` closure per board: choosing which hook to call by
+// looking at the row would be a conditional hook call, so the choice is made by
+// COMPONENT (same rule as SUBJECTS and STAGE_BODIES).
 const DeskRow = memo(function DeskRow({ desk, selection, onSelect, pinned, onPinToggle }) {
     const { meta, idle } = desk.useMeta();
     return (
@@ -282,16 +314,61 @@ const DeskRow = memo(function DeskRow({ desk, selection, onSelect, pinned, onPin
     );
 });
 
+const BoardDeskRow = memo(function BoardDeskRow({ desk, selection, onSelect, pinned, onPinToggle }) {
+    const { meta, idle } = useBoardDeskMeta(desk.board);
+    return (
+        <RackRow
+            state="desk" name={desk.name} meta={meta} dimmed={idle}
+            selected={selection === desk.id} onSelect={() => onSelect(desk.id)}
+            pinnable
+            pinned={pinned.has(desk.id)}
+            onPinToggle={() => onPinToggle(desk.id)}
+        />
+    );
+});
+
+/*
+ * The + in the DESK header adds a board — the affordance that brings a row into
+ * being lives in the header of the section the row appears in, exactly as a
+ * scene's + does. It is the only way to add one: the Match tab's tab strip is
+ * navigation now, and two ways to add a board is the duplication boards became
+ * desks to end.
+ */
+async function addScoreboard() {
+    try {
+        const r = await fetch('/api/v1/scoreboards', { method: 'POST' });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    } catch (e) {
+        notifications.show({ message: `Add scoreboard: ${e?.message || e}`, color: 'red' });
+    }
+}
+
 const DeskSection = memo(function DeskSection({ selection, onSelect, pinned, onPinToggle }) {
+    const rows = useDeskRows();
+    const [adding, setAdding] = useState(false);
+    const add = async () => {
+        setAdding(true);
+        try { await addScoreboard(); } finally { setAdding(false); }
+    };
     return (
         <div data-rack-section="desk" className="rounded-md bg-rio-500/5 pb-1">
-            <SectionHeader label="DESK" accent="text-rio-400" />
-            {DESKS.map(desk => (
-                <DeskRow
-                    key={desk.id} desk={desk} selection={selection}
-                    onSelect={onSelect} pinned={pinned} onPinToggle={onPinToggle}
-                />
-            ))}
+            <SectionHeader
+                label="DESK" accent="text-rio-400"
+                action={<AddButton scene={null} onAdd={adding ? undefined : add} label="Add a scoreboard" />}
+            />
+            {rows.map(desk => (desk.board != null
+                ? (
+                    <BoardDeskRow
+                        key={desk.id} desk={desk} selection={selection}
+                        onSelect={onSelect} pinned={pinned} onPinToggle={onPinToggle}
+                    />
+                )
+                : (
+                    <DeskRow
+                        key={desk.id} desk={desk} selection={selection}
+                        onSelect={onSelect} pinned={pinned} onPinToggle={onPinToggle}
+                    />
+                )))}
         </div>
     );
 });

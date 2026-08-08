@@ -85,7 +85,10 @@ Project Rio randomizes away/home per game. Each HUD frame,
 | pin | `project_rio.pinned_player` + `pinned_side` Settings | no pin, or pinned player not in this game |
 | back_to_back | `_prev_player_sides` from the previous game | no prior game / neither player returning |
 
-- The deciding layer is mirrored to `score.{N}.side_reason`.
+- The deciding layer is mirrored to `score.{N}.side_reason`, and the board desk
+  (`src/routes/production/desks/board.jsx`, `sideReasonLine`) is what reads it —
+  one sentence per layer. A new layer needs a sentence there or the board will
+  state nothing about it.
 - Manual scope = current game only: `_preserve_player_sides` clears
   `_user_overridden` on a new game (inning decreased) and reseeds the manual
   base from the non-manual cascade; a mid-game swap **back to** the pinned

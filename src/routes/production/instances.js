@@ -141,10 +141,10 @@ export function variantLabel(variant) {
  * or plain `lowerthird` for an element with only one of itself. ./placements
  * appends `@{scene}` to make it a full row id.
  *
- * Desk ids ('desk:match') share the colon, and they must not be parsed as
- * instances. The board suffix is always DIGITS, which is what keeps the two
- * namespaces apart — `desk:match` has a non-numeric tail and falls through as
- * an opaque id. Don't introduce a numeric desk name.
+ * Desk ids ('desk:match', 'desk:board:2') share the colon, and they must not be
+ * parsed as instances — a desk is not an element, so nothing about it is a type
+ * plus a board even when it ends in a board number. `parseInstanceId` guards on
+ * the prefix for that reason; see the note there.
  */
 export function instanceId(element, board, url) {
     if (!element) return null;
@@ -154,11 +154,26 @@ export function instanceId(element, board, url) {
     return withVariant(base, variantOf(url));
 }
 
+/*
+ * The desk namespace. A desk id is OPAQUE here: it names a content workflow,
+ * not an element on a board, so it must come back whole.
+ *
+ * This used to hold by accident. The rule was "the board suffix is always
+ * digits, so a desk name must not be numeric" — but the head of the pattern
+ * below is greedy, so ANY id ending in digits splits: `desk:board:2` parsed as
+ * element `desk:board` on board 2, and the stage would then look up an element
+ * that does not exist instead of the desk the producer clicked. Boards are desks
+ * now, and their ids carry a board number, so the documented rule needs to be a
+ * real one.
+ */
+export const DESK_PREFIX = 'desk:';
+
 export function parseInstanceId(id) {
     const s = String(id ?? '');
     const cut = s.indexOf(VARIANT_SEP);
     const base = cut < 0 ? s : s.slice(0, cut);
     const variant = cut < 0 ? null : s.slice(cut + 1) || null;
+    if (base.startsWith(DESK_PREFIX)) return { elementId: base, board: null, variant };
     const m = /^(.+):(\d+)$/.exec(base);
     return m
         ? { elementId: m[1], board: Number(m[2]), variant }

@@ -1,14 +1,16 @@
-import { memo } from 'react';
+import { memo, useState } from 'react';
 import { Text } from '../../components/ui/primitives';
 import { ActionRow, SelectRow } from './kit';
 import { FEED_OPTION_HOOKS, flattenGroups } from './feed-pickers';
 import { quickFaceFor } from './elements';
 import { useContainerPush } from './feeds';
 import { useConsoleOffline } from './placements';
-import { Subject } from './subject';
+import { boardOfDeskId } from './boards';
+import { BoardGameSubject, Subject } from './subject';
 import { SourceToggleRow } from './stage/generic';
 import { ScorecardModeRow, useScorecard } from './stage/scorecard';
 import { EventHeaderBandRows, useEventHeader } from './stage/eventheader';
+import { useBoardDesk } from './desks/board';
 import { useCaptureDesk } from './desks/capture';
 import { BracketPhasePicker, useBracketDesk } from './desks/bracket';
 
@@ -227,10 +229,52 @@ const BracketQuickFace = memo(function BracketQuickFace() {
     );
 });
 
+/*
+ * Board desk: what the board is carrying, then the two corrections a producer
+ * makes without stopping to look — the sides are backwards, or the HUD frame
+ * landed wrong. Everything else about a board is stage work.
+ */
+const BoardQuickFace = memo(function BoardQuickFace({ id }) {
+    const sb = boardOfDeskId(id);
+    const d = useBoardDesk(sb);
+    const [refreshing, setRefreshing] = useState(false);
+    const refreshHud = () => {
+        setRefreshing(true);
+        fetch('/api/v1/rio/refresh', { method: 'POST' }).finally(() => setRefreshing(false));
+    };
+    return (
+        <>
+            <BoardGameSubject board={sb} />
+            <ActionRow actions={[
+                { label: 'Swap sides', onClick: d.swapSides },
+                ...(d.transport === 'hud'
+                    ? [{
+                        label: refreshing ? 'Re-reading…' : 'Re-read HUD',
+                        onClick: refreshHud, disabled: refreshing,
+                    }]
+                    : []),
+            ]} />
+        </>
+    );
+});
+
 export const DESK_QUICK_FACES = {
     'desk:capture': CaptureQuickFace,
     'desk:bracket': BracketQuickFace,
 };
+
+/*
+ * A desk's quick face, or null when it has none (Match — dense fixture
+ * authoring, nothing that fits the two-row cap).
+ *
+ * A resolver rather than a map read, because a board's id carries the board and
+ * the rail therefore cannot key components on it. The face takes the id and
+ * reads the board back out of it, so the rail passes one prop for every desk.
+ */
+export function deskQuickFace(id) {
+    if (boardOfDeskId(id) != null) return BoardQuickFace;
+    return DESK_QUICK_FACES[id] ?? null;
+}
 
 // Elements whose quick face isn't the flavor default. Adding one is a design
 // decision, not a convenience: it must still fit the two-row cap.

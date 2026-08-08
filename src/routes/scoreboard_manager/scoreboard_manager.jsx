@@ -1,12 +1,7 @@
-import { useState, useCallback } from 'react';
-import { Pencil, Check, X, Plus } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../components/ui/tabs';
 import { Text } from '../../components/ui/primitives';
 import { Badge } from '../../components/ui/badge';
-import { Button } from '../../components/ui/button';
-import { Input } from '../../components/ui/input';
-import { Popover, PopoverContent, PopoverTrigger } from '../../components/ui/popover';
-import { SimpleTooltip } from '../../components/ui/simple-tooltip';
 import { cn } from '../../lib/utils';
 import { useShallow } from 'zustand/react/shallow';
 import { useSettingsStore, useStateStore } from '../../context/store';
@@ -112,62 +107,6 @@ function tabBadge({ transport, mode, gameId }) {
 }
 
 /**
- * Inline rename popover for a scoreboard tab.
- */
-function RenamePopover({ sbId, currentAlias }) {
-    const [opened, setOpened] = useState(false);
-    const [value, setValue] = useState(currentAlias);
-
-    const handleSave = useCallback(async () => {
-        await fetch(
-            `/api/v1/scoreboards/${sbId}/alias?alias=${encodeURIComponent(value.trim())}`,
-            { method: 'PUT' },
-        );
-        setOpened(false);
-    }, [sbId, value]);
-
-    const handleKeyDown = useCallback((e) => {
-        if (e.key === 'Enter') handleSave();
-        if (e.key === 'Escape') setOpened(false);
-    }, [handleSave]);
-
-    return (
-        <Popover open={opened} onOpenChange={setOpened}>
-            <PopoverTrigger asChild>
-                <span
-                    role="button"
-                    tabIndex={0}
-                    className="inline-flex cursor-pointer items-center text-muted-foreground hover:text-foreground"
-                    onClick={(e) => { e.stopPropagation(); setValue(currentAlias); setOpened(true); }}
-                    onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); setValue(currentAlias); setOpened(true); } }}
-                >
-                    <Pencil size={12} />
-                </span>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-2" onClick={(e) => e.stopPropagation()}>
-                <div className="relative flex items-center">
-                    <Input
-                        placeholder="Alias (optional)"
-                        value={value}
-                        onChange={(e) => setValue(e.currentTarget.value)}
-                        onKeyDown={handleKeyDown}
-                        autoFocus
-                        className="pr-8"
-                    />
-                    <button
-                        type="button"
-                        className="absolute right-2 inline-flex items-center text-muted-foreground hover:text-foreground"
-                        onClick={handleSave}
-                    >
-                        <Check size={14} />
-                    </button>
-                </div>
-            </PopoverContent>
-        </Popover>
-    );
-}
-
-/**
  * Builds the display label for a tab: always "N" or "N: Alias"
  */
 function tabLabel(sbId, alias) {
@@ -189,28 +128,22 @@ export default function ScoreboardManager() {
         return out;
     }));
     const [activeTab, setActiveTab] = useState(String(active[0] ?? 1));
-
-    const handleAddScoreboard = useCallback(async () => {
-        const resp = await fetch('/api/v1/scoreboards', { method: 'POST' });
-        if (!resp.ok) return;
-        const data = await resp.json();
-        setActiveTab(String(data.id));
-    }, []);
-
-    const handleRemoveScoreboard = useCallback(async (e, sbId) => {
-        e.stopPropagation();
-        const resp = await fetch(`/api/v1/scoreboards/${sbId}`, { method: 'DELETE' });
-        if (!resp.ok) return;
-        const data = await resp.json();
-        const remaining = data.active ?? [1];
-        setActiveTab(String(remaining[0]));
-    }, []);
+    // A board removed on the console takes its tab with it, so fall back rather
+    // than leaving the strip pointing at nothing.
+    useEffect(() => {
+        if (!active.map(String).includes(activeTab)) setActiveTab(String(active[0] ?? 1));
+    }, [active, activeTab]);
 
     return (
         <>
         <MatchPanel />
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <div className="mb-4 flex items-center gap-1">
+            {/* Navigation only. Adding, renaming and removing a board are the
+                console's job — the rack's DESK section has a row per board, a +
+                in its header, and rename/remove on each board's own panel. Two
+                places to manage the rig is the duplication boards became desks
+                to end. */}
+            <div className="mb-4 flex items-center gap-2">
                 <TabsList>
                     {active.map(sbId => {
                         const bind = bindings[sbId] ?? bindings[String(sbId)] ?? {};
@@ -230,27 +163,14 @@ export default function ScoreboardManager() {
                                             {badge.label}
                                         </Badge>
                                     )}
-                                    <RenamePopover sbId={sbId} currentAlias={alias} />
-                                    {active.length > 1 && (
-                                        <span
-                                            role="button"
-                                            tabIndex={0}
-                                            className="inline-flex cursor-pointer items-center text-muted-foreground hover:text-foreground"
-                                            onClick={(e) => handleRemoveScoreboard(e, sbId)}
-                                        >
-                                            <X size={12} />
-                                        </span>
-                                    )}
                                 </span>
                             </TabsTrigger>
                         );
                     })}
                 </TabsList>
-                <SimpleTooltip label="Add scoreboard">
-                    <Button variant="ghost" size="icon-sm" onClick={handleAddScoreboard}>
-                        <Plus size={18} />
-                    </Button>
-                </SimpleTooltip>
+                <Text size="xs" dimmed span>
+                    Boards are added and renamed on the Production tab.
+                </Text>
             </div>
 
             {active.map(sbId => (

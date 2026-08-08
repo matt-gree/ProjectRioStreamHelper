@@ -71,30 +71,81 @@ const rowNested = (name) => row(name)?.hasAttribute('data-rack-nested');
  * phase-shaped.
  */
 describe('Rack desks', () => {
-    it('racks all three desks, always, with their live meta defaults', () => {
+    it('racks all three workflow desks, always, with their live meta defaults', () => {
         ui(<Rack />);
         const section = within(document.querySelector('[data-rack-section="desk"]'));
         for (const [name, meta] of [['Match', 'no match'], ['Capture', 'empty'], ['Bracket', 'nothing loaded']]) {
             expect(section.getByText(name)).toBeInTheDocument();
             expect(section.getByText(meta)).toBeInTheDocument();
         }
-        expect(document.querySelectorAll('[data-chip-state="desk"]').length).toBe(DESKS.length);
+    });
+
+    /*
+     * A board is a desk too, and unlike the three above it is derived from the
+     * rig: `scoreboards.active` finally has an online reader. Boards row FIRST —
+     * the fixture, the capture and the bracket all act on one.
+     */
+    it('rows one board per active scoreboard, boards first, named by alias', () => {
+        useSettingsStore.setState({
+            scoreboards: { active: [1, 2], aliases: { 2: 'Stream B' } },
+            production: withContainers(),
+        });
+        ui(<Rack />);
+        const section = within(document.querySelector('[data-rack-section="desk"]'));
+        expect(section.getByText('Scoreboard 1')).toBeInTheDocument();
+        expect(section.getByText('Stream B')).toBeInTheDocument();
+        expect(sectionRows('desk').slice(0, 2)).toEqual(['Scoreboard 1', 'Stream B']);
+        expect(document.querySelectorAll('[data-chip-state="desk"]').length)
+            .toBe(DESKS.length + 2);
+    });
+
+    // The meta says what the board is CARRYING, and reads state only — the rack
+    // redraws on every HUD frame and must not fire a desk's own fetches.
+    it("says what each board is carrying, and what it's waiting for when empty", () => {
+        useSettingsStore.setState({
+            scoreboards: {
+                active: [1, 2],
+                binding: { 2: { playback: { mode: 'rotate' } } },
+            },
+            production: withContainers(),
+        });
+        useStateStore.setState({
+            score: {
+                1: { player: { 1: { rioName: 'Alice' }, 2: { rioName: 'Bob' } }, score_left: 3, score_right: 2, inning: 5, half_inning: 'Bottom' },
+            },
+            scoreboards: { rotation: { 2: { game_ids: [1, 2, 3] } } },
+        });
+        ui(<Rack />);
+        const section = within(document.querySelector('[data-rack-section="desk"]'));
+        expect(section.getByText('HUD · Alice 3–2 Bob · Bot 5')).toBeInTheDocument();
+        expect(section.getByText('API · rotating, 3 in pool')).toBeInTheDocument();
     });
 
     // Every desk the rack lists needs a body to select into and, when it says
     // it's pinnable, a quick face for the rail — the three registries are
-    // written in three files and would otherwise drift apart silently.
+    // written in three files and would otherwise drift apart silently. Boards
+    // are in the same contract, one tier down: their bodies and faces are
+    // resolved from the id rather than declared per row.
     it('every desk row has a stage body, and a quick face iff it is pinnable', async () => {
-        const { DESK_BODIES } = await import('./production');
-        const { DESK_QUICK_FACES } = await import('./quickface');
+        const { DESK_BODIES, deskBodiesFor } = await import('./production');
+        const { DESK_QUICK_FACES, deskQuickFace } = await import('./quickface');
         for (const desk of DESKS) {
             expect(DESK_BODIES[desk.id], `${desk.id} has a stage body`).toBeTruthy();
             expect(DESK_BODIES[desk.id].pinnable !== false, `${desk.id} body agrees on pinnable`)
                 .toBe(desk.pinnable !== false);
             expect(DESK_QUICK_FACES[desk.id] != null, `${desk.id} quick face`)
                 .toBe(desk.pinnable !== false);
+            expect(deskQuickFace(desk.id) != null).toBe(desk.pinnable !== false);
         }
         expect(Object.keys(DESK_BODIES).length).toBe(DESKS.length);
+
+        const bodies = deskBodiesFor([1, 2]);
+        expect(Object.keys(bodies).length).toBe(DESKS.length + 2);
+        for (const id of ['desk:board:1', 'desk:board:2']) {
+            expect(bodies[id], `${id} has a stage body`).toBeTruthy();
+            expect(bodies[id].pinnable !== false, `${id} is pinnable`).toBe(true);
+            expect(deskQuickFace(id), `${id} quick face`).toBeTruthy();
+        }
     });
 
     it('carries no phase — the console has no phase axis to key one to', () => {

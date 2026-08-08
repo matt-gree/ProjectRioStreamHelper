@@ -61,8 +61,14 @@ export function battingSide(homeTeam, halfInning) {
     return (halfInning || 'Top') === 'Top' ? away : home;
 }
 
-// The live game on one board: who, the score, and where in the game we are.
-const BoardGameSubject = memo(function BoardGameSubject({ board }) {
+/*
+ * The live game on one board: who, the score, and where in the game we are.
+ *
+ * Exported because the board DESK draws the same line about the same board
+ * (./desks/board). One sentence with two homes is how the console's two board
+ * surfaces would start disagreeing about what is on air.
+ */
+export const BoardGameSubject = memo(function BoardGameSubject({ board }) {
     const g = useStateStore(useShallow(s => {
         const b = s?.score?.[board];
         return {

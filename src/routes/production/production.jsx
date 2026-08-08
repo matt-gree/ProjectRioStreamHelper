@@ -23,6 +23,8 @@ import { Rail } from './rail';
 import MatchDesk from './desks/match';
 import CaptureDesk from './desks/capture';
 import BracketDesk from './desks/bracket';
+import BoardDesk from './desks/board';
+import { boardDeskId, useActiveBoards, useBoardLabel } from './boards';
 
 /*
  * Production console — the producer's broadcast control board. Three surfaces
@@ -234,10 +236,30 @@ export const DESK_BODIES = {
     'desk:bracket': { title: 'Bracket', body: <BracketDesk /> },
 };
 
+/*
+ * Board bodies are built from the rig rather than declared, because the rig is
+ * what says how many there are. Pure, so `rack.test.jsx` can check the full set
+ * of rows against the full set of bodies without a store.
+ */
+export function deskBodiesFor(boards, label = (sb) => `Scoreboard ${sb}`) {
+    const out = { ...DESK_BODIES };
+    for (const sb of boards) {
+        out[boardDeskId(sb)] = { title: label(sb), body: <BoardDesk board={sb} /> };
+    }
+    return out;
+}
+
+function useDeskBodies() {
+    const boards = useActiveBoards();
+    const label = useBoardLabel();
+    return useMemo(() => deskBodiesFor(boards, label), [boards, label]);
+}
+
 export default function Production() {
     // Selection + rail pins live here so the rack and the stage read one copy
     // (usePersistentState is per-hook, not a shared store).
     const [selection, setSelection] = useRackSelection();
+    const deskBodies = useDeskBodies();
     const [rail, setRail] = useRailPins();
     /*
      * The Add picker's target: `{ scene }` while open, null while closed.
@@ -298,7 +320,7 @@ export default function Production() {
                     onAdd={(scene) => setAdd({ scene: scene ?? null })}
                 />
                 <Stage
-                    selection={selection} deskBodies={DESK_BODIES}
+                    selection={selection} deskBodies={deskBodies}
                     pins={pins} onPinToggle={togglePin}
                 />
                 <Rail

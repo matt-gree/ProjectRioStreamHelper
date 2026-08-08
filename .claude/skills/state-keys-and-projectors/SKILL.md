@@ -99,6 +99,7 @@ score.{N}.*                    per-board live game + projected fixture (N ≥ 1,
   match_conflict   ← identity-gate conflict dict {active, matchId, expected, feed} | None
   series_decided   ← projected match winner side (1|2) or ""
   side_reason      ← which cascade layer decided orientation: manual|match|pin|back_to_back|""
+                     (read by the board desk — desks/board.jsx sideReasonLine)
   hit.*            ← hit-visualizer payload (id bumps per contact)
   player.{T}.*     (T ∈ {1,2}: 1=left, 2=right — never "away/home")
     rioName, rioName_override (producer pin, cleared each new HUD game),

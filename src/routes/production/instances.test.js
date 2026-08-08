@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { instanceId, parseInstanceId, variantLabel, variantOf } from './instances';
+import { boardDeskId, boardOfDeskId } from './boards';
 import { ELEMENTS } from './elements';
 
 const scoreboard = ELEMENTS.find(e => e.id === 'scoreboard');
@@ -18,12 +19,29 @@ describe('instance ids', () => {
     });
 
     it('does not mistake a desk id for a board instance', () => {
-        // 'desk:match' shares the colon; the digits are what discriminate. A
-        // desk parsed as an instance would be selected as an element and the
-        // stage would fall through to "pick anything in the rack".
+        // A desk parsed as an instance would be selected as an element, and the
+        // stage would offer to bind an OBS source for a content workflow.
         expect(parseInstanceId('desk:match')).toEqual({ elementId: 'desk:match', board: null, variant: null });
         expect(parseInstanceId('scoreboard:2')).toEqual({ elementId: 'scoreboard', board: 2, variant: null });
         expect(parseInstanceId('lowerthird')).toEqual({ elementId: 'lowerthird', board: null, variant: null });
+    });
+
+    /*
+     * The rule used to be "a desk name must not be numeric", enforced by nothing
+     * but the names in use: the pattern's head is greedy, so ANY id ending in
+     * digits split. Boards are desks now and their ids carry a board number, so
+     * `desk:board:2` would have parsed as element `desk:board` on board 2 — a
+     * lookup for an element that does not exist, in place of the desk the
+     * producer clicked.
+     */
+    it('leaves a desk id whole even when it ends in a board number', () => {
+        expect(parseInstanceId('desk:board:2'))
+            .toEqual({ elementId: 'desk:board:2', board: null, variant: null });
+        expect(boardDeskId(2)).toBe('desk:board:2');
+        expect(boardOfDeskId('desk:board:2')).toBe(2);
+        expect(boardOfDeskId('desk:match')).toBeNull();
+        // …and an element id that happens to start with the word is untouched.
+        expect(parseInstanceId('board:2')).toEqual({ elementId: 'board', board: 2, variant: null });
     });
 });
 

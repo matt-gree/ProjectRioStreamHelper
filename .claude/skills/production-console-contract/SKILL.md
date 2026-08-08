@@ -680,7 +680,8 @@ any of them.
   catalog offers only definitions, or the same container would list twice.
 - **The id is never all digits** (`containerIdFor`). A container's row id is
   `container:{id}` and `parseInstanceId` reads a colon-plus-DIGITS as the board
-  suffix — same rule that forbids a numeric desk name.
+  suffix. A container really is an element, so it has no way out of that rule —
+  unlike a desk, whose ids are exempted by prefix.
 - **The catalog reports containers from the definitions** (`_container_layouts`
   in `server/api/v1/layouts.py`), which is also the only place a container's
   name and native size live. The `shared/` folder is skipped entirely.
@@ -931,9 +932,10 @@ connection.
 ## Desks — non-element workflows
 
 Things that **feed the broadcast but aren't on it** (no OBS source, no air
-state). Today: the **Match** desk (fixture authoring — sides, format, series,
-board binding, start.gg load), the **Capture** desk (post-game), and the
-**Bracket** desk (which start.gg phase the bracket overlays draw). Rules:
+state). Today: a **board** desk per active scoreboard, then the **Match** desk
+(fixture authoring — sides, format, series, board binding, start.gg load), the
+**Capture** desk (post-game), and the **Bracket** desk (which start.gg phase the
+bracket overlays draw). Rules:
 
 - One entry per desk in `DESKS` (`rack.jsx`), a body in `DESK_BODIES`
   (`production.jsx`), and — when pinnable — a face in `DESK_QUICK_FACES`
@@ -954,9 +956,56 @@ board binding, start.gg load), the **Capture** desk (post-game), and the
 - Same panel contract as elements — desks may declare a quick face under the
   same rules (Capture's `select board + capture` fits; Match currently has no
   compliant face → `quickFace: null`, not pinnable).
-- Deep authoring still defers to tabs: sets/bracket → Competition, board
-  bindings → Match tab. Any future feeds-but-not-on-air workflow (bracket
-  refresh, roster sync) is a desk, not a new UI invention.
+- Deep authoring still defers to tabs: sets/bracket → Competition, a board's
+  game pool → Match tab (until that moves too). Any future feeds-but-not-on-air
+  workflow (bracket refresh, roster sync) is a desk, not a new UI invention.
+
+### A board is a desk
+
+`src/routes/production/desks/board.jsx` + `boards.js`. A board feeds the
+broadcast, is never on it, has no source of its own and persists for the whole
+event — the desk tier exactly. What it is **not** is an element: pool, playback,
+stats tag and transport belong to the **board**, so hanging them off the
+Scoreboard's panel would give two board-scoped elements on one board two copies
+of one pool, and a board that feeds only a ticker no row at all (rows derive from
+sources).
+
+- **The section is DERIVED from `scoreboards.active`**, which is finally the
+  online reader that settings key never had — `instances.js` used to union the
+  declared boards into discovery for the same reason and lost that reader when
+  rows became source-derived. Boards row **first**: they are the rig, and the
+  fixture, the capture and the bracket all act on one.
+- **Boards get rows; matches get a list inside one row.** Boards are bounded
+  (one to three, permanent, a rig property); matches are unbounded and accumulate
+  all night. A rack row per match is the Match tab's stacked-cards problem
+  relocated.
+- **The `+` in the DESK header adds a board.** Same rule as a scene's `+`: the
+  affordance that brings a row into being lives in the header of the section the
+  row appears in. Rename and remove are on that board's own stage panel. There is
+  deliberately only one place to manage boards.
+- **The id is `desk:board:{N}`** (`boardDeskId`), and `parseInstanceId` is
+  explicitly guarded on the `desk:` prefix. The old rule — "a desk name must not
+  be numeric" — was enforced by nothing but the names in use: the pattern's head
+  is greedy, so any id ending in digits split, and `desk:board:2` would have
+  parsed as element `desk:board` on board 2.
+- **Rows, bodies and faces are RESOLVED for boards, not declared**: `useDeskRows`
+  (rack), `deskBodiesFor` (page), `deskQuickFace` (rail). Row components are
+  chosen by kind (`BoardDeskRow` vs `DeskRow`) rather than by picking a hook from
+  the row, which would be a conditional hook call — same rule as `SUBJECTS`.
+- **The body answers three questions**: what is this board carrying (the live
+  game via the shared `BoardGameSubject`, plus the bound match from the *board's*
+  side), why does it look like that (`side_reason`, whose only previous frontend
+  reference was the reset that cleared it), and how do I fix it.
+- **Corrections are correction grade.** Score, inning, count, stadium, home side,
+  the two `rioName_override` identities, swap sides, reset. The roster grid,
+  per-character stat editing and manual runner/fielder placement that used to sit
+  beside them were read-only under every real feed and are **deleted, not moved**.
+  Broadcast-visible writes stage under `board:{sb}:{field}`; the HUD re-read and
+  the stats refresh are momentary; the alias and Remove are rig config, so they
+  are immediate.
+- **Transport stays a readout** (`HUD`/`API` badge, derived from board 1 + the
+  global HUD toggle). There is no per-board source selector and adding one is a
+  regression, not a feature.
 
 ## Adding a new element — checklist
 
@@ -1000,9 +1049,11 @@ element is URL-scoped (`?scoreboard=N`), so two of them are two independent
 things with their own source, air state and settings.
 
 - **Instance id is `{type}:{board}`**, or plain `{type}` for a global element;
-  a placement appends `@{scene}`. Desk ids (`desk:match`) share the colon and
-  must not parse as instances — the board suffix is always DIGITS, which is what
-  keeps the namespaces apart. Don't introduce a numeric desk name.
+  a placement appends `@{scene}`. Desk ids (`desk:match`, `desk:board:2`) share
+  the colon and must not parse as instances — `parseInstanceId` returns them
+  whole, guarded on the `desk:` prefix. That guard is load-bearing: the pattern's
+  head is greedy, so before it every id ending in digits split (see "A board is a
+  desk").
 - **The board is not the only axis.** `?team=`, `?size=`, `?dir=` and `?port=`
   each make two sources of one overlay two different things, and they are read
   straight off the URL for ANY element — registered or generic — as a `~` variant

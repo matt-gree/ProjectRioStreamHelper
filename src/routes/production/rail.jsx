@@ -9,7 +9,8 @@ import { QuickCard, chipFor } from './kit';
 import {
     resolvePlacement, useConsolePlacements, useConsoleScenes, usePlacementLabel,
 } from './placements';
-import { DESK_QUICK_FACES, QuickFace } from './quickface';
+import { deskQuickFace, QuickFace } from './quickface';
+import { boardOfDeskId, useActiveBoards, useBoardLabel } from './boards';
 
 /*
  * The quick rail — the console's right surface: the producer's own set of
@@ -60,14 +61,16 @@ const ElementRailCard = memo(function ElementRailCard({
 });
 
 const RailCard = memo(function RailCard({ entry, onOpen, onUnpin, move }) {
-    const DeskFace = DESK_QUICK_FACES[entry.id];
+    const DeskFace = deskQuickFace(entry.id);
     if (DeskFace) {
         return (
             <QuickCard
                 state="desk" title={entry.title} onOpen={onOpen} onUnpin={onUnpin}
                 move={move}
             >
-                <DeskFace />
+                {/* Every desk face takes the id: a board's carries its board,
+                    which is what lets one component serve every board. */}
+                <DeskFace id={entry.id} />
             </QuickCard>
         );
     }
@@ -85,6 +88,10 @@ export const Rail = memo(function Rail({ pins, onReorder, onUnpin, onOpen }) {
     const scenes = useConsoleScenes();
     const placements = useConsolePlacements(scenes);
     const label = usePlacementLabel(placements);
+    // A board desk's title is its alias, so a renamed board is renamed on the
+    // rail too — a static title map cannot answer for a row the rig defines.
+    const boardLabel = useBoardLabel();
+    const active = useActiveBoards();
     const [dragging, setDragging] = useState(null);
 
     // A pin is kept under the id it is STORED as (that's what reorder and unpin
@@ -93,12 +100,18 @@ export const Rail = memo(function Rail({ pins, onReorder, onUnpin, onOpen }) {
     // scene since removed, still draws a working card. Pins naming a source that
     // no longer exists anywhere resolve to nothing and drop out.
     const entries = useMemo(() => pins.map((id) => {
-        if (DESK_QUICK_FACES[id]) return { id, title: DESK_TITLES[id] ?? id };
+        // A pin outlives the board it was made against, so a removed board's
+        // card drops out exactly as a placement that no longer resolves does —
+        // resolved at read time, never rewritten (the stored pin stays
+        // removable).
+        const sb = boardOfDeskId(id);
+        if (sb != null) return active.includes(sb) ? { id, title: boardLabel(sb) } : null;
+        if (deskQuickFace(id)) return { id, title: DESK_TITLES[id] ?? id };
         const placement = resolvePlacement(id, placements);
         if (!placement || !isPinnable(placement.element)) return null;
         const { name, detail } = label(placement);
         return { id, placement, title: detail ? `${name} · ${detail}` : name };
-    }).filter(Boolean), [pins, placements, label]);
+    }).filter(Boolean), [pins, placements, label, boardLabel, active]);
 
     // Reorder by pin ID. `pins` holds every stored pin; `entries` holds only the
     // ones that still resolve, so the two index differently the moment a pin goes

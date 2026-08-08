@@ -1,4 +1,5 @@
 import { useSettingsStore } from '../../context/store';
+import { DESK_PREFIX } from './instances';
 
 /*
  * Board (scoreboard) helpers for the console surfaces.
@@ -51,6 +52,29 @@ export function useMatchBindableBoards() {
  * derives one on its own. Any leftover `prsh.ui.production.board.*` keys in a
  * producer's localStorage are inert.
  */
+
+/*
+ * A board's row id in the console.
+ *
+ * A board IS a desk: it feeds the broadcast and is never on it, it has no OBS
+ * source of its own, and it persists for the whole event. What it is not is an
+ * element — pool, playback, stats tag and transport belong to the board, not to
+ * the Scoreboard overlay, and hanging them off an element row would give two
+ * board-scoped elements on one board two copies of one pool (and a board that
+ * feeds only a ticker no row at all, since rows derive from sources).
+ *
+ * The id therefore lives in the desk namespace and carries the board, which
+ * `parseInstanceId` is explicitly guarded to leave alone (see ./instances).
+ */
+export const boardDeskId = (sb) => `${DESK_PREFIX}board:${sb}`;
+
+const BOARD_DESK_ID = /^desk:board:(\d+)$/;
+
+// The board a desk id names, or null for the workflow desks (match/capture/bracket).
+export function boardOfDeskId(id) {
+    const m = BOARD_DESK_ID.exec(String(id ?? ''));
+    return m ? Number(m[1]) : null;
+}
 
 // Producer-facing board name: the alias when one is set, else "Scoreboard N".
 export function useBoardLabel() {
