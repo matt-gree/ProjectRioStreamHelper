@@ -11,6 +11,7 @@ from loguru import logger
 from server.api import router_v1
 from server.utils.tasks import spawn, drain
 from server.api.v1.assets import get_msb_assets_path
+from server.api.v1.layouts import layout_url
 from server.paths import app_root, user_data_dir, ensure_game_data, rio_visualizer_dir
 from server.rio.game_pool import OngoingGamePool, CompletedGamePool
 from server.rio.rotation import PoolManager
@@ -236,7 +237,9 @@ async def layout_index(request: Request) -> HTMLResponse:
                 layouts.append({
                     "group": group.name,
                     "name": f.stem,
-                    "url": f"{base}/layout/{rel}",
+                    # as_posix: a Path renders with the native separator, which
+                    # would put a backslash in this URL on Windows.
+                    "url": layout_url(base, rel),
                 })
 
     rows = ""

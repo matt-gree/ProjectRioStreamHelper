@@ -3,11 +3,13 @@
 These drive the ``?size=`` / ``?team=`` variant expansion and the per-layout
 settings whitelist that the Layouts tab reads — external contracts for OBS.
 """
+import re
+
 import orjson
 import pytest
 
 from server.api.v1.layouts import (
-    _container_layouts, _derive_type, _parse_html_meta, list_layouts,
+    _container_layouts, _derive_type, _parse_html_meta, layout_url, list_layouts,
 )
 from server.settings import Settings
 
@@ -150,3 +152,38 @@ async def test_the_catalog_does_not_also_list_the_shared_folder(isolate_user_dat
     assert {row["container"] for row in shared} == SEEDED_CONTAINERS
     # No row for the shell itself, and none for the legacy files.
     assert all(row["url"].endswith(f"?container={row['container']}") for row in shared)
+
+
+# --- layout_url ---------------------------------------------------------
+#
+# A catalog URL is consumed twice: OBS loads it, and the element registry
+# matches it. Only the first one forgives a native separator.
+
+def test_layout_url_uses_forward_slashes_on_a_windows_path():
+    """`str(Path)` renders with the NATIVE separator, so this had to be pinned
+    with a PureWindowsPath — on a POSIX runner the bug is invisible and the
+    assertion passes against the broken code."""
+    from pathlib import PureWindowsPath
+    url = layout_url("http://host:5260", PureWindowsPath("scoreboard1/roster.html"))
+    assert url == "http://host:5260/layout/scoreboard1/roster.html"
+    assert "\\" not in url
+
+
+def test_layout_url_is_unchanged_for_posix_paths():
+    from pathlib import PurePosixPath
+    assert layout_url("http://h", PurePosixPath("rotator/ticker.html")) \
+        == "http://h/layout/rotator/ticker.html"
+
+
+@pytest.mark.parametrize("rel,pattern", [
+    # The registry entries with no bare-filename fallback: these are the ones
+    # that silently became "generic layout" rows when the URL carried a "\".
+    ("scoreboard1/roster.html", r"/layout/scoreboard\d*/roster\.html"),
+    ("schedule/schedule.html", r"/layout/schedule/"),
+    ("bracket/index.html", r"/layout/bracket/(index|winners_only|losers_only)"),
+    ("rotator/ticker.html", r"/layout/rotator/ticker"),
+])
+def test_windows_catalog_urls_still_match_the_element_registry(rel, pattern):
+    from pathlib import PureWindowsPath
+    url = layout_url("http://host:5260", PureWindowsPath(rel))
+    assert re.search(pattern, url), f"{url!r} no longer matches {pattern!r}"

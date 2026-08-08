@@ -21,6 +21,21 @@ _layout_dir = app_root() / "public" / "layout"
 _CONTAINER_GROUP = "shared"
 _CONTAINER_SHELL = "/layout/shared/container.html"
 
+
+def layout_url(base: str, rel) -> str:
+    """The browser-source URL for a layout file, from its path under _layout_dir.
+
+    `as_posix`, never `str(rel)`. A Path renders with the NATIVE separator, so on
+    Windows this produced `…/layout/scoreboard1\\roster.html`. Browsers forgive
+    that (the URL spec folds "\\" to "/" for http), which is exactly why it would
+    survive a smoke test — but the element registry does not: every `match` in
+    src/routes/production/elements.js is a regex over the raw URL, and the ones
+    without a bare-filename fallback (roster, schedule, bracket, ticker) simply
+    stop matching. The console then files a known element as a generic layout,
+    which costs it its stage panel, preview and style settings.
+    """
+    return f"{base}/layout/{rel.as_posix()}"
+
 # The controller browser-source wraps gc-overlay, which only runs on macOS.
 # Hide that layout group from the catalog on other platforms.
 _CONTROLLER_SUPPORTED = platform.system() == "Darwin"
@@ -202,7 +217,7 @@ async def list_layouts(request: Request):
                 continue
 
             layout_type = _derive_type(f.stem, group)
-            base_url = f"{base}/layout/{rel}"
+            base_url = layout_url(base, rel)
 
             # If this layout type has size variants, expand into multiple entries
             w, h, supported = _parse_html_meta(f)
