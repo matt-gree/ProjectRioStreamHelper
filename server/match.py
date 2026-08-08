@@ -16,7 +16,6 @@ The projector is the single merge point where draft/fixture data meets the
 this slice the live feed remains last-writer-wins on HUD/Live boards by design;
 binding is verified against Manual boards.
 """
-import asyncio
 
 from loguru import logger
 
@@ -26,6 +25,7 @@ from server.settings import Settings
 from server.state import State
 from server.utils.deep_dict import deep_get
 from server.utils.projection import run_startup_projection
+from server.utils.tasks import spawn
 
 # Every score.player.* key the projector owns for one side. A projection always
 # writes the full set (resolved value or "") so re-projection is deterministic and
@@ -349,7 +349,7 @@ class Match:
     def schedule_primary_sync(cls) -> None:
         """Fire-and-forget the primary-match surface prep. Non-blocking so a match
         edit never waits on — or fails because of — the Rio API."""
-        asyncio.create_task(cls._run_primary_sync())
+        spawn(cls._run_primary_sync(), name="match.primary_sync")
 
     @classmethod
     async def _run_primary_sync(cls) -> None:

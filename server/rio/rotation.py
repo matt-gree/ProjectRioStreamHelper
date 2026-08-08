@@ -12,6 +12,7 @@ from server.rio import stats_api
 from server.rio.game_pool import _sanitize_row
 from server.settings import Settings
 from server.state import State
+from server.utils.tasks import spawn
 
 
 async def _mirror_to_state(sb_id: int, **fields):
@@ -592,7 +593,8 @@ class PoolState:
                 "[PoolState] sb {} no longer rotating; self-cancelling lingering task",
                 self.sb_id,
             )
-            asyncio.create_task(PoolManager.stop_rotation(self.sb_id, user_stop=False))
+            spawn(PoolManager.stop_rotation(self.sb_id, user_stop=False),
+                  name=f"rotation.self_stop:{self.sb_id}")
             return
 
         game_id = self.game_ids[self.current_index]

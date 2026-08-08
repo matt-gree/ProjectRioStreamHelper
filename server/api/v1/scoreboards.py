@@ -8,6 +8,7 @@ from server.rio.rotation import PoolManager
 from server.rio.stats_tracker import StatsTracker
 from server.settings import Settings
 from server.state import State
+from server.utils.tasks import spawn
 
 router = APIRouter()
 
@@ -292,8 +293,6 @@ async def set_player_name_override(
     Applies to any board, but is primarily for HUD/live boards whose feed would
     otherwise overwrite a hand-typed name every frame.
     """
-    import asyncio
-
     if team not in (1, 2):
         raise HTTPException(status_code=400, detail="team must be 1 or 2")
     active = Settings.Get("scoreboards.active", [1])
@@ -319,7 +318,7 @@ async def set_player_name_override(
 
     # Stats follow the (new) identity — fetch in the background so the click
     # returns immediately; the merged stats broadcast when ready.
-    asyncio.create_task(StatsTracker.refresh_api_stats(sb_id))
+    spawn(StatsTracker.refresh_api_stats(sb_id), name=f"stats.refresh:{sb_id}")
 
     return ORJSONResponse({"success": True, "override": name})
 

@@ -30,6 +30,7 @@ import pandas as pd
 from loguru import logger
 
 from server.match import Match
+from server.utils.tasks import spawn
 
 RETRY_DELAY = 10.0    # seconds between completed-pool lookups
 RETRY_MAX = 12        # attempts (~2 min) before deferring to the producer
@@ -94,7 +95,8 @@ class GameEndWatcher:
                 "[GameEnd] board {} game {} left ongoing — resolving winner for match {}",
                 sb, gid, m,
             )
-            asyncio.create_task(cls._resolve(gid, sb, m, away, home, start_time))
+            spawn(cls._resolve(gid, sb, m, away, home, start_time),
+                  name=f"game_end.resolve:{gid}")
 
     @classmethod
     async def _resolve(cls, game_id, sb, m, away, home, start_time) -> None:

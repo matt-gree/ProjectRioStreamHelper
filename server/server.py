@@ -9,6 +9,7 @@ from fastapi.templating import Jinja2Templates
 from loguru import logger
 
 from server.api import router_v1
+from server.utils.tasks import spawn, drain
 from server.api.v1.assets import get_msb_assets_path
 from server.paths import app_root, user_data_dir, ensure_game_data, rio_visualizer_dir
 from server.rio.game_pool import OngoingGamePool, CompletedGamePool
@@ -80,7 +81,7 @@ async def lifespan(app: FastAPI):
     # per launch instead of trusting a cache.pkl timestamp that can be stale
     # by up to a day across restarts. Fire-and-forget so a slow/offline Rio
     # API doesn't delay startup; the manual Settings refresh covers mid-session.
-    asyncio.create_task(stats_api.fetch_game_modes(force=True))
+    spawn(stats_api.fetch_game_modes(force=True), name="stats.game_modes")
     await OngoingGamePool.Start()
     await CompletedGamePool.Start()
     await PoolManager.Start()
@@ -123,6 +124,10 @@ async def lifespan(app: FastAPI):
     await CompletedGamePool.Stop()
     await OngoingGamePool.Stop()
     await RioGameDataProvider.Stop()
+    # Background work spawned during the run — a stats refresh, a game-end
+    # resolver mid-retry — gets a bounded chance to finish before the state
+    # queue closes under it, then is cancelled.
+    await drain(timeout=3.0)
     consumer.cancel()
 
     shutdown_tasks = [
