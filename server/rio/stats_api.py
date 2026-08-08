@@ -321,6 +321,19 @@ async def fetch_ongoing_games() -> dict:
 # Cached game modes: {name: id}
 _game_modes: dict[str, int] = {}
 _game_modes_lock: asyncio.Lock | None = None
+_cache_refresh_lock: asyncio.Lock | None = None
+
+# How long a LIVE path (a HUD frame resolving its game mode) will wait on the
+# game-mode cache before giving up and leaving the tag alone. pyrio builds its
+# session with no HTTP timeout, so "the API is unreachable" is indistinguishable
+# from "the API is slow" and can last forever — and the scoreboard is on air.
+# Resolution is a nicety; the board coming up is not.
+LIVE_RESOLVE_TIMEOUT = 2.0
+
+# How long after launch the completer-cache rebuild waits. It is CPU-bound in
+# pyrio and starves the event loop for ~40s cold, so running it at second zero
+# put ~13s between a HUD frame and the board appearing. Nothing live reads it.
+STARTUP_CACHE_REFRESH_DELAY = 60.0
 
 
 def _get_game_modes_lock() -> asyncio.Lock:
@@ -328,6 +341,22 @@ def _get_game_modes_lock() -> asyncio.Lock:
     if _game_modes_lock is None:
         _game_modes_lock = asyncio.Lock()
     return _game_modes_lock
+
+
+def modes_ready() -> bool:
+    """True once the game-mode list has been fetched at least once.
+
+    Lets a caller tell the two empty answers apart: "that id is not an active
+    mode" (final) from "we never got to look" (worth trying again next frame).
+    """
+    return bool(_game_modes)
+
+
+def _get_cache_refresh_lock() -> asyncio.Lock:
+    global _cache_refresh_lock
+    if _cache_refresh_lock is None:
+        _cache_refresh_lock = asyncio.Lock()
+    return _cache_refresh_lock
 
 
 async def fetch_game_modes(force: bool = False) -> dict[str, int]:
@@ -347,17 +376,15 @@ async def fetch_game_modes(force: bool = False) -> dict[str, int]:
     if _game_modes and not force:
         return _game_modes
 
+    client = _get_client()
+
+    # The mode list first, and alone under this lock. Everything that waits on
+    # `_game_modes` — including a HUD frame resolving a new game's tag — waits
+    # exactly as long as this one call, and no longer.
     async with _get_game_modes_lock():
         # Double-check after acquiring lock (another coroutine may have filled it)
         if _game_modes and not force:
             return _game_modes
-
-        client = _get_client()
-        if force:
-            try:
-                await asyncio.to_thread(client.cache.refresh_cache)
-            except Exception as e:
-                logger.warning(f"[StatsAPI] Failed to refresh completer cache: {e}")
         try:
             raw = await asyncio.to_thread(client.list_game_modes, active=True)
             tag_sets = raw.get("Tag Sets", [])
@@ -368,19 +395,81 @@ async def fetch_game_modes(force: bool = False) -> dict[str, int]:
         except Exception as e:
             logger.error(f"[StatsAPI] Unexpected error fetching game modes: {e}")
 
+    if force:
+        await refresh_completer_cache()
+
     return _game_modes
 
 
-async def resolve_tag_set_name(tag_set_id) -> str:
+async def refresh_completer_cache() -> None:
+    """Rebuild pyrio's disk-persisted completer cache (tags/users/modes).
+
+    A separate concern on a separate lock from `_game_modes`, which is what
+    anything live actually waits on. Holding the game-modes lock across this is
+    what used to put a ~42s Project Rio round-trip in front of the first HUD
+    frame.
+
+    Be aware of what this costs even off that lock: it is CPU-bound inside pyrio
+    (pickle + pandas), so `to_thread` hands off the work but NOT the GIL, and it
+    measurably starves the event loop while it runs. That is why startup defers
+    it rather than racing the producer's first frames with it.
+    """
+    client = _get_client()
+    async with _get_cache_refresh_lock():
+        try:
+            await asyncio.to_thread(client.cache.refresh_cache)
+        except Exception as e:
+            logger.warning(f"[StatsAPI] Failed to refresh completer cache: {e}")
+
+
+async def prime_caches() -> None:
+    """Launch-time cache warmup, ordered so the board is never behind it.
+
+    The mode list first: it is ~2s, and a HUD frame resolving a new game's tag
+    blocks on it. The completer-cache rebuild after a delay: it is ~40s cold and
+    starves the loop, and its whole purpose (not trusting a cache.pkl timestamp
+    that can be a day stale) is served just as well a minute in as at second
+    zero. Nothing on air reads it — it backs game-mode names in the COMPLETED
+    games browser.
+    """
+    await fetch_game_modes()
+    await asyncio.sleep(STARTUP_CACHE_REFRESH_DELAY)
+    await refresh_completer_cache()
+    logger.debug("[StatsAPI] deferred completer-cache refresh complete")
+
+
+async def resolve_tag_set_name(tag_set_id, timeout: float | None = None) -> str:
     """Resolve a tag-set id (e.g. from a HUD/ongoing game) to its game-mode name.
 
     Ensures the game-mode cache is populated first. Returns '' when the id is
-    missing or not an active game mode.
+    missing, not an active game mode, or — when ``timeout`` is given — could not
+    be resolved in time.
+
+    ``timeout`` is for callers on a live path. Resolving costs a Project Rio
+    round-trip the first time, and pyrio's session has no HTTP timeout of its
+    own, so an unreachable API is an indefinite wait. A caller who is holding up
+    something that is on air passes a budget and accepts '' — which is already
+    the "unknown mode" answer, and already means "leave the current selection
+    alone".
     """
     if tag_set_id is None or tag_set_id == -1:
         return ""
-    modes = _game_modes or await fetch_game_modes()
-    for name, tid in modes.items():
+    modes = _game_modes
+    if not modes:
+        if timeout is None:
+            modes = await fetch_game_modes()
+        else:
+            try:
+                modes = await asyncio.wait_for(
+                    asyncio.shield(fetch_game_modes()), timeout
+                )
+            except Exception:
+                # shield: the in-flight fetch keeps going and fills the cache for
+                # the next frame, rather than being cancelled and restarted by
+                # whoever asks next.
+                logger.debug("[StatsAPI] game-mode resolve timed out; leaving tag alone")
+                return ""
+    for name, tid in (modes or {}).items():
         if tid == tag_set_id:
             return name
     return ""

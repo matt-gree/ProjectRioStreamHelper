@@ -78,11 +78,12 @@ async def lifespan(app: FastAPI):
     # empty every launch even though it persisted to participants.json.
     await Participants.Load()
     await RioGameDataProvider.Start()
-    # Force-refresh game modes (+ pyrio's disk-persisted tag/user cache) once
-    # per launch instead of trusting a cache.pkl timestamp that can be stale
-    # by up to a day across restarts. Fire-and-forget so a slow/offline Rio
+    # Warm the Rio caches once per launch rather than trusting a cache.pkl
+    # timestamp that can be a day stale. Fire-and-forget so a slow/offline Rio
     # API doesn't delay startup; the manual Settings refresh covers mid-session.
-    spawn(stats_api.fetch_game_modes(force=True), name="stats.game_modes")
+    # prime_caches orders the two halves — the mode list now (a HUD frame waits
+    # on it), the completer-cache rebuild a minute in (it starves the loop).
+    spawn(stats_api.prime_caches(), name="stats.prime_caches")
     await OngoingGamePool.Start()
     await CompletedGamePool.Start()
     await PoolManager.Start()

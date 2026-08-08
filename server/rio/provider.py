@@ -441,6 +441,11 @@ class RioGameDataProvider:
     # whenever the HUD toggle or active scoreboards change).
     _hud_targets: list[int] = []
 
+    # True when a new-game frame could not resolve its game mode because the
+    # mode list had not arrived yet (cold start). Makes the next frame try
+    # again; see _apply_hud_game_mode.
+    _game_mode_unresolved: bool = False
+
     # Player side preservation state
     _prev_player_sides: dict = {}
     _prev_inning: int | None = None
@@ -926,6 +931,13 @@ class RioGameDataProvider:
             # HUD value (the override is scoped to a single game).
             await cls._clear_name_overrides()
             await cls._apply_hud_game_mode(game_json)
+        elif cls._game_mode_unresolved:
+            # The new-game frame gave up on the mode within its budget (cold
+            # start: the modes had not arrived yet). Retry on following frames,
+            # or the game plays out with no stats tag — which is what "skipping
+            # API stats fetch" in the log means. Only retried while the answer
+            # was "we never got to look"; a genuinely unknown mode settles.
+            await cls._apply_hud_game_mode(game_json)
 
         for sb in cls._hud_targets:
             if is_new_game:
@@ -997,9 +1009,19 @@ class RioGameDataProvider:
         from server.rio import stats_api  # local import avoids cycle at module load
 
         tag_set_id = game_json.get("tag_set")
-        name = await stats_api.resolve_tag_set_name(tag_set_id)
+        # Budgeted: this runs INSIDE the HUD frame handler, before the frame is
+        # parsed and written to state, and under the provider lock — so an
+        # unresolved tag does not merely delay itself, it holds the scoreboard
+        # (and every queued frame behind it) off air. The mode is a nicety; the
+        # board is the product.
+        name = await stats_api.resolve_tag_set_name(
+            tag_set_id, timeout=stats_api.LIVE_RESOLVE_TIMEOUT
+        )
         if not name:
+            # Worth another go next frame only if the modes hadn't loaded yet.
+            cls._game_mode_unresolved = not stats_api.modes_ready()
             return
+        cls._game_mode_unresolved = False
         for sb in cls._hud_targets:
             current = Settings.Get(f"scoreboards.binding.{sb}.stats_tag", None)
             if current != name:
