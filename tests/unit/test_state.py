@@ -348,3 +348,33 @@ async def test_a_sanitized_label_is_removed_by_the_same_name(set_setting, isolat
 
     await State.Export([{"key": "roster.by_name", "old": payload, "new": None, "action": "unset"}])
     assert not label.exists()
+
+
+async def test_one_unwritable_label_does_not_lose_the_rest_of_the_batch(
+    set_setting, isolate_user_data, monkeypatch
+):
+    """A label is an independent output. A key whose file the OS refuses (locked
+    by OBS on Windows, full disk, permissions) must not abort the batch —
+    previously it raised out of Export and every later change was dropped."""
+    set_setting("general.disable_export", False)
+
+    real = State._create_files_dict.__func__
+
+    async def explode_on_one(cls, path, di):
+        if path.startswith("score/1/bad"):
+            raise PermissionError("file is open in another process")
+        return await real(cls, path, di)
+
+    monkeypatch.setattr(State, "_create_files_dict", classmethod(explode_on_one))
+
+    await State.Export([
+        {"key": "score.1.first", "old": None, "new": "A", "action": "set"},
+        {"key": "score.1.bad", "old": None, "new": "B", "action": "set"},
+        {"key": "score.1.last", "old": None, "new": "C", "action": "set"},
+    ])
+
+    labels = isolate_user_data / "stream_labels" / "score" / "1"
+    # The key AFTER the failure is what regressed — it never got written.
+    assert (labels / "first.txt").read_text() == "A"
+    assert (labels / "last.txt").read_text() == "C"
+    assert not (labels / "bad.txt").exists()

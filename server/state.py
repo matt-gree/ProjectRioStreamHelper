@@ -121,17 +121,26 @@ class State:
                 filename = "/".join(_safe_segment(p) for p in key.split("."))
                 action = change["action"]
 
-                if action == "unset":
-                    old_val = change["old"]
-                    if old_val is not None:
-                        await cls._remove_files_dict(filename, old_val)
-                else:
-                    new_val = change["new"]
-                    old_val = change["old"]
-                    if new_val is None and old_val is not None:
-                        await cls._remove_files_dict(filename, old_val)
-                    elif new_val is not None:
-                        await cls._create_files_dict(filename, new_val)
+                # Per KEY, not per batch. One label writing to a path the OS
+                # refuses — a file OBS has open on Windows, a full disk, a
+                # permission — used to raise straight out of Export and take
+                # every remaining change in the batch with it, so one bad key
+                # silently froze unrelated labels. A label is an independent
+                # output; failing one must not cost the others.
+                try:
+                    if action == "unset":
+                        old_val = change["old"]
+                        if old_val is not None:
+                            await cls._remove_files_dict(filename, old_val)
+                    else:
+                        new_val = change["new"]
+                        old_val = change["old"]
+                        if new_val is None and old_val is not None:
+                            await cls._remove_files_dict(filename, old_val)
+                        elif new_val is not None:
+                            await cls._create_files_dict(filename, new_val)
+                except Exception:
+                    logger.exception("[State] stream-label export failed for {}", key)
 
     @classmethod
     async def Consumer(cls):
