@@ -8,8 +8,9 @@ import { SimpleTooltip } from '../../components/ui/simple-tooltip';
 import { notifications } from '../../lib/notify';
 import { IconToggle } from './kit';
 import {
-    absoluteOverlayUrl, instanceUrl, setSourceVisibility, useDisplayedEnabled,
+    absoluteOverlayUrl, instanceUrl, placementDims, setSourceVisibility, useDisplayedEnabled,
 } from './bindings';
+import { sizeOptionFor } from './elements';
 import { useActiveBoards } from './boards';
 import { useContainerPush } from './feeds';
 import { useContainerOf, useSharedContainers } from './containers';
@@ -60,21 +61,29 @@ function useAddTargetScene() {
 // element, and for a fed one the source of the container whose roster names it
 // — sized and named from the definition, since that is the only place a
 // container's name and native size live.
-function useBindTarget(element, board) {
+function useBindTarget(element, board, placement) {
     const containers = useSharedContainers();
     const boards = useActiveBoards();
     const { container } = useContainerOf(element);
+    const variant = placement?.variant ?? '';
     if (element.flavor === 'direct') {
         // Board-scoped: create the source for the board the panel is pointed at.
         // Suffix the name only on a multi-board rig — otherwise the producer
         // gets two identically-named sources they can tell apart only by opening
         // the URL, and on a single-board rig a "1" that means nothing.
         const suffix = element.scope === 'board' && board != null && boards.length > 1;
+        // A size variant is a different canvas AND a different source, so it
+        // earns its own name — two browser sources both called "Scoreboard"
+        // that differ only by dimensions is the thing a producer can't undo
+        // later without opening each one.
+        const size = sizeOptionFor(element, variant);
+        const base = size ? `${element.name} ${size.label}` : element.name;
+        const dims = placementDims({ element, variant });
         return {
-            inputName: suffix ? `${element.name} ${board}` : element.name,
-            url: instanceUrl(element, board),
-            width: element.width,
-            height: element.height,
+            inputName: suffix ? `${base} ${board}` : base,
+            url: instanceUrl(element, board, variant),
+            width: dims.width,
+            height: dims.height,
         };
     }
     const entry = containers.find(c => c.id === container);
@@ -95,10 +104,10 @@ function useBindTarget(element, board) {
  * VISIBLE, because it was a setup surface with nothing live to disturb; it's
  * gone now, and every console add path is hidden.)
  */
-const BindSlot = memo(function BindSlot({ element, board }) {
+const BindSlot = memo(function BindSlot({ element, board, placement }) {
     const status = useObsStore(s => s.status);
     const scene = useAddTargetScene();
-    const target = useBindTarget(element, board);
+    const target = useBindTarget(element, board, placement);
     const [adding, setAdding] = useState(false);
 
     /*
@@ -249,7 +258,7 @@ export const SourceStrip = memo(function SourceStrip({ element, board, placement
         <div className="flex shrink-0 items-center gap-1.5">
             {placement?.item
                 ? <AirSlot binding={placement} />
-                : <BindSlot element={element} board={board} />}
+                : <BindSlot element={element} board={board} placement={placement} />}
             {!direct && <PushSlot element={element} />}
         </div>
     );

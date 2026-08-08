@@ -224,6 +224,9 @@ export default function ScoreControls({ scoreboardNumber = 1, onSwapTeams, trans
         setItem(`${base}.innings_selected`, null);
         setItem(`${base}.stadium`, '');
         setItem(`${base}.tag_set`, null);
+        // The resolved name beside tag_set's raw id; both feeds write it, so
+        // both have to be cleared or an overlay keeps naming the old mode.
+        setItem(`${base}.game_mode`, '');
         setItem(`${base}.side_reason`, '');
         setItem(`${base}.away_linescore`, []);
         setItem(`${base}.home_linescore`, []);

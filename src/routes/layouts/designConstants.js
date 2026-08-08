@@ -49,8 +49,14 @@ export const LAYOUT_SETTINGS = {
     // distinguishes it rightwards, which is most of why a settings column reads
     // as a wall. The description still carries the sentence.
     scoreboard: [
-        { key: 'showElo', type: 'switch', label: 'ELO', description: 'Display ELO ratings on completed games' },
+        // Default OFF: a one-game rating swing is a season-play number, and at a
+        // tournament or in a league it was taking the widest thirds of the
+        // completed-game row to say something nobody in the room was watching.
+        { key: 'showElo', type: 'switch', label: 'ELO', description: 'Rating change on completed games. Off unless you’re running ranked ladder play.', defaultValue: false },
         { key: 'showTeamLogos', type: 'switch', label: 'Team Logos', description: 'Display MSB team logos' },
+        // Both feeds write score.{N}.game_mode now, so this is standing context
+        // rather than a completed-game detail.
+        { key: 'showGameMode', type: 'switch', label: 'Game Mode', description: 'The game mode / tag set, during a game and after it', defaultValue: true },
         // Segment toggles honoured by melded themes (e.g. Small Scoreboard); a
         // theme without those segments ignores them.
         { key: 'showLive', type: 'switch', label: 'Live Cluster', description: 'The live count + base diamond. Off keeps it hidden even during a live game (the card stays compact).', defaultValue: true },
@@ -104,9 +110,15 @@ export const LAYOUT_SETTINGS = {
     // the full score block, the condensed bar, or neither. The theme SVG comes
     // from the active Design Package (scorecard.svg).
     // Grouped down the card the way it stacks on screen (the descriptions'
-    // "element N" is that order). `mainMode` carries no group: it is the
-    // scorecard's headline decision and the stage renders it flat above the
-    // groups, so it is also the rail's quick-face row.
+    // "element N" is that order). `mainMode` carries no group ON PURPOSE: it is
+    // the score block's whole control, so it sits ungrouped between Top bars and
+    // Lower bars — the card's own order — rather than under a one-row "Score
+    // block" eyebrow. It used to share that region with Rosters and Bases
+    // switches; those are gone, because the parts of the block a producer
+    // actually cuts between are the three the segmented control already names
+    // (full / condensed / off), and a full block missing its rosters or its
+    // diamond was a fourth state nobody asked for. Same def, so it is still the
+    // rail's quick-face row.
     scorecard: [
         { key: 'showHeader',   group: 'Top bars', type: 'switch', label: 'Header Bar',    description: 'Branding logo + title bar (element 0)', defaultValue: true },
         { key: 'titleText',    group: 'Top bars', type: 'text',   label: 'Header Title',   description: 'Centered next to the logo. Blank uses the branding logo alone.', placeholder: 'Project Rio' },
@@ -114,8 +126,6 @@ export const LAYOUT_SETTINGS = {
         { key: 'phaseText',    group: 'Top bars', type: 'text',   label: 'Phase Text',     description: 'Overrides the bracket-phase bar. Leave blank to use the assigned match’s phase; the bar hides when neither is set.', placeholder: 'Winners Final' },
         { key: 'showGameMode', group: 'Top bars', type: 'switch', label: 'Game Mode',      description: 'Game-mode bar (element 2)', defaultValue: true },
         { key: 'mainMode',     type: 'select', label: 'Score Block',    description: 'Full score block (3), condensed bar (3a), or neither', options: [{ value: 'full', label: 'Full' }, { value: 'condensed', label: 'Condensed' }, { value: 'off', label: 'Off' }], defaultValue: 'full' },
-        { key: 'showRosters',  group: 'Score block', type: 'switch', label: 'Rosters',        description: 'Both teams’ 9-character rosters in the full block', defaultValue: true },
-        { key: 'showBases',    group: 'Score block', type: 'switch', label: 'Bases / Diamond', description: 'The base diamond and on-base runners', defaultValue: true },
         { key: 'showAtBat',    group: 'Lower bars', type: 'switch', label: 'At-Bat Lines',   description: 'Current batter + pitcher game lines (element 4)', defaultValue: true },
         { key: 'showBoxScore', group: 'Lower bars', type: 'switch', label: 'Box Score',      description: 'Per-inning linescore (element 5)', defaultValue: true },
         { key: 'showStadium',  group: 'Lower bars', type: 'switch', label: 'Stadium',        description: 'Stadium bar (element 6)', defaultValue: true },

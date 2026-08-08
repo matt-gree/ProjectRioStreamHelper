@@ -121,9 +121,11 @@ export function mountScorecard({ host, sb }) {
       showHeader:   bool('showHeader', true),
       showPhase:    bool('showPhase', true),
       showGameMode: bool('showGameMode', true),
-      mainMode:     t('mainMode') || 'full',   // full | condensed | off
-      showRosters:  bool('showRosters', true),
-      showBases:    bool('showBases', true),
+      // full | condensed | off — the score block's whole control. The rosters
+      // and the base diamond are PARTS OF the full block, not switches beside
+      // it: a producer who wants less than the full block picks the condensed
+      // bar, which is the state that was actually designed.
+      mainMode:     t('mainMode') || 'full',
       showAtBat:    bool('showAtBat', true),
       showBoxScore: bool('showBoxScore', true),
       showStadium:  bool('showStadium', true),
@@ -222,9 +224,9 @@ export function mountScorecard({ host, sb }) {
   // ── data binding ────────────────────────────────────────────────────────────
   // Standard roster order 0..8 (no captain reordering; the team logo already
   // tells the viewer who the captain is).
-  function bindRoster(prefix, team, show) {
+  function bindRoster(prefix, team) {
     for (let i = 0; i < 9; i++) {
-      const name = show ? g(OverlayBase.state, `score.${SB}.player.${team}.character.${i}.name`, '') : '';
+      const name = g(OverlayBase.state, `score.${SB}.player.${team}.character.${i}.name`, '');
       engine.setImage(`${prefix}-char-${i}`, name ? charIconUrl(name) : '');
     }
   }
@@ -237,8 +239,8 @@ export function mountScorecard({ host, sb }) {
     engine.setImage('s1-logo', vis.showTeamLogos ? teamLogoUrl(d.team1) : '');
     engine.setImage('s2-logo', vis.showTeamLogos ? teamLogoUrl(d.team2) : '');
 
-    bindRoster('s1', 1, vis.showRosters);
-    bindRoster('s2', 2, vis.showRosters);
+    bindRoster('s1', 1);
+    bindRoster('s2', 2);
 
     const innEl = engine.slots['inn-num'];
     engine.setText('inn-num', d.isFinal ? '' : d.inn);
@@ -251,14 +253,14 @@ export function mountScorecard({ host, sb }) {
     for (let i = 0; i < 3; i++) dot(engine, `strike-${i}`, i < d.strikes, STRIKE_ON);
     for (let i = 0; i < 3; i++) dot(engine, `out-${i}`, i < d.outs, OUT_ON);
 
-    bindBases(d, vis);
+    bindBases(d);
   }
 
-  function bindBases(d, vis) {
+  function bindBases(d) {
     const on = [d.r1, d.r2, d.r3];
     const names = [d.r1Name, d.r2Name, d.r3Name];
     for (let b = 1; b <= 3; b++) {
-      const occupied = vis.showBases && !d.isFinal && !!on[b - 1];
+      const occupied = !d.isFinal && !!on[b - 1];
       const baseEl = engine.slots[`base-${b}`];
       const runnerEl = engine.slots[`runner-${b}`];
       if (baseEl) {

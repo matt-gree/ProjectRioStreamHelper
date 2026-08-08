@@ -93,6 +93,37 @@ export function variantOf(url) {
     return parts.join('.');
 }
 
+/*
+ * The variant tag for one param/value ('size','s' → 'zs'). The catalog tier
+ * builds rows for variants no source exists for yet, and this keeps it from
+ * hand-spelling the one-letter tags that VARIANT_PARAMS already owns.
+ */
+export function variantTagFor(param, value) {
+    const entry = VARIANT_PARAMS.find(([p]) => p === param);
+    return entry && value != null ? `${entry[1]}${value}` : '';
+}
+
+/*
+ * The inverse of `variantOf`: the query params a variant tag stands for
+ * ('zs' → [['size','s']]).
+ *
+ * Online a variant is READ off a source that already exists, so nothing ever
+ * needed to go the other way. The catalog tier has no source to read — it is
+ * the list of what a producer could create — so it has to be able to WRITE the
+ * variant it is offering back into a URL. One table serves both directions,
+ * which is what stops "Small" in the rack from meaning something different to
+ * the URL that Copy hands over.
+ */
+export function variantParams(variant) {
+    if (!variant) return [];
+    const out = [];
+    for (const part of String(variant).split('.')) {
+        const entry = VARIANT_PARAMS.find(([, tag]) => part.startsWith(tag));
+        if (entry) out.push([entry[0], part.slice(entry[1].length)]);
+    }
+    return out;
+}
+
 // How a variant reads in the rack ('t2' → "Team 2"). Null when there is
 // nothing to say, so a caller can drop the slot rather than print an empty one.
 export function variantLabel(variant) {

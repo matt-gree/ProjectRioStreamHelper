@@ -2,6 +2,7 @@ import { memo, useMemo } from 'react';
 import { Text } from '../../../components/ui/primitives';
 import { PanelShell, chipFor } from '../kit';
 import { isPinnable } from '../elements';
+import { placementDims } from '../bindings';
 import {
     placementTarget, resolvePlacement, useConsolePlacements, useConsoleScenes,
     usePlacementLabel,
@@ -76,7 +77,10 @@ export function stageBodyComponent(element) {
  * same rule as any unregistered source, for the same reason.
  */
 function useContainerDims(placement) {
-    const { width, height } = placement?.element ?? {};
+    // Through placementDims, so a size VARIANT reports its own canvas rather
+    // than the element's default — the preview's "800 × 460" readout is the
+    // number a producer sizes their browser source from.
+    const { width, height } = placementDims(placement);
     return useMemo(
         () => (width && height ? { width, height } : null),
         [width, height],

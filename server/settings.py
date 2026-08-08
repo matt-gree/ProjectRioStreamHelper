@@ -402,7 +402,7 @@ class Settings:
             "auto_start": False
         },
         "overlays": {
-            "schema_version": 2,
+            "schema_version": 3,
             "global": {
                 "accentColor": "#f59e0b",
                 "cardBg": "rgba(15, 15, 25, 0.88)",
@@ -423,8 +423,13 @@ class Settings:
             },
             "presets": {},
             "scoreboard": {
-                "showElo": True,
+                # ELO off: a one-game rating swing is a season-play number, and
+                # it was taking the two widest thirds of the completed-game row
+                # at every tournament and league broadcast to say it. Producers
+                # running ranked ladder play turn it on.
+                "showElo": False,
                 "showTeamLogos": True,
+                "showGameMode": True,
             },
             "roster": {
                 "showSuperstars": True,
@@ -525,6 +530,21 @@ class Settings:
                     if key in promoted_to_global:
                         layout_dict.pop(key, None)
             overlays["schema_version"] = 2
+            await cls.Save()
+
+        # v3: ELO's default flipped to off (it is a season-play number, and it
+        # was holding the widest thirds of the completed-game row at every
+        # tournament broadcast). The seeded `true` has to be CLEARED, not left,
+        # or the new default never reaches anyone who already ran the app.
+        #
+        # Only the un-scoped leaf, which is the one the seed writes. A per-board
+        # pin (overlays.scoreboard.{N}.showElo) is nothing but an explicit
+        # choice — nothing seeds those — so those are left exactly as found.
+        if overlays.get("schema_version", 1) < 3:
+            sb_overlays = overlays.get("scoreboard")
+            if isinstance(sb_overlays, dict) and sb_overlays.get("showElo") is True:
+                sb_overlays.pop("showElo", None)
+            overlays["schema_version"] = 3
             await cls.Save()
 
         # Container membership moved ONTO the container. It used to live per

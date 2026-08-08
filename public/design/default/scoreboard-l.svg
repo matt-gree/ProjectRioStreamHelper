@@ -55,6 +55,10 @@
       <rect x="364" y="31" width="72" height="30" rx="7" style="fill:var(--accent)"/>
       <text x="400" y="52" text-anchor="middle" fill="#ffffff" font-family="var(--font-display)" font-size="16" font-weight="700" letter-spacing="1">FINAL</text>
     </g>
+
+    <!-- Game mode: standing context, so it lives in row-top (always shown)
+         rather than the completed-game row. Self-hides when unknown. -->
+    <text data-slot="meta-game-mode" data-maxw="260" x="400" y="88" text-anchor="middle" class="sb-dim" font-size="12" font-weight="600" letter-spacing="0.6" opacity="0">Game Mode</text>
   </g>
 
   <!-- ░░ LIVE: batter / pitcher / count / diamond ░░ -->

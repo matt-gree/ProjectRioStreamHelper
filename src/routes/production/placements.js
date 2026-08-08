@@ -5,7 +5,9 @@ import { useStateStore } from '../../context/store';
 import { boardOfUrl } from '../../lib/obs-binding';
 import { ELEMENTS } from './elements';
 import { containerOfSource, fedTargets, useContainerDefs } from './containers';
-import { instanceId, parseInstanceId, variantLabel, variantOf, withVariant } from './instances';
+import {
+    instanceId, parseInstanceId, variantLabel, variantOf, variantTagFor, withVariant,
+} from './instances';
 import { useActiveBoards, useBoardLabel } from './boards';
 
 /*
@@ -307,20 +309,49 @@ export function catalogPlacements({ defs = {}, boards = [1], feeds = {} } = {}) 
     const targets = fedTargets(defs);
     const out = [];
     const row = (element, board = null, extra = null) => {
-        const instance = instanceId(element, board);
+        // The variant is part of the IDENTITY, not decoration on it — two sizes
+        // of one board's scoreboard are two rows, two selections and two stage
+        // panels, exactly as they are once real sources exist.
+        const instance = withVariant(instanceId(element, board), extra?.variant ?? '');
         return {
             id: instance, instance, element, board, variant: '',
             scene: null, where: 'none', item: null, ...extra,
         };
     };
 
-    // A board-scoped element gets one row per board the producer actually runs.
-    // This is the one legitimate reader left for the DECLARED board list: with
-    // no OBS there is nothing to discover them from, and Settings genuinely
-    // knows how many boards the rig has.
+    /*
+     * A board-scoped element gets one row per board the producer actually runs.
+     * This is the one legitimate reader left for the DECLARED board list: with
+     * no OBS there is nothing to discover them from, and Settings genuinely
+     * knows how many boards the rig has.
+     *
+     * An element declaring `sizes` gets one row per SIZE on top of that, because
+     * online the size is read off a source that already exists — so with OBS
+     * closed the console could only ever offer the default canvas, and Copy URL
+     * handed over a Large board however small the one you wanted. The variant
+     * tag is the same `zs`/`zm`/`zl` the online path derives from a URL, so a
+     * selection made here still resolves once the source exists.
+     */
     for (const el of DIRECT_ELEMENTS) {
-        if (el.scope === 'board') for (const b of boards) out.push(row(el, b));
-        else out.push(row(el));
+        /*
+         * The default size gets the BARE instance id, because a source with no
+         * ?size= is exactly that size — so the row a producer pinned with OBS
+         * closed is the row their source becomes when OBS comes up.
+         *
+         * And it comes FIRST. The bare id is the element's canonical instance,
+         * which is what a pin or selection naming only the element ('scoreboard')
+         * resolves to; emitted after its variants, the nearest-match resolution
+         * would answer "the scoreboard" with whichever size happened to be
+         * declared first.
+         */
+        const variants = (el.sizes ?? [])
+            .map(s => (s.default ? '' : variantTagFor('size', s.value)))
+            .sort((a, b) => (a === '' ? -1 : b === '' ? 1 : 0));
+        const forBoard = (b) => (variants.length
+            ? variants.forEach(v => out.push(row(el, b, { variant: v })))
+            : out.push(row(el, b)));
+        if (el.scope === 'board') for (const b of boards) forBoard(b);
+        else forBoard(null);
     }
 
     for (const def of Object.values(defs).sort((a, b) => a.name.localeCompare(b.name))) {
@@ -390,21 +421,32 @@ export function useConsolePlacements(consoleScenes) {
  * scenes is still one thing to tell apart from nothing, and suffixing all three
  * would be the board mechanism charging rent it isn't paying. The scene is not
  * in the name either: the section header above the row already says it.
+ *
+ * The two axes are counted SEPARATELY, because they answer separate questions.
+ * A single-board rig offering three scoreboard sizes has three instances, and a
+ * shared "more than one" flag then printed the board on every row — "Scoreboard ·
+ * Scoreboard 1" three times over, where the board was never in doubt and the
+ * size was the only thing telling them apart. Each half of the detail now earns
+ * its own place.
  */
 export function usePlacementLabel(placements) {
     const boardLabel = useBoardLabel();
     return useMemo(() => {
-        const instances = new Map();
+        const axes = new Map();
         for (const p of placements) {
-            if (!instances.has(p.element.id)) instances.set(p.element.id, new Set());
-            instances.get(p.element.id).add(p.instance);
+            if (!axes.has(p.element.id)) {
+                axes.set(p.element.id, { boards: new Set(), variants: new Set() });
+            }
+            const a = axes.get(p.element.id);
+            a.boards.add(p.board);
+            a.variants.add(p.variant || '');
         }
         return (p) => {
-            const many = (instances.get(p.element.id)?.size ?? 0) > 1;
-            const detail = many
-                ? [p.board != null ? boardLabel(p.board) : null, variantLabel(p.variant)]
-                    .filter(Boolean).join(' · ')
-                : '';
+            const a = axes.get(p.element.id);
+            const detail = [
+                a?.boards.size > 1 && p.board != null ? boardLabel(p.board) : null,
+                a?.variants.size > 1 ? variantLabel(p.variant) : null,
+            ].filter(Boolean).join(' · ');
             return { name: p.element.name, detail: detail || null };
         };
     }, [placements, boardLabel]);

@@ -1,4 +1,4 @@
-<svg viewBox="0 0 388 128" preserveAspectRatio="xMidYMid meet" data-layout="absolute" xmlns="http://www.w3.org/2000/svg">
+<svg viewBox="0 0 388 156" preserveAspectRatio="xMidYMid meet" data-layout="absolute" xmlns="http://www.w3.org/2000/svg">
   <!--
     DEFAULT package - Scoreboard S (388x128): a vertical two-row card (side 1 over
     side 2), all Inter, HORIZONTAL-MELD absolute layout. The core (names + scores)
@@ -26,7 +26,7 @@
     </linearGradient>
   </defs>
 
-  <rect data-slot="card-bg" x="8" width="380" height="128" rx="20" data-compact-w="224" fill="#0B0B12"/>
+  <rect data-slot="card-bg" x="8" width="380" height="128" rx="20" data-compact-w="224" data-compact-h="128" fill="#0B0B12"/>
   <rect data-slot="card-rail" width="6" height="128" rx="3" style="fill:var(--accent,#e60012)"/>
 
   <!-- ░░ CORE side 1 (always shown) ░░ -->
@@ -45,6 +45,18 @@
     <image data-slot="s2-logo" x="29" y="75" width="38" height="38" preserveAspectRatio="xMidYMid meet" opacity="0"/>
     <text data-slot="s2-name" data-maxw="108" x="75" y="102.27" fill="#F5F5F8" font-family="Inter" font-size="20" font-weight="bold">Player Two</text>
     <text data-slot="s2-score" data-maxw="44" x="223.63" y="106.14" text-anchor="end" fill="#F5F5F8" font-family="Inter" font-size="32" font-weight="bold">0</text>
+  </g>
+
+  <!-- ░░ GAME MODE band (toggle + content) — melds card to 156 tall ░░
+       A real bottom section: data-cardh grows card-bg (and the rail with it)
+       from the compact 128 to 156 when the band shows, and collapses back when
+       the producer switches it off or the mode is unknown. Left-aligned to the
+       plates above rather than centred on the card, because the card's WIDTH
+       melds underneath it — a centred label would slide sideways every time the
+       live cluster opened. -->
+  <g data-slot="row-mode" data-cardh="156">
+    <rect x="17" y="126" width="4" height="16" rx="2" style="fill:var(--accent,#e60012)" opacity="0.85"/>
+    <text data-slot="meta-game-mode" data-maxw="176" x="29" y="139" fill="#F5F5F8" fill-opacity="0.62" font-family="Inter" font-size="12" font-weight="600" letter-spacing="0.4">Game Mode</text>
   </g>
 
   <!-- ░░ INNING segment (toggle) — melds card to 292 ░░ -->

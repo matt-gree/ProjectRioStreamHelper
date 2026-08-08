@@ -60,6 +60,27 @@ def test_production_elements_scoreboard_dims_match_contract():
     assert (int(m.group(1)), int(m.group(2))) == _canvas("l")
 
 
+def test_production_elements_scoreboard_size_table_matches_contracts():
+    """The console's own size table — what the catalog tier OFFERS with no OBS.
+
+    A fourth copy of the canvas dims, and the one a producer pastes into a
+    browser source by hand, so it gets pinned like the other three.
+    """
+    src = (REPO / "src/routes/production/elements.js").read_text()
+    block = re.search(r"sizes:\s*\[(.*?)\],\s*\n", src, re.DOTALL)
+    assert block, "scoreboard `sizes` table not found in elements.js"
+    entries = {
+        size: (int(w), int(h))
+        for size, w, h in re.findall(
+            r"value:\s*'(\w+)'.*?width:\s*(\d+),\s*height:\s*(\d+)", block.group(1)
+        )
+    }
+    # The offered sizes are the ones the layouts API expands (xs is retired).
+    assert set(entries) == {"s", "m", "l"}
+    for size, dims in entries.items():
+        assert dims == _canvas(size), f"elements.js sizes.{size} drifted"
+
+
 def test_builtin_theme_svg_viewboxes_match_contracts():
     svgs = sorted((REPO / "public/design").glob("*/scoreboard-*.svg"))
     assert svgs, "no built-in scoreboard theme SVGs found"

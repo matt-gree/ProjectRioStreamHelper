@@ -42,6 +42,30 @@ describe('previewUrl', () => {
         expect(url).toContain('preview=1');
     });
 
+    /*
+     * A catalog-tier row — no scene item, but a variant of its own. The variant
+     * is the ROW's, not the source's, so it has to survive having no source: the
+     * component narrows its `binding` to null when there is no item, and passing
+     * that narrowed value here made "Scoreboard — Small" preview the Large
+     * board at Small's dimensions.
+     */
+    it('honours a sourceless placement’s variant', () => {
+        const url = previewUrl(el('scoreboard'), 1, {
+            element: el('scoreboard'), board: 1, variant: 'zs', item: null,
+        });
+        expect(url).toContain('size=s');
+        expect(url).toContain('scoreboard=1');
+    });
+
+    // The default size is the bare URL, so the Large row must not start
+    // spelling a param the mount already assumes.
+    it('leaves a bare variant out of the preview url', () => {
+        const url = previewUrl(el('scoreboard'), 1, {
+            element: el('scoreboard'), board: 1, variant: '', item: null,
+        });
+        expect(url).not.toContain('size=');
+    });
+
     // Not every element is board-scoped; inventing ?scoreboard= for a Lower
     // Third would be the same bug instanceUrl already guards against.
     it('adds no board param to an element that has no board', () => {

@@ -125,6 +125,10 @@ def _scoreboard_slots() -> dict[str, Slot]:
         "row-final": Slot("group"),
         "row-roster": Slot("group"),
         "row-box": Slot("group"),
+        # Optional game-mode band. In an absolute theme it may declare
+        # data-cardh to grow the card's height when it shows (see the VERTICAL
+        # MELD note in scoreboard-mount.js).
+        "row-mode": Slot("group"),
         "logo": Slot("image"),
         "logo-default": Slot("any"),
         "inn-half": Slot("text"),
@@ -142,6 +146,9 @@ def _scoreboard_slots() -> dict[str, Slot]:
         "pit-name": Slot("text"),
         "meta-main": Slot("text"),
         "meta-date": Slot("text"),
+        # Unlike the two above (completed-game only), this one is bound in both
+        # states — every size may place it.
+        "meta-game-mode": Slot("text"),
         "elo1-group": Slot("group"),
         "elo2-group": Slot("group"),
         "box-away-R": Slot("text"),
@@ -210,7 +217,7 @@ CONTRACTS: dict[str, Contract] = {
     # scoreboards share one slot vocabulary; each size uses a subset (all optional)
     "scoreboard-xs": Contract((400, 50), "xMidYMid meet", slots=_scoreboard_slots(),
                               parts={"div": Slot("any")}),
-    "scoreboard-s": Contract((388, 128), "xMidYMid meet", slots=_scoreboard_slots(),
+    "scoreboard-s": Contract((388, 156), "xMidYMid meet", slots=_scoreboard_slots(),
                              parts={"div": Slot("any")}),
     "scoreboard-m": Contract((600, 200), "xMidYMid meet", slots=_scoreboard_slots(),
                              parts={"div": Slot("any")}),

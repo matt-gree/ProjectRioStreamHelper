@@ -27,7 +27,7 @@ const PREVIEW_ROWS = [
         { label: 'Player Stats',     path: '/layout/scoreboard1/stats.html?scoreboard=1',             w: 800,  h: 460 },
     ],
     [
-        { label: 'Small Scoreboard', path: '/layout/scoreboard1/scoreboard.html?scoreboard=1&size=s', w: 388,  h: 128 },
+        { label: 'Small Scoreboard', path: '/layout/scoreboard1/scoreboard.html?scoreboard=1&size=s', w: 388,  h: 156 },
         { label: 'Bracket',          path: '/layout/bracket/index.html',                              w: 960, h: 540 },
     ],
     [

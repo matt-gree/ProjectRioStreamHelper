@@ -12,19 +12,22 @@ import { OverlaySettingGroups, OverlaySettingRow, defsFor, useOverlaySettings } 
  * Setup. Config is per board (overlays.scorecard.{N}.*) so two scorecard
  * sources can be driven independently.
  *
- * The score block leads because it's the headline decision (full block /
- * condensed bar / off) and the one control the rail's quick face carries.
- * Everything else follows grouped by where it sits on the card — top bars,
- * score block, lower bars — which puts the header title and the phase text
- * beside the switches that turn those bars on. They used to sit in the stage's
- * catch-all Style section, a scroll below the switch they belong to, with a
- * sentence in this panel explaining where they had gone. Colours come from the
- * active design package.
+ * Everything is grouped by where it sits on the card — top bars, score block,
+ * lower bars — which puts the header title and the phase text beside the
+ * switches that turn those bars on. They used to sit in the stage's catch-all
+ * Style section, a scroll below the switch they belong to, with a sentence in
+ * this panel explaining where they had gone. Colours come from the active
+ * design package.
+ *
+ * The score-block mode is one of those rows now, in card order, rather than a
+ * flat row pinned above the groups. It led the panel back when the score block
+ * was a region with switches of its own and the mode was the headline decision
+ * among them; with those switches gone the mode IS the region, and a control
+ * hoisted out of the order it belongs to is just a control in the wrong place.
+ * It is still the rail's quick face — see ScorecardModeRow.
  */
 
 const MODE_KEY = 'mainMode';
-// Everything but the headline mode, which renders flat above the groups.
-const GROUPED_KEYS = LAYOUT_SETTINGS.scorecard.map(d => d.key).filter(k => k !== MODE_KEY);
 
 /*
  * `board` is the INSTANCE's board, handed down by whichever surface is
@@ -40,7 +43,8 @@ export function useScorecard(board = 1) {
     return { board, os };
 }
 
-// The scorecard's headline live control — also its rail quick-face row.
+// The scorecard's headline live control, as the rail card's one quick-face row
+// (the stage draws the same def inline, in card order, via the groups below).
 export const ScorecardModeRow = memo(function ScorecardModeRow({ sc }) {
     const [def] = defsFor('scorecard', [MODE_KEY]);
     if (!def) return null;
@@ -55,8 +59,7 @@ export default function ScorecardStage({ element, board }) {
             <DirectStage element={element} board={board} />
 
             <div className="mt-1 flex flex-col gap-3 border-t border-border/60 pt-2">
-                <ScorecardModeRow sc={sc} />
-                <OverlaySettingGroups os={sc.os} type="scorecard" keys={GROUPED_KEYS} />
+                <OverlaySettingGroups os={sc.os} type="scorecard" />
             </div>
         </>
     );

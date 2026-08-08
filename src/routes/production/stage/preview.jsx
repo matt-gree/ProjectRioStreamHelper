@@ -76,8 +76,20 @@ function useFeedSel(element, board) {
  * makes the difference visible: intro on plays the reveal, intro off doesn't.
  * `null`/undefined means "this element has no intro" — leave the url alone.
  */
-export function previewUrl(element, board, binding, nonce = 0, feedSel = null, introDisabled = null) {
-    const base = binding?.item?.url || instanceUrl(element, board);
+/*
+ * Takes the PLACEMENT, not the narrowed "binding". The component nulls its
+ * binding when there is no scene item (see the note below), which is right for
+ * anything read off the item — but the VARIANT belongs to the row whether a
+ * source exists or not, and nulling it made the catalog tier's "Scoreboard —
+ * Small" preview the Large board. Everything here is already `?.`-guarded, so a
+ * sourceless placement reads exactly as `null` used to.
+ */
+export function previewUrl(element, board, placement, nonce = 0, feedSel = null, introDisabled = null) {
+    const binding = placement;
+    // No source to read a URL off means the row is an OFFER — the catalog tier's
+    // "Scoreboard — Small" — so the variant it is offering has to be written in,
+    // or the preview shows the default canvas whatever row you picked.
+    const base = binding?.item?.url || instanceUrl(element, board, binding?.variant ?? '');
     if (!base) return null;
     try {
         // Resolved against this origin so a dual-machine rig's source URL
@@ -159,8 +171,10 @@ const StagePreview = memo(function StagePreview({ element, board, binding: maybe
     const introDisabled = useSettingsStore(s => (introTypeFor(element)
         ? !!s?.overlays?.[introTypeFor(element)]?.disableIntro
         : null));
+    // The full placement, not `binding` — see previewUrl: the variant is the
+    // row's own, and survives having no source.
     const src = previewUrl(
-        element, board, binding, nonce,
+        element, board, maybe, nonce,
         feedSel.team != null ? feedSel : null,
         introDisabled,
     );

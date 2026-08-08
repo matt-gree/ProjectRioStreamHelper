@@ -47,10 +47,18 @@
     <g data-slot="inn-arrow-up"><polygon points="291,24 309,24 300,14" style="fill:var(--accent)"/></g>
     <g data-slot="inn-arrow-down" opacity="0"><polygon points="291,54 309,54 300,64" style="fill:var(--accent)"/></g>
     <text data-slot="inn-num" x="300" y="49" text-anchor="middle" class="sb-num" font-size="21" font-weight="700">1</text>
+    <!-- The badge takes the inning's place at final, so it has to fit the gap
+         the SCORES leave: they are anchored end/start at 272/328, i.e. 56 units.
+         It was authored 64 wide and cut into both numbers. Sized to leave 4
+         units either side, which is the clearance the L theme already has. -->
     <g data-slot="final-badge" opacity="0">
-      <rect x="268" y="26" width="64" height="27" rx="6" style="fill:var(--accent)"/>
-      <text x="300" y="45" text-anchor="middle" fill="#ffffff" font-family="var(--font-display)" font-size="15" font-weight="700" letter-spacing="1">FINAL</text>
+      <rect x="276" y="28" width="48" height="24" rx="5" style="fill:var(--accent)"/>
+      <text x="300" y="45" text-anchor="middle" fill="#ffffff" font-family="var(--font-display)" font-size="13" font-weight="700" letter-spacing="0.5">FINAL</text>
     </g>
+
+    <!-- Game mode: standing context, so it lives in row-top (always shown)
+         rather than the completed-game row. Self-hides when unknown. -->
+    <text data-slot="meta-game-mode" data-maxw="200" x="302" y="74" text-anchor="middle" class="sb-dim" font-size="10" font-weight="600" letter-spacing="0.6" opacity="0">Game Mode</text>
   </g>
 
   <!-- ░░ LIVE: batter / pitcher / count / diamond ░░ -->
@@ -62,33 +70,41 @@
     <image data-slot="bat-icon" x="68" y="34" width="40" height="40" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
     <text data-slot="bat-name" data-maxw="106" x="116" y="60" class="sb-ink" font-size="17" font-weight="600">Batter</text>
 
-    <text data-slot="pit-name" data-maxw="106" x="484" y="60" text-anchor="end" class="sb-ink" font-size="17" font-weight="600">Pitcher</text>
+    <!-- maxw is the budget refitText shrinks into, so it has to be REAL space:
+         anchored end at 484 with the diamond now ending at 416, that is 68 units
+         and 64 is the safe read. Authored at 106 it grew left THROUGH the
+         diamond — "Peach" already overlapped, a long name by ~70. -->
+    <text data-slot="pit-name" data-maxw="64" x="484" y="60" text-anchor="end" class="sb-ink" font-size="17" font-weight="600">Pitcher</text>
     <image data-slot="pit-icon" x="492" y="34" width="40" height="40" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
     <rect x="540" y="44" width="24" height="20" rx="4" style="fill:var(--side2)"/>
     <text x="552" y="59" text-anchor="middle" fill="#ffffff" font-family="var(--font-display)" font-size="12" font-weight="700">P</text>
 
-    <!-- count: balls / strikes / outs -->
-    <text x="252" y="40" text-anchor="end" class="sb-dim" font-size="13" font-weight="700">B</text>
-    <circle data-slot="ball-0" cx="270" cy="35" r="6.5" style="fill:rgba(255,255,255,0.08)"/>
-    <circle data-slot="ball-1" cx="291" cy="35" r="6.5" style="fill:rgba(255,255,255,0.08)"/>
-    <circle data-slot="ball-2" cx="312" cy="35" r="6.5" style="fill:rgba(255,255,255,0.08)"/>
-    <circle data-slot="ball-3" cx="333" cy="35" r="6.5" style="fill:rgba(255,255,255,0.08)"/>
-    <text x="252" y="59" text-anchor="end" class="sb-dim" font-size="13" font-weight="700">S</text>
-    <circle data-slot="strike-0" cx="270" cy="54" r="6.5" style="fill:rgba(255,255,255,0.08)"/>
-    <circle data-slot="strike-1" cx="291" cy="54" r="6.5" style="fill:rgba(255,255,255,0.08)"/>
-    <circle data-slot="strike-2" cx="312" cy="54" r="6.5" style="fill:rgba(255,255,255,0.08)"/>
-    <text x="252" y="78" text-anchor="end" class="sb-dim" font-size="13" font-weight="700">O</text>
-    <circle data-slot="out-0" cx="270" cy="73" r="6.5" style="fill:rgba(255,255,255,0.08)"/>
-    <circle data-slot="out-1" cx="291" cy="73" r="6.5" style="fill:rgba(255,255,255,0.08)"/>
-    <circle data-slot="out-2" cx="312" cy="73" r="6.5" style="fill:rgba(255,255,255,0.08)"/>
+    <!-- count: balls / strikes / outs — shifted 12 left to open the run between
+         the count and the diamond, which is what pays for the pitcher's name. -->
+    <text x="240" y="40" text-anchor="end" class="sb-dim" font-size="13" font-weight="700">B</text>
+    <circle data-slot="ball-0" cx="258" cy="35" r="6.5" style="fill:rgba(255,255,255,0.08)"/>
+    <circle data-slot="ball-1" cx="279" cy="35" r="6.5" style="fill:rgba(255,255,255,0.08)"/>
+    <circle data-slot="ball-2" cx="300" cy="35" r="6.5" style="fill:rgba(255,255,255,0.08)"/>
+    <circle data-slot="ball-3" cx="321" cy="35" r="6.5" style="fill:rgba(255,255,255,0.08)"/>
+    <text x="240" y="59" text-anchor="end" class="sb-dim" font-size="13" font-weight="700">S</text>
+    <circle data-slot="strike-0" cx="258" cy="54" r="6.5" style="fill:rgba(255,255,255,0.08)"/>
+    <circle data-slot="strike-1" cx="279" cy="54" r="6.5" style="fill:rgba(255,255,255,0.08)"/>
+    <circle data-slot="strike-2" cx="300" cy="54" r="6.5" style="fill:rgba(255,255,255,0.08)"/>
+    <text x="240" y="78" text-anchor="end" class="sb-dim" font-size="13" font-weight="700">O</text>
+    <circle data-slot="out-0" cx="258" cy="73" r="6.5" style="fill:rgba(255,255,255,0.08)"/>
+    <circle data-slot="out-1" cx="279" cy="73" r="6.5" style="fill:rgba(255,255,255,0.08)"/>
+    <circle data-slot="out-2" cx="300" cy="73" r="6.5" style="fill:rgba(255,255,255,0.08)"/>
 
-    <!-- diamond (wide rhombus trio, 2B top / 3B left / 1B right) -->
-    <polygon data-slot="base-2" points="421,38 395,52 369,38 395,24" style="fill:rgba(255,255,255,0.08);stroke:var(--border);stroke-width:1.5"/>
-    <polygon data-slot="base-3" points="393,56 367,70 341,56 367,42" style="fill:rgba(255,255,255,0.08);stroke:var(--border);stroke-width:1.5"/>
-    <polygon data-slot="base-1" points="449,56 423,70 397,56 423,42" style="fill:rgba(255,255,255,0.08);stroke:var(--border);stroke-width:1.5"/>
-    <image data-slot="runner-2" x="385" y="28" width="20" height="20" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
-    <image data-slot="runner-3" x="357" y="46" width="20" height="20" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
-    <image data-slot="runner-1" x="413" y="46" width="20" height="20" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <!-- diamond (wide rhombus trio, 2B top / 3B left / 1B right), 0.72 of the
+         authored size and recentred on 378. At full size it ran 341→449 and
+         left the pitcher's name 35 units of a 106-unit budget; it now ends at
+         416 with 12 units clear of the count on the other side. -->
+    <polygon data-slot="base-2" points="397,38 378,48 359,38 378,28" style="fill:rgba(255,255,255,0.08);stroke:var(--border);stroke-width:1.5"/>
+    <polygon data-slot="base-3" points="378,56 359,66 340,56 359,46" style="fill:rgba(255,255,255,0.08);stroke:var(--border);stroke-width:1.5"/>
+    <polygon data-slot="base-1" points="416,56 397,66 378,56 397,46" style="fill:rgba(255,255,255,0.08);stroke:var(--border);stroke-width:1.5"/>
+    <image data-slot="runner-2" x="369" y="29" width="18" height="18" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="runner-3" x="350" y="47" width="18" height="18" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="runner-1" x="388" y="47" width="18" height="18" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
   </g>
 
   <!-- ░░ FINAL: ELO swings + game meta (completed games) ░░ -->

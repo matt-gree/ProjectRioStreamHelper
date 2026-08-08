@@ -1,5 +1,7 @@
 import { useObsStore } from '../../context/obs';
 import { stageOrRun, usePending } from '../../context/staging';
+import { sizeOptionFor } from './elements';
+import { variantParams } from './instances';
 
 /*
  * What is left of the OBS binding layer: creating a source's URL, toggling one,
@@ -24,9 +26,31 @@ import { stageOrRun, usePending } from '../../context/staging';
  * writing `?scoreboard=2` onto it would invent a distinction the overlay does
  * not have.
  */
-export function instanceUrl(element, board) {
-    if (element.scope !== 'board' || board == null) return element.url;
-    return `${element.url}?scoreboard=${board}`;
+export function instanceUrl(element, board, variant = '') {
+    if (!element?.url) return element?.url;
+    const parts = [];
+    if (element.scope === 'board' && board != null) parts.push(`scoreboard=${board}`);
+    // The variant the ROW is offering, written back into the URL. Online this
+    // travels the other way — the variant is read off a source that exists —
+    // but a catalog row is an offer, not a discovery, so "Scoreboard — Small"
+    // has to be able to produce ?size=s or Copy hands over the Large board.
+    for (const [param, value] of variantParams(variant)) parts.push(`${param}=${value}`);
+    if (!parts.length) return element.url;
+    const sep = element.url.includes('?') ? '&' : '?';
+    return `${element.url}${sep}${parts.join('&')}`;
+}
+
+/*
+ * The native size of one placement — the element's, unless the row is a VARIANT
+ * that has its own canvas. The scoreboard's three sizes are three different
+ * browser sources (388×156 / 600×200 / 800×460), so a strip offering to copy
+ * "Scoreboard — Small" has to quote Small's dimensions, not the element's
+ * default. Every other element answers with exactly what it did before.
+ */
+export function placementDims(placement) {
+    const el = placement?.element;
+    const opt = sizeOptionFor(el, placement?.variant);
+    return { width: opt?.width ?? el?.width, height: opt?.height ?? el?.height };
 }
 
 /*

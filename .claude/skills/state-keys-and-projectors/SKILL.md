@@ -90,6 +90,10 @@ score.{N}.*                    per-board live game + projected fixture (N ≥ 1,
   inning, half_inning, outs, strikes, balls, batter, pitcher,
   cbRioRunnerOn1/2/3, runner{1,2,3}Name, star_chance, stadium,
   innings_selected, tag_set, best_of, phase, game_id,
+  game_mode        ← tag set as a NAME, written by BOTH feeds (the live path
+                     resolves tag_set against the cached mode list, completed
+                     games arrive with it resolved). Overlay slots that want
+                     standing context read this, not tag_set.
   score_left, score_right, away_linescore, home_linescore, home_team,
   match            ← bound match id (int; unset when unbound)
   match_conflict   ← identity-gate conflict dict {active, matchId, expected, feed} | None

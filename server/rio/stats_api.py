@@ -488,3 +488,21 @@ async def resolve_tag_set_name(tag_set_id, timeout: float | None = None) -> str:
         if tid == tag_set_id:
             return name
     return ""
+
+
+def game_mode_name(tag_set_id) -> str:
+    """Cache-only resolve of a tag-set id to its game-mode name; '' if unknown.
+
+    The synchronous sibling of resolve_tag_set_name, for callers ON the hot
+    path — apply_parsed_game_to_state runs per HUD frame, and the perf contract
+    for that path is no awaits that can become a network round-trip. This never
+    fetches: it answers from the cache the boot fetch and _apply_hud_game_mode
+    already fill, and returns '' until then, which is the same "unknown mode"
+    answer every other caller treats as "say nothing".
+    """
+    if tag_set_id is None or tag_set_id == -1:
+        return ""
+    for name, tid in (_game_modes or {}).items():
+        if tid == tag_set_id:
+            return name
+    return ""

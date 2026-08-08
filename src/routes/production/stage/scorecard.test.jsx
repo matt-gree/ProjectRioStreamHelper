@@ -67,7 +67,10 @@ describe('Scorecard stage', () => {
         ui();
         const groups = [...document.querySelectorAll('[data-setting-group]')]
             .map(e => e.dataset.settingGroup);
-        expect(groups).toEqual(['Top bars', 'Score block', 'Lower bars']);
+        // The middle block is the score-block mode, ungrouped: it is one control
+        // standing in for a whole region, so it takes the region's PLACE without
+        // taking an eyebrow.
+        expect(groups).toEqual(['Top bars', '', 'Lower bars']);
         const top = document.querySelector('[data-setting-group="Top bars"]');
         expect(within(top).getByRole('button', { name: 'Header Bar' })).toBeInTheDocument();
         expect(within(top).getByLabelText('Header Title')).toBeInTheDocument();
@@ -97,14 +100,20 @@ describe('Scorecard stage', () => {
         expect(width('Box Score')).not.toBe(width('Game Mode'));
     });
 
-    // The headline decision stays flat above the groups — it is also the rail
-    // card's one quick-face row, and the card has no room for a group eyebrow.
-    it('keeps the score block mode out of the groups', () => {
+    /*
+     * The score block's only control is the mode, and it reads in card order —
+     * after the top bars, before the lower ones. It used to be hoisted flat
+     * above the groups because the block was a REGION back then (mode + Rosters
+     * + Bases); once the switches went, hoisting it left the panel's one
+     * segmented control sitting outside the order it describes.
+     */
+    it('places the score block mode between the top and lower bars', () => {
         ui();
-        for (const g of document.querySelectorAll('[data-setting-group]')) {
-            expect(g).not.toHaveTextContent('Score Block');
-        }
-        expect(screen.getByText('Score Block')).toBeInTheDocument();
+        const rows = [...document.querySelectorAll('[data-setting-group]')];
+        expect(within(rows[1]).getByText('Score Block')).toBeInTheDocument();
+        // ...and it is the whole block: no Rosters/Bases switches beside it.
+        expect(screen.queryByText('Rosters')).not.toBeInTheDocument();
+        expect(screen.queryByText('Bases / Diamond')).not.toBeInTheDocument();
     });
 
     it('writes an authored text field to the per-board namespace', () => {

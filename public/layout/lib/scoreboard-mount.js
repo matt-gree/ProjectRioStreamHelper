@@ -20,6 +20,8 @@
 // A theme implements whatever subset fits its size. row-inning/row-live are
 // gated by producer toggles overlays.scoreboard.showInning/showLive (both
 // default on); showLive is a master override the live game state ANDs with.
+// row-roster needs TWO characters on a side, not one — a completed game with no
+// roster in its record still has a captain, and one icon is not a roster band.
 //
 // LAYOUT MODES: by default the mount stack-lays the rows as above. A theme that
 // declares data-layout="absolute" on its root <svg> opts out — the mount then
@@ -39,6 +41,14 @@
 // sideways (Scoreboard S: a compact names+scores pill that extends to reveal the
 // inning + live cluster during a game, collapsing back when it completes).
 //
+// VERTICAL MELD (absolute mode): the same grammar one axis over —
+// data-compact-h on card-bg + data-cardh on a segment grows the card's HEIGHT
+// for a band that is only sometimes there (Scoreboard S's game-mode strip).
+// Height alone, no clip wipe: the horizontal sweep exists because the card's
+// right EDGE travels across the segments it reveals, and a band appearing under
+// the card has nothing to travel over — it grows and fades. card-rail tracks the
+// height with card-bg, or the accent stripe stops short of the taller card.
+//
 // DATA SLOTS (all optional; the engine skips what a theme omits):
 //   sT-logo(image) sT-name(text,maxw) sT-score(text)          T ∈ {1,2}
 //   inn-half(text TOP/BOT) inn-num(text) inn-arrow-up/down(g) final-badge(g)
@@ -47,6 +57,9 @@
 //   base-1..3(polygon fill) runner-1..3(image)
 //   elo1-group/elo2-group(g)  eloT-in eloT-out eloT-delta(text)
 //   meta-main(text stadium · innings) meta-date(text)
+//   meta-game-mode(text) — BOTH states, unlike the meta-* pair above, which are
+//     completed-game only. Place it wherever the size has room for standing
+//     context; it self-hides when the mode is unknown.
 //   sT-char-0..8(image) sT-cap-ring(shape; mount moves it to the captain slot)
 //   box-col-1..9(g) box-h-1..9(text) box-away-1..9 box-home-1..9(text)
 //   box-away-R box-home-R(text) box-away-name box-home-name(text)
@@ -73,7 +86,7 @@ const MAX_INN = 9;
 
 export const SIZE_DIMS = {
   xs: { w: 400, h: 50 },
-  s:  { w: 388, h: 128 },
+  s:  { w: 388, h: 156 },
   m:  { w: 600, h: 200 },
   l:  { w: 800, h: 460 },
 };
@@ -91,7 +104,18 @@ const STACK = [
   ['row-final',  v => v.showFinal],
   ['row-roster', v => v.showRoster],
   ['row-box',    v => v.showBox],
+  ['row-mode',   v => v.showGameModeSeg],
 ];
+
+// Stadium values reach state as slugs (server/rio/provider.py:_stadium_slug),
+// which is right for lookups and wrong on air — "peach_garden" is not a name
+// anyone writes. Same rule as the Scorecard's prettyStadium: leave anything
+// that already reads as a display name alone.
+function prettyStadium(slug) {
+  if (!slug) return '';
+  if (/[a-z].*[A-Z ]/.test(slug) || slug.includes(' ')) return slug;
+  return String(slug).replace(/[_-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
 
 function fallbackSvg({ w, h }) {
   const nameFs = Math.max(12, Math.round(h * 0.24));
@@ -178,8 +202,13 @@ export function mountScoreboard({ host, sb, size }) {
       ? perSbLogo !== false
       : OverlayBase.readSetting(SETTINGS_TYPE, 'showLogo', true) !== false;
     return {
-      showElo:      sbGet(settings, 'showElo', true) !== false,
+      // ELO is OFF by default. It is a season-play number: at a tournament or in
+      // a league the rating swing on one game isn't what the room is watching,
+      // and it was taking the widest, most-legible thirds of the completed-game
+      // row to say it. A producer running ranked ladder play turns it on.
+      showElo:      sbGet(settings, 'showElo', false) === true,
       showTeamLogos: sbGet(settings, 'showTeamLogos', true) !== false,
+      showGameMode: sbGet(settings, 'showGameMode', true) !== false,
       showLogo,
       // Producer switches for melded themes with independent segments (Scoreboard
       // S): showLive is a master override for the live cluster (off hides it even
@@ -277,6 +306,29 @@ export function mountScoreboard({ host, sb, size }) {
   // the expand-right segments with their target show state. cardX + width = the
   // card's right edge; the clip rect (x = -CLIP_PAD) right edge = cardX+width, so
   // clip width = cardX + width + CLIP_PAD.
+  /*
+   * Vertical meld: card-bg (and card-rail with it) grows to `targetH`.
+   *
+   * Deliberately simpler than meldTo — a height change has no travelling edge to
+   * clip against, so the band that caused it just fades through the normal row
+   * toggle while the card grows underneath it. Shares MELD_DUR/MELD_EASE so a
+   * card that happens to change both dimensions at once moves as one object.
+   */
+  function meldHeightTo(bg, targetH, fresh) {
+    const h = Math.max(targetH, 1);
+    const els = [bg, engine.slots['card-rail']].filter(Boolean);
+    const prev = laidOut['__cardh'];
+    laidOut['__cardh'] = targetH;
+    if (!gsap || fresh || prev === undefined) {
+      els.forEach(el => el.setAttribute('height', String(h)));
+      return;
+    }
+    if (prev === targetH) return;
+    els.forEach(el => gsap.to(el, {
+      attr: { height: h }, duration: MELD_DUR, ease: MELD_EASE,
+    }));
+  }
+
   function meldTo(bg, targetW, rows, fresh) {
     const cardX = parseFloat(bg.getAttribute('x')) || 0;
     const clipW = (w) => cardX + w + CLIP_PAD;
@@ -409,13 +461,20 @@ export function mountScoreboard({ host, sb, size }) {
       // just toggles its rows in place (the original absolute behaviour).
       const bg = engine.slots['card-bg'];
       const compactW = bg ? parseFloat(bg.getAttribute('data-compact-w')) : NaN;
+      const compactH = bg ? parseFloat(bg.getAttribute('data-compact-h')) : NaN;
       const meld = !!bg && Number.isFinite(compactW);
+      const meldH = !!bg && Number.isFinite(compactH);
       let cardW = meld ? compactW : 0;
+      let cardH = meldH ? compactH : 0;
       const expandRows = [];
       for (const [name, want] of STACK) {
         const el = engine.slots[name];
         if (!el) continue;
         const show = !!want(vis);
+        if (meldH && show) {
+          const ch = parseFloat(el.getAttribute('data-cardh'));
+          if (Number.isFinite(ch)) cardH = Math.max(cardH, ch);
+        }
         const isExpand = el.getAttribute('data-anim') === 'expand-right';
         // In a melding theme the expand-right segments are wiped by the shared
         // card-edge clip (meldTo); non-expand rows just snap. In a non-melding
@@ -430,6 +489,7 @@ export function mountScoreboard({ host, sb, size }) {
           toggleRow(el, name, show, fresh);
         }
       }
+      if (meldH) meldHeightTo(bg, cardH, fresh);
       if (meld) meldTo(bg, cardW, expandRows, fresh);
       return;
     }
@@ -542,7 +602,7 @@ export function mountScoreboard({ host, sb, size }) {
     }
 
     const metaParts = [];
-    if (d.stadium) metaParts.push(d.stadium);
+    if (d.stadium) metaParts.push(prettyStadium(d.stadium));
     if (d.inningsPlayed) metaParts.push(`${d.inningsPlayed} inn`);
     engine.setText('meta-main', metaParts.join(' · '), { optional: true });
     let dateStr = '';
@@ -556,14 +616,37 @@ export function mountScoreboard({ host, sb, size }) {
     return hasElo || metaParts.length > 0 || !!dateStr;
   }
 
+  /*
+   * Game mode, in BOTH states — the one piece of context that is as true during
+   * a game as after it, which is why it isn't part of the completed cluster.
+   * The name now reaches state on both feeds (score.N.game_mode; the live path
+   * resolves the tag-set id against the cached mode list), so a theme can place
+   * this slot once and have it mean something all broadcast long.
+   *
+   * `optional` so the slot disappears rather than leaving a hole when the mode
+   * is unknown — which is the honest state for a cold cache or a game played
+   * outside any tag set.
+   */
+  function bindGameMode(d, vis) {
+    engine.setText('meta-game-mode', vis.showGameMode ? d.gameMode : '', { optional: true });
+  }
+
+  /*
+   * Returns how many characters the fuller side actually has, not just whether
+   * ANY name was found. A completed game with no roster in its record still has
+   * its captain, so "any" was true for a single icon — and the Large board drew
+   * a nine-wide band to hold it. The caller wants a roster, and one character
+   * is not one.
+   */
   function bindRoster(state) {
-    let any = false;
+    let most = 0;
     for (let t = 1; t <= 2; t++) {
       const capIdx = g(state, `score.${SB}.player.${t}.rio_captainIndex`, null);
       let capEl = null;
+      let count = 0;
       for (let i = 0; i < 9; i++) {
         const name = g(state, `score.${SB}.player.${t}.character.${i}.name`, '');
-        if (name) any = true;
+        if (name) count++;
         engine.setImage(`s${t}-char-${i}`, name ? charIconUrl(name) : '');
         if (capIdx != null && i === capIdx && name) capEl = engine.slots[`s${t}-char-${i}`];
       }
@@ -580,8 +663,9 @@ export function mountScoreboard({ host, sb, size }) {
           ring.setAttribute('opacity', '0');
         }
       }
+      if (count > most) most = count;
     }
-    return any;
+    return most;
   }
 
   // Linescore. More than MAX_INN innings binds a sliding window of the last 9
@@ -682,14 +766,17 @@ export function mountScoreboard({ host, sb, size }) {
       home: g(state, `score.${SB}.home_linescore`, []) || [],
       stadium: g(state, `score.${SB}.stadium`, ''),
       inningsPlayed: g(state, `score.${SB}.innings_played`, ''),
+      // Written by BOTH feeds now, so it is read outside the completed cluster.
+      gameMode: g(state, `score.${SB}.game_mode`, '') || '',
     };
 
     applyColours(settings, g(state, `score.${SB}.player.1.port`, null), g(state, `score.${SB}.player.2.port`, null));
 
     bindTop(d, vis);
     bindLive(d);
+    bindGameMode(d, vis);
     const hasFinalContent = bindFinal(state, d, vis);
-    const hasRoster = bindRoster(state);
+    const rosterCount = bindRoster(state);
     const hasBox = bindBox(d);
     bindImageProbe(engine, () => disposed, 'logo', vis.showLogo ? OverlayBase.brandingLogoUrl() : '', 'logo-default');
 
@@ -702,7 +789,15 @@ export function mountScoreboard({ host, sb, size }) {
     // to the final-badge on a completed game (bindTop drives which child shows).
     vis.showInningSeg = isFinal || vis.showInning;
     vis.showFinal = isFinal && isCompleted && hasFinalContent;
-    vis.showRoster = hasRoster;
+    // A band, not a captain portrait: two or more characters on a side is the
+    // bar. Completed games now carry the real roster (away_roster/home_roster),
+    // so this is only ever false for a record that genuinely has none.
+    vis.showRoster = rosterCount >= 2;
+    // The game-mode band, for a theme that gives it its own segment (S). Gated
+    // on the CONTENT as well as the toggle: an unknown mode is a cold cache or a
+    // game outside any tag set, and a band that grew the card to say nothing is
+    // worse than no band. Themes that place the slot inline (M, L) ignore this.
+    vis.showGameModeSeg = vis.showGameMode && !!d.gameMode;
     vis.showBox = hasBox;
 
     engine.refitText();

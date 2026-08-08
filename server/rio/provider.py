@@ -10,6 +10,7 @@ from server.rio.pyrio.team_name_algo import team_name
 from server.rio import hit_visualizer
 from server.rio.hud_watcher import HudWatcher
 from server.rio.resurface import RESURFACE_MAP as _RESURFACE_MAP
+from server.rio import stats_api
 from server.rio.stats_tracker import StatsTracker
 from server.match import Match
 from server.participants import Participants
@@ -211,6 +212,13 @@ async def apply_parsed_game_to_state(parsed: dict, scoreboard_number: int, home_
         (f"{sb}.stadium", _stadium_slug(parsed.get("stadium_id"))),
         (f"{sb}.innings_selected", parsed.get("innings_selected")),
         (f"{sb}.tag_set", parsed.get("tag_set")),
+        # Game mode as a NAME, the same key completed games land it in — so an
+        # overlay slot for "what mode is this" works in both states instead of
+        # only after the game ends. The id→name map is the cache the boot fetch
+        # and _apply_hud_game_mode already fill; this reads it synchronously and
+        # accepts "" until it is warm rather than putting a Rio round-trip on
+        # the per-frame path (see stats_api.game_mode_name).
+        (f"{sb}.game_mode", stats_api.game_mode_name(parsed.get("tag_set"))),
         # Why the sides are ordered as they are (manual|pin|match|back_to_back|"").
         (f"{sb}.side_reason", side_reason),
         # Live game — clear any completed-game framing left over on this slot.
@@ -293,13 +301,47 @@ def _linescore_side(linescore, side: int) -> list:
     return linescore.get(str(side), [])
 
 
+def _completed_roster(roster_ids, captain: str) -> tuple[list, int]:
+    """Resolve a completed game's roster to (names, captain_index).
+
+    `roster_ids` is away_roster/home_roster from the /games API: nine character
+    IDs in roster order. It ships in the DEFAULT response — there is no
+    include_roster parameter to add (passing one changes nothing) — and pyrio's
+    _process_games leaves the column untouched, so it arrives here as a plain
+    list.
+
+    The captain is a member of the roster rather than a thing beside it, so its
+    index comes from finding it. That is what makes the captain ring land on the
+    right character; before the roster was available the index could only be
+    hardcoded to 0, which was right only by luck.
+
+    Falls back to the pre-roster shape — captain alone in slot 0 — when a record
+    has no roster (older games, or a shape change upstream). Overlays already
+    handle a one-name roster, so a missing roster degrades instead of breaking.
+    """
+    names = []
+    for cid in roster_ids if isinstance(roster_ids, (list, tuple)) else []:
+        try:
+            names.append(LookupDicts.CHAR_NAME.get(int(cid), ""))
+        except (TypeError, ValueError):
+            names.append("")
+    if not any(names):
+        return ([captain] if captain else []), 0
+    cap_idx = names.index(captain) if captain in names else 0
+    return names, cap_idx
+
+
 async def apply_completed_game_to_state(game: dict, scoreboard_number: int, side_reason: str = ""):
     """Write completed game data into State under score.{scoreboard_number}.
 
-    Completed games from the /games API have limited data compared to HUD/ongoing:
-    - No full roster — only captain is available (placed in character slot 0)
+    Completed games from the /games API differ from HUD/ongoing:
     - No live game state (batter, pitcher, runners, count)
+    - No MSB team / controller port — overlays fall back to the captain icon
+      and the default side colours
     - Includes final scores, ELO changes, timestamps, stadium, game mode
+    - DOES include both rosters: away_roster/home_roster are in the default
+      /games/ response (no include_roster param — that is a no-op), as nine
+      character IDs in roster order.
     """
     sb = f"score.{scoreboard_number}"
 
@@ -385,21 +427,20 @@ async def apply_completed_game_to_state(game: dict, scoreboard_number: int, side
         (f"{sb}.field.RF", ""),
     ]
 
-    # Team data — captain only, no full roster
-    away_captain = game.get("away_captain", "")
-    home_captain = game.get("home_captain", "")
     team_data = [
-        (game.get("away_user", ""), away_captain),
-        (game.get("home_user", ""), home_captain),
+        (game.get("away_user", ""), game.get("away_captain", ""), game.get("away_roster")),
+        (game.get("home_user", ""), game.get("home_captain", ""), game.get("home_roster")),
     ]
 
-    for team_idx, (username, captain) in enumerate(team_data):
+    for team_idx, (username, captain, roster_ids) in enumerate(team_data):
         team_num = team_idx + 1
         prefix = f"{sb}.player.{team_num}"
 
+        roster, cap_idx = _completed_roster(roster_ids, captain)
+
         entries.append((f"{prefix}.rioName", username))
         entries.append((f"{prefix}.msb_team", ""))
-        entries.append((f"{prefix}.rio_captainIndex", 0))
+        entries.append((f"{prefix}.rio_captainIndex", cap_idx))
         # Completed games carry no live banner/port/star data — clear any
         # values left over from a previous live game on this scoreboard.
         entries.append((f"{prefix}.logo", ""))
@@ -408,12 +449,11 @@ async def apply_completed_game_to_state(game: dict, scoreboard_number: int, side
         entries.append((f"{prefix}.batting_hands", []))
         entries.append((f"{prefix}.fielding_hands", []))
 
-        # Captain in slot 0, clear remaining slots and all stale per-character data.
-        entries.append((f"{prefix}.character.0.name", captain))
-        entries.append((f"{prefix}.character.0.position", ""))
-        entries.append((f"{prefix}.character.0.is_starred", False))
-        for char_idx in range(1, 9):
-            entries.append((f"{prefix}.character.{char_idx}.name", None))
+        # Roster in order; clear any slot this game doesn't fill, along with the
+        # per-character data completed games never carry.
+        for char_idx in range(9):
+            name = roster[char_idx] if char_idx < len(roster) else None
+            entries.append((f"{prefix}.character.{char_idx}.name", name))
             entries.append((f"{prefix}.character.{char_idx}.position", ""))
             entries.append((f"{prefix}.character.{char_idx}.is_starred", False))
 

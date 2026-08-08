@@ -334,8 +334,29 @@ describe('Rack without OBS', () => {
 
         const rows = document.querySelectorAll('[data-rack-row]');
         expect(rows.length).toBeGreaterThan(DESKS.length);
-        expect(screen.getByText('Scoreboard')).toBeInTheDocument();
+        expect(screen.getAllByText('Scoreboard').length).toBeGreaterThan(0);
         expect(screen.getByText('Lower Third')).toBeInTheDocument();
+    });
+
+    /*
+     * The scoreboard's sizes are three different canvases and three different
+     * browser sources, and with OBS closed there is no source to read a size off
+     * — so the catalog has to OFFER them or a producer building their scenes from
+     * copied URLs can only ever get the Large board.
+     *
+     * The default size keeps the bare row: a source with no ?size= IS large, so
+     * naming it anything else would mean a pin made here opens nothing once OBS
+     * is up (see the note in catalogPlacements).
+     */
+    it('offers the scoreboard’s sizes, with the default as the bare row', () => {
+        ui(<Rack />);
+        const scoreboards = [...document.querySelectorAll('[data-rack-row="Scoreboard"]')];
+        expect(scoreboards.length).toBe(3);
+        const details = scoreboards.map(r => r.textContent);
+        expect(details.some(t => t.includes('Small'))).toBe(true);
+        expect(details.some(t => t.includes('Medium'))).toBe(true);
+        // The Large row carries no size detail — it is the canonical instance.
+        expect(details.some(t => !t.includes('Small') && !t.includes('Medium'))).toBe(true);
     });
 
     // The producer's containers are definitions in Settings, so they are just as

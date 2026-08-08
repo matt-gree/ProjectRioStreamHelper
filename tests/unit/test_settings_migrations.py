@@ -46,17 +46,51 @@ async def test_overlay_schema_v1_strips_promoted_globals(isolate_user_data):
     overlays = Settings.settings["overlays"]
     # accentColor is now a global — its stale per-layout copy is removed...
     assert "accentColor" not in overlays["scoreboard"]
-    # ...while the genuinely layout-specific key survives.
+    # ...while the genuinely layout-specific key survives. An explicit False is
+    # not the seeded value v3 clears, so it rides through both migrations.
     assert overlays["scoreboard"]["showElo"] is False
-    assert overlays["schema_version"] == 2
+    assert overlays["schema_version"] == 3
 
 
-async def test_overlay_schema_v2_is_left_untouched(isolate_user_data):
+"""
+v3 flipped ELO's default to off. A settings file written before that carries the
+SEEDED `showElo: true`, so leaving it would mean the new default never reaches
+anyone who had already run the app — the migration clears the key so the default
+applies. Only the un-scoped leaf: nothing seeds a per-board pin, so one is
+always a producer's own choice.
+"""
+
+
+async def test_overlay_schema_v3_clears_the_seeded_elo_true(isolate_user_data):
     _write_settings(isolate_user_data, {
         "overlays": {"schema_version": 2, "scoreboard": {"showElo": True}},
     })
     await Settings.Load()
-    assert Settings.settings["overlays"]["schema_version"] == 2
+    overlays = Settings.settings["overlays"]
+    assert overlays["schema_version"] == 3
+    assert "showElo" not in overlays["scoreboard"]
+
+
+async def test_overlay_schema_v3_keeps_a_per_board_elo_pin(isolate_user_data):
+    _write_settings(isolate_user_data, {
+        "overlays": {
+            "schema_version": 2,
+            "scoreboard": {"showElo": True, "2": {"showElo": True}},
+        },
+    })
+    await Settings.Load()
+    sb = Settings.settings["overlays"]["scoreboard"]
+    assert "showElo" not in sb            # seeded leaf cleared
+    assert sb["2"]["showElo"] is True     # deliberate pin kept
+
+
+async def test_overlay_schema_v3_is_left_untouched(isolate_user_data):
+    _write_settings(isolate_user_data, {
+        "overlays": {"schema_version": 3, "scoreboard": {"showElo": True}},
+    })
+    await Settings.Load()
+    assert Settings.settings["overlays"]["schema_version"] == 3
+    # Already migrated, so a `true` here is a producer turning it back ON.
     assert Settings.settings["overlays"]["scoreboard"]["showElo"] is True
 
 

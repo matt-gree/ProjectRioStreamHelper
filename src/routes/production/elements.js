@@ -61,6 +61,33 @@ export const ELEMENTS = [
         url: '/layout/scoreboard1/scoreboard.html',
         width: 800,
         height: 460,
+        /*
+         * The ?size= variants, so the console can OFFER them.
+         *
+         * Online the rack derives its rows from real OBS sources and reads the
+         * size off each URL, so the sizes only ever "existed" once a source did
+         * — which left the catalog tier (OBS closed) able to hand over the Large
+         * board and nothing else. Declaring them here is what lets the catalog
+         * list one row per size, exactly as the layouts API does for the Add
+         * picker, and lets Copy URL and the preview quote the right canvas.
+         *
+         * Dimensions must match `SIZE_DIMS` in scoreboard-mount.js and
+         * `CONTRACTS` in server/theme_contracts.py — pinned by
+         * tests/unit/test_size_dims_parity.py, which reads this array.
+         *
+         * `default: true` marks the size a URL with NO ?size= resolves to — the
+         * mount's fallback, and therefore the element's own `url`/`width`/
+         * `height` above. It gets the BARE row (no variant tag), which is what
+         * keeps `scoreboard:1` naming a real thing: a source carrying no ?size=
+         * rows as `scoreboard:1` online, so the catalog has to spell the same
+         * instance the same way, or a pin made in one state opens nothing in the
+         * other.
+         */
+        sizes: [
+            { value: 's', label: 'Small',  width: 388, height: 156 },
+            { value: 'm', label: 'Medium', width: 600, height: 200 },
+            { value: 'l', label: 'Large',  width: 800, height: 460, default: true },
+        ],
         match: (url) => /\/layout\/scoreboard\d*\/scoreboard/i.test(url) || /scoreboard\.html/i.test(url),
     },
     {
@@ -441,3 +468,22 @@ export function containerId(url) {
 
 // Key of the element's stage panel (stage/<key>); defaults to the element id.
 export const stageBodyFor = (el) => el.stageBody ?? el.id;
+
+/*
+ * The `sizes` entry a variant tag names ('zs' → the Small row), or null.
+ *
+ * Takes the tag rather than the raw value because that is what a placement
+ * carries — read off a source's URL when one exists, written by the catalog
+ * tier when one doesn't. Callers wanting dimensions should use
+ * `placementDims` (./bindings) rather than reaching in here.
+ */
+export function sizeOptionFor(element, variant) {
+    if (!element?.sizes || !variant) return null;
+    for (const part of String(variant).split('.')) {
+        if (!part.startsWith('z')) continue;
+        const value = part.slice(1);
+        const hit = element.sizes.find(s => s.value === value);
+        if (hit) return hit;
+    }
+    return null;
+}
