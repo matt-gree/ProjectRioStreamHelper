@@ -261,7 +261,8 @@ If the app fails to launch due to corrupt `user_data/state.json`: `echo '{}' > u
 | Change HUD game parsing | `server/rio/provider.py`, `server/rio/hud_watcher.py` |
 | Side cascade / orientation | `server/rio/provider.py` (`_decide`, `_preserve_player_sides`) + `tests/unit/rio/test_side_preservation.py` |
 | Binding model (pool/playback/transport) | `server/bindings.py`, `server/rio/rotation.py`, `server/api/v1/scoreboards.py` |
-| Match lifecycle / series / start.gg sets | `server/match.py`, `server/api/v1/match.py`, `server/rio/game_end.py` |
+| Match lifecycle / series / start.gg sets | `server/match.py`, `server/api/v1/match.py` (`bind_board` owns board↔match), `server/rio/game_end.py` |
+| Fixture authoring UI (sides, format, series, flip/decide/reopen, board bind) | `src/routes/production/desks/match.jsx` — the only place; `MatchPanel`/`ScoreControls` are deleted and the Match tab is the game pool alone (`src/routes/scoreboard_manager/`, dies with migration step 3) |
 | Add/modify state keys | `server/state.py`, `src/context/store.jsx` |
 | Add API endpoints | `server/api/v1/` (decorate with `@method`), register in `server/api/__init__.py` |
 | Settings schema | `server/settings.py` (defaults + migrations), `src/components/SettingsModal.jsx` |

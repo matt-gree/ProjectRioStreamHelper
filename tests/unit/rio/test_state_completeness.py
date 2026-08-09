@@ -11,9 +11,10 @@ Two concerns:
      a live game writes but a completed game doesn't provide (in-play display
      state, diamond positions, starred flags, etc.).
 
-  3. Reset — the key list expected after a manual reset (mirrors what
-     resetBaseballState in ScoreControls.jsx sends). Any key written by a live
-     game that the reset omits would leave stale data visible on overlays.
+  3. Reset — the key list expected after a manual reset (mirrors what the board
+     desk's `resetGame` sends: src/routes/production/desks/board.jsx). Any key
+     written by a live game that the reset omits would leave stale data visible
+     on overlays.
 """
 import pytest
 
@@ -210,14 +211,14 @@ async def test_completed_clears_is_starred_for_all_slots(mock_socket):
 # ---------------------------------------------------------------------------
 # 3. Reset key coverage
 #
-# These mirror what resetBaseballState in ScoreControls.jsx sends.
+# These mirror what `resetGame` in src/routes/production/desks/board.jsx sends.
 # We apply a live game to State (giving everything a non-default value),
 # then apply the same key→value pairs the reset button would send, and
 # assert the resulting state matches what we'd expect from a clean slate.
 # ---------------------------------------------------------------------------
 
 def apply_reset(sb: int):
-    """Simulate the key/value pairs that resetBaseballState sends via setItem."""
+    """Simulate the key/value pairs the board desk's reset sends via setItems."""
     base = f"score.{sb}"
     resets = {
         f"{base}.score_left": 0,
@@ -317,8 +318,9 @@ async def test_reset_covers_all_live_game_keys(mock_socket):
     """Every key written by a live game must be covered by the reset.
 
     The reset key list in apply_reset() above is the source of truth for what
-    resetBaseballState in ScoreControls.jsx sends. This test catches any key
-    a future live-game addition writes that the reset doesn't clear.
+    the board desk's `resetGame` sends (src/routes/production/desks/board.jsx).
+    This test catches any key a future live-game addition writes that the reset
+    doesn't clear.
     """
     parsed = P.parse_game_data(make_game())
     await apply_parsed_game_to_state(parsed, 1)
@@ -331,5 +333,5 @@ async def test_reset_covers_all_live_game_keys(mock_socket):
     uncovered = live_keys - reset_keys
     assert not uncovered, (
         f"Live game writes keys not covered by reset:\n  {sorted(uncovered)}\n"
-        "Add them to resetBaseballState in ScoreControls.jsx and apply_reset() in this test."
+        "Add them to resetGame in desks/board.jsx and apply_reset() in this test."
     )

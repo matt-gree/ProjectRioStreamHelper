@@ -1,11 +1,12 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import {
-    ChevronRight, ChevronsUpDown, Check, Plus, Trash2, Trophy,
+    ArrowLeftRight, ChevronRight, ChevronsUpDown, Check, Plus, Trash2, Trophy,
 } from 'lucide-react';
 import { useStateStore } from '../../../context/store';
 import {
     createMatch, updateMatch, deleteMatch, bindScoreboard, loadStartGGSet,
+    flipMatch, decideMatch,
 } from '../../../context/match';
 import { useStagingStore, stageOrRun, usePending } from '../../../context/staging';
 import ParticipantPicker from '../../../components/ParticipantPicker';
@@ -471,13 +472,31 @@ function sideName(match, side) {
     return p.rioName || '';
 }
 
-// The series-decided winner side (1|2) or null — the match's own `decided` flag
-// when set (server arithmetic / producer force), else computed from the live
-// series wins vs the Bo need. Drives the "Side N wins" badge in the header.
-function clinchedSide(match) {
+/*
+ * TWO DIFFERENT FACTS, and the difference is what the Decide and Reopen verbs
+ * act on.
+ *
+ * `decidedSide` is the match's own `decided` flag — a RECORD, written by the
+ * server's award arithmetic when a side reaches the win count, or forced by the
+ * producer. It is what auto-retire and the overlays read.
+ *
+ * `clinchedSide` is arithmetic on the live series against the Bo need — a
+ * DERIVED "someone is at the number". Normally the two agree, because crediting
+ * a game sets the flag. They come apart when the producer corrects the series by
+ * hand with the steppers: the count says 2–0 of Bo3 and the flag says nothing.
+ *
+ * These used to be one function, so the header badged "Side N wins" off either —
+ * claiming a series the server had not recorded, with no way to tell which state
+ * you were in and therefore no way to offer the verb that fixes it.
+ */
+function decidedSide(match) {
     const d = match?.decided;
     if (d === 1 || d === '1') return 1;
     if (d === 2 || d === '2') return 2;
+    return null;
+}
+
+function clinchedSide(match) {
     const bestOf = (match?.format || {}).bestOf ?? 1;
     const need = Math.floor(bestOf / 2) + 1;
     const w1 = Number(match?.series?.[1] ?? match?.series?.['1'] ?? 0);
@@ -496,6 +515,10 @@ const MatchAccordion = memo(function MatchAccordion({ m, open, onToggle, active,
     const draft = useMatchDraft(m);
     const stage = draft.match?.stage || 'draft';
     const [confirmDel, setConfirmDel] = useState(false);
+    const decided = decidedSide(draft.match);
+    // Only interesting where it DISAGREES with the record: someone is at the win
+    // count and nothing has recorded it, which is the producer's cue to decide.
+    const clinched = decided ? null : clinchedSide(draft.match);
 
     const onPickSet = (s) => stageOrRun({
         key: `match:${m}:startgg`,
@@ -507,6 +530,38 @@ const MatchAccordion = memo(function MatchAccordion({ m, open, onToggle, active,
         updateMatch(Number(m), { stage: 'draft' })
             .catch(e => notifications.show({ message: `Next game: ${e?.message || e}`, color: 'red' }));
     };
+    /*
+     * Flip the AUTHORED sides — the fixture was written down the wrong way round.
+     * Distinct from a board's Swap sides, which flips one live game's orientation:
+     * this rewrites the record, and the series wins travel with the player
+     * (server flip_match), so a 2–0 does not silently become an 0–2.
+     *
+     * Broadcast-visible (it re-projects onto the bound board), so it stages. No
+     * `liveValue` pair to collapse against — a flip is its own inverse, and
+     * staging it twice is the producer asking for two flips, which the pending bar
+     * shows as one entry they can discard.
+     */
+    const onFlip = () => stageOrRun({
+        key: `match:${m}:flip`,
+        label: `Match ${m}: flip sides`,
+        value: true,
+        run: () => flipMatch(Number(m)),
+    });
+    /*
+     * The series record. `side` forces decided, null reopens.
+     *
+     * `liveValue` is the current flag, so deciding a match that is already decided
+     * for that side drops out of the buffer, and staging Reopen then Decide leaves
+     * nothing pending — the same toggle-twice rule every other staged control
+     * follows.
+     */
+    const onDecide = (side) => stageOrRun({
+        key: `match:${m}:decide`,
+        label: side ? `Match ${m}: Side ${side} wins the series` : `Match ${m}: reopen the series`,
+        value: side,
+        liveValue: decided,
+        run: () => decideMatch(Number(m), side),
+    });
     const onDelete = () => {
         setConfirmDel(false);
         deleteMatch(Number(m))
@@ -541,7 +596,6 @@ const MatchAccordion = memo(function MatchAccordion({ m, open, onToggle, active,
     const bestOf = draft.val('format.bestOf', (draft.match?.format || {}).bestOf ?? 1);
     const n1 = sideName(draft.match, 1);
     const n2 = sideName(draft.match, 2);
-    const decided = clinchedSide(draft.match);
     // The collapsed line's fixture tail — what tells two matches between the
     // same two players apart. Round/phase/mode are all optional, so only the
     // ones that are set appear and a bare fixture collapses to just the names
@@ -626,11 +680,56 @@ const MatchAccordion = memo(function MatchAccordion({ m, open, onToggle, active,
                     DRAFT_STAGE_BADGE[stage] || DRAFT_STAGE_BADGE.draft)}>
                     {stage}
                 </Badge>
+                {/* THE SERIES VERB, next to the badge that states the series. At
+                    most one of the two ever shows, because they answer opposite
+                    states of one fact: a decided match can be reopened, and a
+                    match sitting on the win count with nothing recorded can be
+                    decided. The second case only arises from the steppers, which
+                    is exactly why the panel that has the steppers needs the verb.
+
+                    Both stage — deciding re-projects the series onto the bound
+                    board, and a producer correcting a miscredit mid-game should not
+                    have it hit air before they confirm. */}
+                {decided ? (
+                    <Button
+                        size="xs" variant="ghost" onClick={() => onDecide(null)}
+                        className="shrink-0 text-muted-foreground"
+                        title="Reopen the series — undo the decided winner"
+                    >
+                        Reopen
+                        <StagedDot show={draft.isStaged('decide')} />
+                    </Button>
+                ) : clinched ? (
+                    <Button
+                        size="xs" variant="secondary" onClick={() => onDecide(clinched)}
+                        className="shrink-0"
+                        title={`Record Side ${clinched} as the series winner`}
+                    >
+                        Decide: Side {clinched}
+                        <StagedDot show={draft.isStaged('decide')} />
+                    </Button>
+                ) : null}
                 {stage === 'post' && (
                     <Button size="xs" variant="secondary" onClick={onNextGame} className="shrink-0">
                         Next game
                     </Button>
                 )}
+                {/* Flip is icon-only and lives with the record actions rather than
+                    on the two side fields it swaps. The sides grid puts its spine
+                    behind an @lg breakpoint, so a control mounted there would
+                    vanish on a narrow panel — and the feedback for a flip is the
+                    collapsed row's own "A vs B", which is right here. */}
+                <SimpleTooltip label="Flip the fixture's sides — series wins follow the player">
+                    <button
+                        type="button"
+                        onClick={onFlip}
+                        aria-label={`Flip sides on match ${m}`}
+                        className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                    >
+                        <ArrowLeftRight size={14} />
+                        <StagedDot show={draft.isStaged('flip')} />
+                    </button>
+                </SimpleTooltip>
                 <Popover open={confirmDel} onOpenChange={setConfirmDel}>
                     <PopoverTrigger asChild>
                         <button
@@ -910,9 +1009,20 @@ const BindChip = memo(function BindChip({
 }) {
     const pending = usePending(`bind:${sb}`);
     const displayBound = pending ? pending.value != null : bound;
+    /*
+     * The bound chip's tip is the RETIRE affordance. The Match tab's panel had a
+     * separate Retire button, because it unbound every board bound to this match
+     * and there could be several. A match holds exactly one board now, so
+     * retiring is unbinding the one chip that is lit — and the only thing missing
+     * was a chip that said so.
+     */
     const tip = rotating
         ? `Board ${sb} is rotating a pool — a match needs a single-game board`
-        : (elsewhere && !displayBound ? `Bound to another match — click to move board ${sb} here` : undefined);
+        : displayBound
+            ? `On board ${sb} — click to take it off and hand the board back to its feed`
+            : elsewhere
+                ? `Bound to another match — click to move board ${sb} here`
+                : undefined;
     return (
         <SimpleTooltip label={tip}>
             <Button

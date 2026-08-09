@@ -934,9 +934,9 @@ connection.
 
 Things that **feed the broadcast but aren't on it** (no OBS source, no air
 state). Today: a **board** desk per active scoreboard, then the **Match** desk
-(fixture authoring — sides, format, series, board binding, start.gg load), the
-**Capture** desk (post-game), and the **Bracket** desk (which start.gg phase the
-bracket overlays draw). Rules:
+(fixture authoring — sides, format, series, board binding, start.gg load, and the
+series lifecycle: flip · decide · reopen), the **Capture** desk (post-game), and
+the **Bracket** desk (which start.gg phase the bracket overlays draw). Rules:
 
 - One entry per desk in `DESKS` (`rack.jsx`), a body in `DESK_BODIES`
   (`production.jsx`), and — when pinnable — a face in `DESK_QUICK_FACES`
@@ -992,6 +992,38 @@ bracket overlays draw). Rules:
 - Deep authoring still defers to tabs: sets/bracket → Competition, a board's
   game pool → Match tab (until that moves too). Any future feeds-but-not-on-air
   workflow (bracket refresh, roster sync) is a desk, not a new UI invention.
+
+### The Match desk owns the whole fixture
+
+`src/routes/production/desks/match.jsx`. Fixture authoring used to exist twice —
+here as a single-open accordion and on the Match tab as a stack of fully-expanded
+cards (`MatchPanel`), with different controls on each. `MatchPanel` is **deleted**;
+so is `ScoreControls`, whose Game State panel the board desk's corrections
+replaced. The Match tab is now the game pool and nothing else.
+
+- **The four verbs that were only on the tab.** Flip sides, Decide, Reopen —
+  ported. **Retire is not**, and this is the interesting one: it looped every
+  bound board unbinding each, and a match can only hold **one** board now, so
+  retiring *is* clicking the lit bind chip. What was missing was a chip that said
+  so, not a button (see `BindChip`'s bound tooltip). Delete a verb when the
+  invariant that justified it changes.
+- **`decidedSide` vs `clinchedSide` are two different facts.** `decided` is the
+  *record* — server award arithmetic, or a producer force. `clinched` is
+  *arithmetic* on the live series against the Bo need. They agree until the
+  producer corrects the series with the steppers, and only then does the disagree
+  case matter: 2–0 of Bo3 with nothing recorded. These were one function, so the
+  header badged "Side N wins" off either — claiming a series the server hadn't
+  recorded, with no way to tell which state you were in and therefore no verb to
+  fix it. Badge on the record; offer Decide on the arithmetic; offer Reopen on the
+  record; offer neither when there is nothing to record or undo.
+- **Flip is icon-only in the header, not on the sides it swaps.** The sides grid
+  hides its `vs` spine behind `@lg`, so a control mounted there disappears on a
+  narrow panel — and the feedback for a flip is the collapsed row's own "A vs B",
+  which is in the header already. Series wins travel with the player (server
+  `flip_match`), so a 2–0 never silently becomes an 0–2.
+- All three stage (`match:{m}:flip` / `match:{m}:decide`) — they re-project onto
+  the bound board. Decide passes `liveValue: decided`, so Reopen-then-Decide
+  leaves nothing pending, the same toggle-twice rule as every other staged control.
 
 ### A board is a desk
 

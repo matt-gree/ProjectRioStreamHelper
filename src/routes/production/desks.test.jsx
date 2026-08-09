@@ -96,6 +96,67 @@ describe('Match desk', () => {
     });
 
     /*
+     * The four verbs the Match tab's panel had and the desk didn't. Retire is not
+     * among them: it looped every bound board unbinding each, and a match can only
+     * hold one board now, so it IS the bound chip — see the binding test below.
+     */
+    const oneMatch = (over = {}) => {
+        useSettingsStore.setState({
+            project_rio: { hud_enabled: false },
+            production: {},
+            scoreboards: { active: [1], binding: {} },
+        });
+        useStateStore.setState({
+            score: {},
+            match: { 1: { stage: 'live', format: { bestOf: 3 }, series: { 1: 0, 2: 0 }, ...over } },
+        });
+    };
+
+    it('flips the fixture sides, and says so rather than showing a bare icon', () => {
+        oneMatch();
+        ui(<MatchDesk />);
+        fireEvent.click(screen.getByRole('button', { name: 'Flip sides on match 1' }));
+        expect(fetch).toHaveBeenCalledWith('/api/v1/match/1/flip', expect.objectContaining({ method: 'POST' }));
+    });
+
+    /*
+     * `decided` (the record) and "someone is at the win count" (arithmetic on the
+     * series) are different facts, and the verb offered depends on which you have.
+     * They used to be one function, so the header badged "Side N wins" off either —
+     * claiming a series the server had not recorded, and offering nothing to fix
+     * it.
+     */
+    it('offers Decide when the series is at the number but nothing recorded it', () => {
+        oneMatch({ series: { 1: 2, 2: 0 } });
+        ui(<MatchDesk />);
+        expect(screen.queryByText('Side 1 wins')).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Decide: Side 1' }));
+        expect(fetch).toHaveBeenCalledWith('/api/v1/match/1/decide', expect.objectContaining({
+            method: 'POST', body: JSON.stringify({ side: 1 }),
+        }));
+    });
+
+    it('badges a decided series and offers Reopen instead', () => {
+        oneMatch({ series: { 1: 2, 2: 0 }, decided: 1 });
+        ui(<MatchDesk />);
+        expect(screen.getByText('Side 1 wins')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Decide/ })).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Reopen' }));
+        expect(fetch).toHaveBeenCalledWith('/api/v1/match/1/decide', expect.objectContaining({
+            method: 'POST', body: JSON.stringify({ side: null }),
+        }));
+    });
+
+    // A series a producer has corrected back below the number is neither decided
+    // nor clinched — no verb, because there is nothing to record or undo.
+    it('offers no series verb on a match nobody has won', () => {
+        oneMatch();
+        ui(<MatchDesk />);
+        expect(screen.queryByRole('button', { name: /Decide/ })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Reopen' })).not.toBeInTheDocument();
+    });
+
+    /*
      * MOVING A MATCH IS ONE ACTION, hence one staged entry. This used to fire a
      * separate `bind:{other}` unbind per sibling board before the bind, so with
      * confirm mode on the producer got two chips and could discard either one —
