@@ -165,6 +165,14 @@ export function matchBindLine(m, match) {
  * The board's one-line state for the rack row. STATE ONLY (plus the derived
  * transport, which is a settings read, not a fetch) — the rack redraws on every
  * HUD frame and must never fire a desk's own requests just to paint a row.
+ *
+ * ONE FACT PER ROW, at the rack's house length. A rack row is ~278px and already
+ * spends it on a chip, the board's name and a pin, so `HUD · Alice 3–2 Bob · Bot
+ * 5` truncated mid-sentence — four facts where the other desks say `no match`,
+ * `captured`, `M1 · 0–0`. The transport and the inning both live on the panel
+ * (the badge, and BoardGameSubject), so the row keeps only the thing that is not
+ * anywhere else at a glance: WHICH game is on this board. When there is no game
+ * there is no matchup to name, and the transport becomes the informative thing.
  */
 export function useBoardDeskMeta(sb) {
     const hudEnabled = useSettingsStore(s => s?.project_rio?.hud_enabled);
@@ -177,24 +185,22 @@ export function useBoardDeskMeta(sb) {
         // Board 1 carries the local HUD iff the global toggle is on; the server
         // default for that toggle is on, so only an explicit false is off.
         const hud = Number(sb) === 1 && hudEnabled !== false;
-        const transport = hud ? 'HUD' : 'API';
         const n1 = b?.player?.[1]?.rioName || '';
         const n2 = b?.player?.[2]?.rioName || '';
         if (n1 || n2) {
-            const inning = b?.inning != null
-                ? ` · ${(b?.half_inning || 'Top') === 'Top' ? 'Top' : 'Bot'} ${b.inning}`
-                : '';
             return {
-                meta: `${transport} · ${n1 || 'Side 1'} ${b?.score_left ?? 0}–${b?.score_right ?? 0} ${n2 || 'Side 2'}${inning}`,
+                meta: `${n1 || 'Side 1'} ${b?.score_left ?? 0}–${b?.score_right ?? 0} ${n2 || 'Side 2'}`,
                 idle: false,
             };
         }
         // Nothing on the board: say what it is waiting for rather than "empty".
         if (!hud && mode === 'rotate') {
+            // Same rule as playbackLine: an empty pool prints no count, because
+            // "0" reads as a count that failed rather than as nothing yet.
             const n = poolSize(s?.scoreboards?.rotation?.[sb]?.game_ids);
-            return { meta: `${transport} · rotating, ${n} in pool`, idle: true };
+            return { meta: n ? `rotating · ${n}` : 'rotating', idle: true };
         }
-        return { meta: `${transport} · no game`, idle: true };
+        return { meta: hud ? 'HUD · no game' : 'no game', idle: true };
     }));
 }
 

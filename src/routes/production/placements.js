@@ -8,7 +8,7 @@ import { containerOfSource, fedTargets, useContainerDefs } from './containers';
 import {
     instanceId, parseInstanceId, variantLabel, variantOf, variantTagFor, withVariant,
 } from './instances';
-import { useActiveBoards, useBoardLabel } from './boards';
+import { useActiveBoards, useBoardTag } from './boards';
 
 /*
  * Placements — what the rack actually lists once the grouping axis is SCENES.
@@ -428,9 +428,15 @@ export function useConsolePlacements(consoleScenes) {
  * Scoreboard 1" three times over, where the board was never in doubt and the
  * size was the only thing telling them apart. Each half of the detail now earns
  * its own place.
+ *
+ * A board with no alias contributes a NUMBER, not a name (`boardTag`). The
+ * default alias is "Scoreboard {N}", so on a rig with three boards every
+ * scoreboard row read "Scoreboard · Scoreboard 1 · Medium" — the word twice, in
+ * a ~278px row, and the half that repeated the element carried nothing. An
+ * aliased board keeps its alias, because the producer chose it to mean something.
  */
 export function usePlacementLabel(placements) {
-    const boardLabel = useBoardLabel();
+    const boardTag = useBoardTag();
     return useMemo(() => {
         const axes = new Map();
         for (const p of placements) {
@@ -444,12 +450,12 @@ export function usePlacementLabel(placements) {
         return (p) => {
             const a = axes.get(p.element.id);
             const detail = [
-                a?.boards.size > 1 && p.board != null ? boardLabel(p.board) : null,
+                a?.boards.size > 1 && p.board != null ? boardTag(p.board) : null,
                 a?.variants.size > 1 ? variantLabel(p.variant) : null,
             ].filter(Boolean).join(' · ');
             return { name: p.element.name, detail: detail || null };
         };
-    }, [placements, boardLabel]);
+    }, [placements, boardTag]);
 }
 
 /*

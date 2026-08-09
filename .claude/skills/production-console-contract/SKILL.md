@@ -947,6 +947,19 @@ bracket overlays draw). Rules:
   loaded phase), dimmed when idle, selectable like any row. Never in the state
   sections. Rack meta must read from state only: the rack draws every frame and
   must not fire a desk's own fetches.
+- **A rack row's meta is ONE fact, at the house length** (`no match`, `captured`,
+  `M1 · 0–0`, `Alice 3–2 Bob`). 278px already carries a chip, a name and a pin, so
+  a third or fourth clause truncates mid-sentence and pushes the pin off the edge
+  — that is what `HUD · Alice 3–2 Bob · Bot 5` did. Ask what the stage panel
+  already says and drop it: transport is on the badge, the inning is in
+  `BoardGameSubject`. The row keeps only what is nowhere else at a glance.
+- **A placement's detail is a QUALIFIER, never a repeat of the name above it.**
+  An unnamed board contributes its number (`useBoardTag` → `B1`), not the default
+  `Scoreboard {N}` alias, which read as "Scoreboard · Scoreboard 1 · Medium". A
+  producer-chosen alias is kept — they wrote it to mean something.
+- **An empty count prints no number.** `rotating · 0` and `0 in pool` read as a
+  count that failed rather than as nothing yet; say `rotating` / `nothing in its
+  pool yet` instead. Same rule in the rack meta and in `playbackLine`.
 - **All three are always racked**, in a permanent section above the scenes.
   Desks used to appear one at a time, keyed to the phase they belonged to, and
   that rule always needed a special case — Live owned no desk, so the section

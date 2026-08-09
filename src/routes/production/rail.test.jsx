@@ -134,7 +134,9 @@ describe('Rail', () => {
     it('titles a card by its board once there is more than one to tell apart', () => {
         obs({ Game: [item(1, 'A', `${SB}?scoreboard=1`), item(2, 'B', `${SB}?scoreboard=2`)] });
         ui(<Rail pins={['scoreboard:2@Game']} onReorder={noop} onUnpin={noop} onOpen={noop} />);
-        expect(screen.getByText('Scoreboard · Scoreboard 2')).toBeInTheDocument();
+        // An unnamed board contributes its number, not the default alias that
+        // repeats the element name beside it (see useBoardTag).
+        expect(screen.getByText('Scoreboard · B2')).toBeInTheDocument();
     });
 
     it('flies the scene the pin names, not whichever copy comes first', () => {

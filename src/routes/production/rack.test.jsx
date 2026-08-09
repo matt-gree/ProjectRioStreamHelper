@@ -117,8 +117,25 @@ describe('Rack desks', () => {
         });
         ui(<Rack />);
         const section = within(document.querySelector('[data-rack-section="desk"]'));
-        expect(section.getByText('HUD · Alice 3–2 Bob · Bot 5')).toBeInTheDocument();
-        expect(section.getByText('API · rotating, 3 in pool')).toBeInTheDocument();
+        // One fact, at the rack's house length. The transport and the inning are
+        // both on the panel (the badge, and BoardGameSubject), so the row keeps
+        // only what is nowhere else at a glance: which game is on this board.
+        expect(section.getByText('Alice 3–2 Bob')).toBeInTheDocument();
+        expect(section.getByText('rotating · 3')).toBeInTheDocument();
+    });
+
+    // With nothing on the board there is no matchup to name, so the transport
+    // becomes the informative thing — but only where it is not the default.
+    it('names the transport only on an idle board', () => {
+        useSettingsStore.setState({
+            scoreboards: { active: [1, 2], binding: {} },
+            production: withContainers(),
+        });
+        useStateStore.setState({ score: {} });
+        ui(<Rack />);
+        const section = within(document.querySelector('[data-rack-section="desk"]'));
+        expect(section.getByText('HUD · no game')).toBeInTheDocument();
+        expect(section.getByText('no game')).toBeInTheDocument();
     });
 
     // Every desk the rack lists needs a body to select into and, when it says
@@ -236,10 +253,16 @@ describe('Rack scene sections', () => {
  * state.
  */
 describe('Rack instances', () => {
+    /*
+     * The detail is a QUALIFIER on a name already printed, so an unnamed board
+     * contributes its number and not its default alias: "Scoreboard · Scoreboard
+     * 1 · Medium" said the word twice in a ~278px row, and the repeat carried
+     * nothing. See useBoardTag.
+     */
     it('rows a board-scoped element once per board present, named apart', () => {
         obs({ Game: [item(1, 'A', `${SB}?scoreboard=1`), item(2, 'B', `${SB}?scoreboard=2`)] });
         ui(<Rack />);
-        expect(rowsNamed('Scoreboard')).toEqual(['ScoreboardScoreboard 1', 'ScoreboardScoreboard 2']);
+        expect(rowsNamed('Scoreboard')).toEqual(['ScoreboardB1', 'ScoreboardB2']);
     });
 
     // The suffix is the board mechanism charging rent: with one board there is
@@ -258,6 +281,8 @@ describe('Rack instances', () => {
         expect(rowsNamed('Scoreboard')).toEqual(['Scoreboard', 'Scoreboard']);
     });
 
+    // A named board keeps its name — the producer chose it to mean something,
+    // and it is not a repeat of the element above it.
     it('uses the board ALIAS in the row, not a bare number', () => {
         useSettingsStore.setState({ scoreboards: { aliases: { 2: 'Feature Court' } } });
         obs({ Game: [item(1, 'A', `${SB}?scoreboard=1`), item(2, 'B', `${SB}?scoreboard=2`)] });

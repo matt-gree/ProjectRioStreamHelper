@@ -81,3 +81,23 @@ export function useBoardLabel() {
     const aliases = useSettingsStore(s => s?.scoreboards?.aliases);
     return (n) => aliases?.[n] || aliases?.[String(n)] || `Scoreboard ${n}`;
 }
+
+/*
+ * A board reduced to what tells it from its siblings — for a row that has
+ * already said what it is.
+ *
+ * `useBoardLabel` is the board's NAME and belongs anywhere the board is the
+ * subject (its desk row, its stage panel, a rail card's title). But an element
+ * row's detail is a qualifier on a name already printed, and the default alias
+ * is "Scoreboard {N}" — so a rig with two boards gave every scoreboard row
+ * "Scoreboard · Scoreboard 1 · Medium": the word twice, in a ~278px row, with the
+ * repeat carrying nothing the row hadn't said.
+ *
+ * An unnamed board therefore contributes its NUMBER (`B1`), which is the only
+ * part that was ever doing work. A named one keeps its alias — the producer chose
+ * it to mean something, and "Stream B · Medium" is what they wrote it for.
+ */
+export function useBoardTag() {
+    const aliases = useSettingsStore(s => s?.scoreboards?.aliases);
+    return (n) => aliases?.[n] || aliases?.[String(n)] || `B${n}`;
+}
