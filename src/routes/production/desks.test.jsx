@@ -173,7 +173,7 @@ describe('Board desk', () => {
         ui(<BoardDesk board={1} />);
         expect(screen.getByText('API')).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /Re-read HUD/ })).not.toBeInTheDocument();
-        expect(screen.getByText(/set on the Match tab/)).toBeInTheDocument();
+        expect(screen.getByText(/Set on the Match tab/)).toBeInTheDocument();
     });
 
     // Corrections are broadcast-visible, so they go through the staging gateway;

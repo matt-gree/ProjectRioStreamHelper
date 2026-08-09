@@ -168,9 +168,10 @@ position, not an identity).
   the rack and rail, where space is genuinely scarce.
 - **Custom blocks are the bounded escape hatch**: allowed only between standard
   rows, on kit spacing and tokens. Today's sanctioned set: the Match desk's
-  captain grid, port select, and format field (Bo + series stepper). Adding a
-  new custom block is a design decision, not a convenience — it should stand
-  out in review.
+  captain grid, port select, and format field (Bo + series stepper), and the
+  board desk's **Game State** block (see "A board is a desk"). Adding a new
+  custom block is a design decision, not a convenience — it should stand out in
+  review.
 - **A label that repeats its own placeholder is noise.** `CAPTAIN` over a
   control reading "Captain…" is the same word twice, and a column of them reads
   as a wall of micro-caps carrying nothing. Label a field when the label adds
@@ -997,12 +998,25 @@ sources).
   side), why does it look like that (`side_reason`, whose only previous frontend
   reference was the reset that cleared it), and how do I fix it.
 - **Corrections are correction grade.** Score, inning, count, stadium, home side,
-  the two `rioName_override` identities, swap sides, reset. The roster grid,
+  the two `rioName_override` identities, swap, reset. The roster grid,
   per-character stat editing and manual runner/fielder placement that used to sit
   beside them were read-only under every real feed and are **deleted, not moved**.
   Broadcast-visible writes stage under `board:{sb}:{field}`; the HUD re-read and
   the stats refresh are momentary; the alias and Remove are rig config, so they
   are immediate.
+- **The GAME STATE block is the Match tab's panel, kept verbatim** — a sanctioned
+  Custom block (user call, 2026-08-08). Big centred P1/P2 boxes, the count as
+  three rows of dots beside them, half-inning and inning under them, searchable
+  comboboxes with their labels above, the stats-diagnostics popover on the game
+  mode, two full-width buttons. It was first built as label-gutter kit rows and
+  that was wrong: those controls are an instrument a producer already has in their
+  hands, and re-expressing them as a settings list made a familiar thing
+  unfamiliar. The kit does not try to express a scoreboard.
+- **The body is ONE NARROW COLUMN** (`BOARD_COL`, 420px) on a ~950px stage, and
+  every group in it shares that width. The controls were laid out to be read at a
+  glance; spreading them to fill the panel costs the grouping that makes them
+  legible, and a card at 420 above rows at 950 reads as two layouts stacked.
+  This is the one stage body that does not want the panel's full width.
 - **Transport stays a readout** (`HUD`/`API` badge, derived from board 1 + the
   global HUD toggle). There is no per-board source selector and adding one is a
   regression, not a feature.
