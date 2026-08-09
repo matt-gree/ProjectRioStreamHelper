@@ -269,12 +269,21 @@ export function useBoardDesk(sb) {
      * Blank the board back to a resting game. The key list here is the contract
      * `tests/unit/rio/test_state_completeness.py` pins: every key a live game
      * writes has to appear, or a reset leaves stale data on air.
+     *
+     * On a HUD board it also RELEASES the feed. The server keeps the last frame
+     * Project Rio wrote (the re-read needs it), but a manual swap re-orients that
+     * frame and re-applies it — so resetting and then swapping brought the whole
+     * game back. Reset clears, Re-read HUD restores; nothing in between puts the
+     * feed back on the board on its own.
      */
     const resetGame = () => stageOrRun({
         key: `board:${sb}:reset`,
         label: `Board ${sb}: reset game state`,
         value: true,
         run: () => {
+            if (transport === 'hud') {
+                fetch('/api/v1/rio/release', { method: 'POST' }).catch(() => {});
+            }
             const entries = [
                 ['score_left', 0], ['score_right', 0], ['inning', 1], ['half_inning', 'Top'],
                 ['outs', 0], ['strikes', 0], ['balls', 0],
@@ -517,6 +526,53 @@ export function useSideTeam(sb, team) {
 }
 
 /*
+ * The per-character superstar mark. ALWAYS DRAWN on a filled slot, hollow when
+ * off — which is the whole point of it: nine hollow stars say "star skills are on
+ * and nobody is starred yet", where a cell with no mark at all says nothing. The
+ * on state is the game's own superstar art with the amber glow it has always had
+ * (`superstar.png` is a required file in the MSB asset pack, so a pack missing it
+ * is already reported in Settings rather than silently blank here).
+ */
+const STAR_POINTS = '10,1 12.9,7 19.5,7.6 14.5,12 16.2,18.5 10,15 3.8,18.5 5.5,12 0.5,7.6 7.1,7';
+
+const StarMark = memo(function StarMark({ on, url }) {
+    /*
+     * PRSH ships no MSB images (Nintendo IP), so every icon here is a file the
+     * user supplied and any of them can be absent. An <img> with no file is a
+     * torn-page box at whatever size the browser picks — it breaks the grid's
+     * rhythm AND reads as a bug rather than as a missing asset. So the art is an
+     * enhancement over a vector that already says the same thing: amber and
+     * filled for on, hairline for off.
+     */
+    const [artMissing, setArtMissing] = useState(false);
+    if (on && url && !artMissing) {
+        return (
+            <img
+                src={url} alt="Superstar" width={12} height={12} data-star="on"
+                onError={() => setArtMissing(true)}
+                className="shrink-0 object-contain"
+                style={{ filter: 'drop-shadow(0 0 3px rgba(245,159,0,0.8))' }}
+            />
+        );
+    }
+    return (
+        <svg
+            viewBox="0 0 20 20" width={11} height={11} data-star={on ? 'on' : 'off'}
+            role={on ? 'img' : undefined} aria-label={on ? 'Superstar' : undefined}
+            aria-hidden={on ? undefined : 'true'}
+            className={cn('shrink-0', on ? 'text-[#f59f00]' : 'text-muted-foreground/50')}
+            style={on ? { filter: 'drop-shadow(0 0 3px rgba(245,159,0,0.6))' } : undefined}
+        >
+            <polygon
+                points={STAR_POINTS}
+                fill={on ? 'currentColor' : 'none'}
+                stroke="currentColor" strokeWidth={1.6} strokeLinejoin="round"
+            />
+        </svg>
+    );
+});
+
+/*
  * The nine characters, as a READOUT.
  *
  * The roster grid that used to live on the Match tab was an editor — a character
@@ -559,9 +615,9 @@ const RosterGrid = memo(function RosterGrid({ roster, captain, mirror }) {
                         >
                             {r.name || '—'}
                         </Text>
-                        {r.starred && (
-                            <img src={superstar} alt="Superstar" width={11} height={11} className="shrink-0 object-contain" />
-                        )}
+                        {/* An empty slot gets no mark — a star on nothing is
+                            noise, where a star on a character is a fact. */}
+                        {r.name && <StarMark on={r.starred} url={superstar} />}
                     </div>
                 );
             })}

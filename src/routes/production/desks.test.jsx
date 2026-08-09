@@ -181,6 +181,57 @@ describe('Board desk', () => {
         expect(screen.getByTitle('Bro(F) · superstar')).toBeInTheDocument();
     });
 
+    /*
+     * The superstar mark is drawn on EVERY filled slot, hollow when off. Nine
+     * hollow stars say "star skills are on and nobody is starred yet"; a cell
+     * with no mark at all says nothing, which is what made the first version of
+     * this grid look like the indicator had been dropped.
+     */
+    it('marks every character’s superstar state, not only the starred ones', () => {
+        useStateStore.setState({
+            score: {
+                1: {
+                    player: {
+                        1: {
+                            character: {
+                                0: { name: 'Bowser' },
+                                1: { name: 'Boo', is_starred: true },
+                                2: { name: 'Yoshi' },
+                            },
+                        },
+                        2: {},
+                    },
+                },
+            },
+            match: {},
+        });
+        const { container } = ui(<BoardDesk board={1} />);
+        // Three characters, three marks — one lit, two hollow. The empty slots
+        // get none: a star on nothing is noise.
+        expect(container.querySelectorAll('[data-star]')).toHaveLength(3);
+        expect(container.querySelectorAll('[data-star="off"]')).toHaveLength(2);
+        // The lit one prefers the game's own superstar art.
+        expect(screen.getAllByAltText('Superstar')).toHaveLength(1);
+    });
+
+    /*
+     * PRSH ships no MSB images, so every icon is a user-supplied file that may
+     * be absent — and an <img> with no file is a torn-page box that breaks the
+     * grid and reads as a bug. The lit star falls back to a filled vector that
+     * says the same thing.
+     */
+    it('still shows a lit star when superstar.png is missing from the pack', () => {
+        useStateStore.setState({
+            score: { 1: { player: { 1: { character: { 0: { name: 'Boo', is_starred: true } } }, 2: {} } } },
+            match: {},
+        });
+        const { container } = ui(<BoardDesk board={1} />);
+        fireEvent.error(screen.getByAltText('Superstar'));
+        expect(screen.queryByAltText('Superstar')).not.toBeInTheDocument();
+        expect(container.querySelector('svg[data-star="on"]')).toBeInTheDocument();
+        expect(screen.getByRole('img', { name: 'Superstar' })).toBeInTheDocument();
+    });
+
     // Nine "Slot n" placeholders on a board with no game is nine rows of
     // nothing, so the grid collapses instead of reserving space for a lineup
     // the feed has not sent.
