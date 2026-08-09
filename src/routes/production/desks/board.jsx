@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { Info, RotateCw, Trash2 } from 'lucide-react';
 import { useStateStore, useSettingsStore } from '../../../context/store';
@@ -6,8 +6,6 @@ import { useSocketSubscribe } from '../../../context/socket';
 import { useStagingStore, stageOrRun } from '../../../context/staging';
 import ParticipantPicker from '../../../components/ParticipantPicker';
 import { Stack, Text, Group, Divider, Loader } from '../../../components/ui/primitives';
-import { Panel } from '../../../components/ui/panel';
-import { Label } from '../../../components/ui/label';
 import { Badge } from '../../../components/ui/badge';
 import { Button } from '../../../components/ui/button';
 import { Combobox } from '../../../components/ui/combobox';
@@ -16,9 +14,10 @@ import { SimpleSelect } from '../../../components/ui/simple-select';
 import { Popover, PopoverTrigger, PopoverContent } from '../../../components/ui/popover';
 import { notifications } from '../../../lib/notify';
 import { cn } from '../../../lib/utils';
-import { HALF_INNINGS } from '../../../data/msb';
+import { useAssetUrls } from '../../../lib/assets';
+import { HALF_INNINGS, ROSTER_SIZE } from '../../../data/msb';
 import { STADIUM_OPTIONS } from '../../../data/stadiums';
-import { FieldRow, SegmentedRow, TextRow } from '../kit';
+import { ActionRow, FieldRow, KitColumn, KitColumns, TextRow, ToggleChip } from '../kit';
 import { useActiveBoards, useBoardLabel } from '../boards';
 import { BoardGameSubject } from '../subject';
 
@@ -43,15 +42,21 @@ import { BoardGameSubject } from '../subject';
  * manual runner and fielder placement — was read-only under every real feed and
  * is deleted, not moved.
  *
- * THE GAME STATE BLOCK IS THE MATCH TAB'S PANEL, kept deliberately (user call,
- * 2026-08-08). Those controls are the ones a producer already has in their hands
- * — big centred P1/P2 boxes, the count as three rows of dots beside them, the
- * half-inning and inning under them, searchable comboboxes with their labels
- * above — and re-expressing them as label-gutter kit rows made a familiar
- * instrument read as a settings list. It is a sanctioned Custom block under the
- * console contract, the same allowance the Match desk's captain grid and port
- * board take, and for the same reason: the kit does not try to express a
- * scoreboard. Everything AROUND it is still kit rows.
+ * THE LAYOUT IS A SCOREBOARD, not a form. One line per side — the name, whether
+ * that side is home, and the runs it has scored — because every one of those is a
+ * fact about a person and the panel should say whose. Two earlier attempts got
+ * this wrong in opposite directions: label-gutter kit rows made a familiar
+ * instrument read as a settings list, and the Match tab's own panel, ported
+ * verbatim, put two big boxes labelled P1 and P2 in a 420px column with the
+ * names in a separate group below and 700px of dead stage beside it. The side
+ * grid is a sanctioned Custom block under the console contract — the same
+ * allowance the Match desk's captain grid takes, for the same reason: the kit
+ * does not try to express a scoreboard. It sits in the kit's own KitColumns
+ * grouping, and everything around it is kit rows.
+ *
+ * The two columns are the app's real seam. Left is `score.{N}.*` — what is on
+ * air this game, all of it correctable. Right is how the board is WIRED (its
+ * transport, its stats tag, its name) — settings, which outlive the game.
  *
  * Every broadcast-visible write routes through the staging gateway under
  * `board:{sb}:{field}`. The momentary ones (re-read the HUD file, refresh stats)
@@ -62,11 +67,15 @@ import { BoardGameSubject } from '../subject';
 const halfInningOptions = HALF_INNINGS.map(h => ({ value: h, label: h }));
 
 /*
- * The panel's column width. Wide enough for the score boxes and the count beside
- * them, narrow enough that the whole board reads as one instrument rather than a
- * form spread across a 950px stage. Every group in the body shares it.
+ * THE BOARD IS MIRRORED, because the thing it controls is: side 1 down the left,
+ * the shared frame (runs, count, inning) in the middle, side 2 down the right,
+ * with the right side's contents reversed and right-aligned so each column runs
+ * outward from the score the way a scoreboard does. A producer checking a wrong
+ * board is comparing the panel against a screen — if left isn't on the left, the
+ * check is a translation step, which is exactly the bug they're hunting.
  */
-const BOARD_COL = 'max-w-[420px]';
+const BOARD_GRID = 'grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-x-3';
+const EYEBROW = 'label-display text-[10px] text-muted-foreground';
 
 // Coerce state (which round-trips through the socket as strings sometimes).
 const num = (v, fallback = 0) => {
@@ -478,6 +487,174 @@ const StatsDiagnostics = memo(function StatsDiagnostics({ stats }) {
     );
 });
 
+/*
+ * ONE SIDE'S TEAM — its MSB team and its nine characters.
+ *
+ * Returned FLAT, all primitives, on purpose. `useShallow` compares element by
+ * element, so an object (or an array of objects) would be a fresh identity on
+ * every read and this panel would re-render on every unrelated state write. A
+ * live HUD board writes 30–100 keys a frame and this desk is open while it does,
+ * so a nested shape here is a per-frame cost, not a style question.
+ */
+export function useSideTeam(sb, team) {
+    const flat = useStateStore(useShallow(s => {
+        const p = s?.score?.[sb]?.player?.[team];
+        const chars = p?.character;
+        const out = [p?.msb_team || '', String(num(p?.rio_captainIndex, -1))];
+        for (let i = 0; i < ROSTER_SIZE; i++) {
+            out.push(chars?.[i]?.name || '', chars?.[i]?.is_starred ? '1' : '');
+        }
+        return out;
+    }));
+    return useMemo(() => ({
+        msbTeam: flat[0],
+        captain: Number(flat[1]),
+        roster: Array.from({ length: ROSTER_SIZE }, (_, i) => ({
+            name: flat[2 + i * 2],
+            starred: flat[3 + i * 2] === '1',
+        })),
+    }), [flat]);
+}
+
+/*
+ * The nine characters, as a READOUT.
+ *
+ * The roster grid that used to live on the Match tab was an editor — a character
+ * combobox, a superstar toggle and a captain button per slot — and under every
+ * real feed it was read-only anyway, so it was deleted with the rest of the
+ * hand-driving controls. What was lost with it is the thing a producer actually
+ * used it for: SEEING the lineup, to check the board against the game. That is a
+ * subject, not a control, so it comes back as one — captain ringed, superstars
+ * starred, nothing clickable.
+ *
+ * It renders only when the feed has given the side characters. Nine "Slot n"
+ * placeholders on an idle board is nine rows of nothing.
+ */
+const RosterGrid = memo(function RosterGrid({ roster, captain, mirror }) {
+    const urls = useAssetUrls();
+    const superstar = urls.gameIcon('superstar.png');
+    if (!roster.some(r => r.name)) return null;
+    return (
+        <div className="grid w-full grid-cols-3 gap-1">
+            {roster.map((r, i) => {
+                const isCaptain = captain === i;
+                const icon = r.name ? urls.charIcon(r.name) : undefined;
+                return (
+                    <div
+                        key={i}
+                        title={[r.name || `Slot ${i + 1}`, isCaptain && 'captain', r.starred && 'superstar']
+                            .filter(Boolean).join(' · ')}
+                        className={cn(
+                            'flex min-w-0 items-center gap-1 rounded border px-1 py-0.5',
+                            mirror && 'flex-row-reverse',
+                            isCaptain ? 'border-[#f5bb00]/70' : 'border-border/60',
+                        )}
+                    >
+                        {icon && (
+                            <img src={icon} alt="" width={14} height={14} className="shrink-0 object-contain pixelated" />
+                        )}
+                        <Text
+                            size="xs" span truncate
+                            className={cn('min-w-0 text-[11px]', isCaptain ? 'text-[#f5bb00]' : 'text-muted-foreground')}
+                        >
+                            {r.name || '—'}
+                        </Text>
+                        {r.starred && (
+                            <img src={superstar} alt="Superstar" width={11} height={11} className="shrink-0 object-contain" />
+                        )}
+                    </div>
+                );
+            })}
+        </div>
+    );
+});
+
+/*
+ * ONE SIDE, as a column: who is there · do they bat last · what they're playing
+ * as · who's in the lineup. Side 2's column is reversed and right-aligned, so
+ * the two read outward from the score between them.
+ *
+ * The name field IS the identity override — the only identity edit that survives
+ * a feed. The raw name comes from Project Rio; the picker shows it, and pinning
+ * one here is how a producer corrects a mis-typed or alt online ID without the
+ * next frame undoing it. It used to be a separate "Who's on each side" group
+ * below the scores, which asked the producer to hold "P1 = the left name" in
+ * their head while a mislabelled game was on air.
+ *
+ * Home is a chip on the side that HAS it, not a Left/Right picker: which side
+ * bats last is a fact about a player, and "MattGree bats last" is the sentence a
+ * producer is checking against the game. Clicking the other side moves it;
+ * clicking the side that already has it does nothing, because this is a choice
+ * between two sides and not a toggle that can be off.
+ */
+const SidePanel = memo(function SidePanel({ side, label, d }) {
+    const { g } = d;
+    const team = useSideTeam(d.sb, side);
+    const urls = useAssetUrls();
+    const mirror = side === 2;
+    const feedName = side === 1 ? g.name1 : g.name2;
+    const override = side === 1 ? g.override1 : g.override2;
+    const isHome = num(d.val('home_team', g.homeTeam), 2) === side;
+    const shown = d.val(`override.${side}`, override) || feedName;
+    const logo = team.msbTeam ? urls.teamIcon(team.msbTeam) : null;
+    return (
+        <div className={cn('flex min-w-0 flex-col gap-1.5', mirror && 'items-end')}>
+            <span className={cn(EYEBROW, d.isStaged(`override.${side}`) && 'text-amber-400')}>
+                {label}
+            </span>
+            <div className={cn('flex w-full min-w-0 items-center gap-1.5', mirror && 'flex-row-reverse')}>
+                <div className="min-w-0 flex-1">
+                    <ParticipantPicker
+                        value={shown}
+                        placeholder="Online ID"
+                        onResolve={row => d.setNameOverride(side, row?.identities?.rioName || row?.display?.tag || '')}
+                        onRawValue={v => d.setNameOverride(side, v)}
+                        className={cn('h-7 text-xs', override && 'border-amber-400 ring-1 ring-amber-400/40')}
+                    />
+                </div>
+                <ToggleChip
+                    label="Home"
+                    ariaLabel={`${label} side bats last`}
+                    title={isHome
+                        ? `${shown || label} bats last`
+                        : `Make the ${label.toLowerCase()} side home`}
+                    checked={isHome}
+                    staged={d.isStaged('home_team')}
+                    onChange={() => { if (!isHome) d.setField('home_team', side); }}
+                />
+            </div>
+            {team.msbTeam && (
+                <div className={cn('flex min-w-0 items-center gap-1.5', mirror && 'flex-row-reverse')}>
+                    {logo && (
+                        <img src={logo} alt="" width={16} height={16} className="shrink-0 object-contain pixelated" />
+                    )}
+                    <Text size="xs" span truncate dimmed className="min-w-0">{team.msbTeam}</Text>
+                </div>
+            )}
+            <RosterGrid roster={team.roster} captain={team.captain} mirror={mirror} />
+        </div>
+    );
+});
+
+// One side's runs, in the centre block beside the other side's — the pair is how
+// a score is read, so they sit together rather than one per side column.
+const ScoreBox = memo(function ScoreBox({ side, label, d }) {
+    const field = side === 1 ? 'score_left' : 'score_right';
+    const live = side === 1 ? d.g.scoreLeft : d.g.scoreRight;
+    return (
+        <NumberInput
+            aria-label={`Score, ${label.toLowerCase()} side`}
+            value={d.val(field, live)}
+            onChange={v => d.setField(field, v === '' ? 0 : Number(v))}
+            min={0}
+            className={cn(
+                'h-9 w-14 px-1 text-center text-xl font-bold tabular-nums',
+                d.isStaged(field) && 'border-amber-400/60 text-amber-400',
+            )}
+        />
+    );
+});
+
 export default function BoardDesk({ board }) {
     const sb = Number(board);
     const d = useBoardDesk(sb);
@@ -541,129 +718,53 @@ export default function BoardDesk({ board }) {
                 <Text size="xs" truncate className="text-muted-foreground">{reasonLine}</Text>
             )}
 
-            {/* ONE NARROW COLUMN on a wide stage, on purpose: these are the
-                controls of an instrument and they were laid out to be reached at
-                a glance, so spreading them to fill the panel would cost the
-                grouping that makes them readable. The column width is shared —
-                the kit rows under the card line up with its edges, or the panel
-                reads as two different layouts stacked. */}
-            <div className={cn('flex w-full flex-col gap-1.5', BOARD_COL)}>
-            <Panel glow={false} title="Game State">
-                <div className="p-3.5">
-                    <Stack gap="md">
-                        {/* Where this board's games come from. Transport is
-                            DERIVED and there is deliberately no picker: board 1
-                            carries the local HUD iff the global toggle is on,
-                            every other board is API (server/bindings.py). */}
-                        <div className="flex flex-col gap-1.5">
-                            <Label className="field-label">Games</Label>
-                            <div className="flex items-center gap-2">
-                                <Badge className={cn(
-                                    'text-[11px] font-semibold uppercase tracking-wider',
-                                    d.transport === 'hud'
-                                        ? 'bg-[#22c55e]/15 text-[#4ade80]'
-                                        : 'bg-[#3b82f6]/15 text-[#60a5fa]',
-                                )}>
-                                    {d.transport === 'hud' ? 'HUD' : 'API'}
-                                </Badge>
-                                {d.transport === 'hud' && (
-                                    <Button
-                                        variant="ghost" size="icon-sm"
-                                        onClick={refreshHud} disabled={refreshingHud}
-                                        title="Re-read HUD file and restore scoreboard to match it"
-                                    >
-                                        {refreshingHud ? <Loader size={12} /> : <RotateCw size={14} />}
-                                    </Button>
-                                )}
-                                <Text size="xs" dimmed>
-                                    {d.transport === 'hud'
-                                        ? 'Local game — disable HUD in Settings to rebind.'
-                                        : 'Set on the Match tab.'}
-                                </Text>
-                            </div>
-                        </div>
+            {/* THE MIRROR TAKES THE WHOLE PANEL. Beside a wiring column it was
+                two thirds of the width, and a lineup does not compress: nine
+                character names in a third of a stage truncate to "Dry Bon…",
+                which is the one thing a roster readout exists to avoid. The
+                wiring is four one-line settings and reads fine below. */}
+            <div className="flex flex-col gap-1.5 pt-1">
+                {/* score.{N}.*: what is on air this game. */}
+                <KitColumn label="Game state">
+                    <div className={BOARD_GRID}>
+                        <SidePanel side={1} d={d} label="Left" />
 
-                        {/* Game Mode — which mode's stats to fetch, with the
-                            pipeline's own diagnostics beside it. */}
-                        <div className="flex items-end gap-1.5">
-                            <div className="flex flex-1 flex-col gap-1.5">
-                                <Label className="field-label">Game Mode</Label>
-                                <Combobox
-                                    placeholder="Select game mode"
-                                    data={gameModes}
-                                    value={d.statsTag || null}
-                                    onChange={d.setStatsTag}
-                                    clearable
+                        {/* The shared frame, between the two sides that share it:
+                            the runs as a pair, then the inning, then the count.
+                            `pt` clears the sides' eyebrow line so the scores land
+                            level with the two name fields. */}
+                        <div className="flex shrink-0 flex-col items-center gap-1.5 pt-[1.1rem]">
+                            <div className="flex items-center gap-1">
+                                <ScoreBox side={1} label="Left" d={d} />
+                                <Text size="sm" span dimmed>–</Text>
+                                <ScoreBox side={2} label="Right" d={d} />
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                                <SimpleSelect
+                                    aria-label="Half inning"
+                                    data={halfInningOptions}
+                                    value={d.val('half_inning', g.halfInning)}
+                                    onChange={v => {
+                                        d.setField('half_inning', v ?? 'Top');
+                                        d.clearAtBatState();
+                                    }}
+                                    triggerClassName={cn(
+                                        '!h-7 w-[4.75rem] text-xs',
+                                        d.isStaged('half_inning') && 'border-amber-400/60 text-amber-400',
+                                    )}
+                                />
+                                <NumberInput
+                                    aria-label="Inning"
+                                    value={d.val('inning', g.inning)}
+                                    onChange={v => d.setField('inning', v === '' ? 1 : Number(v))}
+                                    min={1} max={99}
+                                    className={cn(
+                                        'h-7 w-11 px-1 text-center tabular-nums',
+                                        d.isStaged('inning') && 'border-amber-400/60 text-amber-400',
+                                    )}
                                 />
                             </div>
-                            <StatsDiagnostics stats={stats} />
-                        </div>
-
-                        <div className="flex flex-col gap-1.5">
-                            <Label className="field-label">Stadium</Label>
-                            <Combobox
-                                placeholder="Select stadium"
-                                data={STADIUM_OPTIONS}
-                                value={d.val('stadium', g.stadium) || null}
-                                onChange={v => d.setField('stadium', v ?? '')}
-                                clearable
-                            />
-                        </div>
-
-                        {/* Scores + inning on the left, the count as three rows of
-                            dots spanning both on the right. */}
-                        <div className="flex items-stretch gap-2">
-                            <Stack gap="xs" className="flex-1">
-                                <div className="flex items-end justify-center gap-2">
-                                    <div className="flex flex-1 flex-col items-center gap-0.5">
-                                        <span className="label-display text-[10px] text-muted-foreground">P1</span>
-                                        <NumberInput
-                                            aria-label="Score, left side"
-                                            value={d.val('score_left', g.scoreLeft)}
-                                            onChange={v => d.setField('score_left', v === '' ? 0 : Number(v))}
-                                            min={0}
-                                            className={cn(
-                                                'h-11 text-center text-2xl font-bold tabular-nums',
-                                                d.isStaged('score_left') && 'border-amber-400/60 text-amber-400',
-                                            )}
-                                        />
-                                    </div>
-                                    <div className="flex flex-1 flex-col items-center gap-0.5">
-                                        <span className="label-display text-[10px] text-muted-foreground">P2</span>
-                                        <NumberInput
-                                            aria-label="Score, right side"
-                                            value={d.val('score_right', g.scoreRight)}
-                                            onChange={v => d.setField('score_right', v === '' ? 0 : Number(v))}
-                                            min={0}
-                                            className={cn(
-                                                'h-11 text-center text-2xl font-bold tabular-nums',
-                                                d.isStaged('score_right') && 'border-amber-400/60 text-amber-400',
-                                            )}
-                                        />
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <SimpleSelect
-                                        aria-label="Half inning"
-                                        data={halfInningOptions}
-                                        value={d.val('half_inning', g.halfInning)}
-                                        onChange={v => {
-                                            d.setField('half_inning', v ?? 'Top');
-                                            d.clearAtBatState();
-                                        }}
-                                        triggerClassName="flex-[4]"
-                                    />
-                                    <NumberInput
-                                        aria-label="Inning"
-                                        value={d.val('inning', g.inning)}
-                                        onChange={v => d.setField('inning', v === '' ? 1 : Number(v))}
-                                        min={1} max={99}
-                                        className="flex-[2] tabular-nums"
-                                    />
-                                </div>
-                            </Stack>
-
-                            <Stack gap="xs" justify="center">
+                            <div className="flex flex-col gap-1 pt-0.5">
                                 <CountDots
                                     label="B" max={4} hex="#22c55e"
                                     count={d.val('balls', g.balls)}
@@ -679,67 +780,104 @@ export default function BoardDesk({ board }) {
                                     count={d.val('outs', g.outs)}
                                     onChange={v => d.setField('outs', v)}
                                 />
-                            </Stack>
+                            </div>
                         </div>
 
-                        <Button
-                            variant="outline" size="sm" className="w-full"
-                            onClick={d.swapSides}
-                        >
-                            Swap Teams
-                        </Button>
-                        <Button
-                            variant="outline" size="sm"
-                            className="w-full border-destructive/40 text-destructive hover:bg-destructive/10"
-                            onClick={d.resetGame}
-                        >
-                            Reset Game State
-                        </Button>
-                    </Stack>
-                </div>
-            </Panel>
+                        <SidePanel side={2} d={d} label="Right" />
+                    </div>
 
-            {/* Which side bats last. The HUD writes it every frame on a HUD
-                board; on a hand-driven one it decides which half of the inning
-                belongs to whom. New to this panel — the tab had no control for
-                it, so it sits outside the kept block rather than inside it. */}
-            <SegmentedRow
-                label="Home" value={String(d.val('home_team', g.homeTeam))}
-                onChange={v => d.setField('home_team', Number(v))}
-                data={[{ label: 'Left', value: '1' }, { label: 'Right', value: '2' }]}
-            />
+                    {/* Belongs to the game, not to either side, so it sits under
+                        the mirror rather than in one of its halves. */}
+                    <FieldRow label="Stadium" staged={d.isStaged('stadium')} className="pt-1">
+                        <Combobox
+                            placeholder="Select stadium"
+                            data={STADIUM_OPTIONS}
+                            value={d.val('stadium', g.stadium) || null}
+                            onChange={v => d.setField('stadium', v ?? '')}
+                            clearable
+                            className={cn(
+                                'h-7 min-w-0 flex-1 text-xs',
+                                d.isStaged('stadium') && 'border-amber-400/60 text-amber-400',
+                            )}
+                        />
+                    </FieldRow>
 
-            {/* An override is the only identity edit that survives a feed: the
-                raw name comes from Project Rio, and pinning one here is how a
-                producer corrects a mis-typed or alt online ID without the next
-                frame undoing it. */}
-            <Label className="field-label pt-1">Who’s on each side</Label>
-            <FieldRow label="Left" staged={d.isStaged('override.1')}>
-                <ParticipantPicker
-                    value={d.val('override.1', g.override1) || g.name1}
-                    placeholder="Online ID"
-                    onResolve={row => d.setNameOverride(1, row?.identities?.rioName || row?.display?.tag || '')}
-                    onRawValue={v => d.setNameOverride(1, v)}
-                    className={g.override1 ? 'border-amber-400 ring-1 ring-amber-400/40' : undefined}
-                />
-            </FieldRow>
-            <FieldRow label="Right" staged={d.isStaged('override.2')}>
-                <ParticipantPicker
-                    value={d.val('override.2', g.override2) || g.name2}
-                    placeholder="Online ID"
-                    onResolve={row => d.setNameOverride(2, row?.identities?.rioName || row?.display?.tag || '')}
-                    onRawValue={v => d.setNameOverride(2, v)}
-                    className={g.override2 ? 'border-amber-400 ring-1 ring-amber-400/40' : undefined}
-                />
-            </FieldRow>
-            {(g.override1 || g.override2) && (
-                <Text size="xs" className="text-amber-500/90">
-                    Pinned over the feed until the next game. Clear the field to hand it back.
-                </Text>
-            )}
+                    {(g.override1 || g.override2) && (
+                        <Text size="xs" className="text-amber-500/90">
+                            A name is pinned over the feed until the next game. Clear the
+                            field to hand it back.
+                        </Text>
+                    )}
 
-            <Label className="field-label pt-1">This board</Label>
-            <div className="flex flex-col gap-1.5">
+                    {/* The two escape hatches, at the bottom of the thing they
+                        escape from. Reset is destructive, so it reads that way. */}
+                    <ActionRow
+                        className="pt-0.5"
+                        actions={[
+                            { label: 'Swap sides', onClick: d.swapSides, variant: 'outline' },
+                            {
+                                label: 'Reset game state', onClick: d.resetGame, variant: 'outline',
+                                className: 'border-destructive/40 text-destructive hover:bg-destructive/10',
+                            },
+                        ]}
+                    />
+                </KitColumn>
+
+                <Divider className="my-1.5" />
+
+                {/* How the board is WIRED — settings, which outlive this game, so
+                    they read below what is on air rather than beside it. */}
+                <KitColumn label="This board">
+                  {/* Uneven on purpose: the transport row carries a sentence
+                      explaining why there is no picker, and an even split
+                      truncated it. Name and Remove are short. */}
+                  <KitColumns template="minmax(0,6fr) minmax(0,4fr)">
+                   <div className="flex min-w-0 flex-col gap-1.5">
+                    {/* Transport is DERIVED and there is deliberately no picker:
+                        board 1 carries the local HUD iff the global toggle is on,
+                        every other board is API (server/bindings.py). */}
+                    <FieldRow label="Games">
+                        <Badge className={cn(
+                            'shrink-0 text-[11px] font-semibold uppercase tracking-wider',
+                            d.transport === 'hud'
+                                ? 'bg-[#22c55e]/15 text-[#4ade80]'
+                                : 'bg-[#3b82f6]/15 text-[#60a5fa]',
+                        )}>
+                            {d.transport === 'hud' ? 'HUD' : 'API'}
+                        </Badge>
+                        {d.transport === 'hud' && (
+                            <Button
+                                variant="ghost" size="icon-sm" className="shrink-0"
+                                onClick={refreshHud} disabled={refreshingHud}
+                                aria-label="Re-read HUD file"
+                                title="Re-read HUD file and restore scoreboard to match it"
+                            >
+                                {refreshingHud ? <Loader size={12} /> : <RotateCw size={14} />}
+                            </Button>
+                        )}
+                        <Text size="xs" dimmed truncate className="min-w-0">
+                            {d.transport === 'hud'
+                                ? 'Local game — disable HUD in Settings to rebind.'
+                                : 'Set on the Match tab.'}
+                        </Text>
+                    </FieldRow>
+
+                    {/* Which mode's stats to fetch, with the pipeline's own
+                        diagnostics one click away beside it. */}
+                    <FieldRow label="Game mode">
+                        <Combobox
+                            placeholder="Select game mode"
+                            data={gameModes}
+                            value={d.statsTag || null}
+                            onChange={d.setStatsTag}
+                            clearable
+                            className="h-7 min-w-0 flex-1 text-xs"
+                        />
+                        <StatsDiagnostics stats={stats} />
+                    </FieldRow>
+                   </div>
+
+                   <div className="flex min-w-0 flex-col gap-1.5">
                     {/* TextRow echoes keystrokes locally and writes once you stop
                         or blur — a rename is a settings round-trip and every
                         overlay reading the alias would otherwise redraw per
@@ -774,7 +912,9 @@ export default function BoardDesk({ board }) {
                             </div>
                         </PopoverContent>
                     </Popover>
-            </div>
+                   </div>
+                  </KitColumns>
+                </KitColumn>
             </div>
         </>
     );

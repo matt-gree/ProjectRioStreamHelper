@@ -169,7 +169,7 @@ position, not an identity).
 - **Custom blocks are the bounded escape hatch**: allowed only between standard
   rows, on kit spacing and tokens. Today's sanctioned set: the Match desk's
   captain grid, port select, and format field (Bo + series stepper), and the
-  board desk's **Game State** block (see "A board is a desk"). Adding a new
+  board desk's mirrored **Game State** grid (see "A board is a desk"). Adding a new
   custom block is a design decision, not a convenience — it should stand out in
   review.
 - **A label that repeats its own placeholder is noise.** `CAPTAIN` over a
@@ -998,25 +998,39 @@ sources).
   side), why does it look like that (`side_reason`, whose only previous frontend
   reference was the reset that cleared it), and how do I fix it.
 - **Corrections are correction grade.** Score, inning, count, stadium, home side,
-  the two `rioName_override` identities, swap, reset. The roster grid,
-  per-character stat editing and manual runner/fielder placement that used to sit
-  beside them were read-only under every real feed and are **deleted, not moved**.
-  Broadcast-visible writes stage under `board:{sb}:{field}`; the HUD re-read and
-  the stats refresh are momentary; the alias and Remove are rig config, so they
-  are immediate.
-- **The GAME STATE block is the Match tab's panel, kept verbatim** — a sanctioned
-  Custom block (user call, 2026-08-08). Big centred P1/P2 boxes, the count as
-  three rows of dots beside them, half-inning and inning under them, searchable
-  comboboxes with their labels above, the stats-diagnostics popover on the game
-  mode, two full-width buttons. It was first built as label-gutter kit rows and
-  that was wrong: those controls are an instrument a producer already has in their
-  hands, and re-expressing them as a settings list made a familiar thing
-  unfamiliar. The kit does not try to express a scoreboard.
-- **The body is ONE NARROW COLUMN** (`BOARD_COL`, 420px) on a ~950px stage, and
-  every group in it shares that width. The controls were laid out to be read at a
-  glance; spreading them to fill the panel costs the grouping that makes them
-  legible, and a card at 420 above rows at 950 reads as two layouts stacked.
-  This is the one stage body that does not want the panel's full width.
+  the two `rioName_override` identities, swap, reset. Per-character stat editing
+  and manual runner/fielder placement that used to sit beside them were read-only
+  under every real feed and are **deleted, not moved**. The roster came back, but
+  as a **readout** — see below. Broadcast-visible writes stage under
+  `board:{sb}:{field}`; the HUD re-read and the stats refresh are momentary; the
+  alias and Remove are rig config, so they are immediate.
+- **THE GAME STATE BLOCK IS A MIRROR** (`BOARD_GRID`) — a sanctioned Custom block.
+  Side 1 down the left, the shared frame (the runs as a pair, then the inning,
+  then the count) in the middle, side 2 down the right with its contents reversed
+  and right-aligned, so each column runs outward from the score. Each side column
+  is: name (the `rioName_override` picker) · a **Home chip** · MSB team + logo ·
+  the roster. The producer is comparing this panel against a screen, and if left
+  isn't on the left the comparison is a translation step — which is the very bug
+  they're hunting. Two earlier attempts are the reason this is written down: kit
+  rows in a label gutter made an instrument read as a settings list, and the Match
+  tab's own panel ported verbatim gave two boxes labelled **P1/P2** in a 420px
+  column with the names in a separate group below it. **Never re-abstract the
+  sides to P1/P2** — a side's runs belong next to the person who scored them.
+- **The roster is a subject, not a control.** Nine cells, captain ringed amber,
+  superstars starred, nothing clickable, and the whole grid **collapses when the
+  feed has given no characters** (nine "Slot n" placeholders on an idle board is
+  nine rows of nothing). The lineup is what the deleted editor was actually used
+  for; seeing it is correction grade, editing it never was.
+- **Home is a chip on the side that has it**, not a Left/Right segmented row.
+  Which side bats last is a fact about a player, and "MattGree bats last" is the
+  sentence being checked against the game. It is a choice between two sides, so
+  clicking the side that already has it does nothing — it cannot be off. Both
+  chips read "Home", so each takes `ariaLabel` (`ToggleChip`) to be nameable.
+- **The mirror takes the whole panel width; the wiring reads below it.** A lineup
+  does not compress — beside a wiring column, nine character names truncated to
+  "Dry Bon…", which is the one thing a roster readout exists to avoid. `This
+  board` (transport · game mode · name · remove) is four one-line settings in a
+  `KitColumns` group under a divider.
 - **Transport stays a readout** (`HUD`/`API` badge, derived from board 1 + the
   global HUD toggle). There is no per-board source selector and adding one is a
   regression, not a feature.

@@ -129,12 +129,17 @@ export const ToggleRow = memo(function ToggleRow({
  * foreground + fill and off is muted + hairline. Amber still means staged.
  */
 export const ToggleChip = memo(function ToggleChip({
-    label, checked, onChange, disabled, staged, title, className,
+    label, checked, onChange, disabled, staged, title, ariaLabel, className,
 }) {
     return (
         <button
             type="button" onClick={() => onChange?.(!checked)} disabled={disabled}
             aria-pressed={!!checked} title={title || undefined}
+            /* `ariaLabel` for a chip whose text names the SETTING but not the
+               thing it applies to — two "Home" chips, one per side, are two
+               buttons with the same accessible name until the side is in it.
+               Same escape hatch TextRow's ariaLabel is. */
+            aria-label={ariaLabel || undefined}
             className={cn(
                 'flex h-6 shrink-0 items-center rounded-md border px-2 text-xs transition-colors',
                 'disabled:cursor-not-allowed disabled:opacity-40',
@@ -341,14 +346,20 @@ export const ColorRow = memo(function ColorRow({
 });
 
 // 1–3 equal-width buttons — push, replay/spotlight/split, capture.
-// Each action: { label, icon?, onClick, disabled?, variant?, title? }.
+// Each action: { label, icon?, onClick, disabled?, variant?, title?, className? }.
+// `className` tints ONE action without promoting it to a different button size
+// or layout — the destructive-outline reset beside a plain sibling.
 export const ActionRow = memo(function ActionRow({ actions = [], className }) {
     return (
         <div className={cn(ROW, className)}>
-            {actions.slice(0, 3).map(({ label, icon: Icon, onClick, disabled, variant = 'secondary', title }) => (
+            {actions.slice(0, 3).map(({
+                label, icon: Icon, onClick, disabled, variant = 'secondary', title,
+                className: actionClassName,
+            }) => (
                 <Button
                     key={label} size="xs" variant={variant} disabled={disabled}
-                    onClick={onClick} title={title} className="h-7 min-w-0 flex-1"
+                    onClick={onClick} title={title}
+                    className={cn('h-7 min-w-0 flex-1', actionClassName)}
                 >
                     {Icon && <Icon />}
                     <span className="truncate">{label}</span>

@@ -144,6 +144,77 @@ describe('Board desk', () => {
         expect(matchBindLine(null, null)).toBeNull();
     });
 
+    /*
+     * The lineup is what the deleted roster EDITOR was actually used for — a
+     * producer checking the board against the game — so it came back as a
+     * readout. Nothing here is clickable; the captain is the one cell that reads
+     * differently, because that is the fact the panel is asked for.
+     */
+    it('shows each side’s lineup and marks the captain', () => {
+        const chars = (names) => Object.fromEntries(
+            names.map((name, i) => [i, { name, is_starred: i === 2 }]),
+        );
+        useStateStore.setState({
+            score: {
+                1: {
+                    player: {
+                        1: {
+                            rioName: 'rjb', msb_team: 'Bowser Blue Shells', rio_captainIndex: 1,
+                            character: chars(['Dry Bones(G)', 'Bowser', 'Bro(F)']),
+                        },
+                        2: {
+                            rioName: 'MattGree', msb_team: 'Birdo Bows', rio_captainIndex: 0,
+                            character: chars(['Toad(P)', 'DK']),
+                        },
+                    },
+                },
+            },
+            match: {},
+        });
+        ui(<BoardDesk board={1} />);
+        expect(screen.getByText('Bowser Blue Shells')).toBeInTheDocument();
+        expect(screen.getByText('Birdo Bows')).toBeInTheDocument();
+        expect(screen.getByText('Dry Bones(G)')).toBeInTheDocument();
+        expect(screen.getByText('Toad(P)')).toBeInTheDocument();
+        // Captain and superstar are stated on the cell, not spelled out in a row.
+        expect(screen.getByTitle('Bowser · captain')).toBeInTheDocument();
+        expect(screen.getByTitle('Bro(F) · superstar')).toBeInTheDocument();
+    });
+
+    // Nine "Slot n" placeholders on a board with no game is nine rows of
+    // nothing, so the grid collapses instead of reserving space for a lineup
+    // the feed has not sent.
+    it('draws no lineup at all until the feed has sent characters', () => {
+        useStateStore.setState({ score: { 1: { player: {} } }, match: {} });
+        ui(<BoardDesk board={1} />);
+        expect(screen.queryByText('—')).not.toBeInTheDocument();
+    });
+
+    /*
+     * Home is a per-side chip, not a Left/Right picker: it is a choice between
+     * two sides, so the side that has it cannot be clicked off — only the other
+     * side can take it.
+     */
+    it('moves home to the other side, and will not turn it off', () => {
+        useStateStore.setState({ score: { 1: { home_team: 2, player: {} } }, match: {} });
+        ui(<BoardDesk board={1} />);
+        const left = screen.getByRole('button', { name: 'Left side bats last' });
+        const right = screen.getByRole('button', { name: 'Right side bats last' });
+        expect(right).toHaveAttribute('aria-pressed', 'true');
+        expect(left).toHaveAttribute('aria-pressed', 'false');
+
+        fireEvent.click(left);
+        expect(useStateStore.getState().score[1].home_team).toBe(1);
+    });
+
+    it('ignores a click on the side that is already home', () => {
+        useStateStore.setState({ score: { 1: { home_team: 2, player: {} } }, match: {} });
+        ui(<BoardDesk board={1} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Right side bats last' }));
+        expect(useStagingStore.getState().order).toEqual([]);
+        expect(useStateStore.getState().score[1].home_team).toBe(2);
+    });
+
     it('warns when the live players do not match the bound fixture', () => {
         useStateStore.setState({
             score: { 1: { match: 2, match_conflict: true, player: {} } },
