@@ -538,11 +538,11 @@ const STAR_POINTS = '10,1 12.9,7 19.5,7.6 14.5,12 16.2,18.5 10,15 3.8,18.5 5.5,1
 const StarMark = memo(function StarMark({ on, url }) {
     /*
      * PRSH ships no MSB images (Nintendo IP), so every icon here is a file the
-     * user supplied and any of them can be absent. An <img> with no file is a
-     * torn-page box at whatever size the browser picks — it breaks the grid's
-     * rhythm AND reads as a bug rather than as a missing asset. So the art is an
-     * enhancement over a vector that already says the same thing: amber and
-     * filled for on, hairline for off.
+     * user supplied and any of them can be absent. An image tag pointed at a
+     * file that isn't there is a torn-page box at whatever size the browser
+     * picks — it breaks the grid's rhythm AND reads as a bug rather than as a
+     * missing asset. So the art is an enhancement over a vector that already
+     * says the same thing: amber and filled for on, hairline for off.
      */
     const [artMissing, setArtMissing] = useState(false);
     if (on && url && !artMissing) {

@@ -216,9 +216,9 @@ describe('Board desk', () => {
 
     /*
      * PRSH ships no MSB images, so every icon is a user-supplied file that may
-     * be absent — and an <img> with no file is a torn-page box that breaks the
-     * grid and reads as a bug. The lit star falls back to a filled vector that
-     * says the same thing.
+     * be absent — and an image tag pointed at a file that isn't there is a
+     * torn-page box that breaks the grid and reads as a bug. The lit star falls
+     * back to a filled vector that says the same thing.
      */
     it('still shows a lit star when superstar.png is missing from the pack', () => {
         useStateStore.setState({
