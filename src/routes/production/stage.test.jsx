@@ -20,9 +20,15 @@ const ui = (node) => render(<TooltipProvider>{node}</TooltipProvider>);
  * that has nothing to do with whether a browser source exists yet.
  */
 describe('Stage without OBS', () => {
+    /*
+     * "Scoreboard · Large" not "Scoreboard": with OBS closed the catalog offers
+     * all three sizes, so the default one names itself like its siblings rather
+     * than being the unlabelled row beside a Small and a Medium. Its id is still
+     * the bare `scoreboard` (see variantLabelFor).
+     */
     it('renders the selected element in a panel with its state chip', () => {
         ui(<Stage selection="scoreboard" />);
-        expect(screen.getByText('Scoreboard')).toBeInTheDocument();
+        expect(screen.getByText('Scoreboard · Large')).toBeInTheDocument();
         expect(document.querySelectorAll('[data-chip-state="unbound"]').length).toBe(1);
     });
 

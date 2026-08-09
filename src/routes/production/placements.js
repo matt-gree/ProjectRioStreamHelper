@@ -6,7 +6,7 @@ import { boardOfUrl } from '../../lib/obs-binding';
 import { ELEMENTS } from './elements';
 import { containerOfSource, fedTargets, useContainerDefs } from './containers';
 import {
-    instanceId, parseInstanceId, variantLabel, variantOf, variantTagFor, withVariant,
+    instanceId, parseInstanceId, variantLabelFor, variantOf, variantTagFor, withVariant,
 } from './instances';
 import { useActiveBoards, useBoardTag } from './boards';
 
@@ -338,15 +338,15 @@ export function catalogPlacements({ defs = {}, boards = [1], feeds = {} } = {}) 
          * ?size= is exactly that size — so the row a producer pinned with OBS
          * closed is the row their source becomes when OBS comes up.
          *
-         * And it comes FIRST. The bare id is the element's canonical instance,
-         * which is what a pin or selection naming only the element ('scoreboard')
-         * resolves to; emitted after its variants, the nearest-match resolution
-         * would answer "the scoreboard" with whichever size happened to be
-         * declared first.
+         * Rows come out in DECLARED order (small → medium → large), because that
+         * is the order a list of sizes should read in now that all three are
+         * named — the default one used to print no label, so its position looked
+         * arbitrary rather than wrong. It used to be hoisted to the front so a
+         * bare pin ('scoreboard') resolved to it; `resolvePlacement` prefers the
+         * canonical instance outright now, so order no longer carries that.
          */
         const variants = (el.sizes ?? [])
-            .map(s => (s.default ? '' : variantTagFor('size', s.value)))
-            .sort((a, b) => (a === '' ? -1 : b === '' ? 1 : 0));
+            .map(s => (s.default ? '' : variantTagFor('size', s.value)));
         const forBoard = (b) => (variants.length
             ? variants.forEach(v => out.push(row(el, b, { variant: v })))
             : out.push(row(el, b)));
@@ -451,7 +451,7 @@ export function usePlacementLabel(placements) {
             const a = axes.get(p.element.id);
             const detail = [
                 a?.boards.size > 1 && p.board != null ? boardTag(p.board) : null,
-                a?.variants.size > 1 ? variantLabel(p.variant) : null,
+                a?.variants.size > 1 ? variantLabelFor(p.element, p.variant) : null,
             ].filter(Boolean).join(' · ');
             return { name: p.element.name, detail: detail || null };
         };
@@ -506,7 +506,7 @@ export function sourcelessPlacement(id) {
  * asking for "the scoreboard" means: the one currently reaching air. But a
  * named scene outranks that — an id that says Break means Break.
  */
-const ROLE_RANK = { program: 0, preview: 1, other: 2 };
+const ROLE_RANK = { program: 0, preview: 1, other: 2, none: 3 };
 
 export function resolvePlacement(id, placements) {
     if (!id) return null;
@@ -532,7 +532,16 @@ export function resolvePlacement(id, placements) {
     const inScene = scene ? pool.filter(p => p.scene === scene) : [];
     const candidates = inScene.length ? inScene : pool;
     return candidates.slice()
-        .sort((a, b) => ROLE_RANK[a.where] - ROLE_RANK[b.where])[0] ?? null;
+        .sort((a, b) => (ROLE_RANK[a.where] ?? 9) - (ROLE_RANK[b.where] ?? 9)
+            /*
+             * Then the CANONICAL instance — the variant-less one. An id like
+             * 'scoreboard' means the element's default size, and this used to be
+             * true only because catalogPlacements emitted that row first, which
+             * made list ORDER carry resolution meaning: the catalog had to list
+             * Large, Small, Medium to keep a bare pin working. Saying it here
+             * frees the list to read in the order the sizes are declared.
+             */
+            || (a.variant ? 1 : 0) - (b.variant ? 1 : 0))[0] ?? null;
 }
 
 // What a stored pin currently POINTS AT — its resolved placement id, or the pin

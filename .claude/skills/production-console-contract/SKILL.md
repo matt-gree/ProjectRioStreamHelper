@@ -957,6 +957,17 @@ bracket overlays draw). Rules:
   An unnamed board contributes its number (`useBoardTag` → `B1`), not the default
   `Scoreboard {N}` alias, which read as "Scoreboard · Scoreboard 1 · Medium". A
   producer-chosen alias is kept — they wrote it to mean something.
+- **The DEFAULT variant names itself whenever its siblings are on screen**
+  (`variantLabelFor`). It carries no variant tag — a source with no `?size=` *is*
+  the default size, and its instance id must stay bare — but printing no label
+  left a Small, a Medium and an unnamed row, so Large existed and nothing said so.
+  The name comes off the element's `sizes` table; the id is untouched. The Add
+  picker has always named it, so this is the row agreeing with what created it.
+- **List order must not carry resolution meaning.** The catalog used to emit the
+  default size FIRST so a bare pin (`'scoreboard'`) resolved to it, which listed
+  the board as Large · Small · Medium. `resolvePlacement` prefers the canonical
+  (variant-less) instance outright now, so sizes list in declared order. If you
+  find yourself ordering a list to make a lookup work, fix the lookup.
 - **An empty count prints no number.** `rotating · 0` and `0 in pool` read as a
   count that failed rather than as nothing yet; say `rotating` / `nothing in its
   pool yet` instead. Same rule in the rack meta and in `playbackLine`.

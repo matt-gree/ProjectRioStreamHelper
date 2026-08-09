@@ -64,7 +64,7 @@ describe('Rail', () => {
         ui(<Rail pins={pins} onReorder={noop} onUnpin={noop} onOpen={noop} />);
         const titles = [...document.querySelectorAll('header')]
             .map(h => h.querySelector('button').textContent);
-        expect(titles).toEqual(['Stats', 'Scoreboard']);
+        expect(titles).toEqual(['Stats', 'Scoreboard · Large']);
     });
 
     it('drops a pin naming an element that no longer exists', () => {
@@ -83,14 +83,14 @@ describe('Rail', () => {
     it('reorders from the card header, so the rail is not mouse-only', () => {
         const onReorder = vi.fn();
         ui(<Rail pins={['stats', 'scoreboard']} onReorder={onReorder} onUnpin={noop} onOpen={noop} />);
-        fireEvent.click(screen.getByRole('button', { name: 'Move Scoreboard up' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Move Scoreboard · Large up' }));
         expect(onReorder).toHaveBeenCalledWith(['scoreboard', 'stats']);
     });
 
     it('disables the move that would run off the end of the rail', () => {
         ui(<Rail pins={['stats', 'scoreboard']} onReorder={noop} onUnpin={noop} onOpen={noop} />);
         expect(screen.getByRole('button', { name: 'Move Stats up' })).toBeDisabled();
-        expect(screen.getByRole('button', { name: 'Move Scoreboard down' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Move Scoreboard · Large down' })).toBeDisabled();
         expect(screen.getByRole('button', { name: 'Move Stats down' })).toBeEnabled();
     });
 
@@ -108,7 +108,7 @@ describe('Rail', () => {
                 onReorder={onReorder} onUnpin={noop} onOpen={noop}
             />,
         );
-        fireEvent.click(screen.getByRole('button', { name: 'Move Scoreboard up' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Move Scoreboard · Large up' }));
         expect(onReorder).toHaveBeenCalledWith(['scoreboard', 'stats', 'gone-in-a-later-build']);
     });
 
@@ -116,7 +116,7 @@ describe('Rail', () => {
         const onOpen = vi.fn();
         const onUnpin = vi.fn();
         ui(<Rail pins={['scoreboard']} onReorder={noop} onUnpin={onUnpin} onOpen={onOpen} />);
-        fireEvent.click(screen.getByText('Scoreboard'));
+        fireEvent.click(screen.getByText('Scoreboard · Large'));
         // Acted on as STORED, not as resolved: reorder and unpin address the
         // producer's array, so a pin written before instances existed must not
         // become un-removable the moment it renders as scoreboard:1.

@@ -378,11 +378,30 @@ describe('catalogPlacements — what PRSH can configure with no OBS', () => {
      * OBS opens. Read-time resolution, nothing rewritten.
      */
     it('keys rows in the pre-scene form, so they resolve once OBS is up', () => {
-        const offline = all().find(p => p.element.id === 'scoreboard');
-        expect(offline.id).toBe('scoreboard:1');
+        const offline = all().find(p => p.id === 'scoreboard:1');
+        expect(offline).toBeTruthy();
 
         const online = rows(scene('Game', 'program', item(1, 'SB1', `${SB}?scoreboard=1`)));
         expect(resolvePlacement(offline.id, online).id).toBe('scoreboard:1@Game');
+    });
+
+    /*
+     * Sizes read in the order they are declared. They used to be emitted with the
+     * default hoisted to the front so a bare pin resolved to it — which listed
+     * the board as Large, Small, Medium. That was invisible while the default
+     * printed no label and plainly wrong once it named itself, so the resolution
+     * rule moved into resolvePlacement and the order became the list's own.
+     */
+    it('lists an element’s sizes in declared order, default included', () => {
+        const ids = idsOf(all()).filter(i => i.startsWith('scoreboard:1'));
+        expect(ids).toEqual(['scoreboard:1~zs', 'scoreboard:1~zm', 'scoreboard:1']);
+    });
+
+    // …and a bare pin still answers with the default size rather than with
+    // whichever row now happens to come first.
+    it('answers a bare pin with the canonical instance, not the first row', () => {
+        const rowsOut = all({ boards: [1] });
+        expect(resolvePlacement('scoreboard', rowsOut).id).toBe('scoreboard:1');
     });
 
     // The one legitimate reader left for the DECLARED board list: with no OBS

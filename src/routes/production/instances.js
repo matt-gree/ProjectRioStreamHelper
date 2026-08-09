@@ -124,6 +124,27 @@ export function variantParams(variant) {
     return out;
 }
 
+/*
+ * How a variant reads when its siblings are on screen with it — including the
+ * DEFAULT one, which has no tag to read a name off.
+ *
+ * The default size deliberately carries no variant tag: a source with no ?size=
+ * is exactly that size, so its instance id is the bare `scoreboard:1` and must
+ * stay that way (see catalogPlacements). But a row list of "Scoreboard · B1",
+ * "Scoreboard · B1 · Small", "Scoreboard · B1 · Medium" then offers a small, a
+ * medium and an unnamed one — Large exists and nothing says so, which is the
+ * "smaller ones read as the big one with pieces missing" problem back in the
+ * labels. The Add picker has always named it ("Scoreboard — Large", from the
+ * layouts API), so the row it created disagreed with the row that created it.
+ *
+ * The name comes off the element's own size table. Nothing about the id changes:
+ * this is what the row SAYS, not what it is.
+ */
+export function variantLabelFor(element, variant) {
+    if (variant) return variantLabel(variant);
+    return element?.sizes?.find(s => s.default)?.label ?? null;
+}
+
 // How a variant reads in the rack ('t2' → "Team 2"). Null when there is
 // nothing to say, so a caller can drop the slot rather than print an empty one.
 export function variantLabel(variant) {
