@@ -34,6 +34,24 @@ async def rio_refresh(session_id: str | None = None) -> ORJSONResponse:
 
 
 @method(
+    router.post, "/rio/release",
+    version="1", id="rio.release",
+    response_class=ORJSONResponse
+)
+async def rio_release(session_id: str | None = None) -> ORJSONResponse:
+    """Stop treating the cached HUD frame as what is on the board.
+
+    Called when the producer clears a HUD board by hand. The frame itself is
+    kept — /rio/refresh is how they ask for it back — but until the next real
+    frame arrives, nothing re-applies it behind their back. Without this, a
+    manual swap after a reset resurrected the whole game, because the swap
+    re-orients the last frame (see RioGameDataProvider._feed_released).
+    """
+    RioGameDataProvider.release_feed()
+    return ORJSONResponse({"success": True, "released": True})
+
+
+@method(
     router.post, "/rio/swap",
     version="1", id="rio.swap",
     response_class=ORJSONResponse

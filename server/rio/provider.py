@@ -493,6 +493,21 @@ class RioGameDataProvider:
     _sides_swapped: bool = False
     _user_overridden: bool = False
 
+    # The producer has cleared the board by hand and the feed's cached frame no
+    # longer describes what is on air.
+    #
+    # `hud_watcher.latest_game_data` is the last frame Project Rio wrote, and it
+    # outlives a hand reset — deliberately, because several paths re-seat it (the
+    # HUD toggle, /scoreboards/reset, the explicit re-read). But a MANUAL SWAP
+    # also re-applied it, so resetting a board and then swapping sides brought
+    # the whole game back (user report, 2026-08-08). A swap is not a request for
+    # the feed's data; it is a request to flip whatever is on the board.
+    #
+    # Set by release_feed() (the desk's Reset), cleared by the next real frame
+    # from the watcher or by an explicit re-read — so Reset clears and Re-read
+    # restores, which is the pairing the desk already offers.
+    _feed_released: bool = False
+
     # Serializes the two entry points that read-modify-write the shared side
     # state (_sides_swapped/_user_overridden/current_game): a HUD frame landing
     # mid-swap would otherwise interleave with toggle_sides_swapped and apply a
@@ -574,6 +589,9 @@ class RioGameDataProvider:
         """Immediate one-shot read of the HUD file. Updates state and returns parsed game."""
         await cls.ReloadHudPath()
         if cls.hud_watcher and cls.hud_watcher.latest_game_data:
+            # An explicit re-read is the producer asking for the feed back, so it
+            # ends a hand reset's hold on the board (see _feed_released).
+            cls._feed_released = False
             game_json = cls.hud_watcher.latest_game_data
             for sb in cls._hud_targets:
                 StatsTracker.on_hud_update(game_json, sb)
@@ -794,6 +812,9 @@ class RioGameDataProvider:
         cls._prev_game_id = None
         cls._sides_swapped = False
         cls._user_overridden = False
+        # Every caller of this re-seats the current frame right after (the HUD
+        # toggle, /scoreboards/reset), so a hand reset's hold is over.
+        cls._feed_released = False
         cls._hud_targets = _read_hud_targets()
         for sb in cls._hud_targets:
             StatsTracker.reset_scoreboard(sb)
@@ -956,7 +977,23 @@ class RioGameDataProvider:
             await cls._on_hud_game_update_impl(game_json)
 
     @classmethod
+    def release_feed(cls):
+        """Stop treating the cached HUD frame as what is on the board.
+
+        Called when the producer clears a HUD board by hand. See _feed_released.
+        """
+        if not cls._feed_released:
+            logger.info("[RIO] HUD feed released — board cleared by hand")
+        cls._feed_released = True
+
+    @classmethod
     async def _on_hud_game_update_impl(cls, game_json: dict):
+        # A real frame from the watcher is the feed speaking again, so it takes
+        # the board back from a hand reset. The watcher is OS-event driven, so
+        # this only fires when Project Rio actually rewrites the file — a reset
+        # holds for as long as the game is genuinely not moving.
+        cls._feed_released = False
+
         # Check for new game before parsing (uses raw inning from game_json)
         current_inning = game_json.get("inning", 1)
         is_new_game = cls._is_new_game(current_inning, game_json.get("game_id"))
@@ -1122,7 +1159,12 @@ class RioGameDataProvider:
         # Re-apply current game with new swap state. A manual swap sets
         # _user_overridden, so _apply_game_to_state skips match orientation and
         # every board honors the user's flip (swaps == global state).
-        if cls.hud_watcher and cls.hud_watcher.latest_game_data:
+        #
+        # A RELEASED feed takes the direct-swap branch below instead: the cached
+        # frame is still there (the re-read needs it) but the producer has
+        # cleared the board, so re-applying it here would resurrect a game they
+        # just blanked. See _feed_released.
+        if cls.hud_watcher and cls.hud_watcher.latest_game_data and not cls._feed_released:
             # Carry any manually-entered display identity (name/full_name/…) to
             # the other side BEFORE the feed re-apply. The re-apply rewrites the
             # game-derived fields (rioName, roster, scores) but never these, and

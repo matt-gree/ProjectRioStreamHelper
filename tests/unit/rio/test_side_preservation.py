@@ -200,6 +200,81 @@ async def test_toggle_sets_swap_and_override_flags():
     assert P._user_overridden is True   # override stays set on every manual swap
 
 
+# --- Released feed (hand reset vs the cached frame) ---
+#
+# `hud_watcher.latest_game_data` outlives a hand reset on purpose — the re-read
+# needs it, and several paths re-seat it. But a manual swap RE-APPLIED it, so
+# clearing a board and then swapping sides brought the whole game back (user
+# report, 2026-08-08). A swap is a request to flip what is on the board, not a
+# request for the feed's data.
+
+class _FakeWatcher:
+    """Just enough watcher for the swap's re-apply branch to be reachable."""
+    def __init__(self, game):
+        self.latest_game_data = game
+        self.last_error = None
+
+
+def _hud_frame():
+    return {"inning": 4, "away_score": 3, "home_score": 1, "game_id": "g1"}
+
+
+async def test_swap_re_applies_the_cached_frame_normally(monkeypatch):
+    """The control for the test below — this is the behaviour being suppressed."""
+    applied = []
+    P.hud_watcher = _FakeWatcher(_hud_frame())
+    monkeypatch.setattr(P, "_apply_game_to_state", classmethod(
+        lambda cls, parsed: _record(applied, parsed)))
+
+    await P.toggle_sides_swapped()
+    assert len(applied) == 1
+
+
+async def test_swap_after_reset_does_not_re_apply_the_cached_frame(monkeypatch):
+    applied = []
+    P.hud_watcher = _FakeWatcher(_hud_frame())
+    monkeypatch.setattr(P, "_apply_game_to_state", classmethod(
+        lambda cls, parsed: _record(applied, parsed)))
+
+    P.release_feed()
+    assert P._feed_released is True
+    await P.toggle_sides_swapped()
+
+    # The flip still happened; it just didn't drag the game back with it.
+    assert P._sides_swapped is True
+    assert applied == []
+
+
+async def test_a_real_frame_takes_the_board_back_from_a_reset():
+    P.release_feed()
+    await P._on_hud_game_update_impl(_hud_frame())
+    assert P._feed_released is False
+
+
+async def test_an_explicit_re_read_takes_the_board_back(monkeypatch):
+    P.hud_watcher = _FakeWatcher(_hud_frame())
+    monkeypatch.setattr(P, "ReloadHudPath", classmethod(lambda cls: _noop()))
+    monkeypatch.setattr(P, "_apply_game_to_state", classmethod(lambda cls, parsed: _dict()))
+    monkeypatch.setattr(P, "_maybe_apply_hit", classmethod(lambda cls, g: _noop()))
+
+    P.release_feed()
+    await P.FetchHUDGame()
+    assert P._feed_released is False
+
+
+async def _record(sink, parsed):
+    sink.append(parsed)
+    return {}
+
+
+async def _noop():
+    return None
+
+
+async def _dict():
+    return {}
+
+
 # --- _is_new_game ---
 
 @pytest.mark.parametrize("prev,current,expected", [
