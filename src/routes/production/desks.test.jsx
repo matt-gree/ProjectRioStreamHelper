@@ -7,7 +7,7 @@ import { useStagingStore } from '../../context/staging';
 import MatchDesk from './desks/match';
 import CaptureDesk from './desks/capture';
 import BracketDesk from './desks/bracket';
-import BoardDesk, { matchBindLine, sideReasonLine } from './desks/board';
+import BoardDesk, { matchBindLine, playbackLine, sideReasonLine } from './desks/board';
 
 // Desks are content workflows, not OBS ones: they must be fully usable with
 // OBS disconnected. Both fetch on mount (game modes / nothing), so stub it.
@@ -284,6 +284,51 @@ describe('Board desk', () => {
         ui(<BoardDesk board={1} />);
         expect(screen.getByText('HUD')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /Re-read HUD file/ })).toBeInTheDocument();
+    });
+
+    /*
+     * Transport and playback are two axes, not one three-way choice. The badge
+     * says where games come from (derived); the sentence says how this board
+     * shows them (chosen). Flattening them the way the Match tab did makes
+     * "HUD + rotate" expressible when it is not a real state — board 1 under the
+     * HUD toggle is single by construction whatever its stored mode says.
+     */
+    it('states playback separately from transport, and never HUD + rotating', () => {
+        expect(playbackLine({ transport: 'hud', mode: 'rotate', poolCount: 6 }))
+            .toBe('One game — the local HUD feed.');
+        expect(playbackLine({ transport: 'api', mode: 'rotate', running: true, poolCount: 6 }))
+            .toBe('Rotating — 6 in pool.');
+        expect(playbackLine({ transport: 'api', mode: 'rotate', running: false, poolCount: 6 }))
+            .toBe('Rotating (paused) — 6 in pool.');
+        expect(playbackLine({ transport: 'api', mode: 'single', gameId: 'g7' }))
+            .toBe('One game, pinned.');
+        expect(playbackLine({ transport: 'api', mode: 'single', poolCount: 4 }))
+            .toBe('One game — following the newest of 4 in pool.');
+        expect(playbackLine({ transport: 'api', mode: 'single', poolCount: 0 }))
+            .toBe('One game — nothing in its pool yet.');
+        // Rotation on with an empty pool is a real state (nothing has matched the
+        // filters yet); "0 in pool" reads like a count that failed.
+        expect(playbackLine({ transport: 'api', mode: 'rotate', running: true, poolCount: 0 }))
+            .toBe('Rotating — nothing in its pool yet.');
+    });
+
+    it('reads a rotating board’s playback out on the panel, not just the rack row', () => {
+        useSettingsStore.setState({
+            project_rio: { hud_enabled: false },
+            production: {},
+            scoreboards: {
+                active: [1],
+                aliases: {},
+                binding: { 1: { playback: { mode: 'rotate', running: true } } },
+            },
+        });
+        useStateStore.setState({
+            score: { 1: { player: {} } },
+            scoreboards: { rotation: { 1: { game_ids: [11, 12, 13] } } },
+            match: {},
+        });
+        ui(<BoardDesk board={1} />);
+        expect(screen.getByText(/Rotating — 3 in pool\./)).toBeInTheDocument();
     });
 
     it('is an API board with no re-read once the HUD is off', () => {

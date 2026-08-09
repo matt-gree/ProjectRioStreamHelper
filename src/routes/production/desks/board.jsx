@@ -84,6 +84,15 @@ const num = (v, fallback = 0) => {
 };
 
 /*
+ * How many games are in a board's pool. `Array.isArray` rather than `?? []`
+ * because `.length` answers for a STRING too — a game_ids that arrived as
+ * "[11,12,13]" reads as a 10-game pool, which is a wrong number stated with
+ * confidence. The server writes a list; this is about what the readout does when
+ * something upstream doesn't.
+ */
+const poolSize = (ids) => (Array.isArray(ids) ? ids.length : 0);
+
+/*
  * WHY the sides are ordered the way they are.
  *
  * `_decide()` in server/rio/provider.py runs manual > match > pin > back_to_back
@@ -105,6 +114,38 @@ export function sideReasonLine(reason, leftName) {
     if (!why) return null;
     const who = leftName || 'Side 1';
     return `${who} on the left — ${why}`;
+}
+
+/*
+ * HOW this board presents its games — the second axis, and the one the desk was
+ * silent about.
+ *
+ * Transport (HUD vs API) and playback (single vs rotate) are independent:
+ * transport is where games come from and is DERIVED, playback is how the board
+ * shows them and is CHOSEN. Flattening them into one "HUD / single / rotator"
+ * list is what the Match tab did, and it makes "HUD + rotate" expressible when
+ * it is not a real state — board 1 under the HUD toggle is single by
+ * construction whatever its stored mode says (see ../boards
+ * useMatchBindableBoards, and bind_scoreboard on the server, which encode the
+ * same rule). So they are stated as two things, never picked as one.
+ *
+ * Readout only: pool and playback are still AUTHORED on the Match tab until
+ * that moves (migration step 3).
+ */
+export function playbackLine({ transport, mode, running, poolCount, gameId }) {
+    if (transport === 'hud') return 'One game — the local HUD feed.';
+    if (mode === 'rotate') {
+        // Rotation on with an empty pool is a real state (nothing matched the
+        // filters yet), and "0 in pool" reads like a count that failed.
+        if (!poolCount) return 'Rotating — nothing in its pool yet.';
+        return running
+            ? `Rotating — ${poolCount} in pool.`
+            : `Rotating (paused) — ${poolCount} in pool.`;
+    }
+    if (gameId) return 'One game, pinned.';
+    return poolCount
+        ? `One game — following the newest of ${poolCount} in pool.`
+        : 'One game — nothing in its pool yet.';
 }
 
 /*
@@ -150,7 +191,7 @@ export function useBoardDeskMeta(sb) {
         }
         // Nothing on the board: say what it is waiting for rather than "empty".
         if (!hud && mode === 'rotate') {
-            const n = (s?.scoreboards?.rotation?.[sb]?.game_ids ?? []).length;
+            const n = poolSize(s?.scoreboards?.rotation?.[sb]?.game_ids);
             return { meta: `${transport} · rotating, ${n} in pool`, idle: true };
         }
         return { meta: `${transport} · no game`, idle: true };
@@ -174,6 +215,22 @@ export function useBoardDesk(sb) {
         s => s?.scoreboards?.binding?.[sb]?.stats_tag
             ?? s?.scoreboards?.binding?.[String(sb)]?.stats_tag
             ?? '',
+    );
+
+    // The playback axis, for the readout only — this desk does not author it yet.
+    const playback = useSettingsStore(useShallow(s => {
+        const p = s?.scoreboards?.binding?.[sb]?.playback
+            ?? s?.scoreboards?.binding?.[String(sb)]?.playback ?? {};
+        return {
+            mode: p.mode || 'single',
+            running: !!p.running,
+            gameId: p.gameId ?? null,
+        };
+    }));
+    // Mirrored into State by the server, so a rotating board's pool size is a
+    // read rather than a fetch (the rack draws this on every frame too).
+    const poolCount = useStateStore(
+        s => poolSize(s?.scoreboards?.rotation?.[sb]?.game_ids),
     );
 
     const g = useStateStore(useShallow(s => {
@@ -344,7 +401,7 @@ export function useBoardDesk(sb) {
     const setStatsTag = (v) => settingsSetItem(`scoreboards.binding.${sb}.stats_tag`, v ?? '');
 
     return {
-        sb, base, transport, statsTag, g, boundMatch, clearAtBatState,
+        sb, base, transport, statsTag, playback, poolCount, g, boundMatch, clearAtBatState,
         val, isStaged, setField, swapSides, resetGame, setNameOverride, setStatsTag,
     };
 }
@@ -911,9 +968,23 @@ export default function BoardDesk({ board }) {
                                 {refreshingHud ? <Loader size={12} /> : <RotateCw size={14} />}
                             </Button>
                         )}
-                        <Text size="xs" dimmed truncate className="min-w-0">
+                        {/* Two axes, stated as two things. The badge is WHERE the
+                            games come from (derived); the sentence is HOW this
+                            board shows them (chosen). The rack row already read
+                            the second one — the panel it points at said only
+                            "Set on the Match tab", so it knew less than its own
+                            row. Authoring still lives there (step 3). */}
+                        <Text size="xs" dimmed className="min-w-0">
+                            {playbackLine({
+                                transport: d.transport,
+                                mode: d.playback.mode,
+                                running: d.playback.running,
+                                gameId: d.playback.gameId,
+                                poolCount: d.poolCount,
+                            })}
+                            {' '}
                             {d.transport === 'hud'
-                                ? 'Local game — disable HUD in Settings to rebind.'
+                                ? 'Disable HUD in Settings to rebind.'
                                 : 'Set on the Match tab.'}
                         </Text>
                     </FieldRow>

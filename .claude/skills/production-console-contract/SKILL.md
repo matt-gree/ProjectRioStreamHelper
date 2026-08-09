@@ -1034,6 +1034,15 @@ sources).
 - **Transport stays a readout** (`HUD`/`API` badge, derived from board 1 + the
   global HUD toggle). There is no per-board source selector and adding one is a
   regression, not a feature.
+- **Transport and playback are TWO AXES, stated as two things.** The badge is
+  where games come from (derived); `playbackLine()` beside it is how this board
+  shows them (chosen — single or rotate). Do **not** flatten them into one
+  "HUD / single game / rotator" list: that is what the Match tab did, and it makes
+  *HUD + rotate* expressible when it is not a real state — board 1 under the HUD
+  toggle is single by construction whatever its stored mode says, a rule
+  `useMatchBindableBoards` (client) and `bind_scoreboard` (server) both encode.
+  The desk **reads** playback today; the pool and playback are still authored on
+  the Match tab until migration step 3 moves them.
 
 ## Adding a new element — checklist
 
