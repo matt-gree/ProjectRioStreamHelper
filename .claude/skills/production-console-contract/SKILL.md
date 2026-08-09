@@ -989,9 +989,10 @@ the **Bracket** desk (which start.gg phase the bracket overlays draw). Rules:
 - Same panel contract as elements — desks may declare a quick face under the
   same rules (Capture's `select board + capture` fits; Match currently has no
   compliant face → `quickFace: null`, not pinnable).
-- Deep authoring still defers to tabs: sets/bracket → Competition, a board's
-  game pool → Match tab (until that moves too). Any future feeds-but-not-on-air
-  workflow (bracket refresh, roster sync) is a desk, not a new UI invention.
+- Deep authoring still defers to tabs for **sets/bracket → Competition** only.
+  The Match tab is **gone**: fixtures are the Match desk and a board's games are
+  its own panel. Any future feeds-but-not-on-air workflow (bracket refresh,
+  roster sync) is a desk, not a new UI invention.
 
 ### The Match desk owns the whole fixture
 
@@ -999,7 +1000,10 @@ the **Bracket** desk (which start.gg phase the bracket overlays draw). Rules:
 here as a single-open accordion and on the Match tab as a stack of fully-expanded
 cards (`MatchPanel`), with different controls on each. `MatchPanel` is **deleted**;
 so is `ScoreControls`, whose Game State panel the board desk's corrections
-replaced. The Match tab is now the game pool and nothing else.
+replaced, and `PoolBrowser`, whose pool/playback authoring is now the board's own
+`GamesSection`. **The Match tab, its route and `src/routes/scoreboard_manager/`
+are gone** — `/scoreboard` renders the console so an old bookmark still lands
+somewhere, and the conflict banner's "Go to board" selects the board's desk.
 
 - **The four verbs that were only on the tab.** Flip sides, Decide, Reopen —
   ported. **Retire is not**, and this is the interesting one: it looped every
@@ -1120,8 +1124,35 @@ sources).
   *HUD + rotate* expressible when it is not a real state — board 1 under the HUD
   toggle is single by construction whatever its stored mode says, a rule
   `useMatchBindableBoards` (client) and `bind_scoreboard` (server) both encode.
-  The desk **reads** playback today; the pool and playback are still authored on
-  the Match tab until migration step 3 moves them.
+  The desk both reads and **sets** playback now (`GamesSection`, ../games).
+
+### Games: pool + playback (`src/routes/production/games.jsx`)
+
+A board's games are authored on the board, and the surface is **split by tempo —
+the same split the rack takes from the Add picker.**
+
+- **On the panel: what a producer watches and nudges during a show.** The
+  playback mode, the seconds per game, the keep-current cadence, the pool count
+  and the transport (rotate/stop, prev/next, index + countdown).
+- **Behind a dialog: what they sit down and BROWSE.** The three chip filter
+  fields, the date range, the limit, and the scrolling game tables. `PoolBrowser`
+  held both tempos in one 933-line always-open panel; a filter with a date picker
+  does not belong on a surface a producer glances at mid-game.
+- **One dialog, named for the job the board is doing**: `Find a game` (single —
+  Live/Completed tabs, row action puts the game on the board) or `Pool` (rotating
+  — scope + filter, matched games with Exclude, excluded chips). The filter is one
+  element in a `filters` array by design: every field already takes a list.
+- **What stages vs what fires now.** Putting a game on a board **stages**
+  (`board:{sb}:game`) — it is the one thing here that reaches air. The filter, the
+  scope, the cadence and an exclusion write straight through: that is prep, the
+  same call the schedule queue makes. The **transport is momentary**, like Take
+  and post-game capture — Rotate/Stop/Next mean now, not on the next confirm.
+- **A HUD board gets the readout and nothing else.** Its game is whatever Project
+  Rio is playing, so a mode picker, a pool and a transport would all be controls
+  with nothing to act on.
+- `mode` is server-backed, so the segmented **echoes the click locally** and
+  reconciles when the settings PUT comes back; without that it reads as locked
+  while the server is off fetching games.
 
 ## Adding a new element — checklist
 

@@ -19,6 +19,7 @@ import { HALF_INNINGS, ROSTER_SIZE } from '../../../data/msb';
 import { STADIUM_OPTIONS } from '../../../data/stadiums';
 import { ActionRow, FieldRow, KitColumn, KitColumns, TextRow, ToggleChip } from '../kit';
 import { BoardGameSubject } from '../subject';
+import { GamesSection } from '../games';
 
 /*
  * Board desk — the console's panel for one scoreboard.
@@ -55,7 +56,9 @@ import { BoardGameSubject } from '../subject';
  *
  * The two columns are the app's real seam. Left is `score.{N}.*` — what is on
  * air this game, all of it correctable. Right is how the board is WIRED (its
- * transport, its stats tag, its name) — settings, which outlive the game.
+ * games, its stats tag, its name) — settings, which outlive the game. The games
+ * region is ../games: its steady-state rows sit here, its browsing opens as a
+ * dialog, and that split is what let the Match tab go.
  *
  * Every broadcast-visible write routes through the staging gateway under
  * `board:{sb}:{field}`. The momentary ones (re-read the HUD file, refresh stats)
@@ -133,8 +136,7 @@ export function sideReasonLine(reason, leftName) {
  * useMatchBindableBoards, and bind_scoreboard on the server, which encode the
  * same rule). So they are stated as two things, never picked as one.
  *
- * Readout only: pool and playback are still AUTHORED on the Match tab until
- * that moves (migration step 3).
+ * This is the sentence; ../games holds the controls that set it.
  */
 export function playbackLine({ transport, mode, running, poolCount, gameId }) {
     if (transport === 'hud') return 'One game — the local HUD feed.';
@@ -950,48 +952,48 @@ export default function BoardDesk({ board }) {
                       truncated it. The name is short. */}
                   <KitColumns template="minmax(0,6fr) minmax(0,4fr)">
                    <div className="flex min-w-0 flex-col gap-1.5">
-                    {/* Transport is DERIVED and there is deliberately no picker:
-                        board 1 carries the local HUD iff the global toggle is on,
-                        every other board is API (server/bindings.py). */}
-                    <FieldRow label="Games">
-                        <Badge className={cn(
-                            'shrink-0 text-[11px] font-semibold uppercase tracking-wider',
-                            d.transport === 'hud'
-                                ? 'bg-[#22c55e]/15 text-[#4ade80]'
-                                : 'bg-[#3b82f6]/15 text-[#60a5fa]',
-                        )}>
-                            {d.transport === 'hud' ? 'HUD' : 'API'}
-                        </Badge>
-                        {d.transport === 'hud' && (
-                            <Button
-                                variant="ghost" size="icon-sm" className="shrink-0"
-                                onClick={refreshHud} disabled={refreshingHud}
-                                aria-label="Re-read HUD file"
-                                title="Re-read HUD file and restore scoreboard to match it"
-                            >
-                                {refreshingHud ? <Loader size={12} /> : <RotateCw size={14} />}
-                            </Button>
+                    {/* Where this board's games come from and how it plays them.
+                        Two axes, stated as two things: the badge is the DERIVED
+                        transport (board 1 carries the local HUD iff the global
+                        toggle is on, every other board is API — no picker, ever),
+                        the sentence is the CHOSEN playback. Authoring lives in
+                        ../games, which splits the steady-state rows from the
+                        browsing dialog. */}
+                    <GamesSection
+                        sb={sb}
+                        transport={d.transport}
+                        poolCount={d.poolCount}
+                        gameModes={gameModes}
+                        readout={`${playbackLine({
+                            transport: d.transport,
+                            mode: d.playback.mode,
+                            running: d.playback.running,
+                            gameId: d.playback.gameId,
+                            poolCount: d.poolCount,
+                        })}${d.transport === 'hud' ? ' Disable HUD in Settings to rebind.' : ''}`}
+                        badge={(
+                            <>
+                                <Badge className={cn(
+                                    'shrink-0 text-[11px] font-semibold uppercase tracking-wider',
+                                    d.transport === 'hud'
+                                        ? 'bg-[#22c55e]/15 text-[#4ade80]'
+                                        : 'bg-[#3b82f6]/15 text-[#60a5fa]',
+                                )}>
+                                    {d.transport === 'hud' ? 'HUD' : 'API'}
+                                </Badge>
+                                {d.transport === 'hud' && (
+                                    <Button
+                                        variant="ghost" size="icon-sm" className="shrink-0"
+                                        onClick={refreshHud} disabled={refreshingHud}
+                                        aria-label="Re-read HUD file"
+                                        title="Re-read HUD file and restore scoreboard to match it"
+                                    >
+                                        {refreshingHud ? <Loader size={12} /> : <RotateCw size={14} />}
+                                    </Button>
+                                )}
+                            </>
                         )}
-                        {/* Two axes, stated as two things. The badge is WHERE the
-                            games come from (derived); the sentence is HOW this
-                            board shows them (chosen). The rack row already read
-                            the second one — the panel it points at said only
-                            "Set on the Match tab", so it knew less than its own
-                            row. Authoring still lives there (step 3). */}
-                        <Text size="xs" dimmed className="min-w-0">
-                            {playbackLine({
-                                transport: d.transport,
-                                mode: d.playback.mode,
-                                running: d.playback.running,
-                                gameId: d.playback.gameId,
-                                poolCount: d.poolCount,
-                            })}
-                            {' '}
-                            {d.transport === 'hud'
-                                ? 'Disable HUD in Settings to rebind.'
-                                : 'Set on the Match tab.'}
-                        </Text>
-                    </FieldRow>
+                    />
 
                     {/* Which mode's stats to fetch, with the pipeline's own
                         diagnostics one click away beside it. */}

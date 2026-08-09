@@ -4,6 +4,8 @@ import { AlertTriangle } from 'lucide-react';
 import { useStateStore } from '../context/store';
 import { bindScoreboard, dismissMatchConflict } from '../context/match';
 import { Button } from './ui/button';
+import { useRackSelection } from '../routes/production/rack';
+import { boardDeskId } from '../routes/production/boards';
 
 /*
  * MatchConflictBanner — app-wide notification for a per-game match identity
@@ -13,7 +15,7 @@ import { Button } from './ui/button';
  * don't match the fixture, the server writes score.{N}.match_conflict rather
  * than silently overriding. That needs the producer's attention no matter which
  * tab they're on, so this banner is mounted at the app root. It names the board,
- * shows expected-vs-actual players, routes the producer to the Match tab, and
+ * shows expected-vs-actual players, opens the offending BOARD on the console, and
  * offers the two inline resolutions (unbind / keep + ignore this game).
  *
  * Producer-UI only — overlays never consume match_conflict.
@@ -22,6 +24,14 @@ import { Button } from './ui/button';
 function ConflictRow({ sb }) {
     const conflict = useStateStore((s) => s.score?.[sb]?.match_conflict ?? s.score?.[String(sb)]?.match_conflict);
     const navigate = useNavigate();
+    /*
+     * "Go to board" used to mean the Match tab, which no longer exists. The board
+     * IS a console panel now, so this selects its desk and lands on the console —
+     * and because the selection hook broadcasts to every mounted copy of its key
+     * (usePersistentState), it works whether the producer is on another tab or
+     * already looking at the console with a different row selected.
+     */
+    const [, setSelection] = useRackSelection();
 
     if (!conflict?.active) return null;
     const expected = conflict.expected || {};
@@ -48,7 +58,7 @@ function ConflictRow({ sb }) {
             </div>
             <div className="ml-auto flex items-center gap-2">
                 <Button size="sm" variant="ghost" className="text-amber-100 hover:text-white"
-                    onClick={() => navigate('/scoreboard')}>
+                    onClick={() => { setSelection(boardDeskId(sb)); navigate('/'); }}>
                     Go to board
                 </Button>
                 <Button size="sm" variant="secondary"

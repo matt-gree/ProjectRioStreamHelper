@@ -418,6 +418,11 @@ describe('Board desk', () => {
         expect(screen.getByText(/Rotating — 3 in pool\./)).toBeInTheDocument();
     });
 
+    /*
+     * The two axes on one row: the DERIVED transport as a badge, the CHOSEN
+     * playback as a control. An API board also gets the playback picker and the
+     * way into its games — which used to be a sentence pointing at another tab.
+     */
     it('is an API board with no re-read once the HUD is off', () => {
         useSettingsStore.setState({
             project_rio: { hud_enabled: false },
@@ -427,7 +432,23 @@ describe('Board desk', () => {
         ui(<BoardDesk board={1} />);
         expect(screen.getByText('API')).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /Re-read HUD/ })).not.toBeInTheDocument();
-        expect(screen.getByText(/Set on the Match tab/)).toBeInTheDocument();
+        expect(screen.queryByText(/Match tab/)).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Find a game…' })).toBeInTheDocument();
+    });
+
+    // A HUD board's game is whatever Project Rio is playing, so it has no pool
+    // and no playback choice — controls with nothing to act on.
+    it('offers no playback controls on a HUD board', () => {
+        useSettingsStore.setState({
+            project_rio: { hud_enabled: true },
+            production: {},
+            scoreboards: { active: [1], aliases: {}, binding: {} },
+        });
+        ui(<BoardDesk board={1} />);
+        expect(screen.getByText('HUD')).toBeInTheDocument();
+        expect(screen.getByText(/Disable HUD in Settings to rebind/)).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Find a game/ })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Rotating/ })).not.toBeInTheDocument();
     });
 
     // Corrections are broadcast-visible, so they go through the staging gateway;
