@@ -94,6 +94,32 @@ describe('Match desk', () => {
         ui(<MatchDesk />);
         expect(screen.getByRole('radio', { name: /Board 1/ })).not.toHaveAttribute('aria-disabled');
     });
+
+    /*
+     * MOVING A MATCH IS ONE ACTION, hence one staged entry. This used to fire a
+     * separate `bind:{other}` unbind per sibling board before the bind, so with
+     * confirm mode on the producer got two chips and could discard either one —
+     * commit the bind without the unbind and the match sits on two boards, which
+     * is two boards claiming one game and a state nothing can draw. The steal is
+     * `bind_board`'s on the server now (server/api/v1/match.py).
+     */
+    it('moves a bound match with one staged change, not a bind plus an unbind', () => {
+        useSettingsStore.setState({
+            project_rio: { hud_enabled: false },
+            production: { confirm: { enabled: true } },
+            scoreboards: { active: [1, 2], binding: {} },
+        });
+        useStateStore.setState({
+            score: { 1: { match: 1 } },
+            match: { 1: { stage: 'draft', format: { bestOf: 1 } } },
+        });
+        ui(<MatchDesk />);
+        fireEvent.click(screen.getByRole('radio', { name: /Board 2/ }));
+
+        const { order, pending } = useStagingStore.getState();
+        expect(order).toEqual(['bind:2']);
+        expect(pending['bind:2'].value).toBe(1);
+    });
 });
 
 /*

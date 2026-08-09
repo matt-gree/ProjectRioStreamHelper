@@ -49,6 +49,26 @@ description: PRSH match fixture model, scoreboard bindings (pool + playback + de
 
 - A board binds via `score.{N}.match = M` — **int id, never a round-name
   string**. Unbinding = `State.Unset` + `Match.clear_scoreboard(sb)`.
+- **A MATCH FILLS EXACTLY ONE BOARD, and `bind_board`
+  (`server/api/v1/match.py`) is the only writer of `score.{N}.match`.** Binding
+  a match that another board holds **moves** it: vacate the old holder (its
+  binding, its `match_conflict`, and the projected keys), then bind. A match
+  owns the series score for its fixture, so two boards holding one match is two
+  boards claiming one game.
+  - Route it through `bind_board`, never a bare `State.Set`. That rule used to
+    be a loop in the Match desk's `selectBoard`, so nothing else inherited it:
+    the bind route didn't, and `/startgg/load-set` wrote the key directly —
+    loading one set onto two boards left it bound to both. The console's version
+    also wasn't atomic under confirm mode (each sibling unbind was a separately
+    discardable staged entry), so a partial commit produced a state the UI
+    cannot draw. A move is **one** staged change.
+  - `Match.bound_scoreboards(m)` stays plural — it is the query, and returning a
+    list is right whether the answer is 0 or 1 items.
+  - Exclusivity is per **match**, not global: a two-board rig runs two fixtures
+    at once. The board is single-valued too, so binding a new match to an
+    occupied board displaces the old one rather than erroring.
+  - Tests: `tests/unit/api/test_match_binding.py` (+ the move assertion in
+    `test_load_set_reuses_match_holding_the_set`).
 - **The match owns the series; boards own only their live game.**
   `award_game(m, winner_rio)` resolves the winner's side by rioName
   (`side_for_rio` — declines with a warning on mismatch, never guesses),
@@ -143,4 +163,7 @@ records `provider.startgg.setId`. Unseeded phases produce string preview ids
 
 **There is no direct set→score path, and no other provider.** Challonge was
 fully removed in July 2026 — do not reintroduce provider branching or write
-`score.{N}.match` from anywhere but the match-bind flow.
+`score.{N}.match` from anywhere but `bind_board`. `/startgg/load-set` binds
+through it with `project=False`, because `apply_startgg_set` already ends in
+`project_match` + `_regate_bound_boards` and a fixture must not be projected
+twice — once empty, then once filled.

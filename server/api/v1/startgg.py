@@ -96,7 +96,7 @@ async def startgg_load_set(
     direct-to-score path, whose ``score.{N}.match`` round-name write collided
     with the match binding key.
     """
-    from server.api.v1.match import apply_startgg_set
+    from server.api.v1.match import apply_startgg_set, bind_board
     from server.bindings import is_rotating, transport
     from server.match import Match, default_match
     from server.state import State
@@ -127,8 +127,11 @@ async def startgg_load_set(
         m = Match.next_id()
         await State.Set(f"match.{m}", default_match())
 
-    await State.Set(f"score.{scoreboard_number}.match", m)
-    await State.Save()
+    # Through `bind_board`, not a direct `score.{N}.match` write: the one-match-
+    # one-board rule lives there, and loading the same set onto a second board used
+    # to leave it bound to both. `project=False` because apply_startgg_set ends in
+    # project_match + _regate_bound_boards.
+    await bind_board(scoreboard_number, m, project=False)
     await apply_startgg_set(m, set_data, set_id)
     return ORJSONResponse({"success": True, "match": m, "set": set_data})
 

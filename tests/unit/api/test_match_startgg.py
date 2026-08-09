@@ -170,8 +170,13 @@ async def test_load_set_reuses_match_holding_the_set(monkeypatch):
 
     assert first["match"] == second["match"]
     assert len(State.state.get("match", {})) == 1
-    # Both boards bound to the same match.
-    assert Match.bound_scoreboards(first["match"]) == [2, 3]
+    # A match fills exactly ONE board, so the second load MOVES it — this route
+    # used to write score.{N}.match directly and leave the set on both boards,
+    # which is two boards claiming one game. It goes through bind_board now.
+    assert Match.bound_scoreboards(first["match"]) == [3]
+    assert deep_get(State.state, "score.2.match") is None
+    # The vacated board is blanked, not left showing the fixture it no longer has.
+    assert deep_get(State.state, "score.2.phase") == ""
 
 
 @pytest.mark.asyncio

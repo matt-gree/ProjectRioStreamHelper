@@ -512,29 +512,26 @@ const MatchAccordion = memo(function MatchAccordion({ m, open, onToggle, active,
         deleteMatch(Number(m))
             .catch(e => notifications.show({ message: `Delete match: ${e?.message || e}`, color: 'red' }));
     };
-    // Board binding is radio-style: a match fills exactly one board. Selecting a
-    // board unbinds any OTHER board this match currently holds (score.{N}.match
-    // is single-valued, so binding here already steals the board from whatever
-    // match had it); clicking the selected board again clears it.
-    const unbind = (sb) => stageOrRun({
-        key: `bind:${sb}`,
-        label: `Unbind board ${sb}`,
-        value: null,
-        liveValue: boundMap[sb] != null ? Number(boundMap[sb]) : null,
-        run: () => bindScoreboard(sb, null),
-    });
+    /*
+     * Board binding is radio-style: a match fills exactly one board. Clicking the
+     * board it already holds clears it; clicking any other board MOVES it there.
+     *
+     * The move is ONE call. This used to loop the active boards unbinding the
+     * siblings first, which put a data invariant in a click handler: under confirm
+     * mode each unbind was a separately discardable staged entry, so committing
+     * the bind without one of them left a match on two boards. `bind_scoreboard`
+     * vacates the old holder itself now (server/api/v1/match.py), which is also
+     * how every other caller inherits the rule.
+     */
     const selectBoard = (sb) => {
         if (!canBind(sb)) return;
-        if (String(boundMap[sb]) === String(m)) { unbind(sb); return; }
-        for (const other of active) {
-            if (other !== sb && String(boundMap[other]) === String(m)) unbind(other);
-        }
+        const held = String(boundMap[sb]) === String(m);
         stageOrRun({
             key: `bind:${sb}`,
-            label: `Bind board ${sb} → match ${m}`,
-            value: Number(m),
+            label: held ? `Unbind board ${sb}` : `Bind board ${sb} → match ${m}`,
+            value: held ? null : Number(m),
             liveValue: boundMap[sb] != null ? Number(boundMap[sb]) : null,
-            run: () => bindScoreboard(sb, Number(m)),
+            run: () => bindScoreboard(sb, held ? null : Number(m)),
         });
     };
 

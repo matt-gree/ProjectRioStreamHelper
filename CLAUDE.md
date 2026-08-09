@@ -138,6 +138,7 @@ The deciding layer is mirrored to `score.{N}.side_reason`. Manual scope is the c
 ### Match Model & Projectors
 
 - `apply_startgg_set` in `server/api/v1/match.py` is the **only** set→match path. There is no direct set→score path.
+- **A match fills exactly one board**, and `bind_board` (`server/api/v1/match.py`) is the only writer of `score.{N}.match` — binding a match another board holds *moves* it, vacating and blanking the old holder. Never write that key directly; the invariant used to live in a click handler and every other caller missed it.
 - **The match owns the series** (games won within the Bo format); boards own only their live game.
 - **Identity gate:** if live players don't match the bound fixture, `score.{N}.match_conflict` raises the app-wide banner; a decided-mismatch auto-retires the binding.
 - **Projector rules** (Match, Commentary, PlayerPlates, PostGame all follow this shape — reuse it, don't invent a new one): resolve records against the Participants registry, write the *full* owned key set via `SetBatch` (value or `""`), wrap `project_all()` startup hooks in try/except so a bad record never blocks boot. A captain-less match projection must never blank a live HUD captain.

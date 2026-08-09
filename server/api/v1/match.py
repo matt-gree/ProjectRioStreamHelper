@@ -316,6 +316,45 @@ async def match_from_startgg(payload: StartGGSetPayload):
 bind_router = APIRouter(prefix="/scoreboards", tags=["match"])
 
 
+async def _unbind_board(sb: int) -> None:
+    """Drop board ``sb``'s binding and blank the keys the projector owns."""
+    await State.UnsetBatch([f"score.{sb}.match", f"score.{sb}.match_conflict"])
+    await State.Save()
+    await Match.clear_scoreboard(sb)
+
+
+async def bind_board(sb: int, m, *, project: bool = True) -> None:
+    """Put match ``m`` on board ``sb``, moving it off any board already holding it.
+
+    A MATCH FILLS EXACTLY ONE BOARD. A match exists so the stream can show a
+    fixture before any game data arrives, and it owns the series score for that
+    fixture — two boards holding one match would be two boards claiming one game.
+
+    This is the only place that writes ``score.{N}.match``, so that every caller
+    inherits the rule. It used to be a loop in the Match desk's `selectBoard`,
+    which meant nothing else did: this route didn't, and `/startgg/load-set` wrote
+    the key directly, so loading one set onto two boards left it on both. Under
+    confirm mode the console's version wasn't even atomic — each sibling unbind was
+    a separately discardable staged entry, so committing the bind without one put a
+    match on two boards, a state nothing in the UI can draw.
+
+    ``project=False`` is for a caller that projects immediately afterwards
+    (`apply_startgg_set` ends in `project_match` + `_regate_bound_boards`), so a
+    fixture isn't projected twice — once empty, then once filled.
+    """
+    for other in Match.bound_scoreboards(m):
+        if other != sb:
+            await _unbind_board(other)
+    await State.Set(f"score.{sb}.match", m)
+    await State.Save()
+    if project:
+        await Match.project_scoreboard(sb, m)
+        # Re-run the identity gate against the current live game so a mismatch
+        # created by binding mid-game surfaces the conflict now, rather than
+        # waiting for the next new-game event (or an app restart).
+        await RioGameDataProvider.evaluate_match_gate_for_board(sb)
+
+
 @bind_router.put("/{sb}/match", response_class=ORJSONResponse)
 async def bind_scoreboard(sb: int, payload: BindPayload):
     """Bind board ``sb`` to a match (or unbind + blank when ``match`` is null).
@@ -324,15 +363,16 @@ async def bind_scoreboard(sb: int, payload: BindPayload):
     ``single``-kind board (a HUD board is single by construction). Binding to a
     ``set`` (rotating feed) board is rejected — a rotation has no fixed sides to
     project onto.
+
+    A match already on another board is MOVED here, not copied — see
+    ``bind_board``, which owns that rule for every caller.
     """
     m = payload.match
     if m is not None and not Match.exists(m):
         raise HTTPException(404, f"match {m!r} not found")
 
     if m is None:
-        await State.UnsetBatch([f"score.{sb}.match", f"score.{sb}.match_conflict"])
-        await State.Save()
-        await Match.clear_scoreboard(sb)
+        await _unbind_board(sb)
     else:
         from server.bindings import is_rotating, transport
         # A HUD-transport board is single by construction — its stored
@@ -345,13 +385,7 @@ async def bind_scoreboard(sb: int, payload: BindPayload):
                 409,
                 f"scoreboard {sb} is rotating — bind a match to a single-game board",
             )
-        await State.Set(f"score.{sb}.match", m)
-        await State.Save()
-        await Match.project_scoreboard(sb, m)
-        # Re-run the identity gate against the current live game so a mismatch
-        # created by binding mid-game surfaces the conflict now, rather than
-        # waiting for the next new-game event (or an app restart).
-        await RioGameDataProvider.evaluate_match_gate_for_board(sb)
+        await bind_board(sb, m)
     return {"success": True, "match": m}
 
 
