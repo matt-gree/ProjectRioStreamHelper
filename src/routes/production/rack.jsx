@@ -1,10 +1,12 @@
 import { memo, useMemo, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import { Eye, EyeOff, ChevronDown, ChevronRight, Plus, Circle, CircleDot } from 'lucide-react';
+import { Eye, EyeOff, ChevronDown, ChevronRight, Plus, Circle, CircleDot, Trash2 } from 'lucide-react';
 import { useObsStore, useMirrorScene } from '../../context/obs';
 import { useStateStore } from '../../context/store';
 import { Panel } from '../../components/ui/panel';
 import { ScrollArea } from '../../components/ui/scroll-area';
+import { Button } from '../../components/ui/button';
+import { Popover, PopoverTrigger, PopoverContent } from '../../components/ui/popover';
 import { Text } from '../../components/ui/primitives';
 import { SimpleTooltip } from '../../components/ui/simple-tooltip';
 import { cn } from '../../lib/utils';
@@ -25,7 +27,7 @@ import { notifications } from '../../lib/notify';
  * The rack — the console's left surface (production-console-contract skill):
  * a monitor + selector for everything the producer can put on the broadcast.
  *
- *   Desk → Program scene → Preview scene → every other scene (lazy, collapsed)
+ *   Boards → Desk → Program scene → Preview scene → every other scene (lazy)
  *
  * SCENES ARE THE GROUPING AXIS. The rack used to sort by a "phase" the producer
  * picked from a segmented control — Draft / Live / Post-game / Break — which was
@@ -50,6 +52,7 @@ import { notifications } from '../../lib/notify';
 export const SELECTION_KEY = 'prsh.ui.production.selection';
 export const RAIL_KEY = 'prsh.ui.production.rail';
 export const OPEN_SCENES_KEY = 'prsh.ui.production.scenes';
+export const SHUT_TIERS_KEY = 'prsh.ui.production.tiers';
 
 export function useRackSelection() {
     return usePersistentState(SELECTION_KEY, 'desk:match', v => typeof v === 'string');
@@ -64,6 +67,21 @@ export function useRailPins() {
 // section should find it live on the next load, not collapsed again.
 export function useOpenScenes() {
     return usePersistentState(OPEN_SCENES_KEY, [], v => Array.isArray(v));
+}
+
+/*
+ * Which permanent tiers the producer has collapsed — and note it tracks the SHUT
+ * ones, the inverse of useOpenScenes above.
+ *
+ * A scene section defaults closed because there can be a dozen of them and
+ * opening one is also what asks OBS to mirror it. The two tiers at the top of
+ * the rack are neither: there are exactly two, they cost nothing to draw, and
+ * they are where the producer starts. So the empty list — a producer who has
+ * never touched a chevron — has to mean BOTH OPEN, which means storing what was
+ * closed rather than what was opened.
+ */
+export function useShutTiers() {
+    return usePersistentState(SHUT_TIERS_KEY, [], v => Array.isArray(v));
 }
 
 // First-run seed: an empty rail undersells the surface, so a producer who has
@@ -160,11 +178,69 @@ const PinToggle = memo(function PinToggle({ pinned, onToggle }) {
     );
 });
 
+/*
+ * A row's remove — the counterpart to its section's +.
+ *
+ * DRAWN AT REST, not on hover. The first version faded it in on `group-hover`,
+ * which is the reflex for a destructive control on a row you click all night —
+ * and it reproduced the bug it was written to fix. This affordance exists because
+ * a producer could not FIND how to remove a board; an invisible control is
+ * findable only by sweeping the mouse over the thing you want gone, which is not
+ * a discovery path. It is muted at rest and turns destructive on hover, which is
+ * the same bargain the pin diamond already takes one glyph to the left.
+ *
+ * It sits after the pin: the rarest thing on the row, and the one you least want
+ * to hit reaching for something else. The confirm states the CONSEQUENCE rather
+ * than asking whether you are sure — what a board takes with it is the thing
+ * worth a second look, not the click.
+ */
+const RowRemove = memo(function RowRemove({ label, note, onRemove, disabled, disabledHint }) {
+    const [open, setOpen] = useState(false);
+    const trigger = (
+        <button
+            type="button" disabled={disabled}
+            aria-label={label} title={disabled ? disabledHint : label}
+            className={cn(
+                'shrink-0 transition-colors',
+                disabled
+                    ? 'cursor-not-allowed text-muted-foreground/40'
+                    : 'text-muted-foreground/70 hover:text-destructive',
+                open && 'text-destructive',
+            )}
+        >
+            <Trash2 size={12} />
+        </button>
+    );
+    // A disabled trigger must not open a popover asking about something that
+    // can't happen; the title is the whole answer in that state.
+    if (disabled) return trigger;
+    return (
+        <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+            <PopoverContent align="end" className="w-60">
+                <div className="flex flex-col gap-1.5">
+                    <Text size="sm" className="text-foreground">{label}?</Text>
+                    <Text size="xs" className="text-muted-foreground">{note}</Text>
+                    <div className="flex justify-end gap-1.5">
+                        <Button size="xs" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
+                        <Button
+                            size="xs" variant="destructive"
+                            onClick={() => { setOpen(false); onRemove(); }}
+                        >
+                            Remove
+                        </Button>
+                    </div>
+                </div>
+            </PopoverContent>
+        </Popover>
+    );
+});
+
 // One rack row. Rows relocate as OBS state changes; the entry animation is
 // motion-safe so prefers-reduced-motion users get an instant move.
 const RackRow = memo(function RackRow({
     state, name, meta, dimmed, selected, onSelect, quickAction,
-    pinnable, pinned, onPinToggle, nested,
+    pinnable, pinned, onPinToggle, nested, rowAction,
 }) {
     return (
         <div
@@ -190,6 +266,7 @@ const RackRow = memo(function RackRow({
             </button>
             {quickAction}
             {pinnable && <PinToggle pinned={pinned} onToggle={onPinToggle} />}
+            {rowAction}
         </div>
     );
 });
@@ -273,28 +350,32 @@ export const DESKS = [
 ];
 
 /*
- * The desk rows, boards first.
+ * The rig — one row per board, DERIVED from `scoreboards.active`, which is
+ * finally the online reader that settings key never had. (`instances.js` used to
+ * union the declared boards into source discovery for the same reason, and lost
+ * that reader when rows became source-derived.)
  *
- * A board is a desk too — see ../boards for why — but unlike the three above it
- * is not a fixed workflow: the rig has one to three of them and the producer
- * adds and removes them. So the section is DERIVED from `scoreboards.active`,
- * which is finally the online reader that settings key never had. (`instances.js`
- * used to union the declared boards into source discovery for the same reason
- * and lost that reader when rows became source-derived; a board's row belongs on
- * the desk tier, not among the sources.)
+ * A board is a desk in every way that matters to the stage — it feeds the
+ * broadcast and is never on it (see ../boards) — but it is NOT a fixed workflow,
+ * and that is why it rows in a section of its own rather than above Match with a
+ * shared header. Membership is the difference: there is exactly one Match desk
+ * forever, while the rig has one to three boards that the producer adds and
+ * removes. Racked together, the section's + could only ever add one of the two
+ * kinds under it, and a header whose control applies to half its rows is a header
+ * that lies.
  *
  * Boards come first because they are the rig: the fixture, the capture and the
  * bracket all act ON a board. Bounded, permanent, one row each — the treatment
  * matches are deliberately NOT given, since matches accumulate all night and
  * belong in a list inside one row.
  */
-export function useDeskRows() {
+export function useRigRows() {
     const boards = useActiveBoards();
     const label = useBoardLabel();
-    return useMemo(() => [
-        ...boards.map(sb => ({ id: boardDeskId(sb), board: sb, name: label(sb) })),
-        ...DESKS,
-    ], [boards, label]);
+    return useMemo(
+        () => boards.map(sb => ({ id: boardDeskId(sb), board: sb, name: label(sb) })),
+        [boards, label],
+    );
 }
 
 // A row that takes its meta from the desk's own hook. Boards use the sibling
@@ -314,7 +395,9 @@ const DeskRow = memo(function DeskRow({ desk, selection, onSelect, pinned, onPin
     );
 });
 
-const BoardDeskRow = memo(function BoardDeskRow({ desk, selection, onSelect, pinned, onPinToggle }) {
+const BoardDeskRow = memo(function BoardDeskRow({
+    desk, selection, onSelect, pinned, onPinToggle, canRemove,
+}) {
     const { meta, idle } = useBoardDeskMeta(desk.board);
     return (
         <RackRow
@@ -323,16 +406,31 @@ const BoardDeskRow = memo(function BoardDeskRow({ desk, selection, onSelect, pin
             pinnable
             pinned={pinned.has(desk.id)}
             onPinToggle={() => onPinToggle(desk.id)}
+            rowAction={(
+                <RowRemove
+                    label={`Remove ${desk.name}`}
+                    note={`Its binding and pool go with it. Overlays pointed at `
+                        + `?scoreboard=${desk.board} will have nothing to draw.`}
+                    onRemove={() => removeScoreboard(desk.board)}
+                    disabled={!canRemove}
+                    disabledHint="The rig always keeps one board"
+                />
+            )}
         />
     );
 });
 
 /*
- * The + in the DESK header adds a board — the affordance that brings a row into
- * being lives in the header of the section the row appears in, exactly as a
- * scene's + does. It is the only way to add one: the Match tab's tab strip is
- * navigation now, and two ways to add a board is the duplication boards became
- * desks to end.
+ * RIG MEMBERSHIP IS THE SECTION'S. How many boards exist is one question, asked
+ * and answered in one place: the + in the BOARDS header adds, the trash on a row
+ * removes, and the board's own stage panel owns everything else about it (its
+ * name, its wiring, its game state).
+ *
+ * Remove used to live on that panel, and a producer could not find it — which is
+ * the predictable result of putting the verb that ends a row's existence inside
+ * the row, four scrolls down, rather than next to the + that started it. Adding
+ * it here without taking it off the panel would have left two ways to do one
+ * thing, which is the duplication boards became desks to end.
  */
 async function addScoreboard() {
     try {
@@ -343,32 +441,58 @@ async function addScoreboard() {
     }
 }
 
-const DeskSection = memo(function DeskSection({ selection, onSelect, pinned, onPinToggle }) {
-    const rows = useDeskRows();
+async function removeScoreboard(sb) {
+    try {
+        const r = await fetch(`/api/v1/scoreboards/${sb}`, { method: 'DELETE' });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    } catch (e) {
+        notifications.show({ message: `Remove scoreboard: ${e?.message || e}`, color: 'red' });
+    }
+}
+
+const RigSection = memo(function RigSection({
+    open, onToggle, selection, onSelect, pinned, onPinToggle,
+}) {
+    const rows = useRigRows();
     const [adding, setAdding] = useState(false);
     const add = async () => {
         setAdding(true);
         try { await addScoreboard(); } finally { setAdding(false); }
     };
     return (
-        <div data-rack-section="desk" className="rounded-md bg-rio-500/5 pb-1">
+        <div data-rack-section="rig" className="rounded-md bg-rio-500/5 pb-1">
             <SectionHeader
-                label="DESK" accent="text-rio-400"
-                action={<AddButton scene={null} onAdd={adding ? undefined : add} label="Add a scoreboard" />}
+                label="BOARDS" accent="text-rio-400" count={rows.length}
+                open={open} onToggle={onToggle}
+                // Same rule as a scene's +: no adding into a section you can't
+                // see the result in.
+                action={open
+                    ? <AddButton scene={null} onAdd={adding ? undefined : add} label="Add a scoreboard" />
+                    : null}
             />
-            {rows.map(desk => (desk.board != null
-                ? (
-                    <BoardDeskRow
-                        key={desk.id} desk={desk} selection={selection}
-                        onSelect={onSelect} pinned={pinned} onPinToggle={onPinToggle}
-                    />
-                )
-                : (
-                    <DeskRow
-                        key={desk.id} desk={desk} selection={selection}
-                        onSelect={onSelect} pinned={pinned} onPinToggle={onPinToggle}
-                    />
-                )))}
+            {open && rows.map(desk => (
+                <BoardDeskRow
+                    key={desk.id} desk={desk} selection={selection}
+                    onSelect={onSelect} pinned={pinned} onPinToggle={onPinToggle}
+                    canRemove={rows.length > 1}
+                />
+            ))}
+        </div>
+    );
+});
+
+const DeskSection = memo(function DeskSection({
+    open, onToggle, selection, onSelect, pinned, onPinToggle,
+}) {
+    return (
+        <div data-rack-section="desk" className="rounded-md bg-rio-500/5 pb-1">
+            <SectionHeader label="DESK" accent="text-rio-400" open={open} onToggle={onToggle} />
+            {open && DESKS.map(desk => (
+                <DeskRow
+                    key={desk.id} desk={desk} selection={selection}
+                    onSelect={onSelect} pinned={pinned} onPinToggle={onPinToggle}
+                />
+            ))}
         </div>
     );
 });
@@ -504,6 +628,7 @@ export const Rack = memo(function Rack({
     const [ownSelection, setOwnSelection] = useRackSelection();
     const [ownRail, setOwnRail] = useRailPins();
     const [openScenes, setOpenScenes] = useOpenScenes();
+    const [shutTiers, setShutTiers] = useShutTiers();
 
     const selection = selectionProp ?? ownSelection;
     const setSelection = onSelect ?? setOwnSelection;
@@ -532,11 +657,24 @@ export const Rack = memo(function Rack({
             : [...(prev ?? []), name]
     ));
 
+    const shut = new Set(shutTiers ?? []);
+    const toggleTier = (tier) => setShutTiers(prev => (
+        (prev ?? []).includes(tier)
+            ? (prev ?? []).filter(t => t !== tier)
+            : [...(prev ?? []), tier]
+    ));
+
     return (
         <Panel title="Rack" className="h-full">
             <ScrollArea className="h-[calc(100vh-13rem)]">
                 <div className="flex flex-col gap-1 p-2">
+                    <RigSection
+                        open={!shut.has('rig')} onToggle={() => toggleTier('rig')}
+                        selection={selection} onSelect={setSelection}
+                        pinned={pinned} onPinToggle={togglePin}
+                    />
                     <DeskSection
+                        open={!shut.has('desk')} onToggle={() => toggleTier('desk')}
                         selection={selection} onSelect={setSelection}
                         pinned={pinned} onPinToggle={togglePin}
                     />

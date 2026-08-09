@@ -942,11 +942,17 @@ bracket overlays draw). Rules:
   (`production.jsx`), and — when pinnable — a face in `DESK_QUICK_FACES`
   (`quickface.jsx`). All three are checked against each other in
   `rack.test.jsx`; adding a desk means adding all three.
-- They live in the rack's **Desk section** (first section, faint red wash,
-  `DESK` chip) — a row with live meta (`M1 · 1–0`, `empty`/`captured`, the
-  loaded phase), dimmed when idle, selectable like any row. Never in the state
-  sections. Rack meta must read from state only: the rack draws every frame and
-  must not fire a desk's own fetches.
+- They live in the rack's **two permanent tiers above the scenes** — `BOARDS`
+  (the rig) then `DESK` (the three workflows), both a faint red wash with the
+  `DESK` chip — a row with live meta (`M1 · 1–0`, `empty`/`captured`, the loaded
+  phase), dimmed when idle, selectable like any row. Never in the state sections.
+  Rack meta must read from state only: the rack draws every frame and must not
+  fire a desk's own fetches.
+- **The two tiers collapse, and the stored key names the SHUT ones**
+  (`useShutTiers`, `prsh.ui.production.tiers`) — the inverse of `useOpenScenes`.
+  A scene defaults closed because there can be a dozen and opening one is what
+  mirrors it; a tier defaults **open**, so the empty list a first-run producer has
+  must mean both open. Store what was closed, not what was opened.
 - **A rack row's meta is ONE fact, at the house length** (`no match`, `captured`,
   `M1 · 0–0`, `Alice 3–2 Bob`). 278px already carries a chip, a name and a pin, so
   a third or fourth clause truncates mid-sentence and pushes the pin off the edge
@@ -971,7 +977,9 @@ bracket overlays draw). Rules:
 - **An empty count prints no number.** `rotating · 0` and `0 in pool` read as a
   count that failed rather than as nothing yet; say `rotating` / `nothing in its
   pool yet` instead. Same rule in the rack meta and in `playbackLine`.
-- **All three are always racked**, in a permanent section above the scenes.
+- **All three are always racked**, in a permanent section above the scenes, and
+  the `DESK` header carries **no `+`** — there are exactly three, forever. The one
+  it used to carry added a *board*, which is the tell that split the tiers.
   Desks used to appear one at a time, keyed to the phase they belonged to, and
   that rule always needed a special case — Live owned no desk, so the section
   stood empty — which was the tell that desks were never phase-shaped. A
@@ -1000,20 +1008,35 @@ sources).
   declared boards into discovery for the same reason and lost that reader when
   rows became source-derived. Boards row **first**: they are the rig, and the
   fixture, the capture and the bracket all act on one.
+- **BOARDS is its own section, and MEMBERSHIP is why.** A board is a desk in every
+  way the stage cares about, but it is not a fixed workflow: there is one Match
+  desk forever, while the rig has one to three boards the producer adds and
+  removes. Racked under one header, that header's `+` could only ever add one of
+  the two kinds beneath it — a control that applies to half its rows. If you are
+  tempted to merge them again, the `+` is the thing that will be wrong.
 - **Boards get rows; matches get a list inside one row.** Boards are bounded
   (one to three, permanent, a rig property); matches are unbounded and accumulate
   all night. A rack row per match is the Match tab's stacked-cards problem
   relocated.
-- **The `+` in the DESK header adds a board.** Same rule as a scene's `+`: the
-  affordance that brings a row into being lives in the header of the section the
-  row appears in. Rename and remove are on that board's own stage panel. There is
-  deliberately only one place to manage boards.
+- **RIG MEMBERSHIP IS THE SECTION'S; the stage panel owns the board's
+  PROPERTIES.** The `+` in the `BOARDS` header adds (same rule as a scene's `+`:
+  the affordance that brings a row into being lives in that section's header), and
+  a per-row trash removes (`RowRemove` — hover/`focus-within` revealed, after the
+  pin, a confirm that states the *consequence*). The panel keeps the name, the
+  wiring and the game state. Remove lived on the panel first and the producer
+  could not find it: the verb that ends a row's existence was inside the row, four
+  scrolls down. Adding it to the rack **and** leaving it on the panel would have
+  been two ways to do one thing — still only one place to manage boards, it is just
+  the right one now.
+- **The last board's remove is disabled with the reason in its `title`**, not
+  absent and not an error discovered by clicking. The rig always keeps one board
+  (`DELETE /scoreboards/{id}` enforces it server-side too).
 - **The id is `desk:board:{N}`** (`boardDeskId`), and `parseInstanceId` is
   explicitly guarded on the `desk:` prefix. The old rule — "a desk name must not
   be numeric" — was enforced by nothing but the names in use: the pattern's head
   is greedy, so any id ending in digits split, and `desk:board:2` would have
   parsed as element `desk:board` on board 2.
-- **Rows, bodies and faces are RESOLVED for boards, not declared**: `useDeskRows`
+- **Rows, bodies and faces are RESOLVED for boards, not declared**: `useRigRows`
   (rack), `deskBodiesFor` (page), `deskQuickFace` (rail). Row components are
   chosen by kind (`BoardDeskRow` vs `DeskRow`) rather than by picking a hook from
   the row, which would be a conditional hook call — same rule as `SUBJECTS`.
@@ -1027,7 +1050,7 @@ sources).
   under every real feed and are **deleted, not moved**. The roster came back, but
   as a **readout** — see below. Broadcast-visible writes stage under
   `board:{sb}:{field}`; the HUD re-read and the stats refresh are momentary; the
-  alias and Remove are rig config, so they are immediate.
+  alias is config rather than content, so it is immediate.
 - **THE GAME STATE BLOCK IS A MIRROR** (`BOARD_GRID`) — a sanctioned Custom block.
   Side 1 down the left, the shared frame (the runs as a pair, then the inning,
   then the count) in the middle, side 2 down the right with its contents reversed

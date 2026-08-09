@@ -1,11 +1,11 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import { Info, RotateCw, Trash2 } from 'lucide-react';
+import { Info, RotateCw } from 'lucide-react';
 import { useStateStore, useSettingsStore } from '../../../context/store';
 import { useSocketSubscribe } from '../../../context/socket';
 import { useStagingStore, stageOrRun } from '../../../context/staging';
 import ParticipantPicker from '../../../components/ParticipantPicker';
-import { Stack, Text, Group, Divider, Loader } from '../../../components/ui/primitives';
+import { Stack, Text, Divider, Loader } from '../../../components/ui/primitives';
 import { Badge } from '../../../components/ui/badge';
 import { Button } from '../../../components/ui/button';
 import { Combobox } from '../../../components/ui/combobox';
@@ -18,7 +18,6 @@ import { useAssetUrls } from '../../../lib/assets';
 import { HALF_INNINGS, ROSTER_SIZE } from '../../../data/msb';
 import { STADIUM_OPTIONS } from '../../../data/stadiums';
 import { ActionRow, FieldRow, KitColumn, KitColumns, TextRow, ToggleChip } from '../kit';
-import { useActiveBoards, useBoardLabel } from '../boards';
 import { BoardGameSubject } from '../subject';
 
 /*
@@ -60,8 +59,13 @@ import { BoardGameSubject } from '../subject';
  *
  * Every broadcast-visible write routes through the staging gateway under
  * `board:{sb}:{field}`. The momentary ones (re-read the HUD file, refresh stats)
- * fire immediately, same rule as Take and capture. Rig admin — the alias, and
- * removing the board — is config rather than content, so it is immediate too.
+ * fire immediately, same rule as Take and capture. The alias is config rather
+ * than content, so it is immediate too.
+ *
+ * WHETHER THIS BOARD EXISTS is not on this panel. Adding and removing a board are
+ * rig membership, and they live together in the rack's BOARDS section — the +
+ * that creates a row and the trash that ends it, side by side. Remove used to be
+ * here, at the bottom of the right-hand column, and could not be found.
  */
 
 const halfInningOptions = HALF_INNINGS.map(h => ({ value: h, label: h }));
@@ -778,12 +782,9 @@ export default function BoardDesk({ board }) {
     const sb = Number(board);
     const d = useBoardDesk(sb);
     const { g } = d;
-    const active = useActiveBoards();
-    const boardLabel = useBoardLabel();
     const stats = useStatsDiagnostics(sb);
     const [gameModes, setGameModes] = useState([]);
     const [refreshingHud, setRefreshingHud] = useState(false);
-    const [confirmDel, setConfirmDel] = useState(false);
     const aliases = useSettingsStore(s => s?.scoreboards?.aliases);
     const storedAlias = aliases?.[sb] ?? aliases?.[String(sb)] ?? '';
 
@@ -808,12 +809,6 @@ export default function BoardDesk({ board }) {
         fetch(`/api/v1/scoreboards/${sb}/alias?alias=${encodeURIComponent(v)}`, { method: 'PUT' })
             .catch(e => notifications.show({ message: `Rename: ${e?.message || e}`, color: 'red' }));
     }, [sb, storedAlias]);
-
-    const removeBoard = useCallback(() => {
-        setConfirmDel(false);
-        fetch(`/api/v1/scoreboards/${sb}`, { method: 'DELETE' })
-            .catch(e => notifications.show({ message: `Remove board: ${e?.message || e}`, color: 'red' }));
-    }, [sb]);
 
     const bindLine = matchBindLine(g.match, d.boundMatch);
     const reasonLine = sideReasonLine(g.sideReason, g.name1);
@@ -945,11 +940,14 @@ export default function BoardDesk({ board }) {
                 <Divider className="my-1.5" />
 
                 {/* How the board is WIRED — settings, which outlive this game, so
-                    they read below what is on air rather than beside it. */}
+                    they read below what is on air rather than beside it.
+                    PROPERTIES ONLY: whether this board exists at all is rig
+                    membership, and that belongs to the rack's BOARDS section
+                    beside the + that adds one (see RowRemove in ../rack). */}
                 <KitColumn label="This board">
                   {/* Uneven on purpose: the transport row carries a sentence
                       explaining why there is no picker, and an even split
-                      truncated it. Name and Remove are short. */}
+                      truncated it. The name is short. */}
                   <KitColumns template="minmax(0,6fr) minmax(0,4fr)">
                    <div className="flex min-w-0 flex-col gap-1.5">
                     {/* Transport is DERIVED and there is deliberately no picker:
@@ -1019,32 +1017,6 @@ export default function BoardDesk({ board }) {
                         label="Name" value={storedAlias} placeholder={`Scoreboard ${sb}`}
                         onChange={commitAlias}
                     />
-                    <Popover open={confirmDel} onOpenChange={setConfirmDel}>
-                        <PopoverTrigger asChild>
-                            <Button
-                                size="xs" variant="ghost" disabled={active.length < 2}
-                                className="h-7 w-fit text-muted-foreground hover:text-destructive"
-                                title={active.length < 2
-                                    ? 'The rig always keeps one board'
-                                    : `Remove ${boardLabel(sb)}`}
-                            >
-                                <Trash2 size={13} className="mr-1" /> Remove board
-                            </Button>
-                        </PopoverTrigger>
-                        <PopoverContent align="start" className="w-60">
-                            <div className="flex flex-col gap-1.5">
-                                <Text size="sm" className="text-foreground">Remove {boardLabel(sb)}?</Text>
-                                <Text size="xs" className="text-muted-foreground">
-                                    Its binding and pool go with it. Overlays pointed at
-                                    ?scoreboard={sb} will have nothing to draw.
-                                </Text>
-                                <Group gap="xs" className="justify-end">
-                                    <Button size="xs" variant="ghost" onClick={() => setConfirmDel(false)}>Cancel</Button>
-                                    <Button size="xs" variant="destructive" onClick={removeBoard}>Remove</Button>
-                                </Group>
-                            </div>
-                        </PopoverContent>
-                    </Popover>
                    </div>
                   </KitColumns>
                 </KitColumn>

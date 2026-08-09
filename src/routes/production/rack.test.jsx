@@ -80,68 +80,26 @@ describe('Rack desks', () => {
         }
     });
 
-    /*
-     * A board is a desk too, and unlike the three above it is derived from the
-     * rig: `scoreboards.active` finally has an online reader. Boards row FIRST —
-     * the fixture, the capture and the bracket all act on one.
-     */
-    it('rows one board per active scoreboard, boards first, named by alias', () => {
-        useSettingsStore.setState({
-            scoreboards: { active: [1, 2], aliases: { 2: 'Stream B' } },
-            production: withContainers(),
-        });
+    it('collapses the desk tier and remembers it', () => {
         ui(<Rack />);
-        const section = within(document.querySelector('[data-rack-section="desk"]'));
-        expect(section.getByText('Scoreboard 1')).toBeInTheDocument();
-        expect(section.getByText('Stream B')).toBeInTheDocument();
-        expect(sectionRows('desk').slice(0, 2)).toEqual(['Scoreboard 1', 'Stream B']);
-        expect(document.querySelectorAll('[data-chip-state="desk"]').length)
-            .toBe(DESKS.length + 2);
+        expect(sectionRows('desk').length).toBe(DESKS.length);
+        fireEvent.click(screen.getByRole('button', { name: /DESK/ }));
+        expect(sectionRows('desk')).toEqual([]);
+        expect(JSON.parse(fakeLocalStorage.getItem('prsh.ui.production.tiers'))).toEqual(['desk']);
     });
 
-    // The meta says what the board is CARRYING, and reads state only — the rack
-    // redraws on every HUD frame and must not fire a desk's own fetches.
-    it("says what each board is carrying, and what it's waiting for when empty", () => {
-        useSettingsStore.setState({
-            scoreboards: {
-                active: [1, 2],
-                binding: { 2: { playback: { mode: 'rotate' } } },
-            },
-            production: withContainers(),
-        });
-        useStateStore.setState({
-            score: {
-                1: { player: { 1: { rioName: 'Alice' }, 2: { rioName: 'Bob' } }, score_left: 3, score_right: 2, inning: 5, half_inning: 'Bottom' },
-            },
-            scoreboards: { rotation: { 2: { game_ids: [1, 2, 3] } } },
-        });
+    // The DESK header has no + : there are exactly three workflow desks, forever.
+    // The one it used to carry added a BOARD, which is why the two tiers split.
+    it('offers nothing to add to the desk tier', () => {
         ui(<Rack />);
-        const section = within(document.querySelector('[data-rack-section="desk"]'));
-        // One fact, at the rack's house length. The transport and the inning are
-        // both on the panel (the badge, and BoardGameSubject), so the row keeps
-        // only what is nowhere else at a glance: which game is on this board.
-        expect(section.getByText('Alice 3–2 Bob')).toBeInTheDocument();
-        expect(section.getByText('rotating · 3')).toBeInTheDocument();
-    });
-
-    // With nothing on the board there is no matchup to name, so the transport
-    // becomes the informative thing — but only where it is not the default.
-    it('names the transport only on an idle board', () => {
-        useSettingsStore.setState({
-            scoreboards: { active: [1, 2], binding: {} },
-            production: withContainers(),
-        });
-        useStateStore.setState({ score: {} });
-        ui(<Rack />);
-        const section = within(document.querySelector('[data-rack-section="desk"]'));
-        expect(section.getByText('HUD · no game')).toBeInTheDocument();
-        expect(section.getByText('no game')).toBeInTheDocument();
+        const header = document.querySelector('[data-rack-section="desk"]');
+        expect(within(header).queryByRole('button', { name: /^Add/ })).not.toBeInTheDocument();
     });
 
     // Every desk the rack lists needs a body to select into and, when it says
     // it's pinnable, a quick face for the rail — the three registries are
     // written in three files and would otherwise drift apart silently. Boards
-    // are in the same contract, one tier down: their bodies and faces are
+    // are in the same contract, one tier over: their bodies and faces are
     // resolved from the id rather than declared per row.
     it('every desk row has a stage body, and a quick face iff it is pinnable', async () => {
         const { DESK_BODIES, deskBodiesFor } = await import('./production');
@@ -171,6 +129,133 @@ describe('Rack desks', () => {
 });
 
 /*
+ * The rig — the boards themselves, in a section of their own.
+ *
+ * They used to share the DESK header with Match/Capture/Bracket, and the give-away
+ * was its +: it added a BOARD, because a board is the only one of the two kinds
+ * under that header whose count the producer controls. Membership is the
+ * difference between the two tiers, so membership is what splits them.
+ */
+describe('Rack rig', () => {
+    const rig = (active, aliases = {}) => useSettingsStore.setState({
+        scoreboards: { active, aliases },
+        production: withContainers(),
+    });
+
+    it('rows one board per active scoreboard, above the desks, named by alias', () => {
+        rig([1, 2], { 2: 'Stream B' });
+        ui(<Rack />);
+        const section = within(document.querySelector('[data-rack-section="rig"]'));
+        expect(section.getByText('Scoreboard 1')).toBeInTheDocument();
+        expect(section.getByText('Stream B')).toBeInTheDocument();
+        expect(sectionRows('rig')).toEqual(['Scoreboard 1', 'Stream B']);
+        expect(document.querySelectorAll('[data-chip-state="desk"]').length)
+            .toBe(DESKS.length + 2);
+    });
+
+    // Three boards put six rows above the first scene in a ~278px column, and a
+    // producer working one board all night has no use for the other two.
+    it('collapses, hiding the rows and the + with them', () => {
+        rig([1, 2]);
+        ui(<Rack />);
+        fireEvent.click(screen.getByRole('button', { name: /BOARDS/ }));
+        expect(sectionRows('rig')).toEqual([]);
+        // No adding into a section you can't see the result in — same rule as a
+        // collapsed scene.
+        expect(screen.queryByRole('button', { name: 'Add a scoreboard' })).not.toBeInTheDocument();
+        expect(JSON.parse(fakeLocalStorage.getItem('prsh.ui.production.tiers'))).toEqual(['rig']);
+    });
+
+    // Both tiers default OPEN, so the stored list has to name the CLOSED ones —
+    // a producer who has never touched a chevron must not find the top of their
+    // rack shut.
+    it('opens both tiers for a producer who has never collapsed one', () => {
+        rig([1, 2]);
+        ui(<Rack />);
+        expect(sectionRows('rig').length).toBe(2);
+        expect(sectionRows('desk').length).toBe(DESKS.length);
+    });
+
+    it('adds a board from the section header, where the row will appear', async () => {
+        const fetchMock = vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({}) }));
+        vi.stubGlobal('fetch', fetchMock);
+        rig([1]);
+        ui(<Rack />);
+        fireEvent.click(screen.getByRole('button', { name: 'Add a scoreboard' }));
+        expect(fetchMock).toHaveBeenCalledWith('/api/v1/scoreboards', { method: 'POST' });
+    });
+
+    /*
+     * Removing a board is rig membership too, so it sits on the row rather than
+     * four scrolls down the panel of the board it deletes — which is where it was,
+     * and where it could not be found.
+     */
+    it('removes a board from its own row, after a confirm', () => {
+        const fetchMock = vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({}) }));
+        vi.stubGlobal('fetch', fetchMock);
+        rig([1, 2], { 2: 'Stream B' });
+        ui(<Rack />);
+        fireEvent.click(screen.getByRole('button', { name: 'Remove Stream B' }));
+        // The confirm states the consequence rather than asking whether you meant
+        // it — an overlay left pointed at the board is what a producer needs told.
+        expect(screen.getByText(/scoreboard=2 will have nothing to draw/)).toBeInTheDocument();
+        expect(fetchMock).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+        expect(fetchMock).toHaveBeenCalledWith('/api/v1/scoreboards/2', { method: 'DELETE' });
+    });
+
+    // The rig always keeps one board, so the last row's remove is unavailable and
+    // says why, rather than being an error the producer discovers by clicking.
+    it('will not remove the last board', () => {
+        rig([1]);
+        ui(<Rack />);
+        const remove = screen.getByRole('button', { name: 'Remove Scoreboard 1' });
+        expect(remove).toBeDisabled();
+        expect(remove).toHaveAttribute('title', 'The rig always keeps one board');
+    });
+
+    // The meta says what the board is CARRYING, and reads state only — the rack
+    // redraws on every HUD frame and must not fire a desk's own fetches.
+    it("says what each board is carrying, and what it's waiting for when empty", () => {
+        useSettingsStore.setState({
+            scoreboards: {
+                active: [1, 2],
+                binding: { 2: { playback: { mode: 'rotate' } } },
+            },
+            production: withContainers(),
+        });
+        useStateStore.setState({
+            score: {
+                1: { player: { 1: { rioName: 'Alice' }, 2: { rioName: 'Bob' } }, score_left: 3, score_right: 2, inning: 5, half_inning: 'Bottom' },
+            },
+            scoreboards: { rotation: { 2: { game_ids: [1, 2, 3] } } },
+        });
+        ui(<Rack />);
+        const section = within(document.querySelector('[data-rack-section="rig"]'));
+        // One fact, at the rack's house length. The transport and the inning are
+        // both on the panel (the badge, and BoardGameSubject), so the row keeps
+        // only what is nowhere else at a glance: which game is on this board.
+        expect(section.getByText('Alice 3–2 Bob')).toBeInTheDocument();
+        expect(section.getByText('rotating · 3')).toBeInTheDocument();
+    });
+
+    // With nothing on the board there is no matchup to name, so the transport
+    // becomes the informative thing — but only where it is not the default.
+    it('names the transport only on an idle board', () => {
+        useSettingsStore.setState({
+            scoreboards: { active: [1, 2], binding: {} },
+            production: withContainers(),
+        });
+        useStateStore.setState({ score: {} });
+        ui(<Rack />);
+        const section = within(document.querySelector('[data-rack-section="rig"]'));
+        expect(section.getByText('HUD · no game')).toBeInTheDocument();
+        expect(section.getByText('no game')).toBeInTheDocument();
+    });
+
+});
+
+/*
  * Scenes are the grouping axis, and a row exists because a SOURCE exists. The
  * rack lists nothing that isn't really in a scene: those were six dead "—" rows
  * pretending to be a catalog, and the section's + is the honest version.
@@ -181,7 +266,7 @@ describe('Rack scene sections', () => {
         ui(<Rack />);
         const headers = [...document.querySelectorAll('[data-rack-section]')]
             .map(s => s.getAttribute('data-rack-section'));
-        expect(headers).toEqual(['desk', 'Game', 'Break']);
+        expect(headers).toEqual(['rig', 'desk', 'Game', 'Break']);
         expect(screen.getByText('PROGRAM · Game')).toBeInTheDocument();
     });
 

@@ -372,21 +372,21 @@ describe('Board desk', () => {
         expect(useStagingStore.getState().order).toEqual([]);
     });
 
-    // The rig always keeps one board, so the last one's Remove is unavailable
-    // rather than an error the producer has to discover.
-    it('will not remove the last board', () => {
-        ui(<BoardDesk board={1} />);
-        expect(screen.getByRole('button', { name: /Remove board/ })).toBeDisabled();
-    });
-
-    it('removes a board once the rig has more than one', () => {
+    /*
+     * The panel owns the board's PROPERTIES; whether the board exists is rig
+     * membership, which lives in the rack's BOARDS section next to the + that
+     * creates one (rack.test.jsx covers it). Remove was here, four scrolls down
+     * inside the row it deletes, and could not be found.
+     */
+    it('renames the board but does not offer to remove it', () => {
         useSettingsStore.setState({
             project_rio: { hud_enabled: true },
             production: {},
             scoreboards: { active: [1, 2], aliases: {}, binding: {} },
         });
         ui(<BoardDesk board={2} />);
-        expect(screen.getByRole('button', { name: /Remove board/ })).not.toBeDisabled();
+        expect(screen.getByLabelText('Name')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Remove/ })).not.toBeInTheDocument();
     });
 });
 

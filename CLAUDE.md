@@ -34,7 +34,7 @@ These terms have specific meanings in this codebase. Use them precisely; correct
 
 | Term | Meaning |
 |------|---------|
-| **Scoreboard / Board** | One entry under `score.{N}` in state, listed in `scoreboards.active`. N ≥ 1; multiple may be active simultaneously. At least one always remains. Its console home is a **board desk** (`desk:board:{N}`) — added from the rack's DESK `+`, renamed and removed on its own stage panel. |
+| **Scoreboard / Board** | One entry under `score.{N}` in state, listed in `scoreboards.active`. N ≥ 1; multiple may be active simultaneously. At least one always remains. Its console home is a **board desk** (`desk:board:{N}`) — added and removed from the rack's own `BOARDS` section, renamed on its stage panel. |
 | **Binding** | What fills a scoreboard: `scoreboards.binding.{N}` in **Settings** — a `pool` (membership) + `playback` (how the pool is shown) + `stats_tag`. Defined in `server/bindings.py`. There is **no "source" enum** — "manual" is just the empty binding (single playback, empty pool). |
 | **Pool** | A binding's game membership: `filters` (search chips: tag/username/vs_username/limit), `scope` (`live \| completed \| both`), `pinned` (always in), `excluded` (never in), `refresh_interval` (0 = static). |
 | **Playback** | How a board presents its pool: `mode: single \| rotate`, `gameId` (single: null = auto-follow), `interval` + `running` (rotate). |
@@ -268,7 +268,7 @@ If the app fails to launch due to corrupt `user_data/state.json`: `echo '{}' > u
 | Sample data / demo mode | `public/layout/preview/*_sample.json`, `public/layout/lib/overlay-base.js` (`sample` option), `src/routes/production/sample.jsx` (switch + banner) |
 | Theme/design packages | `public/design/`, `server/design_packages.py`, `public/layout/lib/svg-theme-engine.js` |
 | Production console (rack/stage/rail) | `src/routes/production/{rack,rail}.jsx`, `stage/`, `desks/`, `kit/`, `elements.js`, `placements.js` (row identity), `addsource.jsx` (Add picker) |
-| One board's console panel (mirrored game state, lineup readout, `side_reason`, corrections, rename/remove) | `src/routes/production/desks/board.jsx` (`SidePanel`/`RosterGrid`/`useSideTeam`) + `boards.js` (`boardDeskId`, `useActiveBoards`), rows in `rack.jsx` (`useDeskRows`), bodies in `production.jsx` (`deskBodiesFor`), face in `quickface.jsx` (`deskQuickFace`) |
+| One board's console panel (mirrored game state, lineup readout, `side_reason`, corrections, rename) | `src/routes/production/desks/board.jsx` (`SidePanel`/`RosterGrid`/`useSideTeam`) + `boards.js` (`boardDeskId`, `useActiveBoards`), rows in `rack.jsx` (`useRigRows`, `RigSection`, `RowRemove` — add/remove a board), bodies in `production.jsx` (`deskBodiesFor`), face in `quickface.jsx` (`deskQuickFace`) |
 | Shared containers (definitions, roster) | `src/routes/production/containers.js`, `stage/container.jsx`, `public/layout/shared/container.html`, `production.container_defs` in `server/settings.py`, `server/api/v1/layouts.py` |
 | Container runtime (members, cross-fade, centering) | `public/layout/lib/fed-container.js` (the `MEMBERS` registry — add a member here, never control flow) + `lib/container-layers.js` (retained layers, cross-fade, `memberBox`, scope merge) |
 | Container automations (rules, dwell, resting, reason) | `server/automations.py` (engine + `RESOLVERS`, registered on `State.hooks`), `server/state.py` (`_augment`), `src/routes/production/automations.js` (quick-add library), `stage/automation.jsx`, `tests/unit/test_automations.py` |
