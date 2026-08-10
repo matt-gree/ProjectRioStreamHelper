@@ -9,6 +9,7 @@ authoring UI reads ``match.{M}.*`` straight from the state broadcast, like
 Every write re-projects the affected board(s) so the bound scoreboard's overlay
 reflects the fixture immediately. See ``server/match.py`` for the projection.
 """
+import asyncio
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -387,6 +388,41 @@ async def bind_scoreboard(sb: int, payload: BindPayload):
             )
         await bind_board(sb, m)
     return {"success": True, "match": m}
+
+
+# Taking the next queued fixture has to be ATOMIC — resolve and bind under one
+# lock. `next_up()` reads state and `bind_board` awaits before its first write, so
+# two boards advancing in the same tick can both resolve the same match; the
+# second bind would then STEAL it (exclusivity working exactly as designed) and
+# leave the first board empty. A lock is the whole fix: the point of a queue on a
+# multi-board rig is that two boards take two different fixtures.
+_take_next_lock = asyncio.Lock()
+
+
+@bind_router.post("/{sb}/next-match", response_class=ORJSONResponse)
+async def take_next_match(sb: int):
+    """Bind board ``sb`` to the next queued fixture waiting for a board.
+
+    "Next" is DERIVED, never stored — `Schedule.next_up()` walks the queue for the
+    first fixture nothing holds and nothing has decided. There is no cursor to
+    advance and none to get out of step, which is what lets several matches run at
+    once and lets whichever board frees up first take the next one.
+
+    409 when the queue has nothing waiting, so the producer gets told why rather
+    than watching a button do nothing.
+    """
+    async with _take_next_lock:
+        m = Schedule.next_up()
+        if m is None:
+            raise HTTPException(409, "nothing in the queue is waiting for a board")
+        from server.bindings import is_rotating, transport
+        if transport(sb) != "hud" and is_rotating(sb):
+            raise HTTPException(
+                409,
+                f"scoreboard {sb} is rotating — bind a match to a single-game board",
+            )
+        await bind_board(sb, m)
+    return {"success": True, "match": m, "queue": Schedule.queue()}
 
 
 @bind_router.post("/{sb}/match-conflict/dismiss", response_class=ORJSONResponse)

@@ -1,0 +1,94 @@
+import { useShallow } from 'zustand/react/shallow';
+import { useStateStore } from '../../context/store';
+
+/*
+ * The queue — `schedule.queue`, an ORDER over matches, read from the board's side.
+ *
+ * A board takes the next fixture waiting for one. What makes that possible without
+ * a stored cursor is that "waiting" is derivable: a match nothing holds, nothing
+ * has decided, and nothing has started yet. The server owns the resolution
+ * (`Schedule.next_up` + `POST /scoreboards/{sb}/next-match`, resolve and bind under
+ * one lock); this is the client's PREVIEW of the same answer, so the button can
+ * name the fixture it is about to put up.
+ *
+ * PREVIEW, not policy. A stale label is harmless — the take re-resolves on the
+ * server and is the only thing that decides. The rule is mirrored here for one
+ * reason only: a button that says "Up next" without saying what is not worth
+ * pressing.
+ *
+ * NO CURSOR, and never add one. A PRSH stream can run several matches at once —
+ * two games side by side, one finishing early and its slot taking the next
+ * fixture while the other keeps running. A single position cannot express that,
+ * and a queue that assumed one chain would make the common two-board case
+ * unrepresentable. Everything here walks the order and asks per match.
+ */
+
+/*
+ * Is this match a fixture still waiting for a board? Mirrors
+ * `Schedule.is_up_next_eligible` on the server — keep the two in step.
+ *
+ * `decided` is the finished test, NOT `stage`: a Bo3 sits at `stage: post`
+ * between games and is still the current fixture. `stage === 'draft'` is a
+ * separate, anti-bounce test — a fixture that has already been on a board and
+ * been fed would otherwise become "next" again the moment the board moves off it,
+ * and the verb would ping-pong between two matches.
+ */
+function waiting(match, boundIds) {
+    if (!match) return false;
+    const d = match.decided;
+    if (d === 1 || d === 2 || d === '1' || d === '2') return false;
+    if ((match.stage || 'draft') !== 'draft') return false;
+    return !boundIds.has(String(match.__id));
+}
+
+/*
+ * The next queued fixture waiting for a board: `{ id, label }` or null.
+ *
+ * One selector, flat and all-primitive, so a board panel re-reading this on every
+ * HUD frame doesn't re-render on unrelated writes (the same rule as
+ * `useSideTeam`).
+ */
+export function useNextUp() {
+    const flat = useStateStore(useShallow((s) => {
+        const queue = s?.schedule?.queue;
+        if (!Array.isArray(queue) || queue.length === 0) return ['', ''];
+        const matches = s?.match ?? {};
+        const bound = new Set(
+            Object.values(s?.score ?? {})
+                .map(b => (b?.match != null ? String(b.match) : null))
+                .filter(Boolean),
+        );
+        for (const raw of queue) {
+            const id = String(raw);
+            const match = matches[id];
+            if (!waiting(match ? { ...match, __id: id } : null, bound)) continue;
+            const n1 = match?.player?.[1]?.rioName || match?.player?.['1']?.rioName || '';
+            const n2 = match?.player?.[2]?.rioName || match?.player?.['2']?.rioName || '';
+            const names = n1 && n2 ? `${n1} vs ${n2}` : (n1 || n2 || '');
+            return [id, names || match?.label || `Match ${id}`];
+        }
+        return ['', ''];
+    }));
+    return flat[0] ? { id: Number(flat[0]), label: flat[1] } : null;
+}
+
+/** How many queued fixtures are still waiting for a board. */
+export function useWaitingCount() {
+    return useStateStore(useShallow((s) => {
+        const queue = s?.schedule?.queue;
+        if (!Array.isArray(queue)) return 0;
+        const matches = s?.match ?? {};
+        const bound = new Set(
+            Object.values(s?.score ?? {})
+                .map(b => (b?.match != null ? String(b.match) : null))
+                .filter(Boolean),
+        );
+        let n = 0;
+        for (const raw of queue) {
+            const id = String(raw);
+            const match = matches[id];
+            if (waiting(match ? { ...match, __id: id } : null, bound)) n += 1;
+        }
+        return n;
+    }));
+}

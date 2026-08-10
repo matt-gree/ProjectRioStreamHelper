@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import { Info, RotateCw } from 'lucide-react';
+import { Info, RotateCw, SkipForward } from 'lucide-react';
 import { useStateStore, useSettingsStore } from '../../../context/store';
 import { useSocketSubscribe } from '../../../context/socket';
 import { useStagingStore, stageOrRun } from '../../../context/staging';
@@ -20,6 +20,8 @@ import { STADIUM_OPTIONS } from '../../../data/stadiums';
 import { ActionRow, FieldRow, KitColumn, KitColumns, TextRow, ToggleChip } from '../kit';
 import { BoardGameSubject } from '../subject';
 import { GamesSection } from '../games';
+import { useNextUp } from '../queue';
+import { takeNextMatch } from '../../../context/match';
 
 /*
  * Board desk — the console's panel for one scoreboard.
@@ -153,6 +155,45 @@ export function playbackLine({ transport, mode, running, poolCount, gameId }) {
         ? `One game — following the newest of ${poolCount} in pool.`
         : 'One game — nothing in its pool yet.';
 }
+
+/*
+ * UP NEXT — the board takes the next queued fixture.
+ *
+ * The verb lives on the BOARD, beside the line that says which match it is
+ * carrying, because that line is what it changes. Assignment from the match's
+ * side (the Match desk's bind chips) is right for drafting the night's fixtures;
+ * this is the live direction — "board 2 just finished, put the next one up" — and
+ * it is one press rather than finding the right match in a stack.
+ *
+ * It names the fixture it will put up. A bare "Next" would be the one control on
+ * the panel that changes what is on air without saying what to.
+ *
+ * The take is momentary, like the rotation transport and Take: a producer pressing
+ * this at the end of a game means now. The label previews the client's read of the
+ * queue (../queue), but the SERVER re-resolves and binds under a lock — the button
+ * never sends an id, so two boards pressed together can't land on one fixture.
+ */
+const UpNextButton = memo(function UpNextButton({ sb }) {
+    const next = useNextUp();
+    const [taking, setTaking] = useState(false);
+    if (!next) return null;
+    const take = () => {
+        setTaking(true);
+        takeNextMatch(sb)
+            .catch(e => notifications.show({ message: `Up next: ${e?.message || e}`, color: 'red' }))
+            .finally(() => setTaking(false));
+    };
+    return (
+        <Button
+            size="xs" variant="secondary" className="h-7 shrink-0 max-w-[60%]"
+            onClick={take} disabled={taking}
+            title={`Put ${next.label} on this board — the next fixture in the queue`}
+        >
+            <SkipForward size={12} className="mr-1 shrink-0" />
+            <span className="truncate">Up next · {next.label}</span>
+        </Button>
+    );
+});
 
 /*
  * What the board is carrying, from the board's side: the match id (the M in
@@ -822,9 +863,12 @@ export default function BoardDesk({ board }) {
                 qualifiers on it, so they read a tier down rather than as three
                 competing subjects. */}
             <BoardGameSubject board={sb} />
-            {bindLine && (
-                <Text size="xs" truncate className="text-muted-foreground">{bindLine}</Text>
-            )}
+            <div className="flex min-w-0 items-center gap-2">
+                <Text size="xs" truncate className="min-w-0 flex-1 text-muted-foreground">
+                    {bindLine || 'No match on this board'}
+                </Text>
+                <UpNextButton sb={sb} />
+            </div>
             {g.conflict && (
                 <Text size="xs" className="text-amber-500/90">
                     The live players don’t match the bound fixture — resolve it on the Match desk.

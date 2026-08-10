@@ -42,6 +42,7 @@ These terms have specific meanings in this codebase. Use them precisely; correct
 | **Side** | `1 = left`, `2 = right`. Used everywhere PRSH state references team position. Never use "away/home" in app vocabulary — Project Rio uses those internally but we translate. |
 | **Team** | Synonymous with Side in state (`.player.{T}` where T∈{1,2}). |
 | **Match** | The fixture object above scoreboards: `match.{M}` in state (participants per side, captain, format, series, stage `draft \| live \| post`). A board binds to it via `score.{N}.match = M` (int id, never a round-name string). |
+| **Queue** | `schedule.queue` — the producer's **ordered list** of match ids, and only an order: there is no stored position, because several matches run live at once. A board takes the next fixture *waiting for one* (queued, unbound, undecided, never started). Not to be confused with **Rotation**, which cycles one board's game pool. |
 | **Projector** | The resolve-by-copy pattern: a model (Match, Commentary, PlayerPlates, PostGame) resolves its records against the participant registry and copies the result into the state keys overlays read. Deterministic: writes the full key set (value or `""`) so unbinding blanks exactly what it set. |
 | **Placement** | A Production rack row: one source, in one scene — `{element}:{board}@{scene}`. The console's row identity; see `src/routes/production/placements.js`. |
 | **Element** | A Production-page broadcast unit. **Direct** elements own a dedicated source; **fed** elements are pushed content into a container. Related: **dedicated source** / **feed** — see `src/routes/production/elements.js`. |
@@ -139,6 +140,7 @@ The deciding layer is mirrored to `score.{N}.side_reason`. Manual scope is the c
 
 - `apply_startgg_set` in `server/api/v1/match.py` is the **only** set→match path. There is no direct set→score path.
 - **A match fills exactly one board**, and `bind_board` (`server/api/v1/match.py`) is the only writer of `score.{N}.match` — binding a match another board holds *moves* it, vacating and blanking the old holder. Never write that key directly; the invariant used to live in a click handler and every other caller missed it.
+- **The queue is an order, not a cursor.** `POST /scoreboards/{sb}/next-match` resolves the next waiting fixture and binds it under one lock. Eligible = queued ∧ unbound ∧ undecided ∧ `stage == 'draft'`. Several matches run live at once, so **never** add a stored position — see `server/schedule.py`.
 - **The match owns the series** (games won within the Bo format); boards own only their live game.
 - **Identity gate:** if live players don't match the bound fixture, `score.{N}.match_conflict` raises the app-wide banner; a decided-mismatch auto-retires the binding.
 - **Projector rules** (Match, Commentary, PlayerPlates, PostGame all follow this shape — reuse it, don't invent a new one): resolve records against the Participants registry, write the *full* owned key set via `SetBatch` (value or `""`), wrap `project_all()` startup hooks in try/except so a bad record never blocks boot. A captain-less match projection must never blank a live HUD captain.
@@ -263,6 +265,7 @@ If the app fails to launch due to corrupt `user_data/state.json`: `echo '{}' > u
 | Binding model (pool/playback/transport) | `server/bindings.py`, `server/rio/rotation.py`, `server/api/v1/scoreboards.py` |
 | Match lifecycle / series / start.gg sets | `server/match.py`, `server/api/v1/match.py` (`bind_board` owns board↔match), `server/rio/game_end.py` |
 | Fixture authoring UI (sides, format, series, flip/decide/reopen, board bind) | `src/routes/production/desks/match.jsx` — the only place. The Match tab is **deleted** (`MatchPanel`, `ScoreControls`, `PoolBrowser`, `src/routes/scoreboard_manager/`); `/scoreboard` renders the console for old bookmarks |
+| Match queue (order, "up next" per board) | `server/schedule.py` (`next_up`, `is_up_next_eligible`), `take_next_match` in `server/api/v1/match.py`, `src/routes/production/queue.js` (preview only), the verb on `desks/board.jsx` + `quickface.jsx` |
 | A board's games (pool, playback, rotation transport, game search) | `src/routes/production/games.jsx` (`GamesSection` = panel rows; the dialog = filter + game tables), rendered by `desks/board.jsx`; server side `server/bindings.py`, `server/rio/rotation.py`, `server/api/v1/rotation.py` |
 | Add/modify state keys | `server/state.py`, `src/context/store.jsx` |
 | Add API endpoints | `server/api/v1/` (decorate with `@method`), register in `server/api/__init__.py` |

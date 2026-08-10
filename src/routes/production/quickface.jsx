@@ -6,6 +6,9 @@ import { quickFaceFor } from './elements';
 import { useContainerPush } from './feeds';
 import { useConsoleOffline } from './placements';
 import { boardOfDeskId } from './boards';
+import { useNextUp } from './queue';
+import { takeNextMatch } from '../../context/match';
+import { notifications } from '../../lib/notify';
 import { BoardGameSubject, Subject } from './subject';
 import { SourceToggleRow } from './stage/generic';
 import { ScorecardModeRow, useScorecard } from './stage/scorecard';
@@ -237,23 +240,54 @@ const BracketQuickFace = memo(function BracketQuickFace() {
 const BoardQuickFace = memo(function BoardQuickFace({ id }) {
     const sb = boardOfDeskId(id);
     const d = useBoardDesk(sb);
+    const next = useNextUp();
     const [refreshing, setRefreshing] = useState(false);
+    const [taking, setTaking] = useState(false);
     const refreshHud = () => {
         setRefreshing(true);
         fetch('/api/v1/rio/refresh', { method: 'POST' }).finally(() => setRefreshing(false));
     };
+    const takeNext = () => {
+        setTaking(true);
+        takeNextMatch(sb)
+            .catch(e => notifications.show({ message: `Up next: ${e?.message || e}`, color: 'red' }))
+            .finally(() => setTaking(false));
+    };
+    /*
+     * UP NEXT EARNS THE FIRST SLOT when the queue has something waiting. The rail
+     * is the surface for flying the show, and "that game just ended, put the next
+     * fixture up" is the most live thing a board does — one press instead of
+     * finding the match in a stack and clicking its board chip.
+     *
+     * It displaces RE-READ HUD, never Swap sides. The face is capped at two rows
+     * and the subject takes one, so something has to give — and swap is the
+     * correction a producer makes most often mid-game, where re-read is a recovery
+     * path they reach for at the panel. Anything queued would otherwise take swap
+     * off the card for the whole night.
+     *
+     * The label is bare here and names the fixture only in its tooltip: a 252px
+     * card splitting two buttons cannot hold "Up next · Erin vs Frank" without
+     * truncating it, and the panel is where the fixture is spelled out.
+     */
+    const actions = [
+        ...(next
+            ? [{
+                label: 'Up next', onClick: takeNext, disabled: taking,
+                title: `Put ${next.label} on this board — the next fixture in the queue`,
+            }]
+            : []),
+        { label: 'Swap sides', onClick: d.swapSides },
+        ...(!next && d.transport === 'hud'
+            ? [{
+                label: refreshing ? 'Re-reading…' : 'Re-read HUD',
+                onClick: refreshHud, disabled: refreshing,
+            }]
+            : []),
+    ];
     return (
         <>
             <BoardGameSubject board={sb} />
-            <ActionRow actions={[
-                { label: 'Swap sides', onClick: d.swapSides },
-                ...(d.transport === 'hud'
-                    ? [{
-                        label: refreshing ? 'Re-reading…' : 'Re-read HUD',
-                        onClick: refreshHud, disabled: refreshing,
-                    }]
-                    : []),
-            ]} />
+            <ActionRow actions={actions} />
         </>
     );
 });

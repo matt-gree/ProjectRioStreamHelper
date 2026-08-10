@@ -49,6 +49,30 @@ description: PRSH match fixture model, scoreboard bindings (pool + playback + de
 
 - A board binds via `score.{N}.match = M` — **int id, never a round-name
   string**. Unbinding = `State.Unset` + `Match.clear_scoreboard(sb)`.
+- **The queue is an ORDER, not a cursor** (`server/schedule.py`). A board takes the
+  next fixture waiting for one: `POST /scoreboards/{sb}/next-match` →
+  `Schedule.next_up()` + `bind_board`, **both under one `asyncio.Lock`**. Without
+  the lock two boards advancing in the same tick resolve the same match and the
+  second bind *steals* it, leaving the first board empty.
+  - **Never add a stored position.** A PRSH stream can run several matches at once
+    (two games side by side; one finishes early and its slot takes the next fixture
+    while the other keeps running). A single cursor cannot express that, and a
+    queue that assumed one chain would make the common two-board case
+    unrepresentable. Because "next" is derived, two boards asking take two
+    different matches for free.
+  - **Eligible = queued ∧ unbound ∧ `decided is None` ∧ `stage == 'draft'`**
+    (`Schedule.is_up_next_eligible`). `decided` is the *finished* test — **not
+    `stage`**, because a Bo3 sits at `stage: post` between games and is still the
+    current fixture. `stage == 'draft'` is a separate **anti-bounce** test: without
+    it, moving a board off an undecided fixture leaves it queued, unbound and
+    undecided, so it is instantly "next" again and the verb ping-pongs. A fixture
+    mid-lifecycle is bound by hand from the Match desk instead.
+  - Taking a fixture **does not consume its queue slot** — what stops it being
+    "next" is that a board now holds it.
+  - The client mirrors the rule in `src/routes/production/queue.js` (`useNextUp`)
+    **for the button's label only**; the take sends no id. Keep the two in step.
+  - Tests: `tests/unit/api/test_schedule_next.py`,
+    `src/routes/production/queue.test.jsx`.
 - **A MATCH FILLS EXACTLY ONE BOARD, and `bind_board`
   (`server/api/v1/match.py`) is the only writer of `score.{N}.match`.** Binding
   a match that another board holds **moves** it: vacate the old holder (its

@@ -9,6 +9,13 @@ already broadcast, so a fixture edit re-renders the schedule with no projector.
     schedule.title   optional heading ("Today's Matches")
 
 Deleting a match prunes it from the queue (see api/v1/match.delete_match).
+
+THE QUEUE IS AN ORDER, NOT A CURSOR. There is deliberately no "current position"
+here, and adding one would be a bug: a PRSH stream can have several matches live
+at once (two games side by side on one canvas), and when one finishes early the
+next queued fixture fills *that* slot while the other keeps running. A single
+position can't express that. So "what's next" is resolved per board, from what is
+bound and what is decided — see ``next_up``.
 """
 from server.state import State
 
@@ -46,6 +53,58 @@ class Schedule:
         await State.Set("schedule.queue", clean)
         await State.Save()
         return clean
+
+    @classmethod
+    def is_up_next_eligible(cls, m) -> bool:
+        """Is match ``m`` a fixture still waiting to be put on a board?
+
+        Four conditions, and each one rules out a state that would otherwise make
+        "next" hand back something the producer has already dealt with:
+
+        * **it exists** — a queued id whose match was deleted is not a fixture;
+        * **nothing holds it** — a match fills exactly one board (``bind_board``),
+          so one already on air is not waiting for one;
+        * **its series is undecided** — ``decided`` is the record of a finished
+          fixture. Note this is NOT ``stage``: a Bo3 sits at ``stage: post``
+          between games and is very much still the current fixture, so stage is
+          the wrong question to ask about a *fixture* being done;
+        * **it has never started** (``stage == 'draft'``) — the anti-bounce rule.
+          Without it, moving a board off an undecided fixture leaves that fixture
+          queued, unbound and undecided, so it is immediately "next" again and the
+          verb ping-pongs between two matches. A fixture that has been on a board
+          and been fed (``note_live`` → ``live``) is mid-lifecycle; the producer
+          binds it by hand from the Match desk rather than being offered it as
+          fresh.
+        """
+        try:
+            mid = int(m)
+        except (TypeError, ValueError):
+            return False
+        match = (State.state.get("match", {}) or {}).get(str(mid))
+        if not isinstance(match, dict):
+            return False
+        if match.get("decided") in (1, 2, "1", "2"):
+            return False
+        if (match.get("stage") or "draft") != "draft":
+            return False
+        # Import here: server.match imports nothing from this module, and keeping
+        # it that way is what stops a cycle.
+        from server.match import Match
+        return not Match.bound_scoreboards(mid)
+
+    @classmethod
+    def next_up(cls) -> int | None:
+        """The first queued fixture waiting for a board, or None.
+
+        Board-agnostic on purpose. Two boards asking take two different matches
+        because binding the first removes it from the eligible set, which is what
+        lets a rig run several fixtures at once and fill whichever slot frees up —
+        no per-board queue, no shared cursor.
+        """
+        for m in cls.queue():
+            if cls.is_up_next_eligible(m):
+                return m
+        return None
 
     @classmethod
     async def remove(cls, m) -> list[int]:

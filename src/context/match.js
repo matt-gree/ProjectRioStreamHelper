@@ -44,6 +44,18 @@ export async function bindScoreboard(sb, m) {
     });
 }
 
+/*
+ * Put the next queued fixture on board `sb`.
+ *
+ * "Next" is resolved SERVER-side (Schedule.next_up + bind under one lock), not
+ * passed in: two boards advancing in the same tick would otherwise both send the
+ * same match id and the second bind would steal it from the first. Rejects with
+ * 409 when nothing in the queue is waiting for a board.
+ */
+export async function takeNextMatch(sb) {
+    return req(`/scoreboards/${sb}/next-match`, { ...jsonBody({}), method: "POST" });
+}
+
 /** Swap participant 1↔2 on a match (authoring flip); series wins follow. */
 export async function flipMatch(m) {
     return req(`/match/${m}/flip`, { ...jsonBody({}), method: "POST" });

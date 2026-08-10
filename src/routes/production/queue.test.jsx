@@ -1,0 +1,239 @@
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
+import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
+import { TooltipProvider } from '../../components/ui/tooltip';
+import { SocketContext } from '../../context/socket';
+import { useSettingsStore, useStateStore } from '../../context/store';
+import { useStagingStore } from '../../context/staging';
+import BoardDesk from './desks/board';
+import { useNextUp, useWaitingCount } from './queue';
+
+/*
+ * The queue, from the board's side.
+ *
+ * `useNextUp` is a PREVIEW of the server's `Schedule.next_up` — it exists so the
+ * button can name the fixture it will put up, and the two rules have to stay in
+ * step (tests/unit/api/test_schedule_next.py pins the server half). The take
+ * itself never sends an id: the server re-resolves under a lock.
+ */
+
+const socket = { on: vi.fn(), off: vi.fn(), emit: vi.fn() };
+const ui = (node) => render(
+    <SocketContext value={{ socket }}>
+        <TooltipProvider>{node}</TooltipProvider>
+    </SocketContext>,
+);
+
+beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({}) })));
+    useStagingStore.setState({ pending: {}, order: [] });
+    useSettingsStore.setState({
+        project_rio: { hud_enabled: false },
+        production: {},
+        scoreboards: { active: [1, 2], aliases: {}, binding: {} },
+    });
+});
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+
+const fixture = (n1, n2, over = {}) => ({
+    stage: 'draft', format: { bestOf: 3 }, series: { 1: 0, 2: 0 },
+    player: { 1: { rioName: n1 }, 2: { rioName: n2 } }, ...over,
+});
+
+const state = (over = {}) => useStateStore.setState({
+    score: {}, match: {}, schedule: {}, ...over,
+});
+
+// A probe, so the hooks are tested through React the way they run.
+function Probe() {
+    const next = useNextUp();
+    const waiting = useWaitingCount();
+    return <span data-testid="probe">{next ? `${next.id}:${next.label}` : 'none'}|{waiting}</span>;
+}
+const probe = () => screen.getByTestId('probe').textContent;
+
+describe('useNextUp', () => {
+    it('is the first queued fixture waiting for a board', () => {
+        state({
+            match: { 1: fixture('Alice', 'Bob'), 2: fixture('Carol', 'Dave') },
+            schedule: { queue: [1, 2] },
+        });
+        ui(<Probe />);
+        expect(probe()).toBe('1:Alice vs Bob|2');
+    });
+
+    it('is nothing when the queue is empty', () => {
+        state({ match: { 1: fixture('Alice', 'Bob') } });
+        ui(<Probe />);
+        expect(probe()).toBe('none|0');
+    });
+
+    // A match fills exactly one board, so one already on air is not waiting.
+    it('skips a fixture a board already holds', () => {
+        state({
+            score: { 1: { match: 1 } },
+            match: { 1: fixture('Alice', 'Bob'), 2: fixture('Carol', 'Dave') },
+            schedule: { queue: [1, 2] },
+        });
+        ui(<Probe />);
+        expect(probe()).toBe('2:Carol vs Dave|1');
+    });
+
+    /*
+     * `decided` is the finished test. NOT `stage` — a Bo3 sits at `stage: post`
+     * between games and is still very much the current fixture, so asking stage
+     * whether a FIXTURE is done gets the wrong answer half the time.
+     */
+    it('skips a decided fixture', () => {
+        state({
+            match: { 1: fixture('Alice', 'Bob', { decided: 1 }), 2: fixture('Carol', 'Dave') },
+            schedule: { queue: [1, 2] },
+        });
+        ui(<Probe />);
+        expect(probe()).toBe('2:Carol vs Dave|1');
+    });
+
+    /*
+     * The anti-bounce rule. Without it, moving a board off an undecided fixture
+     * leaves it queued, unbound and undecided — so it is immediately "next" again
+     * and the verb ping-pongs between two matches.
+     */
+    it('does not offer a fixture that has already started as fresh', () => {
+        state({
+            match: { 1: fixture('Alice', 'Bob', { stage: 'live' }), 2: fixture('Carol', 'Dave') },
+            schedule: { queue: [1, 2] },
+        });
+        ui(<Probe />);
+        expect(probe()).toBe('2:Carol vs Dave|1');
+    });
+
+    it('ignores a queued id whose match is gone', () => {
+        state({ match: { 2: fixture('Carol', 'Dave') }, schedule: { queue: [9, 2] } });
+        ui(<Probe />);
+        expect(probe()).toBe('2:Carol vs Dave|1');
+    });
+
+    // Nothing in the queue is waiting: everything is on a board or finished. The
+    // count is what tells a producer that, so it must not read as "queue empty".
+    it('counts nothing waiting when every fixture is placed or done', () => {
+        state({
+            score: { 1: { match: 1 } },
+            match: { 1: fixture('Alice', 'Bob'), 2: fixture('Carol', 'Dave', { decided: 2 }) },
+            schedule: { queue: [1, 2] },
+        });
+        ui(<Probe />);
+        expect(probe()).toBe('none|0');
+    });
+
+    it('falls back to the round label when a fixture has no names yet', () => {
+        state({
+            match: { 1: fixture('', '', { label: 'Winners R2' }) },
+            schedule: { queue: [1] },
+        });
+        ui(<Probe />);
+        expect(probe()).toBe('1:Winners R2|1');
+    });
+});
+
+describe('Up next on a board', () => {
+    it('names the fixture it will put up, rather than saying Next', () => {
+        state({
+            match: { 1: fixture('Alice', 'Bob') },
+            schedule: { queue: [1] },
+        });
+        ui(<BoardDesk board={2} />);
+        expect(screen.getByRole('button', { name: /Up next · Alice vs Bob/ })).toBeInTheDocument();
+    });
+
+    /*
+     * The take is momentary — a producer pressing it at the end of a game means
+     * now, the same rule as Take and the rotation transport. And it sends NO id:
+     * the server resolves and binds under one lock, so two boards pressed together
+     * can't land on the same fixture.
+     */
+    it('takes the next fixture immediately, and sends no match id', async () => {
+        useSettingsStore.setState({
+            project_rio: { hud_enabled: false },
+            production: { confirm: { enabled: true } },
+            scoreboards: { active: [1, 2], aliases: {}, binding: {} },
+        });
+        state({ match: { 1: fixture('Alice', 'Bob') }, schedule: { queue: [1] } });
+        ui(<BoardDesk board={2} />);
+        fireEvent.click(screen.getByRole('button', { name: /Up next/ }));
+
+        await waitFor(() => expect(fetch).toHaveBeenCalledWith(
+            '/api/v1/scoreboards/2/next-match',
+            expect.objectContaining({ method: 'POST' }),
+        ));
+        const call = fetch.mock.calls.find(c => String(c[0]).includes('next-match'));
+        expect(JSON.parse(call[1].body)).toEqual({});
+        expect(useStagingStore.getState().order).toEqual([]);
+    });
+
+    // Nothing waiting: no button. A disabled one would be a control whose whole
+    // job is to explain that there is nothing to do.
+    it('is absent when nothing in the queue is waiting', () => {
+        state({ match: { 1: fixture('Alice', 'Bob', { decided: 1 }) }, schedule: { queue: [1] } });
+        ui(<BoardDesk board={2} />);
+        expect(screen.queryByRole('button', { name: /Up next/ })).not.toBeInTheDocument();
+    });
+
+    // The bind line is the thing the verb changes, so it sits beside it — and an
+    // unbound board says so rather than leaving the row blank.
+    it('says a board has no match beside the verb', () => {
+        state({ match: { 1: fixture('Alice', 'Bob') }, schedule: { queue: [1] } });
+        ui(<BoardDesk board={2} />);
+        expect(screen.getByText('No match on this board')).toBeInTheDocument();
+    });
+});
+
+/*
+ * The rail card is capped at two rows and the subject takes one, so the action row
+ * is a budget. Up next displaces Re-read HUD, never Swap sides: swap is the
+ * correction a producer makes most often mid-game, and anything sitting in the
+ * queue would otherwise take it off the card for the whole night.
+ */
+describe('Up next on a rail card', () => {
+    const railFace = async (board) => {
+        const { deskQuickFace } = await import('./quickface');
+        const { boardDeskId } = await import('./boards');
+        const Face = deskQuickFace(boardDeskId(board));
+        ui(<Face id={boardDeskId(board)} />);
+    };
+
+    it('keeps Swap sides when it offers the next fixture', async () => {
+        useSettingsStore.setState({
+            project_rio: { hud_enabled: true },
+            production: {},
+            scoreboards: { active: [1], aliases: {}, binding: {} },
+        });
+        state({ match: { 1: fixture('Alice', 'Bob') }, schedule: { queue: [1] } });
+        await railFace(1);
+        expect(screen.getByRole('button', { name: 'Up next' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Swap sides' })).toBeInTheDocument();
+        // Re-read is the one that steps aside — it's a recovery path, and the panel
+        // still has it.
+        expect(screen.queryByRole('button', { name: /Re-read/ })).not.toBeInTheDocument();
+    });
+
+    // The card has no room to spell the fixture out beside a second button, so the
+    // name lives in the tooltip and the panel is where it is written in full.
+    it('names the fixture in the tooltip rather than the label', async () => {
+        state({ match: { 1: fixture('Alice', 'Bob') }, schedule: { queue: [1] } });
+        await railFace(1);
+        expect(screen.getByRole('button', { name: 'Up next' }))
+            .toHaveAttribute('title', expect.stringContaining('Alice vs Bob'));
+    });
+
+    it('falls back to swap and re-read when nothing is waiting', async () => {
+        useSettingsStore.setState({
+            project_rio: { hud_enabled: true },
+            production: {},
+            scoreboards: { active: [1], aliases: {}, binding: {} },
+        });
+        state({ match: {}, schedule: {} });
+        await railFace(1);
+        expect(screen.queryByRole('button', { name: 'Up next' })).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Swap sides' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Re-read HUD/ })).toBeInTheDocument();
+    });
+});
