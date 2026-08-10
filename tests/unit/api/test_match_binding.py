@@ -10,8 +10,11 @@ server rather than the click handler.
 import pytest
 from fastapi import HTTPException
 
-from server.api.v1.match import bind_board, bind_scoreboard, BindPayload
+from server.api.v1.match import (
+    bind_board, bind_scoreboard, take_next_match, BindPayload,
+)
 from server.match import Match, default_match
+from server.schedule import Schedule
 from server.state import State
 from server.utils.deep_dict import deep_get
 
@@ -109,7 +112,8 @@ async def test_binding_a_board_that_holds_another_match_replaces_it():
 
 
 @pytest.mark.asyncio
-async def test_route_moves_the_match_and_reports_it():
+async def test_route_moves_the_match_and_reports_it(rig):
+    rig(1, 2)
     m = await make_match()
     await bind_scoreboard(1, BindPayload(match=m))
 
@@ -117,6 +121,37 @@ async def test_route_moves_the_match_and_reports_it():
 
     assert result == {"success": True, "match": m}
     assert Match.bound_scoreboards(m) == [2]
+
+
+@pytest.mark.asyncio
+async def test_binding_a_board_outside_the_rig_is_a_404():
+    """A board id arrives from a request and nothing downstream checks it.
+
+    Binding a match to a board that is not in `scoreboards.active` wrote
+    `score.{sb}.match` for a board no layout reads and no rack row lists — state
+    for a phantom board, persisted, with no surface able to show or clear it.
+    Found by driving `POST /scoreboards/2/next-match` against a one-board rig,
+    which reported success. The default rig here is one board, so board 2 is the
+    unknown one.
+    """
+    m = await make_match()
+    with pytest.raises(HTTPException) as exc:
+        await bind_scoreboard(2, BindPayload(match=m))
+    assert exc.value.status_code == 404
+    assert "rig" in exc.value.detail
+    assert deep_get(State.state, "score.2.match") is None
+    assert Match.bound_scoreboards(m) == []
+
+
+@pytest.mark.asyncio
+async def test_taking_the_next_fixture_onto_a_board_outside_the_rig_is_a_404():
+    a = await make_match()
+    await Schedule.set_queue([a])
+    with pytest.raises(HTTPException) as exc:
+        await take_next_match(3)
+    assert exc.value.status_code == 404
+    # And it consumed nothing on the way out.
+    assert Schedule.next_up() == a
 
 
 @pytest.mark.asyncio

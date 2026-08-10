@@ -55,6 +55,53 @@ class Schedule:
         return clean
 
     @classmethod
+    async def append(cls, m) -> list[int]:
+        """Put match ``m`` at the end of the running order (no-op if already in).
+
+        Called when a match is CREATED, which is why it exists as its own verb
+        rather than the UI sending a whole list back: a new fixture is almost
+        always part of tonight, and a producer who authors eight matches should
+        not have to enrol each one. Taking one out again is one click on the Match
+        desk — the queue stays a curated order, it just starts out useful.
+        """
+        try:
+            mid = int(m)
+        except (TypeError, ValueError):
+            return cls.queue()
+        q = cls.queue()
+        if mid in q:
+            return q
+        q.append(mid)
+        await State.Set("schedule.queue", q)
+        await State.Save()
+        return q
+
+    @classmethod
+    async def move(cls, m, delta: int) -> list[int]:
+        """Shift match ``m`` by ``delta`` places in the order, clamped to the ends.
+
+        A per-id verb, not a whole-list write. The UI used to send the entire
+        reordered queue back, which silently drops anything added between its read
+        and its PUT — and now that creating a match enrols it, that window is real.
+        """
+        try:
+            mid = int(m)
+            step = int(delta)
+        except (TypeError, ValueError):
+            return cls.queue()
+        q = cls.queue()
+        if mid not in q or step == 0:
+            return q
+        i = q.index(mid)
+        j = max(0, min(len(q) - 1, i + step))
+        if i == j:
+            return q
+        q.insert(j, q.pop(i))
+        await State.Set("schedule.queue", q)
+        await State.Save()
+        return q
+
+    @classmethod
     def is_up_next_eligible(cls, m) -> bool:
         """Is match ``m`` a fixture still waiting to be put on a board?
 

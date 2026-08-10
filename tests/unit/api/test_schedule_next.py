@@ -126,9 +126,10 @@ async def test_take_next_leaves_the_queue_alone():
 
 
 @pytest.mark.asyncio
-async def test_two_boards_take_two_different_fixtures():
+async def test_two_boards_take_two_different_fixtures(rig):
     """The whole point on a multi-board rig. Sequentially here; the concurrent
     case is below."""
+    rig(1, 2)
     a, b = await make_match(), await make_match("Carol", "Dave")
     await Schedule.set_queue([a, b])
 
@@ -141,7 +142,7 @@ async def test_two_boards_take_two_different_fixtures():
 
 
 @pytest.mark.asyncio
-async def test_concurrent_takes_do_not_land_on_one_fixture(monkeypatch):
+async def test_concurrent_takes_do_not_land_on_one_fixture(monkeypatch, rig):
     """Without the lock both requests resolve the same match, the second bind
     STEALS it (exclusivity doing its job) and the first board ends up empty.
 
@@ -152,6 +153,7 @@ async def test_concurrent_takes_do_not_land_on_one_fixture(monkeypatch):
     window is the real production shape: `bind_board` awaits before its first
     write.
     """
+    rig(1, 2)
     a, b = await make_match(), await make_match("Carol", "Dave")
     await Schedule.set_queue([a, b])
 
@@ -172,7 +174,8 @@ async def test_concurrent_takes_do_not_land_on_one_fixture(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_take_next_says_why_when_nothing_is_waiting():
+async def test_take_next_says_why_when_nothing_is_waiting(rig):
+    rig(1, 2)
     a = await make_match()
     await Schedule.set_queue([a])
     await take_next_match(1)
@@ -184,13 +187,14 @@ async def test_take_next_says_why_when_nothing_is_waiting():
 
 
 @pytest.mark.asyncio
-async def test_take_next_refuses_a_rotating_board(monkeypatch):
+async def test_take_next_refuses_a_rotating_board(monkeypatch, rig):
     """Same rule as an explicit bind: a rotation has no fixed sides to project a
     fixture onto. Mirrored here rather than left to bind_board so the queue verb
     fails before it consumes anything."""
     import server.bindings
     monkeypatch.setattr(server.bindings, "is_rotating", lambda sb: True)
     monkeypatch.setattr(server.bindings, "transport", lambda sb: "api")
+    rig(1, 2)
     a = await make_match()
     await Schedule.set_queue([a])
 

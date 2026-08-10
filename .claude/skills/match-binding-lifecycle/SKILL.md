@@ -71,8 +71,34 @@ description: PRSH match fixture model, scoreboard bindings (pool + playback + de
     "next" is that a board now holds it.
   - The client mirrors the rule in `src/routes/production/queue.js` (`useNextUp`)
     **for the button's label only**; the take sends no id. Keep the two in step.
+  - **Creating a match enrols it** (`create_match` and the from-startgg create path
+    both end in `Schedule.append`). A producer authoring eight fixtures should not
+    have to enrol each one — before this they could build a night's worth and find
+    the schedule overlay empty and every board's Up next silent, with nothing
+    saying why. Taking one back out is `DELETE /schedule/queue/{m}`; re-loading a
+    set into an *existing* match must not reshuffle the order.
+  - **Membership and position are PER-ID verbs**: `POST`/`DELETE`
+    `/schedule/queue/{m}` and `POST /schedule/queue/{m}/move?delta=±1`
+    (`Schedule.append` / `remove` / `move`, which clamps). The whole-list
+    `PUT /schedule` survives for the title, but **the UI must not use it for a
+    one-match change** — it sends back the order it read, so anything added
+    meanwhile silently vanishes, and enrolment-on-create makes that window real.
+    `test_moving_does_not_drop_a_match_added_meanwhile` pins both halves.
+  - **The order is authored on the Match desk**, whose accordion stack *is* the
+    order (`useQueueOrder` → queued first, then unenrolled). The Upcoming Schedule
+    element's stage panel is display-only.
   - Tests: `tests/unit/api/test_schedule_next.py`,
+    `tests/unit/api/test_schedule_queue.py`,
     `src/routes/production/queue.test.jsx`.
+- **A board id off a request must be in the rig** — `require_board(sb)` (404),
+  called by `bind_scoreboard`, `take_next_match` and `/startgg/load-set`. Without
+  it, binding to a board outside `scoreboards.active` wrote `score.{sb}.match` for
+  a board no layout reads and no rack row lists: persisted phantom state with no
+  surface able to show or clear it. The guard is on the **routes**, not in
+  `bind_board` — "is this id in the rig" is input validation whose answer is an
+  HTTP status, where `bind_board` holds the data invariant for callers that already
+  have a real board. Tests binding a multi-board rig use the `rig(...)` conftest
+  fixture.
 - **A MATCH FILLS EXACTLY ONE BOARD, and `bind_board`
   (`server/api/v1/match.py`) is the only writer of `score.{N}.match`.** Binding
   a match that another board holds **moves** it: vacate the old holder (its

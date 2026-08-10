@@ -158,6 +158,25 @@ def reset_singletons():
 
 
 @pytest.fixture
+def rig():
+    """Put boards in the rig for a test (`rig(1, 2, 3)`).
+
+    The default rig is one board, and the bind routes 404 a board that is not in
+    it (`require_board`) — a board id off a request must not write
+    `score.{N}.match` for a board no layout reads and no rack row lists. A test
+    exercising a two- or three-board rig has to actually have one.
+    """
+    from server.settings import Settings
+    from server.utils.deep_dict import deep_set
+
+    def _rig(*ids):
+        deep_set(Settings.settings, "scoreboards.active", [int(i) for i in ids])
+        Settings.revision += 1
+
+    return _rig
+
+
+@pytest.fixture
 def set_setting():
     """Set a dotted settings key for the duration of a test (auto-restored)."""
     from server.settings import Settings

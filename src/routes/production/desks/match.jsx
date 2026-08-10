@@ -1,7 +1,7 @@
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, memo, useEffect, useMemo, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import {
-    ArrowLeftRight, ChevronRight, ChevronsUpDown, Check, Plus, Trash2, Trophy,
+    ArrowLeftRight, ChevronRight, ChevronsUpDown, Check, ListOrdered, Plus, Trash2, Trophy,
 } from 'lucide-react';
 import { useStateStore } from '../../../context/store';
 import {
@@ -24,8 +24,10 @@ import { SimpleTooltip } from '../../../components/ui/simple-tooltip';
 import { notifications } from '../../../lib/notify';
 import { cn } from '../../../lib/utils';
 import { KIT_FIELD, FieldRow, KitColumn, KitColumns } from '../kit';
-import { StagedDot } from '../controls';
+import { StagedDot, MoveButtons } from '../controls';
 import { useActiveBoards, useMatchBindableBoards } from '../boards';
+import { useQueueOrder } from '../queue';
+import { queueMatch, unqueueMatch, moveQueuedMatch } from '../../../context/schedule';
 
 /*
  * Match desk — the console's fixture-authoring surface (the full authoring
@@ -511,7 +513,9 @@ function clinchedSide(match) {
 // series / board binds. Every broadcast-visible edit routes through the staging
 // gateway; New / Next game / Delete are momentary. Deletable via the header
 // trash (a two-step Popover confirm, no blocking browser dialog).
-const MatchAccordion = memo(function MatchAccordion({ m, open, onToggle, active, boundMap, gameModes, canBind }) {
+const MatchAccordion = memo(function MatchAccordion({
+    m, open, onToggle, active, boundMap, gameModes, canBind, queuePos, queueLen,
+}) {
     const draft = useMatchDraft(m);
     const stage = draft.match?.stage || 'draft';
     const [confirmDel, setConfirmDel] = useState(false);
@@ -633,6 +637,39 @@ const MatchAccordion = memo(function MatchAccordion({ m, open, onToggle, active,
                 'flex items-center gap-2 px-2 py-1.5',
                 open && 'border-b border-border bg-night-700/50',
             )}>
+                {/* THE POSITION IN THE RUNNING ORDER, and the two verbs that
+                    change it — at the head of the row, because that is what the
+                    number is: this row's place in the list it is sitting in. The
+                    stack is ordered by the queue, so moving a match here moves it
+                    on the schedule overlay and changes which fixture a board's Up
+                    next offers, and all three are one fact rather than three
+                    surfaces to keep in agreement.
+
+                    Visible at rest, not hover-revealed. Reordering is a
+                    scan-the-whole-list task — arrows that appear one row at a time
+                    under the pointer cannot be scanned, and the last control this
+                    console hid on hover (a board's Remove) is in the skill as the
+                    mistake not to repeat. */}
+                {queuePos != null && (
+                    /* The group carries the name, because the digit on its own
+                       has none — "1" beside two arrows tells a screen reader
+                       nothing, and `role="group"` is what lets the number be read
+                       as this row's place rather than as loose content. */
+                    <div
+                        role="group"
+                        aria-label={`Match ${m}: position ${queuePos} of ${queueLen} in the running order`}
+                        className="flex shrink-0 items-center gap-1"
+                    >
+                        <MoveButtons
+                            label={`match ${m} in the running order`}
+                            canUp={queuePos > 1} canDown={queuePos < queueLen}
+                            onUp={() => moveQueuedMatch(m, -1)} onDown={() => moveQueuedMatch(m, 1)}
+                        />
+                        <span aria-hidden="true" className="w-4 text-center text-[11px] tabular-nums text-muted-foreground">
+                            {queuePos}
+                        </span>
+                    </div>
+                )}
                 <button
                     type="button"
                     onClick={onToggle}
@@ -719,6 +756,35 @@ const MatchAccordion = memo(function MatchAccordion({ m, open, onToggle, active,
                     behind an @lg breakpoint, so a control mounted there would
                     vanish on a narrow panel — and the feedback for a flip is the
                     collapsed row's own "A vs B", which is right here. */}
+                {/* MEMBERSHIP, beside the record's other actions — whether this
+                    fixture is part of tonight at all, which is a property of the
+                    record and not of its position. A new match arrives enrolled
+                    (create_match appends it), so this is normally the way OUT: a
+                    placeholder, or a fixture kept for reference, that should not
+                    show on the schedule overlay or be offered to a board. */}
+                <SimpleTooltip label={queuePos != null
+                    ? 'In the running order — click to take it out of the schedule and out of Up next'
+                    : 'Not in the running order — click to add it to the end'}>
+                    <button
+                        type="button"
+                        onClick={() => (queuePos != null ? unqueueMatch(m) : queueMatch(m))
+                            .catch(e => notifications.show({
+                                message: `Running order: ${e?.message || e}`, color: 'red',
+                            }))}
+                        aria-label={queuePos != null
+                            ? `Take match ${m} out of the running order`
+                            : `Add match ${m} to the running order`}
+                        aria-pressed={queuePos != null}
+                        className={cn(
+                            'shrink-0 rounded p-1 transition-colors hover:bg-secondary',
+                            queuePos != null
+                                ? 'text-rio-400 hover:text-rio-300'
+                                : 'text-muted-foreground/60 hover:text-foreground',
+                        )}
+                    >
+                        <ListOrdered size={14} />
+                    </button>
+                </SimpleTooltip>
                 <SimpleTooltip label="Flip the fixture's sides — series wins follow the player">
                     <button
                         type="button"
@@ -942,6 +1008,28 @@ export default function MatchDesk() {
         () => Object.keys(matches).filter(k => /^\d+$/.test(k)).sort((a, b) => Number(a) - Number(b)),
         [matches],
     );
+    /*
+     * THE STACK IS THE RUNNING ORDER. Queued matches first, in `schedule.queue`
+     * order, then anything not enrolled, by id.
+     *
+     * The order used to be authored inside the Upcoming Schedule element's stage
+     * panel — a ticker's settings — so tonight's running order was edited in a
+     * different place from the fixtures it orders, in a second list that could
+     * disagree with this one. One list, and it is this one: what a producer sees
+     * top-to-bottom here is what the schedule overlay draws and the sequence a
+     * board's Up next walks.
+     *
+     * `newestId` deliberately stays the highest ID, not the last row: "default to
+     * the newest match" means the one just created, wherever it sits in the order.
+     */
+    const queueOrder = useQueueOrder();
+    const { order, queuePos, queuedCount } = useMemo(() => {
+        const pos = {};
+        queueOrder.forEach((id, i) => { pos[id] = i + 1; });
+        const rest = ids.filter(id => pos[id] == null);
+        return { order: [...queueOrder, ...rest], queuePos: pos, queuedCount: queueOrder.length };
+    }, [queueOrder, ids]);
+
     const newestId = ids[ids.length - 1] || null;
     const effectiveOpen = openId === null ? newestId : (openId || null);
 
@@ -971,17 +1059,31 @@ export default function MatchDesk() {
                 </Stack>
             ) : (
                 <Stack gap="xs">
-                    {ids.map(id => (
-                        <MatchAccordion
-                            key={id}
-                            m={id}
-                            open={effectiveOpen === id}
-                            onToggle={() => setOpenId(effectiveOpen === id ? '' : id)}
-                            active={active}
-                            boundMap={boundMap}
-                            gameModes={gameModes}
-                            canBind={canBind}
-                        />
+                    {order.map((id, i) => (
+                        <Fragment key={id}>
+                            {/* The one rule between the two groups, stated where
+                                the groups meet rather than as a heading over each.
+                                It only appears when there IS an unenrolled match —
+                                normally every fixture is in the order, and a
+                                divider announcing an empty second group would be
+                                furniture. */}
+                            {i === queuedCount && queuedCount > 0 && (
+                                <Text size="xs" className="pt-1.5 text-muted-foreground/70">
+                                    Not in the running order — no schedule slot, never offered as a board’s next fixture.
+                                </Text>
+                            )}
+                            <MatchAccordion
+                                m={id}
+                                open={effectiveOpen === id}
+                                onToggle={() => setOpenId(effectiveOpen === id ? '' : id)}
+                                active={active}
+                                boundMap={boundMap}
+                                gameModes={gameModes}
+                                canBind={canBind}
+                                queuePos={queuePos[id] ?? null}
+                                queueLen={queuedCount}
+                            />
+                        </Fragment>
                     ))}
                     <Button size="xs" variant="outline" disabled={creating} onClick={onNew} className="self-start">
                         <Plus size={13} className="mr-1" /> New match

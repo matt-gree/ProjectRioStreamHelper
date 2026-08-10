@@ -5,7 +5,9 @@ import { SocketContext } from '../../context/socket';
 import { useSettingsStore, useStateStore } from '../../context/store';
 import { useStagingStore } from '../../context/staging';
 import BoardDesk from './desks/board';
-import { useNextUp, useWaitingCount } from './queue';
+import MatchDesk from './desks/match';
+import ScheduleStage from './stage/schedule';
+import { useNextUp, useQueueOrder, useWaitingCount } from './queue';
 
 /*
  * The queue, from the board's side.
@@ -47,9 +49,15 @@ const state = (over = {}) => useStateStore.setState({
 function Probe() {
     const next = useNextUp();
     const waiting = useWaitingCount();
-    return <span data-testid="probe">{next ? `${next.id}:${next.label}` : 'none'}|{waiting}</span>;
+    const order = useQueueOrder();
+    return (
+        <span data-testid="probe">
+            {next ? `${next.id}:${next.label}` : 'none'}|{waiting}|{order.join(',')}
+        </span>
+    );
 }
-const probe = () => screen.getByTestId('probe').textContent;
+const probe = () => screen.getByTestId('probe').textContent.split('|').slice(0, 2).join('|');
+const orderOf = () => screen.getByTestId('probe').textContent.split('|')[2];
 
 describe('useNextUp', () => {
     it('is the first queued fixture waiting for a board', () => {
@@ -183,6 +191,162 @@ describe('Up next on a board', () => {
         state({ match: { 1: fixture('Alice', 'Bob') }, schedule: { queue: [1] } });
         ui(<BoardDesk board={2} />);
         expect(screen.getByText('No match on this board')).toBeInTheDocument();
+    });
+});
+
+/*
+ * THE RUNNING ORDER IS AUTHORED ON THE MATCH DESK.
+ *
+ * It used to be authored inside the Upcoming Schedule element's stage panel — a
+ * ticker's settings — which made tonight's order a second list of the same
+ * matches, in a different place from the fixtures it orders, free to disagree with
+ * the desk's stack. These tests pin that there is now exactly one place to change
+ * it, and that the desk's stack IS the order.
+ */
+describe('useQueueOrder', () => {
+    it('is the queue, in order', () => {
+        state({
+            match: { 1: fixture('Alice', 'Bob'), 2: fixture('Carol', 'Dave') },
+            schedule: { queue: [2, 1] },
+        });
+        ui(<Probe />);
+        expect(orderOf()).toBe('2,1');
+    });
+
+    // The server prunes a deleted match from the queue, but a client can see the
+    // two writes out of order — a position with no fixture is not a position.
+    it('drops a queued id whose match is gone, and de-duplicates', () => {
+        state({ match: { 1: fixture('Alice', 'Bob') }, schedule: { queue: [9, 1, 1] } });
+        ui(<Probe />);
+        expect(orderOf()).toBe('1');
+    });
+});
+
+describe('The Match desk owns the running order', () => {
+    const three = () => state({
+        match: {
+            1: fixture('Alice', 'Bob'),
+            2: fixture('Carol', 'Dave'),
+            3: fixture('Erin', 'Frank'),
+        },
+        schedule: { queue: [3, 1] },
+    });
+
+    // The stack is the order: queued first in queue order, then whatever is not
+    // enrolled. Read the position numbers rather than the names — the number is
+    // the claim being made.
+    it('stacks the matches in queue order, unenrolled ones last', () => {
+        three();
+        ui(<MatchDesk />);
+        const rows = screen.getAllByRole('button', { name: /^(Take match|Add match) \d+/ });
+        expect(rows.map(b => b.getAttribute('aria-label'))).toEqual([
+            'Take match 3 out of the running order',
+            'Take match 1 out of the running order',
+            'Add match 2 to the running order',
+        ]);
+    });
+
+    /*
+     * The number is the claim this row makes, and it needs a name: a bare "1"
+     * between two arrows reads as loose content, so the position rides a labelled
+     * group and the digit itself is aria-hidden.
+     */
+    it('numbers each queued row with its place in the order', () => {
+        three();
+        ui(<MatchDesk />);
+        expect(screen.getByRole('group', { name: 'Match 3: position 1 of 2 in the running order' }))
+            .toBeInTheDocument();
+        expect(screen.getByRole('group', { name: 'Match 1: position 2 of 2 in the running order' }))
+            .toBeInTheDocument();
+        // The unenrolled match has no position at all, not position 3.
+        expect(screen.queryByRole('group', { name: /Match 2: position/ })).not.toBeInTheDocument();
+    });
+
+    /*
+     * Reorder asks the server to move ONE match. Sending the whole reordered list
+     * back would drop anything added between this client's read and its write —
+     * and creating a match now enrols it, so that window is real
+     * (tests/unit/api/test_schedule_queue.py pins the server half).
+     */
+    it('moves one match by id rather than sending the whole order back', async () => {
+        three();
+        ui(<MatchDesk />);
+        fireEvent.click(screen.getByRole('button', { name: /Move match 1 in the running order up/ }));
+        await waitFor(() => expect(fetch).toHaveBeenCalledWith(
+            '/api/v1/schedule/queue/1/move?delta=-1',
+            expect.objectContaining({ method: 'POST' }),
+        ));
+    });
+
+    // The arrows bound at the ends of the queue, not the ends of the stack — the
+    // unenrolled group below has no position to swap with.
+    it('will not move the first match up or the last queued match down', () => {
+        three();
+        ui(<MatchDesk />);
+        expect(screen.getByRole('button', { name: /Move match 3 in the running order up/ })).toBeDisabled();
+        expect(screen.getByRole('button', { name: /Move match 1 in the running order down/ })).toBeDisabled();
+    });
+
+    it('takes a match out of the order, and puts one back', async () => {
+        three();
+        ui(<MatchDesk />);
+        fireEvent.click(screen.getByRole('button', { name: 'Take match 3 out of the running order' }));
+        await waitFor(() => expect(fetch).toHaveBeenCalledWith(
+            '/api/v1/schedule/queue/3', expect.objectContaining({ method: 'DELETE' }),
+        ));
+        fireEvent.click(screen.getByRole('button', { name: 'Add match 2 to the running order' }));
+        await waitFor(() => expect(fetch).toHaveBeenCalledWith(
+            '/api/v1/schedule/queue/2', expect.objectContaining({ method: 'POST' }),
+        ));
+    });
+
+    // Normally every fixture is enrolled (creating one appends it), so the divider
+    // would be furniture on the common case.
+    it('explains the second group only when something is out of the order', () => {
+        state({ match: { 1: fixture('Alice', 'Bob') }, schedule: { queue: [1] } });
+        ui(<MatchDesk />);
+        expect(screen.queryByText(/Not in the running order/)).not.toBeInTheDocument();
+        cleanup();
+        three();
+        ui(<MatchDesk />);
+        expect(screen.getByText(/Not in the running order/)).toBeInTheDocument();
+    });
+});
+
+/*
+ * The ticker's panel keeps what is genuinely the OVERLAY's — its heading and each
+ * match's display time — and nothing that changes the order. One place to edit it.
+ */
+describe('The Upcoming Schedule panel no longer authors the order', () => {
+    const element = { id: 'schedule', name: 'Upcoming Schedule' };
+
+    beforeEach(() => {
+        state({
+            match: { 1: fixture('Alice', 'Bob'), 2: fixture('Carol', 'Dave') },
+            schedule: { queue: [2, 1], title: 'Tonight' },
+        });
+    });
+
+    it('has no reorder, remove or add controls', () => {
+        ui(<ScheduleStage element={element} />);
+        expect(screen.queryByRole('button', { name: /Move .* up/ })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Remove from queue/ })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Add match to schedule/ })).not.toBeInTheDocument();
+    });
+
+    it('keeps the heading and a display time per match, and says where the order lives', () => {
+        ui(<ScheduleStage element={element} />);
+        expect(screen.getByDisplayValue('Tonight')).toBeInTheDocument();
+        expect(screen.getByLabelText('Display time for match 2')).toBeInTheDocument();
+        expect(screen.getByLabelText('Display time for match 1')).toBeInTheDocument();
+        expect(screen.getByText(/order set on the Match desk/)).toBeInTheDocument();
+    });
+
+    it('reads the order rather than owning it', () => {
+        ui(<ScheduleStage element={element} />);
+        // Carol vs Dave is queued first, so it draws first.
+        const names = screen.getAllByText(/vs/).map(n => n.textContent);
+        expect(names[0]).toMatch(/Carol vs Dave/);
     });
 });
 

@@ -86,11 +86,19 @@ async def get_match(m: int):
 
 @router.post("", response_class=ORJSONResponse)
 async def create_match():
-    """Create the next match with default fields. Returns its id + body."""
+    """Create the next match with default fields, enrolled in the running order.
+
+    A new fixture joins `schedule.queue` because that is what creating one almost
+    always means — it is tonight's next match. Before this, a producer could
+    author eight fixtures and find the schedule overlay empty and every board's
+    Up next silent, with nothing on the desk saying why. Taking one back out is
+    one click on the Match desk (`DELETE /schedule/queue/{m}`).
+    """
     m = Match.next_id()
     body = default_match()
     await State.Set(f"match.{m}", body)
     await State.Save()
+    await Schedule.append(m)
     return {"id": m, "match": body}
 
 
@@ -308,6 +316,10 @@ async def match_from_startgg(payload: StartGGSetPayload):
         m = Match.next_id()
         await State.Set(f"match.{m}", default_match())
         await State.Save()
+        # Same rule as create_match: a set pulled off the bracket is a fixture for
+        # tonight. Reusing an existing match leaves the order alone — it is already
+        # placed, and re-loading a set must not shuffle the running order.
+        await Schedule.append(m)
 
     await apply_startgg_set(m, s, payload.setId)
     return {"id": m, "created": created, "match": Match.get(m)}
@@ -315,6 +327,28 @@ async def match_from_startgg(payload: StartGGSetPayload):
 
 # Binding lives under /scoreboards/{N}/match but is owned here (it's match logic).
 bind_router = APIRouter(prefix="/scoreboards", tags=["match"])
+
+
+def require_board(sb: int) -> int:
+    """404 unless board ``sb`` is actually in the rig.
+
+    Board ids arrive from requests, and nothing downstream checks them: binding a
+    match to a board that does not exist writes `score.{sb}.match` for a board no
+    layout reads and no rack row lists — a phantom board's state that persists and
+    that the UI has no way to show or clear. Found by driving
+    `POST /scoreboards/2/next-match` against a one-board rig, which happily
+    reported success.
+
+    The guard belongs on the ROUTES, not in `bind_board`: "is this id in the rig"
+    is input validation whose answer is an HTTP status, where `bind_board` holds
+    the data invariant (a match fills exactly one board) for callers that already
+    have a real board.
+    """
+    from server.settings import Settings
+    active = Settings.Get("scoreboards.active", [1]) or [1]
+    if int(sb) not in [int(x) for x in active]:
+        raise HTTPException(404, f"scoreboard {sb} is not in the rig")
+    return int(sb)
 
 
 async def _unbind_board(sb: int) -> None:
@@ -368,6 +402,7 @@ async def bind_scoreboard(sb: int, payload: BindPayload):
     A match already on another board is MOVED here, not copied — see
     ``bind_board``, which owns that rule for every caller.
     """
+    require_board(sb)
     m = payload.match
     if m is not None and not Match.exists(m):
         raise HTTPException(404, f"match {m!r} not found")
@@ -411,6 +446,7 @@ async def take_next_match(sb: int):
     409 when the queue has nothing waiting, so the producer gets told why rather
     than watching a button do nothing.
     """
+    require_board(sb)
     async with _take_next_lock:
         m = Schedule.next_up()
         if m is None:

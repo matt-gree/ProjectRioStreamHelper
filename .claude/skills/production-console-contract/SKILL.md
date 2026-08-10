@@ -1040,6 +1040,36 @@ somewhere, and the conflict banner's "Go to board" selects the board's desk.
   the bound board. Decide passes `liveValue: decided`, so Reopen-then-Decide
   leaves nothing pending, the same toggle-twice rule as every other staged control.
 
+#### The stack IS the running order
+
+- **`schedule.queue` is authored here** (`useQueueOrder` → queued matches in order,
+  then anything unenrolled). It used to be authored inside the **Upcoming Schedule
+  element's stage panel** — a ticker's settings — so tonight's running order was
+  edited in a different place from the fixtures it orders, as a second list of the
+  same matches free to disagree with this one. That panel is now display-only:
+  heading, and each match's display time (which is per *match*, `scheduledAt`, so
+  it follows a fixture when the order changes).
+- **Position and its two verbs sit at the HEAD of the row**, before the chevron,
+  because the number is this row's place in the list it is sitting in. Moving a
+  match here moves it on the schedule overlay and changes which fixture a board's
+  Up next offers — one fact, not three surfaces to keep in agreement.
+- **Visible at rest, never hover-revealed.** Reordering is a scan-the-whole-list
+  task and arrows that appear one row at a time under the pointer cannot be
+  scanned. (Same rule that brought a board's Remove out of hiding.)
+- **The position rides a labelled `role="group"`** and the digit is `aria-hidden`:
+  a bare "1" between two arrows has no accessible name, so the group carries
+  `Match {m}: position {n} of {len} in the running order`.
+- **Membership is an icon toggle with the record's other actions**, because whether
+  a fixture is part of tonight is a property of the record, not of its position.
+  Creating a match **enrols** it, so this is normally the way *out* — a placeholder
+  or a kept-for-reference fixture that should not reach the schedule overlay or be
+  offered to a board.
+- **The second group's one line appears only when something is out of the order.**
+  Normally everything is enrolled, and a divider announcing an empty group is
+  furniture.
+- Reorder and membership are **per-id calls** (`src/context/schedule.js`) — never
+  send the whole list back; see the `match-binding-lifecycle` skill for why.
+
 ### A board is a desk
 
 `src/routes/production/desks/board.jsx` + `boards.js`. A board feeds the
@@ -1068,7 +1098,7 @@ sources).
 - **RIG MEMBERSHIP IS THE SECTION'S; the stage panel owns the board's
   PROPERTIES.** The `+` in the `BOARDS` header adds (same rule as a scene's `+`:
   the affordance that brings a row into being lives in that section's header), and
-  a per-row trash removes (`RowRemove` — hover/`focus-within` revealed, after the
+  a per-row trash removes (`RowRemove` — **visible at rest**, muted until hover, after the
   pin, a confirm that states the *consequence*). The panel keeps the name, the
   wiring and the game state. Remove lived on the panel first and the producer
   could not find it: the verb that ends a row's existence was inside the row, four

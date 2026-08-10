@@ -143,7 +143,8 @@ async def test_apply_odd_totalgames_unchanged():
 # --- /startgg/load-set (match-first) ---
 
 @pytest.mark.asyncio
-async def test_load_set_creates_match_and_binds_board(monkeypatch):
+async def test_load_set_creates_match_and_binds_board(monkeypatch, rig):
+    rig(1, 2)
     from server.startgg import provider
     monkeypatch.setattr(provider.StartGGProvider, "GetSet",
                         AsyncMock(return_value=sgg_set()))
@@ -160,7 +161,8 @@ async def test_load_set_creates_match_and_binds_board(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_load_set_reuses_match_holding_the_set(monkeypatch):
+async def test_load_set_reuses_match_holding_the_set(monkeypatch, rig):
+    rig(1, 2, 3)
     from server.startgg import provider
     monkeypatch.setattr(provider.StartGGProvider, "GetSet",
                         AsyncMock(return_value=sgg_set()))
@@ -180,7 +182,8 @@ async def test_load_set_reuses_match_holding_the_set(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_load_set_rejects_rotating_set_board(monkeypatch):
+async def test_load_set_rejects_rotating_set_board(monkeypatch, rig):
+    rig(1, 2)
     import server.bindings
     monkeypatch.setattr(server.bindings, "is_rotating", lambda sb: True)
 

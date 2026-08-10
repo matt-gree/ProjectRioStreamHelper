@@ -96,13 +96,16 @@ async def startgg_load_set(
     direct-to-score path, whose ``score.{N}.match`` round-name write collided
     with the match binding key.
     """
-    from server.api.v1.match import apply_startgg_set, bind_board
+    from server.api.v1.match import apply_startgg_set, bind_board, require_board
     from server.bindings import is_rotating, transport
     from server.match import Match, default_match
     from server.state import State
 
     if not set_id:
         raise HTTPException(status_code=400, detail="set_id is required")
+    # Same boundary check the bind routes make: a board id off a request has to be
+    # in the rig, or this writes score.{N}.match for a board nothing draws.
+    require_board(scoreboard_number)
     # A HUD-transport board is single by construction (its stored playback.mode
     # is ignored while HUD is on), so only reject a board that is actually
     # rotating — API transport + rotate mode. See server/bindings.py.

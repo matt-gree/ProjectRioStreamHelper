@@ -72,6 +72,35 @@ export function useNextUp() {
     return flat[0] ? { id: Number(flat[0]), label: flat[1] } : null;
 }
 
+/*
+ * THE ORDER ITSELF, for the surface that authors it (the Match desk).
+ *
+ * Returns the queue as a flat array of id strings, pruned to matches that still
+ * exist — a queued id whose match was deleted is not a position, and the server
+ * prunes it on delete anyway. The Match desk lists its accordions in exactly this
+ * order, which is the whole point: the night's running order and the desk's stack
+ * are one list, not two views that can disagree.
+ *
+ * `useShallow` over an array of strings, so this compares element-wise: reordering
+ * re-renders, and the ~100 unrelated keys a live HUD frame writes do not.
+ */
+export function useQueueOrder() {
+    return useStateStore(useShallow((s) => {
+        const queue = s?.schedule?.queue;
+        if (!Array.isArray(queue)) return [];
+        const matches = s?.match ?? {};
+        const seen = new Set();
+        const out = [];
+        for (const raw of queue) {
+            const id = String(raw);
+            if (seen.has(id) || !matches[id]) continue;
+            seen.add(id);
+            out.push(id);
+        }
+        return out;
+    }));
+}
+
 /** How many queued fixtures are still waiting for a board. */
 export function useWaitingCount() {
     return useStateStore(useShallow((s) => {
