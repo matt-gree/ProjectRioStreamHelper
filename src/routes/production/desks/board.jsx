@@ -56,11 +56,11 @@ import { takeNextMatch } from '../../../context/match';
  * does not try to express a scoreboard. It sits in the kit's own KitColumns
  * grouping, and everything around it is kit rows.
  *
- * The two columns are the app's real seam. Left is `score.{N}.*` — what is on
- * air this game, all of it correctable. Right is how the board is WIRED (its
- * games, its stats tag, its name) — settings, which outlive the game. The games
- * region is ../games: its steady-state rows sit here, its browsing opens as a
- * dialog, and that split is what let the Match tab go.
+ * The two tiers are the app's real seam. Above the divider is `score.{N}.*` —
+ * what is on air this game, all of it correctable. Below it is how the board is
+ * WIRED — settings, which outlive the game: its **Games** (../games, the mode
+ * and the mode's own surface, which is what let the Match tab go) beside the two
+ * properties that are genuinely one-liners, its stats tag and its name.
  *
  * Every broadcast-visible write routes through the staging gateway under
  * `board:{sb}:{field}`. The momentary ones (re-read the HUD file, refresh stats)
@@ -989,24 +989,27 @@ export default function BoardDesk({ board }) {
                     they read below what is on air rather than beside it.
                     PROPERTIES ONLY: whether this board exists at all is rig
                     membership, and that belongs to the rack's BOARDS section
-                    beside the + that adds one (see RowRemove in ../rack). */}
-                <KitColumn label="This board">
-                  {/* Uneven on purpose: the transport row carries a sentence
-                      explaining why there is no picker, and an even split
-                      truncated it. The name is short. */}
-                  <KitColumns template="minmax(0,6fr) minmax(0,4fr)">
-                   <div className="flex min-w-0 flex-col gap-1.5">
+                    beside the + that adds one (see RowRemove in ../rack).
+
+                    GAMES IS ITS OWN REGION, not a field inside "This board".
+                    Choosing between one game and a rotating pool is the biggest
+                    decision made about an API board, and each half of it brings a
+                    real surface — a live game table, or a filter with a running
+                    transport. Squeezed into a shared column beside the name it
+                    became a label-gutter row, which is how a demoted control gets
+                    read as a minor setting. The remaining properties are two
+                    one-line fields and read fine beside it. */}
+                <KitColumns template="minmax(0,7fr) minmax(0,5fr)">
+                  <KitColumn label="Games">
                     {/* Where this board's games come from and how it plays them.
                         Two axes, stated as two things: the badge is the DERIVED
                         transport (board 1 carries the local HUD iff the global
                         toggle is on, every other board is API — no picker, ever),
-                        the sentence is the CHOSEN playback. Authoring lives in
-                        ../games, which splits the steady-state rows from the
-                        browsing dialog. */}
+                        the sentence is the CHOSEN playback. ../games holds the
+                        mode surfaces. */}
                     <GamesSection
                         sb={sb}
                         transport={d.transport}
-                        poolCount={d.poolCount}
                         gameModes={gameModes}
                         readout={`${playbackLine({
                             transport: d.transport,
@@ -1038,7 +1041,9 @@ export default function BoardDesk({ board }) {
                             </>
                         )}
                     />
+                  </KitColumn>
 
+                  <KitColumn label="This board">
                     {/* Which mode's stats to fetch, with the pipeline's own
                         diagnostics one click away beside it. */}
                     <FieldRow label="Game mode">
@@ -1052,9 +1057,7 @@ export default function BoardDesk({ board }) {
                         />
                         <StatsDiagnostics stats={stats} />
                     </FieldRow>
-                   </div>
 
-                   <div className="flex min-w-0 flex-col gap-1.5">
                     {/* TextRow echoes keystrokes locally and writes once you stop
                         or blur — a rename is a settings round-trip and every
                         overlay reading the alias would otherwise redraw per
@@ -1063,9 +1066,8 @@ export default function BoardDesk({ board }) {
                         label="Name" value={storedAlias} placeholder={`Scoreboard ${sb}`}
                         onChange={commitAlias}
                     />
-                   </div>
-                  </KitColumns>
-                </KitColumn>
+                  </KitColumn>
+                </KitColumns>
             </div>
         </>
     );

@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef, memo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import {
-    ChevronLeft, ChevronRight, X, Ban, RotateCw, Undo2, Search, CalendarDays, Play, Square,
+    ChevronLeft, ChevronRight, X, Ban, RotateCw, Undo2, Search, CalendarDays,
 } from 'lucide-react';
 import { Stack, Text, Loader } from '../../components/ui/primitives';
 import { Button } from '../../components/ui/button';
@@ -9,6 +9,7 @@ import { Badge } from '../../components/ui/badge';
 import { NumberInput } from '../../components/ui/number-input';
 import { MultiSelect } from '../../components/ui/multi-select';
 import { SegmentedControl } from '../../components/ui/segmented-control';
+import { Switch } from '../../components/ui/switch';
 import { Label } from '../../components/ui/label';
 import {
     Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
@@ -23,28 +24,40 @@ import { useSocketSubscribe } from '../../context/socket';
 import { useSettingsStore, useStateStore } from '../../context/store';
 import { stageOrRun } from '../../context/staging';
 import ParticipantPicker from '../../components/ParticipantPicker';
-import {
-    ActionRow, FieldRow, NumberRow, SegmentedRow, ToggleRow,
-} from './kit';
+import { FieldRow } from './kit';
 
 /*
  * Games — where a board's games come from, and how it plays them.
  *
- * SPLIT BY TEMPO, which is the same split the rack takes from the Add picker.
- * What a producer watches and nudges during a show lives on the board's stage
- * panel (`GamesSection` below): the playback mode, the seconds per game, the
- * transport, and how many games are in the pool. What they sit down and BROWSE
- * — a table of live and completed games, a filter with three chip fields and a
- * date range — opens as a dialog, because it is a searching task with a result
- * you act on once.
+ * THE MODE CHOICE IS THE SUBJECT OF THIS SURFACE, and the surface is an
+ * INSTRUMENT, not a settings list: one full-width segmented picks how the board
+ * plays (one game, or rotating), and everything below belongs to the mode that
+ * is selected — a live/completed game table in one, a filter plus a running
+ * transport in the other. That is the shape `PoolBrowser` had on the Match tab,
+ * and it is the shape it keeps here.
  *
- * This replaces `PoolBrowser`, which was 933 lines holding both tempos in one
- * always-open panel on the Match tab: mode, scope, three filter fields, dates,
- * a limit, two timing controls, the transport, a 300px results table and a
- * second modal for the pool. Nothing about the model changed — the same
- * endpoints, the same one-element `filters` array, the same server-mirrored
- * pool. What changed is that a board's games are now authored on the board,
- * which is what let the tab go.
+ * It is written down because an intermediate version got it wrong in a way worth
+ * not repeating. Splitting the surface strictly by TEMPO — steady-state controls
+ * as kit rows on the panel, everything browsable behind one dialog — demoted the
+ * mode to `SegmentedRow label="Playback"` in a label gutter, put the live game
+ * list two clicks away behind "Find a game…", and left the pool's status line
+ * (the thing that says *why* nothing matched) inside the dialog where a producer
+ * glancing at the panel could not see it. The tempo instinct was right about one
+ * thing only — a date range is not a mid-game control — and the Live/Completed
+ * tab already handles that, because the date fields only exist on the tab a
+ * producer explicitly switched to.
+ *
+ * So the split is by JOB, not by tempo:
+ *   • On the panel — the mode, its source scope, its filter, its timing, its
+ *     transport, its status, and the game list you pick from.
+ *   • Behind ONE dialog — the rotating pool's MEMBER LIST, for excluding games.
+ *     Exactly the dialog `PoolBrowser` opened (`PoolGamesModal`), for exactly
+ *     the same reason: it is a long table you visit to prune, not to watch.
+ *
+ * What genuinely changed in the move off the tab: a board's games are authored
+ * on the BOARD (which is what let the Match tab go), and putting a game on a
+ * board now routes through the staging gateway, because it is the one act here
+ * that reaches air.
  *
  * THE TWO AXES STAY TWO THINGS (see ../boards): transport (HUD vs API) is
  * DERIVED and has no picker; playback (single vs rotating) is CHOSEN and is the
@@ -335,7 +348,7 @@ function GameFilters({ value, onChange, tagOptions, showRefine = true, trailing 
     );
 }
 
-// ─── the dialog: single-game search ─────────────────────────────────────────
+// ─── one game: the inline finder ────────────────────────────────────────────
 
 const searchTabs = [
     { value: 'live', label: 'Live' },
@@ -343,15 +356,23 @@ const searchTabs = [
 ];
 
 /*
- * Find one game and put it on the board. Live lists ongoing games; Completed
- * searches the API by player / opponent / mode.
+ * Find one game and put it on the board — INLINE, no dialog.
  *
- * Loading goes through the staging gateway — it is the one thing here that
- * changes what is on air, and a producer running confirm mode should get to
+ * Picking which game a single-playback board shows is the most frequent thing
+ * done to an API board, and the Live tab is a handful of rows of what is being
+ * played right now. Behind a button it was two clicks and a modal for the common
+ * case; open, it is a list you look at and press.
+ *
+ * The completed FILTER only exists on the Completed tab, which is what keeps a
+ * date range off a surface a producer glances at mid-game: nothing here is
+ * visible until they switch to it deliberately.
+ *
+ * Loading goes through the staging gateway — it is the one thing on this surface
+ * that changes what is on air, and a producer running confirm mode should get to
  * choose when the board changes under them. Searching, refreshing and switching
  * tabs are reads and fire immediately.
  */
-const SingleGameFinder = memo(function SingleGameFinder({ sb, tagOptions, onLoaded }) {
+const SingleGameFinder = memo(function SingleGameFinder({ sb, tagOptions }) {
     const pollInterval = useSettingsStore(s => s?.ongoing_games?.poll_interval ?? 10);
     const loadedGameId = useStateStore(s => s?.score?.[sb]?.game_id ?? null);
     const [tab, setTab] = useState('live');
@@ -491,7 +512,7 @@ const SingleGameFinder = memo(function SingleGameFinder({ sb, tagOptions, onLoad
                 </Stack>
             )}
 
-            <ScrollArea className="h-[320px]">
+            <ScrollArea className="h-[260px]">
                 <Table className="text-xs">
                     <TableHeader className="sticky top-0 z-[1] bg-night-900">
                         <TableRow>
@@ -515,7 +536,7 @@ const SingleGameFinder = memo(function SingleGameFinder({ sb, tagOptions, onLoad
                                     size="xs"
                                     variant={isActive ? 'outline' : 'secondary'}
                                     disabled={isActive}
-                                    onClick={() => { load(game); onLoaded?.(); }}
+                                    onClick={() => load(game)}
                                 >
                                     {isActive ? 'On board' : 'Put on board'}
                                 </Button>
@@ -528,7 +549,93 @@ const SingleGameFinder = memo(function SingleGameFinder({ sb, tagOptions, onLoad
     );
 });
 
-// ─── the dialog: the rotating pool ──────────────────────────────────────────
+// ─── rotating: the pool's member list (the one dialog) ──────────────────────
+
+/*
+ * The games this board is rotating through, so any of them can be excluded.
+ *
+ * THE ONLY DIALOG on this surface, and the same one `PoolBrowser` opened: a long
+ * table you visit to prune, not to watch. Everything that says what the pool IS
+ * — the scope, the filter, the count, the status — is on the panel.
+ */
+function PoolGamesDialog({
+    open, onOpenChange, members, currentIndex, excludedList, loading,
+    onRefresh, onExclude, onUnexclude,
+}) {
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="flex max-h-[88vh] w-[calc(100vw-4rem)] flex-col overflow-hidden sm:max-w-[1000px]!">
+                <DialogHeader>
+                    <DialogTitle>Pool games</DialogTitle>
+                    <DialogDescription>
+                        Games this board rotates through. Exclude any you don’t want on screen.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="flex items-center justify-end">
+                    <Button size="xs" variant="secondary" onClick={onRefresh} disabled={loading}>
+                        {loading ? <Loader size={12} /> : <RotateCw size={12} />}
+                        Find games
+                    </Button>
+                </div>
+
+                <ScrollArea className="h-[420px]">
+                    <Table className="text-xs">
+                        <TableHeader className="sticky top-0 z-[1] bg-night-900">
+                            <TableRow>
+                                <TableHead>Player</TableHead>
+                                <TableHead className="w-[60px] text-center">Score</TableHead>
+                                <TableHead>Opponent</TableHead>
+                                <TableHead>Mode</TableHead>
+                                <TableHead>Time</TableHead>
+                                <TableHead className="w-[92px] text-right">Exclude</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            <GameRows
+                                games={members}
+                                loading={loading}
+                                columns={6}
+                                activeId={members[currentIndex]?.game_id ?? null}
+                                emptyLabel="No games match this filter yet. Add a game mode or player on the panel, then Find games."
+                                extraCell={(game) => (
+                                    <TableCell><Text size="xs" dimmed>{formatTimestamp(game.date_time_end)}</Text></TableCell>
+                                )}
+                                action={(game) => (
+                                    <Button size="xs" variant="ghost" className="text-destructive" onClick={() => onExclude(game)}>
+                                        <Ban size={12} /> Exclude
+                                    </Button>
+                                )}
+                            />
+                        </TableBody>
+                    </Table>
+                </ScrollArea>
+
+                {excludedList.length > 0 && (
+                    <div className="border-t border-border pt-2.5">
+                        <Text size="xs" fw={600} className="mb-1.5">Excluded ({excludedList.length})</Text>
+                        <div className="flex flex-wrap gap-1.5">
+                            {excludedList.map(({ id, label }) => (
+                                <Badge key={id} className="gap-1 bg-[#ef4444]/15 text-[10px] text-[#f87171]">
+                                    {label}
+                                    <SimpleTooltip label="Put back in the pool">
+                                        <span
+                                            role="button" aria-label={`Re-include ${label}`}
+                                            className="inline-flex cursor-pointer" onClick={() => onUnexclude(id)}
+                                        >
+                                            <Undo2 className="size-3" />
+                                        </span>
+                                    </SimpleTooltip>
+                                </Badge>
+                            ))}
+                        </div>
+                    </div>
+                )}
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+// ─── rotating: the panel surface ────────────────────────────────────────────
 
 const scopeOptions = [
     { value: 'both', label: 'Live + Completed' },
@@ -541,26 +648,45 @@ const EMPTY_FILTER = {
 };
 
 /*
- * The pool: one continuously-evaluated filter over a live/completed scope, plus
- * the games it currently matches and the ones excluded by hand.
+ * A rotating board: one continuously-evaluated filter over a live/completed
+ * scope, cycled on an interval.
  *
  * The filter IS the pool definition and it persists, so edits write straight
  * through (no staging) — this is prep, the same call the schedule queue makes.
- * What reaches air is the rotation, and that is the transport on the panel.
+ * What reaches air is the rotation, and that is the TRANSPORT, which is
+ * momentary: Start/Stop/Next mean now, the same rule as Take and capture.
+ *
+ * The status line under the transport is the reason this block is on the panel
+ * rather than in a dialog. `Rotating — nothing in its pool yet` (the board's
+ * readout) says the pool is empty; only this line says *why* — filters edited
+ * since the last Find, an unreachable API, or no filter at all yet.
  */
-const PoolEditor = memo(function PoolEditor({ sb, pool, tagOptions, running, currentIndex }) {
+const RotatingGames = memo(function RotatingGames({
+    sb, pool, tagOptions, status, transportCall, countdown,
+}) {
+    const [poolOpen, setPoolOpen] = useState(false);
     const [finding, setFinding] = useState(false);
     // Transient "couldn't reach the pool" error from the last Find — the only
     // status the live members count can't express on its own.
     const [searchError, setSearchError] = useState(null);
-    // The filter/scope has been edited since the last Find, so the list below is
+    // The filter/scope has been edited since the last Find, so the pool is
     // stale. Only meaningful while stopped — a running rotation recomputes on
     // every pool edit, so we never mark it dirty then.
     const [dirty, setDirty] = useState(false);
+    // Preserve the chosen cadence while the toggle is off (0 = off).
+    const [refreshSecs, setRefreshSecs] = useState(() => (pool.refresh_interval > 0 ? pool.refresh_interval : 60));
     // Client-side cache of excluded game dicts so the chips can be labelled —
     // the backend stores excluded ids, not their display fields.
     const [excludedCache, setExcludedCache] = useState({});
 
+    const playback = useSettingsStore(useShallow((s) => {
+        const p = s?.scoreboards?.binding?.[sb]?.playback
+            ?? s?.scoreboards?.binding?.[String(sb)]?.playback ?? {};
+        return { interval: p.interval ?? 30 };
+    }));
+
+    // Live pool membership, mirrored into State by the server on Start and on
+    // Find games (server/rio/rotation.py _mirror_to_state) — a read, not a fetch.
     const gameIds = useStateStore(s => s?.scoreboards?.rotation?.[sb]?.game_ids ?? EMPTY_LIST);
     const cachedGames = useStateStore(s => s?.scoreboards?.rotation?.[sb]?.cached_games ?? EMPTY_LIST);
     const members = useMemo(() => {
@@ -569,6 +695,9 @@ const PoolEditor = memo(function PoolEditor({ sb, pool, tagOptions, running, cur
     }, [gameIds, cachedGames]);
 
     const updatePool = useCallback((patch) => putJSON(`/api/v1/rotation/${sb}/pool`, patch), [sb]);
+    const updatePlayback = useCallback((patch) => putJSON(`/api/v1/rotation/${sb}/playback`, patch), [sb]);
+
+    const running = !!status.active;
     // A pool never needs more than one filter, since each field already accepts a
     // list. Persisted as a one-element `filters` array.
     const filter = pool.filters?.[0] ?? EMPTY_FILTER;
@@ -607,13 +736,11 @@ const PoolEditor = memo(function PoolEditor({ sb, pool, tagOptions, running, cur
         } finally { setFinding(false); }
     }, [sb]);
 
-    // Opening the dialog on a stopped board refreshes what it is about to show.
-    useEffect(() => { if (!running) findGames(); }, [running, findGames]);
     // A running rotation recomputes its pool on every edit, so it's never stale.
     useEffect(() => { if (running) setDirty(false); }, [running]);
 
     const showDirty = dirty && !running;
-    const status = useMemo(() => {
+    const poolStatus = useMemo(() => {
         if (finding) return { dot: 'bg-muted-foreground', text: 'Finding games…', cls: 'text-muted-foreground' };
         if (searchError) return { dot: 'bg-destructive', text: searchError, cls: 'text-destructive' };
         if (showDirty) return { dot: 'bg-amber-400', text: 'Filters changed — Find games to refresh the pool', cls: 'text-amber-400' };
@@ -622,6 +749,17 @@ const PoolEditor = memo(function PoolEditor({ sb, pool, tagOptions, running, cur
         if (filterIsEmpty) return { dot: 'bg-muted-foreground', text: 'Add a game mode, player, or opponent to match games', cls: 'text-muted-foreground' };
         return { dot: 'bg-muted-foreground', text: 'No games match yet — press Find games', cls: 'text-muted-foreground' };
     }, [finding, searchError, showDirty, members.length, filterIsEmpty]);
+
+    /*
+     * Opening the member list refreshes what it is about to show — but only when
+     * stopped, and only on the OPEN. This never runs on mount: selecting a board
+     * desk must not fire a Rio API search, and a running rotation is already
+     * re-evaluating its own pool.
+     */
+    const openPool = useCallback(() => {
+        setPoolOpen(true);
+        if (!running) findGames();
+    }, [running, findGames]);
 
     const exclude = useCallback((game) => {
         setExcludedCache(c => ({ ...c, [game.game_id]: game }));
@@ -633,12 +771,15 @@ const PoolEditor = memo(function PoolEditor({ sb, pool, tagOptions, running, cur
 
     return (
         <Stack gap="sm">
+            {/* Source scope — a subordinate segmented, mirroring the single-game
+                Live/Completed selector so both modes read mode → source. */}
             <SegmentedControl
                 fullWidth size="xs"
                 data={scopeOptions}
                 value={pool.scope ?? 'both'}
                 onChange={setScope}
             />
+
             {/* Date and limit are completed-only, so they are hidden on a
                 live-only scope where they would filter nothing. */}
             <GameFilters
@@ -646,80 +787,147 @@ const PoolEditor = memo(function PoolEditor({ sb, pool, tagOptions, running, cur
                 onChange={updateFilter}
                 tagOptions={tagOptions}
                 showRefine={(pool.scope ?? 'both') !== 'live'}
-                trailing={(
-                    <Button
-                        size="xs" variant="secondary"
-                        className={cn(showDirty && 'ring-1 ring-amber-400')}
-                        onClick={findGames} disabled={finding}
-                    >
-                        {finding ? <Loader size={12} /> : <Search size={13} />}
-                        Find games
-                    </Button>
-                )}
             />
 
-            <div className="flex min-w-0 items-center gap-2">
-                <span className={cn('size-1.5 shrink-0 rounded-full', status.dot)} />
-                <Text size="xs" className={cn('truncate', status.cls)}>{status.text}</Text>
+            {/* Timing. Both labels are written out: "Keep pool current" says what
+                it keeps current, where a label-gutter row forced it down to
+                "Keep current" and dropped the tooltip that explains the off
+                state. The interval stays visible-but-disabled rather than
+                appearing and disappearing under the switch. */}
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+                <div className="flex items-center gap-2">
+                    <Label className="whitespace-nowrap text-xs" htmlFor={`rot-interval-${sb}`}>
+                        Seconds per game
+                    </Label>
+                    <NumberInput
+                        id={`rot-interval-${sb}`}
+                        aria-label="Seconds per game"
+                        min={5} max={600}
+                        value={playback.interval}
+                        onChange={(val) => updatePlayback({ interval: val || 30 })}
+                        className="w-[72px]"
+                        suffix="s"
+                    />
+                </div>
+                <div className="flex items-center gap-2">
+                    <Switch
+                        size="sm"
+                        aria-label="Keep pool current"
+                        checked={(pool.refresh_interval ?? 0) > 0}
+                        onCheckedChange={(on) => updatePool({ refresh_interval: on ? refreshSecs : 0 })}
+                    />
+                    <SimpleTooltip label="Automatically pick up newly-started and finished games while rotating. Off = the pool only changes when you press Find games.">
+                        <Label className="whitespace-nowrap text-xs">Keep pool current</Label>
+                    </SimpleTooltip>
+                    <NumberInput
+                        aria-label="Re-check interval"
+                        min={10} max={600}
+                        value={refreshSecs}
+                        disabled={(pool.refresh_interval ?? 0) === 0}
+                        onChange={(val) => {
+                            const next = val || 10;
+                            setRefreshSecs(next);
+                            if ((pool.refresh_interval ?? 0) > 0) updatePool({ refresh_interval: next });
+                        }}
+                        className="w-[72px]"
+                        suffix="s"
+                    />
+                </div>
             </div>
 
-            <ScrollArea className="h-[280px]">
-                <Table className="text-xs">
-                    <TableHeader className="sticky top-0 z-[1] bg-night-900">
-                        <TableRow>
-                            <TableHead>Player</TableHead>
-                            <TableHead className="w-[60px] text-center">Score</TableHead>
-                            <TableHead>Opponent</TableHead>
-                            <TableHead>Mode</TableHead>
-                            <TableHead>Time</TableHead>
-                            <TableHead className="w-[92px] text-right">Exclude</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        <GameRows
-                            games={members}
-                            loading={finding}
-                            columns={6}
-                            activeId={members[currentIndex]?.game_id ?? null}
-                            emptyLabel="No games match this filter yet. Add a game mode or player above, then Find games."
-                            extraCell={(game) => (
-                                <TableCell><Text size="xs" dimmed>{formatTimestamp(game.date_time_end)}</Text></TableCell>
+            {/* Pool actions + transport + status, in one contained inset so the
+                status never reads as floating text. Actions left, transport
+                right, the status line beneath the two. */}
+            <div className="space-y-2.5 rounded-md border border-border bg-muted/30 p-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+                    <div className="flex items-center gap-1.5">
+                        <Button
+                            size="xs" variant="secondary"
+                            className={cn(showDirty && 'ring-1 ring-amber-400')}
+                            onClick={findGames} disabled={finding}
+                        >
+                            {finding ? <Loader size={12} /> : <Search size={13} />}
+                            Find games
+                        </Button>
+                        <Button size="xs" variant="outline" onClick={openPool}>
+                            Pool games
+                            {(members.length > 0 || excludedIds.length > 0) && (
+                                <Badge variant="secondary" className="ml-1 text-[10px]">
+                                    {members.length}{excludedIds.length > 0 && ` · ${excludedIds.length} off`}
+                                </Badge>
                             )}
-                            action={(game) => (
-                                <Button size="xs" variant="ghost" className="text-destructive" onClick={() => exclude(game)}>
-                                    <Ban size={12} /> Exclude
-                                </Button>
-                            )}
-                        />
-                    </TableBody>
-                </Table>
-            </ScrollArea>
+                        </Button>
+                    </div>
 
-            {excludedList.length > 0 && (
-                <div className="border-t border-border pt-2.5">
-                    <Text size="xs" fw={600} className="mb-1.5">Excluded ({excludedList.length})</Text>
-                    <div className="flex flex-wrap gap-1.5">
-                        {excludedList.map(({ id, label }) => (
-                            <Badge key={id} className="gap-1 bg-[#ef4444]/15 text-[10px] text-[#f87171]">
-                                {label}
-                                <SimpleTooltip label="Put back in the pool">
-                                    <span
-                                        role="button" aria-label={`Re-include ${label}`}
-                                        className="inline-flex cursor-pointer" onClick={() => unexclude(id)}
-                                    >
-                                        <Undo2 className="size-3" />
-                                    </span>
-                                </SimpleTooltip>
-                            </Badge>
-                        ))}
+                    <div className="flex items-center gap-2">
+                        {!running ? (
+                            <Button
+                                size="sm"
+                                className="bg-[#14b8a6] text-black hover:bg-[#14b8a6]/90"
+                                onClick={() => transportCall('start')}
+                            >
+                                Start rotating
+                            </Button>
+                        ) : (
+                            <>
+                                <Button
+                                    size="sm" variant="outline"
+                                    className="border-destructive/40 text-destructive"
+                                    onClick={() => transportCall('stop')}
+                                >
+                                    Stop
+                                </Button>
+                                {status.total_games > 0 && (
+                                    <div className="flex items-center gap-1.5">
+                                        <Button
+                                            size="icon-sm" variant="secondary"
+                                            aria-label="Previous game in the pool"
+                                            onClick={() => transportCall('prev')}
+                                        >
+                                            <ChevronLeft size={14} />
+                                        </Button>
+                                        <Text size="xs" className="tabular-nums">
+                                            {status.current_index + 1}/{status.total_games}
+                                        </Text>
+                                        <Button
+                                            size="icon-sm" variant="secondary"
+                                            aria-label="Next game in the pool"
+                                            onClick={() => transportCall('next')}
+                                        >
+                                            <ChevronRight size={14} />
+                                        </Button>
+                                        {countdown != null && (
+                                            <Text size="xs" dimmed className="tabular-nums">{countdown}s</Text>
+                                        )}
+                                    </div>
+                                )}
+                            </>
+                        )}
                     </div>
                 </div>
-            )}
+
+                <div className="flex min-w-0 items-center gap-2">
+                    <span className={cn('size-1.5 shrink-0 rounded-full', poolStatus.dot)} />
+                    <Text size="xs" className={cn('truncate', poolStatus.cls)}>{poolStatus.text}</Text>
+                </div>
+            </div>
+
+            <PoolGamesDialog
+                open={poolOpen}
+                onOpenChange={setPoolOpen}
+                members={members}
+                currentIndex={status.current_index ?? -1}
+                excludedList={excludedList}
+                loading={finding}
+                onRefresh={findGames}
+                onExclude={exclude}
+                onUnexclude={unexclude}
+            />
         </Stack>
     );
 });
 
-// ─── the panel rows ─────────────────────────────────────────────────────────
+// ─── the section ────────────────────────────────────────────────────────────
 
 const playbackOptions = [
     { value: 'single', label: 'One game' },
@@ -759,29 +967,23 @@ function useAdvanceCountdown(active, nextAdvanceAt) {
 /*
  * GamesSection — the board panel's "where do this board's games come from" region.
  *
- * Everything here is steady-state: the mode, the cadence, the transport, and a
- * count. The browsing lives one click away in the dialog, which is the tempo
- * split this module exists to make.
+ * The readout on top (the transport badge and the sentence the board already
+ * prints), then the mode, then the mode's own surface. The mode segmented is
+ * full-width and full-size: it is the subject here, and everything under it
+ * belongs to whichever half is chosen.
  *
- * `readout` is the sentence the panel already printed (playbackLine) — passed in
- * rather than recomputed so the board desk keeps one source for it.
+ * `readout` is the sentence the panel already computed (playbackLine) — passed
+ * in rather than recomputed so the board desk keeps one source for it.
  */
 export const GamesSection = memo(function GamesSection({
-    sb, transport, readout, badge, poolCount, gameModes,
+    sb, transport, readout, badge, gameModes,
 }) {
     const pool = useSettingsStore(s => s?.scoreboards?.binding?.[sb]?.pool
         ?? s?.scoreboards?.binding?.[String(sb)]?.pool ?? DEFAULT_POOL);
-    // useShallow, not a bare selector: this one BUILDS an object, and without the
-    // element-wise compare getSnapshot returns a new reference every read — the
-    // same loop DEFAULT_POOL above exists to avoid.
-    const playback = useSettingsStore(useShallow((s) => {
-        const p = s?.scoreboards?.binding?.[sb]?.playback
-            ?? s?.scoreboards?.binding?.[String(sb)]?.playback ?? {};
-        return { mode: p.mode || 'single', interval: p.interval ?? 30, gameId: p.gameId ?? null };
-    }));
+    const serverMode = useSettingsStore(s => s?.scoreboards?.binding?.[sb]?.playback?.mode
+        ?? s?.scoreboards?.binding?.[String(sb)]?.playback?.mode ?? 'single');
     const [status, setStatus] = useRotationStatus(sb);
     const countdown = useAdvanceCountdown(status.active, status.next_advance_at);
-    const [open, setOpen] = useState(false);
 
     /*
      * `mode` is server-backed (a settings round-trip), so a click has to wait for
@@ -790,19 +992,14 @@ export const GamesSection = memo(function GamesSection({
      * reconcile once the persisted value catches up.
      */
     const [modeOverride, setModeOverride] = useState(null);
-    const mode = modeOverride ?? playback.mode;
+    const mode = modeOverride ?? serverMode;
     useEffect(() => {
-        if (modeOverride && playback.mode === modeOverride) setModeOverride(null);
-    }, [playback.mode, modeOverride]);
+        if (modeOverride && serverMode === modeOverride) setModeOverride(null);
+    }, [serverMode, modeOverride]);
     const setMode = useCallback((next) => {
         setModeOverride(next);
         fetch(`/api/v1/scoreboards/${sb}/binding?kind=${next}`, { method: 'PUT' }).catch(() => {});
     }, [sb]);
-
-    // Preserve the chosen cadence while the toggle is off (0 = off).
-    const [refreshSecs, setRefreshSecs] = useState(() => (pool.refresh_interval > 0 ? pool.refresh_interval : 60));
-    const updatePool = useCallback((patch) => putJSON(`/api/v1/rotation/${sb}/pool`, patch), [sb]);
-    const updatePlayback = useCallback((patch) => putJSON(`/api/v1/rotation/${sb}/playback`, patch), [sb]);
 
     // Transport is momentary — the same rule as Take and post-game capture. A
     // producer pressing Next means now, not on the next confirm.
@@ -812,120 +1009,38 @@ export const GamesSection = memo(function GamesSection({
         if (data) setStatus(verb === 'stop' ? { active: false } : data);
     }, [sb, setStatus]);
 
-    const excludedCount = (pool.excluded ?? []).length;
-    const rotating = mode === 'rotate';
+    /*
+     * A HUD board has no pool and no playback choice — its game is whatever
+     * Project Rio is playing locally, and the readout already says so
+     * (server/bindings.py). Everything below would be a control with nothing to
+     * act on.
+     */
+    if (transport === 'hud') {
+        return (
+            <FieldRow>
+                {badge}
+                <Text size="xs" dimmed className="min-w-0">{readout}</Text>
+            </FieldRow>
+        );
+    }
 
     return (
-        <>
-            <FieldRow label="Games">
+        <Stack gap="sm">
+            <FieldRow>
                 {badge}
                 <Text size="xs" dimmed className="min-w-0">{readout}</Text>
             </FieldRow>
 
-            {/* A HUD board has no pool and no playback choice — its game is
-                whatever Project Rio is playing locally, and the readout above
-                already says so (server/bindings.py). Everything below would be a
-                control with nothing to act on. */}
-            {transport !== 'hud' && (
-                <>
-                    <SegmentedRow label="Playback" data={playbackOptions} value={mode} onChange={setMode} />
+            <SegmentedControl fullWidth data={playbackOptions} value={mode} onChange={setMode} />
 
-                    {rotating ? (
-                        <>
-                            <NumberRow
-                                label="Each game" value={playback.interval} min={5} max={600} suffix="s"
-                                onChange={(v) => updatePlayback({ interval: v || 30 })}
-                            />
-                            <ToggleRow
-                                label="Keep current"
-                                checked={(pool.refresh_interval ?? 0) > 0}
-                                onChange={(on) => updatePool({ refresh_interval: on ? refreshSecs : 0 })}
-                            />
-                            {(pool.refresh_interval ?? 0) > 0 && (
-                                <NumberRow
-                                    label="Re-check" value={refreshSecs} min={10} max={600} suffix="s"
-                                    onChange={(v) => {
-                                        const next = v || 10;
-                                        setRefreshSecs(next);
-                                        updatePool({ refresh_interval: next });
-                                    }}
-                                />
-                            )}
-                            <FieldRow label="Pool">
-                                <Text size="xs" span className="shrink-0 tabular-nums text-foreground">
-                                    {poolCount || 'none'}
-                                </Text>
-                                {excludedCount > 0 && (
-                                    <Text size="xs" span dimmed className="shrink-0">· {excludedCount} off</Text>
-                                )}
-                                {status.active && status.total_games > 0 && (
-                                    <Badge className="shrink-0 bg-[#14b8a6] text-[10px] text-black tabular-nums">
-                                        {status.current_index + 1}/{status.total_games}
-                                        {countdown != null && ` · ${countdown}s`}
-                                    </Badge>
-                                )}
-                                <div className="ml-auto flex shrink-0 items-center gap-1">
-                                    {status.active && status.total_games > 0 && (
-                                        <>
-                                            <Button
-                                                size="icon-sm" variant="ghost" aria-label="Previous game in the pool"
-                                                onClick={() => transportCall('prev')}
-                                            >
-                                                <ChevronLeft size={14} />
-                                            </Button>
-                                            <Button
-                                                size="icon-sm" variant="ghost" aria-label="Next game in the pool"
-                                                onClick={() => transportCall('next')}
-                                            >
-                                                <ChevronRight size={14} />
-                                            </Button>
-                                        </>
-                                    )}
-                                    <Button
-                                        size="xs"
-                                        variant={status.active ? 'outline' : 'secondary'}
-                                        className={cn('h-7', status.active && 'border-destructive/40 text-destructive')}
-                                        onClick={() => transportCall(status.active ? 'stop' : 'start')}
-                                    >
-                                        {status.active
-                                            ? <><Square size={11} className="mr-1" /> Stop</>
-                                            : <><Play size={11} className="mr-1" /> Rotate</>}
-                                    </Button>
-                                </div>
-                            </FieldRow>
-                        </>
-                    ) : null}
-
-                    <ActionRow
-                        actions={[{
-                            label: rotating ? 'Edit the pool…' : 'Find a game…',
-                            onClick: () => setOpen(true),
-                            variant: 'outline',
-                        }]}
-                    />
-                </>
+            {mode === 'rotate' ? (
+                <RotatingGames
+                    sb={sb} pool={pool} tagOptions={gameModes}
+                    status={status} transportCall={transportCall} countdown={countdown}
+                />
+            ) : (
+                <SingleGameFinder sb={sb} tagOptions={gameModes} />
             )}
-
-            <Dialog open={open} onOpenChange={setOpen}>
-                <DialogContent className="flex max-h-[88vh] w-[calc(100vw-4rem)] flex-col overflow-hidden sm:max-w-[900px]!">
-                    <DialogHeader>
-                        <DialogTitle>{rotating ? 'Pool' : 'Find a game'}</DialogTitle>
-                        <DialogDescription>
-                            {rotating
-                                ? 'Games this board rotates through. Exclude any you don’t want on screen.'
-                                : 'Pick the game this board shows.'}
-                        </DialogDescription>
-                    </DialogHeader>
-                    {open && (rotating ? (
-                        <PoolEditor
-                            sb={sb} pool={pool} tagOptions={gameModes}
-                            running={!!status.active} currentIndex={status.current_index ?? -1}
-                        />
-                    ) : (
-                        <SingleGameFinder sb={sb} tagOptions={gameModes} onLoaded={() => setOpen(false)} />
-                    ))}
-                </DialogContent>
-            </Dialog>
-        </>
+        </Stack>
     );
 });

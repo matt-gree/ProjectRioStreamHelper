@@ -433,7 +433,10 @@ describe('Board desk', () => {
         expect(screen.getByText('API')).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /Re-read HUD/ })).not.toBeInTheDocument();
         expect(screen.queryByText(/Match tab/)).not.toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Find a game…' })).toBeInTheDocument();
+        // The playback choice, and the live game list it opens onto — both on the
+        // panel, not behind a button (see games.test.jsx).
+        expect(screen.getByRole('radio', { name: 'One game' })).toBeInTheDocument();
+        expect(screen.getByRole('radio', { name: 'Live' })).toBeInTheDocument();
     });
 
     // A HUD board's game is whatever Project Rio is playing, so it has no pool

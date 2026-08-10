@@ -1111,9 +1111,10 @@ sources).
   chips read "Home", so each takes `ariaLabel` (`ToggleChip`) to be nameable.
 - **The mirror takes the whole panel width; the wiring reads below it.** A lineup
   does not compress — beside a wiring column, nine character names truncated to
-  "Dry Bon…", which is the one thing a roster readout exists to avoid. `This
-  board` (transport · game mode · name · remove) is four one-line settings in a
-  `KitColumns` group under a divider.
+  "Dry Bon…", which is the one thing a roster readout exists to avoid. Under a
+  divider, the wiring splits `7fr / 5fr`: **Games** (its own region — see below)
+  beside `This board`, which keeps only the two properties that genuinely are
+  one-liners, the stats game mode and the name.
 - **Transport stays a readout** (`HUD`/`API` badge, derived from board 1 + the
   global HUD toggle). There is no per-board source selector and adding one is a
   regression, not a feature.
@@ -1128,31 +1129,63 @@ sources).
 
 ### Games: pool + playback (`src/routes/production/games.jsx`)
 
-A board's games are authored on the board, and the surface is **split by tempo —
-the same split the rack takes from the Add picker.**
+A board's games are authored on the board, and the surface is an **instrument, not
+a settings list** — the shape `PoolBrowser` had on the Match tab, kept.
 
-- **On the panel: what a producer watches and nudges during a show.** The
-  playback mode, the seconds per game, the keep-current cadence, the pool count
-  and the transport (rotate/stop, prev/next, index + countdown).
-- **Behind a dialog: what they sit down and BROWSE.** The three chip filter
-  fields, the date range, the limit, and the scrolling game tables. `PoolBrowser`
-  held both tempos in one 933-line always-open panel; a filter with a date picker
-  does not belong on a surface a producer glances at mid-game.
-- **One dialog, named for the job the board is doing**: `Find a game` (single —
-  Live/Completed tabs, row action puts the game on the board) or `Pool` (rotating
-  — scope + filter, matched games with Exclude, excluded chips). The filter is one
-  element in a `filters` array by design: every field already takes a list.
+- **GAMES IS ITS OWN REGION on the board panel** (`KitColumn label="Games"`, the
+  wide half of a `7fr / 5fr` split beside `This board`), and the **mode segmented
+  is full-width and full-size** — it is the subject of the region. Everything
+  below it belongs to whichever half is selected. Choosing between one game and a
+  rotating pool is the biggest decision made about an API board, and each half
+  brings a real surface with it.
+- **The split is by JOB, not by tempo.** On the panel: the mode, its scope, its
+  filter, its timing, its transport, its status line, **and the game list you pick
+  from**. Behind **one** dialog: the rotating pool's `Pool games` member list, for
+  excluding — exactly the dialog `PoolBrowser` opened, and for the same reason
+  (a long table you visit to prune, not to watch).
+- **Why this is written down.** An intermediate version split strictly by *tempo*
+  — steady-state as kit rows, everything browsable behind one dialog — and it lost
+  three things worth naming, all in the same way:
+  - the **mode** became `SegmentedRow label="Playback"` in a label gutter inside a
+    shared column, which is how a demoted control reads as a minor setting;
+  - the **live game list** went behind `Find a game…`, making the most frequent
+    act on an API board two clicks and a modal, for a list of 0–5 rows;
+  - the **pool status line** moved inside the dialog, so the one thing that says
+    *why* a pool is empty was invisible on the panel.
+
+  The tempo instinct was right about exactly one thing — a date range is not a
+  mid-game control — and the **Live/Completed tab already handles that**: the
+  filter fields only exist on the tab a producer deliberately switched to.
+- **The status line is the reason the rotating block is on the panel.**
+  `playbackLine` says the pool is empty; only the dot line says why — no filter
+  yet, filters edited since the last Find (amber, and the Find button rings to
+  match), or an unreachable API. Never move it back behind the dialog.
+- **Nothing here searches the Rio API on mount.** Selecting a board desk must not
+  cost a search: `Find games` runs on the button, and on opening `Pool games`
+  while stopped. (The single-game Live tab *does* poll ongoing games on the
+  `ongoing_games.poll_interval` cadence while it is the visible tab — that is a
+  local ongoing-feed read, not a completed-games query.)
+- **Write out the timing labels.** `Seconds per game` and `Keep pool current`
+  (with the tooltip explaining the off state), and the re-check interval stays
+  **visible-but-disabled** rather than appearing under the switch — a control that
+  vanishes moves everything below it. A label gutter is what forced these down to
+  `Each game` / `Keep current` and dropped the tooltip.
 - **What stages vs what fires now.** Putting a game on a board **stages**
-  (`board:{sb}:game`) — it is the one thing here that reaches air. The filter, the
-  scope, the cadence and an exclusion write straight through: that is prep, the
-  same call the schedule queue makes. The **transport is momentary**, like Take
-  and post-game capture — Rotate/Stop/Next mean now, not on the next confirm.
+  (`board:{sb}:game`) — it is the one act here that reaches air, and the one thing
+  `PoolBrowser` got wrong (it fired immediately). The filter, the scope, the
+  cadence and an exclusion write straight through: that is prep, the same call the
+  schedule queue makes. The **transport is momentary**, like Take and post-game
+  capture — Start/Stop/Next mean now, not on the next confirm.
 - **A HUD board gets the readout and nothing else.** Its game is whatever Project
   Rio is playing, so a mode picker, a pool and a transport would all be controls
   with nothing to act on.
 - `mode` is server-backed, so the segmented **echoes the click locally** and
   reconciles when the settings PUT comes back; without that it reads as locked
-  while the server is off fetching games.
+  while the server is off fetching games. Scope has no echo — it is not pressed
+  mid-game.
+- The filter is one element in a `filters` array by design: every field already
+  takes a list.
+- Tests: `src/routes/production/games.test.jsx` pins what is on the panel.
 
 ## Adding a new element — checklist
 

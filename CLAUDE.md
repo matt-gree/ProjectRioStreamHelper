@@ -266,7 +266,7 @@ If the app fails to launch due to corrupt `user_data/state.json`: `echo '{}' > u
 | Match lifecycle / series / start.gg sets | `server/match.py`, `server/api/v1/match.py` (`bind_board` owns board↔match), `server/rio/game_end.py` |
 | Fixture authoring UI (sides, format, series, flip/decide/reopen, board bind) | `src/routes/production/desks/match.jsx` — the only place. The Match tab is **deleted** (`MatchPanel`, `ScoreControls`, `PoolBrowser`, `src/routes/scoreboard_manager/`); `/scoreboard` renders the console for old bookmarks |
 | Match queue (order, "up next" per board) | `server/schedule.py` (`next_up`, `is_up_next_eligible`), `take_next_match` in `server/api/v1/match.py`, `src/routes/production/queue.js` (preview only), the verb on `desks/board.jsx` + `quickface.jsx` |
-| A board's games (pool, playback, rotation transport, game search) | `src/routes/production/games.jsx` (`GamesSection` = panel rows; the dialog = filter + game tables), rendered by `desks/board.jsx`; server side `server/bindings.py`, `server/rio/rotation.py`, `server/api/v1/rotation.py` |
+| A board's games (pool, playback, rotation transport, game search) | `src/routes/production/games.jsx` (`GamesSection` = the mode + its surface; the one dialog is the rotating pool's member list), rendered by `desks/board.jsx` as its own `Games` region; server side `server/bindings.py`, `server/rio/rotation.py`, `server/api/v1/rotation.py` |
 | Add/modify state keys | `server/state.py`, `src/context/store.jsx` |
 | Add API endpoints | `server/api/v1/` (decorate with `@method`), register in `server/api/__init__.py` |
 | Settings schema | `server/settings.py` (defaults + migrations), `src/components/SettingsModal.jsx` |
