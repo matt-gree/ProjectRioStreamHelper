@@ -554,18 +554,27 @@ export function KitColumns({ children, template, className }) {
     );
 }
 
-// `action` rides on the column's header rule — for the one control that FILLS
-// a column rather than living in it (the Match desk's start.gg load), which
-// would otherwise sit in the field list pretending to be a field.
-export function KitColumn({ label, action, children, className }) {
+/*
+ * `action` rides on the column's header rule — for the one control that FILLS
+ * a column rather than living in it (the Match desk's start.gg load), which
+ * would otherwise sit in the field list pretending to be a field.
+ *
+ * `subject` rides the same rule, beside the label rather than pushed right: a
+ * region whose state is one line (the board's Games — transport badge plus the
+ * playback sentence) spends a whole 28px row plus a gap on it otherwise, and it
+ * belongs to the eyebrow the way a `SubjectRow` belongs to a panel. Left-aligned
+ * on purpose — the far edge of a 900px column is not "next to GAMES".
+ */
+export function KitColumn({ label, subject, action, children, className }) {
     return (
         <div className={cn('flex min-w-0 flex-col gap-1.5', className)}>
-            {(label != null || action) && (
+            {(label != null || subject || action) && (
                 <div className="flex min-h-6 items-center gap-2">
                     {label != null && (
-                        <Text size="xs" className="label-display text-muted-foreground">{label}</Text>
+                        <Text size="xs" className="label-display shrink-0 text-muted-foreground">{label}</Text>
                     )}
-                    {action && <div className="ml-auto flex items-center gap-1.5">{action}</div>}
+                    {subject && <div className="flex min-w-0 items-center gap-1.5">{subject}</div>}
+                    {action && <div className="ml-auto flex min-w-0 items-center gap-1.5">{action}</div>}
                 </div>
             )}
             {children}

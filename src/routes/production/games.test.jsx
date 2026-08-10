@@ -54,30 +54,26 @@ const bind = (playback = {}, pool = {}) => useSettingsStore.setState({
 });
 
 const section = (props = {}) => (
-    <GamesSection
-        sb={1} transport="api" readout="One game — nothing in its pool yet."
-        badge={null} gameModes={[]} {...props}
-    />
+    <GamesSection sb={1} transport="api" gameModes={[]} {...props} />
 );
 
 describe('GamesSection', () => {
-    it('states the readout and offers the playback choice', () => {
+    it('offers the playback choice as its subject', () => {
         ui(section());
-        expect(screen.getByText(/One game — nothing in its pool yet/)).toBeInTheDocument();
         expect(screen.getByRole('radio', { name: 'One game' })).toBeInTheDocument();
         expect(screen.getByRole('radio', { name: 'Rotating' })).toBeInTheDocument();
     });
 
     /*
      * A HUD board's game is whatever Project Rio is playing: no pool, no playback
-     * choice, no way in. The readout is the whole surface, because every control
-     * below it would have nothing to act on (server/bindings.py derives this).
+     * choice, no way in. The region collapses to its header, which the board desk
+     * draws (the transport badge and the playback sentence — desks.test.jsx pins
+     * that); everything here would be a control with nothing to act on
+     * (server/bindings.py derives this).
      */
-    it('draws nothing but the readout on a HUD board', () => {
-        ui(section({ transport: 'hud', readout: 'One game — the local HUD feed.' }));
-        expect(screen.getByText(/the local HUD feed/)).toBeInTheDocument();
-        expect(screen.queryByRole('radio', { name: 'Rotating' })).not.toBeInTheDocument();
-        expect(screen.queryByRole('radio', { name: 'Live' })).not.toBeInTheDocument();
+    it('draws nothing at all on a HUD board', () => {
+        const { container } = ui(section({ transport: 'hud' }));
+        expect(container).toBeEmptyDOMElement();
     });
 
     /*

@@ -991,59 +991,23 @@ export default function BoardDesk({ board }) {
                     membership, and that belongs to the rack's BOARDS section
                     beside the + that adds one (see RowRemove in ../rack).
 
-                    GAMES IS ITS OWN REGION, not a field inside "This board".
-                    Choosing between one game and a rotating pool is the biggest
-                    decision made about an API board, and each half of it brings a
-                    real surface — a live game table, or a filter with a running
-                    transport. Squeezed into a shared column beside the name it
-                    became a label-gutter row, which is how a demoted control gets
-                    read as a minor setting. The remaining properties are two
-                    one-line fields and read fine beside it. */}
-                <KitColumns template="minmax(0,7fr) minmax(0,5fr)">
-                  <KitColumn label="Games">
-                    {/* Where this board's games come from and how it plays them.
-                        Two axes, stated as two things: the badge is the DERIVED
-                        transport (board 1 carries the local HUD iff the global
-                        toggle is on, every other board is API — no picker, ever),
-                        the sentence is the CHOSEN playback. ../games holds the
-                        mode surfaces. */}
-                    <GamesSection
-                        sb={sb}
-                        transport={d.transport}
-                        gameModes={gameModes}
-                        readout={`${playbackLine({
-                            transport: d.transport,
-                            mode: d.playback.mode,
-                            running: d.playback.running,
-                            gameId: d.playback.gameId,
-                            poolCount: d.poolCount,
-                        })}${d.transport === 'hud' ? ' Disable HUD in Settings to rebind.' : ''}`}
-                        badge={(
-                            <>
-                                <Badge className={cn(
-                                    'shrink-0 text-[11px] font-semibold uppercase tracking-wider',
-                                    d.transport === 'hud'
-                                        ? 'bg-[#22c55e]/15 text-[#4ade80]'
-                                        : 'bg-[#3b82f6]/15 text-[#60a5fa]',
-                                )}>
-                                    {d.transport === 'hud' ? 'HUD' : 'API'}
-                                </Badge>
-                                {d.transport === 'hud' && (
-                                    <Button
-                                        variant="ghost" size="icon-sm" className="shrink-0"
-                                        onClick={refreshHud} disabled={refreshingHud}
-                                        aria-label="Re-read HUD file"
-                                        title="Re-read HUD file and restore scoreboard to match it"
-                                    >
-                                        {refreshingHud ? <Loader size={12} /> : <RotateCw size={14} />}
-                                    </Button>
-                                )}
-                            </>
-                        )}
-                    />
-                  </KitColumn>
+                    GAMES IS ITS OWN REGION AND TAKES THE FULL WIDTH, not a field
+                    inside "This board". Choosing between one game and a rotating
+                    pool is the biggest decision made about an API board, and each
+                    half of it brings a real surface — a live game table, or a
+                    filter with a running transport. Squeezed into a shared column
+                    beside the name it became a label-gutter row, which is how a
+                    demoted control gets read as a minor setting; given only 7 of
+                    12 columns it was a tall stack of full-width fields with 300px
+                    of empty panel beside it. The width is what lets the rotator
+                    put its pool and its transport side by side (../games) and the
+                    game table show a mode name without truncating it.
 
-                  <KitColumn label="This board">
+                    The two properties that are left go ABOVE it, as one row.
+                    There is no region eyebrow over them on purpose: the rows
+                    already say "Game mode" and "Name", so a THIS BOARD label was
+                    a third label line stating nothing they don't. */}
+                <KitColumns>
                     {/* Which mode's stats to fetch, with the pipeline's own
                         diagnostics one click away beside it. */}
                     <FieldRow label="Game mode">
@@ -1066,8 +1030,54 @@ export default function BoardDesk({ board }) {
                         label="Name" value={storedAlias} placeholder={`Scoreboard ${sb}`}
                         onChange={commitAlias}
                     />
-                  </KitColumn>
                 </KitColumns>
+
+                  {/* THE TWO AXES RIDE THE REGION'S HEADER RULE, not a row of
+                      their own: the badge is the DERIVED transport (board 1
+                      carries the local HUD iff the global toggle is on, every
+                      other board is API — no picker, ever), the sentence is the
+                      CHOSEN playback. One line of state next to the eyebrow that
+                      names it, which is what a `KitColumn subject` is for. On a
+                      HUD board it is the whole region — ../games returns nothing,
+                      because a pool and a transport would have nothing to act
+                      on. */}
+                  <KitColumn
+                    label="Games"
+                    subject={(
+                        <>
+                            <Badge className={cn(
+                                'shrink-0 text-[11px] font-semibold uppercase tracking-wider',
+                                d.transport === 'hud'
+                                    ? 'bg-[#22c55e]/15 text-[#4ade80]'
+                                    : 'bg-[#3b82f6]/15 text-[#60a5fa]',
+                            )}>
+                                {d.transport === 'hud' ? 'HUD' : 'API'}
+                            </Badge>
+                            <Text size="xs" truncate dimmed className="min-w-0">
+                                {playbackLine({
+                                    transport: d.transport,
+                                    mode: d.playback.mode,
+                                    running: d.playback.running,
+                                    gameId: d.playback.gameId,
+                                    poolCount: d.poolCount,
+                                })}
+                                {d.transport === 'hud' && ' Disable HUD in Settings to rebind.'}
+                            </Text>
+                            {d.transport === 'hud' && (
+                                <Button
+                                    variant="ghost" size="icon-sm" className="shrink-0"
+                                    onClick={refreshHud} disabled={refreshingHud}
+                                    aria-label="Re-read HUD file"
+                                    title="Re-read HUD file and restore scoreboard to match it"
+                                >
+                                    {refreshingHud ? <Loader size={12} /> : <RotateCw size={14} />}
+                                </Button>
+                            )}
+                        </>
+                    )}
+                  >
+                    <GamesSection sb={sb} transport={d.transport} gameModes={gameModes} />
+                  </KitColumn>
             </div>
         </>
     );

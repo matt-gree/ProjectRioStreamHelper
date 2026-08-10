@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo, useRef, memo } from 'react';
+import { useState, useCallback, useEffect, useId, useMemo, useRef, memo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import {
     ChevronLeft, ChevronRight, X, Ban, RotateCw, Undo2, Search, CalendarDays,
@@ -24,7 +24,7 @@ import { useSocketSubscribe } from '../../context/socket';
 import { useSettingsStore, useStateStore } from '../../context/store';
 import { stageOrRun } from '../../context/staging';
 import ParticipantPicker from '../../components/ParticipantPicker';
-import { FieldRow } from './kit';
+import { KitColumns } from './kit';
 
 /*
  * Games — where a board's games come from, and how it plays them.
@@ -61,8 +61,11 @@ import { FieldRow } from './kit';
  *
  * THE TWO AXES STAY TWO THINGS (see ../boards): transport (HUD vs API) is
  * DERIVED and has no picker; playback (single vs rotating) is CHOSEN and is the
- * only thing this surface sets. A HUD board has no pool at all — its game is
- * whatever Project Rio is playing — so it gets the readout and nothing else.
+ * only thing this surface sets. Neither is drawn here: the board desk states both
+ * on the region's header rule (`KitColumn subject`), so a one-line statement of
+ * state costs no row. A HUD board has no pool at all — its game is whatever
+ * Project Rio is playing — so that header is its entire Games region and this
+ * module renders nothing.
  */
 
 // ─── game shape helpers ─────────────────────────────────────────────────────
@@ -259,16 +262,6 @@ function DateField({ value, onChange, kind = 'start', label }) {
     );
 }
 
-// A labelled stack for the compact refine row (dates + limit).
-function Field({ label, children }) {
-    return (
-        <div className="flex flex-col gap-1">
-            <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{label}</Label>
-            {children}
-        </div>
-    );
-}
-
 /*
  * The completed-game filter surface, shared by the single-game Completed search
  * and the rotating pool so the two read identically. `value` is a filter dict
@@ -276,9 +269,21 @@ function Field({ label, children }) {
  * `onChange(patch)` merges a partial. Fields combine the way the Rio API does:
  * values within one field OR together, different fields AND. `showRefine=false`
  * hides the completed-only date/limit row (e.g. a live-only pool scope).
+ *
+ * `columns` is EXPLICIT, not a container query, and that is the point. The three
+ * chip fields are peers (one AND-ed term each) and read well across — but the
+ * `@container` here is the PANEL, not the box this component was handed, so a
+ * `@4xl:grid-cols-3` gate goes three-across inside a half-width column too and
+ * squeezes each field to 155px. The caller knows how wide it is; ask it.
+ * `columns={3}` for the full-width single-game search, stacked (the default) in
+ * the rotating pool's half column.
+ *
+ * (Measured, not assumed: at three-across in a 554px column each field was 179px
+ * and "Filter by opponent" already overflowed its own placeholder.)
  */
-function GameFilters({ value, onChange, tagOptions, showRefine = true, trailing = null }) {
+function GameFilters({ value, onChange, tagOptions, showRefine = true, trailing = null, columns = 1 }) {
     const v = value ?? {};
+    const limitId = useId();
     // The date range is opt-in: an always-visible empty date picker reads like
     // an active filter. Collapsed by default; revealed on demand, or already
     // open when a persisted filter carries dates.
@@ -289,41 +294,49 @@ function GameFilters({ value, onChange, tagOptions, showRefine = true, trailing 
     };
     return (
         <Stack gap="sm">
-            <MultiSelect
-                placeholder="Game modes"
-                data={tagOptions}
-                value={v.tag ?? []}
-                onChange={(val) => onChange({ tag: val })}
-            />
-            <NameChips
-                values={v.username ?? []}
-                onChange={(val) => onChange({ username: val })}
-                placeholder="Filter by player"
-            />
-            <NameChips
-                values={v.vs_username ?? []}
-                onChange={(val) => onChange({ vs_username: val })}
-                placeholder="Filter by opponent"
-            />
+            {/* items-start, so a field that grows chips onto a second line does
+                not stretch its two neighbours to match. */}
+            <div className={cn(
+                'grid grid-cols-1 items-start gap-2',
+                columns === 3 && '@4xl:grid-cols-3',
+            )}>
+                <MultiSelect
+                    placeholder="Game modes"
+                    data={tagOptions}
+                    value={v.tag ?? []}
+                    onChange={(val) => onChange({ tag: val })}
+                />
+                <NameChips
+                    values={v.username ?? []}
+                    onChange={(val) => onChange({ username: val })}
+                    placeholder="Filter by player"
+                />
+                <NameChips
+                    values={v.vs_username ?? []}
+                    onChange={(val) => onChange({ vs_username: val })}
+                    placeholder="Filter by opponent"
+                />
+            </div>
+            {/* Inline labels, not micro-caps stacked over each control: a
+                stacked label made this a 51px row for two 32px inputs, and a
+                date input states its own format anyway (the two carry
+                aria-labels, and the dash between them says it is a range). */}
             {showRefine && (
-                <div className="flex flex-wrap items-end gap-3">
-                    <Field label="Limit">
-                        <NumberInput
-                            placeholder="All"
-                            min={1} max={500}
-                            value={v.limit_games ?? null}
-                            onChange={(val) => onChange({ limit_games: val || null })}
-                            className="w-[76px]"
-                        />
-                    </Field>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                    <Label className="whitespace-nowrap text-xs" htmlFor={limitId}>Limit</Label>
+                    <NumberInput
+                        id={limitId}
+                        placeholder="All"
+                        min={1} max={500}
+                        value={v.limit_games ?? null}
+                        onChange={(val) => onChange({ limit_games: val || null })}
+                        className="w-[76px]"
+                    />
                     {dateOpen ? (
                         <>
-                            <Field label="From">
-                                <DateField label="From" value={v.start_time} kind="start" onChange={(t) => onChange({ start_time: t })} />
-                            </Field>
-                            <Field label="To">
-                                <DateField label="To" value={v.end_time} kind="end" onChange={(t) => onChange({ end_time: t })} />
-                            </Field>
+                            <DateField label="From" value={v.start_time} kind="start" onChange={(t) => onChange({ start_time: t })} />
+                            <Text size="xs" span dimmed>–</Text>
+                            <DateField label="To" value={v.end_time} kind="end" onChange={(t) => onChange({ end_time: t })} />
                             <button
                                 type="button"
                                 onClick={closeDates}
@@ -494,6 +507,7 @@ const SingleGameFinder = memo(function SingleGameFinder({ sb, tagOptions }) {
                         value={filters}
                         onChange={patchFilters}
                         tagOptions={tagOptions}
+                        columns={3}
                         trailing={(
                             <Button size="xs" variant="secondary" onClick={manualFetchCompleted} disabled={loadingCompleted}>
                                 {loadingCompleted ? <Loader size={12} /> : <Search size={13} />}
@@ -771,24 +785,36 @@ const RotatingGames = memo(function RotatingGames({
 
     return (
         <Stack gap="sm">
-            {/* Source scope — a subordinate segmented, mirroring the single-game
-                Live/Completed selector so both modes read mode → source. */}
-            <SegmentedControl
-                fullWidth size="xs"
-                data={scopeOptions}
-                value={pool.scope ?? 'both'}
-                onChange={setScope}
-            />
+          {/* TWO COLUMNS, because the rotator has two subjects: what is IN the
+              pool (scope · filter · limit) and how the pool PLAYS (cadence ·
+              transport · status). Stacked, those were seven full-width rows in a
+              554px column with ~300px of empty panel beside them — which is what
+              made this read as too tall even before it was measured. Side by side
+              the region loses ~90px and the dead width goes with it. */}
+          <KitColumns>
+            <Stack gap="sm">
+                {/* Source scope — a subordinate segmented, mirroring the
+                    single-game Live/Completed selector so both modes read
+                    mode → source. */}
+                <SegmentedControl
+                    fullWidth size="xs"
+                    data={scopeOptions}
+                    value={pool.scope ?? 'both'}
+                    onChange={setScope}
+                />
 
-            {/* Date and limit are completed-only, so they are hidden on a
-                live-only scope where they would filter nothing. */}
-            <GameFilters
-                value={filter}
-                onChange={updateFilter}
-                tagOptions={tagOptions}
-                showRefine={(pool.scope ?? 'both') !== 'live'}
-            />
+                {/* Stacked, not across: this is a half-width column. Date and
+                    limit are completed-only, so they are hidden on a live-only
+                    scope where they would filter nothing. */}
+                <GameFilters
+                    value={filter}
+                    onChange={updateFilter}
+                    tagOptions={tagOptions}
+                    showRefine={(pool.scope ?? 'both') !== 'live'}
+                />
+            </Stack>
 
+            <Stack gap="sm">
             {/* Timing. Both labels are written out: "Keep pool current" says what
                 it keeps current, where a label-gutter row forced it down to
                 "Keep current" and dropped the tooltip that explains the off
@@ -838,7 +864,7 @@ const RotatingGames = memo(function RotatingGames({
             {/* Pool actions + transport + status, in one contained inset so the
                 status never reads as floating text. Actions left, transport
                 right, the status line beneath the two. */}
-            <div className="space-y-2.5 rounded-md border border-border bg-muted/30 p-2.5">
+            <div className="space-y-2 rounded-md border border-border bg-muted/30 p-2">
                 <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
                     <div className="flex items-center gap-1.5">
                         <Button
@@ -911,6 +937,8 @@ const RotatingGames = memo(function RotatingGames({
                     <Text size="xs" className={cn('truncate', poolStatus.cls)}>{poolStatus.text}</Text>
                 </div>
             </div>
+            </Stack>
+          </KitColumns>
 
             <PoolGamesDialog
                 open={poolOpen}
@@ -967,17 +995,16 @@ function useAdvanceCountdown(active, nextAdvanceAt) {
 /*
  * GamesSection — the board panel's "where do this board's games come from" region.
  *
- * The readout on top (the transport badge and the sentence the board already
- * prints), then the mode, then the mode's own surface. The mode segmented is
- * full-width and full-size: it is the subject here, and everything under it
- * belongs to whichever half is chosen.
+ * The mode, then the mode's own surface. The mode segmented is full-width and
+ * full-size: it is the subject here, and everything under it belongs to whichever
+ * half is chosen.
  *
- * `readout` is the sentence the panel already computed (playbackLine) — passed
- * in rather than recomputed so the board desk keeps one source for it.
+ * The transport badge and the playback sentence are NOT here — the board desk
+ * puts them on the region's own header rule (`KitColumn subject`), because a
+ * one-line statement of state does not need a row of its own on a surface that
+ * was already too tall.
  */
-export const GamesSection = memo(function GamesSection({
-    sb, transport, readout, badge, gameModes,
-}) {
+export const GamesSection = memo(function GamesSection({ sb, transport, gameModes }) {
     const pool = useSettingsStore(s => s?.scoreboards?.binding?.[sb]?.pool
         ?? s?.scoreboards?.binding?.[String(sb)]?.pool ?? DEFAULT_POOL);
     const serverMode = useSettingsStore(s => s?.scoreboards?.binding?.[sb]?.playback?.mode
@@ -1011,26 +1038,14 @@ export const GamesSection = memo(function GamesSection({
 
     /*
      * A HUD board has no pool and no playback choice — its game is whatever
-     * Project Rio is playing locally, and the readout already says so
-     * (server/bindings.py). Everything below would be a control with nothing to
-     * act on.
+     * Project Rio is playing locally, and the region's header sentence already
+     * says so (server/bindings.py). Everything here would be a control with
+     * nothing to act on, so the region is its header and nothing else.
      */
-    if (transport === 'hud') {
-        return (
-            <FieldRow>
-                {badge}
-                <Text size="xs" dimmed className="min-w-0">{readout}</Text>
-            </FieldRow>
-        );
-    }
+    if (transport === 'hud') return null;
 
     return (
         <Stack gap="sm">
-            <FieldRow>
-                {badge}
-                <Text size="xs" dimmed className="min-w-0">{readout}</Text>
-            </FieldRow>
-
             <SegmentedControl fullWidth data={playbackOptions} value={mode} onChange={setMode} />
 
             {mode === 'rotate' ? (

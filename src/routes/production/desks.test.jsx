@@ -451,7 +451,33 @@ describe('Board desk', () => {
         expect(screen.getByText('HUD')).toBeInTheDocument();
         expect(screen.getByText(/Disable HUD in Settings to rebind/)).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /Find a game/ })).not.toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: /Rotating/ })).not.toBeInTheDocument();
+        expect(screen.queryByRole('radio', { name: 'Rotating' })).not.toBeInTheDocument();
+    });
+
+    /*
+     * The two axes ride the GAMES header rule, not a row of their own — one line
+     * of state beside the eyebrow that names it. A HUD board's whole Games region
+     * IS that header (GamesSection renders nothing), which is why the badge and
+     * the sentence have to live on the desk rather than inside it.
+     */
+    it('states the transport and the playback on the Games header rule', () => {
+        useSettingsStore.setState({
+            project_rio: { hud_enabled: false },
+            production: {},
+            scoreboards: {
+                active: [1], aliases: {},
+                binding: { 1: { playback: { mode: 'rotate', running: true } } },
+            },
+        });
+        useStateStore.setState({
+            score: { 1: { player: {} } },
+            scoreboards: { rotation: { 1: { game_ids: [11, 12] } } },
+            match: {},
+        });
+        ui(<BoardDesk board={1} />);
+        const header = screen.getByText('Games').parentElement;
+        expect(header).toHaveTextContent('API');
+        expect(header).toHaveTextContent('Rotating — 2 in pool.');
     });
 
     // Corrections are broadcast-visible, so they go through the staging gateway;

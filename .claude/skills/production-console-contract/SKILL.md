@@ -155,7 +155,18 @@ position, not an identity).
 - Compose from the row kit. At stage width, rows may flow into **labelled kit
   columns** (the Match desk uses two: "Who's playing" · "Fixture") — column
   grouping is a kit feature, not a per-element invention. `KitColumns` takes an
-  optional `template` for an asymmetric split.
+  optional `template` for an asymmetric split, and `KitColumn` takes a `subject`
+  that rides its header rule beside the label — for a region whose whole state is
+  one line (the board's `Games`: transport badge + playback sentence), which
+  otherwise spends a 28px row and a gap restating what the eyebrow introduces.
+- **A nested column cannot use a container query to size itself.** The
+  `@container` is `PanelShell`'s body, so `@4xl:grid-cols-3` inside a half-width
+  column still fires on the *panel's* width and squeezes each cell to a third of
+  half. Give the child an explicit prop and let the caller — which knows how wide
+  it is — pass it (`GameFilters columns={3}`). Two bugs came from ignoring this:
+  a three-across filter row at 179px per field, and before it a `@5xl` gate that
+  never fired at all because a 1600px window only gives this body ~970px.
+  **Measure the panel; never reason from the window.**
 - **Lay out against the panel, not the viewport.** `PanelShell`'s body is a
   `@container`, so stage bodies use container variants (`@xl:`, `@2xl:`,
   `@5xl:`) and the same body collapses to one column in a narrow window without
@@ -1111,10 +1122,15 @@ sources).
   chips read "Home", so each takes `ariaLabel` (`ToggleChip`) to be nameable.
 - **The mirror takes the whole panel width; the wiring reads below it.** A lineup
   does not compress — beside a wiring column, nine character names truncated to
-  "Dry Bon…", which is the one thing a roster readout exists to avoid. Under a
-  divider, the wiring splits `7fr / 5fr`: **Games** (its own region — see below)
-  beside `This board`, which keeps only the two properties that genuinely are
-  one-liners, the stats game mode and the name.
+  "Dry Bon…", which is the one thing a roster readout exists to avoid. Under the
+  divider: the board's two properties (stats game mode · name) as a single
+  two-column row, then **Games** full width (see below).
+- **The two properties carry no region eyebrow.** The rows already read `Game
+  mode` and `Name`; a `THIS BOARD` label over them was a third label line stating
+  nothing they don't — and giving them a 5-of-12 column so they could have one
+  cost Games the width it needed *and* left ~300px of empty panel beside a tall
+  stack of full-width fields. That emptiness is what made the surface read as too
+  tall before anyone measured it.
 - **Transport stays a readout** (`HUD`/`API` badge, derived from board 1 + the
   global HUD toggle). There is no per-board source selector and adding one is a
   regression, not a feature.
@@ -1132,12 +1148,27 @@ sources).
 A board's games are authored on the board, and the surface is an **instrument, not
 a settings list** — the shape `PoolBrowser` had on the Match tab, kept.
 
-- **GAMES IS ITS OWN REGION on the board panel** (`KitColumn label="Games"`, the
-  wide half of a `7fr / 5fr` split beside `This board`), and the **mode segmented
-  is full-width and full-size** — it is the subject of the region. Everything
-  below it belongs to whichever half is selected. Choosing between one game and a
-  rotating pool is the biggest decision made about an API board, and each half
-  brings a real surface with it.
+- **GAMES IS ITS OWN REGION and takes the full panel width**
+  (`KitColumn label="Games"`), and the **mode segmented is full-width and
+  full-size** — it is the subject of the region. Everything below it belongs to
+  whichever half is selected. Choosing between one game and a rotating pool is the
+  biggest decision made about an API board, and each half brings a real surface
+  with it.
+- **The transport badge and the playback sentence ride the region's header rule**
+  (`KitColumn subject`, drawn by the desk), not a row inside the region. On a HUD
+  board that header *is* the whole region — `GamesSection` returns `null`.
+- **The rotator is two columns, because it has two subjects**: what is IN the pool
+  (scope · filter · limit/dates) and how the pool PLAYS (cadence · transport ·
+  status). Stacked they were seven full-width rows; side by side the region is
+  ~250px instead of ~470px and the dead width goes with it. The filter stays
+  **stacked** inside its half column and goes three-across only in the full-width
+  single-game search — via an explicit `columns` prop, not a container query (see
+  the nested-column rule above).
+- **Measured, not estimated.** Every cut above came from reading real heights off
+  the panel (`getBoundingClientRect`) — the readout row was 28px + gap, three
+  stacked chip fields were 118px, a micro-cap `LIMIT` label made a 32px input a
+  51px row. Estimates were out by 50px+ each time an estimate was trusted; the
+  three-across-at-179px regression was one of them.
 - **The split is by JOB, not by tempo.** On the panel: the mode, its scope, its
   filter, its timing, its transport, its status line, **and the game list you pick
   from**. Behind **one** dialog: the rotating pool's `Pool games` member list, for
