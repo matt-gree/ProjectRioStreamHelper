@@ -240,7 +240,9 @@ const BracketQuickFace = memo(function BracketQuickFace() {
 const BoardQuickFace = memo(function BoardQuickFace({ id }) {
     const sb = boardOfDeskId(id);
     const d = useBoardDesk(sb);
-    const next = useNextUp();
+    // The board's OWN running order, so the card names the fixture this board
+    // would actually take rather than the head of the union.
+    const next = useNextUp(sb);
     const [refreshing, setRefreshing] = useState(false);
     const [taking, setTaking] = useState(false);
     const refreshHud = () => {

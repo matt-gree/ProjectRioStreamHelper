@@ -435,7 +435,7 @@ _take_next_lock = asyncio.Lock()
 
 
 @bind_router.post("/{sb}/next-match", response_class=ORJSONResponse)
-async def take_next_match(sb: int):
+async def take_next_match(sb: int, queue: str | None = None):
     """Bind board ``sb`` to the next queued fixture waiting for a board.
 
     "Next" is DERIVED, never stored — `Schedule.next_up()` walks the queue for the
@@ -443,12 +443,19 @@ async def take_next_match(sb: int):
     advance and none to get out of step, which is what lets several matches run at
     once and lets whichever board frees up first take the next one.
 
+    WHICH queue is the board's own (`scoreboards.match_queue.{N}`, defaulting to the
+    first), overridable per press via ``queue``. The default keeps one-click Up next
+    working; the override is what lets a single board pull from Winners now and
+    Losers next, without the producer reassigning the board between fixtures.
+
     409 when the queue has nothing waiting, so the producer gets told why rather
     than watching a button do nothing.
     """
     require_board(sb)
+    if queue and Schedule.get_queue(queue) is None:
+        raise HTTPException(404, f"queue {queue!r} does not exist")
     async with _take_next_lock:
-        m = Schedule.next_up()
+        m = Schedule.next_up(queue) if queue else Schedule.next_up_for_board(sb)
         if m is None:
             raise HTTPException(409, "nothing in the queue is waiting for a board")
         from server.bindings import is_rotating, transport

@@ -1,9 +1,10 @@
 import { Fragment, memo, useEffect, useMemo, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import {
-    ArrowLeftRight, ChevronRight, ChevronsUpDown, Check, ListOrdered, Plus, Trash2, Trophy,
+    ArrowLeftRight, ChevronRight, ChevronsUpDown, Check, ListOrdered, ListPlus, Plus,
+    Trash2, Trophy,
 } from 'lucide-react';
-import { useStateStore } from '../../../context/store';
+import { useSettingsStore, useStateStore } from '../../../context/store';
 import {
     createMatch, updateMatch, deleteMatch, bindScoreboard, loadStartGGSet,
     flipMatch, decideMatch,
@@ -26,8 +27,11 @@ import { cn } from '../../../lib/utils';
 import { KIT_FIELD, FieldRow, KitColumn, KitColumns } from '../kit';
 import { StagedDot, MoveButtons } from '../controls';
 import { useActiveBoards, useMatchBindableBoards } from '../boards';
-import { useQueueOrder, useWaitingReason } from '../queue';
-import { queueMatch, unqueueMatch, moveQueuedMatch } from '../../../context/schedule';
+import { useQueueOrder, useQueues, useWaitingReason } from '../queue';
+import {
+    queueMatch, unqueueMatch, moveQueuedMatch,
+    createQueue, renameQueue, deleteQueue, moveQueue,
+} from '../../../context/schedule';
 
 /*
  * Match desk — the console's fixture-authoring surface (the full authoring
@@ -507,6 +511,105 @@ const STAGES = ['draft', 'live', 'post'];
  * silent. Setting a played fixture back to Draft is the way out, which is why the
  * two live in one popover.
  */
+/*
+ * WHICH RUNNING ORDER this fixture is in — membership, which is a property of the
+ * record rather than of its position.
+ *
+ * A toggle while there is one order (the common case: enrolled by default, so this
+ * is normally the way OUT — a placeholder, or a fixture kept for reference, that
+ * should not show on the schedule overlay or be offered to a board). A picker once
+ * there are several, because membership is EXCLUSIVE: a fixture belongs to one
+ * order, so choosing another MOVES it rather than listing it twice. Same shape as
+ * a container's exclusive roster.
+ */
+const MembershipControl = memo(function MembershipControl({ m, queues, queueOf }) {
+    const [open, setOpen] = useState(false);
+    const inOrder = queueOf != null;
+    const toast = (e) => notifications.show({
+        message: `Running order: ${e?.message || e}`, color: 'red',
+    });
+    // `null` means take it out; `undefined` means put it in whichever order the
+    // server considers first.
+    const choose = (qid) => {
+        setOpen(false);
+        (qid === null ? unqueueMatch(m) : queueMatch(m, qid)).catch(toast);
+    };
+
+    const single = queues.length <= 1;
+    const face = (
+        <button
+            type="button"
+            /*
+             * A VERB while this is a toggle, a STATE once it opens a picker. An
+             * action label is the better one for a button, but "Take match 3 out of
+             * the running order" would be a lie on a control whose click just opens
+             * a list of orders to choose from.
+             */
+            aria-label={single
+                ? (inOrder
+                    ? `Take match ${m} out of the running order`
+                    : `Add match ${m} to the running order`)
+                : (inOrder
+                    ? `Match ${m} is in the ${queueOf} running order`
+                    : `Match ${m} is not in a running order`)}
+            aria-pressed={inOrder}
+            /*
+             * The toggle sends NO queue id — the server resolves "the first order",
+             * which is the same answer without the client having to name it. It
+             * matters because `queues` may be the pre-migration fallback, whose id
+             * this client invented: naming it would 404 the moment the real first
+             * order is titled anything else.
+             */
+            onClick={single ? () => choose(inOrder ? null : undefined) : undefined}
+            className={cn(
+                'shrink-0 rounded p-1 transition-colors hover:bg-secondary',
+                inOrder ? 'text-rio-400 hover:text-rio-300' : 'text-muted-foreground/60 hover:text-foreground',
+            )}
+        >
+            <ListOrdered size={14} />
+        </button>
+    );
+
+    if (single) {
+        return (
+            <SimpleTooltip label={inOrder
+                ? 'In the running order — click to take it out of the schedule and out of Up next'
+                : 'Not in the running order — click to add it to the end'}>
+                {face}
+            </SimpleTooltip>
+        );
+    }
+    return (
+        <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>{face}</PopoverTrigger>
+            <PopoverContent align="end" className="w-60">
+                <Stack gap="xs">
+                    <Text size="xs" className="label-display text-muted-foreground">Running order</Text>
+                    {queues.map(q => (
+                        <Button
+                            key={q.id}
+                            size="xs"
+                            variant={q.id === queueOf ? 'default' : 'outline'}
+                            onClick={() => choose(q.id)}
+                            className="justify-start"
+                        >
+                            {q.title || q.id}
+                        </Button>
+                    ))}
+                    <Button
+                        size="xs"
+                        variant={inOrder ? 'ghost' : 'secondary'}
+                        onClick={() => choose(null)}
+                        className="justify-start text-muted-foreground"
+                    >
+                        In none — off the schedule
+                    </Button>
+                </Stack>
+            </PopoverContent>
+        </Popover>
+    );
+});
+
 const StageControl = memo(function StageControl({ m, stage, reason, queued }) {
     const [open, setOpen] = useState(false);
     const set = (next) => {
@@ -615,6 +718,7 @@ function clinchedSide(match) {
 // trash (a two-step Popover confirm, no blocking browser dialog).
 const MatchAccordion = memo(function MatchAccordion({
     m, open, onToggle, active, boundMap, gameModes, canBind, queuePos, queueLen,
+    queues, queueOf,
 }) {
     const draft = useMatchDraft(m);
     const stage = draft.match?.stage || 'draft';
@@ -860,29 +964,7 @@ const MatchAccordion = memo(function MatchAccordion({
                     (create_match appends it), so this is normally the way OUT: a
                     placeholder, or a fixture kept for reference, that should not
                     show on the schedule overlay or be offered to a board. */}
-                <SimpleTooltip label={queuePos != null
-                    ? 'In the running order — click to take it out of the schedule and out of Up next'
-                    : 'Not in the running order — click to add it to the end'}>
-                    <button
-                        type="button"
-                        onClick={() => (queuePos != null ? unqueueMatch(m) : queueMatch(m))
-                            .catch(e => notifications.show({
-                                message: `Running order: ${e?.message || e}`, color: 'red',
-                            }))}
-                        aria-label={queuePos != null
-                            ? `Take match ${m} out of the running order`
-                            : `Add match ${m} to the running order`}
-                        aria-pressed={queuePos != null}
-                        className={cn(
-                            'shrink-0 rounded p-1 transition-colors hover:bg-secondary',
-                            queuePos != null
-                                ? 'text-rio-400 hover:text-rio-300'
-                                : 'text-muted-foreground/60 hover:text-foreground',
-                        )}
-                    >
-                        <ListOrdered size={14} />
-                    </button>
-                </SimpleTooltip>
+                <MembershipControl m={m} queues={queues} queueOf={queueOf} />
                 <SimpleTooltip label="Flip the fixture's sides — series wins follow the player">
                     <button
                         type="button"
@@ -1075,6 +1157,156 @@ const MatchAccordion = memo(function MatchAccordion({
     );
 });
 
+/*
+ * Which boards draw from each running order — `{queueId: [sb]}`.
+ *
+ * An order's whole point is that a board takes fixtures from it, and that is the
+ * one fact its heading cannot derive from itself. Resolved the same way the server
+ * does (`Schedule.queue_for_board`): an unassigned board counts toward the FIRST
+ * order, so a rig nobody has configured still shows where its fixtures go.
+ */
+function useBoardsByQueue(active) {
+    const assigned = useSettingsStore(useShallow(s => s?.scoreboards?.match_queue ?? {}));
+    const ids = useStateStore(useShallow((s) => {
+        const qs = s?.schedule?.queues;
+        return Array.isArray(qs) ? qs.map((q, i) => String(q?.id ?? `queue-${i + 1}`)) : [];
+    }));
+    return useMemo(() => {
+        const out = {};
+        for (const sb of active) {
+            const want = assigned[sb] ?? assigned[String(sb)];
+            const qid = (want && ids.includes(String(want))) ? String(want) : ids[0];
+            if (!qid) continue;
+            (out[qid] ||= []).push(sb);
+        }
+        return out;
+    }, [active, assigned, ids]);
+}
+
+/*
+ * One running order's heading: its title, who draws from it, and the verbs that
+ * act on the ORDER rather than on a fixture in it.
+ *
+ * The title is editable in place. A queue's id is minted once from its title and
+ * never changes (`queue_id_for`), so renaming is safe — a board's assignment points
+ * at the id and survives.
+ */
+const QueueHeading = memo(function QueueHeading({ queue, boards, first, last }) {
+    const [title, setTitle] = useState(queue.title);
+    const [confirmDel, setConfirmDel] = useState(false);
+    // Follow the server when it changes underneath us, but never while the producer
+    // is mid-edit in this field.
+    const focused = useRef(false);
+    useEffect(() => { if (!focused.current) setTitle(queue.title); }, [queue.title]);
+
+    const commit = () => {
+        if (title === queue.title) return;
+        renameQueue(queue.id, title)
+            .catch(e => notifications.show({ message: `Rename order: ${e?.message || e}`, color: 'red' }));
+    };
+    const onDelete = () => {
+        setConfirmDel(false);
+        deleteQueue(queue.id)
+            .catch(e => notifications.show({ message: `Remove order: ${e?.message || e}`, color: 'red' }));
+    };
+
+    return (
+        <div className="flex items-center gap-2 pt-2">
+            <MoveButtons
+                label={`the ${queue.title || queue.id} order`}
+                canUp={!first} canDown={!last}
+                onUp={() => moveQueue(queue.id, -1)} onDown={() => moveQueue(queue.id, 1)}
+            />
+            <input
+                type="text"
+                aria-label={`Title of the ${queue.id} running order`}
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                onFocus={() => { focused.current = true; }}
+                onBlur={() => { focused.current = false; commit(); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                placeholder="Untitled order"
+                className="label-display min-w-0 flex-1 rounded border border-transparent bg-transparent px-1 py-0.5 text-xs text-foreground/80 hover:border-border focus:border-border focus:outline-none"
+            />
+            {/* The consequence of the order, which nothing else on the desk says. */}
+            <Text size="xs" span className="shrink-0 text-muted-foreground/70">
+                {boards?.length
+                    ? `board ${boards.join(', ')}`
+                    : 'no board takes from this'}
+            </Text>
+            <Popover open={confirmDel} onOpenChange={setConfirmDel}>
+                <PopoverTrigger asChild>
+                    <button
+                        type="button"
+                        aria-label={`Remove the ${queue.id} running order`}
+                        className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                    >
+                        <Trash2 size={13} />
+                    </button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-60">
+                    <Stack gap="xs">
+                        <Text size="sm" className="text-foreground">Remove this running order?</Text>
+                        <Text size="xs" className="text-muted-foreground">
+                            Its {queue.matches.length} fixture{queue.matches.length === 1 ? '' : 's'} stay,
+                            unenrolled. Boards taking from it fall back to the first order.
+                        </Text>
+                        <Group gap="xs" className="justify-end">
+                            <Button size="xs" variant="ghost" onClick={() => setConfirmDel(false)}>Cancel</Button>
+                            <Button size="xs" variant="destructive" onClick={onDelete}>Remove</Button>
+                        </Group>
+                    </Stack>
+                </PopoverContent>
+            </Popover>
+        </div>
+    );
+});
+
+// Add a running order. The title is asked for up front because it mints the id.
+const NewQueueButton = memo(function NewQueueButton() {
+    const [open, setOpen] = useState(false);
+    const [title, setTitle] = useState('');
+    const add = () => {
+        setOpen(false);
+        const t = title.trim();
+        setTitle('');
+        createQueue(t)
+            .catch(e => notifications.show({ message: `New order: ${e?.message || e}`, color: 'red' }));
+    };
+    return (
+        <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+                <Button size="xs" variant="ghost" className="text-muted-foreground">
+                    <ListPlus size={13} className="mr-1" /> New running order
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-72">
+                <Stack gap="xs">
+                    <Text size="xs" className="label-display text-muted-foreground">New running order</Text>
+                    <Text size="xs" className="text-muted-foreground">
+                        A second ordered list of fixtures — a losers bracket alongside a winners
+                        bracket, say. Assign a board to it on that board’s panel.
+                    </Text>
+                    <input
+                        type="text"
+                        autoFocus
+                        aria-label="Title of the new running order"
+                        value={title}
+                        onChange={(e) => setTitle(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter' && title.trim()) add(); }}
+                        placeholder="e.g. Losers"
+                        className={cn(QUIET_FIELD, 'w-full')}
+                    />
+                    <Group gap="xs" className="justify-end">
+                        <Button size="xs" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
+                        <Button size="xs" disabled={!title.trim()} onClick={add}>Add</Button>
+                    </Group>
+                </Stack>
+            </PopoverContent>
+        </Popover>
+    );
+});
+
 // The Match card — the Draft-phase authoring surface, rendered as its own
 // half-width element window. Holds a stack of match accordions (one per match)
 // and a New-match button; a match binds to at most one board (score.{N}.match
@@ -1121,12 +1353,33 @@ export default function MatchDesk() {
      * the newest match" means the one just created, wherever it sits in the order.
      */
     const queueOrder = useQueueOrder();
-    const { order, queuePos, queuedCount } = useMemo(() => {
-        const pos = {};
-        queueOrder.forEach((id, i) => { pos[id] = i + 1; });
-        const rest = ids.filter(id => pos[id] == null);
-        return { order: [...queueOrder, ...rest], queuePos: pos, queuedCount: queueOrder.length };
-    }, [queueOrder, ids]);
+    const queues = useQueues();
+    /*
+     * SEVERAL ORDERS, one section each, then the unenrolled group.
+     *
+     * `queuePos` is a match's place WITHIN ITS OWN order, and `queueLen` the length
+     * of that order — the arrows bound at its ends, because position and membership
+     * are different verbs and walking the last fixture of Winners "down" must not
+     * spill it into Losers. `groupAt` maps a row index to the section heading that
+     * opens there, so the stack labels itself without a second pass.
+     */
+    const { groups, unenrolled } = useMemo(() => {
+        /*
+         * `queues` absent but `queue` populated is the one-frame window before the
+         * boot migration lands (or a client that connected mid-migration). Treat the
+         * projected union as a single untitled order rather than drawing an empty
+         * desk over a night's worth of fixtures.
+         */
+        const gs = queues.length
+            ? queues
+            : (queueOrder.length ? [{ id: 'main', title: '', matches: queueOrder }] : []);
+        const of = {};
+        for (const q of gs) for (const id of q.matches) of[id] = q.id;
+        return { groups: gs, unenrolled: ids.filter(id => of[id] == null) };
+    }, [queues, queueOrder, ids]);
+    // Which boards draw their next fixture from each order — the consequence of an
+    // order that the desk would otherwise never mention.
+    const boardsByQueue = useBoardsByQueue(active);
 
     const newestId = ids[ids.length - 1] || null;
     const effectiveOpen = openId === null ? newestId : (openId || null);
@@ -1157,35 +1410,72 @@ export default function MatchDesk() {
                 </Stack>
             ) : (
                 <Stack gap="xs">
-                    {order.map((id, i) => (
-                        <Fragment key={id}>
-                            {/* The one rule between the two groups, stated where
-                                the groups meet rather than as a heading over each.
-                                It only appears when there IS an unenrolled match —
-                                normally every fixture is in the order, and a
-                                divider announcing an empty second group would be
-                                furniture. */}
-                            {i === queuedCount && queuedCount > 0 && (
-                                <Text size="xs" className="pt-1.5 text-muted-foreground/70">
-                                    Not in the running order — no schedule slot, never offered as a board’s next fixture.
-                                </Text>
+                    {/* Iterated per ORDER rather than over a flat list with
+                        index-keyed headings: an order that exists but is empty still
+                        gets its heading (an order you cannot see is one you cannot
+                        delete), and two empty ones in a row cannot collide. */}
+                    {groups.map((q, qi) => (
+                        <Fragment key={q.id}>
+                            {/* Only once there is more than one. A single order is
+                                the whole desk, and a title over every fixture there
+                                is would be furniture. */}
+                            {groups.length > 1 && (
+                                <QueueHeading
+                                    queue={q}
+                                    boards={boardsByQueue[q.id]}
+                                    first={qi === 0}
+                                    last={qi === groups.length - 1}
+                                />
                             )}
-                            <MatchAccordion
-                                m={id}
-                                open={effectiveOpen === id}
-                                onToggle={() => setOpenId(effectiveOpen === id ? '' : id)}
-                                active={active}
-                                boundMap={boundMap}
-                                gameModes={gameModes}
-                                canBind={canBind}
-                                queuePos={queuePos[id] ?? null}
-                                queueLen={queuedCount}
-                            />
+                            {q.matches.map((id, i) => (
+                                <MatchAccordion
+                                    key={id}
+                                    m={id}
+                                    open={effectiveOpen === id}
+                                    onToggle={() => setOpenId(effectiveOpen === id ? '' : id)}
+                                    active={active}
+                                    boundMap={boundMap}
+                                    gameModes={gameModes}
+                                    canBind={canBind}
+                                    // Position within ITS OWN order, and that
+                                    // order's length — the arrows bound at its ends,
+                                    // because moving is not the same verb as
+                                    // changing which order a fixture is in.
+                                    queuePos={i + 1}
+                                    queueLen={q.matches.length}
+                                    queues={groups}
+                                    queueOf={q.id}
+                                />
+                            ))}
                         </Fragment>
                     ))}
-                    <Button size="xs" variant="outline" disabled={creating} onClick={onNew} className="self-start">
-                        <Plus size={13} className="mr-1" /> New match
-                    </Button>
+                    {unenrolled.length > 0 && (
+                        <Text size="xs" className="pt-1.5 text-muted-foreground/70">
+                            Not in a running order — no schedule slot, never offered as a board’s next fixture.
+                        </Text>
+                    )}
+                    {unenrolled.map(id => (
+                        <MatchAccordion
+                            key={id}
+                            m={id}
+                            open={effectiveOpen === id}
+                            onToggle={() => setOpenId(effectiveOpen === id ? '' : id)}
+                            active={active}
+                            boundMap={boundMap}
+                            gameModes={gameModes}
+                            canBind={canBind}
+                            queuePos={null}
+                            queueLen={0}
+                            queues={groups}
+                            queueOf={null}
+                        />
+                    ))}
+                    <Group gap="xs" className="pt-0.5">
+                        <Button size="xs" variant="outline" disabled={creating} onClick={onNew}>
+                            <Plus size={13} className="mr-1" /> New match
+                        </Button>
+                        <NewQueueButton />
+                    </Group>
                 </Stack>
             )}
         </>

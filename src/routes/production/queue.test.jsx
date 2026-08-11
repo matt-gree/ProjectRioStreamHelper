@@ -305,11 +305,246 @@ describe('The Match desk owns the running order', () => {
     it('explains the second group only when something is out of the order', () => {
         state({ match: { 1: fixture('Alice', 'Bob') }, schedule: { queue: [1] } });
         ui(<MatchDesk />);
-        expect(screen.queryByText(/Not in the running order/)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Not in a running order/)).not.toBeInTheDocument();
         cleanup();
         three();
         ui(<MatchDesk />);
-        expect(screen.getByText(/Not in the running order/)).toBeInTheDocument();
+        expect(screen.getByText(/Not in a running order/)).toBeInTheDocument();
+    });
+});
+
+/*
+ * SEVERAL RUNNING ORDERS.
+ *
+ * A night can run a winners order and a losers order independently, and a board
+ * draws from one of them. `schedule.queues` is the model; `schedule.queue` is the
+ * server's projection of the union, which is what the schedule overlay draws — so
+ * the desk reads `queues` (it needs to know where one order ends) and everything
+ * else can keep reading the flat list. Server half:
+ * tests/unit/api/test_schedule_queues.py.
+ */
+describe('The Match desk authors several running orders', () => {
+    const twoOrders = () => state({
+        match: {
+            1: fixture('Alice', 'Bob'),
+            2: fixture('Carol', 'Dave'),
+            3: fixture('Erin', 'Frank'),
+        },
+        schedule: {
+            queues: [
+                { id: 'winners', title: 'Winners', matches: [1] },
+                { id: 'losers', title: 'Losers', matches: [3, 2] },
+            ],
+            queue: [1, 3, 2],
+        },
+    });
+
+    it('heads each order with its title and stacks the fixtures under it', () => {
+        twoOrders();
+        ui(<MatchDesk />);
+        expect(screen.getByRole('textbox', { name: 'Title of the winners running order' }))
+            .toHaveValue('Winners');
+        expect(screen.getByRole('textbox', { name: 'Title of the losers running order' }))
+            .toHaveValue('Losers');
+    });
+
+    // The number is a place in ITS OWN order, so the losers bracket starts at 1
+    // again rather than continuing the winners count.
+    it('numbers each fixture within its own order', () => {
+        twoOrders();
+        ui(<MatchDesk />);
+        expect(screen.getByRole('group', { name: 'Match 1: position 1 of 1 in the running order' }))
+            .toBeInTheDocument();
+        expect(screen.getByRole('group', { name: 'Match 3: position 1 of 2 in the running order' }))
+            .toBeInTheDocument();
+        expect(screen.getByRole('group', { name: 'Match 2: position 2 of 2 in the running order' }))
+            .toBeInTheDocument();
+    });
+
+    /*
+     * Position and membership are different verbs. Walking the only fixture in
+     * Winners "down" must not spill it into Losers, so its arrows are bound at its
+     * own order's ends — both disabled on an order of one.
+     */
+    it('bounds the arrows at each order’s own ends, not the stack’s', () => {
+        twoOrders();
+        ui(<MatchDesk />);
+        expect(screen.getByRole('button', { name: /Move match 1 in the running order up/ })).toBeDisabled();
+        expect(screen.getByRole('button', { name: /Move match 1 in the running order down/ })).toBeDisabled();
+        // And within Losers the ends behave normally.
+        expect(screen.getByRole('button', { name: /Move match 3 in the running order up/ })).toBeDisabled();
+        expect(screen.getByRole('button', { name: /Move match 3 in the running order down/ })).toBeEnabled();
+    });
+
+    // Exclusive membership: choosing another order MOVES the fixture, so the
+    // control is a picker rather than a toggle once there is more than one.
+    it('moves a fixture to another order by naming it', async () => {
+        twoOrders();
+        ui(<MatchDesk />);
+        fireEvent.click(screen.getByRole('button', { name: 'Match 1 is in the winners running order' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Losers' }));
+        await waitFor(() => expect(fetch).toHaveBeenCalledWith(
+            '/api/v1/schedule/queue/1?queue=losers',
+            expect.objectContaining({ method: 'POST' }),
+        ));
+    });
+
+    it('takes a fixture out of every order', async () => {
+        twoOrders();
+        ui(<MatchDesk />);
+        fireEvent.click(screen.getByRole('button', { name: 'Match 1 is in the winners running order' }));
+        fireEvent.click(await screen.findByRole('button', { name: /In none/ }));
+        await waitFor(() => expect(fetch).toHaveBeenCalledWith(
+            '/api/v1/schedule/queue/1', expect.objectContaining({ method: 'DELETE' }),
+        ));
+    });
+
+    /*
+     * An order's whole point is that a board takes fixtures from it, and that is
+     * the one fact its heading cannot derive from itself. An unassigned board counts
+     * toward the first order, mirroring `Schedule.queue_for_board`.
+     */
+    it('says which boards draw from each order', () => {
+        twoOrders();
+        useSettingsStore.setState({
+            project_rio: { hud_enabled: false },
+            production: {},
+            scoreboards: { active: [1, 2], aliases: {}, binding: {}, match_queue: { 2: 'losers' } },
+        });
+        ui(<MatchDesk />);
+        expect(screen.getByText('board 1')).toBeInTheDocument();
+        expect(screen.getByText('board 2')).toBeInTheDocument();
+    });
+
+    it('says so when no board draws from an order', () => {
+        twoOrders();
+        ui(<MatchDesk />);
+        // Both boards are unassigned, so both count toward Winners and Losers has none.
+        expect(screen.getByText(/no board takes from this/)).toBeInTheDocument();
+    });
+
+    // An order you created and cannot see is one you cannot delete.
+    it('keeps the heading of an order with nothing in it', () => {
+        state({
+            match: { 1: fixture('Alice', 'Bob') },
+            schedule: {
+                queues: [
+                    { id: 'winners', title: 'Winners', matches: [1] },
+                    { id: 'losers', title: 'Losers', matches: [] },
+                ],
+                queue: [1],
+            },
+        });
+        ui(<MatchDesk />);
+        expect(screen.getByRole('textbox', { name: 'Title of the losers running order' }))
+            .toBeInTheDocument();
+    });
+
+    // A single order is the whole desk; titling it over every fixture there is
+    // would be furniture.
+    it('draws no order heading when there is only one', () => {
+        state({
+            match: { 1: fixture('Alice', 'Bob') },
+            schedule: { queues: [{ id: 'main', title: 'Today', matches: [1] }], queue: [1] },
+        });
+        ui(<MatchDesk />);
+        expect(screen.queryByRole('textbox', { name: /running order$/ })).not.toBeInTheDocument();
+    });
+
+    /*
+     * The window before the boot migration lands: `queues` absent, `queue`
+     * populated. The desk must draw the fixtures rather than showing an empty
+     * stack over a night's worth of them.
+     */
+    it('falls back to the projected union before migration has run', () => {
+        state({
+            match: { 1: fixture('Alice', 'Bob'), 2: fixture('Carol', 'Dave') },
+            schedule: { queue: [2, 1] },
+        });
+        ui(<MatchDesk />);
+        expect(screen.getByRole('group', { name: 'Match 2: position 1 of 2 in the running order' }))
+            .toBeInTheDocument();
+        // And the toggle names no queue, since this client invented that id.
+        fireEvent.click(screen.getByRole('button', { name: 'Take match 2 out of the running order' }));
+        expect(fetch).toHaveBeenCalledWith(
+            '/api/v1/schedule/queue/2', expect.objectContaining({ method: 'DELETE' }),
+        );
+    });
+});
+
+/*
+ * A board draws its next fixture from ONE order — its own — so the button must
+ * preview that order's head, not the union's.
+ */
+describe('Up next follows the board’s own running order', () => {
+    const split = () => state({
+        match: { 1: fixture('Alice', 'Bob'), 2: fixture('Carol', 'Dave') },
+        schedule: {
+            queues: [
+                { id: 'winners', title: 'Winners', matches: [1] },
+                { id: 'losers', title: 'Losers', matches: [2] },
+            ],
+            queue: [1, 2],
+        },
+    });
+
+    it('names the head of the order the board is assigned to', () => {
+        split();
+        useSettingsStore.setState({
+            project_rio: { hud_enabled: false },
+            production: {},
+            scoreboards: { active: [1, 2], aliases: {}, binding: {}, match_queue: { 2: 'losers' } },
+        });
+        ui(<BoardDesk board={2} />);
+        expect(screen.getByRole('button', { name: /Up next · Carol vs Dave/ })).toBeInTheDocument();
+    });
+
+    // Unassigned falls back to the first order, so a rig nobody configured behaves
+    // exactly as it did before queues existed.
+    it('falls back to the first order when the board is unassigned', () => {
+        split();
+        ui(<BoardDesk board={2} />);
+        expect(screen.getByRole('button', { name: /Up next · Alice vs Bob/ })).toBeInTheDocument();
+    });
+
+    /*
+     * The assignment is authored on the BOARD, because it is a property of the
+     * board — the order's own heading only reports the consequence. It writes
+     * `scoreboards.match_queue.{sb}`, deliberately not into the binding, which is
+     * pool + playback + stats_tag.
+     */
+    it('picks the order on the board’s own panel', () => {
+        split();
+        ui(<BoardDesk board={2} />);
+        const picker = screen.getByRole('radio', { name: 'Losers' });
+        expect(screen.getByRole('radio', { name: 'Winners' })).toHaveAttribute('aria-checked', 'true');
+        fireEvent.click(picker);
+        expect(useSettingsStore.getState().scoreboards.match_queue['2']).toBe('losers');
+    });
+
+    // A picker with one option is a control that cannot do anything.
+    it('offers no picker when there is only one order', () => {
+        state({
+            match: { 1: fixture('Alice', 'Bob') },
+            schedule: { queues: [{ id: 'main', title: 'Today', matches: [1] }], queue: [1] },
+        });
+        ui(<BoardDesk board={2} />);
+        expect(screen.queryByText('Fixtures from')).not.toBeInTheDocument();
+    });
+
+    /*
+     * A stale assignment resolves at read time and is never rewritten — a board
+     * pointed at a deleted order degrades to the first rather than losing Up next.
+     */
+    it('degrades to the first order when the assigned one is gone', () => {
+        split();
+        useSettingsStore.setState({
+            project_rio: { hud_enabled: false },
+            production: {},
+            scoreboards: { active: [1, 2], aliases: {}, binding: {}, match_queue: { 2: 'deleted-order' } },
+        });
+        ui(<BoardDesk board={2} />);
+        expect(screen.getByRole('button', { name: /Up next · Alice vs Bob/ })).toBeInTheDocument();
     });
 });
 

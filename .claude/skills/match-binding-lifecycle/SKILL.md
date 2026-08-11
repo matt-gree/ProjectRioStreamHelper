@@ -78,6 +78,30 @@ description: PRSH match fixture model, scoreboard bindings (pool + playback + de
     (`tests/unit/api/test_schedule_waiting.py` pins the strand).
   - Taking a fixture **does not consume its queue slot** — what stops it being
     "next" is that a board now holds it.
+  - **SEVERAL ORDERS.** `schedule.queues` is a list of `{id, title, matches}`; a
+    board draws from one (`scoreboards.match_queue.{N}` in Settings — *not* in
+    `scoreboards.binding.{N}`, which is pool + playback + stats_tag). Unassigned
+    means the first order, so a single-order rig needs no configuration.
+    `take_next_match` also accepts `?queue=` to override for one press, which is
+    what lets one board pull from Winners now and Losers next.
+    - **Membership is exclusive across orders** (mirrors a container's roster): a
+      fixture belongs to one, so `append` into another *moves* it. That is what
+      makes `queue_of(m)` single-valued, which is why the per-id `move` verb takes
+      no queue id from the client at all — a stale read cannot reorder the wrong
+      list. `move` is clamped to its own order's ends: position and membership are
+      different verbs.
+    - **`schedule.queue` is a PROJECTION** of the union, in order, written in the
+      same `SetBatch` as the model — the resolve-and-copy pattern. The overlay and
+      the console subject read it and needed no change. The union specifically, so
+      creating a second order can never drop a fixture off air.
+      `schedule.title` stays the overlay's **heading** and is not any order's
+      title; projecting the first order's title into it headed a Winners+Losers
+      union with the word "WINNERS".
+    - **All change detection lives in `Schedule._commit`**, and every verb calls it
+      unconditionally. `queues()` prunes ids whose match is gone, so after
+      `delete_match` there is nothing left for `remove` to filter — an early-out
+      there skipped the write and left the *projection* drawing a deleted fixture on
+      the schedule overlay.
   - The client mirrors the rule in `src/routes/production/queue.js` (`useNextUp`)
     **for the button's label only**; the take sends no id. Keep the two in step.
   - **Creating a match enrols it** (`create_match` and the from-startgg create path

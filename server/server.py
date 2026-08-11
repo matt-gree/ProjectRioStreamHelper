@@ -24,6 +24,8 @@ from server.announcements import Announcements
 from server.automations import Automations
 from server.participants import Participants
 from server.match import Match
+from server.schedule import Schedule
+from server.utils.projection import run_startup_projection
 from server.commentary import Commentary
 from server.playerplates import PlayerPlates
 from server.state import State
@@ -94,6 +96,11 @@ async def lifespan(app: FastAPI):
     await StartGGProvider.Start()
     await ControllerOverlay.Start()
     await Announcements.Start()
+    # Fold the pre-queues `schedule.queue`/`schedule.title` keys into
+    # `schedule.queues`, and project the flat union every schedule reader uses.
+    # BEFORE Match.project_all: a bad match must not be able to leave the schedule
+    # unmigrated, and nothing in the projections reads the queue.
+    await run_startup_projection("Schedule", Schedule.ensure_migrated())
     # Re-apply every persisted match onto its bound board(s) (resume-on-startup
     # spirit). Runs after State + registry are loaded.
     await Match.project_all()

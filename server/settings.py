@@ -195,7 +195,15 @@ class Settings:
             # as migration fallbacks and are no longer written.
             "sources": {
                 "1": {"type": "manual", "api_game_id": None}
-            }
+            },
+            # Which `schedule.queues` entry each board takes its next fixture
+            # from: {"2": "losers"}. Deliberately NOT part of `binding` — that
+            # is pool + playback + stats_tag, "which GAMES fill this board",
+            # where this is which running order of FIXTURES it draws from.
+            # Absent (the normal case) means the first queue, so a single-queue
+            # rig needs no configuration at all — see
+            # `Schedule.queue_for_board`.
+            "match_queue": {},
         },
         "obs": {
             # OBS WebSocket (obs-websocket v5, OBS 28+). The connection is made

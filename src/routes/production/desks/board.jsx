@@ -20,7 +20,7 @@ import { STADIUM_OPTIONS } from '../../../data/stadiums';
 import { ActionRow, FieldRow, KitColumn, KitColumns, TextRow, ToggleChip } from '../kit';
 import { BoardGameSubject } from '../subject';
 import { GamesSection } from '../games';
-import { useNextUp } from '../queue';
+import { useBoardQueueId, useNextUp, useQueues } from '../queue';
 import { takeNextMatch } from '../../../context/match';
 
 /*
@@ -174,7 +174,7 @@ export function playbackLine({ transport, mode, running, poolCount, gameId }) {
  * never sends an id, so two boards pressed together can't land on one fixture.
  */
 const UpNextButton = memo(function UpNextButton({ sb }) {
-    const next = useNextUp();
+    const next = useNextUp(sb);
     const [taking, setTaking] = useState(false);
     if (!next) return null;
     const take = () => {
@@ -192,6 +192,49 @@ const UpNextButton = memo(function UpNextButton({ sb }) {
             <SkipForward size={12} className="mr-1 shrink-0" />
             <span className="truncate">Up next · {next.label}</span>
         </Button>
+    );
+});
+
+/*
+ * WHICH RUNNING ORDER this board draws its next fixture from.
+ *
+ * Renders nothing while there is one order — the answer is "the only one", and a
+ * picker with a single option is a control that cannot do anything. It writes
+ * `scoreboards.match_queue.{sb}` in Settings, deliberately NOT into
+ * `scoreboards.binding.{sb}`: the binding is pool + playback + stats_tag, "which
+ * GAMES fill this board", where this is which order of FIXTURES it takes from.
+ *
+ * Staged like the board's other broadcast-visible properties: changing it changes
+ * which fixture the next press of Up next puts on air.
+ */
+const BoardQueueRow = memo(function BoardQueueRow({ sb }) {
+    const queues = useQueues();
+    const current = useBoardQueueId(sb);
+    const setItem = useSettingsStore(s => s.setItem);
+    if (queues.length <= 1) return null;
+    return (
+        <FieldRow label="Fixtures from">
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                {queues.map(q => (
+                    <Button
+                        key={q.id}
+                        size="xs"
+                        variant={q.id === current ? 'default' : 'outline'}
+                        role="radio"
+                        aria-checked={q.id === current}
+                        onClick={() => stageOrRun({
+                            key: `board:${sb}:match_queue`,
+                            label: `Board ${sb}: take fixtures from ${q.title || q.id}`,
+                            value: q.id,
+                            liveValue: current,
+                            run: () => setItem(`scoreboards.match_queue.${sb}`, q.id),
+                        })}
+                    >
+                        {q.title || q.id}
+                    </Button>
+                ))}
+            </div>
+        </FieldRow>
     );
 });
 
@@ -1021,6 +1064,15 @@ export default function BoardDesk({ board }) {
                         />
                         <StatsDiagnostics stats={stats} />
                     </FieldRow>
+
+                    {/* Which running order Up next walks for THIS board. Only
+                        once there is more than one to choose between: on a
+                        single-order rig the answer is "the only one", and a
+                        picker with one option is a control that cannot do
+                        anything. Authored here rather than on the Match desk
+                        because it is a property of the board, not of the order —
+                        the order's own heading just reports the consequence. */}
+                    <BoardQueueRow sb={sb} />
 
                     {/* TextRow echoes keystrokes locally and writes once you stop
                         or blur — a rename is a settings round-trip and every

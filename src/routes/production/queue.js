@@ -1,5 +1,6 @@
+import { useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import { useStateStore } from '../../context/store';
+import { useSettingsStore, useStateStore } from '../../context/store';
 
 /*
  * The queue — `schedule.queue`, an ORDER over matches, read from the board's side.
@@ -53,16 +54,94 @@ function waiting(match, boundIds) {
     return notWaitingReason(match, boundIds) === null;
 }
 
+// Separators for the encoded-queues string below. Control characters, so a
+// producer-typed title can never collide with them.
+const SEP_ROW = '\u0002';
+const SEP_FIELD = '\u0001';
+
 /*
- * The next queued fixture waiting for a board: `{ id, label }` or null.
+ * EVERY RUNNING ORDER: `[{ id, title, matches: [idString] }]`, pruned to matches
+ * that still exist.
+ *
+ * `schedule.queues` is the model; `schedule.queue` is the server's projection of
+ * the union, which is what the schedule overlay draws. Surfaces that AUTHOR read
+ * this; surfaces that just want "the whole night in order" can read either.
+ */
+export function useQueues() {
+    /*
+     * The selector returns a STRING, and the objects are built in a `useMemo`
+     * outside it. `useShallow` cannot carry this shape: it compares the array
+     * element-wise with Object.is, and every element is a freshly-minted object, so
+     * no two reads ever match — Zustand v5 then re-runs getSnapshot forever
+     * ("Maximum update depth exceeded"). A string is Object.is-stable by value, so
+     * the subscription settles and the parse only re-runs when the content changes.
+     *
+     * See SEP_ROW / SEP_FIELD above for why the separators are control characters.
+     */
+    const encoded = useStateStore((s) => {
+        const queues = s?.schedule?.queues;
+        const matches = s?.match ?? {};
+        if (!Array.isArray(queues)) return '';
+        const seen = new Set();
+        const parts = [];
+        queues.forEach((q, i) => {
+            const kept = [];
+            for (const raw of q?.matches ?? []) {
+                const id = String(raw);
+                if (seen.has(id) || !matches[id]) continue;
+                seen.add(id);
+                kept.push(id);
+            }
+            parts.push([
+                String(q?.id ?? `queue-${i + 1}`), String(q?.title ?? ''), kept.join(','),
+            ].join(SEP_FIELD));
+        });
+        return parts.join(SEP_ROW);
+    });
+    return useMemo(() => {
+        if (!encoded) return [];
+        return encoded.split(SEP_ROW).map((row) => {
+            const [id, title, matches] = row.split(SEP_FIELD);
+            return { id, title, matches: matches ? matches.split(',') : [] };
+        });
+    }, [encoded]);
+}
+
+/*
+ * Which running order board `sb` draws its next fixture from.
+ *
+ * Mirrors `Schedule.queue_for_board`: an unassigned board falls back to the FIRST
+ * order, so a single-queue rig needs no configuration and one-click Up next keeps
+ * working. A stored id is RESOLVED at read time and never rewritten — a board
+ * pointed at a deleted order degrades to the first rather than losing Up next.
+ */
+export function useBoardQueueId(sb) {
+    const assigned = useSettingsStore(s => s?.scoreboards?.match_queue?.[sb]);
+    const ids = useStateStore(useShallow((s) => {
+        const queues = s?.schedule?.queues;
+        return Array.isArray(queues) ? queues.map((q, i) => String(q?.id ?? `queue-${i + 1}`)) : [];
+    }));
+    if (assigned && ids.includes(String(assigned))) return String(assigned);
+    return ids[0] ?? null;
+}
+
+/*
+ * The next fixture waiting for a board: `{ id, label }` or null.
+ *
+ * `sb` picks the running order — the board's own. Passing nothing reads the union
+ * (`schedule.queue`), which is what a surface with no board in hand wants.
  *
  * One selector, flat and all-primitive, so a board panel re-reading this on every
  * HUD frame doesn't re-render on unrelated writes (the same rule as
  * `useSideTeam`).
  */
-export function useNextUp() {
+export function useNextUp(sb = null) {
+    const qid = useBoardQueueId(sb);
+    const scoped = sb != null && qid != null;
     const flat = useStateStore(useShallow((s) => {
-        const queue = s?.schedule?.queue;
+        const queue = scoped
+            ? (s?.schedule?.queues ?? []).find(q => String(q?.id) === qid)?.matches
+            : s?.schedule?.queue;
         if (!Array.isArray(queue) || queue.length === 0) return ['', ''];
         const matches = s?.match ?? {};
         const bound = new Set(
@@ -85,13 +164,19 @@ export function useNextUp() {
 }
 
 /*
- * THE ORDER ITSELF, for the surface that authors it (the Match desk).
+ * THE ORDERS THEMSELVES, for the surface that authors them (the Match desk).
  *
- * Returns the queue as a flat array of id strings, pruned to matches that still
- * exist — a queued id whose match was deleted is not a position, and the server
- * prunes it on delete anyway. The Match desk lists its accordions in exactly this
- * order, which is the whole point: the night's running order and the desk's stack
- * are one list, not two views that can disagree.
+ * Every enrolled match in reading order, flat, across all queues — the desk stacks
+ * its accordions in exactly this sequence, which is the whole point: the night's
+ * running order and the desk's stack are one list, not two views that can
+ * disagree. `useQueues` is what tells the desk where one order ends and the next
+ * begins, so it can draw the section headings; this is the flat spine.
+ *
+ * Reads the server's projected union rather than re-flattening `queues`, so the
+ * desk and the schedule overlay are looking at the same sequence by construction.
+ *
+ * Pruned to matches that still exist — a queued id whose match was deleted is not
+ * a position, and the server prunes it on delete anyway.
  *
  * `useShallow` over an array of strings, so this compares element-wise: reordering
  * re-renders, and the ~100 unrelated keys a live HUD frame writes do not.

@@ -26,14 +26,26 @@ async def test_set_queue_drops_unknown_and_duplicates():
 
 @pytest.mark.asyncio
 async def test_put_schedule_updates_queue_and_title():
+    """The legacy single-queue shape, which now lands on the FIRST running order.
+
+    Asserted field-by-field rather than against the whole response: the route also
+    answers with `queues` (the model) and `success`, and pinning the exact dict made
+    this fail on a response gaining a field while the behaviour was unchanged.
+    """
     a = await make_match()
     out = await update_schedule(SchedulePayload(queue=[a], title="Today's Matches"))
-    assert out == {"queue": [a], "title": "Today's Matches"}
+    assert out["queue"] == [a]
+    assert out["title"] == "Today's Matches"
+    # The title is the OVERLAY's heading and belongs to no order: heading a union of
+    # Winners + Losers with the first order's name would be a lie about what is on
+    # screen. The order keeps its own label.
+    assert out["queues"] == [{"id": "main", "title": "Main", "matches": [a]}]
     # Partial update: title-only leaves the queue alone.
     out = await update_schedule(SchedulePayload(title="Finals Day"))
-    assert out == {"queue": [a], "title": "Finals Day"}
+    assert out["queue"] == [a]
+    assert out["title"] == "Finals Day"
     got = await get_schedule()
-    assert got == {"queue": [a], "title": "Finals Day"}
+    assert (got["queue"], got["title"]) == ([a], "Finals Day")
 
 
 @pytest.mark.asyncio
