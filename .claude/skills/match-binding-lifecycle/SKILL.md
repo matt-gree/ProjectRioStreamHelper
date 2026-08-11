@@ -67,6 +67,15 @@ description: PRSH match fixture model, scoreboard bindings (pool + playback + de
     it, moving a board off an undecided fixture leaves it queued, unbound and
     undecided, so it is instantly "next" again and the verb ping-pongs. A fixture
     mid-lifecycle is bound by hand from the Match desk instead.
+  - **The rule is stated once, in `Schedule.not_waiting_reason`**, which returns the
+    *reason* (a producer-facing string) and of which `is_up_next_eligible` is just
+    `... is None`. Don't reimplement the four conditions anywhere: the verdict and
+    the explanation must not be able to disagree about which fixture is next.
+    The anti-bounce test is why this matters — `stage` has no server-side writer a
+    producer can reach, so a fixture fed once and then unbound sat queued, unbound
+    and undecided and was **silently never offered again**, forever, with a badge as
+    the only clue. The rule is right; its invisibility was the bug
+    (`tests/unit/api/test_schedule_waiting.py` pins the strand).
   - Taking a fixture **does not consume its queue slot** — what stops it being
     "next" is that a board now holds it.
   - The client mirrors the rule in `src/routes/production/queue.js` (`useNextUp`)
@@ -140,6 +149,17 @@ description: PRSH match fixture model, scoreboard bindings (pool + playback + de
 
 Stage lifecycle: `draft` (authored) → `live` (`note_live(sb)` on first feed
 event, guarded to write once) → `post` (post-game capture, or auto-retire).
+
+Those are the only *automatic* transitions, and they only ever move forward — which
+is why the **producer can set the stage by hand**, from the Match desk's stage badge
+(`StageControl` in `desks/match.jsx`, a `PUT /match/{m}` with `{stage}`). Sending a
+played fixture back to `draft` is the way out of the strand above, and it is the
+only one. The control is **momentary, not staged**, matching that desk's existing
+rule that authoring and lifecycle hops run immediately (Next game is the same write
+with a faster path to it); its one broadcast effect is the schedule ticker's LIVE
+pill, which should track reality the moment it's corrected. The popover also states
+*why* a fixture is not up next, membership first — the console should never make a
+producer guess why Up next is silent.
 
 ## Player-side cascade (`RioGameDataProvider._decide`, provider.py)
 

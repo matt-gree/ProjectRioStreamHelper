@@ -314,6 +314,101 @@ describe('The Match desk owns the running order', () => {
 });
 
 /*
+ * THE LIFECYCLE, made visible and reversible.
+ *
+ * `stage` decides whether a fixture is ever offered to a board, and it had no
+ * producer-facing writer at all: `note_live` promotes draft→live on the first feed
+ * event, the post-game paths set `post`, and the desk showed the result as a
+ * read-only word. A fixture fed once and then unbound was therefore queued,
+ * unbound, undecided — and silently never offered again.
+ *
+ * The reasons are mirrored from `Schedule.not_waiting_reason`, wording included
+ * (tests/unit/api/test_schedule_waiting.py pins the server half).
+ */
+describe('The Match desk states — and can change — a fixture’s lifecycle', () => {
+    const openStage = (m = 1) => fireEvent.click(
+        screen.getByRole('button', { name: new RegExp(`^Match ${m} lifecycle:`) }),
+    );
+
+    it('says a fresh fixture is waiting for a board', () => {
+        state({ match: { 1: fixture('Alice', 'Bob') }, schedule: { queue: [1] } });
+        ui(<MatchDesk />);
+        openStage();
+        expect(screen.getByText(/Waiting for a board/)).toBeInTheDocument();
+    });
+
+    // The trap, from the console's side: nothing about this row used to say why
+    // pressing Up next did nothing.
+    it('says a played fixture is not up next, and why', () => {
+        state({ match: { 1: fixture('Alice', 'Bob', { stage: 'live' }) }, schedule: { queue: [1] } });
+        ui(<MatchDesk />);
+        openStage();
+        expect(screen.getByText(/it has already been played/)).toBeInTheDocument();
+    });
+
+    it('sets a played fixture back to draft, which is the way out of the strand', async () => {
+        state({ match: { 1: fixture('Alice', 'Bob', { stage: 'live' }) }, schedule: { queue: [1] } });
+        ui(<MatchDesk />);
+        openStage();
+        fireEvent.click(screen.getByRole('button', { name: 'draft' }));
+        await waitFor(() => expect(fetch).toHaveBeenCalledWith(
+            '/api/v1/match/1',
+            expect.objectContaining({ method: 'PUT', body: JSON.stringify({ stage: 'draft' }) }),
+        ));
+    });
+
+    /*
+     * Momentary, not staged — this file's rule is that lifecycle hops run
+     * immediately (the same as Next game), because a stage change corrects what
+     * already happened rather than composing something to preview.
+     */
+    it('changes the stage immediately rather than staging it', async () => {
+        // Confirm mode ON, so "nothing staged" is a real result rather than the
+        // only thing that could have happened.
+        useSettingsStore.setState({
+            project_rio: { hud_enabled: false },
+            production: { confirm: { enabled: true } },
+            scoreboards: { active: [1, 2], aliases: {}, binding: {} },
+        });
+        state({ match: { 1: fixture('Alice', 'Bob') }, schedule: { queue: [1] } });
+        ui(<MatchDesk />);
+        openStage();
+        fireEvent.click(screen.getByRole('button', { name: 'post' }));
+        await waitFor(() => expect(fetch).toHaveBeenCalledWith(
+            '/api/v1/match/1', expect.objectContaining({ method: 'PUT' }),
+        ));
+        expect(Object.keys(useStagingStore.getState().pending)).toHaveLength(0);
+
+        // And confirm mode really is on: a control that DOES stage, staging. Without
+        // this the assertion above would hold just as well with the flag misspelled.
+        fireEvent.click(screen.getByRole('button', { name: 'Flip sides on match 1' }));
+        expect(Object.keys(useStagingStore.getState().pending)).toEqual(['match:1:flip']);
+    });
+
+    // Membership outranks the four fixture conditions: a match taken out of the
+    // order is not offered whatever state it is in, so saying "waiting" would be a
+    // lie even though every condition passes.
+    it('reports membership ahead of the fixture’s own state', () => {
+        state({ match: { 1: fixture('Alice', 'Bob') }, schedule: { queue: [] } });
+        ui(<MatchDesk />);
+        openStage();
+        expect(screen.getByText(/it is not in the running order/)).toBeInTheDocument();
+        expect(screen.queryByText(/Waiting for a board/)).not.toBeInTheDocument();
+    });
+
+    it('names the board already holding a bound fixture', () => {
+        state({
+            match: { 1: fixture('Alice', 'Bob') },
+            schedule: { queue: [1] },
+            score: { 2: { match: 1 } },
+        });
+        ui(<MatchDesk />);
+        openStage();
+        expect(screen.getByText(/it is already on board 2/)).toBeInTheDocument();
+    });
+});
+
+/*
  * The ticker's panel keeps what is genuinely the OVERLAY's — its heading and each
  * match's display time — and nothing that changes the order. One place to edit it.
  */

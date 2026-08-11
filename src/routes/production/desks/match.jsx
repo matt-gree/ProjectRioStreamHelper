@@ -26,7 +26,7 @@ import { cn } from '../../../lib/utils';
 import { KIT_FIELD, FieldRow, KitColumn, KitColumns } from '../kit';
 import { StagedDot, MoveButtons } from '../controls';
 import { useActiveBoards, useMatchBindableBoards } from '../boards';
-import { useQueueOrder } from '../queue';
+import { useQueueOrder, useWaitingReason } from '../queue';
 import { queueMatch, unqueueMatch, moveQueuedMatch } from '../../../context/schedule';
 
 /*
@@ -468,6 +468,106 @@ const DRAFT_STAGE_BADGE = {
     post:  'bg-[#64748b]/15 text-[#94a3b8]',
 };
 
+/*
+ * What each stage MEANS, in the producer's terms rather than the key's.
+ *
+ * `stage` has no producer-facing writer on the server — `note_live` promotes
+ * draft→live on the first feed event and the post-game paths set post — so this
+ * badge was a read-only word for a flag that silently decides whether the fixture
+ * is ever offered as a board's next one. Naming the consequence is half the fix;
+ * the control below is the other half.
+ */
+/*
+ * Each line describes what the STAGE does, never what this particular fixture is
+ * about to do. "Offered to a board as its next fixture" read as a promise, and sat
+ * directly above "Not up next — it is already on board 1" — two true sentences that
+ * contradicted each other, because the stage is only one of the four conditions.
+ * The verdict below is the only line that speaks for this fixture.
+ */
+const STAGE_MEANING = {
+    draft: 'Not started — the only stage a fixture can be offered from.',
+    live:  'A board has fed this fixture. Never offered while it sits here.',
+    post:  'A game finished. Never offered while it sits here.',
+};
+
+const STAGES = ['draft', 'live', 'post'];
+
+/*
+ * THE LIFECYCLE CONTROL — the badge, made pressable.
+ *
+ * Momentary, not staged, and deliberately: this file's rule is that authoring and
+ * lifecycle hops run immediately (see the header comment and Next game), and a
+ * stage change is a correction to what already happened rather than a composition
+ * choice to preview. Its one broadcast effect is the LIVE pill on the schedule
+ * ticker, which should track reality the moment the producer fixes it.
+ *
+ * `reason` is the console's mirror of `Schedule.not_waiting_reason` — the same
+ * rule the server resolves Up next with, so the panel can name the condition
+ * holding a fixture back instead of leaving a producer to watch Up next stay
+ * silent. Setting a played fixture back to Draft is the way out, which is why the
+ * two live in one popover.
+ */
+const StageControl = memo(function StageControl({ m, stage, reason, queued }) {
+    const [open, setOpen] = useState(false);
+    const set = (next) => {
+        setOpen(false);
+        if (next === stage) return;
+        updateMatch(Number(m), { stage: next })
+            .catch(e => notifications.show({ message: `Stage: ${e?.message || e}`, color: 'red' }));
+    };
+    // Membership first: it outranks the four fixture conditions, because a match
+    // taken out of the order is not offered no matter what state it is in.
+    const blocked = !queued ? 'it is not in the running order' : reason;
+    return (
+        <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+                <button
+                    type="button"
+                    aria-label={`Match ${m} lifecycle: ${stage}`}
+                    className={cn(
+                        'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider transition-opacity hover:opacity-80',
+                        DRAFT_STAGE_BADGE[stage] || DRAFT_STAGE_BADGE.draft,
+                    )}
+                >
+                    {stage}
+                </button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-72">
+                <Stack gap="xs">
+                    <Text size="xs" className="label-display text-muted-foreground">Lifecycle</Text>
+                    <div className="flex gap-1">
+                        {STAGES.map(s => (
+                            <Button
+                                key={s}
+                                size="xs"
+                                variant={s === stage ? 'default' : 'outline'}
+                                onClick={() => set(s)}
+                                className="flex-1 capitalize"
+                            >
+                                {s}
+                            </Button>
+                        ))}
+                    </div>
+                    <Text size="xs" className="text-muted-foreground">{STAGE_MEANING[stage]}</Text>
+                    {/* The answer to "why is this not coming up?", which nothing
+                        on the desk used to give. */}
+                    <div className="border-t border-border/60 pt-1.5">
+                        {blocked ? (
+                            <Text size="xs" className="text-muted-foreground">
+                                <span className="text-foreground">Not up next</span> — {blocked}.
+                            </Text>
+                        ) : (
+                            <Text size="xs" className="text-emerald-300">
+                                Waiting for a board — this is the next fixture in line.
+                            </Text>
+                        )}
+                    </div>
+                </Stack>
+            </PopoverContent>
+        </Popover>
+    );
+});
+
 // Human name for a side in the collapsed summary, falling back to a muted dash.
 function sideName(match, side) {
     const p = match?.player?.[side] ?? match?.player?.[String(side)] ?? {};
@@ -518,6 +618,7 @@ const MatchAccordion = memo(function MatchAccordion({
 }) {
     const draft = useMatchDraft(m);
     const stage = draft.match?.stage || 'draft';
+    const waitReason = useWaitingReason(m);
     const [confirmDel, setConfirmDel] = useState(false);
     const decided = decidedSide(draft.match);
     // Only interesting where it DISAGREES with the record: someone is at the win
@@ -713,10 +814,7 @@ const MatchAccordion = memo(function MatchAccordion({
                         Side {decided} wins
                     </Badge>
                 )}
-                <Badge className={cn('shrink-0 text-[10px] font-semibold uppercase tracking-wider',
-                    DRAFT_STAGE_BADGE[stage] || DRAFT_STAGE_BADGE.draft)}>
-                    {stage}
-                </Badge>
+                <StageControl m={m} stage={stage} reason={waitReason} queued={queuePos != null} />
                 {/* THE SERIES VERB, next to the badge that states the series. At
                     most one of the two ever shows, because they answer opposite
                     states of one fact: a decided match can be reopened, and a

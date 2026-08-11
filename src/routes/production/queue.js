@@ -24,21 +24,33 @@ import { useStateStore } from '../../context/store';
  */
 
 /*
- * Is this match a fixture still waiting for a board? Mirrors
- * `Schedule.is_up_next_eligible` on the server — keep the two in step.
+ * WHY this match is not a fixture waiting for a board — or null when it is.
+ * Mirrors `Schedule.not_waiting_reason` on the server, wording included; keep
+ * the two in step.
  *
  * `decided` is the finished test, NOT `stage`: a Bo3 sits at `stage: post`
  * between games and is still the current fixture. `stage === 'draft'` is a
  * separate, anti-bounce test — a fixture that has already been on a board and
  * been fed would otherwise become "next" again the moment the board moves off it,
  * and the verb would ping-pong between two matches.
+ *
+ * The reason is what the Match desk shows. `stage` has no writer a producer can
+ * see, so the anti-bounce test used to strand a fed-then-unbound fixture out of
+ * Up next silently — the rule is fine, its invisibility was the bug.
  */
-function waiting(match, boundIds) {
-    if (!match) return false;
+export function notWaitingReason(match, boundIds, boundBoard = null) {
+    if (!match) return 'the match no longer exists';
+    if (boundIds.has(String(match.__id))) {
+        return boundBoard ? `it is already on board ${boundBoard}` : 'it is already on a board';
+    }
     const d = match.decided;
-    if (d === 1 || d === 2 || d === '1' || d === '2') return false;
-    if ((match.stage || 'draft') !== 'draft') return false;
-    return !boundIds.has(String(match.__id));
+    if (d === 1 || d === 2 || d === '1' || d === '2') return 'the series is decided';
+    if ((match.stage || 'draft') !== 'draft') return 'it has already been played';
+    return null;
+}
+
+function waiting(match, boundIds) {
+    return notWaitingReason(match, boundIds) === null;
 }
 
 /*
@@ -99,6 +111,35 @@ export function useQueueOrder() {
         }
         return out;
     }));
+}
+
+/*
+ * ONE MATCH'S readiness, for the record's own surface (the Match desk).
+ *
+ * Returns the reason it is not waiting for a board, or null when it is. A plain
+ * selector, not `useShallow`: the return is a string, so default equality already
+ * skips the re-render on the ~100 unrelated keys a live HUD frame writes.
+ *
+ * Membership is not folded in here — the desk knows whether the match is enrolled
+ * from its position in the order, and "not in the running order" is a different
+ * kind of answer (it is not offered because you took it out) from the four
+ * conditions, which are all about the fixture's own state.
+ */
+export function useWaitingReason(m) {
+    return useStateStore((s) => {
+        const id = String(m);
+        const match = s?.match?.[id];
+        if (!match) return 'the match no longer exists';
+        let boundBoard = null;
+        for (const [sb, b] of Object.entries(s?.score ?? {})) {
+            if (b?.match != null && String(b.match) === id) { boundBoard = sb; break; }
+        }
+        return notWaitingReason(
+            { ...match, __id: id },
+            new Set(boundBoard ? [id] : []),
+            boundBoard,
+        );
+    });
 }
 
 /** How many queued fixtures are still waiting for a board. */

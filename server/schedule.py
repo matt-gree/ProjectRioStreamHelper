@@ -102,8 +102,8 @@ class Schedule:
         return q
 
     @classmethod
-    def is_up_next_eligible(cls, m) -> bool:
-        """Is match ``m`` a fixture still waiting to be put on a board?
+    def not_waiting_reason(cls, m) -> str | None:
+        """Why match ``m`` is NOT waiting to be put on a board — or None when it is.
 
         Four conditions, and each one rules out a state that would otherwise make
         "next" hand back something the producer has already dealt with:
@@ -122,22 +122,45 @@ class Schedule:
           and been fed (``note_live`` → ``live``) is mid-lifecycle; the producer
           binds it by hand from the Match desk rather than being offered it as
           fresh.
+
+        THE REASON IS RETURNED, not just the verdict, because the fourth condition
+        is otherwise invisible and strands fixtures. ``stage`` has no producer-facing
+        writer — it is set by ``note_live`` and the post-game paths — so a match fed
+        once and then unbound sat queued, unbound and undecided while Up next stayed
+        silent about it forever, with a badge as the only clue. The console reads
+        these strings and says which condition is holding a fixture back; the Match
+        desk's stage control is what clears the last one.
+
+        Membership is deliberately NOT one of the conditions: ``next_up`` walks the
+        queue, so being in it is the caller's question, not this one's.
         """
         try:
             mid = int(m)
         except (TypeError, ValueError):
-            return False
+            return "the match no longer exists"
         match = (State.state.get("match", {}) or {}).get(str(mid))
         if not isinstance(match, dict):
-            return False
-        if match.get("decided") in (1, 2, "1", "2"):
-            return False
-        if (match.get("stage") or "draft") != "draft":
-            return False
+            return "the match no longer exists"
         # Import here: server.match imports nothing from this module, and keeping
         # it that way is what stops a cycle.
         from server.match import Match
-        return not Match.bound_scoreboards(mid)
+        held = Match.bound_scoreboards(mid)
+        if held:
+            return f"it is already on board {held[0]}"
+        if match.get("decided") in (1, 2, "1", "2"):
+            return "the series is decided"
+        if (match.get("stage") or "draft") != "draft":
+            return "it has already been played"
+        return None
+
+    @classmethod
+    def is_up_next_eligible(cls, m) -> bool:
+        """Is match ``m`` a fixture still waiting to be put on a board?
+
+        One rule, stated once in ``not_waiting_reason`` — the verdict and the
+        explanation must never be able to disagree.
+        """
+        return cls.not_waiting_reason(m) is None
 
     @classmethod
     def next_up(cls) -> int | None:
