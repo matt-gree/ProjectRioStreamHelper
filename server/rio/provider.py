@@ -1099,10 +1099,12 @@ class RioGameDataProvider:
             cls._game_mode_unresolved = not stats_api.modes_ready()
             return
         cls._game_mode_unresolved = False
+        from server.bindings import sync_stats_tag
         for sb in cls._hud_targets:
-            current = Settings.Get(f"scoreboards.binding.{sb}.stats_tag", None)
-            if current != name:
-                await Settings.Set(f"scoreboards.binding.{sb}.stats_tag", name)
+            # Skips a board whose mode the producer picked (server/bindings.py
+            # sync_stats_tag) — an override sticks against the feed, like a name
+            # override, and the console says so.
+            await sync_stats_tag(sb, name)
 
     @classmethod
     def _is_new_game(cls, current_inning: int, game_id=None) -> bool:

@@ -766,8 +766,11 @@ export function mountScoreboard({ host, sb, size }) {
       home: g(state, `score.${SB}.home_linescore`, []) || [],
       stadium: g(state, `score.${SB}.stadium`, ''),
       inningsPlayed: g(state, `score.${SB}.innings_played`, ''),
-      // Written by BOTH feeds now, so it is read outside the completed cluster.
-      gameMode: g(state, `score.${SB}.game_mode`, '') || '',
+      // Written by BOTH feeds now, so it is read outside the completed cluster —
+      // through RioData, which is where a producer's mode OVERRIDE outranks the
+      // game record (rio-data.js gameMode). Reading the state key directly is how
+      // this ignored the override.
+      gameMode: (window.RioData ? RioData.gameMode(state, SB) : g(state, `score.${SB}.game_mode`, '')) || '',
     };
 
     applyColours(settings, g(state, `score.${SB}.player.1.port`, null), g(state, `score.${SB}.player.2.port`, null));

@@ -21,7 +21,8 @@ Replaces the old `scoreboards.sources.{N}.type` enum (manual | hud | live_game)
             "current_index": int,               # rotate runtime cursor
             "interrupt":     dict | null,        # reserved, not implemented
         },
-        "stats_tag": str | null,   # per-scoreboard game-mode tag
+        "stats_tag": str | null,        # per-scoreboard game-mode tag
+        "stats_tag_manual": bool,       # true = a producer PICKED that tag
     }
 
 A `playback.mode == "single"` binding with an empty pool and no pinned
@@ -71,6 +72,10 @@ DEFAULT_BINDING = {
     "pool": DEFAULT_POOL,
     "playback": DEFAULT_PLAYBACK,
     "stats_tag": None,
+    # Whether `stats_tag` is a producer's PICK rather than the feed's answer.
+    # Default false: a board nobody has touched follows whatever is being played,
+    # which is what every auto-sync path assumed before the flag existed.
+    "stats_tag_manual": False,
 }
 
 
@@ -136,3 +141,37 @@ def pool(sb_id: int) -> dict:
 def binding_stats_tag(sb_id: int) -> str | None:
     """Per-scoreboard game-mode stats tag."""
     return get_binding(sb_id).get("stats_tag")
+
+
+def stats_tag_is_manual(sb_id: int) -> bool:
+    """True when this board's `stats_tag` is a producer's PICK, not the feed's."""
+    return bool(get_binding(sb_id).get("stats_tag_manual"))
+
+
+async def sync_stats_tag(sb_id: int, name: str | None) -> bool:
+    """Point board ``sb_id``'s game-mode tag at what the FEED is playing.
+
+    THE ONE AUTO-SYNC WRITER. Four paths used to write `stats_tag` from a game's
+    mode — the HUD frame handler, the game-pool assign, a rotation advance and the
+    Match projector — each with its own guard, and every one of them silently
+    overwrote a mode the producer had chosen. `stats_tag` was doing two jobs (what
+    the feed says / what the producer picked) with no way to tell them apart, so
+    "the live mode didn't take over" and "my pick got clobbered" were the same
+    bug seen from two ends. `stats_tag_manual` is the distinction, and it works
+    exactly like `player.{T}.rioName_override`: the pick wins, it sticks against
+    the feed, and the console CALLS IT OUT rather than hiding it.
+
+    Returns True when it wrote. A blank/unknown ``name`` still clears the tag —
+    leaving the last game's mode on a board whose game has a mode we can't name
+    is how a stats fetch ends up running against the wrong tag.
+    """
+    if stats_tag_is_manual(sb_id):
+        return False
+    value = name or ""
+    if value.startswith("ID:"):  # unresolved tag-set id is not a mode name
+        value = ""
+    key = f"scoreboards.binding.{sb_id}.stats_tag"
+    if Settings.Get(key, None) == value:
+        return False
+    await Settings.Set(key, value)
+    return True

@@ -400,7 +400,13 @@ export function mountScorecard({ host, sb }) {
     const batTeam = role1 === 'batting' ? 1 : 2;
     const pitTeam = batTeam === 1 ? 2 : 1;
 
-    const modeName = g(settings, `scoreboards.binding.${SB}.stats_tag`, '') || '';
+    // One answer to "what mode is this", for every overlay: the producer's
+    // override, else the game's own mode, else the tag (rio-data.js gameMode).
+    // Reading stats_tag alone was right only while the feed kept it in step, and
+    // an override is exactly the case where it doesn't.
+    const modeName = (window.RioData
+        ? RioData.gameMode(state, SB)
+        : g(settings, `scoreboards.binding.${SB}.stats_tag`, '')) || '';
     const stadium = prettyStadium(g(state, `score.${SB}.stadium`, ''));
 
     const d = {

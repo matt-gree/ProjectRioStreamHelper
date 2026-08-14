@@ -244,10 +244,14 @@ class Match:
         await State.Save()
 
         # stats_tag is a Settings key; its change drives the per-scoreboard stats
-        # fetch (mirrors the HUD/Live path). Only write when we have a mode so an
-        # empty/unbound match never wipes a manually-chosen tag.
+        # fetch (mirrors the HUD/Live path). Only write when we have a mode, so an
+        # empty/unbound match never wipes the board's tag — and route it through
+        # the one auto-sync writer, which leaves a producer's PICK alone. A
+        # fixture's mode is authored, but it is authored about the FIXTURE; the
+        # board's own override is the more specific answer and wins.
         if game_mode:
-            await Settings.Set(f"scoreboards.binding.{sb}.stats_tag", game_mode)
+            from server.bindings import sync_stats_tag
+            await sync_stats_tag(sb, game_mode)
 
     @classmethod
     async def project_match(cls, m) -> None:

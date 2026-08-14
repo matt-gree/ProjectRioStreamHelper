@@ -254,13 +254,21 @@
    * provider._apply_hud_game_mode). Board-scoped either way, so a card on board
    * 2 names board 2's mode.
    *
+   * A PRODUCER'S PICK OUTRANKS BOTH. `stats_tag_manual` marks the tag as an
+   * override rather than the feed's answer (server/bindings.py sync_stats_tag),
+   * and an override that loses on air is not an override — same rule as
+   * `player.{T}.rioName_override` winning over the feed's `rioName`. Without the
+   * flag this fell through to the game record, so a producer correcting a
+   * mislabelled mode watched the overlay keep the wrong one.
+   *
    * Returns '' when neither is known — a caller building a caption out of this
    * should hide the caption rather than print a bare "Stats".
    */
   function gameMode(state, sb) {
-    return deepGet(state, `score.${sb}.game_mode`, '')
-      || deepGet(OverlayBase.settings, `scoreboards.binding.${sb}.stats_tag`, '')
-      || '';
+    const tag = deepGet(OverlayBase.settings, `scoreboards.binding.${sb}.stats_tag`, '');
+    const manual = deepGet(OverlayBase.settings, `scoreboards.binding.${sb}.stats_tag_manual`, false);
+    if (manual && tag) return tag;
+    return deepGet(state, `score.${sb}.game_mode`, '') || tag || '';
   }
 
   window.RioData = {

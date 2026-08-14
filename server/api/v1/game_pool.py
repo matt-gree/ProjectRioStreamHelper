@@ -194,16 +194,11 @@ async def assign_game(
                     resolved = await stats_api.resolve_tag_set_name(game.get("tag_set"))
                     if resolved:
                         game_mode_name = resolved
-                if game_mode_name and not game_mode_name.startswith("ID:"):
-                    await Settings.Set(
-                        f"scoreboards.binding.{scoreboard_number}.stats_tag",
-                        game_mode_name,
-                    )
-                else:
-                    await Settings.Set(
-                        f"scoreboards.binding.{scoreboard_number}.stats_tag",
-                        "",
-                    )
+                # One writer, one rule: it clears an unknown mode rather than
+                # leaving the last game's, and it leaves a producer's PICK alone
+                # (server/bindings.py sync_stats_tag).
+                from server.bindings import sync_stats_tag
+                await sync_stats_tag(scoreboard_number, game_mode_name)
 
                 # Initialize the slot + historical API stats on first load.
                 await StatsTracker.on_new_game(

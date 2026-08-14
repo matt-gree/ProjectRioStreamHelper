@@ -623,11 +623,12 @@ class PoolState:
         await PoolManager._emit_status(self.sb_id)
 
     async def _sync_stats_tag(self, game: dict | None):
-        """Set this board's game-mode tag to the applied game's mode, skipping a
-        redundant write when it hasn't changed."""
+        """Point this board's game-mode tag at the applied game's mode.
+
+        The redundant-write skip, the unknown-mode clear and the "leave a
+        producer's pick alone" rule all live in one place now
+        (server/bindings.py sync_stats_tag)."""
         if not game:
             return
-        name = await _resolve_game_mode_name(game)
-        key = f"scoreboards.binding.{self.sb_id}.stats_tag"
-        if Settings.Get(key, None) != name:
-            await Settings.Set(key, name)
+        from server.bindings import sync_stats_tag
+        await sync_stats_tag(self.sb_id, await _resolve_game_mode_name(game))
