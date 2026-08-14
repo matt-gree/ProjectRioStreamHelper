@@ -143,13 +143,21 @@ describe('useNextUp', () => {
 });
 
 describe('Up next on a board', () => {
+    /*
+     * The verb never changes what is on air without saying what to — but the
+     * NAMING moved from the button's face into the fixture slot the button acts
+     * on, an inch to its left. One box holds the fixture and the verb, which says
+     * it more strongly than a label that truncated at 60% of the row.
+     */
     it('names the fixture it will put up, rather than saying Next', () => {
         state({
             match: { 1: fixture('Alice', 'Bob') },
             schedule: { queue: [1] },
         });
         ui(<BoardDesk board={2} />);
-        expect(screen.getByRole('button', { name: /Up next · Alice vs Bob/ })).toBeInTheDocument();
+        expect(screen.getByText('Alice vs Bob')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Put on board/ }))
+            .toHaveAttribute('title', expect.stringContaining('Alice vs Bob'));
     });
 
     /*
@@ -166,7 +174,7 @@ describe('Up next on a board', () => {
         });
         state({ match: { 1: fixture('Alice', 'Bob') }, schedule: { queue: [1] } });
         ui(<BoardDesk board={2} />);
-        fireEvent.click(screen.getByRole('button', { name: /Up next/ }));
+        fireEvent.click(screen.getByRole('button', { name: /Put on board/ }));
 
         await waitFor(() => expect(fetch).toHaveBeenCalledWith(
             '/api/v1/scoreboards/2/next-match',
@@ -182,15 +190,21 @@ describe('Up next on a board', () => {
     it('is absent when nothing in the queue is waiting', () => {
         state({ match: { 1: fixture('Alice', 'Bob', { decided: 1 }) }, schedule: { queue: [1] } });
         ui(<BoardDesk board={2} />);
-        expect(screen.queryByRole('button', { name: /Up next/ })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Put on board/ })).not.toBeInTheDocument();
     });
 
-    // The bind line is the thing the verb changes, so it sits beside it — and an
-    // unbound board says so rather than leaving the row blank.
-    it('says a board has no match beside the verb', () => {
+    /*
+     * An unbound board shows the SLOT the fixture goes in, not a sentence about
+     * the fixture it hasn't got. "No match on this board" described the hole; the
+     * slot is the hole, dashed the way the console's unbound chip is, holding a
+     * ghost of whatever the take would put in it.
+     */
+    it('shows an empty slot holding what would fill it, not a line about absence', () => {
         state({ match: { 1: fixture('Alice', 'Bob') }, schedule: { queue: [1] } });
         ui(<BoardDesk board={2} />);
-        expect(screen.getByText('No match on this board')).toBeInTheDocument();
+        expect(screen.getByText('UP NEXT')).toBeInTheDocument();
+        expect(screen.getByText('Alice vs Bob')).toBeInTheDocument();
+        expect(screen.queryByText('No match on this board')).not.toBeInTheDocument();
     });
 });
 
@@ -496,7 +510,7 @@ describe('Up next follows the board’s own running order', () => {
             scoreboards: { active: [1, 2], aliases: {}, binding: {}, match_queue: { 2: 'losers' } },
         });
         ui(<BoardDesk board={2} />);
-        expect(screen.getByRole('button', { name: /Up next · Carol vs Dave/ })).toBeInTheDocument();
+        expect(screen.getByText('Carol vs Dave')).toBeInTheDocument();
     });
 
     // Unassigned falls back to the first order, so a rig nobody configured behaves
@@ -504,7 +518,7 @@ describe('Up next follows the board’s own running order', () => {
     it('falls back to the first order when the board is unassigned', () => {
         split();
         ui(<BoardDesk board={2} />);
-        expect(screen.getByRole('button', { name: /Up next · Alice vs Bob/ })).toBeInTheDocument();
+        expect(screen.getByText('Alice vs Bob')).toBeInTheDocument();
     });
 
     /*
@@ -544,7 +558,7 @@ describe('Up next follows the board’s own running order', () => {
             scoreboards: { active: [1, 2], aliases: {}, binding: {}, match_queue: { 2: 'deleted-order' } },
         });
         ui(<BoardDesk board={2} />);
-        expect(screen.getByRole('button', { name: /Up next · Alice vs Bob/ })).toBeInTheDocument();
+        expect(screen.getByText('Alice vs Bob')).toBeInTheDocument();
     });
 });
 
@@ -641,6 +655,50 @@ describe('The Match desk states — and can change — a fixture’s lifecycle',
         openStage();
         expect(screen.getByText(/it is already on board 2/)).toBeInTheDocument();
     });
+
+    /*
+     * WAITING IS NOT NEXT, and the reason string cannot tell them apart: it is per
+     * fixture, so every fresh draft passes all four conditions. A night of eight of
+     * them had eight popovers each calling itself "the next fixture in line" —
+     * seven of them wrong, in the one place a producer looks to find out what is
+     * coming up.
+     */
+    it('claims "next in line" only for the fixture that is actually next', () => {
+        state({
+            match: { 1: fixture('Alice', 'Bob'), 2: fixture('Carol', 'Dave') },
+            schedule: {
+                queue: [1, 2],
+                queues: [{ id: 'main', title: 'Main', matches: [1, 2] }],
+            },
+        });
+        ui(<MatchDesk />);
+
+        openStage(1);
+        expect(screen.getByText(/this is the next fixture in line/)).toBeInTheDocument();
+        fireEvent.keyDown(document.activeElement || document.body, { key: 'Escape' });
+
+        openStage(2);
+        expect(screen.getByText(/once the fixtures ahead of it/)).toBeInTheDocument();
+        expect(screen.queryByText(/this is the next fixture in line/)).not.toBeInTheDocument();
+    });
+
+    // Next is a property of the ORDER a fixture sits in, so the head of Losers is
+    // next for Losers even with Winners ahead of it in the union.
+    it('is per running order, not per union', () => {
+        state({
+            match: { 1: fixture('Alice', 'Bob'), 2: fixture('Carol', 'Dave') },
+            schedule: {
+                queue: [1, 2],
+                queues: [
+                    { id: 'winners', title: 'Winners', matches: [1] },
+                    { id: 'losers', title: 'Losers', matches: [2] },
+                ],
+            },
+        });
+        ui(<MatchDesk />);
+        openStage(2);
+        expect(screen.getByText(/this is the next fixture in line/)).toBeInTheDocument();
+    });
 });
 
 /*
@@ -716,6 +774,27 @@ describe('Up next on a rail card', () => {
         await railFace(1);
         expect(screen.getByRole('button', { name: 'Up next' }))
             .toHaveAttribute('title', expect.stringContaining('Alice vs Bob'));
+    });
+
+    /*
+     * A rotating board has nothing to take: a match encodes two fixed sides and a
+     * rotation has none, so the server 409s the bind. The rail read the queue
+     * without asking that question, so a pinned rotator offered a button whose
+     * only outcome was a red toast.
+     */
+    it('offers no take on a rotating board', async () => {
+        useSettingsStore.setState({
+            project_rio: { hud_enabled: false },
+            production: {},
+            scoreboards: {
+                active: [1], aliases: {},
+                binding: { 1: { playback: { mode: 'rotate' } } },
+            },
+        });
+        state({ match: { 1: fixture('Alice', 'Bob') }, schedule: { queue: [1] } });
+        await railFace(1);
+        expect(screen.queryByRole('button', { name: 'Up next' })).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Swap sides' })).toBeInTheDocument();
     });
 
     it('falls back to swap and re-read when nothing is waiting', async () => {

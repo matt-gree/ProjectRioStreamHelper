@@ -164,6 +164,45 @@ export function useNextUp(sb = null) {
 }
 
 /*
+ * The id (a string) of the first fixture in running order `qid` still waiting for
+ * a board — the one a board drawing from that order would actually take — or null.
+ *
+ * The question `notWaitingReason` cannot answer, and the two are easy to confuse:
+ * that one is per FIXTURE ("is this one waiting"), and on a night of eight fresh
+ * drafts it says yes eight times. Only one of them is next, so any surface that
+ * wants to say "this is next" has to walk the order, which is what this does.
+ *
+ * `qid` null reads the projected union, for a surface with no order in hand — and
+ * so does an id no order answers to, which is the desk's pre-migration window: it
+ * invents a `main` group over the union when `schedule.queues` has not landed yet,
+ * and the fixture at the head of that IS next.
+ *
+ * A plain selector: the return is a string, so default equality already skips the
+ * re-render on the ~100 unrelated keys a live HUD frame writes.
+ */
+export function useNextInOrder(qid = null) {
+    return useStateStore((s) => {
+        const named = qid != null
+            ? (s?.schedule?.queues ?? []).find(q => String(q?.id) === String(qid))?.matches
+            : null;
+        const queue = Array.isArray(named) ? named : s?.schedule?.queue;
+        if (!Array.isArray(queue) || queue.length === 0) return null;
+        const matches = s?.match ?? {};
+        const bound = new Set(
+            Object.values(s?.score ?? {})
+                .map(b => (b?.match != null ? String(b.match) : null))
+                .filter(Boolean),
+        );
+        for (const raw of queue) {
+            const id = String(raw);
+            const match = matches[id];
+            if (waiting(match ? { ...match, __id: id } : null, bound)) return id;
+        }
+        return null;
+    });
+}
+
+/*
  * THE ORDERS THEMSELVES, for the surface that authors them (the Match desk).
  *
  * Every enrolled match in reading order, flat, across all queues — the desk stacks

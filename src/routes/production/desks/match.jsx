@@ -27,7 +27,7 @@ import { cn } from '../../../lib/utils';
 import { KIT_FIELD, FieldRow, KitColumn, KitColumns } from '../kit';
 import { StagedDot, MoveButtons } from '../controls';
 import { useActiveBoards, useMatchBindableBoards } from '../boards';
-import { useQueueOrder, useQueues, useWaitingReason } from '../queue';
+import { useNextInOrder, useQueueOrder, useQueues, useWaitingReason } from '../queue';
 import {
     queueMatch, unqueueMatch, moveQueuedMatch,
     createQueue, renameQueue, deleteQueue, moveQueue,
@@ -45,6 +45,15 @@ import {
  * (captain grid, port swatches, series stepper) that the row kit deliberately
  * does not try to express.
  */
+
+/*
+ * Every write on this desk is fire-and-forget, so each one needs a rejection
+ * handler: a failed reorder or rename is otherwise an unhandled promise and a
+ * control that looks like it did nothing. `.catch(failed('Running order'))`.
+ */
+const failed = (label) => (e) => notifications.show({
+    message: `${label}: ${e?.message || e}`, color: 'red',
+});
 
 // 'player.1.captain' → { player: { 1: { captain: value } } } for the merge PUT.
 function nestPath(path, value) {
@@ -497,21 +506,6 @@ const STAGE_MEANING = {
 const STAGES = ['draft', 'live', 'post'];
 
 /*
- * THE LIFECYCLE CONTROL — the badge, made pressable.
- *
- * Momentary, not staged, and deliberately: this file's rule is that authoring and
- * lifecycle hops run immediately (see the header comment and Next game), and a
- * stage change is a correction to what already happened rather than a composition
- * choice to preview. Its one broadcast effect is the LIVE pill on the schedule
- * ticker, which should track reality the moment the producer fixes it.
- *
- * `reason` is the console's mirror of `Schedule.not_waiting_reason` — the same
- * rule the server resolves Up next with, so the panel can name the condition
- * holding a fixture back instead of leaving a producer to watch Up next stay
- * silent. Setting a played fixture back to Draft is the way out, which is why the
- * two live in one popover.
- */
-/*
  * WHICH RUNNING ORDER this fixture is in — membership, which is a property of the
  * record rather than of its position.
  *
@@ -525,14 +519,12 @@ const STAGES = ['draft', 'live', 'post'];
 const MembershipControl = memo(function MembershipControl({ m, queues, queueOf }) {
     const [open, setOpen] = useState(false);
     const inOrder = queueOf != null;
-    const toast = (e) => notifications.show({
-        message: `Running order: ${e?.message || e}`, color: 'red',
-    });
     // `null` means take it out; `undefined` means put it in whichever order the
     // server considers first.
     const choose = (qid) => {
         setOpen(false);
-        (qid === null ? unqueueMatch(m) : queueMatch(m, qid)).catch(toast);
+        (qid === null ? unqueueMatch(m) : queueMatch(m, qid))
+            .catch(failed('Running order'));
     };
 
     const single = queues.length <= 1;
@@ -610,13 +602,32 @@ const MembershipControl = memo(function MembershipControl({ m, queues, queueOf }
     );
 });
 
-const StageControl = memo(function StageControl({ m, stage, reason, queued }) {
+/*
+ * THE LIFECYCLE CONTROL — the badge, made pressable.
+ *
+ * Momentary, not staged, and deliberately: this file's rule is that authoring and
+ * lifecycle hops run immediately (see the header comment and Next game), and a
+ * stage change is a correction to what already happened rather than a composition
+ * choice to preview. Its one broadcast effect is the LIVE pill on the schedule
+ * ticker, which should track reality the moment the producer fixes it.
+ *
+ * `reason` is the console's mirror of `Schedule.not_waiting_reason` — the same
+ * rule the server resolves Up next with, so the panel can name the condition
+ * holding a fixture back instead of leaving a producer to watch Up next stay
+ * silent. Setting a played fixture back to Draft is the way out, which is why the
+ * two live in one popover.
+ *
+ * `first` is the separate question the reason cannot answer: `not_waiting_reason`
+ * is per fixture, so on a night of eight fresh drafts all eight are waiting and
+ * only one of them is next. See `useNextInOrder`.
+ */
+const StageControl = memo(function StageControl({ m, stage, reason, queued, first }) {
     const [open, setOpen] = useState(false);
     const set = (next) => {
         setOpen(false);
         if (next === stage) return;
         updateMatch(Number(m), { stage: next })
-            .catch(e => notifications.show({ message: `Stage: ${e?.message || e}`, color: 'red' }));
+            .catch(failed('Stage'));
     };
     // Membership first: it outranks the four fixture conditions, because a match
     // taken out of the order is not offered no matter what state it is in.
@@ -653,15 +664,26 @@ const StageControl = memo(function StageControl({ m, stage, reason, queued }) {
                     </div>
                     <Text size="xs" className="text-muted-foreground">{STAGE_MEANING[stage]}</Text>
                     {/* The answer to "why is this not coming up?", which nothing
-                        on the desk used to give. */}
+                        on the desk used to give.
+
+                        Three states, not two: waiting is not the same as next.
+                        Every fresh draft passes the four conditions, so a night of
+                        eight of them had eight popovers each calling itself "the
+                        next fixture in line" — seven of them wrong, and wrong in
+                        the one place a producer goes to find out what is next. */}
                     <div className="border-t border-border/60 pt-1.5">
                         {blocked ? (
                             <Text size="xs" className="text-muted-foreground">
                                 <span className="text-foreground">Not up next</span> — {blocked}.
                             </Text>
-                        ) : (
+                        ) : first ? (
                             <Text size="xs" className="text-emerald-300">
                                 Waiting for a board — this is the next fixture in line.
+                            </Text>
+                        ) : (
+                            <Text size="xs" className="text-muted-foreground">
+                                <span className="text-foreground">Waiting for a board</span> — it
+                                comes up once the fixtures ahead of it in the order have been taken.
                             </Text>
                         )}
                     </div>
@@ -723,6 +745,9 @@ const MatchAccordion = memo(function MatchAccordion({
     const draft = useMatchDraft(m);
     const stage = draft.match?.stage || 'draft';
     const waitReason = useWaitingReason(m);
+    // Waiting is per fixture; NEXT is a property of the order it sits in, so the
+    // stage popover cannot claim it from `waitReason` alone.
+    const nextInOrder = useNextInOrder(queueOf);
     const [confirmDel, setConfirmDel] = useState(false);
     const decided = decidedSide(draft.match);
     // Only interesting where it DISAGREES with the record: someone is at the win
@@ -737,7 +762,7 @@ const MatchAccordion = memo(function MatchAccordion({
     });
     const onNextGame = () => {
         updateMatch(Number(m), { stage: 'draft' })
-            .catch(e => notifications.show({ message: `Next game: ${e?.message || e}`, color: 'red' }));
+            .catch(failed('Next game'));
     };
     /*
      * Flip the AUTHORED sides — the fixture was written down the wrong way round.
@@ -774,7 +799,7 @@ const MatchAccordion = memo(function MatchAccordion({
     const onDelete = () => {
         setConfirmDel(false);
         deleteMatch(Number(m))
-            .catch(e => notifications.show({ message: `Delete match: ${e?.message || e}`, color: 'red' }));
+            .catch(failed('Delete match'));
     };
     /*
      * Board binding is radio-style: a match fills exactly one board. Clicking the
@@ -868,7 +893,8 @@ const MatchAccordion = memo(function MatchAccordion({
                         <MoveButtons
                             label={`match ${m} in the running order`}
                             canUp={queuePos > 1} canDown={queuePos < queueLen}
-                            onUp={() => moveQueuedMatch(m, -1)} onDown={() => moveQueuedMatch(m, 1)}
+                            onUp={() => moveQueuedMatch(m, -1).catch(failed('Running order'))}
+                            onDown={() => moveQueuedMatch(m, 1).catch(failed('Running order'))}
                         />
                         <span aria-hidden="true" className="w-4 text-center text-[11px] tabular-nums text-muted-foreground">
                             {queuePos}
@@ -918,7 +944,13 @@ const MatchAccordion = memo(function MatchAccordion({
                         Side {decided} wins
                     </Badge>
                 )}
-                <StageControl m={m} stage={stage} reason={waitReason} queued={queuePos != null} />
+                <StageControl
+                    m={m}
+                    stage={stage}
+                    reason={waitReason}
+                    queued={queuePos != null}
+                    first={nextInOrder === String(m)}
+                />
                 {/* THE SERIES VERB, next to the badge that states the series. At
                     most one of the two ever shows, because they answer opposite
                     states of one fact: a decided match can be reopened, and a
@@ -1202,12 +1234,12 @@ const QueueHeading = memo(function QueueHeading({ queue, boards, first, last }) 
     const commit = () => {
         if (title === queue.title) return;
         renameQueue(queue.id, title)
-            .catch(e => notifications.show({ message: `Rename order: ${e?.message || e}`, color: 'red' }));
+            .catch(failed('Rename order'));
     };
     const onDelete = () => {
         setConfirmDel(false);
         deleteQueue(queue.id)
-            .catch(e => notifications.show({ message: `Remove order: ${e?.message || e}`, color: 'red' }));
+            .catch(failed('Remove order'));
     };
 
     return (
@@ -1215,7 +1247,8 @@ const QueueHeading = memo(function QueueHeading({ queue, boards, first, last }) 
             <MoveButtons
                 label={`the ${queue.title || queue.id} order`}
                 canUp={!first} canDown={!last}
-                onUp={() => moveQueue(queue.id, -1)} onDown={() => moveQueue(queue.id, 1)}
+                onUp={() => moveQueue(queue.id, -1).catch(failed('Move order'))}
+                onDown={() => moveQueue(queue.id, 1).catch(failed('Move order'))}
             />
             <input
                 type="text"
@@ -1271,7 +1304,7 @@ const NewQueueButton = memo(function NewQueueButton() {
         const t = title.trim();
         setTitle('');
         createQueue(t)
-            .catch(e => notifications.show({ message: `New order: ${e?.message || e}`, color: 'red' }));
+            .catch(failed('New order'));
     };
     return (
         <Popover open={open} onOpenChange={setOpen}>
