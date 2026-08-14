@@ -299,6 +299,7 @@ class OngoingGamePool:
                 if misses >= END_MISS_TOLERANCE:
                     cls._ended_follow[sb_id] = game_id
                     cls._follow_misses.pop(sb_id, None)
+                    await cls._set_following(sb_id, False)
                     logger.info(
                         "[OngoingGamePool] sb {} live game {} left the feed; "
                         "stopping live polling for it", sb_id, game_id,
@@ -318,6 +319,32 @@ class OngoingGamePool:
             sides_swapped = _pinned_swap_needed(p0, p1) is True
             StatsTracker.on_live_game_update(game, sb_id)
             await StatsTracker.push_stats_to_state(sb_id, sides_swapped)
+
+    @classmethod
+    async def _set_following(cls, sb_id: int, following: bool) -> None:
+        """Mirror whether this board's game is still being polled for.
+
+        `_live_consumers_exist` stops counting a follow once the game has left the
+        ongoing feed, so from that moment the board holds a live game that will
+        never update again — and from the client's side that is indistinguishable
+        from one that will: `game_completed` stays False, and the poll's own
+        `v1.game_pool.ongoing_update` is emitted for the WHOLE app, so another
+        board's rotation keeps firing it. The console's live-refresh countdown
+        would sit there promising a refresh that is never coming. Same instinct as
+        `side_reason`: the server knows, so the server says.
+
+        Written only on CHANGE. `State.Set` emits unconditionally and this sits in
+        the poll loop, so writing it every tick would put an extra SocketIO frame
+        on the wire every `poll_interval` per board, for a value that flips twice
+        a game.
+        """
+        from server.state import State
+        from server.utils.deep_dict import deep_get
+
+        key = f"score.{sb_id}.live_following"
+        if deep_get(State.state, key, None) is following:
+            return
+        await State.Set(key, following)
 
     @classmethod
     def get_game(cls, game_id) -> dict | None:
@@ -365,6 +392,9 @@ class OngoingGamePool:
         await Settings.Set(
             f"scoreboards.binding.{scoreboard_number}.playback.gameId", game_id
         )
+        # A game from the ongoing feed is on this board, so the feed is worth
+        # polling for it — the flag the console's countdown renders on.
+        await cls._set_following(scoreboard_number, True)
 
         return True
 
@@ -393,6 +423,10 @@ async def apply_completed_game_dict(game: dict, scoreboard_number: int) -> bool:
     await Settings.Set(
         f"scoreboards.binding.{scoreboard_number}.playback.gameId", game.get("game_id")
     )
+    # A completed game never updates again, so nothing is following anything —
+    # and a board moving from a live game to a completed one has to clear the
+    # flag, or it keeps the last live game's countdown running under it.
+    await OngoingGamePool._set_following(scoreboard_number, False)
     return True
 
 

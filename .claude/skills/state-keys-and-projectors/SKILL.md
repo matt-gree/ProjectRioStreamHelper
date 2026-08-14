@@ -100,6 +100,18 @@ score.{N}.*                    per-board live game + projected fixture (N ≥ 1,
   series_decided   ← projected match winner side (1|2) or ""
   side_reason      ← which cascade layer decided orientation: manual|match|pin|back_to_back|""
                      (read by the board desk — desks/board.jsx sideReasonLine)
+  game_completed   ← False for a live game, True for a completed one
+  live_following   ← is this board's live game still being POLLED for?
+                     Not the same question as `game_completed`: when a followed
+                     game leaves the ongoing feed the server stops polling it
+                     (game_pool `_ended_follow`) and leaves game_completed False,
+                     so the board holds a live game that will never update again.
+                     Written only on CHANGE by `OngoingGamePool._set_following`
+                     (a poll-loop key — an unconditional Set would emit a frame
+                     every poll_interval per board). Absent = treat as following;
+                     that is what boards did before the key existed. The board
+                     desk's live-refresh countdown renders on it — same instinct
+                     as side_reason: the server knows, so the server says.
   hit.*            ← hit-visualizer payload (id bumps per contact)
   player.{T}.*     (T ∈ {1,2}: 1=left, 2=right — never "away/home")
     rioName, rioName_override (producer pin, cleared each new HUD game),

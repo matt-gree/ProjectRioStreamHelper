@@ -121,3 +121,53 @@ def test_stable_ongoing_game_id_is_deterministic():
     assert a == _stable_ongoing_game_id("Alice", "Bob", "2026-07-15 10:00:00")
     assert 0 <= a < 2**31
     assert a != _stable_ongoing_game_id("Bob", "Alice", "2026-07-15 10:00:00")
+
+
+# --- live_following: is this board's game still being polled for? ---
+
+async def test_live_following_set_when_a_live_game_is_applied(mock_socket, monkeypatch):
+    """A game from the ongoing feed is on the board, so the feed is worth polling
+    for it. The console's live-refresh countdown renders on this flag."""
+    from server.rio.game_pool import OngoingGamePool
+
+    monkeypatch.setattr(OngoingGamePool, "games", {7: {
+        "game_id": 7, "away_player": "Alice", "home_player": "Bob",
+        "away_user": "Alice", "home_user": "Bob", "game_completed": False,
+    }})
+    await OngoingGamePool.apply_game_to_scoreboard(7, 1)
+    assert s("score.1.live_following") is True
+
+
+async def test_live_following_cleared_when_the_followed_game_leaves_the_feed(
+    mock_socket, set_setting, monkeypatch,
+):
+    """The end-of-follow case the flag exists for. `_live_consumers_exist` stops
+    counting the board, so nothing will ever update it again — but game_completed
+    stays False, and the poll's socket event is app-wide (another board's rotation
+    keeps firing it). Without this the console would promise a refresh forever."""
+    from server.rio.game_pool import OngoingGamePool, END_MISS_TOLERANCE
+
+    set_setting("scoreboards.active", [1])
+    set_setting("project_rio.hud_enabled", False)
+    set_setting("scoreboards.binding.1.playback", {"mode": "single", "gameId": 7})
+    await State.Set("score.1.live_following", True)
+
+    # The game is gone from the feed; a flickering feed gets grace first.
+    monkeypatch.setattr(OngoingGamePool, "games", {})
+    monkeypatch.setattr(OngoingGamePool, "_follow_misses", {})
+    monkeypatch.setattr(OngoingGamePool, "_ended_follow", {})
+    for _ in range(END_MISS_TOLERANCE - 1):
+        await OngoingGamePool._reapply_single_live()
+        assert s("score.1.live_following") is True
+
+    await OngoingGamePool._reapply_single_live()
+    assert s("score.1.live_following") is False
+    assert OngoingGamePool._ended_follow.get(1) == 7
+
+
+async def test_live_following_cleared_by_a_completed_game(mock_socket):
+    """A board moving from a live game to a completed one has to clear the flag,
+    or it keeps the last live game's countdown running under it."""
+    await State.Set("score.1.live_following", True)
+    await apply_completed_game_dict(_completed(), 1)
+    assert s("score.1.live_following") is False
