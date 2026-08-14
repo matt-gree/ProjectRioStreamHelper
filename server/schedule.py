@@ -191,6 +191,23 @@ class Schedule:
         return cls.queues()
 
     @classmethod
+    async def reproject(cls) -> list[dict]:
+        """Re-commit the normalized model, flushing a pending prune into the projection.
+
+        ``queues()`` drops ids whose match no longer exists, but only on READ: the
+        stored ``schedule.queues`` and the ``schedule.queue`` projection keep the
+        id until some verb calls ``_commit``. Any path that deletes a match WITHOUT
+        going through ``remove`` has to call this — ``POST /scoreboards/reset``
+        unsets ``match.{M}`` directly — or state.json and ``GET /schedule`` disagree
+        about what is on the running order, and the console's subject row (which
+        counts the projection) reports fixtures that no longer exist.
+
+        Idempotent by construction: ``_commit`` writes nothing when the normalized
+        model already matches what is stored.
+        """
+        return await cls._commit(cls.queues())
+
+    @classmethod
     async def ensure_migrated(cls) -> None:
         """Boot hook: fold the old flat ``schedule.queue`` into ``schedule.queues``.
 
@@ -199,6 +216,12 @@ class Schedule:
         read-only-fallback pattern (cf. `scoreboards.sources`), so the migration is
         not re-run against its own output.
 
+        An already-migrated rig still ``reproject``s rather than returning flat,
+        because a stale projection otherwise survives every restart: nothing else
+        at boot calls ``_commit``, so a fixture deleted by a path that skipped
+        ``remove`` would be drawn from state.json forever. The re-commit is a
+        no-op when the two already agree.
+
         ``schedule.title`` is NOT touched. It is the schedule OVERLAY's heading, a
         broadcast string the ticker's own panel owns, and an order's title is a
         producer's private label for a list of fixtures. Projecting the first order's
@@ -206,6 +229,7 @@ class Schedule:
         true of the first order, a lie about what was on screen.
         """
         if cls._raw_queues():
+            await cls.reproject()
             return
         legacy: list[int] = []
         for v in (State.state.get("schedule", {}) or {}).get("queue") or []:

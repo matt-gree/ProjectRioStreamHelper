@@ -74,6 +74,23 @@ async def test_remove_board_clears_state_binding_and_alias(client, set_setting):
     assert Settings.Get("scoreboards.aliases.2") is None
 
 
+async def test_remove_board_clears_its_running_order_assignment(client, set_setting):
+    """Every per-board settings key goes when the board does.
+
+    Ids are re-used (`_lowest_available_id`), so a leftover assignment is not
+    dormant: the next board 2 would silently take its fixtures from Losers, with
+    nothing on its panel saying where that came from.
+    """
+    set_setting("scoreboards.active", [1, 2])
+    set_setting("scoreboards.match_queue", {"2": "losers"})
+
+    client.delete("/api/v1/scoreboards/2")
+
+    assert Settings.Get("scoreboards.match_queue.2") is None
+    assert client.post("/api/v1/scoreboards").json()["id"] == 2   # id reused
+    assert Settings.Get("scoreboards.match_queue.2") is None
+
+
 async def test_board_removed_then_re_added_can_be_written_to(client, set_setting):
     """Remove a board and add one back — `_lowest_available_id` hands out the
     same id — then write live state into it. The Save after that write used to
@@ -182,6 +199,27 @@ async def test_reset_deletes_matches_and_restores_default_bindings(
     assert "2" not in (State.state.get("scoreboards", {}).get("rotation") or {})
     # Board tabs survive the reset — only their contents are recycled.
     assert Settings.Get("scoreboards.active") == [1, 2]
+
+
+async def test_reset_clears_the_running_orders_it_emptied(client):
+    """The reset unsets `match.{M}` directly rather than going through
+    `delete_match`, so nothing prunes the schedule on its way past.
+
+    `Schedule.queues()` prunes dead ids on read, which hid this: `GET /schedule`
+    answered correctly while the STORED projection — what state.json persists,
+    what the socket broadcast carries, and what the console's subject row counts —
+    still listed every deleted fixture. It survived restarts too.
+    """
+    for _ in range(3):
+        assert client.post("/api/v1/match").status_code == 200
+    assert State.state["schedule"]["queue"] == [1, 2, 3]
+
+    client.post("/api/v1/scoreboards/reset")
+
+    assert State.state.get("match") in (None, {})
+    assert State.state["schedule"]["queue"] == []
+    assert State.state["schedule"]["queues"][0]["matches"] == []
+    assert client.get("/api/v1/schedule").json()["queue"] == []
 
 
 # --- name override ---

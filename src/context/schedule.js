@@ -62,8 +62,10 @@ export async function moveQueue(qid, delta) {
 }
 
 /**
- * The schedule overlay's heading. Writes the FIRST order's title, which is what
- * `schedule.title` is projected from.
+ * The schedule overlay's heading (`schedule.title`) — the ticker's own broadcast
+ * string, belonging to NO running order. An order's title is a producer's private
+ * label for a list of fixtures; projecting the first one's into the heading put
+ * the word "WINNERS" over a union of Winners + Losers.
  */
 export async function setScheduleTitle(title) {
     return req("/schedule", { ...jsonBody({ title }), method: "PUT" });

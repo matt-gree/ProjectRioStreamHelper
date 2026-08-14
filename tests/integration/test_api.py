@@ -115,6 +115,23 @@ def test_layouts_bracket_has_dimensions(client):
     assert all("width" in e and "height" in e for e in brackets)
 
 
+# --- /match (payload validation) ---
+
+def test_match_stage_must_be_one_of_the_three(client):
+    """`stage` is an INPUT now — the Match desk's badge is a control — and it gates
+    Up next by an exact match on 'draft'. An unconstrained string meant a typo
+    ("Draft") stranded the fixture out of the running order for good, with a reason
+    blaming a stage nothing had set."""
+    m = client.post("/api/v1/match").json()["id"]
+
+    assert client.put(f"/api/v1/match/{m}", json={"stage": "Draft"}).status_code == 422
+    assert client.put(f"/api/v1/match/{m}", json={"stage": "shipped"}).status_code == 422
+
+    for stage in ("live", "post", "draft"):
+        r = client.put(f"/api/v1/match/{m}", json={"stage": stage})
+        assert r.status_code == 200 and r.json()["stage"] == stage
+
+
 # --- /rio/swap ---
 
 def test_rio_swap_toggles_sides(client):

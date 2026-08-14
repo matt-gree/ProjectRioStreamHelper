@@ -10,7 +10,7 @@ Every write re-projects the affected board(s) so the bound scoreboard's overlay
 reflects the fixture immediately. See ``server/match.py`` for the projection.
 """
 import asyncio
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import ORJSONResponse
@@ -47,7 +47,11 @@ class MatchPayload(BaseModel):
 
     label: str | None = None
     phase: str | None = None
-    stage: str | None = None
+    # Constrained because `stage` is an INPUT now (the Match desk's badge is a
+    # control), and it gates Up next: anything that is not exactly "draft" reads
+    # as already played. A typo — "Draft" — would strand the fixture out of the
+    # running order with a reason that blames a stage nothing set.
+    stage: Literal["draft", "live", "post"] | None = None
     scheduledAt: str | None = None
     format: dict[str, Any] | None = None
     series: dict[str, Any] | None = None

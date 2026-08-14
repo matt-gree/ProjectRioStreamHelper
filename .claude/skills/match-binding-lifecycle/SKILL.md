@@ -102,8 +102,21 @@ description: PRSH match fixture model, scoreboard bindings (pool + playback + de
       `delete_match` there is nothing left for `remove` to filter — an early-out
       there skipped the write and left the *projection* drawing a deleted fixture on
       the schedule overlay.
+    - **Pruning happens on READ, so a path that deletes matches without calling a
+      schedule verb must call `Schedule.reproject()`.** `POST /scoreboards/reset`
+      unsets `match.{M}` directly: `queues()` and `GET /schedule` answered correctly
+      while the *stored* `schedule.queues`/`schedule.queue` still listed every
+      deleted fixture — persisted, broadcast, and counted by the console's subject
+      row ("3 queued" against no matches). It outlived restarts too, which is why
+      `ensure_migrated` now re-projects on an already-migrated rig instead of
+      returning flat. `reproject` is a no-op when the model and its projection agree.
   - The client mirrors the rule in `src/routes/production/queue.js` (`useNextUp`)
     **for the button's label only**; the take sends no id. Keep the two in step.
+  - **Waiting ≠ next.** `not_waiting_reason` is per fixture, so on a night of fresh
+    drafts every one of them is waiting and exactly one is next. Any surface saying
+    "this is next" must walk the order — `useNextInOrder(qid)` client-side,
+    `next_up(qid)` on the server. The Match desk's stage popover claimed it off the
+    reason alone and told eight fixtures they were each next.
   - **Creating a match enrols it** (`create_match` and the from-startgg create path
     both end in `Schedule.append`). A producer authoring eight fixtures should not
     have to enrol each one — before this they could build a night's worth and find
@@ -122,7 +135,12 @@ description: PRSH match fixture model, scoreboard bindings (pool + playback + de
     element's stage panel is display-only.
   - Tests: `tests/unit/api/test_schedule_next.py`,
     `tests/unit/api/test_schedule_queue.py`,
+    `tests/unit/api/test_schedule_queues.py`,
     `src/routes/production/queue.test.jsx`.
+- **`stage` is a constrained input.** `MatchPayload.stage` is
+  `Literal["draft", "live", "post"]` because the desk's badge is a control and the
+  value gates Up next by an exact match on `"draft"` — an unvalidated string let a
+  typo strand a fixture with a reason blaming a stage nothing set.
 - **A board id off a request must be in the rig** — `require_board(sb)` (404),
   called by `bind_scoreboard`, `take_next_match` and `/startgg/load-set`. Without
   it, binding to a board outside `scoreboards.active` wrote `score.{sb}.match` for

@@ -102,6 +102,12 @@ async def remove_scoreboard(sb_id: int, session_id: str | None = None) -> ORJSON
     await Settings.Set("scoreboards.active", active)
     await Settings.Unset(f"scoreboards.binding.{sb_id}")
     await Settings.Unset(f"scoreboards.aliases.{sb_id}")
+    # Every per-board settings key goes when the board does. Ids are RE-USED
+    # (`_lowest_available_id`), so a leftover here is not dormant: removing the
+    # board that took fixtures from Losers and adding one back hands the new
+    # board 2 that assignment, silently, with nothing on its panel explaining
+    # where it came from.
+    await Settings.Unset(f"scoreboards.match_queue.{sb_id}")
 
     StatsTracker.reset_scoreboard(sb_id)
     if was_hud:
@@ -219,13 +225,15 @@ async def reset_scoreboard_state(session_id: str | None = None) -> ORJSONRespons
     default single binding and deletes every authored match.
 
     Steps: stop all rotations → delete all matches (unbind + blank + drop
-    conflicts) → reset each active board's binding to the single default →
-    clear each board's live score state and rotation status → reset HUD
-    side-preservation → re-apply the current HUD frame to board 1 if HUD is on.
+    conflicts) → re-project the running orders → reset each active board's
+    binding to the single default → clear each board's live score state and
+    rotation status → reset HUD side-preservation → re-apply the current HUD
+    frame to board 1 if HUD is on.
     """
     import copy
 
     from server.match import Match
+    from server.schedule import Schedule
 
     active = Settings.Get("scoreboards.active", [1])
 
@@ -245,7 +253,15 @@ async def reset_scoreboard_state(session_id: str | None = None) -> ORJSONRespons
             await Match.clear_scoreboard(sb)
         await State.Unset(f"match.{m}")
 
-    # 3. Reset each board to a clean single binding and blank its live state.
+    # 3. Flush the deletions through to the running orders. This loop unsets
+    #    `match.{M}` directly rather than going through `delete_match`, so nothing
+    #    has called `Schedule._commit` — `Schedule.queues()` would prune the dead
+    #    ids on read while the STORED `schedule.queues`/`schedule.queue` kept them,
+    #    leaving state.json and `GET /schedule` disagreeing and the console's
+    #    subject row counting fixtures that no longer exist.
+    await Schedule.reproject()
+
+    # 4. Reset each board to a clean single binding and blank its live state.
     for sb_id in list(active):
         await Settings.Set(f"scoreboards.binding.{sb_id}", copy.deepcopy(DEFAULT_BINDING))
         await State.Set(f"score.{sb_id}", {})
@@ -254,7 +270,7 @@ async def reset_scoreboard_state(session_id: str | None = None) -> ORJSONRespons
 
     await State.Save()
 
-    # 4. Reset side-preservation and re-seat the current HUD frame on board 1.
+    # 5. Reset side-preservation and re-seat the current HUD frame on board 1.
     RioGameDataProvider._reset_side_preservation()
     if RioGameDataProvider.hud_watcher \
             and RioGameDataProvider.hud_watcher.latest_game_data \

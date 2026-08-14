@@ -124,6 +124,49 @@ async def test_the_flat_queue_is_the_union_in_queue_order():
 
 
 @pytest.mark.asyncio
+async def test_a_pending_prune_is_flushed_into_the_projection():
+    """`queues()` prunes a dead id on READ; the stored model and its projection
+    keep it until something calls `_commit`.
+
+    Any path that deletes a match without going through `remove` therefore leaves
+    the two disagreeing — `POST /scoreboards/reset` unsets `match.{M}` directly —
+    and the console's subject row, which counts the projection, reports fixtures
+    that no longer exist. `reproject` is the flush, and it is what the reset hatch
+    and boot both call.
+    """
+    a, b = await make_match(), await make_match("Carol", "Dave")
+    await Schedule.append(a)
+    await Schedule.append(b)
+    await State.Unset(f"match.{a}")
+
+    # The read already knows; the stored state does not.
+    assert Schedule.queue() == [b]
+    assert deep_get(State.state, "schedule.queue") == [a, b]
+
+    await Schedule.reproject()
+
+    assert deep_get(State.state, "schedule.queue") == [b]
+    assert deep_get(State.state, "schedule.queues")[0]["matches"] == [b]
+
+
+@pytest.mark.asyncio
+async def test_boot_repairs_a_stale_projection():
+    """An already-migrated rig re-projects at boot instead of returning flat.
+
+    Nothing else at startup calls `_commit`, so without this a fixture deleted by
+    a path that skipped `remove` would be drawn from state.json on every launch,
+    forever — the stale projection would outlive the app.
+    """
+    a = await make_match()
+    await Schedule.append(a)
+    await State.Unset(f"match.{a}")
+
+    await Schedule.ensure_migrated()
+
+    assert deep_get(State.state, "schedule.queue") == []
+
+
+@pytest.mark.asyncio
 async def test_reordering_the_queues_reorders_the_projection():
     w, l = await two_queues()
     a, b = await make_match(), await make_match("C", "D")

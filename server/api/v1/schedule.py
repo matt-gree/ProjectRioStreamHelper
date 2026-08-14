@@ -53,7 +53,10 @@ def _result() -> dict:
 
 
 def _require_queue(qid: str) -> str:
-    if Schedule.get_queue(qid) is None or not qid:
+    # The emptiness test comes FIRST: `get_queue("")` answers with the first queue
+    # by design (a falsy id means "the default one"), so asking it about an empty
+    # id would say yes to a queue nobody named.
+    if not qid or Schedule.get_queue(qid) is None:
         raise HTTPException(404, f"queue {qid!r} does not exist")
     return qid
 
