@@ -115,10 +115,21 @@ async def rio_key_set(request: Request, session_id: str | None = None) -> ORJSON
     version="1", id="rio.game_modes.get",
     response_class=ORJSONResponse
 )
-async def rio_game_modes(session_id: str | None = None) -> ORJSONResponse:
-    """Get cached active game modes (name -> id)."""
-    modes = await stats_api.fetch_game_modes()
-    return ORJSONResponse(modes)
+async def rio_game_modes(
+    scope: str = "active", session_id: str | None = None
+) -> ORJSONResponse:
+    """Game modes as {name: id}.
+
+    `scope=active` (the default, and what every existing caller gets) is the
+    list a producer picks from TODAY. `scope=all` is the whole catalogue,
+    ended seasons included — what a console picker needs to be able to SAY the
+    mode a completed game was played in, and what the pool's mode filter needs
+    to be able to search one. Same shape either way, so a caller that wants both
+    tiers asks twice and takes the difference.
+    """
+    if scope == "all":
+        return ORJSONResponse(await stats_api.fetch_all_game_modes())
+    return ORJSONResponse(await stats_api.fetch_game_modes())
 
 
 @method(

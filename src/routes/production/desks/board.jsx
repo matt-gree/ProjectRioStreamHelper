@@ -22,6 +22,7 @@ import { ActionRow, FieldRow, KitColumn, KitColumns, TextRow, ToggleChip } from 
 import { BoardGameSubject } from '../subject';
 import { GamesSection } from '../games';
 import { useBoardQueueId, useNextUp, useQueues } from '../queue';
+import { useGameModes, withHeldModes } from '../gamemodes';
 import { useMatchBindableBoards } from '../boards';
 import { bindScoreboard, takeNextMatch } from '../../../context/match';
 
@@ -213,16 +214,33 @@ const TakeNextButton = memo(function TakeNextButton({ sb, label }) {
  * The disagreement is stated only when there IS one: the live game's mode beside
  * the pick, and one press to hand the board back to the feed. A board with no
  * override, or one whose override matches what is being played, says nothing —
- * agreement is not news.
+ * agreement is not news. It is said in as few words as the console can spend:
+ * the mode name is the long part and it is printed ONCE, because a season name
+ * ("SLICE 2026 Superstars Off") is half the panel's width on its own and a
+ * sentence built around two of them wrapped to three lines under the picker.
+ *
+ * THE ACTIVE LIST IS NOT THE VOCABULARY. It is the list to PICK from, but a
+ * board's mode comes from the game it is carrying, and a rotating pool of
+ * completed games is full of ended seasons that list no longer names. A Combobox
+ * whose value isn't in `data` renders its placeholder, so those boards read
+ * "Select game mode" while holding a perfectly good tag. The catalogue is
+ * offered in two tiers (../gamemodes) — active first, ended below — and whatever
+ * this board is set to or playing is folded in on top of that, so the selector
+ * can always say what it holds even when neither list has caught up with the
+ * feed.
  */
 const ModeRow = memo(function ModeRow({ d, gameModes, stats }) {
     const diverged = d.statsTagManual && !!d.liveMode && d.liveMode !== d.statsTag;
+    const options = useMemo(
+        () => withHeldModes(gameModes, d.statsTag, d.liveMode),
+        [gameModes, d.statsTag, d.liveMode],
+    );
     return (
         <div className="flex min-w-0 flex-col gap-1">
             <FieldRow label="Game mode">
                 <Combobox
                     placeholder="Select game mode"
-                    data={gameModes}
+                    data={options}
                     value={d.statsTag || null}
                     onChange={d.setStatsTag}
                     clearable
@@ -234,12 +252,16 @@ const ModeRow = memo(function ModeRow({ d, gameModes, stats }) {
                 <StatsDiagnostics stats={stats} />
             </FieldRow>
             {diverged && (
-                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 pl-16 @lg:pl-32">
+                <div className="flex min-w-0 items-center gap-x-2 pl-16 @lg:pl-32">
                     <Text size="xs" span truncate className="min-w-0 flex-1 text-amber-500/90">
-                        This game is {d.liveMode} — your pick is overriding it.
+                        Overriding <span className="font-medium">{d.liveMode}</span>
                     </Text>
-                    <Button size="xs" variant="ghost" className="h-6 shrink-0" onClick={d.useLiveMode}>
-                        Use {d.liveMode}
+                    <Button
+                        size="xs" variant="ghost" className="h-6 shrink-0"
+                        onClick={d.useLiveMode}
+                        title={`Use ${d.liveMode} — the mode this game is being played in`}
+                    >
+                        Use live
                     </Button>
                 </div>
             )}
@@ -1283,17 +1305,10 @@ export default function BoardDesk({ board }) {
     const d = useBoardDesk(sb);
     const { g } = d;
     const stats = useStatsDiagnostics(sb);
-    const [gameModes, setGameModes] = useState([]);
+    const { options: gameModes } = useGameModes();
     const [refreshingHud, setRefreshingHud] = useState(false);
     const aliases = useSettingsStore(s => s?.scoreboards?.aliases);
     const storedAlias = aliases?.[sb] ?? aliases?.[String(sb)] ?? '';
-
-    useEffect(() => {
-        fetch('/api/v1/rio/game-modes')
-            .then(r => r.json())
-            .then(data => setGameModes(Object.keys(data).map(n => ({ value: n, label: n }))))
-            .catch(() => {});
-    }, []);
 
     // Force a re-read of the HUD file — the recovery path after a board has been
     // cleared or hand-edited, so it matches what Project Rio is showing again.

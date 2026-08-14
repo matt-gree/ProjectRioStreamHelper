@@ -278,11 +278,23 @@ function GameFilters({ value, onChange, tagOptions, showRefine = true, trailing 
                 'grid grid-cols-1 items-start gap-2',
                 columns === 3 && '@4xl:grid-cols-3',
             )}>
+                {/*
+                  * OPEN VOCABULARY, ACTIVE FIRST. The suggestions are the mode
+                  * catalogue in two tiers (../gamemodes) — this season's modes at
+                  * the top, ended ones under them — because a pool of completed
+                  * games is mostly seasons that have finished, and an active-only
+                  * list could not even offer last month's. `creatable` is the
+                  * other half: this is a SEARCH filter that goes to Project Rio
+                  * as a `tag` param, not a setting with a fixed vocabulary, so a
+                  * mode the catalogue hasn't caught up with is typed and used.
+                  */}
                 <MultiSelect
                     placeholder="Game modes"
                     data={tagOptions}
                     value={v.tag ?? []}
                     onChange={(val) => onChange({ tag: val })}
+                    creatable
+                    searchPlaceholder="Search or type a mode…"
                 />
                 <NameChips
                     values={v.username ?? []}

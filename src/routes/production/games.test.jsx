@@ -178,6 +178,47 @@ describe('One game', () => {
     });
 });
 
+/*
+ * THE MODE FILTER IS A SEARCH, NOT A SETTING.
+ *
+ * A pool of completed games is mostly seasons that have ended, so an active-only
+ * list of modes could not offer the one a producer is most likely to want. The
+ * catalogue arrives in two tiers (../gamemodes) — active first, ended under
+ * their own heading — and the field takes typed text on top of that, because the
+ * value goes to Project Rio as a `tag` search param and a mode the catalogue
+ * hasn't caught up with must still be searchable.
+ */
+describe('Game-mode filter', () => {
+    const tiered = [
+        { value: 'S14 Superstars Off', label: 'S14 Superstars Off', group: 'Active' },
+        { value: 'S13 Superstars Off', label: 'S13 Superstars Off', group: 'Ended' },
+    ];
+
+    it('offers ended seasons under the active ones', () => {
+        bind({ mode: 'rotate' });
+        ui(section({ gameModes: tiered }));
+        fireEvent.click(screen.getByRole('button', { name: 'Game modes' }));
+        expect(screen.getByText('Active')).toBeInTheDocument();
+        expect(screen.getByText('Ended')).toBeInTheDocument();
+        const options = screen.getAllByRole('option').map(o => o.textContent);
+        expect(options).toEqual(['S14 Superstars Off', 'S13 Superstars Off']);
+    });
+
+    it('takes a mode neither list names', () => {
+        bind({ mode: 'rotate' });
+        ui(section({ gameModes: tiered }));
+        fireEvent.click(screen.getByRole('button', { name: 'Game modes' }));
+        fireEvent.change(screen.getByPlaceholderText('Search or type a mode…'), {
+            target: { value: 'Pooper League S2' },
+        });
+        fireEvent.click(screen.getByText('Use "Pooper League S2"'));
+        expect(fetch).toHaveBeenCalledWith('/api/v1/rotation/1/pool', expect.objectContaining({
+            method: 'PUT',
+            body: expect.stringContaining('Pooper League S2'),
+        }));
+    });
+});
+
 describe('Rotating', () => {
     it('puts the scope, the filter and the timing on the panel', () => {
         bind({ mode: 'rotate', interval: 45 });

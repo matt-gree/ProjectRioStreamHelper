@@ -28,6 +28,7 @@ import { KIT_FIELD, FieldRow, KitColumn, KitColumns } from '../kit';
 import { StagedDot, MoveButtons } from '../controls';
 import { useActiveBoards, useMatchBindableBoards } from '../boards';
 import { useNextInOrder, useQueueOrder, useQueues, useWaitingReason } from '../queue';
+import { useGameModes } from '../gamemodes';
 import {
     queueMatch, unqueueMatch, moveQueuedMatch,
     createQueue, renameQueue, deleteQueue, moveQueue,
@@ -241,11 +242,27 @@ const PortGrid = memo(function PortGrid({ value, onChange, className }) {
     );
 });
 
-// Searchable game-mode combobox (Popover + Command). Flex-fills the settings
-// row; the value is the raw game-mode name (empty = unset).
+/*
+ * Searchable game-mode combobox (Popover + Command). Flex-fills the settings
+ * row; the value is the raw game-mode name (empty = unset).
+ *
+ * `modes` is the two-tier catalogue (../gamemodes): this season's modes first,
+ * ended ones under their own heading. A fixture is often authored for a season
+ * that has closed — and the mode it carries is projected onto the board it binds
+ * to — so the active list alone could not name half of them.
+ */
 const GameModeSelect = memo(function GameModeSelect({ value, modes, onChange, className }) {
     const [open, setOpen] = useState(false);
     const choose = (v) => { onChange(v); setOpen(false); };
+    // Group name -> items, in first-appearance order (an ungrouped list stays
+    // one unheaded section).
+    const sections = [];
+    for (const m of modes) {
+        const item = typeof m === 'string' ? { value: m, label: m, group: null } : m;
+        const section = sections.find(s => s.name === (item.group ?? null));
+        if (section) section.items.push(item);
+        else sections.push({ name: item.group ?? null, items: [item] });
+    }
     return (
         <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
@@ -268,13 +285,17 @@ const GameModeSelect = memo(function GameModeSelect({ value, modes, onChange, cl
                                 <span className="text-muted-foreground">None</span>
                                 <Check className={cn('ml-auto size-4', !value ? 'opacity-100' : 'opacity-0')} />
                             </CommandItem>
-                            {modes.map(g => (
-                                <CommandItem key={g} value={g} onSelect={() => choose(g)}>
-                                    <span className="truncate">{g}</span>
-                                    <Check className={cn('ml-auto size-4', value === g ? 'opacity-100' : 'opacity-0')} />
-                                </CommandItem>
-                            ))}
                         </CommandGroup>
+                        {sections.map(section => (
+                            <CommandGroup key={section.name ?? '__all__'} heading={section.name ?? undefined}>
+                                {section.items.map(item => (
+                                    <CommandItem key={item.value} value={item.value} onSelect={() => choose(item.value)}>
+                                        <span className="truncate">{item.label}</span>
+                                        <Check className={cn('ml-auto size-4', value === item.value ? 'opacity-100' : 'opacity-0')} />
+                                    </CommandItem>
+                                ))}
+                            </CommandGroup>
+                        ))}
                     </CommandList>
                 </Command>
             </PopoverContent>
@@ -1372,18 +1393,11 @@ export default function MatchDesk() {
         for (const sb of active) out[sb] = s?.score?.[sb]?.match ?? s?.score?.[String(sb)]?.match ?? null;
         return out;
     }));
-    const [gameModes, setGameModes] = useState([]);
+    const { options: gameModes } = useGameModes();
     const [creating, setCreating] = useState(false);
     // Single-open accordion. `null` means "default to newest"; '' means the user
     // explicitly collapsed everything; else the open match id.
     const [openId, setOpenId] = useState(null);
-
-    useEffect(() => {
-        fetch('/api/v1/rio/game-modes')
-            .then(r => r.json())
-            .then(data => setGameModes(Object.keys(data)))
-            .catch(() => {});
-    }, []);
 
     const ids = useMemo(
         () => Object.keys(matches).filter(k => /^\d+$/.test(k)).sort((a, b) => Number(a) - Number(b)),

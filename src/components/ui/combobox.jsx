@@ -14,8 +14,11 @@ import { cn } from "@/lib/utils";
  * `{ label, value, image }`. When an item carries an `image` url it
  * renders a small sprite (pixelated) before the label in both the
  * trigger and the dropdown — used for MSB team logos / character icons.
- * `creatable` lets typed text outside `data` be committed as-is (e.g.
- * a free-text system font name the picker doesn't enumerate).
+ * An item may carry a `group` name, in which case the list is sectioned
+ * under headings in the order the groups first appear — the caller's
+ * order, so a tier that should lead (today's options over retired ones)
+ * leads. `creatable` lets typed text outside `data` be committed as-is
+ * (e.g. a free-text system font name the picker doesn't enumerate).
  * Built on shadcn Command + Popover.
  * ------------------------------------------------------------------ */
 export const Combobox = React.forwardRef(function Combobox(
@@ -30,6 +33,16 @@ export const Combobox = React.forwardRef(function Combobox(
   const trimmed = search.trim();
   const showCreate = creatable && trimmed.length > 0 &&
     !items.some((i) => i.label.toLowerCase() === trimmed.toLowerCase());
+
+  // Group name -> items, in first-appearance order. No group on any item is the
+  // ungrouped case: one section, no heading, exactly as before.
+  const sections = [];
+  for (const item of items) {
+    const name = item.group ?? null;
+    const section = sections.find((s) => s.name === name);
+    if (section) section.items.push(item);
+    else sections.push({ name, items: [item] });
+  }
 
   return (
     <Popover
@@ -77,21 +90,25 @@ export const Combobox = React.forwardRef(function Combobox(
           />
           <CommandList>
             {!showCreate && <CommandEmpty>{nothingFound}</CommandEmpty>}
-            <CommandGroup>
-              {items.map((item) => (
-                <CommandItem
-                  key={item.value}
-                  value={item.label}
-                  onSelect={() => { onChange?.(item.value); setSearch(""); setOpen(false); }}
-                >
-                  <Check className={cn("mr-2 size-4", item.value === value ? "opacity-100" : "opacity-0")} />
-                  {item.image && (
-                    <img src={item.image} alt="" className="mr-1.5 size-4 shrink-0 object-contain pixelated" />
-                  )}
-                  {item.label}
-                </CommandItem>
-              ))}
-              {showCreate && (
+            {sections.map((section) => (
+              <CommandGroup key={section.name ?? "__all__"} heading={section.name ?? undefined}>
+                {section.items.map((item) => (
+                  <CommandItem
+                    key={item.value}
+                    value={item.label}
+                    onSelect={() => { onChange?.(item.value); setSearch(""); setOpen(false); }}
+                  >
+                    <Check className={cn("mr-2 size-4", item.value === value ? "opacity-100" : "opacity-0")} />
+                    {item.image && (
+                      <img src={item.image} alt="" className="mr-1.5 size-4 shrink-0 object-contain pixelated" />
+                    )}
+                    {item.label}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            ))}
+            {showCreate && (
+              <CommandGroup>
                 <CommandItem
                   key="__create__"
                   value={trimmed}
@@ -100,8 +117,8 @@ export const Combobox = React.forwardRef(function Combobox(
                   <Check className="mr-2 size-4 opacity-0" />
                   Use "{trimmed}"
                 </CommandItem>
-              )}
-            </CommandGroup>
+              </CommandGroup>
+            )}
           </CommandList>
         </Command>
       </PopoverContent>

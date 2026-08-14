@@ -401,6 +401,37 @@ async def fetch_game_modes(force: bool = False) -> dict[str, int]:
     return _game_modes
 
 
+async def fetch_all_game_modes() -> dict[str, int]:
+    """Every game mode Project Rio has ever named — ended seasons included.
+
+    THE ACTIVE LIST IS NOT THE VOCABULARY. `fetch_game_modes` is the list to
+    PICK from — 16 modes against 196 — but a board's mode comes from the game it
+    is carrying, and a pool of completed games is mostly ended seasons that list
+    no longer names. Anything that has to SAY or MATCH a mode (the console's
+    pickers, the pool's mode filter) needs the whole catalogue; anything that
+    offers today's modes first still leads with the active one.
+
+    Reads the same disk-persisted map pyrio uses to name a completed game's mode
+    (`_process_games`), so this endpoint and the mode printed beside a game in
+    the games table can never disagree. Falls back to the active list — never an
+    exception and never empty when we know anything at all — because a picker
+    that offers less is a nuisance and one that offers nothing is broken.
+    """
+    client = _get_client()
+    modes = None
+    # The same lock the warm-up holds: a cold catalogue is a ~14s CPU-bound
+    # rebuild inside pyrio, and two of them at once is what starves the loop
+    # while a board is coming up.
+    async with _get_cache_refresh_lock():
+        try:
+            modes = await asyncio.to_thread(client.cache.game_mode_dictionary)
+        except Exception as e:
+            logger.warning(f"[StatsAPI] Failed to read the full game-mode catalogue: {e}")
+    # Outside the lock: the active fetch can end up refreshing the completer
+    # cache, which takes this same lock.
+    return dict(modes) if modes else dict(await fetch_game_modes())
+
+
 async def refresh_completer_cache() -> None:
     """Force-rebuild every section of pyrio's completer cache.
 

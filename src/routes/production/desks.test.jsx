@@ -815,6 +815,91 @@ describe('Board desk', () => {
     });
 
     /*
+     * THE SELECTOR MUST BE ABLE TO SAY WHAT THE BOARD HOLDS.
+     *
+     * The ACTIVE list is right for picking and wrong as the only vocabulary — a
+     * board's mode comes from the game it is carrying, and a rotating pool of
+     * completed games is mostly ended seasons that list no longer names. The
+     * Combobox falls back to its placeholder for a value outside `data`, so
+     * those boards read "Select game mode" while their stats_tag was perfectly
+     * good and every stats fetch was running against it.
+     *
+     * Two answers, both pinned below: the catalogue arrives in two tiers so an
+     * ended mode is PICKABLE, and whatever the board is holding is folded in on
+     * top so it is SHOWABLE even before either list names it.
+     */
+    it('offers ended modes under the active ones', async () => {
+        vi.stubGlobal('fetch', vi.fn((url) => Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve(
+                String(url).includes('scope=all')
+                    ? { 'S14 Superstars Off': 1, 'S13 Superstars Off': 2 }
+                    : { 'S14 Superstars Off': 1 },
+            ),
+        })));
+        useSettingsStore.setState({
+            project_rio: { hud_enabled: false },
+            production: {},
+            scoreboards: { active: [1], aliases: {}, binding: {} },
+        });
+        useStateStore.setState({ score: { 1: {} }, match: {} });
+        ui(<BoardDesk board={1} />);
+        fireEvent.click(await screen.findByText('Select game mode'));
+        await waitFor(() => expect(screen.getByText('Ended')).toBeInTheDocument());
+        expect(screen.getByText('Active')).toBeInTheDocument();
+        // Active first: the modes in use stay where they were, the rest are
+        // reachable underneath rather than absent.
+        const options = screen.getAllByRole('option').map(o => o.textContent);
+        expect(options).toEqual(['S14 Superstars Off', 'S13 Superstars Off']);
+    });
+
+    it('shows a mode neither list names yet', async () => {
+        vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({
+            ok: true, json: () => Promise.resolve({ 'S14 Superstars Off': 1 }),
+        })));
+
+        useSettingsStore.setState({
+            project_rio: { hud_enabled: false },
+            production: {},
+            scoreboards: {
+                active: [1], aliases: {},
+                binding: { 1: { stats_tag: 'S13 Superstars Off' } },
+            },
+        });
+        useStateStore.setState({ score: { 1: { game_mode: 'S13 Superstars Off' } }, match: {} });
+        ui(<BoardDesk board={1} />);
+        await waitFor(() => expect(screen.getByText('S13 Superstars Off')).toBeInTheDocument());
+        expect(screen.queryByText('Select game mode')).not.toBeInTheDocument();
+    });
+
+    /*
+     * The override callout prints the mode name ONCE. A season name is half the
+     * panel's width on its own, and a sentence that named it twice ("This game is
+     * X — your pick is overriding it" beside a "Use X" button) wrapped to three
+     * lines under the picker.
+     */
+    it('calls out an overridden live mode without spending two lines on its name', () => {
+        useSettingsStore.setState({
+            project_rio: { hud_enabled: false },
+            production: {},
+            scoreboards: {
+                active: [1], aliases: {},
+                binding: { 1: { stats_tag: 'S14 Superstars Off', stats_tag_manual: true } },
+            },
+        });
+        useStateStore.setState({
+            score: { 1: { game_mode: 'SLICE 2026 Superstars Off' } }, match: {},
+        });
+        ui(<BoardDesk board={1} />);
+        const hand_back = screen.getByRole('button', { name: 'Use live' });
+        expect(hand_back).toHaveAttribute(
+            'title', expect.stringContaining('SLICE 2026 Superstars Off'),
+        );
+        // Named once: in the callout. The button says the verb, not the mode.
+        expect(screen.getAllByText('SLICE 2026 Superstars Off')).toHaveLength(1);
+    });
+
+    /*
      * The panel owns the board's PROPERTIES; whether the board exists is rig
      * membership, which lives in the rack's BOARDS section next to the + that
      * creates one (rack.test.jsx covers it). Remove was here, four scrolls down

@@ -13,3 +13,11 @@ if (!globalThis.ResizeObserver) {
         disconnect() {}
     };
 }
+
+// Same shape of gap: jsdom implements no scrolling, so `scrollIntoView` is
+// missing entirely. cmdk calls it on the selected item every time a Command list
+// mounts or its filter changes, so without this NO searchable picker (Combobox,
+// MultiSelect, the mode/participant lists) can be opened in a test.
+if (!Element.prototype.scrollIntoView) {
+    Element.prototype.scrollIntoView = function scrollIntoView() {};
+}
