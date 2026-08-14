@@ -190,6 +190,35 @@ describe('Match desk', () => {
         });
     };
 
+    /*
+     * THE ORDERS OUTLIVE THE FIXTURES IN THEM. "No matches yet" was an early
+     * branch returning a sentence and a button INSTEAD of the desk, so an empty
+     * rig collapsed both running orders: nothing to create into, rename, reorder
+     * or delete, no New running order, and nothing saying they still existed.
+     * Emptiness belongs to the list of fixtures, not to the desk's structure.
+     */
+    it('keeps the running orders when there are no matches at all', () => {
+        twoOrders();
+        useStateStore.setState({
+            score: {},
+            match: {},
+            schedule: {
+                queues: [
+                    { id: 'winners', title: 'Winners', matches: [] },
+                    { id: 'losers', title: 'Losers', matches: [] },
+                ],
+            },
+        });
+        ui(<MatchDesk />);
+        expect(screen.getByText(/No matches yet/)).toBeInTheDocument();
+        expect(screen.getByLabelText('Title of the winners running order')).toBeInTheDocument();
+        expect(screen.getByLabelText('Title of the losers running order')).toBeInTheDocument();
+        // Each order can still be created into, and a third can still be added.
+        expect(screen.getByRole('button', { name: 'New match in the Losers running order' }))
+            .toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /New running order/ })).toBeInTheDocument();
+    });
+
     it('creates a fixture into the running order whose heading was clicked', () => {
         twoOrders();
         ui(<MatchDesk />);

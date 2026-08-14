@@ -1447,72 +1447,50 @@ export default function MatchDesk() {
         } finally { setCreating(false); }
     };
 
-    // The panel frame (chip · title · meta) comes from PanelShell on the stage.
+    /*
+     * The panel frame (chip · title · meta) comes from PanelShell on the stage.
+     *
+     * ONE STACK, EMPTY OR NOT. "No matches yet" used to be an early branch that
+     * returned a sentence and a button INSTEAD of the desk, so an empty rig lost
+     * the running orders themselves: two orders a producer had built and titled
+     * collapsed to a single New match, with no heading to create into, nothing to
+     * rename or reorder, no way to add a second one — and nothing saying the
+     * orders still existed. Emptiness belongs to the list of fixtures; the orders
+     * are the desk's own structure and outlive every fixture in them. The empty
+     * state is a LINE, not a branch.
+     */
     return (
-        <>
-            {ids.length === 0 ? (
-                <Stack gap="sm" className="items-start">
-                    <Text size="sm" className="text-muted-foreground">
-                        No matches yet. Create one to author the fixture — participants, captains,
-                        bracket phase, mode and format — then bind it to a board to project it onto
-                        the broadcast.
-                    </Text>
-                    {/* `() => onNew()` and never a bare `onNew`: the handler's
-                        first argument is now a queue id, and a click event passed
-                        into it reads as one — a 404 on `?queue=[object Object]`. */}
-                    <Button size="xs" variant="outline" disabled={creating} onClick={() => onNew()}>
-                        <Plus size={13} className="mr-1" /> New match
-                    </Button>
-                </Stack>
-            ) : (
-                <Stack gap="xs">
-                    {/* Iterated per ORDER rather than over a flat list with
-                        index-keyed headings: an order that exists but is empty still
-                        gets its heading (an order you cannot see is one you cannot
-                        delete), and two empty ones in a row cannot collide. */}
-                    {groups.map((q, qi) => (
-                        <Fragment key={q.id}>
-                            {/* Only once there is more than one. A single order is
-                                the whole desk, and a title over every fixture there
-                                is would be furniture. */}
-                            {groups.length > 1 && (
-                                <QueueHeading
-                                    queue={q}
-                                    boards={boardsByQueue[q.id]}
-                                    first={qi === 0}
-                                    last={qi === groups.length - 1}
-                                    onNew={onNew}
-                                    creating={creating}
-                                />
-                            )}
-                            {q.matches.map((id, i) => (
-                                <MatchAccordion
-                                    key={id}
-                                    m={id}
-                                    open={effectiveOpen === id}
-                                    onToggle={() => setOpenId(effectiveOpen === id ? '' : id)}
-                                    active={active}
-                                    boundMap={boundMap}
-                                    gameModes={gameModes}
-                                    canBind={canBind}
-                                    // Position within ITS OWN order, and that
-                                    // order's length — the arrows bound at its ends,
-                                    // because moving is not the same verb as
-                                    // changing which order a fixture is in.
-                                    queuePos={i + 1}
-                                    queueLen={q.matches.length}
-                                    queues={groups}
-                                    queueOf={q.id}
-                                />
-                            ))}
-                        </Fragment>
-                    ))}
-                    {unenrolled.length > 0 && (
-                        <Text size="xs" className="pt-1.5 text-muted-foreground/70">
-                            Not in a running order — no schedule slot, never offered as a board’s next fixture.
-                        </Text>
+        <Stack gap="xs">
+            {ids.length === 0 && (
+                <Text size="sm" className="pb-1 text-muted-foreground">
+                    No matches yet.{' '}
+                    {groups.length > 1
+                        ? 'Create one with the + on the running order it belongs to,'
+                        : 'Create one'}{' '}
+                    to author the fixture — participants, captains, bracket phase, mode
+                    and format — then bind it to a board to project it onto the broadcast.
+                </Text>
+            )}
+            {/* Iterated per ORDER rather than over a flat list with
+                index-keyed headings: an order that exists but is empty still
+                gets its heading (an order you cannot see is one you cannot
+                delete), and two empty ones in a row cannot collide. */}
+            {groups.map((q, qi) => (
+                <Fragment key={q.id}>
+                    {/* Only once there is more than one. A single order is
+                        the whole desk, and a title over every fixture there
+                        is would be furniture. */}
+                    {groups.length > 1 && (
+                        <QueueHeading
+                            queue={q}
+                            boards={boardsByQueue[q.id]}
+                            first={qi === 0}
+                            last={qi === groups.length - 1}
+                            onNew={onNew}
+                            creating={creating}
+                        />
                     )}
-                    {unenrolled.map(id => (
+                    {q.matches.map((id, i) => (
                         <MatchAccordion
                             key={id}
                             m={id}
@@ -1522,28 +1500,53 @@ export default function MatchDesk() {
                             boundMap={boundMap}
                             gameModes={gameModes}
                             canBind={canBind}
-                            queuePos={null}
-                            queueLen={0}
+                            // Position within ITS OWN order, and that
+                            // order's length — the arrows bound at its ends,
+                            // because moving is not the same verb as
+                            // changing which order a fixture is in.
+                            queuePos={i + 1}
+                            queueLen={q.matches.length}
                             queues={groups}
-                            queueOf={null}
+                            queueOf={q.id}
                         />
                     ))}
-                    <Group gap="xs" className="pt-0.5">
-                        {/* One order is the whole desk, so a plain New match is
-                            unambiguous and the headings aren't drawn at all. With
-                            several, "New match" cannot say WHICH — each heading's
-                            `+` is the answer, and a button that always meant the
-                            first order would be the trap it replaced. */}
-                        {groups.length <= 1 && (
-                            <Button size="xs" variant="outline" disabled={creating} onClick={() => onNew()}>
-                                <Plus size={13} className="mr-1" /> New match
-                            </Button>
-                        )}
-                        <NewQueueButton />
-                    </Group>
-                </Stack>
+                </Fragment>
+            ))}
+            {unenrolled.length > 0 && (
+                <Text size="xs" className="pt-1.5 text-muted-foreground/70">
+                    Not in a running order — no schedule slot, never offered as a board’s next fixture.
+                </Text>
             )}
-        </>
+            {unenrolled.map(id => (
+                <MatchAccordion
+                    key={id}
+                    m={id}
+                    open={effectiveOpen === id}
+                    onToggle={() => setOpenId(effectiveOpen === id ? '' : id)}
+                    active={active}
+                    boundMap={boundMap}
+                    gameModes={gameModes}
+                    canBind={canBind}
+                    queuePos={null}
+                    queueLen={0}
+                    queues={groups}
+                    queueOf={null}
+                />
+            ))}
+            <Group gap="xs" className="pt-0.5">
+                {/* One order is the whole desk, so a plain New match is
+                    unambiguous and the headings aren't drawn at all. With
+                    several, "New match" cannot say WHICH — each heading's
+                    `+` is the answer, and a button that always meant the
+                    first order would be the trap it replaced. */}
+                {groups.length <= 1 && (
+                    <Button size="xs" variant="outline" disabled={creating} onClick={() => onNew()}>
+                        <Plus size={13} className="mr-1" /> New match
+                    </Button>
+                )}
+                <NewQueueButton />
+            </Group>
+        </Stack>
     );
 }
 
