@@ -11,9 +11,16 @@ import { makeReq, jsonBody } from "../lib/api";
 
 const req = makeReq("/api/v1");
 
-/** Create the next match. Returns { id, match }. */
-export async function createMatch() {
-    return req("/match", { ...jsonBody({}), method: "POST" });
+/**
+ * Create the next match, enrolled in a running order. Returns { id, match }.
+ *
+ * `queue` names WHICH order it joins; omitted means the first, which is the
+ * whole story on a single-order rig. 404 on an order that no longer exists,
+ * which is a stale client read — the desk's headings are the ids it sends.
+ */
+export async function createMatch(queue) {
+    const q = queue ? `?queue=${encodeURIComponent(queue)}` : "";
+    return req(`/match${q}`, { ...jsonBody({}), method: "POST" });
 }
 
 /** Delete a match (unbinds + blanks any bound boards server-side). */

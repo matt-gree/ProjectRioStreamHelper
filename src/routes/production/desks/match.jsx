@@ -1223,7 +1223,7 @@ function useBoardsByQueue(active) {
  * never changes (`queue_id_for`), so renaming is safe — a board's assignment points
  * at the id and survives.
  */
-const QueueHeading = memo(function QueueHeading({ queue, boards, first, last }) {
+const QueueHeading = memo(function QueueHeading({ queue, boards, first, last, onNew, creating }) {
     const [title, setTitle] = useState(queue.title);
     const [confirmDel, setConfirmDel] = useState(false);
     // Follow the server when it changes underneath us, but never while the producer
@@ -1267,6 +1267,24 @@ const QueueHeading = memo(function QueueHeading({ queue, boards, first, last }) 
                     ? `board ${boards.join(', ')}`
                     : 'no board takes from this'}
             </Text>
+            {/* CREATING INTO THIS ORDER, the rack's section-header idiom (its `+`
+                adds into the scene it heads). A desk-level New match can only mean
+                the first order, so on a winners/losers rig every fixture arrived in
+                Winners and had to be moved — a second verb, on the membership icon
+                inside the fixture's own body, which is not where a producer looks
+                for "put this one in Losers". The heading is the order, so its `+`
+                is where a fixture enters it. */}
+            <SimpleTooltip label={`New match in “${queue.title || queue.id}”`}>
+                <button
+                    type="button"
+                    aria-label={`New match in the ${queue.title || queue.id} running order`}
+                    disabled={creating}
+                    onClick={() => onNew?.(queue.id)}
+                    className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50"
+                >
+                    <Plus size={13} />
+                </button>
+            </SimpleTooltip>
             <Popover open={confirmDel} onOpenChange={setConfirmDel}>
                 <PopoverTrigger asChild>
                     <button
@@ -1417,10 +1435,12 @@ export default function MatchDesk() {
     const newestId = ids[ids.length - 1] || null;
     const effectiveOpen = openId === null ? newestId : (openId || null);
 
-    const onNew = async () => {
+    // `qid` is which running order the fixture is created INTO — the heading's
+    // `+` names its own, the desk-level button names none and takes the first.
+    const onNew = async (qid) => {
         setCreating(true);
         try {
-            const { id } = await createMatch();
+            const { id } = await createMatch(qid);
             setOpenId(String(id));
         } catch (e) {
             notifications.show({ message: `New match: ${e?.message || e}`, color: 'red' });
@@ -1437,7 +1457,10 @@ export default function MatchDesk() {
                         bracket phase, mode and format — then bind it to a board to project it onto
                         the broadcast.
                     </Text>
-                    <Button size="xs" variant="outline" disabled={creating} onClick={onNew}>
+                    {/* `() => onNew()` and never a bare `onNew`: the handler's
+                        first argument is now a queue id, and a click event passed
+                        into it reads as one — a 404 on `?queue=[object Object]`. */}
+                    <Button size="xs" variant="outline" disabled={creating} onClick={() => onNew()}>
                         <Plus size={13} className="mr-1" /> New match
                     </Button>
                 </Stack>
@@ -1458,6 +1481,8 @@ export default function MatchDesk() {
                                     boards={boardsByQueue[q.id]}
                                     first={qi === 0}
                                     last={qi === groups.length - 1}
+                                    onNew={onNew}
+                                    creating={creating}
                                 />
                             )}
                             {q.matches.map((id, i) => (
@@ -1504,9 +1529,16 @@ export default function MatchDesk() {
                         />
                     ))}
                     <Group gap="xs" className="pt-0.5">
-                        <Button size="xs" variant="outline" disabled={creating} onClick={onNew}>
-                            <Plus size={13} className="mr-1" /> New match
-                        </Button>
+                        {/* One order is the whole desk, so a plain New match is
+                            unambiguous and the headings aren't drawn at all. With
+                            several, "New match" cannot say WHICH — each heading's
+                            `+` is the answer, and a button that always meant the
+                            first order would be the trap it replaced. */}
+                        {groups.length <= 1 && (
+                            <Button size="xs" variant="outline" disabled={creating} onClick={() => onNew()}>
+                                <Plus size={13} className="mr-1" /> New match
+                            </Button>
+                        )}
                         <NewQueueButton />
                     </Group>
                 </Stack>

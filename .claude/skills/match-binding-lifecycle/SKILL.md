@@ -123,6 +123,17 @@ description: PRSH match fixture model, scoreboard bindings (pool + playback + de
     the schedule overlay empty and every board's Up next silent, with nothing
     saying why. Taking one back out is `DELETE /schedule/queue/{m}`; re-loading a
     set into an *existing* match must not reshuffle the order.
+  - **…and it enrols into the order the CALLER names**: `POST /match?queue={qid}`,
+    omitted = the first. Enrolment-on-create is only half the answer once a rig has
+    two orders — every fixture landed in Winners and had to be *moved* into Losers,
+    a second verb on a control (`MembershipControl`) that lives inside the
+    fixture's own body, for something the producer knew before they clicked. The
+    Match desk's per-order **`+`** is what sends it (the rack's section-header
+    idiom), and with several orders the desk-level *New match* is **gone** rather
+    than silently meaning the first. 404 on an unknown id *and on an empty one* —
+    `get_queue("")` answers with the first by design, so accepting `?queue=` would
+    enrol into an order nobody named. Validation runs **before** the match is
+    written, so a stale id can't leave an unenrolled fixture behind.
   - **Membership and position are PER-ID verbs**: `POST`/`DELETE`
     `/schedule/queue/{m}` and `POST /schedule/queue/{m}/move?delta=±1`
     (`Schedule.append` / `remove` / `move`, which clamps). The whole-list

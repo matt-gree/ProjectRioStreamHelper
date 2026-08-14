@@ -164,6 +164,68 @@ describe('Match desk', () => {
      * is two boards claiming one game and a state nothing can draw. The steal is
      * `bind_board`'s on the server now (server/api/v1/match.py).
      */
+    /*
+     * WHERE A FIXTURE ENTERS AN ORDER is the order's own heading, the rack's
+     * section-header idiom. A desk-level New match can only mean the first order,
+     * so on a winners/losers rig every fixture arrived in Winners and had to be
+     * moved with the membership icon inside its own body — the producer knew
+     * which order they wanted before they clicked, and the UI had nowhere to say
+     * it.
+     */
+    const twoOrders = () => {
+        useSettingsStore.setState({
+            project_rio: { hud_enabled: false },
+            production: {},
+            scoreboards: { active: [1], binding: {} },
+        });
+        useStateStore.setState({
+            score: {},
+            match: { 1: { stage: 'draft', format: { bestOf: 1 } } },
+            schedule: {
+                queues: [
+                    { id: 'winners', title: 'Winners', matches: [1] },
+                    { id: 'losers', title: 'Losers', matches: [] },
+                ],
+            },
+        });
+    };
+
+    it('creates a fixture into the running order whose heading was clicked', () => {
+        twoOrders();
+        ui(<MatchDesk />);
+        fireEvent.click(screen.getByRole('button', { name: 'New match in the Losers running order' }));
+        expect(fetch).toHaveBeenCalledWith(
+            '/api/v1/match?queue=losers',
+            expect.objectContaining({ method: 'POST' }),
+        );
+    });
+
+    // …and with several orders there is no order-less New match to fall into the
+    // first one by default. The headings carry it.
+    it('drops the ambiguous desk-level New match once there are several orders', () => {
+        twoOrders();
+        ui(<MatchDesk />);
+        expect(screen.queryByRole('button', { name: /^New match$/ })).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'New match in the Winners running order' }))
+            .toBeInTheDocument();
+    });
+
+    it('keeps the plain New match on a single-order rig, and sends no order', () => {
+        useSettingsStore.setState({
+            project_rio: { hud_enabled: false },
+            production: {},
+            scoreboards: { active: [1], binding: {} },
+        });
+        useStateStore.setState({
+            score: {},
+            match: { 1: { stage: 'draft', format: { bestOf: 1 } } },
+            schedule: { queues: [{ id: 'main', title: '', matches: [1] }] },
+        });
+        ui(<MatchDesk />);
+        fireEvent.click(screen.getByRole('button', { name: /New match/ }));
+        expect(fetch).toHaveBeenCalledWith('/api/v1/match', expect.objectContaining({ method: 'POST' }));
+    });
+
     it('moves a bound match with one staged change, not a bind plus an unbind', () => {
         useSettingsStore.setState({
             project_rio: { hud_enabled: false },

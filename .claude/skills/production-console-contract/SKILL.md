@@ -1088,6 +1088,16 @@ somewhere, and the conflict banner's "Go to board" selects the board's desk.
   Creating a match **enrols** it, so this is normally the way *out* — a placeholder
   or a kept-for-reference fixture that should not reach the schedule overlay or be
   offered to a board.
+- **…but it is not how a fixture GETS into a chosen order.** `MembershipControl`
+  lives inside a fixture's own body: reaching it means creating the match, finding
+  the row, expanding it and knowing the icon — a correction, at correction depth,
+  which is right for moving something authored into the wrong order and wrong for
+  the ordinary case of "the next Losers match". **Each order's heading carries a
+  `+`** that creates into it (`POST /match?queue={qid}`), the same idiom as the
+  rack's scene header, and with several orders the desk-level *New match* is
+  removed — a create button that cannot name its order silently means the first
+  one, which is the trap the `+` exists to close. A single-order rig draws no
+  headings, so it keeps the plain button.
 - **The second group's one line appears only when something is out of the order.**
   Normally everything is enrolled, and a divider announcing an empty group is
   furniture.

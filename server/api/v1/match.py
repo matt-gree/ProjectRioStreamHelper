@@ -89,20 +89,34 @@ async def get_match(m: int):
 
 
 @router.post("", response_class=ORJSONResponse)
-async def create_match():
-    """Create the next match with default fields, enrolled in the running order.
+async def create_match(queue: str | None = None):
+    """Create the next match with default fields, enrolled in a running order.
 
-    A new fixture joins `schedule.queue` because that is what creating one almost
+    A new fixture joins a running order because that is what creating one almost
     always means — it is tonight's next match. Before this, a producer could
     author eight fixtures and find the schedule overlay empty and every board's
     Up next silent, with nothing on the desk saying why. Taking one back out is
     one click on the Match desk (`DELETE /schedule/queue/{m}`).
+
+    WHICH order is the caller's to name. Omitted means the first, which is the
+    whole answer on a single-order rig; a rig running winners and losers has two,
+    and creating into the one you are looking at beats creating into the first
+    and moving it — the move is a second verb, on a control the producer has to
+    find, for a fixture they already knew the home of.
+
+    404 on an order that does not exist, and on an EMPTY id: `get_queue("")`
+    answers with the first by design, so accepting it would silently enrol into
+    an order nobody named (cf. `_require_queue` in the schedule routes).
     """
+    if queue is not None:
+        await Schedule.ensure_migrated()
+        if not queue or Schedule.get_queue(queue) is None:
+            raise HTTPException(404, f"queue {queue!r} does not exist")
     m = Match.next_id()
     body = default_match()
     await State.Set(f"match.{m}", body)
     await State.Save()
-    await Schedule.append(m)
+    await Schedule.append(m, queue)
     return {"id": m, "match": body}
 
 

@@ -336,6 +336,43 @@ async def test_a_new_match_enrols_in_the_first_queue():
 
 
 @pytest.mark.asyncio
+async def test_a_new_match_can_name_the_order_it_joins():
+    """Creating INTO an order, which is what the desk's per-heading `+` sends.
+
+    Without it every fixture on a winners/losers rig arrived in the first order
+    and had to be moved — a second verb for something the producer already knew.
+    """
+    w, l = await two_queues()
+    out = await create_match(queue=l)
+    assert Schedule.matches(l) == [out["id"]]
+    assert Schedule.matches(w) == []
+    assert Schedule.queue_of(out["id"]) == l
+
+
+@pytest.mark.asyncio
+async def test_creating_into_an_unknown_order_is_a_404_and_creates_nothing():
+    await two_queues()
+    before = Match.next_id()
+    with pytest.raises(HTTPException) as exc:
+        await create_match(queue="grands")
+    assert exc.value.status_code == 404
+    # The validation runs BEFORE the match is written, so a stale id from a
+    # client that missed a delete cannot leave an unenrolled fixture behind.
+    assert Match.next_id() == before
+
+
+@pytest.mark.asyncio
+async def test_an_empty_order_id_is_not_the_first_order():
+    """`get_queue("")` answers with the first by design, so an empty id has to be
+    rejected rather than resolved — enrolling into an order nobody named is the
+    bug `_require_queue` was reordered for."""
+    await two_queues()
+    with pytest.raises(HTTPException) as exc:
+        await create_match(queue="")
+    assert exc.value.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_the_last_running_order_cannot_be_removed():
     """A rig with no queues has nowhere for a new fixture to enrol and no answer
     for what is next on a board — the same reason one scoreboard always remains."""
