@@ -214,12 +214,19 @@ describe('Rack rig', () => {
         expect(remove).toHaveAttribute('title', 'The rig always keeps one board');
     });
 
-    // The meta says what the board is CARRYING, and reads state only — the rack
-    // redraws on every HUD frame and must not fire a desk's own fetches.
-    it("says what each board is carrying, and what it's waiting for when empty", () => {
+    /*
+     * A BOARD ROW IS ITS NAME. The row used to carry a one-line game summary
+     * beside the alias (`Alice 3–2 Bob`, `HUD · no game`, `rotating · 3`) and it
+     * did not fit: 218px of text against the 176px a 278px row leaves once the
+     * chip, the pin and the trash are paid for, so the widest case — a live game
+     * between two real usernames — was the one that overran. Everything it said
+     * is on the board's own panel at full length, one click away.
+     */
+    it('rows a board as its name alone, with no game summary beside it', () => {
         useSettingsStore.setState({
             scoreboards: {
                 active: [1, 2],
+                aliases: {},
                 binding: { 2: { playback: { mode: 'rotate' } } },
             },
             production: withContainers(),
@@ -232,25 +239,72 @@ describe('Rack rig', () => {
         });
         ui(<Rack />);
         const section = within(document.querySelector('[data-rack-section="rig"]'));
-        // One fact, at the rack's house length. The transport and the inning are
-        // both on the panel (the badge, and BoardGameSubject), so the row keeps
-        // only what is nowhere else at a glance: which game is on this board.
-        expect(section.getByText('Alice 3–2 Bob')).toBeInTheDocument();
-        expect(section.getByText('rotating · 3')).toBeInTheDocument();
+        expect(section.getByText('Scoreboard 1')).toBeInTheDocument();
+        expect(section.queryByText(/Alice/)).not.toBeInTheDocument();
+        expect(section.queryByText(/3–2/)).not.toBeInTheDocument();
+        expect(section.queryByText(/rotating/)).not.toBeInTheDocument();
+        expect(section.queryByText(/no game/)).not.toBeInTheDocument();
     });
 
-    // With nothing on the board there is no matchup to name, so the transport
-    // becomes the informative thing — but only where it is not the default.
-    it('names the transport only on an idle board', () => {
+    /*
+     * What the row DOES carry beside the name is the board's TYPE — three fixed
+     * words, the widest ~50px, saying what is true of the board rather than of
+     * whichever game is passing through it. HUD + rotating is not a real state
+     * (board 1 under the HUD toggle is single by construction), so the two axes
+     * collapse to three tags with nothing lost.
+     */
+    it('tags each board with its type', () => {
         useSettingsStore.setState({
-            scoreboards: { active: [1, 2], binding: {} },
+            scoreboards: {
+                active: [1, 2, 3],
+                aliases: {},
+                binding: {
+                    2: { playback: { mode: 'rotate' } },
+                    3: { playback: { mode: 'single' } },
+                },
+            },
             production: withContainers(),
         });
-        useStateStore.setState({ score: {} });
         ui(<Rack />);
-        const section = within(document.querySelector('[data-rack-section="rig"]'));
-        expect(section.getByText('HUD · no game')).toBeInTheDocument();
-        expect(section.getByText('no game')).toBeInTheDocument();
+        const tagOf = (name) => within(document.querySelector(`[data-rack-row="${name}"]`));
+        // Board 1 carries the local HUD (the toggle defaults on).
+        expect(tagOf('Scoreboard 1').getByText('HUD')).toBeInTheDocument();
+        expect(tagOf('Scoreboard 2').getByText('ROTATING')).toBeInTheDocument();
+        expect(tagOf('Scoreboard 3').getByText('API')).toBeInTheDocument();
+    });
+
+    // HUD is a per-board derivation, not a label: turn the global toggle off and
+    // board 1 is an API board like any other.
+    it('drops the HUD tag when the HUD toggle is off', () => {
+        useSettingsStore.setState({
+            scoreboards: { active: [1], aliases: {}, binding: {} },
+            project_rio: { hud_enabled: false },
+            production: withContainers(),
+        });
+        ui(<Rack />);
+        const row = within(document.querySelector('[data-rack-row="Scoreboard 1"]'));
+        expect(row.getByText('API')).toBeInTheDocument();
+        expect(row.queryByText('HUD')).not.toBeInTheDocument();
+    });
+
+    /*
+     * What survives the summary is the DIM, which costs no width: a board with
+     * players on it reads at full strength and an empty one recedes. That is the
+     * monitoring half of the rack's job — which boards are carrying something —
+     * and it is the half a truncated sentence served worst.
+     */
+    it('dims a board with nothing on it and leaves a carrying one lit', () => {
+        useSettingsStore.setState({
+            scoreboards: { active: [1, 2], aliases: {} },
+            production: withContainers(),
+        });
+        useStateStore.setState({
+            score: { 1: { player: { 1: { rioName: 'Alice' }, 2: { rioName: 'Bob' } } } },
+        });
+        ui(<Rack />);
+        const row = (name) => document.querySelector(`[data-rack-row="${name}"]`);
+        expect(row('Scoreboard 1').className).not.toMatch(/opacity-60/);
+        expect(row('Scoreboard 2').className).toMatch(/opacity-60/);
     });
 
 });

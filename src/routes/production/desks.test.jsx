@@ -7,7 +7,7 @@ import { useStagingStore } from '../../context/staging';
 import MatchDesk from './desks/match';
 import CaptureDesk from './desks/capture';
 import BracketDesk from './desks/bracket';
-import BoardDesk, { matchBindLine, playbackLine, sideReasonLine } from './desks/board';
+import BoardDesk, { boardTypeTag, playbackLine, sideReasonLine } from './desks/board';
 
 // Desks are content workflows, not OBS ones: they must be fully usable with
 // OBS disconnected. Both fetch on mount (game modes / nothing), so stub it.
@@ -215,8 +215,171 @@ describe('Board desk', () => {
         });
         ui(<BoardDesk board={1} />);
         expect(screen.getByText('Alice 3–2 Bob')).toBeInTheDocument();
-        expect(screen.getByText('Match 2 · Winners R2 · 1–0')).toBeInTheDocument();
         expect(screen.getByText('Alice on the left — pinned in Settings')).toBeInTheDocument();
+        // The fixture is a SLOT with the match in it, not a sentence about one:
+        // its id, both participants, the series between them, the round after.
+        expect(screen.getByText('M2')).toBeInTheDocument();
+        expect(screen.getByText('Winners R2')).toBeInTheDocument();
+        expect(screen.getByText('1–0')).toBeInTheDocument();
+    });
+
+    /*
+     * THE EMPTY STATES ARE SHAPES, NOT SENTENCES ABOUT ABSENCE. "No match on this
+     * board" described the hole where a fixture goes; the slot IS that hole, and
+     * when something is waiting it holds a ghost of the fixture the take would put
+     * in it — so a producer reads what they are about to air in the place it will
+     * appear, rather than off the face of a button.
+     */
+    it('shows the waiting fixture in the empty slot, with the take beside it', () => {
+        useStateStore.setState({
+            score: { 1: {} },
+            match: { 5: { stage: 'draft', player: { 1: { rioName: 'Cara' }, 2: { rioName: 'Dev' } } } },
+            schedule: { queue: [5], queues: [{ id: 'main', title: 'Main', matches: [5] }] },
+        });
+        ui(<BoardDesk board={1} />);
+        expect(screen.getByText('UP NEXT')).toBeInTheDocument();
+        expect(screen.getByText('Cara vs Dev')).toBeInTheDocument();
+        // The button no longer has to carry the name — the slot it acts on does.
+        expect(screen.getByRole('button', { name: /Put on board/ }))
+            .toHaveAttribute('title', expect.stringContaining('Cara vs Dev'));
+        expect(screen.queryByText('No match on this board')).not.toBeInTheDocument();
+    });
+
+    /*
+     * UNBIND FROM THE BOARD'S SIDE. It used to live only on the Match desk's lit
+     * bind chip, which asked a producer looking at the wrong fixture ON THIS BOARD
+     * to go find the match holding it. Both routes are the same staged write under
+     * the SAME key, so confirm mode can never hold two entries disagreeing about
+     * what one board carries.
+     */
+    it('takes a bound match off the board, staged under the shared bind key', () => {
+        useSettingsStore.setState({
+            project_rio: { hud_enabled: true },
+            production: { confirm: { enabled: true } },
+            scoreboards: { active: [1], aliases: {}, binding: {} },
+        });
+        useStateStore.setState({
+            score: { 1: { match: 2 } },
+            match: { 2: { label: 'Winners R2', series: { 1: 1, 2: 0 } } },
+        });
+        ui(<BoardDesk board={1} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Take match 2 off board 1' }));
+        expect(useStagingStore.getState().order).toEqual(['bind:1']);
+        expect(useStagingStore.getState().pending['bind:1'].value).toBeNull();
+        expect(fetch).not.toHaveBeenCalledWith(
+            '/api/v1/scoreboards/1/match', expect.anything(),
+        );
+    });
+
+    /*
+     * THE END OF A MATCH. `decided` is the fixture's finished test, never `stage`
+     * — a Bo3 sits at stage `post` BETWEEN GAMES and is still the current fixture.
+     * A decided fixture stays bound (only a new game between different players
+     * auto-retires one), so both end-of-match moves have to be here: hand the
+     * board on, or clear it. Taking the next needs no unbind first — `bind_board`
+     * overwrites the board's match.
+     */
+    it('marks a decided fixture final and offers the handover in place', () => {
+        useSettingsStore.setState({
+            project_rio: { hud_enabled: true },
+            production: {},
+            scoreboards: { active: [1], aliases: {}, binding: {} },
+        });
+        useStateStore.setState({
+            score: { 1: { match: 2 } },
+            match: {
+                2: {
+                    stage: 'post', decided: 1, series: { 1: 2, 2: 1 },
+                    player: { 1: { rioName: 'Alice' }, 2: { rioName: 'Bob' } },
+                },
+                5: { stage: 'draft', player: { 1: { rioName: 'Cara' }, 2: { rioName: 'Dev' } } },
+            },
+            schedule: { queue: [2, 5] },
+        });
+        ui(<BoardDesk board={1} />);
+        expect(screen.getByText('FINAL')).toBeInTheDocument();
+        expect(screen.getByText('UP NEXT')).toBeInTheDocument();
+        expect(screen.getByText('Cara vs Dev')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Put on board/ })).toBeInTheDocument();
+        // Clearing the board stays available beside the handover.
+        expect(screen.getByRole('button', { name: 'Take match 2 off board 1' })).toBeInTheDocument();
+    });
+
+    // Mid-series: the game is over, the FIXTURE is not — so no FINAL, no handover,
+    // and the slot says why nothing cleared itself.
+    it('says a fixture at post is between games, not finished', () => {
+        useStateStore.setState({
+            score: { 1: { match: 2 } },
+            match: {
+                2: {
+                    stage: 'post', series: { 1: 1, 2: 0 },
+                    player: { 1: { rioName: 'Alice' }, 2: { rioName: 'Bob' } },
+                },
+                5: { stage: 'draft', player: { 1: { rioName: 'Cara' }, 2: { rioName: 'Dev' } } },
+            },
+            schedule: { queue: [2, 5] },
+        });
+        ui(<BoardDesk board={1} />);
+        expect(screen.getByText('between games')).toBeInTheDocument();
+        expect(screen.queryByText('FINAL')).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Put on board/ })).not.toBeInTheDocument();
+    });
+
+    /*
+     * A ROTATING BOARD CANNOT HOLD A FIXTURE — a match encodes both sides of one
+     * fixture and a board cycling a pool has no fixed sides to project onto. The
+     * server 409s both bind routes; the panel must not offer a take that is going
+     * to be rejected, and must say why rather than just going quiet.
+     */
+    it('offers no take on a rotating board, and says why', () => {
+        useSettingsStore.setState({
+            project_rio: { hud_enabled: false },
+            production: {},
+            scoreboards: {
+                active: [1], aliases: {},
+                binding: { 1: { playback: { mode: 'rotate' } } },
+            },
+        });
+        useStateStore.setState({
+            score: { 1: {} },
+            match: { 5: { stage: 'draft', player: { 1: { rioName: 'Cara' }, 2: { rioName: 'Dev' } } } },
+            schedule: { queue: [5] },
+        });
+        ui(<BoardDesk board={1} />);
+        expect(screen.getByText(/a fixture needs a single-game board/)).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Put on board/ })).not.toBeInTheDocument();
+        expect(screen.queryByText('Cara vs Dev')).not.toBeInTheDocument();
+    });
+
+    /*
+     * …but a board switched to rotate while already holding a match still shows
+     * it, with the unbind — because that is precisely how a producer gets out of
+     * the state, and hiding the fixture would strand it there.
+     */
+    it('still shows a match a rotating board is already holding, with its unbind', () => {
+        useSettingsStore.setState({
+            project_rio: { hud_enabled: false },
+            production: {},
+            scoreboards: {
+                active: [1], aliases: {},
+                binding: { 1: { playback: { mode: 'rotate' } } },
+            },
+        });
+        useStateStore.setState({
+            score: { 1: { match: 2 } },
+            match: { 2: { label: 'Winners R2', series: { 1: 1, 2: 0 } } },
+        });
+        ui(<BoardDesk board={1} />);
+        expect(screen.getByText('M2')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Take match 2 off board 1' })).toBeInTheDocument();
+    });
+
+    it('names where fixtures come from when nothing is waiting either', () => {
+        useStateStore.setState({ score: { 1: {} }, match: {}, schedule: { queue: [] } });
+        ui(<BoardDesk board={1} />);
+        expect(screen.getByText('NO FIXTURE')).toBeInTheDocument();
+        expect(screen.getByText(/add one on the Match desk/)).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Put on board/ })).not.toBeInTheDocument();
     });
 
     it('has a sentence for every layer of the cascade, and none for raw feed order', () => {
@@ -227,8 +390,6 @@ describe('Board desk', () => {
         // Raw feed order is not a decision, so there is nothing to explain.
         expect(sideReasonLine('', 'Alice')).toBeNull();
         expect(sideReasonLine(undefined, 'Alice')).toBeNull();
-        // An unbound board says nothing about a match rather than "Match null".
-        expect(matchBindLine(null, null)).toBeNull();
     });
 
     /*
@@ -389,6 +550,12 @@ describe('Board desk', () => {
             .toBe('Rotating (paused) — 6 in pool.');
         expect(playbackLine({ transport: 'api', mode: 'single', gameId: 'g7' }))
             .toBe('One game, pinned.');
+        // A pinned game still being played tracks the ongoing feed on its own,
+        // server-side. The line says so because the panel's game list — which a
+        // producer refreshes by hand — is NOT what keeps the board current, and
+        // a visible countdown down there used to imply it was.
+        expect(playbackLine({ transport: 'api', mode: 'single', gameId: 'g7', live: true }))
+            .toBe('One game, pinned — following it live.');
         expect(playbackLine({ transport: 'api', mode: 'single', poolCount: 4 }))
             .toBe('One game — following the newest of 4 in pool.');
         expect(playbackLine({ transport: 'api', mode: 'single', poolCount: 0 }))
@@ -397,6 +564,53 @@ describe('Board desk', () => {
         // filters yet); "0 in pool" reads like a count that failed.
         expect(playbackLine({ transport: 'api', mode: 'rotate', running: true, poolCount: 0 }))
             .toBe('Rotating — nothing in its pool yet.');
+    });
+
+    /*
+     * The same two axes compressed to what a rack row can hold. Three tags, not
+     * four: HUD + rotate is not a real state, so the pair collapses with nothing
+     * lost. ROTATING, never "rotator" — a Rotator is the standalone layout group
+     * (the results ticker), and one shared word on the app's most-read surface is
+     * how the two get conflated.
+     */
+    it('compresses transport and playback into one type tag', () => {
+        expect(boardTypeTag({ transport: 'hud', mode: 'single' })).toBe('HUD');
+        expect(boardTypeTag({ transport: 'hud', mode: 'rotate' })).toBe('HUD');
+        expect(boardTypeTag({ transport: 'api', mode: 'single' })).toBe('API');
+        expect(boardTypeTag({ transport: 'api', mode: undefined })).toBe('API');
+        expect(boardTypeTag({ transport: 'api', mode: 'rotate' })).toBe('ROTATING');
+    });
+
+    /*
+     * THE COUNTDOWN IS THE BOARD'S, NOT THE GAME LIST'S. It reads the server's
+     * cadence (every `v1.game_pool.ongoing_update` is a poll that just re-applied
+     * this board's game) and fetches nothing itself, and it renders only under the
+     * condition the server actually polls in: a single-mode board with a pinned
+     * game still being played.
+     */
+    it('counts down to the live refresh only while the board is following one', () => {
+        const single = (score) => {
+            useSettingsStore.setState({
+                project_rio: { hud_enabled: false },
+                production: {},
+                scoreboards: {
+                    active: [1], aliases: {},
+                    binding: { 1: { playback: { mode: 'single', gameId: 42 } } },
+                },
+            });
+            useStateStore.setState({ score, match: {} });
+        };
+
+        single({ 1: { game_completed: false, player: { 1: { rioName: 'Alice' } } } });
+        const { unmount } = ui(<BoardDesk board={1} />);
+        expect(screen.getByText(/Refreshing in \d+s/)).toBeInTheDocument();
+        unmount();
+
+        // A finished game is not re-applied by the server, so a countdown here
+        // would be timing something that never arrives.
+        single({ 1: { game_completed: true, player: { 1: { rioName: 'Alice' } } } });
+        ui(<BoardDesk board={1} />);
+        expect(screen.queryByText(/Refreshing in/)).not.toBeInTheDocument();
     });
 
     it('reads a rotating board’s playback out on the panel, not just the rack row', () => {

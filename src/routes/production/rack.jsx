@@ -20,7 +20,7 @@ import { StateChip, chipFor } from './kit';
 import { setSourceVisibility, useDisplayedEnabled } from './bindings';
 import { useContainerPush } from './feeds';
 import { boardDeskId, useActiveBoards, useBoardLabel } from './boards';
-import { useBoardDeskMeta } from './desks/board';
+import { useBoardDeskRow, BOARD_TAG_TITLE } from './desks/board';
 import { notifications } from '../../lib/notify';
 
 /*
@@ -239,7 +239,7 @@ const RowRemove = memo(function RowRemove({ label, note, onRemove, disabled, dis
 // One rack row. Rows relocate as OBS state changes; the entry animation is
 // motion-safe so prefers-reduced-motion users get an instant move.
 const RackRow = memo(function RackRow({
-    state, name, meta, dimmed, selected, onSelect, quickAction,
+    state, name, meta, tag, tagTitle, dimmed, selected, onSelect, quickAction,
     pinnable, pinned, onPinToggle, nested, rowAction,
 }) {
     return (
@@ -263,6 +263,21 @@ const RackRow = memo(function RackRow({
             <button type="button" onClick={onSelect} className="flex h-full min-w-0 flex-1 items-center gap-1.5 text-left">
                 <Text size="xs" span truncate className="min-w-0 text-foreground">{name}</Text>
                 {meta != null && <Text size="xs" span truncate dimmed className="min-w-0">{meta}</Text>}
+                {/* A TYPE tag, not a status: it says what the row IS, and it is
+                    the same for as long as the producer leaves it that way. So it
+                    is deliberately colourless — the rack's hues are spoken for
+                    (emerald AIR, sky PVW, rio DESK) and a green HUD tag beside a
+                    green chip would read as a second air state. Right-aligned so
+                    the tags line up into a column a producer can scan down
+                    without reading the names. */}
+                {tag && (
+                    <span
+                        title={tagTitle}
+                        className="label-display ml-auto shrink-0 text-[10px] tracking-wider text-muted-foreground/80"
+                    >
+                        {tag}
+                    </span>
+                )}
             </button>
             {quickAction}
             {pinnable && <PinToggle pinned={pinned} onToggle={onPinToggle} />}
@@ -398,10 +413,14 @@ const DeskRow = memo(function DeskRow({ desk, selection, onSelect, pinned, onPin
 const BoardDeskRow = memo(function BoardDeskRow({
     desk, selection, onSelect, pinned, onPinToggle, canRemove,
 }) {
-    const { meta, idle } = useBoardDeskMeta(desk.board);
+    // A board row is its NAME and its TYPE. The game summary that used to ride
+    // beside it did not fit the row and is stated at full length on the board's
+    // own panel (see useBoardDeskRow).
+    const { tag, idle } = useBoardDeskRow(desk.board);
     return (
         <RackRow
-            state="desk" name={desk.name} meta={meta} dimmed={idle}
+            state="desk" name={desk.name} meta={null} dimmed={idle}
+            tag={tag} tagTitle={BOARD_TAG_TITLE[tag]}
             selected={selection === desk.id} onSelect={() => onSelect(desk.id)}
             pinnable
             pinned={pinned.has(desk.id)}

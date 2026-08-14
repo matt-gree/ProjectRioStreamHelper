@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useId, useMemo, useRef, memo } from 'react';
+import { useState, useCallback, useEffect, useId, useMemo, memo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import {
     ChevronLeft, ChevronRight, X, Ban, RotateCw, Undo2, Search, CalendarDays,
@@ -119,45 +119,23 @@ async function postJSON(url, body) {
 }
 
 /*
- * Counts down to the next auto re-fetch and fires `onRefresh` at zero, returning
- * the seconds remaining so the caller can render a live countdown. `active`
- * gates the timer (e.g. only the visible tab); bumping `resetKey` restarts it
- * (e.g. after a manual refresh). `onRefresh` is read through a ref so a changing
- * callback identity doesn't restart the countdown.
+ * THE GAME PICKER NEVER FETCHES ON A TIMER. Both tabs used to re-query the Rio
+ * API every `ongoing_games.poll_interval` seconds while visible, with a
+ * "Refreshing in 4s" countdown beside the list — and that put a repeating fetch
+ * under a producer who had merely selected a board desk.
+ *
+ * The countdown also mis-stated where a loaded game's freshness comes from. A
+ * board following a live API game is kept current SERVER-side and independently
+ * of this panel: OngoingGamePool polls only while a live consumer exists (a
+ * single-mode board on a live game, or a running rotation with live scope) and
+ * re-applies it through `_reapply_single_live` (server/rio/game_pool.py). The
+ * list at the bottom is a BROWSER — what else is being played — and a browser
+ * refreshes when you ask it to.
+ *
+ * So the only automatic fetching left is the one a producer set up deliberately:
+ * a rotating pool's "Keep pool current" (`pool.refresh_interval`), which is the
+ * rotator's own server-side re-check. Don't reintroduce a client timer here.
  */
-function useAutoRefresh(active, intervalSecs, onRefresh, resetKey = 0) {
-    const [remaining, setRemaining] = useState(intervalSecs);
-    const onRefreshRef = useRef(onRefresh);
-    onRefreshRef.current = onRefresh;
-    useEffect(() => {
-        if (!active || !intervalSecs) { setRemaining(intervalSecs); return undefined; }
-        let next = Date.now() + intervalSecs * 1000;
-        setRemaining(intervalSecs);
-        const id = setInterval(() => {
-            const rem = Math.round((next - Date.now()) / 1000);
-            if (rem <= 0) {
-                onRefreshRef.current?.();
-                next = Date.now() + intervalSecs * 1000;
-                setRemaining(intervalSecs);
-            } else {
-                setRemaining(rem);
-            }
-        }, 250);
-        return () => clearInterval(id);
-    }, [active, intervalSecs, resetKey]);
-    return remaining;
-}
-
-function RefreshCountdown({ seconds, intervalSecs }) {
-    return (
-        <SimpleTooltip label={`This list re-fetches from the Project Rio API every ${intervalSecs}s.`}>
-            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground tabular-nums">
-                <RotateCw size={11} />
-                Refreshing in {seconds}s
-            </span>
-        </SimpleTooltip>
-    );
-}
 
 // A game table body, shared by the single-game search and the pool list.
 function GameRows({ games, loading, emptyLabel, action, activeId, columns = 5, extraCell }) {
@@ -386,7 +364,6 @@ const searchTabs = [
  * tabs are reads and fire immediately.
  */
 const SingleGameFinder = memo(function SingleGameFinder({ sb, tagOptions }) {
-    const pollInterval = useSettingsStore(s => s?.ongoing_games?.poll_interval ?? 10);
     const loadedGameId = useStateStore(s => s?.score?.[sb]?.game_id ?? null);
     const [tab, setTab] = useState('live');
     const [liveGames, setLiveGames] = useState([]);
@@ -399,9 +376,6 @@ const SingleGameFinder = memo(function SingleGameFinder({ sb, tagOptions }) {
     // is the shared GameFilters component.
     const [filters, setFilters] = useState({});
     const patchFilters = useCallback((patch) => setFilters(f => ({ ...f, ...patch })), []);
-    // Bumped on a manual refresh to restart that tab's auto-refresh countdown.
-    const [liveResetKey, setLiveResetKey] = useState(0);
-    const [completedResetKey, setCompletedResetKey] = useState(0);
 
     const fetchLive = useCallback(async () => {
         setLoadingLive(true);
@@ -412,13 +386,9 @@ const SingleGameFinder = memo(function SingleGameFinder({ sb, tagOptions }) {
         } catch { setLiveGames([]); } finally { setLoadingLive(false); }
     }, []);
 
-    /*
-     * Run a completed search from an explicit query string. Split out from the
-     * filter-reading path so the auto-refresh can replay the *last executed*
-     * query (kept in lastQueryRef) rather than whatever's been typed since —
-     * editing filters shouldn't silently re-query until Find games is pressed.
-     */
-    const lastQueryRef = useRef(null);
+    // A completed search runs when Find games is pressed and at no other time —
+    // editing a filter must not re-query, and nothing replays the last one on a
+    // timer any more.
     const runCompleted = useCallback(async (queryStr) => {
         setLoadingCompleted(true);
         setSearched(true);
@@ -449,31 +419,23 @@ const SingleGameFinder = memo(function SingleGameFinder({ sb, tagOptions }) {
         return params.toString();
     }, [filters]);
 
-    const fetchCompleted = useCallback(() => {
-        const q = buildCompletedQuery();
-        lastQueryRef.current = q;
-        return runCompleted(q);
-    }, [buildCompletedQuery, runCompleted]);
+    const fetchCompleted = useCallback(
+        () => runCompleted(buildCompletedQuery()),
+        [buildCompletedQuery, runCompleted],
+    );
 
-    // Auto-refresh replays the last executed query (no-op until first search).
-    const refetchCompleted = useCallback(() => {
-        if (lastQueryRef.current != null) return runCompleted(lastQueryRef.current);
-        return undefined;
-    }, [runCompleted]);
-
-    const manualFetchLive = useCallback(() => { setLiveResetKey(k => k + 1); fetchLive(); }, [fetchLive]);
-    const manualFetchCompleted = useCallback(() => { setCompletedResetKey(k => k + 1); fetchCompleted(); }, [fetchCompleted]);
-
+    /*
+     * ONE fetch, when the picker first appears, and then only on the button.
+     * Opening the picker is the producer asking what is live — showing them an
+     * empty table and a Refresh they have to press would be a click charged for
+     * the most frequent act on an API board. A REPEAT of that fetch is a
+     * different thing entirely, and it is the thing that is gone.
+     */
     useEffect(() => { fetchLive(); }, [fetchLive]);
 
     const isLive = tab === 'live';
     const games = isLive ? liveGames : completedGames;
     const loading = isLive ? loadingLive : loadingCompleted;
-
-    // Each tab re-fetches on the live poll cadence while it is the visible tab;
-    // completed only once a search has been run.
-    const liveCountdown = useAutoRefresh(isLive, pollInterval, fetchLive, liveResetKey);
-    const completedCountdown = useAutoRefresh(!isLive && searched, pollInterval, refetchCompleted, completedResetKey);
 
     const load = (game) => stageOrRun({
         key: `board:${sb}:game`,
@@ -491,15 +453,12 @@ const SingleGameFinder = memo(function SingleGameFinder({ sb, tagOptions }) {
             <SegmentedControl fullWidth size="xs" data={searchTabs} value={tab} onChange={setTab} />
 
             {isLive ? (
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                        <Button size="xs" variant="secondary" onClick={manualFetchLive} disabled={loadingLive}>
-                            {loadingLive ? <Loader size={12} /> : <RotateCw size={12} />}
-                            Refresh
-                        </Button>
-                        <Text size="xs" dimmed>{liveGames.length} live game{liveGames.length !== 1 ? 's' : ''}</Text>
-                    </div>
-                    <RefreshCountdown seconds={liveCountdown} intervalSecs={pollInterval} />
+                <div className="flex flex-wrap items-center gap-2">
+                    <Button size="xs" variant="secondary" onClick={fetchLive} disabled={loadingLive}>
+                        {loadingLive ? <Loader size={12} /> : <RotateCw size={12} />}
+                        Refresh
+                    </Button>
+                    <Text size="xs" dimmed>{liveGames.length} live game{liveGames.length !== 1 ? 's' : ''}</Text>
                 </div>
             ) : (
                 <Stack gap="sm">
@@ -509,19 +468,16 @@ const SingleGameFinder = memo(function SingleGameFinder({ sb, tagOptions }) {
                         tagOptions={tagOptions}
                         columns={3}
                         trailing={(
-                            <Button size="xs" variant="secondary" onClick={manualFetchCompleted} disabled={loadingCompleted}>
+                            <Button size="xs" variant="secondary" onClick={fetchCompleted} disabled={loadingCompleted}>
                                 {loadingCompleted ? <Loader size={12} /> : <Search size={13} />}
                                 Find games
                             </Button>
                         )}
                     />
                     {searched && (
-                        <div className="flex items-center justify-between gap-2">
-                            <Text size="xs" dimmed>
-                                {completedGames.length} result{completedGames.length !== 1 ? 's' : ''}
-                            </Text>
-                            <RefreshCountdown seconds={completedCountdown} intervalSecs={pollInterval} />
-                        </div>
+                        <Text size="xs" dimmed>
+                            {completedGames.length} result{completedGames.length !== 1 ? 's' : ''}
+                        </Text>
                     )}
                 </Stack>
             )}

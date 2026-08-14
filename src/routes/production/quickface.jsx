@@ -5,7 +5,7 @@ import { FEED_OPTION_HOOKS, flattenGroups } from './feed-pickers';
 import { quickFaceFor } from './elements';
 import { useContainerPush } from './feeds';
 import { useConsoleOffline } from './placements';
-import { boardOfDeskId } from './boards';
+import { boardOfDeskId, useMatchBindableBoards } from './boards';
 import { useNextUp } from './queue';
 import { takeNextMatch } from '../../context/match';
 import { notifications } from '../../lib/notify';
@@ -242,7 +242,13 @@ const BoardQuickFace = memo(function BoardQuickFace({ id }) {
     const d = useBoardDesk(sb);
     // The board's OWN running order, so the card names the fixture this board
     // would actually take rather than the head of the union.
-    const next = useNextUp(sb);
+    const nextUp = useNextUp(sb);
+    // …and nothing to take at all on a rotating board: a match has two fixed
+    // sides and a rotation has none, so the server 409s the bind. Same single
+    // client statement of the rule the Match desk's chips and the board panel's
+    // fixture slot read (./boards useMatchBindableBoards).
+    const canBind = useMatchBindableBoards()(sb);
+    const next = canBind ? nextUp : null;
     const [refreshing, setRefreshing] = useState(false);
     const [taking, setTaking] = useState(false);
     const refreshHud = () => {

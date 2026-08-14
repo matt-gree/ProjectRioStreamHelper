@@ -106,6 +106,38 @@ describe('One game', () => {
     });
 
     /*
+     * NOTHING HERE FETCHES ON A TIMER. Both tabs used to re-query the Rio API on
+     * the ongoing-poll cadence while visible, with a "Refreshing in 4s" countdown
+     * beside the list — a repeating fetch under a producer who had only selected a
+     * board desk, and a countdown that implied the loaded game's score came from
+     * this list. It doesn't: a board following a live game is re-applied
+     * server-side (OngoingGamePool._reapply_single_live), and the only automatic
+     * fetching left is the one a producer asks for — a rotating pool's "Keep pool
+     * current". One fetch when the picker opens, then only the button.
+     */
+    it('fetches once when it opens and never on a timer', async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        try {
+            stubFetch([{ game_id: 42, away_user: 'Alice', home_user: 'Bob', away_score: 3, home_score: 2 }]);
+            ui(section());
+            await screen.findByText('Alice');
+            const ongoingCalls = () => fetch.mock.calls
+                .filter(([u]) => String(u).includes('/game-pool/ongoing')).length;
+            const opened = ongoingCalls();
+            expect(opened).toBeGreaterThan(0);
+            // Well past the 10s poll_interval the countdown used to run on.
+            await vi.advanceTimersByTimeAsync(45_000);
+            expect(ongoingCalls()).toBe(opened);
+            expect(screen.queryByText(/Refreshing in/)).not.toBeInTheDocument();
+            // The producer's own refresh still works.
+            fireEvent.click(screen.getByRole('button', { name: /Refresh/ }));
+            await waitFor(() => expect(ongoingCalls()).toBeGreaterThan(opened));
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    /*
      * The completed filter — three chip fields, a limit and an opt-in date range —
      * is the one part of this surface that is a sit-down task, and the tab is what
      * keeps it off a glance surface: nothing appears until a producer asks for it.

@@ -965,11 +965,31 @@ the **Bracket** desk (which start.gg phase the bracket overlays draw). Rules:
   mirrors it; a tier defaults **open**, so the empty list a first-run producer has
   must mean both open. Store what was closed, not what was opened.
 - **A rack row's meta is ONE fact, at the house length** (`no match`, `captured`,
-  `M1 · 0–0`, `Alice 3–2 Bob`). 278px already carries a chip, a name and a pin, so
-  a third or fourth clause truncates mid-sentence and pushes the pin off the edge
-  — that is what `HUD · Alice 3–2 Bob · Bot 5` did. Ask what the stage panel
-  already says and drop it: transport is on the badge, the inning is in
-  `BoardGameSubject`. The row keeps only what is nowhere else at a glance.
+  `M1 · 0–0`). 278px already carries a chip, a name and a pin, so a third or
+  fourth clause truncates mid-sentence and pushes the pin off the edge — that is
+  what `HUD · Alice 3–2 Bob · Bot 5` did. Ask what the stage panel already says
+  and drop it: transport is on the badge, the inning is in `BoardGameSubject`.
+  The row keeps only what is nowhere else at a glance.
+- **A board row carries its TYPE, and a type is not a status.** `boardTypeTag`
+  compresses the two axes to the three states they actually produce — `HUD` ·
+  `API` · `ROTATING` — because HUD + rotate is not a real one. It is
+  **colourless** on purpose: the rack's hues are spoken for (emerald AIR, sky
+  PVW, rio DESK), and the stage panel's green/blue transport badge repeated in a
+  dense row would read as a second air state. Right-aligned, so the tags stack
+  into a column a producer scans without reading the names. **ROTATING, never
+  "rotator"** — a Rotator is the standalone layout group (the results ticker);
+  one shared word on the app's most-read surface is how the two get conflated.
+- **The budget is 176px, measured, and a BOARD ROW SPENDS THE REST ON ITS NAME.**
+  A row leaves name + meta 176px (278 − 16 padding − 36 chip − 24 gaps − 19 pin
+  and trash) ≈ 27 characters at `text-xs`; an element row, with no trash, gets
+  ~203. A board row's summary was the one that could not live inside that:
+  `Scoreboard 4` + `JustAGrump 6–7 Dyla81` measured 218px, and the widest case
+  was the most interesting one — a live game between two real usernames. So the
+  board row is the board's NAME (its alias, or `Scoreboard {N}`) and nothing
+  else; `useBoardDeskIdle` keeps only the dim, which costs no width and is the
+  monitoring half a truncated sentence served worst. Everything the summary said
+  is on the board's panel at full length, one click away. Don't reintroduce a
+  meta here: the next long username puts it straight back over the edge.
 - **A placement's detail is a QUALIFIER, never a repeat of the name above it.**
   An unnamed board contributes its number (`useBoardTag` → `B1`), not the default
   `Scoreboard {N}` alias, which read as "Scoreboard · Scoreboard 1 · Medium". A
@@ -1022,6 +1042,10 @@ somewhere, and the conflict banner's "Go to board" selects the board's desk.
   retiring *is* clicking the lit bind chip. What was missing was a chip that said
   so, not a button (see `BindChip`'s bound tooltip). Delete a verb when the
   invariant that justified it changes.
+  The board desk's fixture slot unbinds too, under the **same `bind:{sb}` staging
+  key** — that is not the deleted verb coming back, it is the one verb reachable
+  from the second place the fact is shown. A producer staring at the wrong fixture
+  on a board should not have to go find the match holding it.
 - **`decidedSide` vs `clinchedSide` are two different facts.** `decided` is the
   *record* — server award arithmetic, or a producer force. `clinched` is
   *arithmetic* on the live series against the Bo need. They agree until the
@@ -1121,6 +1145,50 @@ sources).
   game via the shared `BoardGameSubject`, plus the bound match from the *board's*
   side), why does it look like that (`side_reason`, whose only previous frontend
   reference was the reset that cleared it), and how do I fix it.
+- **THE FIXTURE IS A SLOT, NOT A SENTENCE** (`FixtureSlot`). One shape in three
+  states, and the shape carries the state: **bound** = a solid holder with the
+  fixture in it (id · the two players with the series between them · round and
+  phase trailing); **waiting** = the same holder, dashed, holding a *ghost* of the
+  fixture the take would put in it; **empty** = dashed and quiet, naming where
+  fixtures come from. It replaced a line of prose that read "No match on this
+  board" — a statement ABOUT absence, in the spot a bound match printed
+  `Match 2 · Winners R2 · 1–0`, which never said who was playing. Two rules did
+  the work: **dashed means unbound** is the console's existing vocabulary (the `—`
+  chip), not a new idiom; and a take **never changes what is on air without saying
+  what to** — which is now satisfied by the slot naming the fixture an inch from
+  the button, rather than by cramming it onto the button's face, where it
+  truncated at 60% of the row. A conflict tints the slot amber, matching the
+  sentence beneath it.
+- **The slot has an END-OF-MATCH state, and `decided` is what defines it — never
+  `stage`.** A Bo3 sits at stage `post` *between games* and is still the current
+  fixture (the rule `Schedule.not_waiting_reason` states once, asked here too), so
+  the slot says both: `FINAL` with the loser dropped a tier when the series is
+  decided, "between games" when a game has ended but the fixture hasn't. Only ONE
+  server path unbinds by itself (`_retire_match_from_board` — a decided match plus
+  a new game between *different* players), so on the ordinary end of a night
+  clearing the board is the producer's move, and **both moves live in the slot**:
+  a `UP NEXT · <fixture>` footer with the take, and the unbind. Taking the next
+  needs no unbind first — `bind_board` overwrites `score.{N}.match`, so Put on
+  board IS the handover. Before this, a finished fixture and a mid-series one
+  rendered identically and the take was hidden behind an unbind you had to know to
+  press first.
+- **The slot UNBINDS**, from the board's side, staged under the **same
+  `bind:{sb}` key** the Match desk's chips use — one fact, one staging entry, so
+  confirm mode can never hold two entries disagreeing about what a board carries.
+  It was Match-desk-only on the reasoning that a match fills one board so
+  retiring *is* clicking the lit chip, which is true and still asked a producer
+  looking at the wrong fixture ON THIS BOARD to go find the match holding it. No
+  confirm dialog: it unbinds, it doesn't delete — the fixture keeps its series and
+  goes back to the running order.
+- **A ROTATING BOARD CANNOT HOLD A FIXTURE, on every surface that offers one.** A
+  match encodes two fixed sides; a rotation has none. The server 409s both bind
+  routes (`bind_scoreboard`, `take_next_match`) and `useMatchBindableBoards` is
+  the single client statement of it — read by the Match desk's chips, the board
+  panel's slot (which says *why*, rather than going quiet) and the **rail's quick
+  face**, which read the queue without asking and so offered a pinned rotator a
+  button whose only outcome was a red toast. The gate sits **after** the bound
+  branch: a board switched to rotate while already holding a match still shows it
+  with its unbind, because that is how a producer gets out of the state.
 - **Corrections are correction grade.** Score, inning, count, stadium, home side,
   the two `rioName_override` identities, swap, reset. Per-character stat editing
   and manual runner/fielder placement that used to sit beside them were read-only
@@ -1223,9 +1291,35 @@ a settings list** — the shape `PoolBrowser` had on the Match tab, kept.
   match), or an unreachable API. Never move it back behind the dialog.
 - **Nothing here searches the Rio API on mount.** Selecting a board desk must not
   cost a search: `Find games` runs on the button, and on opening `Pool games`
-  while stopped. (The single-game Live tab *does* poll ongoing games on the
-  `ongoing_games.poll_interval` cadence while it is the visible tab — that is a
-  local ongoing-feed read, not a completed-games query.)
+  while stopped. The single-game **Live** tab is the one exception and it is a
+  SINGLE fetch when the picker appears — opening the picker is the producer
+  asking what is live, and charging them a click for an empty table is worse.
+- **NO CLIENT TIMER EVER RE-FETCHES.** Both tabs used to re-query on the
+  `ongoing_games.poll_interval` cadence while visible, with a "Refreshing in 4s"
+  countdown beside the list. It is gone, twice over: it put a repeating API fetch
+  under a producer who had merely selected a desk, and it mis-stated where a
+  loaded game's freshness comes from — **a board following a live API game is
+  re-applied server-side** (`OngoingGamePool._reapply_single_live`, gated by
+  `_live_consumers_exist`), whether this panel is open or not. The list is a
+  BROWSER of what else is on; a browser refreshes when you ask it to. The only
+  automatic fetching in the console is the one a producer set up deliberately: a
+  rotating pool's **Keep pool current** (`pool.refresh_interval`), server-side.
+  `playbackLine` says which case a pinned game is in ("following it live"), and
+  `games.test.jsx` pins that no timer comes back.
+- **The live-refresh countdown belongs to the BOARD, and it is a readout of the
+  SERVER's cadence.** It rides the Games region header beside the sentence that
+  says the board is following a live game (`LiveRefreshCountdown`, desks/board.jsx)
+  — never on the game list, which is the browser the countdown used to be
+  mistaken for. It fetches nothing: every successful poll emits
+  `v1.game_pool.ongoing_update` *after* `_reapply_single_live` has pushed the
+  fresh game onto the board, so the event's arrival IS the refresh the producer
+  just watched land, and counting from it cannot drift out of step with the server
+  the way an independent client interval would.
+  **It renders only under the condition the server actually polls in** — single
+  mode, pinned game, `game_completed === false` AND `live_following !== false`.
+  That last one is load-bearing and not inferable client-side: the poll event is
+  emitted app-wide, so another board's rotation keeps firing it long after this
+  board's own follow ended, and the countdown would promise a refresh forever.
 - **Write out the timing labels.** `Seconds per game` and `Keep pool current`
   (with the tooltip explaining the off state), and the re-check interval stays
   **visible-but-disabled** rather than appearing under the switch — a control that

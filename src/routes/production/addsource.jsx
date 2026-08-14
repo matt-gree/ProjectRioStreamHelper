@@ -983,16 +983,20 @@ export const AddSourceDialog = memo(function AddSourceDialog({ scene, open: open
                                 />
                             </div>
 
-                            {/* A plain scroll container, not the kit's
-                                ScrollArea: Radix wraps its viewport's children
-                                in a shrink-to-fit `display: table` so a list CAN
+                            {/* A plain scroll container, kept for the explicit
+                                height and the measuring ref below. It sidesteps
+                                the trap the kit's ScrollArea used to carry:
+                                Radix wraps its viewport's children in a
+                                shrink-to-fit `display: table` so a list CAN
                                 scroll sideways, and a row's `truncate` label is
-                                `white-space: nowrap` — so the table sizes to the
-                                longest full name, the rows run past the pane,
-                                and the dimensions on the right get sliced
-                                ("1920×1080" reading as "192"). A block box has
-                                the pane's definite width, which is what the
-                                label needs to truncate against. */}
+                                `white-space: nowrap` — so the table sized to the
+                                longest full name, the rows ran past the pane,
+                                and the dimensions on the right got sliced
+                                ("1920×1080" reading as "192"). The kit forces
+                                that wrapper back to `block` now (see
+                                components/ui/scroll-area.jsx); either way what a
+                                truncating label needs is a box with the pane's
+                                definite width. */}
                             <div
                                 ref={listRef}
                                 className="overflow-y-auto overflow-x-hidden"
