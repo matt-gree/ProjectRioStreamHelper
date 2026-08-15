@@ -62,17 +62,13 @@
 
 import { createThemeEngine } from './svg-theme-engine.js';
 import { createRevealGate, clearAnimClassOnEnd } from './reveal-gate.js';
+import { ensurePortPalette, portColor } from './port-colors.js';
 
 const SETTINGS_TYPE = 'lowerthird';
 const ELEMENT = 'lowerthird';
 const DEFAULT_PACKAGE = 'default';
 const SLOT_COUNT = 5;
 const SLOT_TYPES = ['logo', 'match', 'scorebox', 'merch', 'clock', 'message', 'bracket', 'space'];
-
-// Controller-port → colour (0-indexed), used to tint match/scorebox sides.
-// Overridable per port via overlays.lowerthird.port{N}Color. Falls back to the
-// token side colours when a side has no port.
-const PORT_COLORS = ['#e53935', '#1e88e5', '#fdd835', '#43a047'];
 
 // Minimal inline fallback if a theme SVG can't be fetched (offline / typo, or a
 // legacy package without slot templates). Bare band + compact templates.
@@ -194,15 +190,10 @@ export function mountLowerThird({ host }) {
   let disposed = false;
 
   // ── colour seam ────────────────────────────────────────────────────────────
-  function portColor(port, settings) {
-    const idx = Number.isInteger(port) ? port : -1;
-    if (idx >= 0) {
-      const ov = OverlayBase.deepGet(settings, `overlays.${SETTINGS_TYPE}.port${idx}Color`, null);
-      if (ov) return ov;
-      if (idx < PORT_COLORS.length) return PORT_COLORS[idx];
-    }
-    return null;
-  }
+  // Side tints come from the controller ports, whose palette is the app's
+  // (Design tab → Controller Ports, with the active package's own `portColors`
+  // under it — see lib/port-colors.js). A side with no port takes no tint at
+  // all here, so the theme's own token side colours show through.
 
   function applyAccent(settings) {
     // Per-layout accent pin only (the "+ Add style override" UI writes here).
@@ -214,9 +205,9 @@ export function mountLowerThird({ host }) {
   }
 
   // Side tint vars scoped to ONE segment (two match slots can tint differently).
-  function applySideColours(seg, port1, port2, settings) {
-    const c1 = portColor(port1, settings);
-    const c2 = portColor(port2, settings);
+  function applySideColours(seg, port1, port2) {
+    const c1 = portColor(port1);
+    const c2 = portColor(port2);
     if (c1) seg.node.style.setProperty('--side1', c1); else seg.node.style.removeProperty('--side1');
     if (c2) seg.node.style.setProperty('--side2', c2); else seg.node.style.removeProperty('--side2');
   }
@@ -549,7 +540,7 @@ export function mountLowerThird({ host }) {
     probe.src = logoUrl;
   }
 
-  function bindMatch(seg, slot, state, settings) {
+  function bindMatch(seg, slot, state) {
     const g = OverlayBase.deepGet;
     const matchId = slot.matchId != null && slot.matchId !== '' ? String(slot.matchId) : '';
     const match = matchId ? g(state, `match.${matchId}`, null) : null;
@@ -597,11 +588,10 @@ export function mountLowerThird({ host }) {
 
     applySideColours(seg,
       Number.isInteger(p1.port) ? p1.port : null,
-      Number.isInteger(p2.port) ? p2.port : null,
-      settings);
+      Number.isInteger(p2.port) ? p2.port : null);
   }
 
-  function bindScorebox(seg, slot, state, settings) {
+  function bindScorebox(seg, slot, state) {
     const g = OverlayBase.deepGet;
     const sb = parseInt(slot.scoreboard) || 1;
     const half = g(state, `score.${sb}.half_inning`, '') || '';
@@ -622,7 +612,7 @@ export function mountLowerThird({ host }) {
       const v = g(state, `score.${sb}.player.${t}.port`, null);
       return Number.isInteger(v) ? v : null;
     };
-    applySideColours(seg, port(1), port(2), settings);
+    applySideColours(seg, port(1), port(2));
   }
 
   function bindMerch(seg, slot) {
@@ -720,7 +710,9 @@ export function mountLowerThird({ host }) {
   // ── main update ───────────────────────────────────────────────────────────
   async function update(state, settings) {
     const theme = OverlayBase.deepGet(settings, 'overlays.global.designPackage', null) || DEFAULT_PACKAGE;
-    const themeChanged = await engine.ensureTheme(theme);
+    // The package's port palette rides along with its SVG: the side tints are
+    // read synchronously while binding, so it has to have landed by then.
+    const [themeChanged] = await Promise.all([engine.ensureTheme(theme), ensurePortPalette(theme)]);
     if (themeChanged) { revealKey = ''; structureKey = ''; }
     if (disposed) return;
 
@@ -758,8 +750,8 @@ export function mountLowerThird({ host }) {
       const slot = active.find((s) => s.i === seg.i);
       if (!slot) continue;
       if (seg.type === 'logo') bindLogo(seg, slot);
-      else if (seg.type === 'match') bindMatch(seg, slot, state, settings);
-      else if (seg.type === 'scorebox') bindScorebox(seg, slot, state, settings);
+      else if (seg.type === 'match') bindMatch(seg, slot, state);
+      else if (seg.type === 'scorebox') bindScorebox(seg, slot, state);
       else if (seg.type === 'merch') bindMerch(seg, slot);
       else if (seg.type === 'message') bindMessage(seg, slot);
       else if (seg.type === 'bracket') bindBracket(seg, slot, state);

@@ -410,7 +410,7 @@ class Settings:
             "auto_start": False
         },
         "overlays": {
-            "schema_version": 3,
+            "schema_version": 4,
             "global": {
                 "accentColor": "#f59e0b",
                 "cardBg": "rgba(15, 15, 25, 0.88)",
@@ -428,6 +428,16 @@ class Settings:
                 "showCaptains": True,
                 "showLogo": True,
                 "finalBadgeColor": None,
+                # Controller-port palette (ports 1-4). GLOBAL, not per element:
+                # the red that says "port 1" on the scoreboard says it on the
+                # scorecard, the lower third and both callouts too.
+                # None = unset, which is not "no colour" but "inherit" — the
+                # active design package's own `portColors`, else the app's
+                # built-in convention. See public/layout/lib/port-colors.js.
+                "port0Color": None,
+                "port1Color": None,
+                "port2Color": None,
+                "port3Color": None,
             },
             "presets": {},
             "scoreboard": {
@@ -553,6 +563,35 @@ class Settings:
             if isinstance(sb_overlays, dict) and sb_overlays.get("showElo") is True:
                 sb_overlays.pop("showElo", None)
             overlays["schema_version"] = 3
+            await cls.Save()
+
+        # v4: the controller-port palette was promoted to a global. It was read
+        # per layout (overlays.{type}.port{N}Color) by five mounts but had a UI
+        # on exactly one of them — the Character Spotlight — so a producer who
+        # recoloured port 1 there watched the scoreboard, scorecard and lower
+        # third keep the old red. It is one palette: a port is a player's
+        # identity across the whole broadcast, so it lives on the Design tab
+        # next to the design package that can now declare its own (see
+        # design_packages._port_colors).
+        #
+        # The spotlight's copy wins, being the only one anything ever wrote;
+        # a hand-edited settings.json with a colour only under some other
+        # namespace still carries it up rather than losing it.
+        if overlays.get("schema_version", 1) < 4:
+            port_keys = [f"port{i}Color" for i in range(4)]
+            glob = overlays.setdefault("global", {})
+            namespaces = ["postgamecallout"] + [
+                n for n in overlays if n not in ("global", "presets", "schema_version", "postgamecallout")
+            ]
+            for name in namespaces:
+                ns = overlays.get(name)
+                if not isinstance(ns, dict):
+                    continue
+                for key in port_keys:
+                    value = ns.pop(key, None)
+                    if value and not glob.get(key):
+                        glob[key] = value
+            overlays["schema_version"] = 4
             await cls.Save()
 
         # Container membership moved ONTO the container. It used to live per

@@ -28,12 +28,9 @@
 
 import { ensureGsap } from './gsap-loader.js';
 import { captainFrame } from './captain-framing.js';
+import { ensurePortPalette, portColor as portPaletteColor } from './port-colors.js';
 
 const REF_W = 1920, REF_H = 1080;
-// Port-colour knobs are shared with the Stat Callout — one set of overrides
-// recolors both callout elements.
-const SETTINGS_TYPE = 'postgamecallout';
-const PORT_COLORS = ['#e53935', '#1e88e5', '#fdd835', '#43a047'];
 const NEUTRAL_ACCENT = '#f59e0b';
 
 let _cssInjected = false;
@@ -422,13 +419,12 @@ export function mountPostgameVs({ host }) {
   window.addEventListener('resize', autoScale);
   autoScale();
 
+  // The port palette is the app's, not this scene's — see lib/port-colors.js.
+  // A side with no controller port has no port colour to take, so it falls
+  // back to the global accent.
   function portColor(port) {
-    const { deepGet: g, settings } = OverlayBase;
-    const idx = Number.isInteger(port) ? port : -1;
-    const override = idx >= 0 ? g(settings, `overlays.${SETTINGS_TYPE}.port${idx}Color`, null) : null;
-    if (override) return override;
-    if (idx >= 0 && idx < PORT_COLORS.length) return PORT_COLORS[idx];
-    return g(settings, 'overlays.global.accentColor', NEUTRAL_ACCENT);
+    return portPaletteColor(port)
+      || OverlayBase.deepGet(OverlayBase.settings, 'overlays.global.accentColor', NEUTRAL_ACCENT);
   }
 
   async function fetchThemeSvg(pkg) {
@@ -803,7 +799,9 @@ export function mountPostgameVs({ host }) {
     };
 
     const themePkg = g(OverlayBase.settings, 'overlays.global.designPackage', null) || 'default';
-    ctx.themeSvg = await loadTheme(themePkg);
+    // Both halves of the package's look in one await: the backdrop it draws and
+    // the port palette it declares (resolvePalette reads that synchronously).
+    [ctx.themeSvg] = await Promise.all([loadTheme(themePkg), ensurePortPalette(themePkg)]);
 
     root.style.display = '';
     buildDom(ctx);

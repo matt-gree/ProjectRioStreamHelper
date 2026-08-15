@@ -21,7 +21,7 @@ still applies verbatim when authoring by hand.
 
 ```
 <package>/
-├── package.json         # { id, name, version, author, description } — all optional but recommended
+├── package.json         # { id, name, version, author, description, portColors } — all optional but recommended
 ├── commentary.svg       # the caster strip (1–4 reflowing plates)
 ├── lowerthird.svg       # the Break-phase broadcast band
 ├── matchup.svg          # the head-to-head band (series summary + 5 game cards)
@@ -57,6 +57,38 @@ replaced by an installed package.
 anything it doesn't provide falls back element-by-element to `default`. If a
 file fails to fetch entirely, each mount also carries a minimal inline
 fallback, so a broken package never blanks an OBS source.
+
+## The controller-port palette (`portColors`)
+
+The one thing a package declares in its **manifest** rather than on an SVG root:
+
+```jsonc
+"portColors": ["#e53935", "#1e88e5", "#fdd835", "#43a047"]   // ports 1-4, in order
+```
+
+A player's side is tinted by the controller port they're on — the same four
+colours across the **scoreboard, scorecard, lower third, Game Summary and
+Character Spotlight**. No single element owns that, so it is one line in
+`package.json` instead of four copies on five SVG roots.
+
+* **Hex only**, and index *i* is always port *i + 1*. Declare fewer than four
+  and the rest are left alone (`null`); a non-hex entry is dropped rather than
+  failing the install.
+* **Resolution:** the producer's own choice (Setup → Design → **Controller
+  Ports**) → this declaration → PRSH's built-in convention (P1 red, P2 blue,
+  P3 yellow, P4 green — what Project Rio and gc-overlay show).
+* **No fallback to `default`.** Unlike a theme SVG, a manifest is not an
+  element: a package that says nothing about ports gets *the app's* palette,
+  not another package's. A token skin should not silently wear `default`'s
+  ports.
+* Declare it when your package's identity has its own player colours (a
+  tournament's lime/teal, say). Leave it out when ports should keep matching
+  what the players see on their own controllers.
+
+Note this is **package-wide and orthogonal to the palette tier below** — a
+full-art package and a token skin both declare it the same way, and both mounts
+apply it themselves rather than through the app's CSS vars, so a full-art
+element still honours it.
 
 ## Palette policy: fixed vs app-vars
 
@@ -310,7 +342,7 @@ falls back to the live controller-port colours / the producer's global accent:
 
 | Declared variable | Meaning |
 |-------------------|---------|
-| `--side1` / `--side2` | Fixed side colours (side 1 = left, side 2 = right). slice26 pins these; **default deliberately does not**, so sides stay bound to each player's controller port. |
+| `--side1` / `--side2` | Fixed side colours (side 1 = left, side 2 = right), for **these two elements only**. slice26 pins these; **default deliberately does not**, so sides stay bound to each player's controller port. To recolour the ports themselves — across every element, not just the callouts — declare `portColors` in the manifest instead (above). |
 | `--well` | Glass-well tint for every card surface (any CSS color). |
 | `--accent-neutral` | Neutral accent (FINAL, winner mark, star pips). Overrides `overlays.global.accentColor` for these two elements. |
 

@@ -2,7 +2,8 @@
 
 A design package is a folder of themed SVGs — one per re-themable element
 (``commentary.svg``, ``lowerthird.svg``, ``callout.svg``, …) — plus an optional
-``package.json`` manifest (display name / author / version / description).
+``package.json`` manifest (display name / author / version / description, and
+the package-wide ``portColors`` palette every element tints its sides from).
 
 Two packages ship built-in under ``./public/design/`` and are part of the
 codebase:
@@ -74,6 +75,36 @@ def _read_manifest(folder: Path) -> dict:
 _SVG_TAG_RE = re.compile(r"<svg\b[^>]*>", re.IGNORECASE)
 _APP_VARS_RE = re.compile(r"""data-design-vars\s*=\s*["']app["']""", re.IGNORECASE)
 
+# A package's controller-port palette: `"portColors": ["#e53935", …]`, ports 1-4
+# in order. Unlike everything else a package declares, this is PACKAGE-WIDE
+# rather than per element — a controller port is a player's identity across the
+# whole broadcast (scoreboard, scorecard, lower third, both callouts), so it is
+# one declaration in the manifest and not four copies on four SVG roots.
+#
+# Hex only, because the value has to render in the Design tab's colour input as
+# well as in a CSS custom property. An entry that isn't hex is dropped (the port
+# falls through to the app's own default) rather than failing the install.
+_HEX_RE = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+PORT_COUNT = 4
+
+
+def _port_colors(manifest: dict) -> list[str | None]:
+    """The manifest's declared port palette as exactly 4 slots, or ``[]``.
+
+    ``[]`` means "declares nothing" — the app keeps its built-in port palette.
+    A declared list is padded/truncated to 4 with ``None`` for the ports it
+    leaves alone, so index ``i`` is always port ``i + 1``.
+    """
+    raw = manifest.get("portColors")
+    if not isinstance(raw, list) or not raw:
+        return []
+    out: list[str | None] = []
+    for value in raw[:PORT_COUNT]:
+        ok = isinstance(value, str) and _HEX_RE.match(value.strip())
+        out.append(value.strip().lower() if ok else None)
+    out.extend([None] * (PORT_COUNT - len(out)))
+    return out if any(out) else []
+
 
 def _uses_app_vars(svg: Path) -> bool:
     """Whether this theme file opts into the user's Design-tab palette.
@@ -113,6 +144,9 @@ def _package_info(folder: Path, builtin: bool) -> dict:
         # still ships a full-art callout.svg and no statscard at all, and an
         # element a package omits falls back to `default`, which is full-art.
         "appVarElements": [p.stem for p in svgs if _uses_app_vars(p)],
+        # The package's controller-port palette (package-wide, see _port_colors).
+        # Read from the MANIFEST, not from a file: no element owns it.
+        "portColors": _port_colors(manifest),
     }
 
 

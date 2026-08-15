@@ -364,12 +364,21 @@ Two consequences worth knowing before you tune anything:
 
 Resolution order (per `resolvePalette`): the **active design package's
 `callout.svg`** may declare `--side1 / --side2 / --well / --accent-neutral` on
-its SVG root → else the per-port controller colors (`PORT_COLORS`, overridable
-via `overlays.postgamecallout.port{N}Color`) → else
+its SVG root → else the player's **controller-port colour** → else
 `overlays.global.accentColor`. The mount fetches `/design/{pkg}/callout.svg` as
 the backdrop and falls back to `default`, then to a built-in radial-gradient SVG
 (`builtinThemeSvg`) keyed on port colors. This is the **same theme contract as
 the Game Summary** (`postgame-vs-mount.js`); see `public/design/README.md`.
+
+**The port palette is the app's, not this scene's.** It resolves in
+`lib/port-colors.js` — the producer's own choice (Design tab → **Controller
+Ports**, `overlays.global.port{N}Color`), else the active package's manifest
+`portColors`, else the built-in convention — and the scoreboard, scorecard,
+lower third and Game Summary all read the same four colours. The four knobs
+used to live on *this element's* settings, which meant recolouring port 1 on
+the spotlight and watching every other overlay keep the old red. Don't take a
+per-element copy back; a package that wants its own ports declares them once in
+its `package.json`.
 
 **Default vs Slice 26 — what each pins.** slice26 declares a fixed side pair
 (the sides are the tournament's colours). The **default** package deliberately
@@ -694,7 +703,8 @@ top-of-file constants first — they were all left as knobs deliberately:
 |-------|-----------|----------|
 | theater | `BEAT.*` | walkthrough pacing (transition card, stamp dwell, HR/short holds, finale) |
 | theater | `DEEP_FLY_DISTANCE_M` (85), `DEEP_FLY_HEIGHT_M` (30) | when a ball earns the hero crane |
-| mount | `PORT_COLORS`, `NEUTRAL_ACCENT` | fallback palette |
+| mount | `NEUTRAL_ACCENT` | the colour a side with no controller port falls back to |
+| lib/port-colors.js | `DEFAULT_PORT_COLORS` | the app-wide port palette's last-resort tier (a package's `portColors` sits above it, the Design tab above that) |
 | renderer | `TRAIL_RADIUS` (0.34) | trail thickness (all kinds) |
 | renderer | `HR_*`, `STAR_*` (crawl period, repeat, hold, pulse) | celebratory trail cadence |
 | renderer | `SPRAY_ORBIT_ARC/PERIOD`, `SPRAY_BREATHE*`, `SPRAY_AERIAL` | spray idle drift feel |

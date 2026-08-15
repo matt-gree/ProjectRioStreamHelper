@@ -84,16 +84,18 @@ export const LAYOUT_SETTINGS = {
         { key: 'tickerSpeed', type: 'number-override', label: 'Scroll Speed', description: 'Horizontal scroll rate of the ticker (pixels per second)', defaultValue: 60, min: 10, max: 300, step: 10, suffix: 'px/s' },
         { key: 'tickerGap', type: 'number-override', label: 'Card Spacing', description: 'Space between game cards (px)', defaultValue: 16, min: 0, max: 80, step: 2, suffix: 'px' },
     ],
-    // Post-game full-screen Stat Callout (fed element). The mount reads these
-    // under overlays.postgamecallout.*; port colours default to the Smash/MK
-    // convention. The backdrop SVG comes from the active Design Package
-    // (callout.svg — overlays.global.designPackage picks the package).
-    postgamecallout: [
-        { key: 'port0Color', type: 'color-override', label: 'Port 1 Color', description: 'Accent for a player on controller port 1' },
-        { key: 'port1Color', type: 'color-override', label: 'Port 2 Color', description: 'Accent for a player on controller port 2' },
-        { key: 'port2Color', type: 'color-override', label: 'Port 3 Color', description: 'Accent for a player on controller port 3' },
-        { key: 'port3Color', type: 'color-override', label: 'Port 4 Color', description: 'Accent for a player on controller port 4' },
-    ],
+    // Post-game full-screen Stat Callout (fed element). Everything about its
+    // look comes from the active Design Package (callout.svg —
+    // overlays.global.designPackage picks it).
+    //
+    // The four controller-port colours used to live here, and they were the
+    // only UI for a palette FIVE mounts read (scoreboard, scorecard, lower
+    // third, both callouts). Recolouring port 1 on the spotlight and watching
+    // the scoreboard keep the old red is the bug that shape guarantees, so
+    // they are now one global set on the Design tab — PORT_COLOR_KEYS below,
+    // under them whatever the active package declares. Don't bring a
+    // per-element copy back.
+    postgamecallout: [],
     // Lower Third (Break) — a re-themable SVG band. The mount reads these under
     // overlays.lowerthird.*; the theme SVG comes from the active Design Package
     // (lowerthird.svg — overlays.global.designPackage picks the package),
@@ -194,12 +196,29 @@ export const OVERRIDABLE_GLOBAL_KEYS = [
     { key: 'fontFamily',       meta: ['fontFamily'],       type: 'font',   label: 'Font Family', defaultValue: 'Inter' },
 ];
 
+// ── The controller-port palette ──
+// Ports 1-4, in order. GLOBAL and not per-layout overridable: a controller port
+// is a player's identity for the whole broadcast, and five mounts tint their
+// sides from it (scoreboard, scorecard, lower third, Game Summary, Character
+// Spotlight). Unset (null) is INHERIT, not "no colour" — the active design
+// package's own `portColors` answers next, and DEFAULT_PORT_COLORS last.
+// Resolution lives in one place per runtime: usePortColors() here on the app
+// side, public/layout/lib/port-colors.js on the overlay side.
+export const PORT_COLOR_KEYS = ['port0Color', 'port1Color', 'port2Color', 'port3Color'];
+
+// The Smash/MK convention — and what Project Rio and gc-overlay show, so an
+// unthemed install matches what the producer sees in game. Mirrored in
+// public/layout/lib/port-colors.js (pinned by designConstants.test.js).
+export const DEFAULT_PORT_COLORS = ['#e53935', '#1e88e5', '#fdd835', '#43a047'];
+
 export const GLOBAL_DESIGN_KEYS = [
     'accentColor', 'cardBg', 'textColor', 'borderRadius', 'borderColor', 'borderWidth', 'fontFamily',
     'showShadow', 'cardShadowBlur', 'cardShadowColor',
     'textShadowEnabled', 'textShadowBlur', 'textShadowColor',
     // Promoted from per-layout in v2:
     'showCaptains', 'showLogo', 'finalBadgeColor',
+    // Promoted from the Character Spotlight's own settings in v4 (see above):
+    ...PORT_COLOR_KEYS,
     // Design package selector — not a CSS knob, not per-layout overridable; read
     // directly by element mounts (e.g. commentary-mount.js) to pick a theme.
     'designPackage',
@@ -222,5 +241,11 @@ export const GLOBAL_DESIGN_DEFAULTS = {
     showCaptains:      true,
     showLogo:          true,
     finalBadgeColor:   null,
+    // null = inherit (package, then DEFAULT_PORT_COLORS) — never a literal
+    // colour here, or a preset would pin the app's palette over the package's.
+    port0Color:        null,
+    port1Color:        null,
+    port2Color:        null,
+    port3Color:        null,
     designPackage:     'default',
 };

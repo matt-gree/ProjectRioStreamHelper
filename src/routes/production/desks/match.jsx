@@ -16,6 +16,7 @@ import {
     Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
 } from '../../../components/ui/command';
 import { useAssetUrls } from '../../../lib/assets';
+import { usePortColors } from '../../layouts/designPackage';
 import { MSB_CAPTAINS } from '../../../data/msb';
 import { Stack, Group, Text } from '../../../components/ui/primitives';
 import { Badge } from '../../../components/ui/badge';
@@ -192,19 +193,17 @@ const CaptainGrid = memo(function CaptainGrid({
     );
 });
 
-// Canonical Dolphin controller-port colours (P1 red, P2 blue, P3 yellow, P4
-// green) — mirrors PORT_COLORS in the overlay mounts so the producer sees the
-// same colour the broadcast will use.
-const PORT_COLORS = ['#e53935', '#1e88e5', '#fdd835', '#43a047'];
-
 /*
  * Controller port for a side — a 2×2 board of the four ports, one touch like
  * the captain grid beside it. Stored 0-indexed (matches the HUD's Away/Home
  * Port and the projected score.{N}.player.{T}.port).
  *
- * Each cell carries its port's broadcast colour, so the producer picks against
- * the same colour the overlay will draw. Clicking the selected port clears it,
- * exactly as the captain grid clears a captain — no separate "None" row.
+ * Each cell carries its port's broadcast colour — the RESOLVED one (Design tab
+ * → Controller Ports, under it the active package's own palette), not a copy of
+ * the stock four, so the producer picks against the colour the overlay will
+ * actually draw under whatever package is loaded. Clicking the selected port
+ * clears it, exactly as the captain grid clears a captain — no separate "None"
+ * row.
  *
  * 2×2 is also what makes the mirrored loadout fit: this is ~60px where the
  * dropdown it replaced was ~90, which is the width the two sides were fighting
@@ -212,6 +211,7 @@ const PORT_COLORS = ['#e53935', '#1e88e5', '#fdd835', '#43a047'];
  */
 const PortGrid = memo(function PortGrid({ value, onChange, className }) {
     const idx = value === '' || value == null ? null : Number(value);
+    const ports = usePortColors();
     return (
         <div role="listbox" aria-label="Controller port" className={cn('grid w-fit grid-cols-2 gap-1', className)}>
             {[0, 1, 2, 3].map((p) => {
@@ -226,7 +226,7 @@ const PortGrid = memo(function PortGrid({ value, onChange, className }) {
                         aria-selected={selected}
                         aria-label={`Port ${p + 1}`}
                         onClick={() => onChange(selected ? null : p)}
-                        style={{ color: PORT_COLORS[p] }}
+                        style={{ color: ports[p].color }}
                         className={cn(
                             'flex size-6 items-center justify-center rounded-md border text-[10px] font-semibold tabular-nums transition-colors',
                             selected

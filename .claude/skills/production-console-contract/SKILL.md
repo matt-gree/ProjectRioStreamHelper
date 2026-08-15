@@ -844,7 +844,7 @@ from. 28px control rhythm. Primitives:
 | Select row | label + dropdown | board pick, content pick, spotlight scene |
 | Number row | label + number + suffix | spotlight hold, countdown minutes, gap width, band geometry |
 | Text row | label + text input | header title, field separator, a card's custom bottom line |
-| Colour row | label + swatch + hex + reset | per-overlay colour overrides (bracket lines, port colours); empty = theme default |
+| Colour row | label + swatch + hex + reset | per-overlay colour overrides (bracket connector/active lines); empty = theme default. A colour shared by several elements is NOT one of these — the controller-port palette is a global on the Design tab, because a per-element copy means recolouring port 1 on one overlay and watching the rest keep the old red |
 | Field row | label + any control; `stacked` puts the label above | pickers the kit doesn't own (participant, captain, port, a typed field). Stack it in a column of form fields, where a fixed label gutter would push every control off the panel's left edge |
 | Action row | 1–3 buttons | push, replay/spotlight/split, capture, clock transport |
 | Segmented row | segmented control | plates mode, scorecard score block |

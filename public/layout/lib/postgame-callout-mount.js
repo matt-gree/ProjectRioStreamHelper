@@ -40,7 +40,9 @@
 // backdrop SVG comes from /design/{pkg}/callout.svg; a package may declare
 // --side1/--side2/--well/--accent-neutral on the SVG root (slice26 does) and
 // the mount keys every surface to them, falling back to controller-port
-// colours. Requires the host page's `three` importmap (callout-stage has it).
+// colours — which are the APP's palette (Design tab → Controller Ports, with
+// the package's own `portColors` under it; see lib/port-colors.js), not this
+// scene's. Requires the host page's `three` importmap (callout-stage has it).
 
 //
 // This file is the orchestrator; the CSS, AB-ticker chips, and the AB
@@ -51,9 +53,8 @@
 import { injectCss, REF_W, REF_H } from './postgame-callout-css.js';
 import { escapeHtml } from './postgame-callout-chips.js';
 import { createTheater } from './postgame-callout-theater.js';
+import { ensurePortPalette, portColor as portPaletteColor } from './port-colors.js';
 
-const SETTINGS_TYPE = 'postgamecallout';
-const PORT_COLORS = ['#e53935', '#1e88e5', '#fdd835', '#43a047'];
 const NEUTRAL_ACCENT = '#f59e0b';
 
 function charArtUrl(name) {
@@ -123,13 +124,12 @@ export function mountPostgameCallout({ host }) {
   window.addEventListener('resize', autoScale);
   autoScale();
 
+  // The port palette is the app's, not this scene's — see lib/port-colors.js.
+  // A side with no controller port has no port colour to take, so it falls
+  // back to the global accent.
   function portColor(port) {
-    const { deepGet: g, settings } = OverlayBase;
-    const idx = Number.isInteger(port) ? port : -1;
-    const override = idx >= 0 ? g(settings, `overlays.${SETTINGS_TYPE}.port${idx}Color`, null) : null;
-    if (override) return override;
-    if (idx >= 0 && idx < PORT_COLORS.length) return PORT_COLORS[idx];
-    return g(settings, 'overlays.global.accentColor', NEUTRAL_ACCENT);
+    return portPaletteColor(port)
+      || OverlayBase.deepGet(OverlayBase.settings, 'overlays.global.accentColor', NEUTRAL_ACCENT);
   }
 
   async function fetchThemeSvg(pkg) {
@@ -624,7 +624,10 @@ export function mountPostgameCallout({ host }) {
     };
 
     const themePkg = g(OverlayBase.settings, 'overlays.global.designPackage', null) || 'default';
-    ctx.themeSvg = await loadTheme(themePkg);
+    // Both halves of the package's look, in one await: the backdrop it draws
+    // and the port palette it declares (resolvePalette reads the latter
+    // synchronously, so it has to have landed before the DOM is built).
+    [ctx.themeSvg] = await Promise.all([loadTheme(themePkg), ensurePortPalette(themePkg)]);
     if (prevKey !== key) return;
 
     root.style.display = '';

@@ -45,11 +45,11 @@ describe('ElementStyleSettings — every setting type is stage-renderable (phase
     });
 
     it('writes a per-board colour to overlays.{type}.{board}.{key}', () => {
-        // postgamecallout is not per-board, but the ns wiring is exercised with a
-        // board arg here to prove the {type}.{board} path lands correctly.
-        render(<ElementStyleSettings type="postgamecallout" board={2} label="Character Spotlight 2" />);
-        fireEvent.change(screen.getByLabelText('Port 1 Color'), { target: { value: '#00ff00' } });
-        expect(useSettingsStore.getState()?.overlays?.postgamecallout?.[2]?.port0Color).toBe('#00ff00');
+        // bracket is not per-board, but the ns wiring is exercised with a board
+        // arg here to prove the {type}.{board} path lands correctly.
+        render(<ElementStyleSettings type="bracket" board={2} label="Bracket 2" />);
+        fireEvent.change(screen.getByLabelText('Connector Line Color'), { target: { value: '#00ff00' } });
+        expect(useSettingsStore.getState()?.overlays?.bracket?.[2]?.connectorColor).toBe('#00ff00');
     });
 
     it('excludes keys a body already surfaced, keeps the rest', () => {

@@ -67,6 +67,66 @@ def test_a_hand_dropped_package_is_read_from_its_files_not_its_manifest(tmp_path
     assert info["appVarElements"] == ["ticker"]
 
 
+# --- the controller-port palette -----------------------------------------
+#
+# `portColors` is the one thing a package declares in its MANIFEST rather than
+# on an SVG root, because no single element owns it: five mounts tint their
+# sides from the same four colours. It is read straight from package.json (the
+# compiler never touches it), so a hand-dropped folder declares it the same way
+# an installed zip does.
+
+def _drop(tmp_path, monkeypatch, manifest: dict, pkg_id: str = "ports") -> dict:
+    root = tmp_path / "design_packages"
+    folder = root / pkg_id
+    folder.mkdir(parents=True)
+    monkeypatch.setattr(design_packages, "user_packages_dir", lambda: root)
+    folder.joinpath("package.json").write_text(json.dumps({"id": pkg_id, **manifest}))
+    folder.joinpath("stats.svg").write_text('<svg viewBox="0 0 10 10"></svg>')
+    return _pkg(pkg_id)
+
+
+def test_default_declares_the_port_palette_and_classic_inherits_it():
+    # The built-in convention, stated where a package states things. `classic`
+    # says nothing, which is not "no ports" but "the app's own palette" —
+    # there is deliberately no fallback to `default` for a manifest.
+    assert _pkg("default")["portColors"] == ["#e53935", "#1e88e5", "#fdd835", "#43a047"]
+    assert _pkg("classic")["portColors"] == []
+
+
+def test_a_partial_palette_leaves_the_ports_it_omits_alone(tmp_path, monkeypatch):
+    """Index i is always port i+1, so a short list pads rather than shifting.
+
+    A package that only wants to recolour ports 1 and 2 must not silently move
+    port 3's colour onto port 4.
+    """
+    info = _drop(tmp_path, monkeypatch, {"portColors": ["#C5F707", "#57E0E7"]})
+    assert info["portColors"] == ["#c5f707", "#57e0e7", None, None]
+
+
+def test_a_junk_entry_drops_to_the_app_default_without_failing_the_package(tmp_path, monkeypatch):
+    """The value has to render in a colour input and in a CSS var, so hex only.
+
+    Dropping the bad entry (rather than the package) is what keeps a typo in
+    one port from costing a designer their whole theme.
+    """
+    info = _drop(tmp_path, monkeypatch, {"portColors": ["red", "#1e88e5", 42, "#fdd8"]})
+    assert info["portColors"] == [None, "#1e88e5", None, None]
+
+
+def test_a_package_saying_nothing_about_ports_declares_nothing(tmp_path, monkeypatch):
+    assert _drop(tmp_path, monkeypatch, {})["portColors"] == []
+    assert _drop(tmp_path, monkeypatch, {"portColors": []}, "empty")["portColors"] == []
+    # All-junk is the same statement as none: nothing usable was declared.
+    assert _drop(tmp_path, monkeypatch, {"portColors": ["nope"]}, "junk")["portColors"] == []
+
+
+def test_a_fifth_port_is_dropped(tmp_path, monkeypatch):
+    """Four controllers. A fifth entry is a mistake, and carrying it would put a
+    colour in the payload that nothing can ever show."""
+    info = _drop(tmp_path, monkeypatch, {"portColors": ["#111111"] * 5})
+    assert len(info["portColors"]) == 4
+
+
 # --- install_zip containment ---------------------------------------------
 #
 # A design package is a bundle a user gets from a designer and installs, so the

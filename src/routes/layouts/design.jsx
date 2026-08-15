@@ -17,7 +17,8 @@ import { useSettingsStore } from '../../context/store';
 import { useShallow } from 'zustand/react/shallow';
 import ScaledIframe from '../../components/ScaledIframe';
 import { COLOR_SWATCHES, ColorWithOpacity, LabeledColor, DebouncedColorInput } from './shared';
-import { invalidateDesignPackages } from './designPackage';
+import { invalidateDesignPackages, usePortColors, useDesignPackages } from './designPackage';
+import { PORT_COLOR_KEYS } from './designConstants';
 import { PresetsPanel } from './presets';
 
 // ── Live preview grid for the Design tab ──
@@ -239,6 +240,75 @@ const DesignPackageSection = memo(function DesignPackageSection() {
     );
 });
 
+// ── Controller ports (rendered under the package selector) ──
+// Four colours, one palette, every overlay: the scoreboard, the scorecard, the
+// lower third and both post-game callouts all tint their sides from a player's
+// controller port. It sits with the design package rather than in Color &
+// Typography because a package can DECLARE its own set (`portColors` in its
+// manifest) — so this section is the package's palette, with the producer's
+// own choices layered on top port by port.
+//
+// An inherited port is shown at its resolved colour rather than blank: the
+// producer is looking at this to read the palette, and a row of empty swatches
+// answers "what is port 3" with nothing. What separates set from inherited is
+// the Reset control and the caption, not a missing value.
+const PortColorRow = memo(function PortColorRow({ index, resolved, onChange }) {
+    const label = `Port ${index + 1}`;
+    return (
+        <div className="flex flex-col gap-1">
+            <Label className="field-label">{label}</Label>
+            <div className="flex items-end gap-2">
+                <DebouncedColorInput
+                    value={resolved.color}
+                    onChange={(color) => onChange(color || null)}
+                    swatches={COLOR_SWATCHES}
+                    className="flex-1"
+                />
+                {resolved.source === 'user' && (
+                    <Button variant="ghost" size="sm" onClick={() => onChange(null)}>Reset</Button>
+                )}
+            </div>
+        </div>
+    );
+});
+
+const PortColorsSection = memo(function PortColorsSection() {
+    const setItem = useSettingsStore(s => s.setItem);
+    const activeId = useSettingsStore(s => s?.overlays?.global?.designPackage) ?? 'default';
+    const packages = useDesignPackages();
+    const ports = usePortColors();
+
+    const pkgName = packages?.find(p => p.id === activeId)?.name || activeId;
+    const inherited = ports.some(p => p.source === 'package')
+        ? `Unset ports follow the ${pkgName} package.`
+        : `${pkgName} declares no port palette, so unset ports use the Project Rio convention (P1 red · P2 blue · P3 yellow · P4 green).`;
+
+    return (
+        <div>
+            <Text size="xs" fw={700} dimmed className="mb-2 uppercase tracking-wide">Controller Ports</Text>
+            {/* Two columns, not four. The panel this sits in is ~370px, and
+                the breakpoint prefixes key off the VIEWPORT, not the panel — so
+                a four-across row is 86px per port on a wide screen, which
+                clips the hex and squeezes the Reset control. 2×2 also happens
+                to be how the Match desk draws a set of ports. */}
+            <div className="grid grid-cols-2 gap-2 sm:max-w-md">
+                {ports.map((resolved, i) => (
+                    <PortColorRow
+                        key={PORT_COLOR_KEYS[i]}
+                        index={i}
+                        resolved={resolved}
+                        onChange={(color) => setItem(`overlays.global.${PORT_COLOR_KEYS[i]}`, color)}
+                    />
+                ))}
+            </div>
+            <Text size="xs" dimmed className="mt-1">
+                Each player’s side takes their controller port’s colour on the scoreboard,
+                scorecard, lower third and both post-game callouts. {inherited}
+            </Text>
+        </div>
+    );
+});
+
 // ── Global Design Section (rendered inside the Design tab) ──
 const GlobalDesignSection = memo(function GlobalDesignSection() {
     const globalDesign = useSettingsStore(useShallow(s => s?.overlays?.global ?? {}));
@@ -264,6 +334,7 @@ const GlobalDesignSection = memo(function GlobalDesignSection() {
     return (
         <Stack gap="md">
             <DesignPackageSection />
+            <PortColorsSection />
 
             <div>
                 <Text size="xs" fw={700} dimmed className="mb-2 uppercase tracking-wide">Color & Typography</Text>

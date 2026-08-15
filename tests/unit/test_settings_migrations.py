@@ -7,6 +7,10 @@ import orjson
 
 from server.settings import Settings
 
+# Every overlay migration bumps this, so tests assert "fully migrated" rather
+# than pinning the number a given migration happened to land on.
+CURRENT_OVERLAY_SCHEMA = Settings.settings["overlays"]["schema_version"]
+
 
 def _write_settings(path, data):
     (path / "settings.json").write_bytes(orjson.dumps(data))
@@ -49,7 +53,7 @@ async def test_overlay_schema_v1_strips_promoted_globals(isolate_user_data):
     # ...while the genuinely layout-specific key survives. An explicit False is
     # not the seeded value v3 clears, so it rides through both migrations.
     assert overlays["scoreboard"]["showElo"] is False
-    assert overlays["schema_version"] == 3
+    assert overlays["schema_version"] == CURRENT_OVERLAY_SCHEMA
 
 
 """
@@ -67,7 +71,7 @@ async def test_overlay_schema_v3_clears_the_seeded_elo_true(isolate_user_data):
     })
     await Settings.Load()
     overlays = Settings.settings["overlays"]
-    assert overlays["schema_version"] == 3
+    assert overlays["schema_version"] == CURRENT_OVERLAY_SCHEMA
     assert "showElo" not in overlays["scoreboard"]
 
 
@@ -89,9 +93,55 @@ async def test_overlay_schema_v3_is_left_untouched(isolate_user_data):
         "overlays": {"schema_version": 3, "scoreboard": {"showElo": True}},
     })
     await Settings.Load()
-    assert Settings.settings["overlays"]["schema_version"] == 3
-    # Already migrated, so a `true` here is a producer turning it back ON.
+    # Later migrations still run (the version moves on), but v3's own clearing
+    # does not: already migrated, so a `true` here is a producer turning it
+    # back ON.
+    assert Settings.settings["overlays"]["schema_version"] == CURRENT_OVERLAY_SCHEMA
     assert Settings.settings["overlays"]["scoreboard"]["showElo"] is True
+
+
+"""
+v4 promoted the controller-port palette to a global. It was read per layout by
+five mounts but had a UI on exactly one — the Character Spotlight — so its copy
+is the one that wins; any other namespace's is carried up only if nothing has
+claimed that port yet. Every per-layout copy goes, because two places storing
+one palette is how they drift back apart.
+"""
+
+
+async def test_overlay_schema_v4_promotes_the_port_palette(isolate_user_data):
+    _write_settings(isolate_user_data, {
+        "overlays": {
+            "schema_version": 3,
+            "postgamecallout": {"port0Color": "#111111", "port1Color": "#222222"},
+            "scorecard": {"port1Color": "#999999", "port2Color": "#333333", "mainMode": "full"},
+        },
+    })
+    await Settings.Load()
+    overlays = Settings.settings["overlays"]
+    assert overlays["schema_version"] == CURRENT_OVERLAY_SCHEMA
+    # The spotlight's copies win; the scorecard's port 3 fills a port nobody
+    # else claimed; its port 2 loses to the spotlight rather than overwriting.
+    assert overlays["global"]["port0Color"] == "#111111"
+    assert overlays["global"]["port1Color"] == "#222222"
+    assert overlays["global"]["port2Color"] == "#333333"
+    assert overlays["global"]["port3Color"] is None
+    # ...and nothing per-layout is left to drift, while the scorecard's own
+    # settings ride through untouched.
+    assert overlays["postgamecallout"] == {}
+    assert "port1Color" not in overlays["scorecard"]
+    assert overlays["scorecard"]["mainMode"] == "full"
+
+
+async def test_overlay_schema_v4_leaves_an_unset_palette_inheriting(isolate_user_data):
+    """No stored port colours = nothing to promote. The four globals stay None,
+    which is INHERIT (the design package's palette, then the app's own) — a
+    migration that wrote literal hexes here would pin the old defaults over
+    every package a producer installs later."""
+    _write_settings(isolate_user_data, {"overlays": {"schema_version": 3}})
+    await Settings.Load()
+    glob = Settings.settings["overlays"]["global"]
+    assert [glob[f"port{i}Color"] for i in range(4)] == [None] * 4
 
 
 # --- Pool + playback migration (schema v2) ---

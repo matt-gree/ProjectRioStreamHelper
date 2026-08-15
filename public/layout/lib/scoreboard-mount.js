@@ -79,6 +79,7 @@ import { createThemeEngine } from './svg-theme-engine.js';
 import { createRevealGate, clearAnimClassOnEnd } from './reveal-gate.js';
 import { ensureGsap } from './gsap-loader.js';
 import { DOT_OFF, dot, bindImageProbe } from './mount-utils.js';
+import { ensurePortPalette, portColor as portPaletteColor } from './port-colors.js';
 
 const SETTINGS_TYPE = 'scoreboard';
 const DEFAULT_PACKAGE = 'default';
@@ -90,9 +91,6 @@ export const SIZE_DIMS = {
   m:  { w: 600, h: 200 },
   l:  { w: 800, h: 460 },
 };
-
-// Controller-port → side colour (0-indexed), same convention as the Scorecard.
-const PORT_COLORS = ['#e53935', '#1e88e5', '#fdd835', '#43a047'];
 
 const BALL_ON = '#22c55e', STRIKE_ON = '#eab308', OUT_ON = '#ef4444';
 
@@ -219,19 +217,19 @@ export function mountScoreboard({ host, sb, size }) {
     };
   }
 
-  function portColor(port, settings, fallbackIdx) {
-    const idx = Number.isInteger(port) ? port : (fallbackIdx == null ? -1 : fallbackIdx);
-    if (idx < 0) return null;
-    const ov = sbGet(settings, `port${idx}Color`, null);
-    if (ov) return ov;
-    return idx < PORT_COLORS.length ? PORT_COLORS[idx] : null;
+  // The port palette is the app's (Design tab → Controller Ports, under it the
+  // active package's own `portColors`) — see lib/port-colors.js. A side with no
+  // controller port falls back to its side index, so a board with no port data
+  // is still two different colours.
+  function portColor(port, fallbackIdx) {
+    return portPaletteColor(Number.isInteger(port) ? port : fallbackIdx);
   }
 
   function applyColours(settings, p1Port, p2Port) {
     const accent = sbGet(settings, 'accentColor', null);
     if (accent) host.style.setProperty('--accent', accent); else host.style.removeProperty('--accent');
-    const c1 = portColor(p1Port, settings, 0);
-    const c2 = portColor(p2Port, settings, 1);
+    const c1 = portColor(p1Port, 0);
+    const c2 = portColor(p2Port, 1);
     if (c1) host.style.setProperty('--side1', c1); else host.style.removeProperty('--side1');
     if (c2) host.style.setProperty('--side2', c2); else host.style.removeProperty('--side2');
   }
@@ -712,7 +710,9 @@ export function mountScoreboard({ host, sb, size }) {
   // ── main update ─────────────────────────────────────────────────────────────
   async function update(state, settings) {
     const theme = g(settings, 'overlays.global.designPackage', null) || DEFAULT_PACKAGE;
-    const themeChanged = await engine.ensureTheme(theme);
+    // The package's port palette rides along with its SVG: applyColours reads
+    // it synchronously, so it has to have landed by the time this returns.
+    const [themeChanged] = await Promise.all([engine.ensureTheme(theme), ensurePortPalette(theme)]);
     if (themeChanged) { revealKey = ''; laidOut = {}; animShown = {}; clipProxy = {}; }
     if (disposed) return;
 

@@ -122,6 +122,13 @@ engine.refitText();                                  // after text binds + on fo
   `default`, then to the mount's inline `fallbackSvg` (always provide one with
   the same slot names, so binding never silently no-ops).
 - The active package id comes from `overlays.global.designPackage` (Settings).
+- **Side tints come from `lib/port-colors.js`, never a local copy.** A player's
+  colour is their controller port's, and five mounts draw it — so
+  `portColor(idx)` resolves it once (producer's Design-tab choice → the
+  package's manifest `portColors` → the built-in convention). It reads
+  synchronously, so `await ensurePortPalette(pkg)` wherever the mount already
+  awaits `ensureTheme(pkg)`. A mount that keeps its own four hexes, or its own
+  per-layout override key, is the bug this replaced.
 - A theme SVG declares hooks via `data-slot` attributes; text slots with
   `data-maxw` auto-fit (uniform shrink, base size captured in `data-basefs`).
   Sub-parts use `data-part`. Position anchors can ride in a

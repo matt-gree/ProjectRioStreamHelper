@@ -18,7 +18,9 @@
 // invalidateDesignPackages() there.
 
 import { useEffect, useReducer } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useSettingsStore } from '../../context/store';
+import { DEFAULT_PORT_COLORS, PORT_COLOR_KEYS } from './designConstants';
 
 const FALLBACK_PACKAGE = 'default';
 
@@ -85,4 +87,47 @@ export function paintedByApp(packages, activeId, themeElement) {
 export function usePaintedByApp(themeElement) {
     const active = useSettingsStore(s => s?.overlays?.global?.designPackage) ?? FALLBACK_PACKAGE;
     return paintedByApp(useDesignPackages(), active, themeElement);
+}
+
+/**
+ * The controller-port palette a package supplies, or `[]`.
+ *
+ * A package declares this in its manifest (`"portColors"`), NOT on an SVG root
+ * — no single element owns it, since five of them tint their sides from the
+ * same four colours. Unlike a theme SVG there is no element-by-element
+ * fallback to `default`: a package that says nothing about ports means the
+ * app's own palette, not another package's.
+ */
+export function packagePortColors(packages, activeId) {
+    const pkg = (packages ?? []).find(p => p.id === activeId);
+    return Array.isArray(pkg?.portColors) ? pkg.portColors : [];
+}
+
+/**
+ * The four resolved port colours, and where each came from — the app-side twin
+ * of public/layout/lib/port-colors.js, and it must resolve the same way:
+ * the producer's own choice, else the active package's declaration, else the
+ * built-in convention. Per port, not per palette: a producer who has pinned
+ * port 1 keeps the package's ports 2-4.
+ *
+ * `source` is what lets the Design tab show an inherited colour as inherited
+ * (no Reset control) rather than as a value the producer picked.
+ *
+ * @returns {{color: string, source: 'user'|'package'|'default'}[]}
+ */
+export function resolvePortColors(overrides, declared) {
+    return DEFAULT_PORT_COLORS.map((fallback, i) => {
+        if (overrides?.[i]) return { color: overrides[i], source: 'user' };
+        if (declared?.[i]) return { color: declared[i], source: 'package' };
+        return { color: fallback, source: 'default' };
+    });
+}
+
+/** resolvePortColors() against the live settings store, for a component. */
+export function usePortColors() {
+    const activeId = useSettingsStore(s => s?.overlays?.global?.designPackage) ?? FALLBACK_PACKAGE;
+    const overrides = useSettingsStore(useShallow(
+        s => PORT_COLOR_KEYS.map(k => s?.overlays?.global?.[k] ?? null),
+    ));
+    return resolvePortColors(overrides, packagePortColors(useDesignPackages(), activeId));
 }

@@ -43,6 +43,14 @@ Production stage.
 - A package = folder of per-element SVGs + optional `package.json`
   (`id`/`name`/`version`/`author`/`description`). Served at
   `/design/{pkg}/{element}.svg`.
+- **`portColors` is the one package-WIDE declaration** — `["#e53935", …]`,
+  ports 1-4, hex only, in the manifest rather than on an SVG root. Five mounts
+  tint their sides from the same controller-port palette (scoreboard,
+  scorecard, lower third, both callouts), so no element owns it. Resolution:
+  the producer's Design-tab choice → this → PRSH's built-in convention; there
+  is **no element-style fallback to `default`** (a package that says nothing
+  gets the app's palette, not another package's). See `public/design/README.md`
+  and `public/layout/lib/port-colors.js`.
 - Built-ins in `public/design/{default,classic}/` (repo); user packages in
   `user_data/design_packages/<id>/` (never in the repo). Install = zip upload
   on the Design tab or drop the folder in by hand.
