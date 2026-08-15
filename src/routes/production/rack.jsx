@@ -570,7 +570,7 @@ const CatalogSection = memo(function CatalogSection({
                         key={p.id} state={chipFor(p)} name={name} meta={detail}
                         nested={!!p.parent}
                         selected={selection === p.id} onSelect={() => onSelect(p.id)}
-                        quickAction={p.parent ? <FeedAction placement={p} /> : null}
+                        quickAction={p.slot ? <FeedAction placement={p} /> : null}
                         pinnable={isPinnable(p.element)} pinned={pinned.has(p.id)}
                         onPinToggle={() => onPinToggle(p.id)}
                     />
@@ -611,12 +611,21 @@ const SceneSection = memo(function SceneSection({
                 : rows.length
                     ? rows.map((p) => {
                         const { name, detail } = label(p);
+                        /*
+                         * `parent` and `slot` are two different questions and the
+                         * row asks both. INDENT is about the list — is there a row
+                         * above me I hang off — while the RADIO is about the
+                         * placement: a member's slot pushes, an own source shows
+                         * and hides (`isFedPlacement`, ../placements). They travel
+                         * together on a row either builder made, and part company
+                         * on one resolved from a stored id.
+                         */
                         return (
                             <RackRow
                                 key={p.id} state={chipFor(p)} name={name} meta={detail}
                                 nested={!!p.parent}
                                 selected={selection === p.id} onSelect={() => onSelect(p.id)}
-                                quickAction={p.parent
+                                quickAction={p.slot
                                     ? <FeedAction placement={p} />
                                     : <EyeAction placement={p} />}
                                 pinnable={isPinnable(p.element)} pinned={pinned.has(p.id)}

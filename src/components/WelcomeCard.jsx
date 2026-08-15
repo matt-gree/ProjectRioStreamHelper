@@ -184,8 +184,16 @@ export default function WelcomeCard() {
                                     ? 'Found — game data will sync automatically.'
                                     : 'Not found yet. Open Settings → Project Rio to set the path.'}
                             </ChecklistRow>
+                            {/* The Setup tab is GONE, and this pointed at it by
+                                name — `#/layouts` has been the Design tab since
+                                the layout browser's jobs moved onto the console
+                                (see routes/layouts/layouts.jsx). Adding a source
+                                and copying its URL are both the rack's + now, and
+                                naming it that way also stops the checklist from
+                                promising something that needs OBS: the Add picker
+                                opens without it, for Copy URL. */}
                             <ChecklistRow done={false} title="Add OBS browser sources">
-                                Open the <Anchor href="#/layouts" onClick={handleDismiss} style={{ color: '#ffb3b8' }}>Setup tab</Anchor> to copy URLs — or add sources straight to OBS — for scoreboards, brackets, and more.
+                                Open the <Anchor href="#/" onClick={handleDismiss} style={{ color: '#ffb3b8' }}>Production tab</Anchor> and hit the + beside a scene to add scoreboards, brackets and the rest — or copy their URLs to paste into OBS yourself.
                             </ChecklistRow>
                             <ChecklistRow done={tournamentLoaded} title="Tournament integration (optional)">
                                 Load a bracket from start.gg on the Competition tab.

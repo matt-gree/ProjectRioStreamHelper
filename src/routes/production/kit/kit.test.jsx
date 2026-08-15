@@ -50,8 +50,10 @@ describe('chipFor — the one status language', () => {
      * sharing one scene item, and one of them lying.
      */
     describe('a fed row is on air only if its container is carrying it', () => {
+        // A real slot row as either builder makes it: `slot` names the container
+        // it is a member of, `parent` is the row it nests under.
         const fed = (where, enabled, mine) =>
-            ({ ...at(where, enabled), parent: 'callout@Game', mine });
+            ({ ...at(where, enabled), slot: 'callout', parent: 'callout@Game', mine });
 
         it('is AIR when the container is up and the feed is mine', () => {
             expect(chipFor(fed('program', true, true))).toBe('air');
@@ -69,6 +71,20 @@ describe('chipFor — the one status language', () => {
         // The container itself keeps the plain reading — it IS the source.
         it('leaves the container row reading its own source', () => {
             expect(chipFor(at('program', true))).toBe('air');
+        });
+
+        /*
+         * WHICH KIND OF ROW THIS IS COMES FROM `slot`, the same field
+         * `isFedPlacement` reads — not `parent`. The two travel together on a row
+         * either builder produced, so the difference only shows on one RESOLVED
+         * from a stored id, which `sourcelessPlacement` rebuilds with its slot and
+         * no parent. Asked the old way, that row skipped the carrying test and
+         * could claim AIR for content the container is not showing.
+         */
+        it('reads a parentless slot row as fed all the same', () => {
+            const resolved = { ...at('program', true), slot: 'callout', mine: false };
+            expect(chipFor(resolved)).toBe('off');
+            expect(chipFor({ ...resolved, mine: true })).toBe('air');
         });
     });
 });

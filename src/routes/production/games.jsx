@@ -20,6 +20,7 @@ import {
     Table, TableHeader, TableBody, TableHead, TableRow, TableCell,
 } from '../../components/ui/table';
 import { cn } from '../../lib/utils';
+import { notifications } from '../../lib/notify';
 import { useSocketSubscribe } from '../../context/socket';
 import { useSettingsStore, useStateStore } from '../../context/store';
 import { stageOrRun } from '../../context/staging';
@@ -985,6 +986,14 @@ export const GamesSection = memo(function GamesSection({ sb, transport, gameMode
      * the PUT to echo back before the control moves — which reads as a locked
      * segmented while the server is busy fetching. Echo the click locally and
      * reconcile once the persisted value catches up.
+     *
+     * AN ECHO THAT OUTLIVES A FAILED WRITE IS A LIE, and this one had no way to
+     * end: the override cleared only when the server AGREED with it, so a PUT
+     * that 4xx'd or never landed left the segmented showing a mode the board is
+     * not in, for the rest of the session. On the one control that decides where
+     * a board's games come from, that is the worst possible thing to be wrong
+     * about. Drop back to the server's answer and say so — the same rule every
+     * other fire-and-forget write on the console follows.
      */
     const [modeOverride, setModeOverride] = useState(null);
     const mode = modeOverride ?? serverMode;
@@ -993,7 +1002,13 @@ export const GamesSection = memo(function GamesSection({ sb, transport, gameMode
     }, [serverMode, modeOverride]);
     const setMode = useCallback((next) => {
         setModeOverride(next);
-        fetch(`/api/v1/scoreboards/${sb}/binding?kind=${next}`, { method: 'PUT' }).catch(() => {});
+        const failed = (e) => {
+            setModeOverride(null);
+            notifications.show({ message: `Playback mode: ${e?.message || e}`, color: 'red' });
+        };
+        fetch(`/api/v1/scoreboards/${sb}/binding?kind=${next}`, { method: 'PUT' })
+            .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); })
+            .catch(failed);
     }, [sb]);
 
     // Transport is momentary — the same rule as Take and post-game capture. A

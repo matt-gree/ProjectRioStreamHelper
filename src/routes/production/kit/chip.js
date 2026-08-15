@@ -23,7 +23,7 @@
  * the producer can see what WILL come up when that scene does. Scene grouping
  * adds a coordinate to the vocabulary rather than a word to it.
  *
- * A FED element (a row nested under its container) takes both conditions. Its
+ * A FED element (a member's slot on a container) takes both conditions. Its
  * content reaches the broadcast only if the container source is up AND the
  * container is carrying THIS element's content — one container holds one feed.
  * Reading the container's enabled state alone is how Character Spotlight and
@@ -31,12 +31,19 @@
  * AIR keeps meaning exactly what it always meant; a fed element just has two
  * ways to not be on.
  *
+ * WHICH KIND OF ROW THIS IS COMES FROM `slot`, not `parent` — the one statement
+ * of that question lives in ../placements (`isFedPlacement`), and this asked it
+ * a second way. They agree for a row either builder produced, because those
+ * carry both; they part company on a row RESOLVED from a stored id, which
+ * `sourcelessPlacement` rebuilds with its slot and no parent. Two spellings of
+ * one fact is how the console's identity bugs have started every time.
+ *
  * Desk rows never derive — they pass state="desk" explicitly.
  */
 export function chipFor(placement) {
     // No source anywhere — the one case that isn't about scenes at all.
     if (!placement?.item) return 'unbound';
-    const live = placement.parent
+    const live = placement.slot
         ? placement.item.enabled && !!placement.mine
         : placement.item.enabled;
     if (placement.where === 'program') return live ? 'air' : 'off';
