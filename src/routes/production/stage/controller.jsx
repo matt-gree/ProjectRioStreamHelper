@@ -50,10 +50,10 @@ const UrlRow = memo(function UrlRow({ label, url, disabled }) {
     );
 });
 
-export default function ControllerStage({ element }) {
+export default function ControllerStage({ element, placement }) {
     return (
         <>
-            <DirectStage element={element} />
+            <DirectStage element={element} placement={placement} />
             <ControllerContent />
         </>
     );

@@ -132,10 +132,19 @@ export const FeedContentPicker = memo(function FeedContentPicker({ element, fed 
     return null;
 });
 
-// Plain direct element (e.g. scoreboard): its one control — show/hide — lives
-// in the header strip, so the body is left saying what the panel is wired to.
-// An element that draws a PICK carries that pick here, because on its own
-// source the pick is the content.
+/*
+ * Plain direct element (e.g. scoreboard): its one control — show/hide — lives
+ * in the header strip, so the body is left saying what the panel is wired to.
+ * An element that draws a PICK carries that pick here, because on its own
+ * source the pick is the content.
+ *
+ * A BODY THAT WRAPS THIS MUST FORWARD `placement`. `stage/index.jsx` hands every
+ * body `element`, `board` and `placement`, and for a while all nine bodies
+ * destructured only `element` — so `BindingNote` read undefined and told every
+ * bound overlay in the console it "isn't in any scene we can see", pointing at a
+ * Bind that had already happened. Nothing caught it because the note renders
+ * either way; it just says the wrong thing. Take the prop.
+ */
 export const DirectStage = memo(function DirectStage({ element, board, placement }) {
     return (
         <>

@@ -37,7 +37,10 @@ import ContainerStage from './container';
  * the page shell (they move into ../desks/ in the next slice).
  */
 
-const STAGE_BODIES = {
+// Exported for `generic.test.jsx`, which renders every one of them to hold the
+// rule that a body forwards its `placement` — a guard is only a guard if it
+// covers the body added after it was written.
+export const STAGE_BODIES = {
     hitvisualizer: HitVisualizerStage,
     matchuphistory: MatchupStage,
     schedule: ScheduleStage,

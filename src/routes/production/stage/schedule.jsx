@@ -79,13 +79,13 @@ const ScheduleTimeField = memo(function ScheduleTimeField({ m, initial }) {
     );
 });
 
-export default function ScheduleStage({ element }) {
+export default function ScheduleStage({ element, placement }) {
     const queue = useQueueOrder();
     const matches = useStateStore(useShallow(s => s?.match ?? {}));
 
     return (
         <>
-            <DirectStage element={element} />
+            <DirectStage element={element} placement={placement} />
             <ScheduleHeading />
             {queue.length === 0 ? (
                 <Text size="xs" className="text-muted-foreground">

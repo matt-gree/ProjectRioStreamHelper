@@ -51,12 +51,12 @@ export const ScorecardModeRow = memo(function ScorecardModeRow({ sc }) {
     return <OverlaySettingRow os={sc.os} def={def} />;
 });
 
-export default function ScorecardStage({ element, board }) {
+export default function ScorecardStage({ element, board, placement }) {
     const sc = useScorecard(board);
 
     return (
         <>
-            <DirectStage element={element} board={board} />
+            <DirectStage element={element} board={board} placement={placement} />
 
             <div className="mt-1 flex flex-col gap-3 border-t border-border/60 pt-2">
                 <OverlaySettingGroups os={sc.os} type="scorecard" />

@@ -24,11 +24,11 @@ import { BracketPhasePicker, useBracketDesk } from '../bracket';
  * as the Competition tab's own selector.
  */
 
-export default function BracketStage({ element }) {
+export default function BracketStage({ element, placement }) {
     const d = useBracketDesk();
     return (
         <>
-            <DirectStage element={element} />
+            <DirectStage element={element} placement={placement} />
             <BracketPhasePicker desk={d} />
             <ActionRow actions={[
                 {

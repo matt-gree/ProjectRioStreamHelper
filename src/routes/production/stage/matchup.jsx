@@ -16,10 +16,10 @@ import { DirectStage } from './generic';
  * content, so both route through the staging gateway (one entry,
  * key 'matchup:fetch').
  */
-export default function MatchupStage({ element }) {
+export default function MatchupStage({ element, placement }) {
     return (
         <>
-            <DirectStage element={element} />
+            <DirectStage element={element} placement={placement} />
             <MatchupContent />
         </>
     );

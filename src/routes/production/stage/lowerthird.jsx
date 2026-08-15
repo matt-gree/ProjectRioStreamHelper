@@ -439,14 +439,14 @@ const SlotEditor = memo(function SlotEditor({ i }) {
     );
 });
 
-export default function LowerThirdStage({ element }) {
+export default function LowerThirdStage({ element, placement }) {
     // Which slot the editor below is showing. Transient view state, not a
     // broadcast value — it never goes near State or the staging gateway.
     const [selected, setSelected] = useState(1);
 
     return (
         <Stack gap="sm">
-            <DirectStage element={element} />
+            <DirectStage element={element} placement={placement} />
 
             <Stack gap="none">
                 <BandRibbon selected={selected} onSelect={setSelected} />

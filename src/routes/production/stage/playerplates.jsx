@@ -130,7 +130,7 @@ const PlayerPlateSide = memo(function PlayerPlateSide({ t, pp }) {
     );
 });
 
-export default function PlayerPlatesStage({ element }) {
+export default function PlayerPlatesStage({ element, placement }) {
     const pp = usePlayerPlates();
     const { config } = pp;
     const ids = useMemo(() => matchIds(pp.matches), [pp.matches]);
@@ -139,7 +139,7 @@ export default function PlayerPlatesStage({ element }) {
 
     return (
         <>
-            <DirectStage element={element} />
+            <DirectStage element={element} placement={placement} />
             {pp.staged && (
                 <Group gap="xs" className="items-center">
                     <StagedDot show />

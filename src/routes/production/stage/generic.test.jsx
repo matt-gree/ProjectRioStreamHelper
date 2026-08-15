@@ -1,8 +1,10 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
 import { useStateStore } from '../../../context/store';
+import { TooltipProvider } from '../../../components/ui/tooltip';
 import { ELEMENTS } from '../elements';
 import { ReadinessNote } from './generic';
+import { STAGE_BODIES } from './index';
 
 afterEach(() => {
     cleanup();
@@ -59,4 +61,35 @@ describe('ReadinessNote', () => {
         const { container } = render(<ReadinessNote element={el('lowerthird')} board={1} />);
         expect(container).toBeEmptyDOMElement();
     });
+});
+
+/*
+ * EVERY STAGE BODY MUST FORWARD `placement`.
+ *
+ * `stage/index.jsx` hands each body `element`, `board` and `placement`, and for
+ * a while all nine destructured only `element` — so `BindingNote` read undefined
+ * and told every bound overlay in the console it "isn't in any scene we can
+ * see", pointing at a Bind that had already happened. Nothing caught it because
+ * the note renders either way; it just says the wrong thing.
+ *
+ * Rendering all nine is what makes this a guard rather than nine assertions: a
+ * tenth body is covered the day it joins the map.
+ */
+describe('a stage body names the source it is driving', () => {
+    const bound = {
+        item: { sourceName: 'obs-scoreboard', url: '' },
+        scene: 'Game', where: 'program', board: 1,
+    };
+
+    for (const [id, Body] of Object.entries(STAGE_BODIES)) {
+        it(`${id} forwards the placement to its binding note`, () => {
+            render(
+                <TooltipProvider>
+                    <Body element={el(id) ?? { id, name: id }} board={1} placement={bound} />
+                </TooltipProvider>
+            );
+            expect(screen.getByText('obs-scoreboard'), id).toBeInTheDocument();
+            expect(screen.queryByText(/isn’t in any scene/), id).not.toBeInTheDocument();
+        });
+    }
 });

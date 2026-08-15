@@ -53,10 +53,6 @@ export const EventHeaderBandRows = memo(function EventHeaderBandRows({ os }) {
     return <OverlaySettingRows os={os} type="eventheader" keys={BAND_KEYS} />;
 });
 
-// `placement` is threaded through to DirectStage on purpose: BindingNote reads
-// `binding.item` to name the source and scene this panel commands, and a body
-// that drops the prop leaves it permanently telling a bound element it "isn't
-// in any scene we can see".
 export default function EventHeaderStage({ element, placement }) {
     const os = useEventHeader();
     const info = useStateStore(useShallow(s => s?.tournamentInfo ?? {}));

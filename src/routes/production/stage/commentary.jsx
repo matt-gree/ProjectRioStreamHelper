@@ -133,12 +133,12 @@ const CasterRow = memo(function CasterRow({ i, slot, desk }) {
     );
 });
 
-export default function CommentaryStage({ element }) {
+export default function CommentaryStage({ element, placement }) {
     const desk = useCommentaryDesk();
 
     return (
         <>
-            <DirectStage element={element} />
+            <DirectStage element={element} placement={placement} />
             {desk.staged && (
                 <Group gap="xs" className="items-center">
                     <StagedDot show />
