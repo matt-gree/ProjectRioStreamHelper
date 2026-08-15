@@ -113,6 +113,40 @@ describe('SocketProvider', () => {
         expect(useStateStore.getState().getItem('echo')).toBeUndefined();
     });
 
+    /*
+     * ECHO SUPPRESSION IS ABOUT WHAT WE WROTE, AND `augmented` IS NOT THAT.
+     *
+     * A server write-path hook decides things off our write and rides them back
+     * in the same frame (server/state.py `_augment`). They used to be mixed into
+     * `items`, so the sid guard dropped them — and the live case was the worst
+     * one: a producer's Push made the automation engine answer with
+     * `production.feed.reason.{container} = manual`, and that producer's console
+     * went on reporting the container as resting (rules still running) while
+     * every other browser had it right.
+     */
+    it('takes the server’s augmented keys even on its own echo', async () => {
+        await renderProvider();
+        h.socket.server('v1.state.set_batch', {
+            sid: h.socket.id,
+            items: [{ key: 'production.feed.container.c', value: { element: 'stats' } }],
+            augmented: [{ key: 'production.feed.reason.c', value: 'manual' }],
+        });
+        await waitFor(() =>
+            expect(useStateStore.getState().getItem('production.feed.reason.c')).toBe('manual'));
+        // …and still not the half we wrote ourselves.
+        expect(useStateStore.getState().getItem('production.feed.container.c')).toBeUndefined();
+    });
+
+    it('takes both lists from another client’s frame', async () => {
+        await renderProvider();
+        h.socket.server('v1.state.set_batch', {
+            items: [{ key: 'theirs', value: 1 }],
+            augmented: [{ key: 'derived', value: 2 }],
+        });
+        await waitFor(() => expect(useStateStore.getState().getItem('derived')).toBe(2));
+        expect(useStateStore.getState().getItem('theirs')).toBe(1);
+    });
+
     it('applies v1.state.unset and unset_batch', async () => {
         h.socket.rpc['v1.state.get'] = { score: { 1: { a: 1, b: 2, c: 3 } } };
         await renderProvider();

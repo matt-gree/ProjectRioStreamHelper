@@ -94,10 +94,27 @@ export const SocketProvider = ({children}) => {
             scheduleFlush();
         }
 
+        /*
+         * ECHO SUPPRESSION IS ABOUT WHAT *WE* WROTE, AND `augmented` IS NOT THAT.
+         *
+         * A write-path hook on the server decides things OFF our write and rides
+         * them back in the same frame (server/state.py `_augment`) — the
+         * automation engine answering a Push with
+         * `production.feed.reason.{container} = manual` is the live case. Those
+         * keys are the server's answer, not our echo, so dropping the whole frame
+         * on a session-id match swallowed them: the pushing producer's own console
+         * kept reporting the container as resting — rules still running — while
+         * every other browser had it right. Skip our own items; always take the
+         * augmented ones.
+         */
         const doBatchSet = (resp) => {
-            if("sid" in resp && resp.sid === socket.id) return;
-            if(resp.items && resp.items.length > 0) {
-                for (const item of resp.items) {
+            const own = "sid" in resp && resp.sid === socket.id;
+            const items = [
+                ...(own ? [] : (resp.items ?? [])),
+                ...(resp.augmented ?? []),
+            ];
+            if (items.length > 0) {
+                for (const item of items) {
                     pending.push({ kind: 'set', key: item.key, value: item.value });
                 }
                 scheduleFlush();

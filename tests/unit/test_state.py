@@ -233,7 +233,10 @@ async def test_a_hook_folds_its_entries_into_the_same_batch(mock_socket):
     assert "derived" in State.changed_keys      # persisted by the caller's Save
     assert mock_socket.await_count == 1
     _, payload = mock_socket.await_args.args
-    assert payload["items"][-1] == {"key": "derived", "value": 2}
+    # Same frame, its own list — the caller's items stay the caller's, so a
+    # client can suppress its own echo without swallowing the hook's answer.
+    assert payload["items"] == [{"key": "a", "value": 1}, {"key": "b", "value": 2}]
+    assert payload["augmented"] == [{"key": "derived", "value": 2}]
 
 
 async def test_a_hook_reads_the_post_write_world():
@@ -262,7 +265,12 @@ async def test_a_single_set_with_an_addition_becomes_a_batch_frame(mock_socket):
     assert mock_socket.await_count == 1
     event, payload = mock_socket.await_args.args
     assert event == "v1.state.set_batch"
-    assert payload["items"] == [{"key": "a", "value": 1}, {"key": "extra", "value": True}]
+    # ONE frame, TWO lists. See `_augment`: a client suppresses the echo of its
+    # own `items` by session id, and a hook's entries are the server's answer to
+    # that write rather than the client's own — mixed in, they were dropped by
+    # the one client that needed them most.
+    assert payload["items"] == [{"key": "a", "value": 1}]
+    assert payload["augmented"] == [{"key": "extra", "value": True}]
 
 
 async def test_a_set_with_no_hook_addition_keeps_its_single_frame(mock_socket):

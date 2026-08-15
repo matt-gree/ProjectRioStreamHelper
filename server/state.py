@@ -312,6 +312,19 @@ class State:
 
         Hooks must NOT call Set/SetBatch themselves; they return entries. That is
         what keeps this non-reentrant.
+
+        WHAT THEY RETURN IS EMITTED SEPARATELY, under `augmented` rather than
+        mixed into `items`, and that separation is load-bearing. A client
+        suppresses the echo of its OWN frame by session id (src/context/socket.jsx)
+        — which is right for the keys it just wrote and wrong for these, because a
+        hook's entries are not the client's write at all: they are the server's
+        answer to it. Folded into `items`, every one of them was dropped by the
+        one client that most needed it. A producer's Push writes the container
+        feed, the automation engine answers with `production.feed.reason.{id} =
+        manual`, and that producer's console went on saying "resting" — i.e. that
+        the rules were still running — until something else happened to write the
+        key or the page was reloaded. Every other browser had it right, which is
+        what made it read as flaky rather than as wrong.
         """
         if not cls.hooks:
             return []
@@ -346,8 +359,8 @@ class State:
             # batch one — every consumer handles both, and splitting it into two
             # frames would put the trigger on air a frame before its consequence.
             await socketio.emit('v1.state.set_batch', {
-                "items": [{"key": key, "value": value}]
-                         + [{"key": k, "value": v} for k, v in added],
+                "items": [{"key": key, "value": value}],
+                "augmented": [{"key": k, "value": v} for k, v in added],
                 "sid": session_id
             })
             return
@@ -372,12 +385,13 @@ class State:
             cls.changed_keys.append(key)
             items.append({"key": key, "value": value})
 
-        # Anything a hook decides off this write rides the SAME frame.
-        for key, value in await cls._augment(entries):
-            items.append({"key": key, "value": value})
+        # Anything a hook decides off this write rides the SAME frame, in its own
+        # list — see `augmented` below.
+        augmented = [{"key": k, "value": v} for k, v in await cls._augment(entries)]
 
         await socketio.emit('v1.state.set_batch', {
             "items": items,
+            "augmented": augmented,
             "sid": session_id
         })
 

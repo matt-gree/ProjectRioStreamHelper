@@ -202,6 +202,7 @@ API routes live in `server/api/v1/` — decorate with `@method` and register in 
 ### SocketIO Events
 
 - `v1.state.set` / `v1.state.set_batch` (+ `unset` variants) — state updates (server → clients). **Every consumer must handle both** — overlays get this for free via `OverlayBase.init`.
+- **A `set_batch` frame has TWO lists: `items` and `augmented`.** `items` is what the caller wrote; `augmented` is what a write-path hook (`State._augment` — today the container automation engine) decided *off* that write, riding the same frame so a consequence never lands a frame after its trigger. The split exists because a client suppresses the echo of its **own** frame by `sid`, and a hook's entries are not its write — they are the server's answer to it. Mixed into `items` they were dropped by the one client that needed them most: a producer's Push got `production.feed.reason.{container} = manual` back and never saw it, so their console kept reporting the container as *resting* — rules still running — while every other browser had it right. **Every consumer must read both lists** (`src/context/socket.jsx`, `public/layout/lib/overlay-base.js`).
 - `v1.settings.set` — settings updates (bidirectional).
 - `v1.state.get` — client requests full state on connect.
 - `v1.action` — ephemeral action cues (see action bus).

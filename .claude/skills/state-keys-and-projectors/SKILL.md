@@ -34,13 +34,30 @@ Critical semantics:
 - Consumers must handle **both** `v1.state.set` and `v1.state.set_batch` (plus
   the unset variants). Overlays get this for free via `OverlayBase.init`;
   anything hand-rolled must implement all four.
+- **A `set_batch` frame carries TWO lists, and a consumer must read both.**
+  `items` is what the caller wrote; `augmented` is what a write-path hook decided
+  off it (below). Echo suppression applies to `items` **only** — see the hook
+  section for why that separation is load-bearing.
 
 ## Write-path hooks (`State.hooks` / `State.unset_hooks`)
 
 A hook is `async (entries) -> [(key, value), ...]`. It runs **after** the write
 has landed in `state` (so it reads the post-write world) and **before** the
-socket emit, and whatever it returns is folded into the **same** batch — one
-frame, one diff cycle, the latency of the triggering write.
+socket emit, and whatever it returns rides the **same** frame — one frame, one
+diff cycle, the latency of the triggering write.
+
+**It rides that frame in its own list, `augmented`, never mixed into `items`,
+and that is not cosmetic.** A frontend client suppresses the echo of its own
+frame by session id, which is right for the keys it just wrote and wrong for
+these: a hook's entries are not the client's write, they are the server's
+*answer* to it. Folded into `items`, every one was dropped by the one client that
+needed it most — a producer's Push wrote the container feed, the automation
+engine answered `production.feed.reason.{id} = manual`, and that producer's
+console went on saying the container was *resting* (i.e. that the rules were
+still running) until something else wrote the key or the page was reloaded.
+Every other browser had it right, which is what made it read as flaky rather
+than as wrong. Pinned on both sides: `tests/unit/test_state.py` (the frame's
+shape) and `src/context/socket.test.jsx` (own-echo still takes `augmented`).
 
 ```python
 State.hooks.append(Automations.on_write)          # may add entries

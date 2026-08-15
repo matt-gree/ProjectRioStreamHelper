@@ -116,8 +116,10 @@ async def test_the_feed_lands_in_the_same_batch_as_its_trigger(rule, mock_socket
     assert len(frames) == 1, frames
     event, payload = frames[0].args
     assert event == "v1.state.set_batch"
-    keys = [item["key"] for item in payload["items"]]
-    assert TRIGGER in keys and FEED in keys and REASON in keys
+    # One frame, but the engine's half rides `augmented` — a producer's client
+    # suppresses the echo of its own `items`, and the reason is not their write.
+    assert TRIGGER in [item["key"] for item in payload["items"]]
+    assert {FEED, REASON} <= {item["key"] for item in payload["augmented"]}
 
 
 async def test_the_mirrored_side_shows_the_pitcher(container, set_setting):

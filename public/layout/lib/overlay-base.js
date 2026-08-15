@@ -495,10 +495,15 @@
       if (liveKeyChanged(msg.key)) render();
     });
 
+    // `augmented` is what a server write-path hook decided off this write
+    // (server/state.py `_augment`) — carried separately from `items` so a client
+    // suppressing its OWN echo still gets it. An overlay never writes state, so
+    // the sid guard never fires here; it still has to read both lists, or a
+    // hook-added key would simply never arrive.
     socket.on('v1.state.set_batch', (msg) => {
       if (msg.sid === socket.id) return;
       let needs = false;
-      for (const item of msg.items) {
+      for (const item of [...(msg.items || []), ...(msg.augmented || [])]) {
         const op = { kind: 'set', key: item.key, value: item.value };
         if (statePending) stateBuffer.push(op);
         applyStateOp(op);
