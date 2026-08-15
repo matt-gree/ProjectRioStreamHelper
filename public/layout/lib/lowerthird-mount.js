@@ -119,8 +119,17 @@ const FALLBACK_SVG = `
 </svg>`;
 
 const CSS = `
-.lt-host { position: fixed; inset: 0; }
-.lt-host svg { width: 100%; height: 100%; display: block; }
+.lt-host { position: fixed; inset: 0; overflow: hidden; }
+/* The theme's own box decides the height, and it is pinned to the BOTTOM of the
+   source — the same arrangement as the Commentary strip, and for the same
+   reason: vertical placement is a scene decision, so the source is the size of
+   the thing in it, not the size of the stream. A band-native theme fills the
+   source exactly; a theme authored on the full 1920x1080 canvas (Classic,
+   Slice26, and the fallback below) hangs its empty upper canvas out of the top
+   where overflow crops it, landing the band in the same place it always was.
+   Height 100% would instead have made preserveAspectRatio "meet"-fit a
+   1080-tall theme into a 320-tall source and shrink it to a third of its size. */
+.lt-host svg { position: absolute; left: 0; bottom: 0; width: 100%; height: auto; display: block; }
 .lt-host.lt-reveal { animation: lt-rise 0.55s cubic-bezier(0.16, 1, 0.3, 1) both; }
 .lt-host.lt-off { opacity: 0 !important; }
 @keyframes lt-rise { from { opacity: 0; transform: translateY(36px); } to { opacity: 1; transform: translateY(0); } }

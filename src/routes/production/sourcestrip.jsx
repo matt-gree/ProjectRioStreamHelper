@@ -14,6 +14,7 @@ import { sizeOptionFor } from './elements';
 import { useActiveBoards } from './boards';
 import { useContainerPush } from './feeds';
 import { useContainerOf, useSharedContainers } from './containers';
+import { isFedPlacement } from './placements';
 import { StagedDot } from './controls';
 
 /*
@@ -36,12 +37,16 @@ import { StagedDot } from './controls';
  * browser source in OBS") is gone — the panel that told you what to do now
  * does it.
  *
- * WHICH SOURCE the strip acts on follows flavor, and this is the whole reason
- * one strip can serve both:
- *   direct → the element's own dedicated source.
- *   fed    → the SHARED CONTAINER it feeds. "On air" for a fed element has
- *            never meant anything else, and Push is the slot that distinguishes
- *            its content from the container carrying it.
+ * WHICH SOURCE the strip acts on follows the PLACEMENT, and this is the whole
+ * reason one strip can serve both:
+ *   its own row  → the element's own dedicated source.
+ *   a container  → the SHARED CONTAINER it is a member of. "On air" for a
+ *                  member has never meant anything else, and Push is the slot
+ *                  that distinguishes its content from the container carrying
+ *                  it.
+ * Not the element: a member that owns a source is both, one row each, and
+ * asking the element answered with whichever kind it was declared as — which
+ * is how a dedicated source ended up wearing a Push (see placementFlavor).
  *
  * The strip is a STAGE surface. Rail cards keep their quick face (visibility as
  * row one) — a QuickCard header is 8px shorter and already spoken for. Both
@@ -66,7 +71,7 @@ function useBindTarget(element, board, placement) {
     const boards = useActiveBoards();
     const { container } = useContainerOf(element);
     const variant = placement?.variant ?? '';
-    if (element.flavor === 'direct') {
+    if (!isFedPlacement(placement)) {
         // Board-scoped: create the source for the board the panel is pointed at.
         // Suffix the name only on a multi-board rig — otherwise the producer
         // gets two identically-named sources they can tell apart only by opening
@@ -86,7 +91,11 @@ function useBindTarget(element, board, placement) {
             height: dims.height,
         };
     }
-    const entry = containers.find(c => c.id === container);
+    // The row's OWN container, not a lookup from the element: a
+    // container-scoped member may sit on several rosters (that exception is
+    // what makes a mirrored pair buildable), so asking `useContainerOf` here is
+    // a coin flip between the two sides.
+    const entry = containers.find(c => c.id === (placement?.slot ?? container));
     return {
         inputName: entry?.name || element.name,
         url: entry?.url || element.url,
@@ -209,8 +218,8 @@ const AirSlot = memo(function AirSlot({ binding }) {
  * per element is the mishmash this contract exists to end — one that stays put
  * and goes honestly grey is not.
  */
-const PushSlot = memo(function PushSlot({ element }) {
-    const { mine, staged, canPush, toggle } = useContainerPush(element);
+const PushSlot = memo(function PushSlot({ element, container }) {
+    const { mine, staged, canPush, toggle } = useContainerPush(element, 1, container);
     return (
         <>
             <StagedDot show={staged} />
@@ -253,13 +262,21 @@ const PushSlot = memo(function PushSlot({ element }) {
  * makes it scannable — that its position always means the same three verbs.
  */
 export const SourceStrip = memo(function SourceStrip({ element, board, placement }) {
-    const direct = element.flavor === 'direct';
+    /*
+     * PUSH IS A SLOT'S VERB, NOT AN ELEMENT'S. It renders for a row that IS a
+     * member's place on a container — where handing the container this
+     * element's content is the only thing "putting it up" can mean. The same
+     * element's own dedicated source has nothing to push into and gets the eye
+     * alone; it used to get a Push aimed at whichever container claimed the
+     * element, or at none, which is how the Character Spotlight's own panel
+     * ended up offering a button whose only outcome was an explanation.
+     */
     return (
         <div className="flex shrink-0 items-center gap-1.5">
             {placement?.item
                 ? <AirSlot binding={placement} />
                 : <BindSlot element={element} board={board} placement={placement} />}
-            {!direct && <PushSlot element={element} />}
+            {isFedPlacement(placement) && <PushSlot element={element} container={placement.slot} />}
         </div>
     );
 });

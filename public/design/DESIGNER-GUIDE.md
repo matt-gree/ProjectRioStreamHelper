@@ -68,10 +68,13 @@ don't):
 | Scoreboard (xs / s / m / l) | 400×50 · 500×80 · 600×200 · 800×460 |
 | Stat card | 452×118 |
 | Results ticker | 1920×80 |
-| Everything full-screen (matchup, lower third, commentary, callout, …) | 1920×1080 |
+| Bands (commentary · player plates · lower third · matchup) | 1920×240 · 240 · 320 · 480 |
+| Everything full-screen (scorecard, callout, …) | 1920×1080 |
 
-For the full-screen bands, put your artwork where it sits on the 1920×1080
-stream (the matchup band hugs the bottom, etc.) — copy the built-in's frame.
+The bands may also be drawn on the full 1920×1080 stream canvas — put the
+artwork where it sits on the stream (they all hug the bottom) and the mount
+pins it to the bottom of the source and crops the empty canvas above it. Either
+way, copy the built-in's frame.
 
 ---
 

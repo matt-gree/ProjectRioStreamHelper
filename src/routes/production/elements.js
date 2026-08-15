@@ -6,14 +6,25 @@
  *                      listed on the Production page under the OBS scene its
  *                      source lives in.
  *   - Direct element : owns a DEDICATED source; fire = show/hide it.
- *   - Fed element    : has no source of its own — its content is pushed into a
- *                      CONTAINER, the one whose roster names it (./containers).
- *                      Membership lives on the container and is exclusive; an
+ *   - Fed element    : has no source of its own AT ALL — the Stat Card and the
+ *                      fed Stats bar are container members and nothing else, so
+ *                      a container is the only place their content can go. An
  *                      element on no roster has nowhere to be pushed, which is a
  *                      real state every surface reports rather than defaulting
  *                      around. A `feed` kind additionally names a content picker
  *                      ('stats' = which roster character), and the pick is
  *                      written to `production.feed.container.{id}`.
+ *
+ * FLAVOR IS THE FLOOR, AND THE PLACEMENT IS THE ANSWER. Being fed is a property
+ * of WHERE a source is, not of what an element is: a member sitting on a
+ * container's roster rows under that container and pushes into it, and the same
+ * element's own dedicated source rows on its own and just shows and hides. Both
+ * are real at once — that is what `containerHostable` has always meant for the
+ * hit visualizer, and what the two post-game callouts now mean too. So `flavor`
+ * answers only "does it own a source of its own"; ./placements decides which
+ * kind of row you are looking at, and every surface branches on the placement
+ * (see placementFlavor there). An element that is `fed` has one possible answer,
+ * which is why the floor still earns a name.
  *
  * Binding is by URL: each element matches the streamer's OBS browser source(s)
  * whose URL is its PRSH layout, so there's no manual wiring in the common case.
@@ -228,17 +239,35 @@ export const ELEMENTS = [
         // Post-game only: the full-screen per-character callout — identity column
         // (hero art, team-logo badge, H-AB premier stat, batting/pitching/defense
         // boxes) around an embedded hit-visualizer AB Theater that replays every
-        // plate appearance and ends holding on the spray chart. Fed like Stats —
-        // the producer picks which side + roster slot; the pick is written to the
-        // chosen container's feed key (production.feed.container.<id> =
-        // { element:'postgamecallout', … }). Reads postgame.{N}.* plus the
-        // REST-only GET /postgame/abs walkthrough payload. Native 1920×1080.
-        flavor: 'fed',
+        // plate appearance and ends holding on the spray chart. Reads
+        // postgame.{N}.* plus the REST-only GET /postgame/abs walkthrough
+        // payload. Native 1920×1080.
+        //
+        // DIRECT, AND ALSO A CONTAINER MEMBER — the same shape as the hit
+        // visualizer. It was fed-only, on the reasoning that it shares the
+        // Callout Stage with the Game Summary; but sharing is what a container
+        // is FOR, not what an element is, and an element no roster claimed had
+        // nowhere to go at all: its panel offered a Push into nothing. Its own
+        // source is the ordinary case now, and a producer who wants the two
+        // callouts mutually exclusive puts both on one container's roster,
+        // which is the sentence that arrangement is supposed to mean.
+        //
+        // `feed` still names the content picker ('postgamecallout' = which side
+        // + roster slot). The pick is the element's standing INTENT
+        // (production.feed.last.postgamecallout) either way — on its own source
+        // that intent IS what the overlay draws, and on a container it is what
+        // Push sends. One pick, one answer, wherever it ends up.
+        flavor: 'direct',
         feed: 'postgamecallout',
-        url: '/layout/shared/callout-stage.html',
+        url: '/layout/postgame/spotlight.html',
         width: 1920,
         height: 1080,
-        match: (url) => /callout-stage/i.test(url) || /callout/i.test(url),
+        // Anchored to the layout, not the word "callout": the old matcher also
+        // answered to the shared callout-stage shell, which is a CONTAINER —
+        // and a container that identified as one of its own occupants would row
+        // twice and drive the wrong source.
+        match: (url) => /\/layout\/postgame\/spotlight/i.test(url),
+        containerHostable: true,
     },
     {
         id: 'postgamevs',
@@ -246,16 +275,20 @@ export const ELEMENTS = [
         // Post-game only: the full-screen player-vs-player end-of-game callout —
         // both captains with team logos, the match context (tournament · round ·
         // series) top-center, and the side totals (runs / hits / homeruns /
-        // stars won / strikeouts pitched) unfolding from the center line. Fed
-        // into the same Callout Stage as the Stat Callout: pushing writes
-        // production.feed.container.<id> = { element:'postgamevs', scoreboard }.
-        // Reads postgame.{N}.player.{T}.totals (Phase 6 capture). 1920×1080.
-        flavor: 'fed',
+        // stars won / strikeouts pitched) unfolding from the center line. Reads
+        // postgame.{N}.player.{T}.totals (Phase 6 capture). 1920×1080.
+        //
+        // Direct + container member, for the same reasons as the Character
+        // Spotlight above. Nothing to pick — a summary is the whole game — so
+        // its content is the board's capture and `?scoreboard=` is all that
+        // scopes it.
+        flavor: 'direct',
         feed: 'postgamevs',
-        url: '/layout/shared/callout-stage.html',
+        url: '/layout/postgame/summary.html',
         width: 1920,
         height: 1080,
-        match: (url) => /callout-stage/i.test(url) || /callout/i.test(url),
+        match: (url) => /\/layout\/postgame\/summary/i.test(url),
+        containerHostable: true,
     },
     {
         id: 'lowerthird',
@@ -266,11 +299,13 @@ export const ELEMENTS = [
         // bracket. Direct element (own dedicated source); everything lives on
         // the face — each slot row is a type picker + on/off that expands in
         // place to that slot's content editor (no gear). Slot widths/looks
-        // belong to the design package. Native 1920×1080.
+        // belong to the design package. Native 1920×320 — the band's own box,
+        // not the stream canvas: vertical placement is a scene decision, and
+        // the mount bottom-anchors a full-canvas theme inside it.
         flavor: 'direct',
         url: '/layout/lowerthird/lowerthird.html',
         width: 1920,
-        height: 1080,
+        height: 320,
         match: (url) => /lowerthird/i.test(url),
     },
     {
@@ -294,11 +329,13 @@ export const ELEMENTS = [
         // match's two participants, fetched from the Project Rio API into the
         // singleton matchup.* state (POST /matchup/fetch). Direct element; SVG
         // themed via the active
-        // design package (/design/{pkg}/matchup.svg). Native 1920×1080.
+        // design package (/design/{pkg}/matchup.svg). Native 1920×480 — the
+        // band's own box, not the stream canvas: vertical placement is a scene
+        // decision, and the mount bottom-anchors a full-canvas theme inside it.
         flavor: 'direct',
         url: '/layout/matchup/matchup.html',
         width: 1920,
-        height: 1080,
+        height: 480,
         match: (url) => /\/layout\/matchup\//i.test(url) || /matchup\.html/i.test(url),
     },
     {

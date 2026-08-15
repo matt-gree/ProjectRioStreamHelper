@@ -94,22 +94,25 @@ describe('previewUrl', () => {
 });
 
 /*
- * A fed element has NO source of its own — Character Spotlight and Game Summary
- * are both registered at /layout/shared/callout-stage.html, and the container
- * draws whichever occupant is fed to it. So `previewUrl` returns the same URL
- * for both, and the container in PREVIEW_MODE hardcodes ONE occupant: every
- * Callout Stage preview drew Character Spotlight, whatever panel it was under.
+ * A member's SLOT has no source of its own: its row's source IS the container,
+ * and the container draws whichever occupant is fed to it. So `previewUrl`
+ * returns the same URL for every member of one container, and a container in
+ * PREVIEW_MODE hardcodes ONE occupant: every Callout Stage preview drew
+ * Character Spotlight, whatever panel it was under.
  *
  * `?feed=` is how a preview names the occupant it wants. The container honours
- * it (callout-stage.html) and falls back to its hardcoded default, so a bare
- * ?preview=1 from the Setup catalog is unchanged.
+ * it (container.html / callout-stage.html) and falls back to its own default,
+ * so a bare ?preview=1 from the Add picker is unchanged.
+ *
+ * The element's OWN source names nobody — it isn't a container, and ?feed=
+ * there would be a param its layout never reads.
  */
 describe('previewUrl — a fed element names the occupant it wants', () => {
     const CALLOUT = 'http://x/layout/shared/callout-stage.html';
     const fedAt = (carrying) => ({
         item: { id: 3, sourceName: 'Callout', url: CALLOUT, enabled: true },
         scene: 'Game', where: 'program', parent: 'callout@Game',
-        container: 'callout-stage', carrying,
+        container: 'callout-stage', slot: 'callout-stage', carrying,
     });
 
     it('asks the container for THIS element, not whatever is fed', () => {
@@ -124,6 +127,25 @@ describe('previewUrl — a fed element names the occupant it wants', () => {
         const a = previewUrl(el('postgamevs'), null, fedAt(null));
         const b = previewUrl(el('postgamecallout'), null, fedAt(null));
         expect(a).not.toBe(b);
+    });
+
+    /*
+     * …and the same element's OWN source is not a container, so it names
+     * nobody. It reads its pick out of state itself (the spotlight layout
+     * renders `production.feed.last.postgamecallout`), and a ?feed= there would
+     * be the preview telling the overlay something it already knows.
+     */
+    it('names no occupant on the element’s own dedicated source', () => {
+        const own = {
+            item: {
+                id: 4, sourceName: 'Spotlight', enabled: true,
+                url: 'http://x/layout/postgame/spotlight.html',
+            },
+            scene: 'Game', where: 'program',
+        };
+        const url = previewUrl(el('postgamecallout'), null, own);
+        expect(url).toContain('/layout/postgame/spotlight.html');
+        expect(url).not.toContain('feed=');
     });
 
     // The container's own row shows what it is really carrying.
@@ -192,7 +214,7 @@ describe('StagePreview renders', () => {
     const fedBinding = (carrying) => ({
         item: { id: 3, sourceName: 'Callout', url: CALLOUT, enabled: true },
         scene: 'Game', where: 'program', parent: 'callout@Game',
-        container: 'callout-stage', carrying,
+        container: 'callout-stage', slot: 'callout-stage', carrying,
     });
     const ch = (name, b = {}) => ({ name, batting: { singles: 0, doubles: 0, triples: 0, homeruns: 0, rbi: 0, ...b } });
 

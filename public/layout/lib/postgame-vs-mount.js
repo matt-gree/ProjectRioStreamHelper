@@ -768,7 +768,7 @@ export function mountPostgameVs({ host }) {
       // Blank until a game is captured and both sides resolve — say which, or
       // the empty source reads as broken in the preview.
       OverlayBase.setBlank(
-        !present ? 'No captured game on this board — capture a game, then push the game summary from Production.'
+        !present ? 'No captured game on this board — capture a game from the board panel in Production.'
           : 'Captured game is missing a side — both players need to resolve.',
         'Game Summary',
       );

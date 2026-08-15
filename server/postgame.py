@@ -167,6 +167,7 @@ class PostGame:
                 (f"{base}.present", False),
                 (f"{base}.gameId", ""),
                 (f"{base}.capturedAt", ""),
+                (f"{base}.capturedBy", ""),
                 (f"{base}.sourceFile", ""),
                 (f"{base}.meta", {}),
                 (f"{base}.player.1", {}),
@@ -177,6 +178,7 @@ class PostGame:
             (f"{base}.present", True),
             (f"{base}.gameId", payload["gameId"]),
             (f"{base}.capturedAt", payload["capturedAt"]),
+            (f"{base}.capturedBy", payload.get("capturedBy", "manual")),
             (f"{base}.sourceFile", payload["sourceFile"]),
             (f"{base}.meta", payload["meta"]),
             (f"{base}.player.1", payload["player"]["1"]),
@@ -187,12 +189,17 @@ class PostGame:
     # ----- public API ------------------------------------------------------
 
     @classmethod
-    async def capture(cls, sb: int) -> dict:
+    async def capture(cls, sb: int, by: str = "manual") -> dict:
         """Capture the finished game for board ``sb`` from its stat file.
 
         Matches by ``score.{sb}.game_id`` + the Loaded-from-HUD gate, projects the
         box score into State, caches the full payload (incl. events), and promotes
         a bound match draft/live → ``post``.
+
+        ``by`` is mirrored to ``postgame.{sb}.capturedBy`` (``auto`` when the stat
+        watcher fired it, ``manual`` when the producer did) — the same "say which
+        layer decided this" idiom as ``score.{N}.side_reason``, so the board panel
+        can tell a box score that filled itself in from one somebody pressed for.
 
         Returns ``{"success": bool, ...}`` — never raises on a missing/invalid
         stat file (the producer sees ``reason``).
@@ -220,6 +227,7 @@ class PostGame:
                 return {"success": False, "scoreboard": sb,
                         "reason": f"Failed to parse stat file: {e}"}
 
+            payload["capturedBy"] = by if by in ("auto", "manual") else "manual"
             cls._captured[sb] = payload
             cls._stat_objs[sb] = stat
             cls._contacts.pop(sb, None)  # rebuilt lazily for the new capture

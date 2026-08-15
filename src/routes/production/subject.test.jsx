@@ -92,6 +92,91 @@ describe('Subject', () => {
         const { container } = render(<Subject placement={placementFor('ticker')} />);
         expect(container).toBeEmptyDOMElement();
     });
+
+    /*
+     * A pick, said in the tense of the row it is on. On a container SLOT it is
+     * what Push would put up; on the element's own source the overlay renders
+     * that key itself, so it is simply what is drawn.
+     *
+     * And a SUGGESTION IS NOT A PICK: `resolveIntent` proposes when there is no
+     * memory, which is right for "what would Push show" and a lie next to a
+     * source drawing nothing — so the direct row keeps the proposal as a
+     * qualifier rather than claiming it is on screen.
+     */
+    const CAPTURE = {
+        postgame: {
+            1: {
+                present: true, meta: { winnerSide: 1 },
+                player: {
+                    1: {
+                        rioName: 'Matt', score: 7,
+                        characters: [{ name: 'Mario', batting: { singles: 1, homeruns: 2, rbi: 4 } }],
+                    },
+                    2: { rioName: 'Jake', score: 3, characters: [{ name: 'Wario', batting: {} }] },
+                },
+            },
+        },
+    };
+
+    it('says what a pick WOULD show on a slot, and what it IS showing on its own source', () => {
+        setState({
+            ...CAPTURE,
+            production: {
+                feed: {
+                    last: {
+                        postgamecallout: {
+                            element: 'postgamecallout', scoreboard: 1, team: 1,
+                            charIndex: 0, name: 'Mario',
+                        },
+                    },
+                },
+            },
+        });
+        const slot = placementFor('postgamecallout', {
+            slot: 'callout-stage', container: 'callout-stage', parent: 'container:callout-stage@Game',
+        });
+        const { unmount } = render(<Subject placement={slot} />);
+        expect(screen.getByText('Push shows Mario')).toBeInTheDocument();
+        unmount();
+
+        render(<Subject placement={placementFor('postgamecallout')} />);
+        expect(screen.getByText('Showing Mario')).toBeInTheDocument();
+    });
+
+    it('keeps a suggestion a suggestion on the element’s own source', () => {
+        setState(CAPTURE);
+        const { unmount } = render(<Subject placement={placementFor('postgamecallout', {
+            slot: 'callout-stage', container: 'callout-stage', parent: 'x',
+        })} />);
+        // On a container the proposal IS what Push would send.
+        expect(screen.getByText('Push shows Mario')).toBeInTheDocument();
+        unmount();
+
+        // On its own source nothing has been picked, so nothing is drawn.
+        render(<Subject placement={placementFor('postgamecallout')} />);
+        expect(screen.getByText('Nothing picked yet')).toBeInTheDocument();
+        expect(screen.getByText('Mario suggested')).toBeInTheDocument();
+    });
+
+    // …and on a container slot, where it has no pick either, the honest line is
+    // what Push will do — `canPush` is true for a whole-game element with or
+    // without a memory, so "nothing armed yet" described a state it can't be in.
+    it('a whole-game element on a slot says what Push will do', () => {
+        setState(CAPTURE);
+        render(<Subject placement={placementFor('postgamevs', {
+            slot: 'callout-stage', container: 'callout-stage', parent: 'x',
+        })} />);
+        expect(screen.getByText('Push shows this game')).toBeInTheDocument();
+    });
+
+    // A whole-game element has no pick, so "nothing picked yet" would describe a
+    // control it does not have. What it can say is the game it will draw.
+    it('a whole-game element states its capture rather than a pick', () => {
+        setState(CAPTURE);
+        render(<Subject placement={placementFor('postgamevs')} />);
+        expect(screen.getByText('Matt 7–3 Jake')).toBeInTheDocument();
+        expect(screen.getByText('captured')).toBeInTheDocument();
+    });
 });
 
 describe('what does and does not get a subject', () => {

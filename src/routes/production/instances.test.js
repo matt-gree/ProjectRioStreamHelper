@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { instanceId, parseInstanceId, variantLabel, variantOf } from './instances';
+import {
+    instanceId, parseInstanceId, slotInstanceId, variantLabel, variantOf,
+} from './instances';
 import { boardDeskId, boardOfDeskId } from './boards';
 import { ELEMENTS } from './elements';
 
@@ -22,8 +24,10 @@ describe('instance ids', () => {
         // A desk parsed as an instance would be selected as an element, and the
         // stage would offer to bind an OBS source for a content workflow.
         expect(parseInstanceId('desk:match')).toEqual({ elementId: 'desk:match', board: null, variant: null });
-        expect(parseInstanceId('scoreboard:2')).toEqual({ elementId: 'scoreboard', board: 2, variant: null });
-        expect(parseInstanceId('lowerthird')).toEqual({ elementId: 'lowerthird', board: null, variant: null });
+        expect(parseInstanceId('scoreboard:2'))
+            .toEqual({ elementId: 'scoreboard', board: 2, variant: null, slot: null });
+        expect(parseInstanceId('lowerthird'))
+            .toEqual({ elementId: 'lowerthird', board: null, variant: null, slot: null });
     });
 
     /*
@@ -41,7 +45,8 @@ describe('instance ids', () => {
         expect(boardOfDeskId('desk:board:2')).toBe(2);
         expect(boardOfDeskId('desk:match')).toBeNull();
         // …and an element id that happens to start with the word is untouched.
-        expect(parseInstanceId('board:2')).toEqual({ elementId: 'board', board: 2, variant: null });
+        expect(parseInstanceId('board:2'))
+            .toEqual({ elementId: 'board', board: 2, variant: null, slot: null });
     });
 });
 
@@ -72,7 +77,25 @@ describe('variants', () => {
     it('carries the variant alongside the board, not instead of it', () => {
         const url = 'http://x/layout/scoreboard1/scoreboard.html?scoreboard=2&size=s';
         expect(instanceId(scoreboard, 2, url)).toBe('scoreboard:2~zs');
-        expect(parseInstanceId('scoreboard:2~zs')).toEqual({ elementId: 'scoreboard', board: 2, variant: 'zs' });
+        expect(parseInstanceId('scoreboard:2~zs'))
+            .toEqual({ elementId: 'scoreboard', board: 2, variant: 'zs', slot: null });
+    });
+
+    /*
+     * A member that owns a source is TWO rows — its own source and its slot on
+     * a container — and the bare element id can only name one of them. Before
+     * the slot half of the grammar they were one id: duplicate React keys in
+     * the rack, and a panel driving whichever `find()` reached first.
+     */
+    it('tells a member’s slot apart from that member’s own source', () => {
+        expect(slotInstanceId('postgamecallout', 'callout-stage'))
+            .toBe('postgamecallout+callout-stage');
+        expect(parseInstanceId('postgamecallout+callout-stage')).toEqual({
+            elementId: 'postgamecallout', board: null, variant: null, slot: 'callout-stage',
+        });
+        // No container is still just the element — a fed element no roster
+        // claims has a row, and it is not anybody's slot.
+        expect(slotInstanceId('stats', null)).toBe('stats');
     });
 
     it('reads back the way the producer picked it in the catalog', () => {

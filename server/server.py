@@ -20,6 +20,7 @@ from server.rio import stats_api
 from server.settings import Settings, Config
 from server.startgg.provider import StartGGProvider
 from server.controller_overlay import ControllerOverlay
+from server.postgame_watch import StatFileWatcher
 from server.announcements import Announcements
 from server.automations import Automations
 from server.participants import Participants
@@ -95,6 +96,10 @@ async def lifespan(app: FastAPI):
     await PoolManager.Start()
     await StartGGProvider.Start()
     await ControllerOverlay.Start()
+    # Auto-capture. After the provider (the stat directory is derived from the
+    # resolved HUD path) and before the match projections, which is where a
+    # capture's match hop would land anyway.
+    await StatFileWatcher.Start()
     await Announcements.Start()
     # Fold the pre-queues `schedule.queue`/`schedule.title` keys into
     # `schedule.queues`, and project the flat union every schedule reader uses.
@@ -131,6 +136,7 @@ async def lifespan(app: FastAPI):
     # on_shutdown
     await Automations.Stop()
     await Announcements.Stop()
+    await StatFileWatcher.Stop()
     await ControllerOverlay.Stop()
     await StartGGProvider.Stop()
     await PoolManager.Stop()

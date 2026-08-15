@@ -132,10 +132,22 @@ describe('element URL binding (match)', () => {
             `${HOST}/layout/schedule/schedule.html`)).toBe(true);
     });
 
-    it('both post-game feeds bind the shared callout stage', () => {
+    /*
+     * The two post-game callouts own their sources and must NOT answer to the
+     * shared shell they used to be fed through. Their old matcher was the word
+     * "callout", which also matched callout-stage.html — a CONTAINER. An
+     * element that identifies as one of its own containers rows twice and
+     * drives the wrong source.
+     */
+    it('the post-game callouts bind their own layouts, not the callout stage', () => {
         const stage = `${HOST}/layout/shared/callout-stage.html`;
-        expect(byId.postgamecallout.match(stage)).toBe(true);
-        expect(byId.postgamevs.match(stage)).toBe(true);
+        expect(byId.postgamecallout.match(stage)).toBe(false);
+        expect(byId.postgamevs.match(stage)).toBe(false);
+        expect(byId.postgamecallout.match(`${HOST}/layout/postgame/spotlight.html`)).toBe(true);
+        expect(byId.postgamevs.match(`${HOST}/layout/postgame/summary.html`)).toBe(true);
+        // …and neither answers to the other's.
+        expect(byId.postgamecallout.match(`${HOST}/layout/postgame/summary.html`)).toBe(false);
+        expect(byId.postgamevs.match(`${HOST}/layout/postgame/spotlight.html`)).toBe(false);
     });
 
     it('no element binds a non-PRSH browser source', () => {

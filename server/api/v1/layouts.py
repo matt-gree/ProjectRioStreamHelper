@@ -135,6 +135,14 @@ _STANDALONE_DISPLAY_NAMES = {
     # Vertical Scorecard: a tall re-themable SVG scoreboard whose eight design
     # elements each toggle/animate independently (overlays.scorecard.*).
     "scorecard/scorecard": "Vertical Scorecard",
+    # Post-game callouts — each one's OWN full-canvas source. Both are also
+    # container MEMBERS: a producer who wants them mutually exclusive puts both
+    # on one container's roster instead, and that container is a catalog row of
+    # its own (see _container_layouts). The two paths are the same elements,
+    # not two spellings of one — which is why these files are listed even
+    # though the Callout Stage container usually holds them.
+    "postgame/spotlight": "Character Spotlight",
+    "postgame/summary": "Game Summary",
     # Event Header: a centered two-row tournament banner (1263px). Top row =
     # Event / Location / Dates from tournamentInfo; bottom row = Message /
     # Bracket / Phase / Round, the latter three from the bound match. Blank

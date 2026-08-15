@@ -1,25 +1,27 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import { RefreshCw } from 'lucide-react';
-import { useStateStore } from '../../../context/store';
-import { Text } from '../../../components/ui/primitives';
-import { notifications } from '../../../lib/notify';
-import { ActionRow, SelectRow } from '../kit';
+import { useStateStore } from '../../context/store';
+import { Text } from '../../components/ui/primitives';
+import { notifications } from '../../lib/notify';
+import { SelectRow } from './kit';
 
 /*
- * Bracket desk — feeds the broadcast but is never on it.
+ * Which phase of the loaded start.gg event the bracket overlays draw.
  *
  * Loading a phase group writes the whole bracket structure to State (bracket.*)
- * for the bracket overlays to render; the desk owns that workflow so the
- * bracket element's stage and the lower-third's bracket slot can both defer to
- * one place instead of each growing a phase picker.
+ * for every bracket consumer to render — ONE loaded phase, app-wide. This module
+ * is that publish, shared by the two surfaces that offer it: the bracket source's
+ * stage (./stage/bracket) and the lower-third's bracket slot
+ * (./stage/lowerthird). Sharing the hook is what keeps them from disagreeing
+ * about what is loaded.
  *
- * Deep authoring still belongs to the Competition tab — that's where an event
- * is loaded in the first place. This desk only picks WHICH phase of the loaded
- * event is on screen, and re-pulls it when start.gg moves on.
+ * There is no Bracket desk. It was a third surface for these same two controls,
+ * and a permanent rack row for a workflow that only matters when a consumer is
+ * on air — see ./stage/bracket for the full reasoning.
  *
- * Loads are momentary: they fetch and publish immediately rather than staging,
- * same as the Competition tab's own selector and every other "fire now" action.
+ * Deep authoring still belongs to the Competition tab — that's where an event is
+ * loaded in the first place. This only picks which phase of it is on screen, and
+ * re-pulls when start.gg moves on.
  */
 
 async function post(url) {
@@ -31,8 +33,8 @@ async function post(url) {
     return r.json().catch(() => ({}));
 }
 
-// Shared by the desk body and the bracket element's stage, so the two surfaces
-// can never disagree about what's loaded.
+// Shared by the bracket source's stage and the lower-third's bracket slot, so
+// the two surfaces can never disagree about what's loaded.
 export function useBracketDesk() {
     const bracket = useStateStore(useShallow(s => s?.bracket ?? {}));
     const [phases, setPhases] = useState(null); // null = still fetching
@@ -82,8 +84,8 @@ export function useBracketDesk() {
     };
 }
 
-// The picker on its own — reused by the lower-third's bracket slot, which shows
-// the same loaded phase.
+// The picker itself. Both surfaces render this one — a bracket source's stage
+// and a lower-third bracket slot are two views of the same loaded phase.
 export const BracketPhasePicker = memo(function BracketPhasePicker({ desk, label = 'Phase' }) {
     const d = desk;
     if (d.phases !== null && d.options.length === 0) {
@@ -104,32 +106,3 @@ export const BracketPhasePicker = memo(function BracketPhasePicker({ desk, label
         />
     );
 });
-
-// Rack meta: what a producer needs to know without opening the desk.
-export function bracketDeskMeta(desk) {
-    return desk.loaded ? desk.phaseName : 'nothing loaded';
-}
-
-export default function BracketDesk() {
-    const d = useBracketDesk();
-    return (
-        <>
-            <BracketPhasePicker desk={d} />
-            <ActionRow actions={[
-                {
-                    label: d.busy ? 'Loading…' : 'Refresh',
-                    icon: RefreshCw,
-                    disabled: d.busy || d.phaseGroupId == null,
-                    title: 'Re-pull this phase from start.gg',
-                    onClick: d.refresh,
-                },
-            ]} />
-
-            <Text size="xs" className="border-t border-border/60 pt-2 text-muted-foreground">
-                {d.loaded
-                    ? <>Showing <b>{d.phaseName}</b>. Every bracket source renders this phase — refresh after results land on start.gg.</>
-                    : <>Pick a phase to publish it to the bracket overlays. Events are loaded on the Competition tab.</>}
-            </Text>
-        </>
-    );
-}

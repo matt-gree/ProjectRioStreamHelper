@@ -77,7 +77,25 @@ describe('stageBodyComponent', () => {
         const scoreboard = ELEMENTS.find(e => e.id === 'scoreboard');
         const stats = ELEMENTS.find(e => e.id === 'stats');
         expect(stageBodyComponent(scoreboard)).toBe(DirectStage);
+        // Stats has no source of its own, so it is fed wherever it is asked
+        // about — there is no other answer for it.
         expect(stageBodyComponent(stats)).toBe(FedStage);
+    });
+
+    /*
+     * A member that owns a source is two panels, and the PLACEMENT is what
+     * says which one. Its own source gets the direct floor (or its own body);
+     * its slot on a container gets the fed one, whose questions are what to
+     * hand over and which container is carrying it.
+     */
+    it('answers by placement for a member that also owns a source', () => {
+        const spotlight = ELEMENTS.find(e => e.id === 'postgamecallout');
+        const hit = ELEMENTS.find(e => e.id === 'hitvisualizer');
+        expect(stageBodyComponent(spotlight, { scene: 'Main' })).toBe(DirectStage);
+        expect(stageBodyComponent(spotlight, { slot: 'callout-stage' })).toBe(FedStage);
+        // …including one with a dedicated body: Replay and Spotlight act on the
+        // hit's own source, so its slot row must not offer them.
+        expect(stageBodyComponent(hit, { slot: 'split-screen' })).toBe(FedStage);
     });
 
     it('only offers the rail pin where the element declares a quick face', () => {

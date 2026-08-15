@@ -5,8 +5,6 @@ import { useSettingsStore, useStateStore } from '../../context/store';
 import { SocketContext } from '../../context/socket';
 import { useStagingStore } from '../../context/staging';
 import MatchDesk from './desks/match';
-import CaptureDesk from './desks/capture';
-import BracketDesk from './desks/bracket';
 import BoardDesk, { boardTypeTag, playbackLine, sideReasonLine } from './desks/board';
 
 // Desks are content workflows, not OBS ones: they must be fully usable with
@@ -917,53 +915,116 @@ describe('Board desk', () => {
     });
 });
 
-describe('Capture desk', () => {
-    it('offers capture and explains why there is nothing to capture yet', () => {
-        ui(<CaptureDesk />);
+/*
+ * POST-GAME IS A REGION ON THE BOARD, NOT A DESK.
+ *
+ * It was a desk, and its first control gave it away: a "Board" picker, on a
+ * console whose rack has already asked which board you are looking at. Every
+ * key it reads is board-scoped (`postgame.{N}.*`, matched to that board's
+ * `score.{N}.game_id`), which is the same thing that makes Games and the
+ * running order regions rather than desks.
+ *
+ * It is also mostly a readout now — the stat file Project Rio writes at the
+ * final out fires the capture on its own (server/postgame_watch.py), so the
+ * button is the recovery path and the panel says which of the two filled it.
+ */
+describe('Board desk — post-game', () => {
+    beforeEach(() => {
+        useSettingsStore.setState({
+            project_rio: { hud_enabled: true },
+            production: {},
+            scoreboards: { active: [1, 2], aliases: {}, binding: {} },
+        });
+        useStateStore.setState({ score: {}, match: {}, postgame: {} });
+    });
+
+    it('offers capture on the board itself, with no second board picker', () => {
+        ui(<BoardDesk board={1} />);
         expect(screen.getByRole('button', { name: /Capture finished game/ })).toBeInTheDocument();
+        // The rack picked the board; `Board` here would be asking twice. (`Name`
+        // is the rename field, and stays.)
+        expect(screen.queryByLabelText('Board')).not.toBeInTheDocument();
+    });
+
+    it('reads its own board, not the first one with a capture', () => {
+        useStateStore.setState({
+            score: { 1: {}, 2: {} },
+            match: {},
+            postgame: {
+                1: { present: true, player: { 1: { rioName: 'Alice', score: 5 }, 2: { rioName: 'Bob', score: 2 } } },
+            },
+        });
+        ui(<BoardDesk board={2} />);
+        expect(screen.getByText('Nothing captured')).toBeInTheDocument();
+        expect(screen.queryByText(/Alice/)).not.toBeInTheDocument();
+    });
+
+    // Which layer filled it in, the same "say who decided this" idiom as
+    // side_reason — a box score that appeared on its own is not a producer
+    // wondering whether they pressed something.
+    it('says when the capture happened on its own', () => {
+        useStateStore.setState({
+            score: { 1: {} },
+            match: {},
+            postgame: {
+                1: {
+                    present: true, capturedBy: 'auto', sourceFile: 'decoded.Game_7.json',
+                    meta: { winnerSide: 1 },
+                    player: { 1: { rioName: 'Alice', score: 5 }, 2: { rioName: 'Bob', score: 2 } },
+                },
+            },
+        });
+        ui(<BoardDesk board={1} />);
+        expect(screen.getByText('AUTO')).toBeInTheDocument();
+        expect(screen.getByText(/Captured on its own when the game ended/)).toBeInTheDocument();
+        // Still recoverable by hand — the button becomes a re-capture.
+        expect(screen.getByRole('button', { name: /Re-capture/ })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Clear' })).toBeInTheDocument();
+    });
+
+    it('badges a hand capture differently, and hides Clear until there is one', () => {
+        ui(<BoardDesk board={1} />);
+        expect(screen.queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument();
+
+        cleanup();
+        useStateStore.setState({
+            score: { 1: {} },
+            match: {},
+            postgame: {
+                1: {
+                    present: true, capturedBy: 'manual', sourceFile: 'decoded.Game_7.json',
+                    player: { 1: { rioName: 'Alice', score: 5 }, 2: { rioName: 'Bob', score: 2 } },
+                },
+            },
+        });
+        ui(<BoardDesk board={1} />);
+        expect(screen.getByText('CAPTURED')).toBeInTheDocument();
+    });
+
+    // With auto-capture on, "nothing here yet" is a WAIT, not an instruction —
+    // the producer does not have to do anything for the common case.
+    it('says what it is waiting for', () => {
+        useStateStore.setState({ score: { 1: { game_id: '4242' } }, match: {}, postgame: {} });
+        ui(<BoardDesk board={1} />);
+        expect(screen.getByText(/Waiting on the stat file for game 4242/)).toBeInTheDocument();
+
+        cleanup();
+        useStateStore.setState({ score: { 1: {} }, match: {}, postgame: {} });
+        ui(<BoardDesk board={1} />);
         expect(screen.getByText(/No game id on this board yet/)).toBeInTheDocument();
     });
 
-    it('hides Clear until something is captured', () => {
-        ui(<CaptureDesk />);
-        expect(screen.queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument();
-    });
-});
-
-describe('Bracket desk', () => {
-    beforeEach(() => useStateStore.setState({ bracket: {} }));
-
-    it('points at the Competition tab when no event is loaded', async () => {
-        ui(<BracketDesk />);
-        // /startgg/phases resolves to {} → no phase groups to offer.
-        await waitFor(() =>
-            expect(screen.getByText(/No start.gg event loaded/)).toBeInTheDocument());
-    });
-
-    it('names the loaded phase and enables the re-pull', async () => {
-        useStateStore.setState({ bracket: { phaseName: 'Winners Pool A', phaseGroupId: 77 } });
-        vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({
-            ok: true,
-            json: () => Promise.resolve([{ name: 'Winners', phaseGroups: [{ id: 77 }] }]),
-        })));
-        ui(<BracketDesk />);
-        await waitFor(() =>
-            expect(screen.getByRole('button', { name: /Refresh/ })).toBeEnabled());
-        expect(screen.getByText('Winners Pool A')).toBeInTheDocument();
-    });
-
-    it('re-pulls the phase that is already on screen', async () => {
-        useStateStore.setState({ bracket: { phaseName: 'Winners', phaseGroupId: 77 } });
-        const fetchMock = vi.fn((url) => Promise.resolve({
-            ok: true,
-            json: () => Promise.resolve(url.includes('/phases')
-                ? [{ name: 'Winners', phaseGroups: [{ id: 77 }] }] : {}),
-        }));
-        vi.stubGlobal('fetch', fetchMock);
-        ui(<BracketDesk />);
-        await waitFor(() => expect(screen.getByRole('button', { name: /Refresh/ })).toBeEnabled());
-        fireEvent.click(screen.getByRole('button', { name: /Refresh/ }));
-        await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
-            '/api/v1/startgg/load-bracket?phase_group_id=77', { method: 'POST' }));
+    it('captures immediately, staging or not — it is a recovery action', () => {
+        useSettingsStore.setState({
+            project_rio: { hud_enabled: true },
+            production: { confirm: { enabled: true } },
+            scoreboards: { active: [1], aliases: {}, binding: {} },
+        });
+        ui(<BoardDesk board={1} />);
+        fireEvent.click(screen.getByRole('button', { name: /Capture finished game/ }));
+        expect(fetch).toHaveBeenCalledWith(
+            '/api/v1/postgame/capture?scoreboard=1', { method: 'POST' },
+        );
+        expect(useStagingStore.getState().order).toEqual([]);
     });
 });

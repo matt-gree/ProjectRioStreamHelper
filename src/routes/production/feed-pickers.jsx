@@ -238,7 +238,16 @@ export function usePostgameCalloutOptions(element, scoreboard = 1) {
     };
 }
 
-export const PostgameCalloutPicker = memo(function PostgameCalloutPicker({ element, scoreboard = 1 }) {
+/*
+ * `fed` is which ROW this picker is on, and it changes only the sentence under
+ * the dropdown — never the pick itself. A pick writes the element's standing
+ * intent either way (useFeedSelect), and that one key is both what Push sends
+ * to a container and what the element's own source renders. Saying "Push shows
+ * X" beside a panel with no Push button is the stale half of the old model.
+ */
+export const PostgameCalloutPicker = memo(function PostgameCalloutPicker({
+    element, scoreboard = 1, fed = true,
+}) {
     const o = usePostgameCalloutOptions(element, scoreboard);
     if (o.empty) return <Text size="sm" className="text-muted-foreground">{o.empty}</Text>;
     return (
@@ -247,16 +256,27 @@ export const PostgameCalloutPicker = memo(function PostgameCalloutPicker({ eleme
                 stage. Off the stage the select shows the standing intent, and
                 offering to clear a feed that isn't running would just snap the
                 dropdown back to where it was. */}
-            <GroupedFeedSelect o={o} allowNone={o.live} />
+            <GroupedFeedSelect o={o} allowNone={fed && o.live} />
             {o.value && (
                 <Text size="xs" className="text-muted-foreground">
-                    {o.live
-                        ? 'On the stage now — the spotlight plays once and holds on the spray'
-                          + ' chart. Re-pick to swap the featured character.'
-                        : o.suggested
-                            ? `Suggested — ${o.selectedName} led the winning side in total bases.`
-                              + ' Push to put the spotlight on the stage, or pick someone else.'
-                            : `Not on the stage — Push shows ${o.selectedName}.`}
+                    {!fed
+                        /* A suggestion is not a pick, and this source renders
+                           the PICK — so on a direct row the proposal has to
+                           read as an offer, or the panel says "showing Mario"
+                           over a preview that is drawing nothing. */
+                        ? (o.suggested
+                            ? `Suggested — ${o.selectedName} led the winning side in total`
+                              + ' bases. This source draws the pick, so choose one to put a'
+                              + ' spotlight on it.'
+                            : `This source shows ${o.selectedName}. Re-pick to swap the`
+                              + ' featured character; the eye puts it on air.')
+                        : o.live
+                            ? 'On the stage now — the spotlight plays once and holds on the spray'
+                              + ' chart. Re-pick to swap the featured character.'
+                            : o.suggested
+                                ? `Suggested — ${o.selectedName} led the winning side in total bases.`
+                                  + ' Push to put the spotlight on the stage, or pick someone else.'
+                                : `Not on the stage — Push shows ${o.selectedName}.`}
                 </Text>
             )}
         </Stack>
@@ -269,7 +289,9 @@ export const PostgameCalloutPicker = memo(function PostgameCalloutPicker({ eleme
 // production.feed.container.<id> = { element:'postgamevs', scoreboard } and
 // the callout-stage container renders the player-vs-player summary from
 // postgame.{N}.player.{T}.totals.
-export const PostgameVsPicker = memo(function PostgameVsPicker({ element, scoreboard = 1 }) {
+export const PostgameVsPicker = memo(function PostgameVsPicker({
+    element, scoreboard = 1, fed = true,
+}) {
     const { container } = useContainerOf(element);
     const { value: selection, staged } = useFeedControl(container);
     const pg = useStateStore(useShallow(s => {
@@ -297,15 +319,23 @@ export const PostgameVsPicker = memo(function PostgameVsPicker({ element, scoreb
 
     return (
         <Stack gap="xs">
-            <Group gap="xs" className="items-center">
-                <Text size="sm" className="text-foreground">
-                    <span className={cn(pg.winnerSide === 1 && 'font-bold')}>{pg.n1 || 'Side 1'}</span> {pg.s1 ?? 0}
-                    <span className="mx-1 text-muted-foreground">–</span>
-                    {pg.s2 ?? 0} <span className={cn(pg.winnerSide === 2 && 'font-bold')}>{pg.n2 || 'Side 2'}</span>
-                </Text>
-                <StagedDot show={staged} />
-            </Group>
-            {occupiedByOther && (
+            {/* The captured game — but only where the panel isn't already
+                saying it. On the element's own source the SUBJECT is this
+                score (a whole-game element has no pick to report instead), and
+                printing it twice an inch apart is the noise a subject row was
+                supposed to remove. On a container slot the subject is "Push
+                shows this game", so the score belongs here. */}
+            {fed && (
+                <Group gap="xs" className="items-center">
+                    <Text size="sm" className="text-foreground">
+                        <span className={cn(pg.winnerSide === 1 && 'font-bold')}>{pg.n1 || 'Side 1'}</span> {pg.s1 ?? 0}
+                        <span className="mx-1 text-muted-foreground">–</span>
+                        {pg.s2 ?? 0} <span className={cn(pg.winnerSide === 2 && 'font-bold')}>{pg.n2 || 'Side 2'}</span>
+                    </Text>
+                    <StagedDot show={staged} />
+                </Group>
+            )}
+            {fed && occupiedByOther && (
                 <Text size="xs" className="text-muted-foreground">
                     Push replaces what the stage is showing.
                 </Text>
@@ -315,9 +345,15 @@ export const PostgameVsPicker = memo(function PostgameVsPicker({ element, scoreb
                     Older capture without side totals — re-capture to include Stars Won.
                 </Text>
             )}
-            {mine && (
+            {fed && mine && (
                 <Text size="xs" className="text-muted-foreground">
                     Show the callout-stage source on air; Clear hands the stage back.
+                </Text>
+            )}
+            {!fed && (
+                <Text size="xs" className="text-muted-foreground">
+                    This source draws the whole game — there is nothing to pick. The eye
+                    puts it on air.
                 </Text>
             )}
         </Stack>

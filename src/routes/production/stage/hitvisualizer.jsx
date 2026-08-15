@@ -1,20 +1,23 @@
 import { useEffect, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import { RotateCcw, Sparkles, Columns2 } from 'lucide-react';
+import { RotateCcw, Sparkles } from 'lucide-react';
 import { useObsStore } from '../../../context/obs';
 import { useSettingsStore, useStateStore } from '../../../context/store';
 import { notifications } from '../../../lib/notify';
 import { ActionRow, NumberRow, SelectRow, ToggleRow } from '../kit';
 import { runObs } from '../controls';
-import { useFeedControl } from '../feeds';
-import { useContainerOf } from '../containers';
-import { BindingNote, ContainerHostNote } from './generic';
+import { BindingNote } from './generic';
 
 /*
- * Hit Visualizer stage body — live actions (Replay / Spotlight / Split feed)
- * over the full config (overlay visibility, spotlight auto-cut, container
- * target). Moved out of production.jsx (console slice 4); the face/setup
- * split collapses into one stage panel.
+ * Hit Visualizer stage body — live actions (Replay / Spotlight) over the full
+ * config (spotlight auto-cut and its scene/hold).
+ *
+ * NO SPLIT FEED HERE ANY MORE. This panel commands the visualizer's OWN
+ * dedicated source, and a source of its own has nothing to push into; feeding
+ * it to a container is what that container's roster is for, and the hit's row
+ * UNDER that container carries the standard Push slot. A bespoke push button on
+ * a direct source is the thing the source strip exists to end — it was this
+ * body's own copy of a verb the header already owns.
  */
 
 // Lead time before the swing starts after we cut to the spotlight scene — lets
@@ -25,11 +28,9 @@ const SPOTLIGHT_LEAD_MS = 350;
 let _spotlightTimer = null;
 
 // Hit-visualizer behavior shared by the action rows and the config below.
-// Three things the producer can do with a captured hit:
+// Two things the producer can do with a captured hit from this panel:
 //   - Replay it in place (bump score.{N}.hit.replay_nonce — momentary, never
 //     staged).
-//   - Feed it into a named shared container (production.feed.container.<id>) —
-//     staged under confirm mode like every other feed.
 //   - Spotlight it: cut to a chosen OBS scene, play the animation, cut back to
 //     the previous program scene (settings.production.spotlight) — momentary.
 // Scoreboard 1 for now (matches the default overlay binding); multi-scoreboard
@@ -44,15 +45,6 @@ function useHitViz(scoreboard = 1) {
     const setSetting = useSettingsStore(s => s.setItem);
     const obsConnected = status === 'connected';
 
-    // The container whose roster names the hit visualizer, if any. It is one
-    // of the few elements that is both a dedicated source and a container
-    // member, so this can legitimately be null — then Split feed has nowhere
-    // to land and says so.
-    const { container } = useContainerOf({ id: 'hitvisualizer' });
-    const { value: containerFeed, staged: feedStaged, setFeed } = useFeedControl(container);
-    const fedHere = !!containerFeed && containerFeed.element === 'hitvisualizer'
-        && (Number(containerFeed.scoreboard) || 1) === scoreboard;
-
     const mounted = useRef(true);
     // Set true in the body, not just at init: under StrictMode the effect runs
     // mount→unmount→remount, and a cleanup-only ref would stay false forever.
@@ -65,11 +57,6 @@ function useHitViz(scoreboard = 1) {
     const replay = () => useStateStore.getState().setItems([
         { key: `score.${scoreboard}.hit.replay_nonce`, value: Date.now() },
     ]);
-
-    // Feed: assign this hit to the chosen named container. The matching shared
-    // overlay renders it, and plays it when made active in OBS.
-    const feedContainer = () => setFeed({ element: 'hitvisualizer', scoreboard }, 'Feed hit to container');
-    const clearContainer = () => setFeed(null, 'Clear hit feed');
 
     const setSpot = (patch) => {
         const cur = useSettingsStore.getState()?.production?.spotlight || {};
@@ -100,9 +87,8 @@ function useHitViz(scoreboard = 1) {
     };
 
     return {
-        hit, hasHit, fedHere, feedStaged, scenes, spotlight, obsConnected, firing,
-        replay, feedContainer, clearContainer, setSpot, canSpotlight, fireSpotlight,
-        container,
+        hit, hasHit, scenes, spotlight, obsConnected, firing,
+        replay, setSpot, canSpotlight, fireSpotlight,
     };
 }
 
@@ -126,15 +112,6 @@ export default function HitVisualizerStage({ board, placement, scoreboard = boar
                     label: v.firing ? 'On air…' : 'Spotlight', icon: Sparkles, variant: 'default',
                     disabled: !v.canSpotlight || v.firing, onClick: v.fireSpotlight,
                     title: v.canSpotlight ? 'Cut to the spotlight scene and play' : 'Enable + pick a scene below',
-                },
-                {
-                    label: v.fedHere ? 'Clear split' : 'Split', icon: Columns2,
-                    variant: v.fedHere ? 'default' : 'secondary',
-                    disabled: !v.hasHit && !v.fedHere,
-                    onClick: v.fedHere ? v.clearContainer : v.feedContainer,
-                    title: v.feedStaged
-                        ? 'Staged — goes live on confirm'
-                        : v.fedHere ? 'Fed to a shared container — click to clear' : 'Feed to a shared container',
                 },
             ]} />
 
@@ -162,9 +139,6 @@ export default function HitVisualizerStage({ board, placement, scoreboard = boar
                 )}
             </div>
 
-            <div className="mt-1 flex flex-col gap-1.5 border-t border-border/60 pt-2">
-                <ContainerHostNote element={{ id: 'hitvisualizer', name: 'Hit Visualizer' }} />
-            </div>
         </>
     );
 }

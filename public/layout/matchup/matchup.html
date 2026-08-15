@@ -10,8 +10,11 @@
   theme SVG (/design/{package}/matchup.svg — picked by the global Design
   Package selector), the rendering/data-binding in matchup-mount.js, and the
   data in the singleton matchup.* state (POST /api/v1/matchup/fetch?match=M —
-  the Fetch button on the Production page). Drop this in OBS as a full-canvas
-  (1920×1080) browser source; the band sits at the bottom.
+  the Fetch button on the Production page). Drop this in OBS as a 1920×480
+  browser source and place it in the scene yourself — full stream width, because
+  the card row is measured against the frame, but only as tall as the band. A
+  theme that still authors a full 1920×1080 canvas is bottom-anchored inside the
+  source and cropped.
 -->
 <head>
   <meta charset="utf-8" />
@@ -23,8 +26,10 @@
   <link rel="stylesheet" href="/layout/lib/rio-theme/tokens.css" />
   <style>
     html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
-    /* Native full-canvas size hint; the SVG scales to whatever the OBS source is. */
-    body { width: 1920px; height: 1080px; }
+    /* Native size hint: the band's own box (392 tall + the theme's bottom
+       margin and glow headroom), not the stream canvas. The SVG scales to
+       whatever the OBS source is. */
+    body { width: 1920px; height: 480px; }
     #host { position: fixed; inset: 0; }
   </style>
 </head>

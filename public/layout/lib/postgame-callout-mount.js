@@ -559,8 +559,8 @@ export function mountPostgameCallout({ host }) {
       // as broken in the preview. `present` gates on a captured post-game; the
       // rest gate on a character actually being picked to push.
       OverlayBase.setBlank(
-        !present ? 'No captured game on this board — capture a game, then push a spotlight from Production.'
-          : 'No character picked — choose one on the spotlight card in Production.',
+        !present ? 'No captured game on this board — capture a game, then pick a character in Production.'
+          : 'No character picked — choose one on the spotlight panel in Production.',
         'Character Spotlight',
       );
       return;

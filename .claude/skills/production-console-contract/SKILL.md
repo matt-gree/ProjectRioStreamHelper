@@ -1,6 +1,6 @@
 ---
 name: production-console-contract
-description: The Production tab console architecture (rack / stage / quick rail), the element contract every broadcast element must satisfy to appear there (registration, quick face, stage body), the six-row kit that all three surfaces compose from, and the desk tier for non-element workflows (Match, post-game capture, bracket). Read before adding an element to the Production page, changing production UI, or touching src/routes/production/.
+description: The Production tab console architecture (rack / stage / quick rail), the element contract every broadcast element must satisfy to appear there (registration, quick face, stage body), the six-row kit that all three surfaces compose from, and the desk tier for non-element workflows (boards, Match). Read before adding an element to the Production page, changing production UI, or touching src/routes/production/.
 ---
 
 # Production Console Contract
@@ -57,12 +57,32 @@ Every broadcast element registers in `src/routes/production/elements.js` with:
 ```js
 {
   id, name,
-  flavor,           // 'direct' (owns a dedicated source) | 'fed' (pushes to a shared container)
+  flavor,           // 'direct' (owns a dedicated source) | 'fed' (no source of
+                    // its own — a container is the only place it can go)
   url, width, height, match(url),   // OBS source binding — unchanged from today
   quickFace,        // ≤ 2 kit rows, or explicit null (see rules below)
   stageBody,        // full controls — kit rows / labelled kit columns
 }
 ```
+
+**FLAVOR IS THE FLOOR; THE PLACEMENT IS THE ANSWER** (`placementFlavor` in
+`placements.js`). Being fed is a property of WHERE a source is, not of what an
+element is: a member sitting on a container's roster rows under that container
+and pushes into it, and that same element's own dedicated source rows on its own
+and just shows and hides. Both are true at once for a member that owns a source
+— what `containerHostable` has always meant for the hit visualizer, and what the
+two post-game callouts mean now. So `flavor` answers only "does it own a source
+of its own", every surface branches on `isFedPlacement(placement)`, and an
+element declared `fed` (Stats, Stat Card) has one possible answer, which is why
+the floor still earns a name.
+
+That split is the whole point: the Character Spotlight used to be fed-ONLY,
+on the reasoning that it shares the Callout Stage with the Game Summary — so an
+element no roster claimed had nowhere to go at all, and its panel offered a Push
+into nothing plus a paragraph explaining why. Sharing is what a container is
+FOR, not what an element is. A producer who wants the two callouts mutually
+exclusive puts both on one container's roster, which is the sentence that
+arrangement is supposed to mean.
 
 ### The subject — what the element is DRAWING
 
@@ -85,18 +105,27 @@ position, not an identity).
   `tone="warn"` is the single exception and means what amber means everywhere
   else — you would want to know before it is on air.
 - **It reads LIVE STATE, never settings or a stored preference.** The one
-  deliberate exception is a fed element, whose subject is explicitly the standing
-  intent (`resolveIntent` — what Push would show) and says so. If you want to
+  deliberate exception is an element with a PICK, whose subject is the standing
+  intent and says so — and says it in the tense of the row: on a slot it is what
+  Push *would* show, on the element's own source it is what the overlay is
+  already drawing, because that source renders `production.feed.last.{id}`
+  itself. **A suggestion is not a pick**, and only the direct row can tell them
+  apart: `resolveIntent` proposes when there is no memory, which is exactly
+  right for "what would Push show" and a lie beside a source drawing nothing —
+  so a direct row reads `Nothing picked yet · Mario suggested`. If you want to
   show a configured value, that is a stage row.
 - **Dispatch is by COMPONENT, not a map of hooks** (`SUBJECTS`), same as
   `ELEMENT_QUICK_FACES` and `STAGE_BODIES` and for the same reason: choosing a
   resolver by id would be a conditional hook call.
 - **Resolution runs most-specific, then by SHAPE**: a declared subject → container
-  → fed *and* container-scoped → fed → board scope → team variant → nothing.
-  The `containerScoped` branch is gated on `flavor === 'fed'` because **Roster is
-  both** a container member and a direct element with its own `?team=` source;
-  only a fed member ever rows under a container, so an ungated check handed the
-  Roster's own source the container's frame of reference and drew the wrong side.
+  → container-scoped member → an element with a pick → board scope → team
+  variant → nothing. The `containerScoped` branch is gated on the row being a
+  **slot** because **Roster is both** a container member and a direct element
+  with its own `?team=` source: a slot draws off the container's frame of
+  reference, the element's own source off its URL's, and an ungated check handed
+  the Roster's own source the container's side and drew the wrong one. (The gate
+  used to read `flavor === 'fed'`, which said the same thing back when only a
+  fed element could row under a container.)
 - **A scoped member takes its container from the PLACEMENT, not from
   `useContainerOf`.** A container-scoped member may sit on several rosters — that
   exception is what makes a mirrored pair buildable — so a lookup from the
@@ -119,7 +148,7 @@ position, not an identity).
   Change one, change all three.
 - **It is five existing ideas named, not a new one.** The hit visualizer's
   latest-hit line, the matchup's fetched series, the bracket's drawing-phase
-  note and the capture desk's score were each a hand-rolled subject in a stage
+  note and the post-game box score were each a hand-rolled subject in a stage
   body, in four shapes, reachable from nowhere else. When a body wants to state
   its content, that is this row — and if the statement is only true on the stage
   (the matchup's "on air for another match"), that is what stays in the body.
@@ -422,10 +451,16 @@ copy, and a freeform "Push game summary" button inside a picker body).
   (Air and Push would have nothing to act on); bound → Bind retires, Air
   appears. This is why the old dead-end prose ("add its browser source in OBS")
   is gone — the panel that told you what to do now does it.
-- **Which source the strip commands follows flavor.** `direct` → the element's
-  own dedicated source. `fed` → the **shared container** it feeds; "on air" for
-  a fed element has never meant anything else, and Push is the slot that
-  distinguishes its content from the container carrying it.
+- **Which source the strip commands follows the PLACEMENT.** The element's own
+  row → its own dedicated source. A member's SLOT on a container → the
+  **container**; "on air" for a member has never meant anything else, and Push
+  is the slot that distinguishes its content from the container carrying it.
+- **PUSH IS THE SLOT'S VERB, NOT THE ELEMENT'S.** It renders only on a row that
+  is a member's place on a container. An element's own source has nothing to
+  push into and gets the eye alone — asking `element.flavor` instead is how a
+  dedicated source ended up wearing a Push aimed at a container that did not
+  exist. Same rule kills the bespoke ones: the hit visualizer's "Split feed"
+  button came off its stage, because its slot row carries the standard Push.
 - **Bind adds hidden** (`addBrowserSource({ enabled: false })`), into the studio
   preview scene when Studio Mode is on, else program. Adding a source is setup,
   and setup must never be the thing that puts something on the broadcast — the
@@ -540,8 +575,15 @@ identity, and it is the third and last term in a chain the console converged on:
 | | is | keyed |
 |---|---|---|
 | **element** | a type — "Scoreboard" | `scoreboard` |
-| **instance** | + which board or variant | `scoreboard:2`, `roster~t1` |
+| **instance** | + which board, variant, or container SLOT | `scoreboard:2`, `roster~t1`, `statscard+roster-stats-2` |
 | **placement** | + which scene's copy | `scoreboard:2@Break` |
+
+The **slot** half (`+{container}`, `slotInstanceId` in `instances.js`) is what
+keeps a member that owns a source from colliding with itself: its own source and
+its place on a container are two rows of one element, and the bare id can only
+spell one of them — duplicate React keys in the rack, and a panel driving
+whichever `find()` reached first. Read out before the board and variant axes, so
+`statscard+roster-stats-2` is still the `statscard` element.
 
 - **The scene is part of the identity for the same reason the board is.** A
   source in two scenes is two scene items with their own enabled state, so a
@@ -556,12 +598,18 @@ identity, and it is the third and last term in a chain the console converged on:
 - **The rack lists only what is in a scene.** The Add picker (below) is the
   other half of that trade — with unbound rows gone, it is how a source comes
   into being.
-- **Fed elements are NOT discovered from sources, and they NEST under their
-  container.** Character Spotlight and Game Summary share one Callout Stage
+- **Members are NOT discovered from sources, and they NEST under their
+  container.** Character Spotlight and Game Summary can share one Callout Stage
   source; a source→row scan alone would collapse two separately-driven elements
   into one row. The container is what's really in the scene, so **it** takes the
-  row — always, targeted or not — and every fed element aimed at it rows
-  underneath (`parent` on the placement, a left rule + radio in the rack).
+  row — always, targeted or not — and every member on its roster rows underneath
+  (`parent` + `slot` on the placement, a left rule + radio in the rack).
+  **Every** member, including one that also owns a source: leaving those out
+  meant the rack disagreed with the roster the container's own panel listed,
+  with no row to push them from. And nesting is a read of THAT container's
+  roster (`membersOf`), never the inverted element→container map — the inverted
+  read answers with the first container claiming an element, which left a
+  mirrored pair's second container rowing empty.
   They are **mutually exclusive**: `production.feed.container.{id}` holds one
   value, so exactly one can occupy the container. Flat top-level fed rows were
   wrong three ways — two rows shared one scene item so both chips read `AIR`
@@ -616,14 +664,15 @@ Two rules, both learned the hard way:
   preview was a mockup. (Demo mode is the deliberate exception: when the
   producer flips the top bar's **Sample** switch, the preview shows the fixture
   because so does the browser source. The preview never disagrees with air.)
-- A fed element has no source of its own — Character Spotlight and Game Summary
-  are both registered at `/layout/shared/callout-stage.html` — so `previewUrl`
-  returns the same URL for every element aimed at one container, and the
+- A member's SLOT has no source of its own: its row's source IS the container,
+  so `previewUrl` returns the same URL for every member of one container and the
   container draws whichever occupant is fed. It therefore appends
-  **`?feed={elementId}`** (a fed element asks for itself; a container row asks
-  for `placement.carrying`), which the shell passes to `initFedContainer` as
+  **`?feed={elementId}`** (a slot asks for itself; a container row asks for
+  `placement.carrying`), which the shell passes to `initFedContainer` as
   `forceElement`, overriding the element only — board and content still come
-  from the live feed. Preview-only: on air there is no `?feed=`.
+  from the live feed. Preview-only: on air there is no `?feed=`. The element's
+  OWN source names nobody: it is not a container, and `?feed=` there would be a
+  param its layout never reads.
 
 The container's own row previews too, sized from its **definition** —
 `containerElement(id, def)` (`placements.js`) synthesises it rather than
@@ -679,11 +728,11 @@ any of them.
   those dimensions, and changing it later would leave the source at the old size
   with nothing to say so. Two sizes means two containers.
 - **`CONTAINER_MEMBERS` is not the same question as `flavor`.** Every `fed`
-  element, plus anything declaring `containerHostable` — the hit visualizer owns
-  a dedicated source AND can be fed into a container ("Split feed" on its
-  stage). It is the console's half of a fact `fed-container.js` also holds (the
-  mounts it can stand up); `containers.test.jsx` pins the two together until the
-  mount registry makes them one list.
+  element, plus anything declaring `containerHostable` — the hit visualizer and
+  both post-game callouts own a dedicated source AND can be stood up in a
+  container. It is the console's half of a fact `fed-container.js` also holds
+  (the mounts it can stand up); `containers.test.jsx` pins the two together
+  until the mount registry makes them one list.
 - **The container id comes off the URL the same way in both runtimes**:
   `?container=` first, filename stem as fallback (`containerId` in
   `elements.js`, `containerIdFromLocation` in `fed-container.js`). The fallback
@@ -944,10 +993,30 @@ connection.
 ## Desks — non-element workflows
 
 Things that **feed the broadcast but aren't on it** (no OBS source, no air
-state). Today: a **board** desk per active scoreboard, then the **Match** desk
+state). Today: a **board** desk per active scoreboard, and the **Match** desk
 (fixture authoring — sides, format, series, board binding, start.gg load, and the
-series lifecycle: flip · decide · reopen), the **Capture** desk (post-game), and
-the **Bracket** desk (which start.gg phase the bracket overlays draw). Rules:
+series lifecycle: flip · decide · reopen).
+
+**WHAT EARNS A DESK — a GLOBAL workflow with no other home.** Stated as a test
+because the tier grew two rows that failed it, and "feeds the broadcast but isn't
+on it" alone will grow them back:
+
+- **Board-scoped work is a REGION on the board panel, not a desk.** The Capture
+  desk's own first control gave it away — a `Board` picker, on a console whose
+  rack has already asked which board you mean. Everything it touched was
+  `postgame.{N}.*` keyed to one board's `score.{N}.game_id`, which is exactly
+  what makes Games and the running order regions. It is `../postgame` now,
+  rendered as the board panel's last `KitColumn`.
+- **A control both of whose consumers already carry it is not a workflow.** The
+  Bracket desk was a third copy of a phase picker that the bracket source's stage
+  and the lower-third's bracket slot both already rendered — from the same shared
+  hook, which is what made the duplication invisible. It lives on the source that
+  draws it (`stage/bracket.jsx`), with the hook shared from `./bracket.jsx`. The
+  reachability objection ("with OBS connected the rack lists only what's in a
+  scene") does not hold: the rack lists **every scene's** sources, and with OBS
+  closed the catalog tier lists every element outright.
+
+Rules:
 
 - One entry per desk in `DESKS` (`rack.jsx`), a body in `DESK_BODIES`
   (`production.jsx`), and — when pinnable — a face in `DESK_QUICK_FACES`
@@ -1008,9 +1077,9 @@ the **Bracket** desk (which start.gg phase the bracket overlays draw). Rules:
 - **An empty count prints no number.** `rotating · 0` and `0 in pool` read as a
   count that failed rather than as nothing yet; say `rotating` / `nothing in its
   pool yet` instead. Same rule in the rack meta and in `playbackLine`.
-- **All three are always racked**, in a permanent section above the scenes, and
-  the `DESK` header carries **no `+`** — there are exactly three, forever. The one
-  it used to carry added a *board*, which is the tell that split the tiers.
+- **Desks are always racked**, in a permanent section above the scenes, and the
+  `DESK` header carries **no `+`** — the fixed desks are fixed. The one it used
+  to carry added a *board*, which is the tell that split the tiers.
   Desks used to appear one at a time, keyed to the phase they belonged to, and
   that rule always needed a special case — Live owned no desk, so the section
   stood empty — which was the tell that desks were never phase-shaped. A
@@ -1018,12 +1087,15 @@ the **Bracket** desk (which start.gg phase the bracket overlays draw). Rules:
   selector says they may. Desks carry no `phase` field and there is no
   `deskForPhase()`.
 - Same panel contract as elements — desks may declare a quick face under the
-  same rules (Capture's `select board + capture` fits; Match currently has no
-  compliant face → `quickFace: null`, not pinnable).
-- Deep authoring still defers to tabs for **sets/bracket → Competition** only.
-  The Match tab is **gone**: fixtures are the Match desk and a board's games are
-  its own panel. Any future feeds-but-not-on-air workflow (bracket refresh,
-  roster sync) is a desk, not a new UI invention.
+  same rules. `DESK_QUICK_FACES` is **empty today**: Match's dense fixture
+  authoring has no compliant face (`pinnable: false`), so every pinnable desk
+  card is a board, resolved from the id by `deskQuickFace` rather than declared.
+  The map stays as the registration point a future desk uses.
+- Deep authoring still defers to tabs for **loading an event → Competition**
+  only. The Match tab is **gone**: fixtures are the Match desk and a board's games
+  are its own panel. A future feeds-but-not-on-air workflow is a desk only if it
+  passes the test above — otherwise it is a region on the thing it is scoped to,
+  or a control on the source it drives.
 
 ### The Match desk owns the whole fixture
 
@@ -1118,7 +1190,8 @@ sources).
   online reader that settings key never had — `instances.js` used to union the
   declared boards into discovery for the same reason and lost that reader when
   rows became source-derived. Boards row **first**: they are the rig, and the
-  fixture, the capture and the bracket all act on one.
+  fixture and the capture both act on one — which is why capture is a region on
+  the board panel rather than a desk of its own (see the desk test above).
 - **BOARDS is its own section, and MEMBERSHIP is why.** A board is a desk in every
   way the stage cares about, but it is not a fixed workflow: there is one Match
   desk forever, while the rig has one to three boards the producer adds and
@@ -1357,7 +1430,9 @@ a settings list** — the shape `PoolBrowser` had on the Match tab, kept.
 1. Build the overlay Layout first (see `overlay-authoring` skill) — the console
    binds to its URL.
 2. Register in `elements.js`: id, name, flavor, url/dims/match, and
-   quick face (or accept the flavor default, or explicit `null`).
+   quick face (or accept the flavor default, or explicit `null`). `flavor: 'fed'`
+   only when the element genuinely has NO source of its own; an element that can
+   go in a container *and* stand alone is `direct` + `containerHostable`.
 3. Write the stage body as kit rows in its own file under
    `src/routes/production/stage/`. No freeform JSX layout. **Do not write a
    show/hide row or a push button into the body** — the source strip in the
@@ -1393,8 +1468,9 @@ one of that type on the broadcast ("Scoreboard on board 2"). A `scope: 'board'`
 element is URL-scoped (`?scoreboard=N`), so two of them are two independent
 things with their own source, air state and settings.
 
-- **Instance id is `{type}:{board}`**, or plain `{type}` for a global element;
-  a placement appends `@{scene}`. Desk ids (`desk:match`, `desk:board:2`) share
+- **Instance id is `{type}:{board}`**, or plain `{type}` for a global element,
+  or `{type}+{container}` for a member's slot on a container; a placement
+  appends `@{scene}`. Desk ids (`desk:match`, `desk:board:2`) share
   the colon and must not parse as instances — `parseInstanceId` returns them
   whole, guarded on the `desk:` prefix. That guard is load-bearing: the pattern's
   head is greedy, so before it every id ending in digits split (see "A board is a
@@ -1424,9 +1500,13 @@ things with their own source, air state and settings.
   panel whose rows and header strip could point at different boards. A board
   *picker inside a panel* is that bug coming back — switching board means
   selecting the other rack row.
-- **Feed-scoped elements never get instances.** Their container is
+- **A container slot takes neither identity axis.** The container is
   board-agnostic and the board rides in the pushed payload (see the two-board-
-  mechanisms note in `elements.js`).
+  mechanisms note in `elements.js`) — a slot is keyed by its container and
+  nothing else. That board comes from the container's own SCOPE
+  (`def.scoreboard`) for every member, not just the scoped ones: a slot has no
+  board of its own to read, so the container's frame of reference is the only
+  thing that knows which board it is looking at.
 - **Name the detail only when there's more than one INSTANCE** of that element —
   counted distinctly, not per placement. The detail is the board alias, the
   variant ("Team 2", "Small"), or both. One board's scoreboard in three scenes is

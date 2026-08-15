@@ -39,6 +39,12 @@ const connected = (items, extra = {}) => useObsStore.setState({
 // is the same fact as which rack row the producer clicked.
 const at = (item, where = 'program', scene = 'Main') => ({ scene, where, item });
 
+// The same, for a row that is a MEMBER'S SLOT on a container: the strip's Push
+// belongs to the slot, not to the element, so the placement has to say it is
+// one (see placementFlavor in ./placements).
+const on = (container, item = null, where = 'program', scene = 'Main') =>
+    ({ scene, where, item, slot: container, container, parent: `container:${container}@${scene}` });
+
 /*
  * The strip's slots are PROGRESSIVE, not per-element: what renders is decided
  * by whether a source exists, never by which element it is. These tests pin
@@ -121,8 +127,13 @@ describe('SourceStrip drives its placement', () => {
 });
 
 /*
- * Fed elements get a third slot, and it STAYS PUT — a slot that appears and
+ * A member's slot gets a third slot, and it STAYS PUT — one that appears and
  * vanishes per element is the mishmash this contract exists to end.
+ *
+ * PUSH IS THE SLOT'S VERB, NOT THE ELEMENT'S. It renders for a row that is a
+ * member's place on a container, because handing that container this element's
+ * content is the only thing "put it up" can mean there. The same element's own
+ * dedicated source has nothing to push into and gets the eye alone.
  */
 describe('SourceStrip push slot', () => {
     it('is absent for direct elements', () => {
@@ -132,26 +143,40 @@ describe('SourceStrip push slot', () => {
         expect(screen.queryByRole('button', { name: /push|clear/i })).not.toBeInTheDocument();
     });
 
-    it('renders for a fed element even with nothing bound, disabled until pickable content exists', () => {
+    /*
+     * The regression this whole model change exists to kill: the Character
+     * Spotlight owns a source now, so its own panel offers Bind/Air and NOT a
+     * Push aimed at a container that may not even exist. It used to render a
+     * Push here and explain underneath that there was nowhere for it to go.
+     */
+    it('is absent on a member’s OWN source, even though it can also be fed', () => {
+        const item = src(2, 'Spotlight', 'http://x/layout/postgame/spotlight.html', true);
+        connected([item]);
+        ui(<SourceStrip element={el('postgamecallout')} placement={at(item)} />);
+        expect(screen.getByRole('button', { name: /hide spotlight on air/i })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /push|clear/i })).not.toBeInTheDocument();
+    });
+
+    it('renders on a slot even with nothing bound, disabled until pickable content exists', () => {
         connected([]);
-        ui(<SourceStrip element={el('stats')} />);
+        ui(<SourceStrip element={el('stats')} placement={on('stats-bar')} />);
         // 'stats' is a pickable feed with nothing ever picked: honest and grey,
         // not hidden.
         expect(screen.getByRole('button', { name: /^push$/i })).toBeDisabled();
     });
 
-    it('lets a push-only fed element push without a prior pick', () => {
+    it('lets a push-only member push without a prior pick', () => {
         connected([]);
-        ui(<SourceStrip element={el('postgamevs')} />);
+        ui(<SourceStrip element={el('postgamevs')} placement={on('callout-stage')} />);
         expect(screen.getByRole('button', { name: /^push$/i })).toBeEnabled();
     });
 
-    // A fed element's Air slot commands the CONTAINER, not a source of its own —
-    // which is exactly what its placement is (./placements).
+    // A slot's Air commands the CONTAINER, not a source of its own — which is
+    // exactly what its placement is (./placements).
     it('binds Air to the shared container the element feeds', () => {
         const item = src(7, 'Callout Stage', 'http://x/layout/shared/callout-stage.html', false);
         connected([item]);
-        ui(<SourceStrip element={el('postgamevs')} placement={at(item)} />);
+        ui(<SourceStrip element={el('postgamevs')} placement={on('callout-stage', item)} />);
         expect(screen.getByRole('button', { name: /show callout stage on air/i })).toBeInTheDocument();
     });
 });

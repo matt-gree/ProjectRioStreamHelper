@@ -9,8 +9,11 @@
   This file is a thin shell: the look lives in the active DESIGN PACKAGE's
   theme SVG (/design/{package}/lowerthird.svg — picked by the global Design
   Package selector), and the rendering/data-binding lives in the reusable mount
-  (lowerthird-mount.js). Drop this in OBS as a full-canvas (1920×1080) browser
-  source; the band sits at the bottom. Author it on the Production page → Break.
+  (lowerthird-mount.js). Drop this in OBS as a 1920×320 browser source and place
+  it in the scene yourself — full stream width, because slot spacing is measured
+  against the frame, but only as tall as the band. A theme that still authors a
+  full 1920×1080 canvas is bottom-anchored inside the source and cropped. Author
+  it on the Production page → Break.
 -->
 <head>
   <meta charset="utf-8" />
@@ -24,8 +27,10 @@
   <link rel="stylesheet" href="/layout/lib/rio-theme/tokens.css" />
   <style>
     html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
-    /* Native full-canvas size hint; the SVG scales to whatever the OBS source is. */
-    body { width: 1920px; height: 1080px; }
+    /* Native size hint: the band's own box (232 tall + the theme's bottom
+       margin and shadow headroom), not the stream canvas. The SVG scales to
+       whatever the OBS source is. */
+    body { width: 1920px; height: 320px; }
     #host { position: fixed; inset: 0; }
   </style>
 </head>

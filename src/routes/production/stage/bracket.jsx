@@ -1,14 +1,27 @@
+import { RefreshCw } from 'lucide-react';
 import { Text } from '../../../components/ui/primitives';
+import { ActionRow } from '../kit';
 import { DirectStage } from './generic';
-import { useBracketDesk } from '../desks/bracket';
+import { BracketPhasePicker, useBracketDesk } from '../bracket';
 
 /*
- * Bracket stage — visibility, plus what the source will actually draw.
+ * Bracket stage — visibility, plus WHICH phase this source draws.
  *
- * Choosing the phase is the Bracket desk's job (one workflow, one place), so
- * this reports rather than duplicates: a bracket source that's on air with
- * nothing loaded renders empty, and that's worth saying here rather than
- * leaving the producer to discover it in the program feed.
+ * The phase used to be chosen on a Bracket desk, on the reasoning that one
+ * global publish deserves one owner. What that missed is that every consumer
+ * already carries the picker: this stage's own `useBracketDesk`, and the
+ * lower-third's bracket slot (../stage/lowerthird). The desk was a third copy of
+ * a control the two surfaces that need it already had, holding a permanent rack
+ * row for a workflow that only matters when something is on air to draw it.
+ *
+ * So it lives here, on the source. The rack lists sources across EVERY scene
+ * (../placements), so a bracket source anywhere in OBS is reachable without
+ * changing scenes — which is what the desk was really providing.
+ *
+ * The phase is still global (`bracket.*`, one loaded phase for all bracket
+ * sources); the picker says so rather than pretending to be per-source. Loads
+ * are momentary — they fetch and publish immediately rather than staging, same
+ * as the Competition tab's own selector.
  */
 
 export default function BracketStage({ element }) {
@@ -16,13 +29,20 @@ export default function BracketStage({ element }) {
     return (
         <>
             <DirectStage element={element} />
-            {/* WHICH phase is drawn is the panel's subject and the stage draws
-                it above this body (../subject). What is left to say is where to
-                change it — one workflow, one place. */}
+            <BracketPhasePicker desk={d} />
+            <ActionRow actions={[
+                {
+                    label: d.busy ? 'Loading…' : 'Refresh',
+                    icon: RefreshCw,
+                    disabled: d.busy || d.phaseGroupId == null,
+                    title: 'Re-pull this phase from start.gg',
+                    onClick: d.refresh,
+                },
+            ]} />
             <Text size="xs" className="border-t border-border/60 pt-2 text-muted-foreground">
                 {d.loaded
-                    ? 'Switch phase or re-pull from the Bracket desk.'
-                    : 'Pick a phase on the Bracket desk to give this source something to draw.'}
+                    ? 'Every bracket source draws this phase — refresh after results land on start.gg.'
+                    : 'Pick a phase to give this source something to draw. Events are loaded on the Competition tab.'}
             </Text>
         </>
     );

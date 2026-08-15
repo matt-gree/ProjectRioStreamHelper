@@ -21,6 +21,7 @@ import { STADIUM_OPTIONS } from '../../../data/stadiums';
 import { ActionRow, FieldRow, KitColumn, KitColumns, TextRow, ToggleChip } from '../kit';
 import { BoardGameSubject } from '../subject';
 import { GamesSection } from '../games';
+import PostGameSection, { PostGameSubject, usePostGame } from '../postgame';
 import { useBoardQueueId, useNextUp, useQueues } from '../queue';
 import { useGameModes, withHeldModes } from '../gamemodes';
 import { useMatchBindableBoards } from '../boards';
@@ -1305,6 +1306,7 @@ export default function BoardDesk({ board }) {
     const d = useBoardDesk(sb);
     const { g } = d;
     const stats = useStatsDiagnostics(sb);
+    const postgame = usePostGame(sb);
     const { options: gameModes } = useGameModes();
     const [refreshingHud, setRefreshingHud] = useState(false);
     const aliases = useSettingsStore(s => s?.scoreboards?.aliases);
@@ -1552,6 +1554,16 @@ export default function BoardDesk({ board }) {
                     )}
                   >
                     <GamesSection sb={sb} transport={d.transport} gameModes={gameModes} />
+                  </KitColumn>
+
+                  {/* The board's captured box score. Last because it is the END
+                      of a game — and a readout first: the stat file fires the
+                      capture on its own, so the subject usually fills itself in
+                      and the controls below are the recovery path. Was a desk of
+                      its own until its board picker gave it away (see
+                      ../postgame). */}
+                  <KitColumn label="Post-game" subject={<PostGameSubject pg={postgame.pg} />}>
+                    <PostGameSection desk={postgame} />
                   </KitColumn>
             </div>
         </>

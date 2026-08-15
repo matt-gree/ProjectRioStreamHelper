@@ -13,7 +13,7 @@ import {
 import { MoveButtons, StagedDot, stageStateSet } from '../controls';
 import { matchDisplayLabel } from '../matches';
 import { useActiveBoards, useBoardLabel } from '../boards';
-import { BracketPhasePicker, useBracketDesk } from '../desks/bracket';
+import { BracketPhasePicker, useBracketDesk } from '../bracket';
 import { DirectStage } from './generic';
 
 /*
@@ -502,9 +502,9 @@ const MerchImagePicker = memo(function MerchImagePicker({ value, onChange }) {
     );
 });
 
-// The Bracket slot renders the same phase picker the Bracket desk owns —
-// loading a phase is one workflow, and a second copy here would let the two
-// disagree about what's on screen.
+// The Bracket slot renders the shared phase picker (../bracket), the same one a
+// bracket source's stage shows: there is ONE loaded phase app-wide, and a second
+// copy of the control here would let the two surfaces disagree about it.
 const BracketSlotPicker = memo(function BracketSlotPicker() {
     const desk = useBracketDesk();
     // The picker's own select shows which phase is loaded, so the label stays

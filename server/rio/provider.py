@@ -576,6 +576,11 @@ class RioGameDataProvider:
 
         cls.hud_watcher = HudWatcher(new_path, on_update=cls._on_hud_game_update)
         cls.hud_watcher.start()
+        # The stat directory is a sibling of the HUD file's, so auto-capture was
+        # left watching the old rig's folder. Imported here, not at module level:
+        # postgame_files resolves its directory THROUGH this module.
+        from server.postgame_watch import StatFileWatcher
+        await StatFileWatcher.Restart()
         game = await cls.hud_watcher.reload()
         if game:
             await cls._on_hud_game_update(game)

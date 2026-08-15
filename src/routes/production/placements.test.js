@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
-    catalogPlacements, genericElement, parsePlacementId, placementId, placementTarget,
-    placementsInScene, resolvePlacement, sceneRole, sourcelessPlacement, togglePin,
+    catalogPlacements, genericElement, parsePlacementId, placementFlavor, placementId,
+    placementTarget, placementsInScene, resolvePlacement, sceneRole, sourcelessPlacement,
+    togglePin,
 } from './placements';
-import { fedTargets } from './containers';
 import { chipFor } from './kit';
 
 /*
@@ -22,20 +22,22 @@ const scene = (name, where, ...items) => ({ scene: name, where, items });
 
 /*
  * Container DEFINITIONS, the shape settings hold them in. Membership lives on
- * the container now, so a test that used to hand `fedTargets` an element →
- * container map builds a roster instead — which is the point: one relationship,
- * one home.
+ * the container now, so a test that used to hand an element → container map
+ * builds a roster instead — which is the point: one relationship, one home, and
+ * the rack reads it straight rather than inverting it.
  */
 const defs = (spec) => Object.fromEntries(Object.entries(spec).map(([id, members]) => [
     id, { id, name: id, width: 1920, height: 1080, members },
 ]));
 const DEFAULT_DEFS = defs({ 'callout-stage': ['postgamecallout', 'postgamevs'] });
-const targets = fedTargets(DEFAULT_DEFS);
-const rows = (sc) => placementsInScene(sc, targets, {}, DEFAULT_DEFS);
+const rows = (sc) => placementsInScene(sc, {}, DEFAULT_DEFS);
 
 const SB = 'http://x/layout/scoreboard1/scoreboard.html';
 const LOWER = 'http://x/layout/lowerthird/lowerthird.html';
 const CALLOUT = 'http://x/layout/shared/callout-stage.html';
+// The Character Spotlight's OWN source. It is a container member AND a direct
+// element now, which is the pair these tests exist to keep apart.
+const SPOTLIGHT = 'http://x/layout/postgame/spotlight.html';
 // An unregistered PRSH layout with a ?team= variant. Roster used to be the
 // exemplar here; it is a registered element now (it is also a container
 // member), so the unregistered case needs a layout that really is one.
@@ -135,7 +137,7 @@ describe('placementsInScene — source → row', () => {
             'split-screen': ['postgamecallout', 'postgamevs'],
         });
         const out = placementsInScene(
-            scene('Game', 'program', item(3, 'Callout', CALLOUT)), fedTargets(moved), {}, moved,
+            scene('Game', 'program', item(3, 'Callout', CALLOUT)), {}, moved,
         );
         expect(out).toHaveLength(1);
         expect(out[0].container).toBe('callout-stage');
@@ -149,7 +151,7 @@ describe('placementsInScene — source → row', () => {
         });
         const out = placementsInScene(
             scene('Game', 'program', item(3, 'Callout', CALLOUT)),
-            fedTargets(repointed), {}, repointed,
+            {}, repointed,
         );
         expect(out.map(p => p.element.id)).toEqual(['container:callout-stage', 'postgamecallout']);
     });
@@ -164,7 +166,7 @@ describe('placementsInScene — source → row', () => {
         const two = defs({ 'callout-stage': ['postgamecallout'], bar: ['stats'] });
         const out = placementsInScene(scene('Game', 'program',
             item(3, 'Callout', `${SHELL}?container=callout-stage`),
-            item(4, 'Bar', `${SHELL}?container=bar`)), fedTargets(two), {}, two);
+            item(4, 'Bar', `${SHELL}?container=bar`)), {}, two);
         expect(out.filter(p => p.container && !p.parent).map(p => p.id))
             .toEqual(['container:callout-stage@Game', 'container:bar@Game']);
     });
@@ -248,10 +250,75 @@ describe('placementsInScene — source → row', () => {
      * board rides in the pushed payload, so reading a variant off the container
      * URL would split one container's pushers into rows that can't both push.
      */
+    /*
+     * A member that owns a SOURCE is two rows, and they must not be one id.
+     * Being fed is a property of the placement, not of the element: the
+     * spotlight's own source is a direct row with an eye, and its slot on the
+     * Callout Stage is a fed row with a Push. Before the slot half of the id
+     * grammar the two collided — duplicate React keys, and a panel driving
+     * whichever `find()` reached first.
+     */
+    it('rows a member’s own source and its container slot as two rows', () => {
+        const out = rows(scene('Game', 'program',
+            item(1, 'Spotlight', SPOTLIGHT),
+            item(2, 'Callout Stage', CALLOUT)));
+
+        const own = out.find(p => p.id === 'postgamecallout@Game');
+        expect(own.item.sourceName).toBe('Spotlight');
+        expect(own.slot).toBeUndefined();
+        expect(placementFlavor(own)).toBe('direct');
+
+        const onStage = out.find(p => p.id === 'postgamecallout+callout-stage@Game');
+        expect(onStage).toMatchObject({ slot: 'callout-stage', container: 'callout-stage' });
+        expect(onStage.item.sourceName).toBe('Callout Stage');
+        expect(placementFlavor(onStage)).toBe('fed');
+    });
+
+    /*
+     * Every member the roster names nests, not just the ones with no source of
+     * their own. Leaving the source-owning members out meant a container listed
+     * a roster the rack disagreed with — nothing said the hit visualizer was a
+     * member, and there was no row to push it from.
+     */
+    it('nests every rostered member, including ones that own a source', () => {
+        const withHit = defs({ 'split-screen': ['hitvisualizer'] });
+        const out = placementsInScene(
+            scene('Game', 'program', item(1, 'Split', `${SHELL}?container=split-screen`)),
+            {}, withHit,
+        );
+        expect(out.filter(p => p.slot).map(p => p.id))
+            .toEqual(['hitvisualizer+split-screen@Game']);
+    });
+
+    /*
+     * A container-SCOPED member sits on several rosters — the exception that
+     * makes a mirrored pair buildable — so nesting reads each container's OWN
+     * roster rather than the inverted element→container map, which answers with
+     * whichever container it finds first. With the inverted read the pair's
+     * second container rowed empty in the rack while its own panel listed two
+     * members.
+     */
+    it('nests a shared member under every container that rosters it', () => {
+        const pair = defs({
+            'roster-stats-1': ['roster', 'statscard'],
+            'roster-stats-2': ['roster', 'statscard'],
+        });
+        const out = placementsInScene(
+            scene('Game', 'program',
+                item(1, 'Left', `${SHELL}?container=roster-stats-1`),
+                item(2, 'Right', `${SHELL}?container=roster-stats-2`)),
+            {}, pair,
+        );
+        expect(out.filter(p => p.slot).map(p => p.id)).toEqual([
+            'roster+roster-stats-1@Game', 'statscard+roster-stats-1@Game',
+            'roster+roster-stats-2@Game', 'statscard+roster-stats-2@Game',
+        ]);
+    });
+
     it('leaves fed elements unsharded by a param on their container', () => {
         const out = rows(scene('Game', 'program', item(3, 'Callout', `${CALLOUT}?team=2`)));
         expect(out.filter(p => p.parent).map(p => p.id).sort())
-            .toEqual(['postgamecallout@Game', 'postgamevs@Game']);
+            .toEqual(['postgamecallout+callout-stage@Game', 'postgamevs+callout-stage@Game']);
     });
 });
 
@@ -340,8 +407,8 @@ describe('togglePin — compared by what a pin RESOLVES to', () => {
     });
 
     it('passes through a pin placements do not own (a desk)', () => {
-        expect(placementTarget('desk:capture', all)).toBe('desk:capture');
-        expect(togglePin(['desk:capture'], 'desk:capture', all)).toEqual([]);
+        expect(placementTarget('desk:board:2', all)).toBe('desk:board:2');
+        expect(togglePin(['desk:board:2'], 'desk:board:2', all)).toEqual([]);
     });
 });
 
@@ -424,6 +491,26 @@ describe('catalogPlacements — what PRSH can configure with no OBS', () => {
 
         const kids = rows.filter(p => p.parent === stage.id).map(p => p.element.id);
         expect(kids).toEqual(['postgamecallout', 'postgamevs']);
+        // Slot ids, exactly as online — a catalog id has to be the same string
+        // the scene copy will be, or a pin made offline opens the other row.
+        expect(rows.filter(p => p.parent === stage.id).map(p => p.id))
+            .toEqual(['postgamecallout+callout-stage', 'postgamevs+callout-stage']);
+    });
+
+    /*
+     * …and the member's own source still rows on its own, because it owns one.
+     * That is the whole reason the Character Spotlight is reachable with no
+     * container at all now: it is a source like any other.
+     */
+    it('rows a member’s own source alongside its slot', () => {
+        const rows = all();
+        const own = rows.find(p => p.id === 'postgamecallout');
+        expect(own).toMatchObject({ item: null, scene: null, where: 'none' });
+        expect(placementFlavor(own)).toBe('direct');
+        // With no container claiming it at all, the own-source row is all there is.
+        const alone = catalogPlacements({ defs: {}, boards: [1] })
+            .filter(p => p.element.id === 'postgamecallout');
+        expect(alone.map(p => p.id)).toEqual(['postgamecallout']);
     });
 
     // Feeding a container is a STATE write and needs no OBS, so `mine` has to be

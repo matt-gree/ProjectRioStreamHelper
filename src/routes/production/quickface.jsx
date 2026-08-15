@@ -4,7 +4,7 @@ import { ActionRow, SelectRow } from './kit';
 import { FEED_OPTION_HOOKS, flattenGroups } from './feed-pickers';
 import { quickFaceFor } from './elements';
 import { useContainerPush } from './feeds';
-import { useConsoleOffline } from './placements';
+import { isFedPlacement, useConsoleOffline } from './placements';
 import { boardOfDeskId, useMatchBindableBoards } from './boards';
 import { useNextUp } from './queue';
 import { takeNextMatch } from '../../context/match';
@@ -13,9 +13,8 @@ import { BoardGameSubject, Subject } from './subject';
 import { SourceToggleRow } from './stage/generic';
 import { ScorecardModeRow, useScorecard } from './stage/scorecard';
 import { EventHeaderBandRows, useEventHeader } from './stage/eventheader';
+import { BracketPhasePicker, useBracketDesk } from './bracket';
 import { useBoardDesk } from './desks/board';
-import { useCaptureDesk } from './desks/capture';
-import { BracketPhasePicker, useBracketDesk } from './desks/bracket';
 
 /*
  * Quick faces — the ≤2-row control set an element exposes on a rail card
@@ -98,9 +97,11 @@ const ContainerRow = memo(function ContainerRow({ placement }) {
  * pick. `placeholder` (the "Nothing fed" clear) shows only while on air, where
  * clearing means take-off-stage; off air it would clear whatever else is up.
  */
-const PickableFedQuickFace = memo(function PickableFedQuickFace({ element, useOptions }) {
+const PickableFedQuickFace = memo(function PickableFedQuickFace({ element, useOptions, placement }) {
     const o = useOptions(element);
-    const { mine, canPush, toggle } = useContainerPush(element);
+    // The card's OWN container — a scoped member can be pinned from two of
+    // them, and a lookup from the element would push both cards into one.
+    const { mine, canPush, toggle } = useContainerPush(element, 1, placement?.slot);
     if (o.empty) return <Text size="xs" className="text-muted-foreground">{o.empty}</Text>;
     return (
         <>
@@ -125,7 +126,7 @@ const PickableFedQuickFace = memo(function PickableFedQuickFace({ element, useOp
 // Fed element with nothing to pick (Game Summary): push it, or hand the
 // container back. The only decision is timing.
 const PushOnlyFedQuickFace = memo(function PushOnlyFedQuickFace({ element, placement }) {
-    const { mine, canPush, toggle } = useContainerPush(element);
+    const { mine, canPush, toggle } = useContainerPush(element, 1, placement?.slot);
     return (
         <>
             <ContainerRow placement={placement} />
@@ -145,7 +146,7 @@ const PushOnlyFedQuickFace = memo(function PushOnlyFedQuickFace({ element, place
 const FedQuickFace = memo(function FedQuickFace({ element, placement }) {
     const useOptions = FEED_OPTION_HOOKS[element.feed];
     return useOptions
-        ? <PickableFedQuickFace element={element} useOptions={useOptions} />
+        ? <PickableFedQuickFace element={element} useOptions={useOptions} placement={placement} />
         : <PushOnlyFedQuickFace element={element} placement={placement} />;
 });
 
@@ -174,27 +175,6 @@ const DefaultDirectQuickFace = memo(function DefaultDirectQuickFace({ element, p
     );
 });
 
-// Capture desk: pick the board, capture. The only desk with a compliant face.
-const CaptureQuickFace = memo(function CaptureQuickFace() {
-    const d = useCaptureDesk();
-    return (
-        <>
-            <Text size="xs" truncate className="text-muted-foreground">
-                {d.pg.present
-                    ? `${d.pg.n1 || 'Side 1'} ${d.pg.s1 ?? 0}–${d.pg.s2 ?? 0} ${d.pg.n2 || 'Side 2'}`
-                    : 'Nothing captured'}
-            </Text>
-            <ActionRow actions={[
-                {
-                    label: d.busy ? 'Capturing…' : 'Capture',
-                    variant: 'default', disabled: d.busy, onClick: d.capture,
-                },
-                ...(d.pg.present ? [{ label: 'Clear', variant: 'ghost', disabled: d.busy, onClick: d.clear }] : []),
-            ]} />
-        </>
-    );
-});
-
 // Scorecard: on air + which score block. Its other eight bands are stage work —
 // these are the two a producer reaches for without leaving the rail.
 const ScorecardQuickFace = memo(function ScorecardQuickFace({ element, placement, board }) {
@@ -215,7 +195,15 @@ const EventHeaderQuickFace = memo(function EventHeaderQuickFace() {
     return <EventHeaderBandRows os={os} />;
 });
 
-// Bracket desk: switch phase, or re-pull the one on screen after results land.
+/*
+ * Bracket: switch phase, or re-pull the one on screen after results land.
+ *
+ * The one bracket control with a live tempo — start.gg advances all night and
+ * the drawn phase goes stale — so it earns a card even though the source toggle
+ * does not. This is the face the deleted Bracket desk carried, moved to the
+ * source it acts on (../stage/bracket). The phase is global: pinning two bracket
+ * sources gives two cards driving one loaded phase, which is what they draw.
+ */
 const BracketQuickFace = memo(function BracketQuickFace() {
     const d = useBracketDesk();
     return (
@@ -300,10 +288,15 @@ const BoardQuickFace = memo(function BoardQuickFace({ id }) {
     );
 });
 
-export const DESK_QUICK_FACES = {
-    'desk:capture': CaptureQuickFace,
-    'desk:bracket': BracketQuickFace,
-};
+/*
+ * Fixed desks with a rail face. Empty: Match is the only fixed desk and its
+ * dense fixture authoring does not fit the two-row cap, so every pinnable desk
+ * card resolves through BoardQuickFace below.
+ *
+ * Kept as a map rather than deleted — the tier is the shape, and a desk that
+ * earns a face registers here beside the resolver that reads it.
+ */
+export const DESK_QUICK_FACES = {};
 
 /*
  * A desk's quick face, or null when it has none (Match — dense fixture
@@ -323,6 +316,7 @@ export function deskQuickFace(id) {
 const ELEMENT_QUICK_FACES = {
     scorecard: ScorecardQuickFace,
     eventheader: EventHeaderQuickFace,
+    bracket: BracketQuickFace,
 };
 
 // The quick face for a registered element, by flavor. Returns null when the
@@ -330,11 +324,17 @@ const ELEMENT_QUICK_FACES = {
 export const QuickFace = memo(function QuickFace({ element, placement, board }) {
     const face = quickFaceFor(element);
     if (!face) return null;
+    /*
+     * A pin of a member's SLOT gets the fed face, whatever the element is
+     * elsewhere: that card's Push hands the container this element's content,
+     * and its chip already reads both halves of being on air. A pin of the
+     * element's own source gets the element's own face — including the custom
+     * ones, which drive settings that belong to that source.
+     */
+    if (isFedPlacement(placement)) return <FedQuickFace element={element} placement={placement} />;
     const Custom = ELEMENT_QUICK_FACES[element.id];
     // `board` is the pinned placement's board — a board-scoped face (Scorecard)
     // must write the same board the card's chip reads.
     if (Custom) return <Custom element={element} placement={placement} board={board} />;
-    return element.flavor === 'fed'
-        ? <FedQuickFace element={element} placement={placement} />
-        : <DefaultDirectQuickFace element={element} placement={placement} />;
+    return <DefaultDirectQuickFace element={element} placement={placement} />;
 });

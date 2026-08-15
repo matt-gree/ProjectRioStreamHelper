@@ -19,9 +19,13 @@ const NO_SEL = Object.freeze({});
  * element or a container row previews live and needs no override. Kept to
  * primitives inside useShallow so it settles instead of firing every tick.
  */
-function useFeedSel(element, board) {
+function useFeedSel(element, board, placement) {
     return useStateStore(useShallow((s) => {
-        if (element.flavor !== 'fed') return NO_SEL;
+        // Only a MEMBER'S SLOT needs the override: the element's own source
+        // reads the standing intent itself (the spotlight layout renders
+        // `production.feed.last.{id}`), so handing it one would be the preview
+        // telling the overlay something it already knows.
+        if (!placement?.slot) return NO_SEL;
         const i = resolveIntent(s, element, board || 1);
         if (!i) return NO_SEL;
         return { scoreboard: i.scoreboard ?? 1, team: i.team, charIndex: i.charIndex, role: i.role };
@@ -97,7 +101,13 @@ export function previewUrl(element, board, placement, nonce = 0, feedSel = null,
         // browser, and so a junk URL throws here rather than in the iframe.
         const u = new URL(base, window.location.origin);
         u.searchParams.set('preview', '1');
-        const feed = element.flavor === 'fed'
+        /*
+         * WHICH occupant this container should draw. A member's slot asks for
+         * itself; a container's own row asks for whatever it is carrying. An
+         * element's own dedicated source names nobody — it is not a container,
+         * and `?feed=` there would be a param its layout never reads.
+         */
+        const feed = binding?.slot
             ? element.id
             : (binding?.container ? binding.carrying : null);
         if (feed) u.searchParams.set('feed', feed);
@@ -165,7 +175,7 @@ const StagePreview = memo(function StagePreview({ element, board, binding: maybe
     // (which is empty until a pick, and a pick is on-air). `team == null` means
     // no intent — nothing captured/rostered yet — so send no override and let
     // the container render its own empty state.
-    const feedSel = useFeedSel(element, board);
+    const feedSel = useFeedSel(element, board, maybe);
     // The Intro toggle's preference, not the source url's — see previewUrl.
     // `null` for an element with no intro, so the url is left untouched.
     const introDisabled = useSettingsStore(s => (introTypeFor(element)

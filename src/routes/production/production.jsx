@@ -21,8 +21,6 @@ import { SampleModeSwitch } from './sample';
 import { Stage } from './stage';
 import { Rail } from './rail';
 import MatchDesk from './desks/match';
-import CaptureDesk from './desks/capture';
-import BracketDesk from './desks/bracket';
 import BoardDesk from './desks/board';
 import { boardDeskId, useActiveBoards, useBoardLabel } from './boards';
 
@@ -228,12 +226,11 @@ export const PendingBar = memo(function PendingBar() {
  * apart silently.
  *
  * Match has no quick face that fits the rail's two-row cap (dense fixture
- * authoring), so it is deliberately not pinnable; Capture's and Bracket's fit.
+ * authoring), so it is deliberately not pinnable — and it is the only fixed
+ * desk left, the boards below being the rest of the tier.
  */
 export const DESK_BODIES = {
     'desk:match': { title: 'Match', body: <MatchDesk />, pinnable: false },
-    'desk:capture': { title: 'Capture', body: <CaptureDesk /> },
-    'desk:bracket': { title: 'Bracket', body: <BracketDesk /> },
 };
 
 /*

@@ -234,7 +234,16 @@ def test_canvas_mismatch_warned():
     _, report = compile_svg(
         _mini("<g/>", 'viewBox="0 0 800 600"'), "matchup",
     )
-    assert "1920x1080" in _messages(report, "warn")
+    assert "1920x480" in _messages(report, "warn")
+
+
+def test_band_alt_canvas_is_not_a_mismatch():
+    # The band elements are the height of their card, but their mounts
+    # bottom-anchor and crop — so a theme still drawn on the full stream canvas
+    # lands correctly and must not be warned about (server/theme_contracts.py).
+    for element in ("matchup", "lowerthird", "commentary", "playerplates"):
+        _, report = compile_svg(_mini("<g/>", 'viewBox="0 0 1920 1080"'), element)
+        assert "canvas is" not in _messages(report, "warn"), element
 
 
 def test_callout_takes_no_slots():

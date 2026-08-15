@@ -4,9 +4,12 @@ import { useObsStore } from '../../context/obs';
 import { useStateStore } from '../../context/store';
 import { boardOfUrl } from '../../lib/obs-binding';
 import { ELEMENTS } from './elements';
-import { containerOfSource, fedTargets, useContainerDefs } from './containers';
 import {
-    instanceId, parseInstanceId, variantLabelFor, variantOf, variantTagFor, withVariant,
+    CONTAINER_MEMBERS, containerOfSource, fedTargets, useContainerDefs,
+} from './containers';
+import {
+    instanceId, parseInstanceId, slotInstanceId, variantLabelFor, variantOf, variantTagFor,
+    withVariant,
 } from './instances';
 import { useActiveBoards, useBoardTag } from './boards';
 
@@ -86,6 +89,33 @@ const DIRECT_ELEMENTS = ELEMENTS.filter(el => el.flavor === 'direct');
 const FED_ELEMENTS = ELEMENTS.filter(el => el.flavor === 'fed');
 
 /*
+ * WHICH KIND OF ROW THIS IS — the one statement of it, read by every surface.
+ *
+ * Fed is a property of the PLACEMENT, not of the element. A member sitting on a
+ * container's roster rows under that container and pushes into it; the same
+ * element's own dedicated source rows on its own and only shows and hides. Both
+ * are true at once for a member that owns a source (the hit visualizer, the two
+ * post-game callouts), and asking `element.flavor` answered with one of them
+ * whichever row the producer had actually clicked — which is how the Character
+ * Spotlight's own source ended up wearing a Push button aimed at a container
+ * that did not exist.
+ *
+ * An element with no source of its own (`flavor: 'fed'`) has one possible
+ * answer, so it keeps reporting fed even with no roster claiming it: there is
+ * genuinely nowhere else for its content to go, and the panel says so rather
+ * than offering to bind a source it doesn't have.
+ *
+ * `slot` — the container this row is a MEMBER of — is what says which kind of
+ * row this is. Not `container`, which a container's OWN row also carries, and
+ * not `parent`, which a stored slot id resolves without.
+ */
+export const placementFlavor = (placement) => (
+    placement?.slot ? 'fed' : (placement?.element?.flavor ?? 'direct')
+);
+
+export const isFedPlacement = (placement) => placementFlavor(placement) === 'fed';
+
+/*
  * A PRSH source the element registry doesn't know — a roster, a team logo, a
  * player name. Setup has always been able to add these and Production has
  * always been blind to them; now that the Add picker offers the whole layout
@@ -143,21 +173,35 @@ export function containerElement(id, def) {
 }
 
 /*
- * Which container each fed element is pointed at — a direct read of the
- * ROSTERS (./containers), not an inverted scan over per-element settings.
+ * The members that row under one container — READ OFF THAT CONTAINER'S ROSTER,
+ * in the order the producer put them in.
  *
- * Fed elements are NOT discovered from sources the way direct ones are, and the
- * difference is load-bearing: Character Spotlight and Game Summary share one
- * Callout Stage source, so a source→row scan alone would collapse two elements
- * the producer drives separately into a single row. Instead the container
- * source decides WHICH SCENE they row in, and both row there — nested under it.
+ * Members are NOT discovered from sources the way direct rows are, and the
+ * difference is load-bearing: Character Spotlight and Game Summary can share
+ * one Callout Stage source, so a source→row scan alone would collapse two
+ * elements the producer drives separately into a single row. The container
+ * source decides WHICH SCENE they row in, and every member rows there, nested.
+ *
+ * The roster, not the inverted element→container map (`fedTargets`): that map
+ * answers with the FIRST container claiming an element, which is right for "an
+ * element's own row" and wrong here. A container-SCOPED member legitimately
+ * sits on several rosters — that exception is what makes a mirrored pair
+ * buildable — and the inverted read gave the pair's second container an empty
+ * roster in the rack while its own panel listed two members.
+ *
+ * Every member, not just the fed-only ones: one that also owns a dedicated
+ * source (the hit visualizer, the two post-game callouts) is on this container
+ * for exactly the same reason the others are, and leaving it out meant no row
+ * to push it from and nothing saying it was a member at all.
  */
+const BY_ID = new Map(CONTAINER_MEMBERS.map(el => [el.id, el]));
+const membersOf = (def) => (def?.members ?? []).map(id => BY_ID.get(id)).filter(Boolean);
 
 /*
  * One scene's rows. Order follows OBS's own scene-item order, so the rack reads
  * the way the producer's source list does.
  */
-export function placementsInScene({ scene, where, items = [] }, targets = {}, feeds = {}, defs = {}) {
+export function placementsInScene({ scene, where, items = [] }, feeds = {}, defs = {}) {
     const out = [];
     for (const item of items) {
         const url = item.url || '';
@@ -189,9 +233,7 @@ export function placementsInScene({ scene, where, items = [] }, targets = {}, fe
         const variant = variantOf(url);
         const instance = instanceId(el, null, url);
         const id = placementId(instance, scene);
-        const children = isContainer
-            ? FED_ELEMENTS.filter(f => targets[f.id] === stem)
-            : [];
+        const children = isContainer ? membersOf(defs[stem]) : [];
 
         // Which element's content the container is holding right now. Carried on
         // the row rather than re-read per surface, because three of them need
@@ -219,14 +261,18 @@ export function placementsInScene({ scene, where, items = [] }, targets = {}, fe
          *
          * Fed rows take NEITHER identity axis: the container is board-agnostic
          * by design, and reading a variant off its URL would split one
-         * container's pushers into rows that can't both push.
+         * container's pushers into rows that can't both push. What they DO take
+         * is the container itself (`slotInstanceId`) — a member's slot and that
+         * member's own source are two placements of one element, and the bare
+         * id can only name one of them.
          */
         for (const f of children) {
+            const slot = slotInstanceId(f.id, stem);
             out.push({
-                id: placementId(f.id, scene),
-                instance: f.id, element: f, board: null, variant: '',
+                id: placementId(slot, scene),
+                instance: slot, element: f, board: null, variant: '',
                 scene, where, item,
-                parent: id, container: stem,
+                parent: id, container: stem, slot: stem,
                 mine: carrying === f.id,
                 carrying,
             });
@@ -355,23 +401,33 @@ export function catalogPlacements({ defs = {}, boards = [1], feeds = {} } = {}) 
     }
 
     for (const def of Object.values(defs).sort((a, b) => a.name.localeCompare(b.name))) {
-        const children = FED_ELEMENTS.filter(f => targets[f.id] === def.id);
+        const children = membersOf(def);
         const carrying = feeds[def.id]?.element ?? null;
         const parent = row(containerElement(def.id, def), null, {
             container: def.id, feeds: children.map(f => f.id), carrying,
         });
         out.push(parent);
+        // Slot ids, exactly as online — a member's slot and its own source are
+        // two rows of one element, and a catalog id has to be the same string
+        // the scene copy will be or a pin made offline opens the other one.
         for (const f of children) {
-            out.push(row(f, null, {
-                parent: parent.id, container: def.id, mine: carrying === f.id, carrying,
-            }));
+            const slot = slotInstanceId(f.id, def.id);
+            out.push({
+                ...row(f, null, {
+                    parent: parent.id, container: def.id, slot: def.id,
+                    mine: carrying === f.id, carrying,
+                }),
+                id: slot, instance: slot,
+            });
         }
     }
 
-    // A fed element no roster claims rows at the TOP level rather than not at
-    // all. Online it has no container source to nest under and simply doesn't
-    // appear; here, being unreachable is the problem — its stage is where the
-    // producer finds out it needs a container and which one to add it to.
+    // A fed-only element no roster claims rows at the TOP level rather than not
+    // at all. Online it has no container source to nest under and simply
+    // doesn't appear; here, being unreachable is the problem — its stage is
+    // where the producer finds out it needs a container and which one to add it
+    // to. A member that owns a source has already rowed above, from
+    // DIRECT_ELEMENTS, which is the whole point of it owning one.
     for (const f of FED_ELEMENTS) if (!targets[f.id]) out.push(row(f));
 
     return out;
@@ -406,8 +462,7 @@ export function useConsolePlacements(consoleScenes) {
     const offline = useConsoleOffline();
     return useMemo(() => {
         if (offline) return catalogPlacements({ defs, boards, feeds });
-        const targets = fedTargets(defs);
-        return consoleScenes.flatMap(sc => placementsInScene(sc, targets, feeds, defs));
+        return consoleScenes.flatMap(sc => placementsInScene(sc, feeds, defs));
     }, [consoleScenes, defs, feeds, boards, offline]);
 }
 
@@ -475,16 +530,23 @@ export function usePlacementLabel(placements) {
  */
 export function sourcelessPlacement(id) {
     const { instance } = parsePlacementId(id);
-    const { elementId, board, variant } = parseInstanceId(instance);
+    const { elementId, board, variant, slot } = parseInstanceId(instance);
     const element = ELEMENTS.find(e => e.id === elementId);
     if (!element) return null;
     const b = element.scope === 'board' ? (board ?? 1) : null;
     // The variant is carried through rather than re-derived: there is no source
     // to read it off, and dropping it would answer a selection that said "team
-    // 2" with a panel pointed at team 1.
-    const key = withVariant(instanceId(element, b), variant);
+    // 2" with a panel pointed at team 1. Same for the SLOT: an id naming a
+    // member's place on a container means that slot even when the container's
+    // source has gone, and answering with the element's own source would hand
+    // the producer a panel for the other half of a two-row element.
+    const key = slot
+        ? slotInstanceId(element.id, slot)
+        : withVariant(instanceId(element, b), variant);
     return {
-        id: key, instance: key, element, board: b, variant: variant ?? '',
+        id: key, instance: key, element, board: slot ? null : b,
+        variant: slot ? '' : (variant ?? ''),
+        slot: slot ?? undefined, container: slot ?? undefined,
         scene: null, where: 'none', item: null,
     };
 }

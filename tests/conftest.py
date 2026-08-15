@@ -62,6 +62,7 @@ def reset_singletons():
     from server.settings import Settings
     from server.match import Match
     from server.postgame import PostGame
+    from server.postgame_watch import StatFileWatcher
     from server.rio.game_end import GameEndWatcher
     from server.rio.provider import RioGameDataProvider as Provider
     from server.rio.stats_tracker import StatsTracker
@@ -85,6 +86,7 @@ def reset_singletons():
         "credited_games": copy.deepcopy(Match._credited_games),
         "gameend_pending": set(GameEndWatcher._pending),
         "gameend_done": set(GameEndWatcher._done),
+        "autocapture_done": set(StatFileWatcher._done),
         "announcements_active": list(Announcements._active),
         "participants": dict(Participants.participants),
     }
@@ -126,6 +128,7 @@ def reset_singletons():
     Match._credited_games = {}
     GameEndWatcher._pending = set()
     GameEndWatcher._done = set()
+    StatFileWatcher._done = set()
     Announcements._active = []
     Participants.participants = {}
 
@@ -153,6 +156,7 @@ def reset_singletons():
     Match._credited_games = saved["credited_games"]
     GameEndWatcher._pending = saved["gameend_pending"]
     GameEndWatcher._done = saved["gameend_done"]
+    StatFileWatcher._done = saved["autocapture_done"]
     Announcements._active = saved["announcements_active"]
     Participants.participants = saved["participants"]
 

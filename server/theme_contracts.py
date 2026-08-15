@@ -198,7 +198,10 @@ _TICKER_PARTS = {
 
 CONTRACTS: dict[str, Contract] = {
     # --- full slot lint ---
-    "matchup": Contract((1920, 1080), "xMidYMax meet", slots=_matchup_slots()),
+    # A band like commentary/playerplates below: the source is the card's box,
+    # and a full-canvas theme is bottom-anchored and cropped by the mount.
+    "matchup": Contract((1920, 480), "xMidYMax meet", slots=_matchup_slots(),
+                        alt_canvases=((1920, 1080),)),
     "stats": Contract((452, 118), "xMidYMid meet", slots=_stats_slots()),
     "ticker": Contract(
         (1920, 80), "xMidYMid meet",
@@ -224,13 +227,13 @@ CONTRACTS: dict[str, Contract] = {
     "scoreboard-l": Contract((800, 460), "xMidYMid meet", slots=_scoreboard_slots(),
                              parts={"div": Slot("any")}),
     # --- canvas checks only (slot lint not transcribed yet) ---
-    # The two band elements: 1920 wide (spacing is measured against the stream
+    # The band elements: 1920 wide (spacing is measured against the stream
     # frame) by the height of the card, so the producer places them vertically
     # in OBS. Their mounts bottom-anchor and crop, so the old full canvas is
     # still valid — see alt_canvases.
     "commentary": Contract((1920, 240), "xMidYMax meet", alt_canvases=((1920, 1080),)),
     "playerplates": Contract((1920, 240), "xMidYMax meet", alt_canvases=((1920, 1080),)),
-    "lowerthird": Contract((1920, 1080), "xMidYMax meet"),
+    "lowerthird": Contract((1920, 320), "xMidYMax meet", alt_canvases=((1920, 1080),)),
     "scorecard": Contract((1920, 1080), "xMidYMid meet"),
     "statscard": Contract((380, 240), "xMidYMid meet"),
 }

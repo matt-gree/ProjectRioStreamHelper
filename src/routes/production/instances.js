@@ -80,6 +80,26 @@ export const VARIANT_SEP = '~';
 
 export const withVariant = (base, variant) => (variant ? `${base}${VARIANT_SEP}${variant}` : base);
 
+/*
+ * The SLOT separator — an element's place on a container's roster.
+ *
+ * A container member that also owns a dedicated source is two rows: its own
+ * source, and its slot on the container that can stand it up instead. Both are
+ * placements of the same element, so the bare element id can only spell one of
+ * them — and the pair collided the moment the post-game callouts stopped being
+ * fed-only (duplicate React keys in the rack, and a panel driving whichever
+ * `find()` reached first, which is the same bug the board and variant axes
+ * exist to prevent).
+ *
+ * `+` appears in neither half it divides: element ids are plain identifiers and
+ * a container id is a slug (`containerIdFor`), which strips it. Read out before
+ * the board and variant axes, so `stats+stats-bar` is still the `stats` element.
+ */
+export const SLOT_SEP = '+';
+
+export const slotInstanceId = (elementId, container) =>
+    (container ? `${elementId}${SLOT_SEP}${container}` : elementId);
+
 // The variant tag a source URL earns, e.g. 't2', 'zs', 't1.zl'. Empty when the
 // URL names none — which is every overlay that has only one of itself.
 export function variantOf(url) {
@@ -195,8 +215,13 @@ export function parseInstanceId(id) {
     const base = cut < 0 ? s : s.slice(0, cut);
     const variant = cut < 0 ? null : s.slice(cut + 1) || null;
     if (base.startsWith(DESK_PREFIX)) return { elementId: base, board: null, variant };
-    const m = /^(.+):(\d+)$/.exec(base);
+    // The slot comes off FIRST: a container slot is the element, on a
+    // container, and everything below answers questions about the element.
+    const slotCut = base.indexOf(SLOT_SEP);
+    const slot = slotCut < 0 ? null : base.slice(slotCut + 1) || null;
+    const head = slotCut < 0 ? base : base.slice(0, slotCut);
+    const m = /^(.+):(\d+)$/.exec(head);
     return m
-        ? { elementId: m[1], board: Number(m[2]), variant }
-        : { elementId: base || null, board: null, variant };
+        ? { elementId: m[1], board: Number(m[2]), variant, slot }
+        : { elementId: head || null, board: null, variant, slot };
 }

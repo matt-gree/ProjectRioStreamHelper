@@ -4,7 +4,9 @@ import { useStateStore } from '../../context/store';
 import { boardOfUrl } from '../../lib/obs-binding';
 import { SubjectRow } from './kit';
 import { resolveIntent } from './suggest';
+import { isPickableFeed } from './elements';
 import { useContainerDefs, useContainerOf } from './containers';
+import { isFedPlacement } from './placements';
 import { memberName, useFeedReason } from './automations';
 
 /*
@@ -39,9 +41,11 @@ import { memberName, useFeedReason } from './automations';
  * reason.
  *
  * A subject is ALWAYS derived from live state, never from settings or from what
- * the producer last picked — except a fed element's, which is explicitly the
- * standing intent (what Push would show) and says so. If you find yourself
- * wanting to show a configured value here, that is a stage row, not a subject.
+ * the producer last picked — except an element with a PICK, whose subject is the
+ * standing intent and says so, in the tense of the row it is on: what Push would
+ * show on a container slot, what the overlay is already drawing on the element's
+ * own source (which renders that key itself). If you find yourself wanting to
+ * show a configured value here, that is a stage row, not a subject.
  */
 
 // ── shared readouts ─────────────────────────────────────────────────────────
@@ -149,20 +153,75 @@ const ScopedMemberSubject = memo(function ScopedMemberSubject({ element, contain
 });
 
 /*
+ * A whole-game element (the Game Summary) drawing off a board's CAPTURE.
+ *
+ * It has no pick — a summary is the whole game — so "nothing picked yet" is a
+ * sentence about a control it doesn't have. What it can say is what it will
+ * draw: the captured game, or that there isn't one yet. On a container the
+ * question is still "what would Push put up", which is FedSubject's job; this
+ * is the same fact asked of the element's own source.
+ */
+const CaptureSubject = memo(function CaptureSubject({ board = 1 }) {
+    const pg = useStateStore(useShallow(s => {
+        const p = s?.postgame?.[board];
+        return {
+            present: !!p?.present,
+            n1: p?.player?.[1]?.rioName || '', s1: p?.player?.[1]?.score,
+            n2: p?.player?.[2]?.rioName || '', s2: p?.player?.[2]?.score,
+        };
+    }));
+    if (!pg.present) return <SubjectRow text="No captured game on this board yet" />;
+    return (
+        <SubjectRow
+            text={`${pg.n1 || 'Side 1'} ${pg.s1 ?? 0}–${pg.s2 ?? 0} ${pg.n2 || 'Side 2'}`}
+            meta="captured"
+        />
+    );
+});
+
+/*
  * A fed element's subject is its standing INTENT — what Push would put up —
  * because that is the only content question it can answer off the container.
  * `resolveIntent` is the same answer the picker, the Push slot and the preview
  * read, so the four cannot disagree about what is armed.
  */
-const FedSubject = memo(function FedSubject({ element, board = 1 }) {
+const FedSubject = memo(function FedSubject({ element, board = 1, fed = true, pickable = true }) {
     const intent = useStateStore(useShallow(s => {
         const i = resolveIntent(s, element, board);
         return { name: i?.name || '', has: !!i?.element, suggested: !!i?.suggested };
     }));
-    if (!intent.has) return <SubjectRow text="Nothing armed yet" />;
+    /*
+     * The same pick, said in the tense of the row. On a container slot it is
+     * what Push WOULD show; on the element's own source the overlay is reading
+     * that key already, so the pick is simply what is drawn and "Push" would be
+     * naming a verb this panel doesn't have.
+     *
+     * A SUGGESTION IS NOT A PICK, and only the direct row can tell them apart.
+     * `resolveIntent` proposes when there is no memory, which is exactly right
+     * for "what would Push show" — but the element's own source renders the
+     * stored key, not the proposal, so "Showing Mario" beside a source drawing
+     * nothing is the panel disagreeing with its own preview.
+     */
+    const what = intent.name || 'this game';
+    if (!intent.has || (!fed && intent.suggested)) {
+        /*
+         * "Nothing armed" is only true of an element that has something to arm.
+         * A whole-game push has no pick and `canPush` is true regardless, so
+         * the honest line is what the button will do.
+         */
+        const nothing = fed
+            ? (pickable ? 'Nothing armed yet' : 'Push shows this game')
+            : 'Nothing picked yet';
+        return (
+            <SubjectRow
+                text={nothing}
+                meta={!fed && intent.has ? `${what} suggested` : null}
+            />
+        );
+    }
     return (
         <SubjectRow
-            text={intent.name ? `Push shows ${intent.name}` : 'Push shows this game'}
+            text={fed ? `Push shows ${what}` : `Showing ${what}`}
             meta={intent.suggested ? 'suggested' : null}
         />
     );
@@ -339,17 +398,39 @@ export const Subject = memo(function Subject({ placement }) {
         return <ContainerSubject container={element.container} carrying={placement.carrying} />;
     }
     /*
-     * `containerScoped` is gated on being FED, because Roster is both: a
-     * container member AND a direct element with its own `?team=` source. Only
-     * the fed ones (Stat Card) ever row as a member — a direct member never
-     * gets a row of its own, the container's row stands for it — so an
-     * ungated check handed the Roster's own source the container's frame of
-     * reference instead of its URL's, and drew the wrong side.
+     * `containerScoped` is gated on this row being a member's SLOT, because
+     * Roster is both: a container member AND a direct element with its own
+     * `?team=` source. A slot draws off the container's frame of reference; the
+     * element's own source draws off its URL's, and an ungated check handed the
+     * Roster's own source the container's side and drew the wrong one. The gate
+     * used to be `flavor === 'fed'`, which said the same thing back when only a
+     * fed element could row under a container — it can't any more (see
+     * placementFlavor), and a member that owns a source rows both ways.
      */
-    if (element.flavor === 'fed' && element.containerScoped) {
-        return <ScopedMemberSubject element={element} container={placement.container} />;
+    if (element.containerScoped && (isFedPlacement(placement) || element.flavor === 'fed')) {
+        return <ScopedMemberSubject element={element} container={placement.slot} />;
     }
-    if (element.flavor === 'fed') return <FedSubject element={element} board={placement.board ?? 1} />;
+    /*
+     * An element with a PICK has one wherever it is drawn: on a container the
+     * pick is what Push would send, and on the element's own source it is what
+     * the overlay is already reading (production.feed.last.{id} — the spotlight
+     * layout renders exactly that key). One answer, two sentences.
+     */
+    if (element.feed) {
+        const fed = isFedPlacement(placement);
+        // A whole-game element on its OWN source has no pick to report, so the
+        // intent line would be describing a control it doesn't have. On a
+        // container it still answers "what would Push put up".
+        if (!fed && !isPickableFeed(element)) {
+            return <CaptureSubject board={boardOfUrl(placement.item?.url) ?? 1} />;
+        }
+        return (
+            <FedSubject
+                element={element} board={placement.board ?? 1}
+                fed={fed} pickable={isPickableFeed(element)}
+            />
+        );
+    }
     if (element.scope === 'board' && placement.board != null) {
         return <BoardGameSubject board={placement.board} />;
     }

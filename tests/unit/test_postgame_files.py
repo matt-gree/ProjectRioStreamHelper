@@ -38,6 +38,16 @@ def test_stat_dir_is_sibling_of_configured_hud_path(tmp_path, set_setting):
     assert pgf.stat_dir() == tmp_path / "StatFiles" / "MarioSuperstarBaseball"
 
 
+def test_stat_dir_honours_the_env_override_above_the_setting(tmp_path, set_setting, monkeypatch):
+    """``PRSH_HUD_FILE`` is authoritative here exactly as it is in
+    ``provider.get_user_hud_path`` — auto-capture WATCHES this directory, so an
+    isolated agent/CI instance resolving past the override would sit on the
+    developer's real Project Rio folder and capture their live games."""
+    set_setting("project_rio.hud_path", str(tmp_path / "configured" / "decoded.hud.json"))
+    monkeypatch.setenv("PRSH_HUD_FILE", str(tmp_path / "iso" / "HudFiles" / "decoded.hud.json"))
+    assert pgf.stat_dir() == tmp_path / "iso" / "StatFiles" / "MarioSuperstarBaseball"
+
+
 def test_stat_dir_falls_back_to_os_default_when_unset():
     from server.rio.provider import get_default_hud_file_path
     expected = (get_default_hud_file_path().parent.parent

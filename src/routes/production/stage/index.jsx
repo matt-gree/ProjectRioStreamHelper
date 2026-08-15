@@ -5,7 +5,7 @@ import { isPinnable } from '../elements';
 import { DESK_PREFIX } from '../instances';
 import { placementDims } from '../bindings';
 import {
-    placementTarget, resolvePlacement, useConsolePlacements, useConsoleScenes,
+    isFedPlacement, placementTarget, resolvePlacement, useConsolePlacements, useConsoleScenes,
     usePlacementLabel,
 } from '../placements';
 import { SourceStrip } from '../sourcestrip';
@@ -51,16 +51,28 @@ const STAGE_BODIES = {
 };
 
 /*
- * An element's stage body: its own file when it has one, else the floor its
- * flavor guarantees.
+ * A placement's stage body: the element's own file when it has one, else the
+ * floor the placement's kind guarantees.
  *
  * A CONTAINER is dispatched on being one rather than by id — every container
  * the producer builds is a different element id (`container:{id}`), and they
  * all edit the same two things: the name and the member roster.
+ *
+ * A MEMBER'S SLOT always takes FedStage, even when the element has a body of
+ * its own: that row is the element's place on a container, so the questions it
+ * answers are what content to hand over and which container is carrying it —
+ * not the element's own live controls, which belong to the source that has
+ * them. The hit visualizer is the case that proves it: Replay and Spotlight act
+ * on its dedicated source, and rendering them on its slot row would be a panel
+ * whose buttons drive a different source than its header does.
  */
-export function stageBodyComponent(element) {
+export function stageBodyComponent(element, placement) {
     if (element?.container) return ContainerStage;
-    return STAGE_BODIES[element.id] ?? (element.flavor === 'fed' ? FedStage : DirectStage);
+    // Through the one definition, with the element filled in: a panel can be
+    // asked for before its placement resolves, and an element with no source of
+    // its own is fed wherever it is asked about.
+    if (isFedPlacement({ ...placement, element })) return FedStage;
+    return STAGE_BODIES[element.id] ?? DirectStage;
 }
 
 /*
@@ -90,7 +102,7 @@ function useContainerDims(placement) {
 
 const ElementStage = memo(function ElementStage({ placement, title, pinned, onPinToggle }) {
     const { element, board } = placement;
-    const Body = stageBodyComponent(element);
+    const Body = stageBodyComponent(element, placement);
     const dims = useContainerDims(placement);
     return (
         <PanelShell

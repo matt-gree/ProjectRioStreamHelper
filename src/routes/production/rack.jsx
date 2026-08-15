@@ -325,24 +325,6 @@ function useMatchDeskMeta() {
     }));
 }
 
-// Capture desk meta: whether any board has a captured post-game.
-function useCaptureDeskMeta() {
-    return useStateStore(useShallow(s => {
-        const captured = Object.values(s?.postgame ?? {}).some(b => b?.present);
-        return { meta: captured ? 'captured' : 'empty', idle: !captured };
-    }));
-}
-
-// Bracket desk meta: which phase is published to the bracket overlays. Read
-// straight from state — the rack must not fire the desk's phases fetch just to
-// draw a row.
-function useBracketDeskMeta() {
-    return useStateStore(useShallow(s => {
-        const name = s?.bracket?.phaseName || '';
-        return { meta: name || 'nothing loaded', idle: !name };
-    }));
-}
-
 /*
  * The desk tier — content workflows that feed the broadcast but aren't on it.
  * Permanent rows with live meta, dimmed when idle, selectable like any row.
@@ -352,16 +334,21 @@ function useBracketDeskMeta() {
  * face that fits the two-row cap — Match's controls can't be compressed that
  * far, so it is deliberately not pinnable.
  *
- * ALL THREE ARE ALWAYS RACKED. Desks used to appear one at a time, keyed to the
- * phase they belonged to, and that rule always needed a special case (Live owns
- * no desk, so the section stood empty) — the tell that desks were never
- * phase-shaped. A producer fixes a fixture or re-captures a game whenever they
- * need to, not when a selector says they may.
+ * ALWAYS RACKED. Desks used to appear one at a time, keyed to the phase they
+ * belonged to, and that rule always needed a special case (Live owns no desk, so
+ * the section stood empty) — the tell that desks were never phase-shaped. A
+ * producer fixes a fixture whenever they need to, not when a selector says so.
+ *
+ * WHAT A DESK IS, stated because two rows that weren't one used to sit here: a
+ * GLOBAL workflow with no other home. Capture failed the first half — everything
+ * it did was scoped to one board, down to a Board picker on a console whose rack
+ * already asks which board you mean — so it is a region on the board panel
+ * (../postgame). Bracket failed the second: both its consumers already carried
+ * its picker, so it moved onto the source that draws it (../stage/bracket).
+ * Match is what's left, and Match is the shape.
  */
 export const DESKS = [
     { id: 'desk:match', name: 'Match', useMeta: useMatchDeskMeta, pinnable: false },
-    { id: 'desk:capture', name: 'Capture', useMeta: useCaptureDeskMeta },
-    { id: 'desk:bracket', name: 'Bracket', useMeta: useBracketDeskMeta },
 ];
 
 /*

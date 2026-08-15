@@ -7,6 +7,7 @@ matches the file whose in-file ``GameID`` equals the just-finished game's id
 AND whose ``Loaded from HUD`` flag is ``0`` (a HUD-replay file is not real
 recorded data and is rejected).
 """
+import os
 import re
 from pathlib import Path
 
@@ -37,12 +38,24 @@ def norm_game_id(g) -> str:
 def stat_dir() -> Path:
     """``StatFiles/MarioSuperstarBaseball`` as a sibling of ``HudFiles``.
 
-    Resolved from the configured HUD path when set, else the OS default. The
-    HUD *file* may be absent (a game just ended) — we only need its parent
+    Resolution mirrors ``provider.get_user_hud_path``: ``PRSH_HUD_FILE`` is
+    authoritative, then the configured HUD path, then the OS default. Honouring
+    the env override matters now that auto-capture watches this directory
+    (``server/postgame_watch.py``) — resolving past it pointed an isolated
+    agent/CI instance at the developer's REAL Project Rio folder, where it would
+    capture live games into a throwaway state file.
+
+    The HUD *file* may be absent (a game just ended) — we only need its parent
     layout, so this never gates on file existence.
     """
+    override = os.environ.get("PRSH_HUD_FILE")
     user_path = Settings.Get("project_rio.hud_path", "")
-    hud = Path(user_path) if user_path else get_default_hud_file_path()
+    if override:
+        hud = Path(override).expanduser()
+    elif user_path:
+        hud = Path(user_path)
+    else:
+        hud = get_default_hud_file_path()
     return hud.parent.parent.joinpath(*_STAT_SUBDIR)
 
 

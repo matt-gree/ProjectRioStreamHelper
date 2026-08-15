@@ -103,8 +103,8 @@ describe('Production page mounts', () => {
         // Scoped to the rack — 'Break' is also an option in the top bar's
         // program-scene dropdown.
         expect(document.querySelector('[data-rack-section="Break"]')).toBeTruthy();
-        // The desks are permanent, so they survive whatever the scenes do.
-        expect(screen.getAllByText('Bracket').length).toBeGreaterThan(0);
+        // The desk tier is permanent, so it survives whatever the scenes do.
+        expect(screen.getAllByText('Match').length).toBeGreaterThan(0);
     });
 
     // The phase selector is gone: OBS's scene list is the producer stating the

@@ -5,7 +5,7 @@ import { Text } from '../../../components/ui/primitives';
 import { ToggleRow } from '../kit';
 import { setSourceVisibility, useDisplayedEnabled } from '../bindings';
 import { useContainerBinding } from '../feeds';
-import { useContainerOf } from '../containers';
+import { useContainerDefs, useContainerOf } from '../containers';
 import { useConsoleOffline } from '../placements';
 import { PostgameCalloutPicker, PostgameVsPicker, StatsFeedPicker } from '../feed-pickers';
 
@@ -107,11 +107,39 @@ export const ReadinessNote = memo(function ReadinessNote({ element, board }) {
     );
 });
 
+/*
+ * The element's CONTENT control, wherever the element is drawn.
+ *
+ * A pick writes the standing intent (`production.feed.last.{id}`), and that one
+ * key is read by two things: a container, when Push sends it there, and the
+ * element's OWN source, which renders it directly (see
+ * public/layout/postgame/spotlight.html). So the picker belongs on both panels
+ * — `fed` only changes the sentence under it, never the pick.
+ *
+ * Without this, a direct spotlight source could be bound and shown and never
+ * told whose spotlight to draw, which is the same dead end as a Push with no
+ * container: a panel that can see the problem and not fix it.
+ */
+export const FeedContentPicker = memo(function FeedContentPicker({ element, fed = true }) {
+    if (element.feed === 'stats') return <StatsFeedPicker element={element} fed={fed} />;
+    if (element.feed === 'postgamecallout') {
+        return <PostgameCalloutPicker element={element} fed={fed} />;
+    }
+    if (element.feed === 'postgamevs') return <PostgameVsPicker element={element} fed={fed} />;
+    // A member with no picker is NOT unfinished. A container-scoped one (Stat
+    // Card) draws whoever its container's scope has on the field, so there is
+    // nothing to choose and the panel's SUBJECT already says what it will be.
+    return null;
+});
+
 // Plain direct element (e.g. scoreboard): its one control — show/hide — lives
 // in the header strip, so the body is left saying what the panel is wired to.
+// An element that draws a PICK carries that pick here, because on its own
+// source the pick is the content.
 export const DirectStage = memo(function DirectStage({ element, board, placement }) {
     return (
         <>
+            {element.feed && <FeedContentPicker element={element} fed={false} />}
             <BindingNote binding={placement} />
             <ReadinessNote element={element} board={board} />
             {element.generic && (
@@ -137,8 +165,14 @@ export const DirectStage = memo(function DirectStage({ element, board, placement
  * to be pushed, which the Push slot also reports by disabling. Say what to do
  * about it rather than leaving a blank row.
  */
-export const ContainerHostNote = memo(function ContainerHostNote({ element }) {
-    const { container, def } = useContainerOf(element);
+export const ContainerHostNote = memo(function ContainerHostNote({ element, container: on }) {
+    const defs = useContainerDefs();
+    const own = useContainerOf(element);
+    // The ROW's container when it has one — a container-scoped member sits on
+    // several rosters, and the element→container lookup answers with whichever
+    // it finds first, which on a mirrored pair is a coin flip between sides.
+    const container = on ?? own.container;
+    const def = on ? defs[on] : own.def;
     const binding = useContainerBinding(container);
     if (!container) {
         return (
@@ -170,17 +204,12 @@ export const ContainerHostNote = memo(function ContainerHostNote({ element }) {
  * the panel's SUBJECT already says (../subject), and nothing here. "No content
  * options yet" described the absence of a control and read as a missing feature.
  */
-export const FedStage = memo(function FedStage({ element }) {
-    const picker = element.feed === 'stats' ? <StatsFeedPicker element={element} />
-        : element.feed === 'postgamecallout' ? <PostgameCalloutPicker element={element} />
-            : element.feed === 'postgamevs' ? <PostgameVsPicker element={element} />
-                : element.containerScoped ? null
-                    : <Text size="xs" className="text-muted-foreground">No content options yet.</Text>;
+export const FedStage = memo(function FedStage({ element, placement }) {
     return (
         <>
-            {picker}
+            <FeedContentPicker element={element} />
             <div className="mt-1 flex flex-col gap-1.5 border-t border-border/60 pt-2">
-                <ContainerHostNote element={element} />
+                <ContainerHostNote element={element} container={placement?.slot} />
             </div>
         </>
     );

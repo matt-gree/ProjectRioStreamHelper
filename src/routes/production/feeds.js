@@ -4,7 +4,9 @@ import { useStateStore } from '../../context/store';
 import { stageOrRun, usePending } from '../../context/staging';
 import { useConsoleScenes } from './placements';
 import { containerId, isPickableFeed } from './elements';
-import { containerOfSource, useContainerOf, useSharedContainers } from './containers';
+import {
+    containerOfSource, useContainerDefs, useContainerOf, useSharedContainers,
+} from './containers';
 import { resolveIntent } from './suggest';
 
 export { containerId };
@@ -65,7 +67,16 @@ export function useFeedControl(container) {
  * because that IS broadcast-visible. Selecting off-air arms; Push airs.
  *
  * The intent write is immediate and never staged: it drives the preview, not
- * the broadcast, and no overlay renders `production.feed.last.*`.
+ * the broadcast.
+ *
+ * ONE OVERLAY DOES READ IT NOW, and this is the deliberate edge: an element's
+ * own dedicated source renders `production.feed.last.{id}` directly (see
+ * public/layout/postgame/spotlight.html), so a pick made while that source is
+ * on air changes the picture immediately, confirm mode or not. It stays
+ * unstaged because arming is also what drives the stage preview, and holding
+ * the pick would leave the producer picking blind — the same trade the hit
+ * visualizer's Replay makes. The broadcast-visible act on that panel is the
+ * eye, and the eye stages like everything else.
  */
 export function useFeedSelect(element, scoreboard = 1) {
     const { container } = useContainerOf(element);
@@ -128,8 +139,18 @@ export function useFeedSelect(element, scoreboard = 1) {
  * or when NO container's roster names this element, where there is nowhere for
  * a push to land at all.
  */
-export function useContainerPush(element, scoreboard = 1) {
-    const { container, def } = useContainerOf(element);
+export function useContainerPush(element, scoreboard = 1, onContainer = null) {
+    const defs = useContainerDefs();
+    const own = useContainerOf(element);
+    /*
+     * The container this push lands in: the ROW's when it has one, else the
+     * roster that claims this element. A container-scoped member may sit on
+     * several rosters — the exception that makes a mirrored pair buildable — so
+     * the element→container lookup is a coin flip between the two sides, and
+     * both of the pair's rows would have pushed into whichever came first.
+     */
+    const container = onContainer ?? own.container;
+    const def = onContainer ? (defs[onContainer] ?? null) : own.def;
     const { value: feed, staged, setFeed } = useFeedControl(container);
     // Flat primitives, so useShallow settles instead of firing on every tick.
     const intent = useStateStore(useShallow(s => resolveIntent(s, element, scoreboard) || NO_INTENT));
@@ -145,10 +166,17 @@ export function useContainerPush(element, scoreboard = 1) {
      * push and a rule put the identical thing on screen; without it a push into
      * a right-side container would quietly show the left side, because `team`
      * would simply be absent and default to 1.
+     *
+     * The BOARD comes from that scope for every member, scoped or not: a
+     * member's slot on a container has no board axis of its own (the container
+     * is board-agnostic and the board rides in the payload), so the container's
+     * own frame of reference is the only thing left that knows which board it
+     * is looking at. Only `team` stays scoped-only — a content-bearing member
+     * carries its own side in its pick.
      */
     const payload = element.containerScoped
         ? { element: element.id, scoreboard: def?.scoreboard ?? scoreboard, team: def?.team ?? 1 }
-        : { element: element.id, scoreboard };
+        : { element: element.id, scoreboard: def?.scoreboard ?? scoreboard };
     const toggle = () => container && setFeed(mine ? null : (hasIntent ? intent : payload));
 
     return { container, feed, mine, staged, canPush, toggle, setFeed, intent: hasIntent ? intent : null };

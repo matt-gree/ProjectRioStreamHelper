@@ -166,6 +166,13 @@ export default function SettingsModal({ opened, onClose }) {
         setSetting('production.confirm.hotkey', combo);
     }, [setSetting]);
 
+    // Auto-capture — the stat file Project Rio writes at the final out is the
+    // end-of-game signal for a local board (server/postgame_watch.py).
+    const autoCapture = useSettingsStore(state => state?.postgame?.auto_capture) !== false;
+    const handleAutoCapture = useCallback((value) => {
+        setSetting('postgame.auto_capture', !!value);
+    }, [setSetting]);
+
     const fetchHudPath = useCallback(async () => {
         try {
             const resp = await fetch('/api/v1/rio/hud-path');
@@ -593,6 +600,21 @@ export default function SettingsModal({ opened, onClose }) {
                             <Text size="sm" fw={500}>Follow local HUD on Scoreboard 1</Text>
                             <Text size="xs" dimmed>
                                 When on, Scoreboard 1 auto-fills from the local Project Rio game. Turn off to use Scoreboard 1 as a normal single/set board (e.g. an API-only setup).
+                            </Text>
+                        </div>
+                    </div>
+
+                    {/* Auto-capture. Project Rio writes one stat file per
+                        finished game, and that file landing is the only reliable
+                        end-of-game signal a local board has — the HUD feed has
+                        no final frame. Off leaves capture manual; the button is
+                        on every board panel either way. */}
+                    <div className="mt-2 flex items-start gap-3">
+                        <Switch checked={autoCapture} onCheckedChange={handleAutoCapture} className="mt-0.5" />
+                        <div className="flex flex-col">
+                            <Text size="sm" fw={500}>Capture the box score when a game ends</Text>
+                            <Text size="xs" dimmed>
+                                Reads the finished game’s stats the moment Project Rio writes them, so the Stat Callout and Game Summary fill themselves in and a bound match advances to post-game. Turn off to capture by hand from the board’s panel.
                             </Text>
                         </div>
                     </div>

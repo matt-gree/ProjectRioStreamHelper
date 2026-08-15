@@ -290,9 +290,16 @@ screenshot; get the user's eyes or reason from first principles.
    knobs → `GLOBAL_DESIGN_KEYS` + defaults + overridables.
 4. Re-themable? Author `public/design/default/<element>.svg` with the
    `data-slot` contract + an inline `fallbackSvg` in the mount.
-5. Production element? Register in `src/routes/production/elements.js`
-   (direct vs fed — fed elements render on the Callout Stage,
-   `public/layout/shared/callout-stage.html`).
+5. Production element? Register in `src/routes/production/elements.js`.
+   **Give it its own layout unless it genuinely cannot have one** — `fed` means
+   no source of its own (the Stat Card, which draws whoever its container's
+   scope has on the field). Anything that can also stand alone is `direct` +
+   `containerHostable`, which is both post-game callouts
+   (`public/layout/postgame/{spotlight,summary}.html`) and the hit visualizer:
+   one row for its own source, one row under any container that rosters it. An
+   element whose content is a PICK reads that pick straight out of state on its
+   own source (`production.feed.last.{id}` — see spotlight.html), which is the
+   same key Push sends to a container.
    **Authoring a new shared container?** Pass `forceElement` from **`?feed=`**
    AND `previewSel` from **`?feedsel=`** (both gated on `PREVIEW_MODE`) into
    `initFedContainer`, and name a representative occupant in the sample block.

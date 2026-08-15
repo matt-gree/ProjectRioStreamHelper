@@ -69,15 +69,36 @@ const rowNested = (name) => row(name)?.hasAttribute('data-rack-nested');
  * the producer picked — a rule that always needed a special case (Live owned no
  * desk, so the section stood empty), which was the tell that desks were never
  * phase-shaped.
+ *
+ * There is one left, and that is the point: a desk is a GLOBAL workflow with no
+ * other home. Capture was board-scoped (it opened with a Board picker) and is a
+ * region on the board panel; Bracket's two consumers already carried its picker
+ * and it moved onto the source that draws it. Both are pinned below, because a
+ * tier that accepts anything "not on air" grows those rows back.
  */
 describe('Rack desks', () => {
-    it('racks all three workflow desks, always, with their live meta defaults', () => {
+    it('racks the workflow desk, always, with its live meta default', () => {
         ui(<Rack />);
         const section = within(document.querySelector('[data-rack-section="desk"]'));
-        for (const [name, meta] of [['Match', 'no match'], ['Capture', 'empty'], ['Bracket', 'nothing loaded']]) {
-            expect(section.getByText(name)).toBeInTheDocument();
-            expect(section.getByText(meta)).toBeInTheDocument();
-        }
+        expect(section.getByText('Match')).toBeInTheDocument();
+        expect(section.getByText('no match')).toBeInTheDocument();
+    });
+
+    // Board-scoped work is a REGION on the board, not a desk. Capture's board
+    // picker was the tell: a second board selector on a console whose rack has
+    // already asked which board you mean.
+    it('racks no desk for post-game capture', () => {
+        ui(<Rack />);
+        const section = within(document.querySelector('[data-rack-section="desk"]'));
+        expect(section.queryByText('Capture')).not.toBeInTheDocument();
+    });
+
+    // …and a control both of whose consumers already show it is not a workflow
+    // needing a permanent row. The bracket phase lives on the bracket source.
+    it('racks no desk for the bracket phase', () => {
+        ui(<Rack />);
+        const section = within(document.querySelector('[data-rack-section="desk"]'));
+        expect(section.queryByText('Bracket')).not.toBeInTheDocument();
     });
 
     it('collapses the desk tier and remembers it', () => {
@@ -88,8 +109,8 @@ describe('Rack desks', () => {
         expect(JSON.parse(fakeLocalStorage.getItem('prsh.ui.production.tiers'))).toEqual(['desk']);
     });
 
-    // The DESK header has no + : there are exactly three workflow desks, forever.
-    // The one it used to carry added a BOARD, which is why the two tiers split.
+    // The DESK header has no + : the workflow desks are fixed. The one it used
+    // to carry added a BOARD, which is why the two tiers split.
     it('offers nothing to add to the desk tier', () => {
         ui(<Rack />);
         const header = document.querySelector('[data-rack-section="desk"]');

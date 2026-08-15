@@ -82,7 +82,10 @@ const RailCard = memo(function RailCard({ entry, onOpen, onUnpin, move }) {
     );
 });
 
-const DESK_TITLES = { 'desk:capture': 'Capture', 'desk:bracket': 'Bracket' };
+// Fixed desks with a rail-sized face. Empty today: Match is the only fixed
+// desk and its authoring cannot compress to two rows, so every pinnable desk
+// card is now a BOARD (titled from its alias, below).
+const DESK_TITLES = {};
 
 export const Rail = memo(function Rail({ pins, onReorder, onUnpin, onOpen }) {
     const scenes = useConsoleScenes();
