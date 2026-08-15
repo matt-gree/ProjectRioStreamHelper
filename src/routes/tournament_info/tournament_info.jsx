@@ -1,5 +1,6 @@
-import { useCallback, useState, useEffect, useMemo } from 'react';
+import { memo, useCallback, useState, useEffect, useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
+import { X } from 'lucide-react';
 import { Stack, Text, Title, Divider } from '../../components/ui/primitives';
 import { Panel } from '../../components/ui/panel';
 import { TextField } from '../../components/ui/text-field';
@@ -15,6 +16,8 @@ import { cn } from '../../lib/utils';
 import { notifications } from '../../lib/notify';
 import { useStateStore, useBracketStore } from '../../context/store';
 import { useParticipantsStore } from '../../context/participants';
+import { setOrganizers, MAX_ORGANIZERS } from '../../context/organizers';
+import ParticipantPicker from '../../components/ParticipantPicker';
 import useTournament from '../../hooks/useTournament';
 
 // Flatten a start.gg entrant to its primary parsed player (the import unit).
@@ -87,6 +90,136 @@ function EntrantRow({ entrant, columns, getPlayerField, matchedRow, onAssignRio,
     );
 }
 
+/*
+ * ORGANIZERS ARE ADDRESS-BOOK REFERENCES, not nine text fields.
+ *
+ * They used to be three trios of free text — name, twitter, pronoun — which made
+ * this the third place the same person's handle was typed (a commentary slot and
+ * a player row being the others), with nothing keeping the copies in agreement.
+ * Picking the registry row instead means one edit in Address Book reflows
+ * everywhere, the same resolve-by-copy contract Match, Commentary and
+ * PlayerPlates already run on.
+ *
+ * The projected keys are unchanged (`organizer_{i}_{name,twitter,pronoun}`), so
+ * a producer with an OBS text source pointed at the stream_labels .txt mirror
+ * keeps working.
+ *
+ * LEGACY TEXT IS LEFT ALONE until the producer picks someone. A projector owns
+ * its key set and writes it whole, so projecting over hand-typed organizers
+ * would erase them — `tournamentInfo.organizers` being ABSENT is what says "this
+ * has never been authored" (server/organizers.py). The first pick authors the
+ * list, and from then on the registry is the source. The note below is the one
+ * warning a producer gets, and it only shows while there is text to lose.
+ */
+export const OrganizerRows = memo(function OrganizerRows() {
+    /*
+     * FLAT PRIMITIVES ONLY. `useShallow` compares one level, so a selector that
+     * builds the three slots as an array of objects hands back a new reference
+     * every call, never compares equal, and re-renders forever — React error
+     * #185, which is exactly how this first ran. `organizers` is returned as the
+     * state's own array so its reference IS stable; everything else is a string.
+     */
+    const org = useStateStore(useShallow(s => {
+        const info = s?.tournamentInfo ?? {};
+        return {
+            authored: Array.isArray(info.organizers) ? info.organizers : null,
+            n0: info.organizer_0_name || '', t0: info.organizer_0_twitter || '', p0: info.organizer_0_pronoun || '',
+            n1: info.organizer_1_name || '', t1: info.organizer_1_twitter || '', p1: info.organizer_1_pronoun || '',
+            n2: info.organizer_2_name || '', t2: info.organizer_2_twitter || '', p2: info.organizer_2_pronoun || '',
+        };
+    }));
+
+    const slots = useMemo(() => Array.from({ length: MAX_ORGANIZERS }, (_, i) => ({
+        name: org[`n${i}`], twitter: org[`t${i}`], pronoun: org[`p${i}`],
+    })), [org]);
+
+    const legacy = org.authored === null && slots.some(s => s.name || s.twitter || s.pronoun);
+
+    const assign = useCallback(async (index, participantId) => {
+        const next = Array.from({ length: MAX_ORGANIZERS }, (_, i) => ({
+            participantId: (org.authored?.[i]?.participantId) ?? null,
+        }));
+        next[index] = { participantId };
+        try {
+            await setOrganizers(next);
+        } catch (e) {
+            notifications.show({ message: `Organizers: ${e?.message || e}`, color: 'red' });
+        }
+    }, [org.authored]);
+
+    return (
+        <Stack gap="xs">
+            {slots.map((slot, i) => (
+                <div className="grid grid-cols-12 items-center gap-2" key={i}>
+                    <div className="col-span-7">
+                        <ParticipantPicker
+                            value={slot.name}
+                            selectedId={org.authored?.[i]?.participantId ?? null}
+                            onResolve={(row) => assign(i, row?.id ?? null)}
+                            placeholder={`Organizer ${i + 1}`}
+                        />
+                    </div>
+                    {/* Read-only: these come from the picked row, so the edit
+                        belongs in Address Book. Showing them anyway is what makes
+                        it obvious WHICH record got picked. */}
+                    <div className="col-span-4 min-w-0">
+                        <Text size="xs" dimmed truncate>
+                            {[slot.twitter, slot.pronoun].filter(Boolean).join(' · ') || '—'}
+                        </Text>
+                    </div>
+                    <div className="col-span-1 flex justify-end">
+                        {(slot.name || org.authored?.[i]?.participantId) && (
+                            <Button
+                                size="xs" variant="ghost" aria-label={`Clear organizer ${i + 1}`}
+                                onClick={() => assign(i, null)}
+                            >
+                                <X size={13} />
+                            </Button>
+                        )}
+                    </div>
+                </div>
+            ))}
+            <Text size="xs" dimmed>
+                {legacy
+                    ? 'Typed by hand on an older version. Picking anyone here replaces all three with Address Book entries.'
+                    : 'Socials and pronouns come from the Address Book, so an edit there updates them everywhere.'}
+            </Text>
+        </Stack>
+    );
+});
+
+/*
+ * WHICH FIELDS START.GG IS STILL DRIVING.
+ *
+ * Five of these are auto-filled by a tournament load and a sixth — the phase —
+ * by every set load, but only while the producer hasn't typed over them: the
+ * server records what it last filled in `tournamentInfo._auto` and stops
+ * overwriting a field that differs from it (`auto_fill_entries`,
+ * server/startgg/provider.py). That rule was invisible here, so a field could
+ * silently change under a producer who thought they owned it, or stubbornly
+ * refuse to update because of an edit they'd forgotten making.
+ *
+ * The badge states which case a field is in, and it rides the label rather than
+ * the input — it describes where the value comes from, not what it is.
+ */
+const AutoLabel = memo(function AutoLabel({ children, field }) {
+    const tracking = useStateStore(s => {
+        const info = s?.tournamentInfo ?? {};
+        const auto = info._auto ?? {};
+        return field in auto && (info[field] ?? '') === (auto[field] ?? '');
+    });
+    return (
+        <span className="flex items-center gap-1.5">
+            {children}
+            {tracking && (
+                <Text size="xs" span dimmed className="font-normal normal-case">
+                    from start.gg
+                </Text>
+            )}
+        </span>
+    );
+});
+
 export default function TournamentInfo() {
     const setItem = useStateStore(s => s.setItem);
 
@@ -94,30 +227,17 @@ export default function TournamentInfo() {
     const name         = useStateStore(s => s?.tournamentInfo?.name ?? '');
     const event_name   = useStateStore(s => s?.tournamentInfo?.event_name ?? '');
     const phase        = useStateStore(s => s?.tournamentInfo?.phase ?? '');
-    const message      = useStateStore(s => s?.tournamentInfo?.message ?? '');
+    // No `message` here on purpose: the banner line is the Event Header's own
+    // copy and nothing else reads it, so it is authored on that element's
+    // Production stage panel (overlays.eventheader.message). This form is for
+    // facts about the competition — the things several overlays read and
+    // start.gg fills in.
     const abbreviation = useStateStore(s => s?.tournamentInfo?.abbreviation ?? '');
     const location     = useStateStore(s => s?.tournamentInfo?.location ?? '');
     const date         = useStateStore(s => s?.tournamentInfo?.date ?? '');
     const entrants     = useStateStore(s => s?.tournamentInfo?.entrants ?? '');
     const prize_pool   = useStateStore(s => s?.tournamentInfo?.prize_pool ?? '');
     const bracket_link = useStateStore(s => s?.tournamentInfo?.bracket_link ?? '');
-
-    // Organizer fields
-    const org0name    = useStateStore(s => s?.tournamentInfo?.organizer_0_name ?? '');
-    const org0twitter = useStateStore(s => s?.tournamentInfo?.organizer_0_twitter ?? '');
-    const org0pronoun = useStateStore(s => s?.tournamentInfo?.organizer_0_pronoun ?? '');
-    const org1name    = useStateStore(s => s?.tournamentInfo?.organizer_1_name ?? '');
-    const org1twitter = useStateStore(s => s?.tournamentInfo?.organizer_1_twitter ?? '');
-    const org1pronoun = useStateStore(s => s?.tournamentInfo?.organizer_1_pronoun ?? '');
-    const org2name    = useStateStore(s => s?.tournamentInfo?.organizer_2_name ?? '');
-    const org2twitter = useStateStore(s => s?.tournamentInfo?.organizer_2_twitter ?? '');
-    const org2pronoun = useStateStore(s => s?.tournamentInfo?.organizer_2_pronoun ?? '');
-
-    const orgFields = [
-        { name: org0name, twitter: org0twitter, pronoun: org0pronoun },
-        { name: org1name, twitter: org1twitter, pronoun: org1pronoun },
-        { name: org2name, twitter: org2twitter, pronoun: org2pronoun },
-    ];
 
     // Loading a tournament now lives in the shared TournamentLoader (Competition
     // tab chrome). This view only needs the entrants fetch.
@@ -258,25 +378,26 @@ export default function TournamentInfo() {
                         <Stack gap="sm" className="p-4">
                             <div className="grid grid-cols-12 gap-2">
                                 <div className="col-span-8">
-                                    <TextField label="Competition Name" placeholder="Enter competition name" value={name} onChange={e => set('name', e.currentTarget.value)} />
+                                    <TextField label={<AutoLabel field="name">Competition Name</AutoLabel>} placeholder="Enter competition name" value={name} onChange={e => set('name', e.currentTarget.value)} />
                                 </div>
                                 <div className="col-span-4">
                                     <TextField label="Abbreviation" placeholder="Short name" value={abbreviation} onChange={e => set('abbreviation', e.currentTarget.value)} />
                                 </div>
                             </div>
 
-                            <TextField label="Event Name" placeholder="e.g. Stars Off (start.gg event under the competition)" value={event_name} onChange={e => set('event_name', e.currentTarget.value)} />
+                            <TextField label={<AutoLabel field="event_name">Event Name</AutoLabel>} placeholder="e.g. Stars Off (start.gg event under the competition)" value={event_name} onChange={e => set('event_name', e.currentTarget.value)} />
 
-                            <TextField label="Competition Phase" placeholder="e.g. Season 9 Week 2, Top 8" value={phase} onChange={e => set('phase', e.currentTarget.value)} />
-
-                            <TextField label="Message" placeholder="Free-text banner line (e.g. Grand Finals, Welcome!)" value={message} onChange={e => set('message', e.currentTarget.value)} />
+                            {/* The phase is filled by every SET load, not by the
+                                event load — the one field here a fixture can
+                                change mid-broadcast. */}
+                            <TextField label={<AutoLabel field="phase">Competition Phase</AutoLabel>} placeholder="e.g. Season 9 Week 2, Top 8" value={phase} onChange={e => set('phase', e.currentTarget.value)} />
 
                             <div className="grid grid-cols-12 gap-2">
                                 <div className="col-span-8">
-                                    <TextField label="Location" placeholder="City, State" value={location} onChange={e => set('location', e.currentTarget.value)} />
+                                    <TextField label={<AutoLabel field="location">Location</AutoLabel>} placeholder="City, State" value={location} onChange={e => set('location', e.currentTarget.value)} />
                                 </div>
                                 <div className="col-span-4">
-                                    <TextField label="Date" placeholder="YYYY-MM-DD" value={date} onChange={e => set('date', e.currentTarget.value)} />
+                                    <TextField label={<AutoLabel field="date">Date</AutoLabel>} placeholder="YYYY-MM-DD" value={date} onChange={e => set('date', e.currentTarget.value)} />
                                 </div>
                             </div>
 
@@ -284,7 +405,7 @@ export default function TournamentInfo() {
 
                             <div className="grid grid-cols-12 gap-2">
                                 <div className="col-span-4">
-                                    <TextField label="Entrants" placeholder="0" value={String(entrants)} onChange={e => set('entrants', e.currentTarget.value)} />
+                                    <TextField label={<AutoLabel field="entrants">Entrants</AutoLabel>} placeholder="0" value={String(entrants)} onChange={e => set('entrants', e.currentTarget.value)} />
                                 </div>
                                 <div className="col-span-8">
                                     <TextField label="Prize Pool" placeholder="$0" value={prize_pool} onChange={e => set('prize_pool', e.currentTarget.value)} />
@@ -293,19 +414,7 @@ export default function TournamentInfo() {
 
                             <Divider label="Organizers" />
 
-                            {orgFields.map((org, i) => (
-                                <div className="grid grid-cols-12 gap-2" key={i}>
-                                    <div className="col-span-4">
-                                        <TextField label={i === 0 ? "Organizer" : undefined} placeholder={`Organizer ${i + 1}`} value={org.name} onChange={e => set(`organizer_${i}_name`, e.currentTarget.value)} />
-                                    </div>
-                                    <div className="col-span-4">
-                                        <TextField label={i === 0 ? "Twitter" : undefined} placeholder="@handle" value={org.twitter} onChange={e => set(`organizer_${i}_twitter`, e.currentTarget.value)} />
-                                    </div>
-                                    <div className="col-span-4">
-                                        <TextField label={i === 0 ? "Pronoun" : undefined} placeholder="Pronoun" value={org.pronoun} onChange={e => set(`organizer_${i}_pronoun`, e.currentTarget.value)} />
-                                    </div>
-                                </div>
-                            ))}
+                            <OrganizerRows />
                         </Stack>
                     </Panel>
                 </Stack>

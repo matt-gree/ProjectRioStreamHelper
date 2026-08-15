@@ -370,9 +370,17 @@ export const ELEMENTS = [
         name: 'Event Header',
         // The two persistent bands framing the canvas: top (competition ·
         // location · dates) and bottom (message · event · phase · round). It
-        // sits over the whole broadcast. Bands and per-field visibility are
-        // live switches (overlays.eventheader.*); geometry renders in the
-        // stage's Style section (phase 7). Native 1920×1080.
+        // sits over the whole broadcast. Bands, per-field visibility and the
+        // message copy are all overlays.eventheader.* and render on its stage
+        // panel, grouped by the band each one changes. Native 1920×1080.
+        //
+        // NO `scope: 'board'`, deliberately, even though the mount reads
+        // `?scoreboard=` for its Round field. This is full-canvas chrome: there
+        // is one of it per broadcast, and declaring the scope would also make
+        // every band setting per-board (ElementStyleSettings keys off it), so a
+        // producer would be styling the same two strips twice. The board only
+        // decides which fixture Round comes from, and the documented default —
+        // no param means board 1 — is the right answer for a single canvas.
         flavor: 'direct',
         url: '/layout/eventheader/eventheader.html',
         width: 1920,

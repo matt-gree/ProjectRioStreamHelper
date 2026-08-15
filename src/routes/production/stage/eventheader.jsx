@@ -22,18 +22,26 @@ import { OverlaySettingGroups, OverlaySettingRows, useOverlaySettings } from './
  * control IS rather than by what it CHANGES.
  *
  * A field also drops out automatically when its source text is blank, which is
- * invisible from a switch alone — the note at the foot says which.
+ * invisible from a switch alone — the note at the foot says which. It names only
+ * the fields COMPETITION owns: the message is authored here now
+ * (overlays.eventheader.message), so its own empty row is the statement, and a
+ * note pointing at another tab for a field on this panel would be a dead end.
  */
 
 const BAND_KEYS = ['showHeader', 'showFooter'];
-// Fields fed purely from tournamentInfo, so "on but blank" is knowable here.
-// Phase and Round are deliberately absent: both fall back to the bound match,
-// which this panel can't resolve without knowing the board.
+/*
+ * The fields this panel does NOT own — event facts authored on Competition, so
+ * "switched on but nothing behind it" is worth naming with somewhere to go.
+ *
+ * The message is deliberately absent now: it is this element's own copy, its
+ * row is on this panel, and an empty input states its own emptiness. Phase and
+ * Round stay out too — both resolve through the bound match, which is what the
+ * subject row above reads (it has the board; this note doesn't need it).
+ */
 const PREVIEWABLE = [
-    { label: 'event name', from: 'name' },
+    { label: 'competition name', from: 'name' },
     { label: 'location', from: 'location' },
     { label: 'dates', from: 'date' },
-    { label: 'message', from: 'message' },
 ];
 
 export function useEventHeader() {
@@ -45,14 +53,18 @@ export const EventHeaderBandRows = memo(function EventHeaderBandRows({ os }) {
     return <OverlaySettingRows os={os} type="eventheader" keys={BAND_KEYS} />;
 });
 
-export default function EventHeaderStage({ element }) {
+// `placement` is threaded through to DirectStage on purpose: BindingNote reads
+// `binding.item` to name the source and scene this panel commands, and a body
+// that drops the prop leaves it permanently telling a bound element it "isn't
+// in any scene we can see".
+export default function EventHeaderStage({ element, placement }) {
     const os = useEventHeader();
     const info = useStateStore(useShallow(s => s?.tournamentInfo ?? {}));
     const empties = PREVIEWABLE.filter(f => !String(info?.[f.from] ?? '').trim());
 
     return (
         <>
-            <DirectStage element={element} />
+            <DirectStage element={element} placement={placement} />
 
             <div className="mt-1 border-t border-border/60 pt-2">
                 <OverlaySettingGroups os={os} type="eventheader" />

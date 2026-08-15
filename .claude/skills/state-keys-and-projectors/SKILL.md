@@ -1,6 +1,6 @@
 ---
 name: state-keys-and-projectors
-description: PRSH central State store contract (Set/SetBatch/Save/SocketIO emit), the full state-key namespace map, the Settings-vs-State split, and the resolve-by-copy projector pattern — read before writing any state key, adding a state namespace, or building a new projected element (a 5th sibling of Match/Commentary/PlayerPlates/PostGame).
+description: PRSH central State store contract (Set/SetBatch/Save/SocketIO emit), the full state-key namespace map, the Settings-vs-State split, and the resolve-by-copy projector pattern — read before writing any state key, adding a state namespace, or building a new projected element (a 6th sibling of Match/Commentary/PlayerPlates/PostGame/Organizers).
 ---
 
 # State Keys & Projectors
@@ -127,7 +127,17 @@ postgame.{N}.*                 captured post-game (present, gameId, meta, player
 lowerthird.slots.{1..5}.*      lower-third band
 schedule.queue                 upcoming-matches queue
 scoreboards.rotation.{N}.*     live rotation status MIRROR (PoolManager-owned, read-only)
-tournamentInfo.*               tournament metadata (bracket_link etc.)
+tournamentInfo.*               tournament metadata (bracket_link etc.) — FACTS ABOUT
+                               THE EVENT, read by several overlays and auto-filled
+                               from start.gg. A field only ONE overlay reads is that
+                               element's own setting, not a fact: the Event Header's
+                               banner line lived here as `message` and moved to
+                               overlays.eventheader.message (Settings.adopt_eventheader_message)
+tournamentInfo.organizers      authored organizer ids + projected organizer_{0..2}_*
+                               (server/organizers.py — the 5th projector)
+tournamentInfo._auto           what start.gg last auto-filled, per field. The record
+                               that lets a producer's hand edit survive a reload
+                               (`auto_fill_entries`, server/startgg/provider.py)
 overlays.*                     (in Settings, not State — style knobs)
 production.*                   Production-page element/feed state
 production.feed.container.{id} what a shared container is showing NOW (exactly one occupant)

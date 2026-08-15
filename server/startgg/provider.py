@@ -29,6 +29,50 @@ from server.startgg.queries import (
     BRACKET_SETS_QUERY,
 )
 
+
+def auto_fill_entries(fields: dict[str, str], *, skip_blank: bool = False) -> list[tuple]:
+    """Write start.gg-derived ``tournamentInfo`` fields without eating an edit.
+
+    THE AUTO-FILL CONTRACT, stated once so every writer obeys it: a field is
+    overwritten only while it is still EMPTY or still equal to the value we last
+    filled it with (recorded per field in ``tournamentInfo._auto``). A producer
+    who types over it owns it from then on, and re-blanking it re-enables the
+    auto-fill.
+
+    Two callers, and the second is why this is a function. `_load_event` brings
+    back five fields once per EVENT. `apply_startgg_set` brings back a sixth —
+    `phase` — once per SET, from a different path that skipped the record
+    entirely and wrote unconditionally: a hand-typed "Season 9 Week 2" was
+    protected against a detail-less set and destroyed by a detailed one, on every
+    fixture load, silently.
+
+    `skip_blank` is the one real difference between them. A tournament load
+    reports every field it has, so a blank there is information — the event has
+    no address — and clears. A set reports its phase only sometimes, so a blank
+    there means "this set didn't say", and clearing would be the bug the old
+    guard was written to avoid.
+
+    The record is MERGED, never replaced: a field this call doesn't mention keeps
+    what it was filled with, so reloading an event can't make the phase written
+    by a set load look producer-typed.
+    """
+    info = State.state.get("tournamentInfo", {}) or {}
+    auto = dict(info.get("_auto") or {})
+    entries: list[tuple] = []
+    for field, new_val in fields.items():
+        new_val = (new_val or "").strip()
+        if skip_blank and not new_val:
+            continue
+        current = info.get(field, "")
+        untouched = current in ("", None) or current == auto.get(field)
+        auto[field] = new_val
+        if untouched and current != new_val:
+            entries.append((f"tournamentInfo.{field}", new_val))
+    if not entries and auto == (info.get("_auto") or {}):
+        return []
+    return entries + [("tournamentInfo._auto", auto)]
+
+
 _API_URL = "https://www.start.gg/api/-/gql"
 _HEADERS = {
     "client-version": "20",
@@ -241,30 +285,18 @@ class StartGGProvider:
 
         # Write to State (same keys tournament_info.jsx subscribes to). A load may
         # be a first load or a *refresh* of an already-loaded event, and the
-        # producer may have hand-edited some Info fields in between. Preserve those
-        # edits: only overwrite a field when it's still empty or untouched since the
-        # last auto-fill (tracked in tournamentInfo._auto). start.gg's value always
-        # updates the auto-record, so re-blanking a field re-enables auto-fill.
-        info = State.state.get("tournamentInfo", {}) or {}
-        prev_auto = info.get("_auto", {}) or {}
-        new_auto: dict[str, str] = {}
-        entries = []
-
-        def merge(field: str, new_val: str):
-            new_auto[field] = new_val
-            current = info.get(field, "")
-            untouched = current in ("", None) or current == prev_auto.get(field)
-            if untouched and current != new_val:
-                entries.append((f"tournamentInfo.{field}", new_val))
-
-        merge("name", result["tournamentName"])
-        merge("event_name", result["eventName"])
-        merge("location", result["address"] or ("Online" if result["isOnline"] else ""))
-        merge("date", date_str)
-        merge("entrants", str(result["numEntrants"]))
+        # producer may have hand-edited some Info fields in between — the auto-fill
+        # record is what preserves those edits (see auto_fill_entries, which the
+        # per-set `phase` write shares).
+        entries = auto_fill_entries({
+            "name": result["tournamentName"],
+            "event_name": result["eventName"],
+            "location": result["address"] or ("Online" if result["isOnline"] else ""),
+            "date": date_str,
+            "entrants": str(result["numEntrants"]),
+        })
         # Identity/derived fields always track start.gg (never producer-edited).
         entries.append(("tournamentInfo.bracket_link", canonical_url))
-        entries.append(("tournamentInfo._auto", new_auto))
 
         await State.SetBatch(entries)
         await State.Save()

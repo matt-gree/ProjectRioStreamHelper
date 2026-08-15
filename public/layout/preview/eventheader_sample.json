@@ -4,9 +4,11 @@
       "name": "Slice 2026",
       "event_name": "MSB Singles",
       "location": "Chicago, IL",
-      "date": "Aug 15\u201317",
-      "message": "Finals start at 7:00 PM ET",
+      "date": "Aug 15–17",
       "phase": "Top Cut"
     }
+  },
+  "settings": {
+    "overlays.eventheader.message": "Finals start at 7:00 PM ET"
   }
 }

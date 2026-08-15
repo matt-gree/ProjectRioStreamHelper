@@ -50,11 +50,43 @@ describe('overlay-settings whitelist parity', () => {
 describe('Event Header stage', () => {
     it('offers both bands and every per-field switch', () => {
         ui();
-        for (const key of ['showHeader', 'showFooter', 'showEvent', 'showLocation',
-            'showDates', 'showMessage', 'showPhase', 'showRound']) {
+        for (const key of ['showHeader', 'showFooter', 'showCompetition', 'showEvent',
+            'showLocation', 'showDates', 'showMessage', 'showPhase', 'showRound']) {
             const def = LAYOUT_SETTINGS.eventheader.find(d => d.key === key);
             expect(screen.getByText(def.label), key).toBeInTheDocument();
         }
+    });
+
+    /*
+     * These were ONE switch (`showEvent`, in a "Both bands" group) gating the
+     * competition name in the top strip and the event name in the bottom one, so
+     * "Slice 2026" up top could not be run without "MSB Singles" down below.
+     * Two parts in two strips is two switches, each in its own group — which is
+     * the panel-as-scale-model rule, not a preference.
+     */
+    it('separates the two name fields into the bands they appear in', () => {
+        ui();
+        const top = document.querySelector('[data-setting-group="Top band"]');
+        const bottom = document.querySelector('[data-setting-group="Bottom band"]');
+        expect(top).toHaveTextContent('Competition Name');
+        expect(top).not.toHaveTextContent('Event Name');
+        expect(bottom).toHaveTextContent('Event Name');
+        expect(bottom).not.toHaveTextContent('Competition Name');
+    });
+
+    /*
+     * The banner line is the one field on this overlay nothing else reads, so it
+     * is the element's own setting rather than a tournamentInfo fact — authored
+     * beside the switch that draws it instead of on the Competition tab.
+     */
+    it('authors the message here, under the band it prints in', () => {
+        ui();
+        const def = LAYOUT_SETTINGS.eventheader.find(d => d.key === 'message');
+        const input = screen.getByPlaceholderText(def.placeholder);
+        expect(document.querySelector('[data-setting-group="Bottom band"]')).toContainElement(input);
+        fireEvent.change(input, { target: { value: 'Doubles up next' } });
+        fireEvent.blur(input);
+        expect(useSettingsStore.getState()?.overlays?.eventheader?.message).toBe('Doubles up next');
     });
 
     it('surfaces the geometry knobs too — nothing is stranded on the Setup tab', () => {
@@ -99,11 +131,17 @@ describe('Event Header stage', () => {
         expect(useSettingsStore.getState()?.overlays?.eventheader?.separator).toBe('·');
     });
 
-    it('warns which fields are switched on but have nothing behind them', () => {
+    /*
+     * The note names only the fields COMPETITION owns. The message left it when
+     * the field moved onto this panel: pointing a producer at another tab for a
+     * row an inch above is the dead end the move was for.
+     */
+    it('warns which Competition fields are switched on but have nothing behind them', () => {
         useStateStore.setState({ tournamentInfo: { name: 'Slice 2026', location: 'Chicago' } });
         ui();
-        // date + message are blank; name + location are not.
-        expect(screen.getByText(/dates, message/)).toBeInTheDocument();
+        const note = screen.getByText(/blank in Competition/);
+        expect(note).toHaveTextContent('dates is blank');
+        expect(note).not.toHaveTextContent('message');
     });
 
     it('writes to the shared (not per-board) namespace', () => {
@@ -143,11 +181,17 @@ describe('every part toggle is a chip', () => {
         }
     });
 
-    // Alone in its group ('Both bands' is switch · select · number), and still a
-    // chip: consistency is the point, so a lone part does not get a lone switch.
-    it('chips a part toggle that has no siblings', () => {
+    /*
+     * 'Both bands' is now look and geometry only — background, width, scale,
+     * separator. Every part toggle belongs to exactly one strip, so every one of
+     * them sits in that strip's group; a switch left down here would be a part
+     * with no band, which is the state `showEvent` used to be in.
+     */
+    it('leaves no part toggle in the shared group', () => {
         ui();
-        expect(pressed('Event Name')).toBeInTheDocument();
+        const both = document.querySelector('[data-setting-group="Both bands"]');
+        expect(both).toBeInTheDocument();
+        expect(both.querySelectorAll('[aria-pressed]')).toHaveLength(0);
     });
 
     // Nothing in this panel should be left drawing a part as a switch.

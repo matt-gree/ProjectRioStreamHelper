@@ -768,6 +768,33 @@ class Settings:
             await cls.Save()
 
     @classmethod
+    async def adopt_eventheader_message(cls, message: str) -> bool:
+        """Take the Event Header's banner line over from ``tournamentInfo.message``.
+
+        The message is the one field on that overlay no other surface reads, so
+        it moved out of the shared event-fact namespace and onto the element as
+        ``overlays.eventheader.message`` — beside the switch that draws it, and
+        through the staging gateway like every other overlay setting.
+
+        This is the SETTINGS half only. The caller owns the State store and does
+        the matching unset, because the dependency runs state → settings and
+        must not be made to run both ways for one migration. Returns True when
+        the state key is now redundant and can be dropped — including when the
+        producer has already set a message here, since in that case theirs wins
+        and the old copy is what would go stale.
+        """
+        message = (message or "").strip()
+        if not message:
+            return False
+        ns = cls.settings.setdefault("overlays", {}).setdefault("eventheader", {})
+        if ns.get("message"):
+            return True
+        ns["message"] = message
+        await cls.Save()
+        logger.info("[Settings] adopted tournamentInfo.message as overlays.eventheader.message")
+        return True
+
+    @classmethod
     async def Set(cls, key: str, value, session_id: str | None = None):
         deep_set(cls.settings, key, value)
         cls.revision += 1

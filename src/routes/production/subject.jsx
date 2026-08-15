@@ -363,10 +363,49 @@ const LowerThirdSubject = memo(function LowerThirdSubject() {
     return <SubjectRow text={`${lt.on} of ${lt.filled} segments on`} />;
 });
 
+/*
+ * The Event Header draws two strips of event facts, and its panel could not say
+ * one of them — fourteen switches over content the producer had to go to another
+ * tab to see.
+ *
+ * WHAT IT REPORTS IS THE STATE SIDE ONLY: the competition facts each band has to
+ * work with, not the composed line the mount will render. The switches, the
+ * separator and the message are settings, and a subject reads live state (the
+ * module note above) — a configured value belongs in the stage row that
+ * configures it, which for the message is now the row right below this one. The
+ * preview under the panel is what shows the two bands as they will air; this row
+ * is what tells the producer whether there is anything behind them.
+ *
+ * `board` is the placement's, so Round is read from the board this source is
+ * actually pointed at rather than assumed to be 1.
+ */
+const EventHeaderSubject = memo(function EventHeaderSubject({ board }) {
+    const e = useStateStore(useShallow(s => {
+        const info = s?.tournamentInfo ?? {};
+        const matchId = s?.score?.[board]?.match;
+        const match = matchId != null && matchId !== '' ? s?.match?.[String(matchId)] : null;
+        return {
+            top: [info.name, info.location, info.date].filter(Boolean).join(' · '),
+            bottom: [
+                info.event_name || info.name,
+                match?.phase || info.phase,
+                s?.score?.[board]?.phase,
+            ].filter(Boolean).join(' · '),
+        };
+    }));
+    if (!e.top && !e.bottom) {
+        return <SubjectRow text="No competition loaded — both bands render empty" tone="warn" />;
+    }
+    // The top band is the subject; the bottom band trails as its qualifier —
+    // one row, two strips, in the order they sit on the canvas.
+    return <SubjectRow text={e.top || 'Nothing for the header band'} meta={e.bottom || null} />;
+});
+
 const SUBJECTS = {
     hitvisualizer: HitSubject,
     matchuphistory: MatchupSubject,
     bracket: BracketSubject,
+    eventheader: EventHeaderSubject,
     commentary: CommentarySubject,
     playerplates: PlatesSubject,
     schedule: ScheduleSubject,
@@ -391,8 +430,17 @@ export const Subject = memo(function Subject({ placement }) {
     const { element } = placement ?? {};
     if (!element) return null;
 
+    /*
+     * The URL fallback is the same rule the team-variant branch below relies on,
+     * applied one branch earlier: an element can read `?scoreboard=` without
+     * declaring `scope: 'board'`, so the placement's board is null while the
+     * source still carries the one the overlay itself resolves. The Event Header
+     * is exactly that — full-canvas chrome whose Round comes off a board.
+     */
     const Declared = SUBJECTS[element.id];
-    if (Declared) return <Declared board={placement.board ?? 1} />;
+    if (Declared) {
+        return <Declared board={placement.board ?? boardOfUrl(placement.item?.url) ?? 1} />;
+    }
 
     if (element.container) {
         return <ContainerSubject container={element.container} carrying={placement.carrying} />;

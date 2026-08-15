@@ -179,6 +179,55 @@ describe('Subject', () => {
     });
 });
 
+describe('the event header', () => {
+    /*
+     * Its panel is fourteen switches over content authored somewhere else, and
+     * before this row it could not say what either strip had to draw.
+     *
+     * It reports the STATE side only — the competition facts behind the bands —
+     * never the composed line. The switches, the separator and the message are
+     * settings, and a subject that read settings would be reporting a configured
+     * value as if it were live (the rule at the head of subject.jsx); the panel's
+     * own preview is what shows the bands as they will air.
+     */
+    it('states what each band has to draw, top strip then bottom', () => {
+        setState({
+            tournamentInfo: {
+                name: 'Slice 2026', location: 'Chicago, IL', date: 'Aug 15–17',
+                event_name: 'MSB Singles', phase: 'Top Cut',
+            },
+            score: { 1: { phase: 'Winners R2' } },
+        });
+        render(<Subject placement={placementFor('eventheader')} />);
+        expect(screen.getByText('Slice 2026 · Chicago, IL · Aug 15–17')).toBeInTheDocument();
+        expect(screen.getByText('MSB Singles · Top Cut · Winners R2')).toBeInTheDocument();
+    });
+
+    /*
+     * The board comes off the SOURCE's url. The element reads `?scoreboard=` for
+     * its Round without declaring `scope: 'board'` (it is full-canvas chrome, so
+     * per-board style settings would be wrong), which leaves placement.board null
+     * — and assuming 1 there would report another board's round.
+     */
+    it('takes Round from the board its own source points at', () => {
+        setState({
+            tournamentInfo: { name: 'Slice 2026' },
+            score: { 1: { phase: 'Losers R1' }, 2: { phase: 'Winners Final' } },
+        });
+        render(<Subject placement={placementFor('eventheader', {
+            item: { sourceName: 's', url: '/layout/eventheader/eventheader.html?scoreboard=2' },
+        })} />);
+        // The event name falls back to the competition's, so the bottom strip
+        // reads name · round — board 2's round, not board 1's.
+        expect(screen.getByText('Slice 2026 · Winners Final')).toBeInTheDocument();
+    });
+
+    it('warns when there is no competition behind either band', () => {
+        render(<Subject placement={placementFor('eventheader')} />);
+        expect(screen.getByText(/both bands render empty/)).toBeInTheDocument();
+    });
+});
+
 describe('what does and does not get a subject', () => {
     /*
      * The rail spends one of its two rows on this, so which elements draw one
@@ -192,7 +241,10 @@ describe('what does and does not get a subject', () => {
             ['roster (team variant)', placementFor('roster', { variant: 't1' }), true],
             ['commentary', placementFor('commentary'), true],
             ['ticker', placementFor('ticker'), false],
-            ['event header', placementFor('eventheader'), false],
+            // It draws even with nothing loaded — an event header over an empty
+            // tournamentInfo renders two blank strips, which is the case worth
+            // warning about rather than the case worth staying quiet for.
+            ['event header', placementFor('eventheader'), true],
             // A scoped member on no roster has no frame of reference to draw
             // from, which is why the predicate that used to live here couldn't
             // be right: it cannot read the store.

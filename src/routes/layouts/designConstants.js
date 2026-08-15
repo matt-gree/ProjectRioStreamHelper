@@ -138,25 +138,40 @@ export const LAYOUT_SETTINGS = {
     // by control kind instead (all the switches, then all the numbers), the
     // band's own offset sat five rows away from the switch that turns it on.
     eventheader: [
-        { key: 'showHeader',    group: 'Top band', type: 'switch', label: 'Header Band',  description: 'Top row: Event / Location / Dates', defaultValue: true },
+        { key: 'showHeader',    group: 'Top band', type: 'switch', label: 'Header Band',  description: 'Top row: Competition / Location / Dates', defaultValue: true },
         { key: 'headerOffsetY', group: 'Top band', type: 'number-override', label: 'Top Offset', description: 'Nudge the header band down from the top (baseline default y=45)', defaultValue: 0, min: 0, max: 480, step: 1, suffix: 'px' },
-        // Per-field visibility (a field also drops out automatically when blank)
+        // Per-field visibility, each in the band the field appears in (a field
+        // also drops out automatically when blank). `showCompetition` and
+        // `showEvent` used to be ONE switch in a "Both bands" group: the top
+        // band's competition name and the bottom band's event name were tied
+        // together, so a producer could not run "Slice 2026" up top without
+        // "MSB Singles" down below. One switch, two parts, two strips — the
+        // group name was papering over the conflation rather than modelling it.
+        { key: 'showCompetition', group: 'Top band', type: 'switch', label: 'Competition Name', description: 'The competition’s own name (header row)', defaultValue: true },
         { key: 'showLocation',  group: 'Top band', type: 'switch', label: 'Location',    description: 'Header row only', defaultValue: true },
         { key: 'showDates',     group: 'Top band', type: 'switch', label: 'Dates',       description: 'Header row only', defaultValue: true },
 
         { key: 'showFooter',    group: 'Bottom band', type: 'switch', label: 'Footer Band',  description: 'Bottom row: Message / Event / Phase / Round', defaultValue: true },
         { key: 'footerOffsetY', group: 'Bottom band', type: 'number-override', label: 'Bottom Offset', description: 'Nudge the footer band up from the bottom (baseline default y=1078)', defaultValue: 2, min: 0, max: 480, step: 1, suffix: 'px' },
-        { key: 'showMessage',   group: 'Bottom band', type: 'switch', label: 'Message',     description: 'Free-text banner line (footer row)', defaultValue: true },
+        // Message is this element's OWN copy — the one field on the header that
+        // no other overlay reads. It lived on the Competition tab as
+        // `tournamentInfo.message`, in a namespace whose every other member is
+        // an event fact several surfaces read, which put the line a producer
+        // retypes mid-broadcast two tabs from the panel that draws it. The
+        // switch names the part, the text row carries it (same pair as the
+        // scorecard's Header Bar / Header Title).
+        { key: 'showMessage',   group: 'Bottom band', type: 'switch', label: 'Message',     description: 'The banner line at the head of the footer row', defaultValue: true },
+        { key: 'message',       group: 'Bottom band', type: 'text',   label: 'Message Text', description: 'What the banner line says. Blank hides it however the switch is set.', placeholder: 'Finals start at 7:00 PM ET' },
+        { key: 'showEvent',     group: 'Bottom band', type: 'switch', label: 'Event Name',  description: 'The start.gg event under the competition (footer row)', defaultValue: true },
         { key: 'showPhase',     group: 'Bottom band', type: 'switch', label: 'Phase',       description: 'Competition phase (footer row; match, else global)', defaultValue: true },
         { key: 'showRound',     group: 'Bottom band', type: 'switch', label: 'Round',       description: 'Round name from the bound match (footer row)', defaultValue: true },
 
         // Last, and that is the ranking: these are set once for an event, where
         // everything above is flipped during one.
-        { key: 'showEvent',     group: 'Both bands', type: 'switch', label: 'Event Name', description: 'Competition name (both rows)', defaultValue: true },
         { key: 'bgStyle',       group: 'Both bands', type: 'select', label: 'Band Background', description: 'Optional readability plate behind each row', options: [{ value: 'none', label: 'None (transparent)' }, { value: 'scrim', label: 'Soft Scrim' }, { value: 'bar', label: 'Solid Bar' }], defaultValue: 'none' },
         { key: 'bandWidth',     group: 'Both bands', type: 'number-override', label: 'Band Width', description: 'Centered content width for both rows', defaultValue: 1263, min: 600, max: 1920, step: 1, suffix: 'px' },
         { key: 'fontScale',     group: 'Both bands', type: 'number-override', label: 'Font Scale', description: 'Scales all text up or down', defaultValue: 100, min: 50, max: 200, step: 5, suffix: '%' },
-        { key: 'separator',     group: 'Both bands', type: 'text',   label: 'Field Separator', description: 'Character drawn between fields in a row', placeholder: '◆' },
+        { key: 'separator',     group: 'Both bands', type: 'text',   label: 'Field Separator', description: 'Character drawn between fields in a row', defaultValue: '◆', placeholder: '◆' },
     ],
 };
 

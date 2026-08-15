@@ -5,7 +5,7 @@
   <!-- The whitelist must name every knob this file reads: Setup filters
        LAYOUT_SETTINGS.eventheader down to what appears here, so an omitted key
        is a setting the mount honours but nobody can reach. -->
-  <meta name="overlay-settings" content="showHeader, headerOffsetY, showFooter, footerOffsetY, showEvent, showLocation, showDates, showMessage, showPhase, showRound, bandWidth, fontScale, bgStyle, separator, textColor, accentColor, fontFamily" />
+  <meta name="overlay-settings" content="showHeader, headerOffsetY, showFooter, footerOffsetY, showCompetition, showEvent, showLocation, showDates, showMessage, message, showPhase, showRound, bandWidth, fontScale, bgStyle, separator, textColor, accentColor, fontFamily" />
   <style>
     /* Inter is bundled locally and injected by overlay-base.js. */
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -136,7 +136,10 @@
                         || competitionName;
       const location  = deepGet(state, `tournamentInfo.location`, '');
       const dates     = deepGet(state, `tournamentInfo.date`, '');
-      const message   = deepGet(state, `tournamentInfo.message`, '');
+      // The banner line is this element's OWN copy, not an event fact — a
+      // setting beside the switch that draws it, where every other field here
+      // is tournamentInfo the matchup and the callouts read too.
+      const message   = s('message', '');
 
       const matchId   = deepGet(state, `score.${SCOREBOARD}.match`, '');
       const hasMatch  = matchId !== '' && matchId != null;
@@ -147,7 +150,8 @@
       const round     = deepGet(state, `score.${SCOREBOARD}.phase`, '');
 
       // ── per-field visibility (also auto-drops when blank) ───────────
-      const fCompetition = on('showEvent') ? competitionName : '';
+      // Two switches, because these are two fields in two different strips.
+      const fCompetition = on('showCompetition') ? competitionName : '';
       const fEvent    = on('showEvent')    ? eventName : '';
       const fLocation = on('showLocation') ? location  : '';
       const fDates    = on('showDates')    ? dates     : '';
@@ -176,7 +180,7 @@
       header.style.top = hOff + 'px';
       footer.style.bottom = fOff + 'px';
 
-      // ── header (Event · Location · Dates) ───────────────────────────
+      // ── header (Competition · Location · Dates) ─────────────────────
       const showHeader = on('showHeader');
       const headerCount = showHeader
         ? renderRow(document.getElementById('hdr-row'), [fCompetition, fLocation, fDates], sep) : 0;

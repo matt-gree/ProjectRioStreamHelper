@@ -144,9 +144,10 @@ _STANDALONE_DISPLAY_NAMES = {
     "postgame/spotlight": "Character Spotlight",
     "postgame/summary": "Game Summary",
     # Event Header: a centered two-row tournament banner (1263px). Top row =
-    # Event / Location / Dates from tournamentInfo; bottom row = Message /
-    # Bracket / Phase / Round, the latter three from the bound match. Blank
-    # fields drop out and the rest re-center.
+    # Competition / Location / Dates from tournamentInfo; bottom row = Message /
+    # Event / Phase / Round — the message is the element's own copy
+    # (overlays.eventheader.message), the rest tournamentInfo and the bound
+    # match. Blank fields drop out and the rest re-center.
     "eventheader/eventheader": "Event Header",
 }
 

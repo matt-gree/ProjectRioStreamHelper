@@ -317,11 +317,25 @@ position, not an identity).
   renders them in the order they first appear in the registry array, which is the
   order they appear on screen; `groupDefs` collects by name rather than by
   consecutive run, so a filtered-out def can't split one region into two. The
-  Event Header is the reference (14 settings, three regions, no Style section
+  Event Header is the reference (16 settings, three regions, no Style section
   left). Ranking is by ORDER — the set-once group sits last — and groups are
   **always open, never accordions**, same rule as the Lower Third's five columns.
   `OverlaySettingRows` stays flat on purpose: it also builds rail quick faces,
   where a group eyebrow would blow the two-row cap.
+- **A "both regions" group is where a conflation hides.** One `showEvent` switch
+  in the Event Header's *Both bands* group gated the competition name in the top
+  strip AND the event name in the bottom one, so neither could run without the
+  other — the group name read as a legitimate scope while it was really two parts
+  sharing a key. Split, each sits in the strip it draws in, and the shared group
+  is what it should always have been: look and geometry, no part toggles at all.
+- **A field only THIS overlay reads is a setting, not a fact.** The Event Header's
+  banner line was `tournamentInfo.message` — the one field in that namespace no
+  other surface read — so the line a producer retypes mid-broadcast was authored
+  two tabs from the panel that draws it, with no preview and no staging. It is
+  `overlays.eventheader.message` now, a text row under the switch that draws it
+  (the switch names the part, the text row carries it — same pair as the
+  scorecard's Header Bar / Header Title). Ask which surfaces read a value before
+  deciding where it is authored; several means the tab, one means the element.
 - **A detail follows its master, but only when it is INERT.** A def may carry
   `showWhen: { key, is }` and renders only while its master satisfies it (the
   Stat Card's custom bottom text, on a card whose bottom line is showing the game

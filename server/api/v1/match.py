@@ -19,6 +19,7 @@ from pydantic import BaseModel
 from server.match import Match, _norm_side, default_match
 from server.rio.provider import RioGameDataProvider
 from server.schedule import Schedule
+from server.startgg.provider import auto_fill_entries
 from server.state import State
 
 router = APIRouter(prefix="/match", tags=["match"])
@@ -237,11 +238,17 @@ async def apply_startgg_set(m, s: dict, set_id: int) -> None:
     # + bracket type. The phase name is exactly the "where in the competition are
     # we" descriptor the global Competition Phase field wants, so populate it from
     # the loaded set; also stamp it on the match for per-fixture Bracket/Phase/
-    # Round surfaces. Only write when present so a detail-less set never blanks a
-    # producer's manual phase text.
+    # Round surfaces.
+    #
+    # The GLOBAL field goes through the auto-fill record, the same as every other
+    # tournamentInfo field start.gg supplies. It used to be a bare write guarded
+    # only against blanking, so a producer's hand-typed "Season 9 Week 2" was
+    # protected from a detail-less set and destroyed by a detailed one — every
+    # set load, silently. The PER-MATCH copy is unconditional and should be: it
+    # is this set's own fact, not a field anyone types.
     phase = (s.get("tournament_phase") or "").strip()
     if phase:
-        entries.append(("tournamentInfo.phase", phase))
+        entries.extend(auto_fill_entries({"phase": phase}, skip_blank=True))
         entries.append((f"match.{m}.phase", phase))
     bracket_type = s.get("bracket_type") or ""
     if bracket_type:

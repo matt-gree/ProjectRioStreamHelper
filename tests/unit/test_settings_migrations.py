@@ -277,3 +277,35 @@ async def test_fresh_install_gets_v2_shaped_default_binding(isolate_user_data):
     assert b["playback"]["mode"] == "single"
     assert b["pool"]["filters"] == []
     assert Settings.settings["scoreboards"]["binding_schema"] == 2
+
+
+# ── Event Header message: tournamentInfo.message → overlays.eventheader.message ──
+#
+# The banner line is the one field on that overlay nothing else reads, so it
+# moved out of the shared event-fact namespace and onto the element. Settings
+# owns the seed; the caller (server.py's lifespan, which is where both stores are
+# in memory) owns the matching State unset, and the return value is what tells it
+# the old copy is now redundant.
+
+async def test_adopts_the_legacy_banner_line(isolate_user_data):
+    await Settings.Load()
+    assert await Settings.adopt_eventheader_message("Finals at 7") is True
+    assert Settings.settings["overlays"]["eventheader"]["message"] == "Finals at 7"
+
+
+async def test_a_producers_own_message_wins_but_still_clears_the_old_copy(isolate_user_data):
+    """Theirs is the live one, so the state key is what would go stale — the
+    caller is told to drop it either way."""
+    _write_settings(isolate_user_data, {
+        "overlays": {"eventheader": {"message": "Doubles up next"}},
+    })
+    await Settings.Load()
+    assert await Settings.adopt_eventheader_message("Finals at 7") is True
+    assert Settings.settings["overlays"]["eventheader"]["message"] == "Doubles up next"
+
+
+async def test_nothing_to_adopt_leaves_the_setting_unset(isolate_user_data):
+    await Settings.Load()
+    for legacy in ("", "   ", None):
+        assert await Settings.adopt_eventheader_message(legacy) is False
+    assert "message" not in Settings.settings["overlays"].get("eventheader", {})

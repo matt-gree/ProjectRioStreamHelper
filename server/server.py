@@ -28,6 +28,7 @@ from server.match import Match
 from server.schedule import Schedule
 from server.utils.projection import run_startup_projection
 from server.commentary import Commentary
+from server.organizers import Organizers
 from server.playerplates import PlayerPlates
 from server.state import State
 from server.utils import json
@@ -80,6 +81,14 @@ async def lifespan(app: FastAPI):
     # the very first boot projection is already covered.
     persister = asyncio.create_task(State.Persister())
     await State.Load()
+    # The Event Header's banner line moved off the shared event-fact namespace
+    # and onto the element (overlays.eventheader.message). Settings is already
+    # loaded by the time the lifespan runs, so this is the one place both stores
+    # are in memory — the settings side seeds, the state side drops its copy, and
+    # neither module has to import the other.
+    _msg = (State.state.get("tournamentInfo", {}) or {}).get("message", "")
+    if _msg and await Settings.adopt_eventheader_message(_msg):
+        await State.Unset("tournamentInfo.message")
     # Load the participant registry back into memory before anything that reads
     # it (resurface, Match projection). Without this the address book starts
     # empty every launch even though it persisted to participants.json.
@@ -115,6 +124,10 @@ async def lifespan(app: FastAPI):
     # Same for the player-plates band — re-resolve its config against the current
     # registry/matches so a match-fed plate reflects the latest names on launch.
     await PlayerPlates.project_all()
+    # And the competition's organizers, which are address-book references now
+    # rather than nine free-text fields — so a handle edited in the Address Book
+    # reflows on launch, the same contract as the three projectors above.
+    await Organizers.project_all()
 
     # Container automations. Registers the state write hooks (so a rule decides
     # in the same batch as its trigger) and settles every container: a producer's
