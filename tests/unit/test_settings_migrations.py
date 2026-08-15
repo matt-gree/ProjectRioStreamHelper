@@ -279,18 +279,108 @@ async def test_fresh_install_gets_v2_shaped_default_binding(isolate_user_data):
     assert Settings.settings["scoreboards"]["binding_schema"] == 2
 
 
-# ── Event Header message: tournamentInfo.message → overlays.eventheader.message ──
+# ── Event Header: seven switches → two ordered field lists ──
 #
-# The banner line is the one field on that overlay nothing else reads, so it
-# moved out of the shared event-fact namespace and onto the element. Settings
-# owns the seed; the caller (server.py's lifespan, which is where both stores are
-# in memory) owns the matching State unset, and the return value is what tells it
-# the old copy is now redundant.
+# Each band was a fixed run of fields with a boolean apiece, and the ORDER lived
+# in the overlay's render call — so a producer could hide the location and never
+# put the dates first. A band is a list now, and this migration is what carries
+# an existing install onto it without losing a switch anyone had set.
+
+
+def _eh(band):
+    return [e["id"] for e in Settings.settings["overlays"]["eventheader"]["bands"][band]]
+
+
+async def test_a_fresh_install_gets_both_bands_in_their_default_order(isolate_user_data):
+    await Settings.Load()
+    assert _eh("header") == ["competition", "location", "dates"]
+    assert _eh("footer") == ["message", "event", "phase", "round"]
+    assert all(e["on"] for band in Settings.settings["overlays"]["eventheader"]["bands"].values()
+               for e in band)
+
+
+async def test_legacy_switches_become_each_field_s_own_eye(isolate_user_data):
+    _write_settings(isolate_user_data, {
+        "overlays": {"eventheader": {
+            "showDates": False, "showPhase": False, "bandWidth": 1400,
+        }},
+    })
+    await Settings.Load()
+    eh = Settings.settings["overlays"]["eventheader"]
+    off = {e["id"] for band in eh["bands"].values() for e in band if not e["on"]}
+    assert off == {"dates", "phase"}
+    # The switches are gone — a second home for "is this field drawn" is what
+    # the list replaces, not something it sits beside.
+    assert "showDates" not in eh and "showPhase" not in eh
+    # A real setting is untouched: the BANDS stay settings, their fields don't.
+    assert eh["bandWidth"] == 1400
+
+
+async def test_the_banner_line_becomes_the_message_field_s_own_text(isolate_user_data):
+    _write_settings(isolate_user_data, {
+        "overlays": {"eventheader": {"message": "Finals at 7"}},
+    })
+    await Settings.Load()
+    eh = Settings.settings["overlays"]["eventheader"]
+    assert [e for band in eh["bands"].values() for e in band
+            if e["id"] == "message"][0]["text"] == "Finals at 7"
+    assert "message" not in eh
+
+
+async def test_an_arrangement_survives_a_later_boot(isolate_user_data):
+    """The producer's order is theirs. Only its SHAPE is normalised — a heal
+    that re-sorted the band would undo the whole point of it being a list."""
+    _write_settings(isolate_user_data, {
+        "overlays": {"eventheader": {"bands": {
+            "header": [{"id": "dates"}, {"id": "competition", "on": False, "text": "SLICE"}],
+            "footer": [{"id": "round"}],
+        }}},
+    })
+    await Settings.Load()
+    eh = Settings.settings["overlays"]["eventheader"]
+    # Stored ids keep their places; the fields neither band listed are appended
+    # to their defaults, because a field in no band is a field with no way back.
+    assert _eh("header") == ["dates", "competition", "location"]
+    assert _eh("footer") == ["round", "message", "event", "phase"]
+    assert eh["bands"]["header"][1] == {"id": "competition", "on": False, "text": "SLICE"}
+
+
+async def test_a_field_the_producer_moved_across_is_not_moved_back(isolate_user_data):
+    _write_settings(isolate_user_data, {
+        "overlays": {"eventheader": {"bands": {
+            "header": [{"id": "competition"}, {"id": "location"}, {"id": "dates"}, {"id": "round"}],
+            "footer": [{"id": "message"}, {"id": "event"}, {"id": "phase"}],
+        }}},
+    })
+    await Settings.Load()
+    assert _eh("header")[-1] == "round"
+    assert "round" not in _eh("footer")
+
+
+async def test_an_unknown_or_duplicated_id_is_dropped(isolate_user_data):
+    """A hand-edited file can name a field that no longer exists, or one twice.
+    Either would be a segment the panel can't label or can't tell apart."""
+    _write_settings(isolate_user_data, {
+        "overlays": {"eventheader": {"bands": {
+            "header": [{"id": "competition"}, {"id": "sponsor"}, {"id": "competition"}],
+            "footer": [],
+        }}},
+    })
+    await Settings.Load()
+    assert _eh("header") == ["competition", "location", "dates"]
+
+
+# The banner line's ORIGINAL home was tournamentInfo.message — an event fact
+# nothing else read. Settings owns the seed; the caller (server.py's lifespan,
+# where both stores are in memory) owns the matching State unset, and the return
+# value is what tells it the old copy is now redundant. It lands on the message
+# FIELD, because Load() has already run by then and a flat key would be a second
+# copy nothing reads.
 
 async def test_adopts_the_legacy_banner_line(isolate_user_data):
     await Settings.Load()
     assert await Settings.adopt_eventheader_message("Finals at 7") is True
-    assert Settings.settings["overlays"]["eventheader"]["message"] == "Finals at 7"
+    assert _message_text() == "Finals at 7"
 
 
 async def test_a_producers_own_message_wins_but_still_clears_the_old_copy(isolate_user_data):
@@ -301,11 +391,17 @@ async def test_a_producers_own_message_wins_but_still_clears_the_old_copy(isolat
     })
     await Settings.Load()
     assert await Settings.adopt_eventheader_message("Finals at 7") is True
-    assert Settings.settings["overlays"]["eventheader"]["message"] == "Doubles up next"
+    assert _message_text() == "Doubles up next"
 
 
 async def test_nothing_to_adopt_leaves_the_setting_unset(isolate_user_data):
     await Settings.Load()
     for legacy in ("", "   ", None):
         assert await Settings.adopt_eventheader_message(legacy) is False
-    assert "message" not in Settings.settings["overlays"].get("eventheader", {})
+    assert _message_text() == ""
+
+
+def _message_text():
+    bands = Settings.settings["overlays"].get("eventheader", {}).get("bands", {})
+    return next((e["text"] for band in bands.values() for e in band
+                 if e["id"] == "message"), "")

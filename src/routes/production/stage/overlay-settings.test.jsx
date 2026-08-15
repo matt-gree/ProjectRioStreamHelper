@@ -3,7 +3,7 @@ import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/re
 import { useSettingsStore } from '../../../context/store';
 import { useStagingStore } from '../../../context/staging';
 import { invalidateDesignPackages } from '../../layouts/designPackage';
-import { ElementStyleSettings, RENDERABLE, groupDefs } from './overlay-settings';
+import { ElementStyleSettings, RENDERABLE, chunkDefs, groupDefs } from './overlay-settings';
 
 // The package list the session cache fetches. Same shape the server reports.
 const packages = (list) => {
@@ -61,6 +61,51 @@ describe('ElementStyleSettings — every setting type is stage-renderable (phase
     it('renders nothing for an element with no settings', () => {
         const { container } = render(<ElementStyleSettings type="matchuphistory" label="Matchup" />);
         expect(container).toBeEmptyDOMElement();
+    });
+});
+
+/*
+ * A run of one is not a set. A lone part toggle takes the label column so it
+ * lines up with the rows around it; two or more pack into a strip, which is the
+ * whole reason the strip exists.
+ *
+ * The rule this replaces promoted EVERY chip in a region the moment ANY switch
+ * in it owned a text field. It was written for the scorecard (one unpaired
+ * toggle among two paired ones) and its cost scaled with the loners: the event
+ * header's Bottom band has one pair and three other field toggles, so a single
+ * 34px strip became three 128px chips on three rows, each with ~590px of empty
+ * panel beside it.
+ */
+describe('chunkDefs — a run of one aligns, a run of many packs', () => {
+    const sw = key => ({ key, type: 'switch' });
+    const text = key => ({ key, type: 'text' });
+    const shape = defs => chunkDefs(defs).map(s => `${s.kind}:${s.defs.map(d => d.key).join('+')}`);
+
+    it('packs adjacent fieldless toggles into one strip', () => {
+        expect(shape([sw('a'), sw('b'), sw('c')])).toEqual(['chips:a+b+c']);
+    });
+
+    it('gives a lone toggle the label column instead of a one-chip strip', () => {
+        expect(shape([sw('a')])).toEqual(['pair:a']);
+    });
+
+    // The scorecard's Top bars: two titled bars and one without. All three
+    // toggles line up in the same column — the case the region-wide rule existed
+    // for, and the one this keeps.
+    it('lines an unpaired toggle up with its titled siblings', () => {
+        expect(shape([sw('a'), text('at'), sw('b'), text('bt'), sw('c')]))
+            .toEqual(['pair:a+at', 'pair:b+bt', 'pair:c']);
+    });
+
+    /*
+     * The event header's Bottom band. A pair in the region no longer breaks the
+     * strip beside it apart — that is what made this panel four rows taller than
+     * its own Top band, which has the same shape and no pair.
+     */
+    it('leaves a strip packed even when the region has a pair', () => {
+        expect(shape([sw('band'), { key: 'off', type: 'number-override' },
+            sw('msg'), text('msgText'), sw('x'), sw('y'), sw('z')]))
+            .toEqual(['pair:band', 'row:off', 'pair:msg+msgText', 'chips:x+y+z']);
     });
 });
 

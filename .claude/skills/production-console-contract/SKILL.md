@@ -308,18 +308,49 @@ position, not an identity).
   rack row, and it was the only width, so on a ~950px stage the same column
   clipped "Bottom Offset" to "Bottom O…" with 800px empty beside the input.
   Container queries measure `PanelShell`'s body; the rail and rack are not
-  containers, so they never match and keep 64. Same reason `SettingGroups` goes
-  two-column at `@3xl` — a stage panel is wide, and one column of label-plus-
-  control is most of what "sparsely populated" meant.
+  containers, so they never match and keep 64. Same reason `SettingGroups` adds
+  columns as the panel widens (`@3xl` → 2, `@6xl` → 3) — a stage panel is wide,
+  and one column of label-plus-control is most of what "sparsely populated"
+  meant. **A column count is a budget too, and it has to be re-measured at the
+  window a producer actually runs.** A settings row is a label plus one control
+  — 238px for a number, 240px for a chip strip — so a column past ~340px is
+  spending the rest on nothing: two columns were right for the ~950px panel they
+  were written against and wrong at 1394px, where they were 675px each and the
+  median row stranded 437px.
+- **A run of one is not a set** (`chunkDefs`). A lone part toggle takes the label
+  column so it lines up with the rows around it; two or more pack into a strip,
+  which is what the strip is for. The rule this replaced promoted **every** chip
+  in a region the moment **any** switch in it owned a text field: written for the
+  Scorecard's Top bars (one unpaired toggle among two paired ones), its cost
+  scaled with the loners, and the Event Header's Bottom band — one pair plus
+  three field toggles — turned a single 34px strip into three 128px chips on
+  three rows. The tell was that the Bottom band rendered four rows taller than
+  the Top band while modelling the identical thing.
+- **A control states how much it expects.** `TextRow`'s `short` (`short: true` in
+  `LAYOUT_SETTINGS`) sizes the input to its content for a value that is a glyph
+  or two — the Event Header's field separator, which otherwise drew a 675px box
+  around `◆`. Same reason `NumberRow` has always been a fixed `w-20`. And a
+  **segment label is one word**: a segmented control divides its row between its
+  options, so it gets whatever the column leaves after the label gutter divided
+  by three (~82px at two columns). "None (transparent)" and "Soft Scrim" both
+  wrapped to a second line and broke the 28px rhythm — the adjectives were
+  describing, and `description` is where describing goes. `SegmentedRow`'s
+  `fill` is the same question one level up: it stretches for a segmented that is
+  the **subject** of what follows it (the plates mode, a lower-third slot's
+  type) and sizes to its options for **one value among a list of them**, which
+  is every overlay style setting. Stretched, the Event Header's set-once Band
+  Background was the widest and loudest control on a panel of quiet knobs, with
+  its chosen segment an inch from the label naming it — inverted prominence, in
+  the group the registry ranks last on purpose.
 - **A settings panel is a scale model of the element it configures.** A def may
   carry a `group` in `LAYOUT_SETTINGS`, and a group is a **visible region of the
   overlay** — "Top band", never "Switches" or "Geometry". `OverlaySettingGroups`
   renders them in the order they first appear in the registry array, which is the
   order they appear on screen; `groupDefs` collects by name rather than by
   consecutive run, so a filtered-out def can't split one region into two. The
-  Event Header is the reference (16 settings, three regions, no Style section
-  left). Ranking is by ORDER — the set-once group sits last — and groups are
-  **always open, never accordions**, same rule as the Lower Third's five columns.
+  Scorecard is the reference (three regions, no Style section left). Ranking is
+  by ORDER — the set-once group sits last — and groups are **always open, never
+  accordions**, same rule as the Lower Third's five columns.
   `OverlaySettingRows` stays flat on purpose: it also builds rail quick faces,
   where a group eyebrow would blow the two-row cap.
 - **A "both regions" group is where a conflation hides.** One `showEvent` switch
@@ -328,14 +359,35 @@ position, not an identity).
   other — the group name read as a legitimate scope while it was really two parts
   sharing a key. Split, each sits in the strip it draws in, and the shared group
   is what it should always have been: look and geometry, no part toggles at all.
+- **A LIST IS NOT A ROW OF SWITCHES.** When the producer's question is *what is
+  in this thing, and in what order*, the model is an ordered list and the panel
+  is a picture of it — not one boolean per part with the order hardcoded
+  somewhere else. The Event Header was seven `show*` switches in registry order
+  while the order they DREW in lived in the overlay's own render call, so a
+  producer could hide the location and never put the dates first, and only one
+  of the seven fields had any text of its own. Its bands are
+  `overlays.eventheader.bands.{header,footer}` now — ordered arrays of
+  `{id, on, text}` (`src/routes/production/eventheader.js`,
+  `EVENTHEADER_FIELDS` in `server/settings.py`) — authored as two Lower-Third
+  ribbons on the stage. Three rules came out of it:
+  - **The override is the same field for every entry.** `text` beats the source,
+    blank falls back to it, which is what makes `message` stop being a special
+    key: it is simply the entry with no source. A per-field "…Text" setting
+    beside a per-field switch is the shape to distrust.
+  - **Both bands live under ONE settings key.** Moving a field across is one
+    edit to two arrays, and two staged entries could be confirmed apart, leaving
+    the field in both bands or in neither.
+  - **A field in no band is unreachable**, so the census self-heals at both ends
+    — the server appends a missing field to its default band on every Load, the
+    client normalises the same way on every read, and unknown or duplicated ids
+    are dropped. Pinned across the three runtimes by `eventheader.test.jsx`.
 - **A field only THIS overlay reads is a setting, not a fact.** The Event Header's
   banner line was `tournamentInfo.message` — the one field in that namespace no
   other surface read — so the line a producer retypes mid-broadcast was authored
   two tabs from the panel that draws it, with no preview and no staging. It is
-  `overlays.eventheader.message` now, a text row under the switch that draws it
-  (the switch names the part, the text row carries it — same pair as the
-  scorecard's Header Bar / Header Title). Ask which surfaces read a value before
-  deciding where it is authored; several means the tab, one means the element.
+  the message field's own `text` now, on the panel that draws it. Ask which
+  surfaces read a value before deciding where it is authored; several means the
+  tab, one means the element.
 - **A detail follows its master, but only when it is INERT.** A def may carry
   `showWhen: { key, is }` and renders only while its master satisfies it (the
   Stat Card's custom bottom text, on a card whose bottom line is showing the game

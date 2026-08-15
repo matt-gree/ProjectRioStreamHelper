@@ -15,6 +15,94 @@ from server.utils import json
 from server.utils.deep_dict import deep_set, deep_unset, deep_get
 
 
+# ── The Event Header's two bands are ORDERED FIELD LISTS ──
+#
+# Each band was seven fixed positions with a boolean apiece — `showCompetition`,
+# `showLocation`, … — and the ORDER lived in the overlay's own render call
+# (`[fCompetition, fLocation, fDates]`). So a producer could hide the location
+# but never put the dates first, and the only field they could actually write
+# was the message.
+#
+# A band is a list now: `overlays.eventheader.bands.{header,footer}` is an
+# ordered array of `{id, on, text}`, drawn left→right. `text` OVERRIDES the
+# field's source ("Winners Final" over a start.gg round name), blank falls back
+# to it, and `message` is simply the entry with no source — which is what it
+# always was, spelled the same way as the rest instead of as a special key.
+#
+# Which band a field is in is which array holds it, so moving one across is the
+# same edit as moving it along. The pairs below are the DEFAULT arrangement and
+# the legacy switch each field's `on` migrates from; they are also the census of
+# known fields, which is what `_eventheader_bands` heals against.
+EVENTHEADER_FIELDS = {
+    "header": [("competition", "showCompetition"), ("location", "showLocation"),
+               ("dates", "showDates")],
+    "footer": [("message", "showMessage"), ("event", "showEvent"),
+               ("phase", "showPhase"), ("round", "showRound")],
+}
+
+
+def _eventheader_bands(ns: dict) -> bool:
+    """Bring ``overlays.eventheader`` up to the ordered-field model. True if changed.
+
+    Runs on every Load, not once, because it does two jobs. The first is the
+    one-time migration off the switches, flagged by `bands` being absent. The
+    second is HEALING: a field in neither array is a field with no way back —
+    unreachable on the panel and undrawable by the overlay — so a release that
+    adds one (or a hand-edited settings.json that drops one) appends it to its
+    default band rather than losing it silently. Both write the same shape, so
+    there is one statement of what a band contains.
+    """
+    stored = ns.get("bands")
+    stored = stored if isinstance(stored, dict) else {}
+    bands: dict[str, list] = {}
+
+    known = {fid for fields in EVENTHEADER_FIELDS.values() for fid, _ in fields}
+    changed = False
+    seen: set[str] = set()
+    for band in EVENTHEADER_FIELDS:
+        raw = stored.get(band)
+        raw = raw if isinstance(raw, list) else []
+        # A stored id keeps the place the producer put it; only its shape is
+        # normalised, so an upgrade never re-sorts a band someone arranged. An
+        # id that is a duplicate or no longer a field is dropped — it can name
+        # no source and would draw nothing.
+        kept = []
+        for e in raw:
+            fid = e.get("id") if isinstance(e, dict) else None
+            if fid not in known or fid in seen:
+                continue
+            seen.add(fid)
+            kept.append({"id": fid, "on": e.get("on", True) is not False,
+                         "text": str(e.get("text") or "")})
+        if kept != raw:
+            changed = True
+        bands[band] = kept
+
+    for band, fields in EVENTHEADER_FIELDS.items():
+        for fid, legacy_switch in fields:
+            if fid in seen:
+                continue
+            seen.add(fid)
+            # The legacy switch survives as the field's initial `on`; a switch
+            # nobody ever touched defaults on, same as it did.
+            bands[band].append({
+                "id": fid,
+                "on": ns.get(legacy_switch, True) is not False,
+                # The banner line is the only legacy field with authored text,
+                # and this is where it lands — the message entry's own override.
+                "text": str(ns.get("message") or "") if fid == "message" else "",
+            })
+            changed = True
+
+    if changed:
+        ns["bands"] = bands
+        for _, fields in EVENTHEADER_FIELDS.items():
+            for _, legacy_switch in fields:
+                ns.pop(legacy_switch, None)
+        ns.pop("message", None)
+    return changed
+
+
 def _resolve_version() -> str:
     """Resolve app version via scripts/freeze-version.py.
 
@@ -629,6 +717,14 @@ class Settings:
             cls.settings["overlays"].pop("rosterstats", None)
             await cls.Save()
 
+        # The Event Header's bands became ordered field lists (see
+        # EVENTHEADER_FIELDS above). Migrates off the switches once, and heals a
+        # missing field on every boot after that.
+        if _eventheader_bands(
+            cls.settings.setdefault("overlays", {}).setdefault("eventheader", {})
+        ):
+            await cls.Save()
+
         # One-time binding migration: unify the per-scoreboard source-type enum
         # (manual | hud | live_game) + orthogonal rotation feed into a single
         # `scoreboards.binding.{N}` model. Presence of `binding` is the flag, so
@@ -772,9 +868,11 @@ class Settings:
         """Take the Event Header's banner line over from ``tournamentInfo.message``.
 
         The message is the one field on that overlay no other surface reads, so
-        it moved out of the shared event-fact namespace and onto the element as
-        ``overlays.eventheader.message`` — beside the switch that draws it, and
-        through the staging gateway like every other overlay setting.
+        it moved out of the shared event-fact namespace and onto the element —
+        and then onto the message FIELD, whose `text` is now the one place the
+        banner line lives (see EVENTHEADER_FIELDS). It writes there rather than
+        to a flat `message` key, because Load() has already run and would leave
+        a second copy nothing reads.
 
         This is the SETTINGS half only. The caller owns the State store and does
         the matching unset, because the dependency runs state → settings and
@@ -787,11 +885,16 @@ class Settings:
         if not message:
             return False
         ns = cls.settings.setdefault("overlays", {}).setdefault("eventheader", {})
-        if ns.get("message"):
+        _eventheader_bands(ns)  # the entry has to exist before it can be filled
+        entry = next(
+            (e for band in ns["bands"].values() for e in band if e.get("id") == "message"),
+            None,
+        )
+        if entry is None or entry.get("text"):
             return True
-        ns["message"] = message
+        entry["text"] = message
         await cls.Save()
-        logger.info("[Settings] adopted tournamentInfo.message as overlays.eventheader.message")
+        logger.info("[Settings] adopted tournamentInfo.message as the Event Header's message field")
         return True
 
     @classmethod

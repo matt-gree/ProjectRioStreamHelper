@@ -119,7 +119,7 @@ export const OverlaySettingRow = memo(function OverlaySettingRow({ os, def }) {
     if (def.type === 'select') {
         return (
             <SegmentedRow
-                label={def.label} value={value} data={def.options}
+                label={def.label} value={value} data={def.options} fill={false}
                 onChange={(v) => os.set(def, v)}
             />
         );
@@ -128,7 +128,7 @@ export const OverlaySettingRow = memo(function OverlaySettingRow({ os, def }) {
         return (
             <TextRow
                 label={def.label} value={value} placeholder={def.placeholder} staged={!!pending}
-                onChange={(v) => os.set(def, v)}
+                short={def.short} onChange={(v) => os.set(def, v)}
             />
         );
     }
@@ -220,22 +220,26 @@ export function chunkDefs(defs) {
         else out.push({ kind: 'chips', defs: [def] });
     }
     /*
-     * Once ANY bar in a region owns a text field, the region is a list of bars
-     * and every toggle in it lines up in the same column — an unpaired one
-     * becomes a pair with an empty field rather than a content-width chip in a
-     * strip. Without this the scorecard's Top bars drew Header Bar and Bracket
-     * Phase at the label column's width and Game Mode, which has no title, at
-     * its own, so one region had two chip widths.
+     * A RUN OF ONE IS NOT A SET, so it takes the label column instead of a
+     * strip — the same reasoning ToggleChip's own note gives for why a lone
+     * chip "reads as a fragment rather than a set". Aligned, it lines up with
+     * the rows above and below it (the scorecard's Game Mode with the two
+     * titled bars; each event-header band's master above its offset), and a
+     * region's leading toggle reads as the master by width and position.
      *
-     * A region with no pairs at all (Score block, Lower bars) is untouched:
-     * there is no column to line up with, and packed chips are the point.
+     * This replaced a region-wide promotion — ANY pair in the group turned
+     * EVERY chip in it into a lone aligned row. It was written for the
+     * scorecard, where one unpaired toggle sits among two paired ones, and it
+     * scaled with the number of loners: the event header's Bottom band has one
+     * pair (Message) and four other toggles, so the strip that should have been
+     * a single 34px row became four 128px chips on four rows, each stranding
+     * ~590px of empty panel beside it (measured at a 1394px panel). Packing is
+     * what the strip is for; alignment is for the chip that has nothing to pack
+     * with.
      */
-    if (out.some(seg => seg.kind === 'pair')) {
-        return out.flatMap(seg => (seg.kind === 'chips'
-            ? seg.defs.map(d => ({ kind: 'pair', defs: [d] }))
-            : seg));
-    }
-    return out;
+    return out.map(seg => (seg.kind === 'chips' && seg.defs.length === 1
+        ? { kind: 'pair', defs: seg.defs }
+        : seg));
 }
 
 /*
@@ -338,22 +342,25 @@ export const SettingGroups = memo(function SettingGroups({ os, defs }) {
         return <SettingSegments os={os} defs={groups[0].defs} />;
     }
     /*
-     * Two columns once the PANEL is wide enough (PanelShell's body is the
-     * `@container`), one below that. A stage panel is ~950px and a settings row
-     * is a label and a control, so a single column left most of that width empty
-     * beside every row — the "sparsely populated" read. Regions stay whole
-     * (`break-inside-avoid`); only the regions sit side by side.
+     * More columns as the PANEL gets wider (PanelShell's body is the
+     * `@container`). A settings row is a label plus one control — a number row
+     * measures 238px, a chip strip 240px — so the column width that fits one is
+     * ~340px, and everything past that is empty panel beside every row in it.
+     * Two columns were right for the ~950px panel this was written against and
+     * wrong for a maximised window: at 1394px they were 675px each, so the
+     * median row spent 437px on nothing and the three regions of the event
+     * header stacked two-then-one instead of standing side by side.
      *
-     * CSS columns rather than a 2-col GRID, because regions differ wildly in
-     * height and a grid gives every row the height of its tallest cell. The
-     * Scorecard is the worst case: Top bars is five rows deep and Score block is
-     * a single chip strip, so the grid left ~400px of dead panel under Score
-     * block and pushed Lower bars onto a third row. Columns pack and balance
-     * instead, and the reading order stays the registry's — down column one,
-     * then column two — which is the order the regions appear on screen.
+     * CSS columns rather than a GRID, because regions differ wildly in height
+     * and a grid gives every row the height of its tallest cell. The Scorecard
+     * is the worst case: Top bars is five rows deep and Score block is a single
+     * chip strip, so the grid left ~400px of dead panel under Score block and
+     * pushed Lower bars onto a third row. Columns pack and balance instead, and
+     * the reading order stays the registry's — which is the order the regions
+     * appear on screen.
      */
     return (
-        <div className="columns-1 gap-x-6 @3xl:columns-2">
+        <div className="columns-1 gap-x-6 @3xl:columns-2 @6xl:columns-3">
             {groups.map(({ group, defs: rows }) => (
                 <div
                     key={group ?? '_'}

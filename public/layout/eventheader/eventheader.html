@@ -5,7 +5,7 @@
   <!-- The whitelist must name every knob this file reads: Setup filters
        LAYOUT_SETTINGS.eventheader down to what appears here, so an omitted key
        is a setting the mount honours but nobody can reach. -->
-  <meta name="overlay-settings" content="showHeader, headerOffsetY, showFooter, footerOffsetY, showCompetition, showEvent, showLocation, showDates, showMessage, message, showPhase, showRound, bandWidth, fontScale, bgStyle, separator, textColor, accentColor, fontFamily" />
+  <meta name="overlay-settings" content="showHeader, headerOffsetY, showFooter, footerOffsetY, bands, bandWidth, fontScale, bgStyle, separator, textColor, accentColor, fontFamily" />
   <style>
     /* Inter is bundled locally and injected by overlay-base.js. */
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -123,41 +123,54 @@
       return present.length;
     }
 
-    function render() {
-      applyDesignSettings('eventheader');
-
-      // ── data ────────────────────────────────────────────────────────
-      // Header leads with the parent competition ("Slice 2026"); the footer's
-      // Event field carries the specific start.gg event ("Stars Off"), falling
-      // back to the competition name when no event_name is present
+    /*
+     * What each field DRAWS when it has no override of its own.
+     *
+     * The bands are ordered lists of these ids (overlays.eventheader.bands, see
+     * EVENTHEADER_FIELDS in server/settings.py), so position is the producer's
+     * and the source is ours. `message` has no source on purpose: it is the
+     * entry whose whole content is its own `text`, which is what the element's
+     * banner line always was.
+     */
+    function fieldSource(id) {
+      // Header leads with the parent competition ("Slice 2026"); the Event
+      // field carries the specific start.gg event ("Stars Off"), falling back
+      // to the competition name when no event_name is present
       // (manually-entered tournaments).
       const competitionName = deepGet(state, `tournamentInfo.name`, '');
-      const eventName = deepGet(state, `tournamentInfo.event_name`, '')
-                        || competitionName;
-      const location  = deepGet(state, `tournamentInfo.location`, '');
-      const dates     = deepGet(state, `tournamentInfo.date`, '');
-      // The banner line is this element's OWN copy, not an event fact — a
-      // setting beside the switch that draws it, where every other field here
-      // is tournamentInfo the matchup and the callouts read too.
-      const message   = s('message', '');
+      switch (id) {
+        case 'competition': return competitionName;
+        case 'event':       return deepGet(state, `tournamentInfo.event_name`, '') || competitionName;
+        case 'location':    return deepGet(state, `tournamentInfo.location`, '');
+        case 'dates':       return deepGet(state, `tournamentInfo.date`, '');
+        case 'phase': {
+          const matchId = deepGet(state, `score.${SCOREBOARD}.match`, '');
+          const hasMatch = matchId !== '' && matchId != null;
+          return (hasMatch ? deepGet(state, `match.${matchId}.phase`, '') : '')
+                 || deepGet(state, `tournamentInfo.phase`, '');
+        }
+        // Round = the match label (start.gg round name), projected onto the
+        // board as score.{N}.phase so it tracks the live board.
+        case 'round':       return deepGet(state, `score.${SCOREBOARD}.phase`, '');
+        case 'message':     return '';
+        default:            return '';
+      }
+    }
 
-      const matchId   = deepGet(state, `score.${SCOREBOARD}.match`, '');
-      const hasMatch  = matchId !== '' && matchId != null;
-      const phase     = (hasMatch ? deepGet(state, `match.${matchId}.phase`, '') : '')
-                        || deepGet(state, `tournamentInfo.phase`, '');
-      // Round = the match label (start.gg round name), projected onto the board
-      // as score.{N}.phase so it tracks the live board.
-      const round     = deepGet(state, `score.${SCOREBOARD}.phase`, '');
+    // One band's drawable values, in the producer's order. A field is dropped
+    // when it is switched off OR when nothing is behind it — an override wins
+    // over the source, and a field with neither is not a gap, it is absent.
+    function bandValues(band) {
+      const entries = deepGet(settings, `overlays.eventheader.bands.${band}`, null);
+      if (!Array.isArray(entries)) return [];
+      return entries
+        .filter(e => e && e.on !== false)
+        .map(e => String(e.text || '').trim() || fieldSource(e.id))
+        .filter(v => v != null && String(v).trim() !== '');
+    }
 
-      // ── per-field visibility (also auto-drops when blank) ───────────
-      // Two switches, because these are two fields in two different strips.
-      const fCompetition = on('showCompetition') ? competitionName : '';
-      const fEvent    = on('showEvent')    ? eventName : '';
-      const fLocation = on('showLocation') ? location  : '';
-      const fDates    = on('showDates')    ? dates     : '';
-      const fMessage  = on('showMessage')  ? message   : '';
-      const fPhase    = on('showPhase')    ? phase     : '';
-      const fRound    = on('showRound')    ? round     : '';
+    function render() {
+      applyDesignSettings('eventheader');
 
       // ── layout knobs ────────────────────────────────────────────────
       const sep    = s('separator', '◆');
@@ -180,16 +193,15 @@
       header.style.top = hOff + 'px';
       footer.style.bottom = fOff + 'px';
 
-      // ── header (Competition · Location · Dates) ─────────────────────
+      // ── the two bands, each in the order its field list is in ───────
       const showHeader = on('showHeader');
       const headerCount = showHeader
-        ? renderRow(document.getElementById('hdr-row'), [fCompetition, fLocation, fDates], sep) : 0;
+        ? renderRow(document.getElementById('hdr-row'), bandValues('header'), sep) : 0;
       header.hidden = !showHeader || headerCount === 0;
 
-      // ── footer (Message · Event · Phase · Round) ────────────────────
       const showFooter = on('showFooter');
       const footerCount = showFooter
-        ? renderRow(document.getElementById('ftr-row'), [fMessage, fEvent, fPhase, fRound], sep) : 0;
+        ? renderRow(document.getElementById('ftr-row'), bandValues('footer'), sep) : 0;
       footer.hidden = !showFooter || footerCount === 0;
     }
 

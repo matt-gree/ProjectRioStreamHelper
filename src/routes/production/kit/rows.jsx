@@ -281,8 +281,14 @@ function useDebouncedText(value, onChange, ms) {
 // paired chip rows, where the chip beside the field is what names the band.
 // Without it a labelless field would be reachable only by its placeholder,
 // which disappears the moment it holds a value.
+//
+// `short` sizes the input to its content instead of filling the row — for a
+// value that is a glyph or two (the event header's field separator, `◆`). A
+// field states how much it expects: 300px of empty box around one character
+// reads as a field that has lost its value, which is the same reason NumberRow
+// has always been a fixed `w-20` rather than a flexed input.
 export const TextRow = memo(function TextRow({
-    label, value, onChange, placeholder, disabled, staged, debounceMs = 300, ariaLabel, className,
+    label, value, onChange, placeholder, disabled, staged, debounceMs = 300, ariaLabel, short, className,
 }) {
     const [draft, type, commit] = useDebouncedText(value, onChange, debounceMs);
     const deferred = debounceMs > 0;
@@ -299,7 +305,11 @@ export const TextRow = memo(function TextRow({
                 value={deferred ? draft : (value ?? '')}
                 onChange={(e) => (deferred ? type(e.target.value) : onChange?.(e.target.value))}
                 onBlur={deferred ? commit : undefined}
-                className={cn(KIT_INPUT, 'min-w-0 flex-1', staged && 'border-amber-400/60 text-amber-400')}
+                className={cn(
+                    KIT_INPUT,
+                    short ? 'w-14 shrink-0 text-center' : 'min-w-0 flex-1',
+                    staged && 'border-amber-400/60 text-amber-400',
+                )}
             />
         </div>
     );
@@ -409,9 +419,18 @@ export const FieldRow = memo(function FieldRow({ label, staged, stacked, childre
     );
 });
 
-// label · segmented control — plates mode and friends.
+/*
+ * label · segmented control — plates mode and friends.
+ *
+ * `fill` (default) stretches the control across the row, for a segmented that is
+ * the SUBJECT of what follows it: the plates mode, a lower-third slot's type.
+ * `fill={false}` sizes it to its options, for one value among a list of them —
+ * an overlay style setting, where a stretched control is the widest and loudest
+ * thing on a panel of set-once knobs, and the chosen segment ends up an inch
+ * from the label that names it.
+ */
 export const SegmentedRow = memo(function SegmentedRow({
-    label, value, onChange, data, disabled, className,
+    label, value, onChange, data, disabled, fill = true, className,
 }) {
     return (
         <div className={cn(ROW, className)}>
@@ -419,8 +438,9 @@ export const SegmentedRow = memo(function SegmentedRow({
                 <Text size="xs" span truncate className={cn(KIT_LABEL, 'text-muted-foreground')}>{label}</Text>
             )}
             <SegmentedControl
-                size="xs" fullWidth data={data} value={value}
-                onChange={onChange} disabled={disabled} className="min-w-0 flex-1"
+                size="xs" fullWidth={fill} data={data} value={value}
+                onChange={onChange} disabled={disabled}
+                className={fill ? 'min-w-0 flex-1' : 'min-w-0 shrink'}
             />
         </div>
     );

@@ -8,6 +8,7 @@ import { isPickableFeed } from './elements';
 import { useContainerDefs, useContainerOf } from './containers';
 import { isFedPlacement } from './placements';
 import { memberName, useFeedReason } from './automations';
+import { bandLine, useBands, useFieldValues } from './eventheader';
 
 /*
  * THE SUBJECT — what an element is currently drawing.
@@ -379,26 +380,23 @@ const LowerThirdSubject = memo(function LowerThirdSubject() {
  * `board` is the placement's, so Round is read from the board this source is
  * actually pointed at rather than assumed to be 1.
  */
+/*
+ * Both bands, as they will actually draw — through the shared band model
+ * (../eventheader), not a second hardcoded order. The fields are arrangeable
+ * and overridable now, so a subject reading `[name, location, date]` would be
+ * confidently wrong the moment a producer moved one or typed over it.
+ */
 const EventHeaderSubject = memo(function EventHeaderSubject({ board }) {
-    const e = useStateStore(useShallow(s => {
-        const info = s?.tournamentInfo ?? {};
-        const matchId = s?.score?.[board]?.match;
-        const match = matchId != null && matchId !== '' ? s?.match?.[String(matchId)] : null;
-        return {
-            top: [info.name, info.location, info.date].filter(Boolean).join(' · '),
-            bottom: [
-                info.event_name || info.name,
-                match?.phase || info.phase,
-                s?.score?.[board]?.phase,
-            ].filter(Boolean).join(' · '),
-        };
-    }));
-    if (!e.top && !e.bottom) {
+    const { bands } = useBands();
+    const values = useFieldValues(board);
+    const top = bandLine(bands.header, values).join(' · ');
+    const bottom = bandLine(bands.footer, values).join(' · ');
+    if (!top && !bottom) {
         return <SubjectRow text="No competition loaded — both bands render empty" tone="warn" />;
     }
     // The top band is the subject; the bottom band trails as its qualifier —
     // one row, two strips, in the order they sit on the canvas.
-    return <SubjectRow text={e.top || 'Nothing for the header band'} meta={e.bottom || null} />;
+    return <SubjectRow text={top || 'Nothing for the header band'} meta={bottom || null} />;
 });
 
 const SUBJECTS = {
