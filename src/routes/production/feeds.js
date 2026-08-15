@@ -156,7 +156,20 @@ export function useContainerPush(element, scoreboard = 1, onContainer = null) {
     const intent = useStateStore(useShallow(s => resolveIntent(s, element, scoreboard) || NO_INTENT));
 
     const mine = !!feed && feed.element === element.id;
-    const hasIntent = !!intent.element;
+    /*
+     * A CONTAINER-SCOPED member has no intent to remember. It has no content of
+     * its own — what it draws is entirely the container's frame of reference —
+     * so the only honest payload is the one built from that scope below.
+     *
+     * `useFeedControl` records every feed at `production.feed.last.{element}`,
+     * and `resolveIntent` replays a remembered payload verbatim for any feed
+     * with no `FEED_INTENT` entry (which is every scoped member). Left alone,
+     * the FIRST Stat Card push anywhere fixed its board and side forever: the
+     * mirrored pair's right-hand container replayed the left one's `team`, and
+     * re-pointing a container's Board picker changed nothing on the next push.
+     * Scope wins, always.
+     */
+    const hasIntent = !!intent.element && !element.containerScoped;
     const canPush = !!container && (mine || !isPickableFeed(element) || hasIntent);
     /*
      * A CONTAINER-SCOPED member has no content of its own — it draws whoever the

@@ -19,6 +19,7 @@ import {
 import { StateChip, chipFor } from './kit';
 import { setSourceVisibility, useDisplayedEnabled } from './bindings';
 import { useContainerPush } from './feeds';
+import { useMemberScope } from './containers';
 import { boardDeskId, useActiveBoards, useBoardLabel } from './boards';
 import { useBoardDeskRow, BOARD_TAG_TITLE } from './desks/board';
 import { notifications } from '../../lib/notify';
@@ -129,9 +130,18 @@ const EyeAction = memo(function EyeAction({ placement }) {
  * because a container holds exactly one feed, its siblings are alternatives
  * rather than independent switches. A filled dot is that fact; two eyes were the
  * old lie.
+ *
+ * IT DRIVES THE ROW'S CONTAINER, not whichever roster claims the element. The
+ * lookup was the default here while every other surface (the source strip, the
+ * rail's quick faces) passed the placement's, and it broke the shipped mirrored
+ * pair: Roster and Stat Card sit on `roster-stats-1` AND `roster-stats-2`, so
+ * both of the right-hand container's rows fed the LEFT one — and the row's chip,
+ * which reads `placement.mine`, disagreed with its own radio.
  */
 const FeedAction = memo(function FeedAction({ placement }) {
-    const { mine, staged, canPush, toggle } = useContainerPush(placement.element);
+    const { scoreboard } = useMemberScope(placement.element, placement.slot);
+    const { mine, staged, canPush, toggle } =
+        useContainerPush(placement.element, scoreboard, placement.slot);
     const Icon = mine ? CircleDot : Circle;
     const disabled = !mine && !canPush;
     return (

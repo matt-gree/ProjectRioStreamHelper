@@ -4,6 +4,7 @@ import { ActionRow, SelectRow } from './kit';
 import { FEED_OPTION_HOOKS, flattenGroups } from './feed-pickers';
 import { quickFaceFor } from './elements';
 import { useContainerPush } from './feeds';
+import { useMemberScope } from './containers';
 import { isFedPlacement, useConsoleOffline } from './placements';
 import { boardOfDeskId, useMatchBindableBoards } from './boards';
 import { useNextUp } from './queue';
@@ -98,10 +99,13 @@ const ContainerRow = memo(function ContainerRow({ placement }) {
  * clearing means take-off-stage; off air it would clear whatever else is up.
  */
 const PickableFedQuickFace = memo(function PickableFedQuickFace({ element, useOptions, placement }) {
-    const o = useOptions(element);
-    // The card's OWN container — a scoped member can be pinned from two of
-    // them, and a lookup from the element would push both cards into one.
-    const { mine, canPush, toggle } = useContainerPush(element, 1, placement?.slot);
+    // The card's OWN container, and the board that container is scoped to — a
+    // scoped member can be pinned from two of them, and a lookup from the
+    // element would push both cards into one. The options come from the same
+    // board the push lands on, so the card cannot offer a pick it won't send.
+    const { scoreboard } = useMemberScope(element, placement?.slot);
+    const o = useOptions(element, scoreboard);
+    const { mine, canPush, toggle } = useContainerPush(element, scoreboard, placement?.slot);
     if (o.empty) return <Text size="xs" className="text-muted-foreground">{o.empty}</Text>;
     return (
         <>
@@ -126,7 +130,8 @@ const PickableFedQuickFace = memo(function PickableFedQuickFace({ element, useOp
 // Fed element with nothing to pick (Game Summary): push it, or hand the
 // container back. The only decision is timing.
 const PushOnlyFedQuickFace = memo(function PushOnlyFedQuickFace({ element, placement }) {
-    const { mine, canPush, toggle } = useContainerPush(element, 1, placement?.slot);
+    const { scoreboard } = useMemberScope(element, placement?.slot);
+    const { mine, canPush, toggle } = useContainerPush(element, scoreboard, placement?.slot);
     return (
         <>
             <ContainerRow placement={placement} />

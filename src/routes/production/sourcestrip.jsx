@@ -13,7 +13,7 @@ import {
 import { sizeOptionFor } from './elements';
 import { useActiveBoards } from './boards';
 import { useContainerPush } from './feeds';
-import { useContainerOf, useSharedContainers } from './containers';
+import { useContainerOf, useMemberScope, useSharedContainers } from './containers';
 import { isFedPlacement } from './placements';
 import { StagedDot } from './controls';
 
@@ -219,7 +219,10 @@ const AirSlot = memo(function AirSlot({ binding }) {
  * and goes honestly grey is not.
  */
 const PushSlot = memo(function PushSlot({ element, container }) {
-    const { mine, staged, canPush, toggle } = useContainerPush(element, 1, container);
+    // The container's own frame of reference, not board 1 — it is what decides
+    // which board a suggestion is drawn from (../containers useMemberScope).
+    const { scoreboard } = useMemberScope(element, container);
+    const { mine, staged, canPush, toggle } = useContainerPush(element, scoreboard, container);
     return (
         <>
             <StagedDot show={staged} />

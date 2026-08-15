@@ -5,7 +5,8 @@ import { Text } from '../../../components/ui/primitives';
 import { ToggleRow } from '../kit';
 import { setSourceVisibility, useDisplayedEnabled } from '../bindings';
 import { useContainerBinding } from '../feeds';
-import { useContainerDefs, useContainerOf } from '../containers';
+import { useContainerDefs, useContainerOf, useMemberScope } from '../containers';
+import { boardOfUrl } from '../../../lib/obs-binding';
 import { useConsoleOffline } from '../placements';
 import { PostgameCalloutPicker, PostgameVsPicker, StatsFeedPicker } from '../feed-pickers';
 
@@ -119,13 +120,26 @@ export const ReadinessNote = memo(function ReadinessNote({ element, board }) {
  * Without this, a direct spotlight source could be bound and shown and never
  * told whose spotlight to draw, which is the same dead end as a Push with no
  * container: a panel that can see the problem and not fix it.
+ *
+ * `scoreboard` is the frame of reference the pick is made in, and it is a PROP
+ * because the two rows answer it differently: a container slot takes the
+ * container's scope (../containers `useMemberScope`), the element's own source
+ * takes the board its URL names. It used to default to 1 in each picker, so a
+ * container scoped to board 2 listed board 1's roster and armed a board-1 pick
+ * that Push then sent into it.
  */
-export const FeedContentPicker = memo(function FeedContentPicker({ element, fed = true }) {
-    if (element.feed === 'stats') return <StatsFeedPicker element={element} fed={fed} />;
-    if (element.feed === 'postgamecallout') {
-        return <PostgameCalloutPicker element={element} fed={fed} />;
+export const FeedContentPicker = memo(function FeedContentPicker({
+    element, fed = true, scoreboard = 1,
+}) {
+    if (element.feed === 'stats') {
+        return <StatsFeedPicker element={element} scoreboard={scoreboard} />;
     }
-    if (element.feed === 'postgamevs') return <PostgameVsPicker element={element} fed={fed} />;
+    if (element.feed === 'postgamecallout') {
+        return <PostgameCalloutPicker element={element} fed={fed} scoreboard={scoreboard} />;
+    }
+    if (element.feed === 'postgamevs') {
+        return <PostgameVsPicker element={element} fed={fed} scoreboard={scoreboard} />;
+    }
     // A member with no picker is NOT unfinished. A container-scoped one (Stat
     // Card) draws whoever its container's scope has on the field, so there is
     // nothing to choose and the panel's SUBJECT already says what it will be.
@@ -146,9 +160,16 @@ export const FeedContentPicker = memo(function FeedContentPicker({ element, fed 
  * either way; it just says the wrong thing. Take the prop.
  */
 export const DirectStage = memo(function DirectStage({ element, board, placement }) {
+    // The element's OWN source draws the board its URL names. A feed element
+    // takes no `scope: 'board'` (the two post-game callouts are full-canvas), so
+    // the placement's board is null while the source still carries the
+    // `?scoreboard=` the overlay itself reads — same read as ../subject.
+    const own = board ?? boardOfUrl(placement?.item?.url) ?? 1;
     return (
         <>
-            {element.feed && <FeedContentPicker element={element} fed={false} />}
+            {element.feed && (
+                <FeedContentPicker element={element} fed={false} scoreboard={own} />
+            )}
             <BindingNote binding={placement} />
             <ReadinessNote element={element} board={board} />
             {element.generic && (
@@ -214,9 +235,13 @@ export const ContainerHostNote = memo(function ContainerHostNote({ element, cont
  * options yet" described the absence of a control and read as a missing feature.
  */
 export const FedStage = memo(function FedStage({ element, placement }) {
+    // The container's frame of reference, taken from the ROW's container — a
+    // scoped member sits on several rosters, so a lookup from the element is a
+    // coin flip between a mirrored pair's two sides.
+    const { scoreboard } = useMemberScope(element, placement?.slot);
     return (
         <>
-            <FeedContentPicker element={element} />
+            <FeedContentPicker element={element} scoreboard={scoreboard} />
             <div className="mt-1 flex flex-col gap-1.5 border-t border-border/60 pt-2">
                 <ContainerHostNote element={element} container={placement?.slot} />
             </div>

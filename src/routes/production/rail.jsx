@@ -11,6 +11,7 @@ import {
 } from './placements';
 import { deskQuickFace, QuickFace } from './quickface';
 import { boardOfDeskId, useActiveBoards, useBoardLabel } from './boards';
+import { useContainerDefs } from './containers';
 
 /*
  * The quick rail — the console's right surface: the producer's own set of
@@ -95,6 +96,9 @@ export const Rail = memo(function Rail({ pins, onReorder, onUnpin, onOpen }) {
     // rail too — a static title map cannot answer for a row the rig defines.
     const boardLabel = useBoardLabel();
     const active = useActiveBoards();
+    // So a pinned container keeps its card when its source goes — resolution
+    // synthesises the row from the definition (../placements).
+    const defs = useContainerDefs();
     const [dragging, setDragging] = useState(null);
 
     // A pin is kept under the id it is STORED as (that's what reorder and unpin
@@ -110,11 +114,11 @@ export const Rail = memo(function Rail({ pins, onReorder, onUnpin, onOpen }) {
         const sb = boardOfDeskId(id);
         if (sb != null) return active.includes(sb) ? { id, title: boardLabel(sb) } : null;
         if (deskQuickFace(id)) return { id, title: DESK_TITLES[id] ?? id };
-        const placement = resolvePlacement(id, placements);
+        const placement = resolvePlacement(id, placements, defs);
         if (!placement || !isPinnable(placement.element)) return null;
         const { name, detail } = label(placement);
         return { id, placement, title: detail ? `${name} · ${detail}` : name };
-    }).filter(Boolean), [pins, placements, label, boardLabel, active]);
+    }).filter(Boolean), [pins, placements, label, boardLabel, active, defs]);
 
     // Reorder by pin ID. `pins` holds every stored pin; `entries` holds only the
     // ones that still resolve, so the two index differently the moment a pin goes

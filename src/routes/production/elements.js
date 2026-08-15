@@ -127,16 +127,25 @@ export const ELEMENTS = [
         name: 'Stats',
         flavor: 'fed',
         // `feed` names the content picker the card renders: 'stats' = pick which
-        // roster character's stats to show. The pick is written to the chosen
-        // named container's feed key (production.feed.container.<id> = { element:
-        // 'stats', … }); the container overlay renders it.
+        // roster character's stats to show. The pick is written to the feed key
+        // of the container whose ROSTER names this element
+        // (production.feed.container.<id> = { element: 'stats', … }); the
+        // container overlay renders it. There is no default container — an
+        // element no roster claims has nowhere to be pushed, which every surface
+        // reports rather than falling back to one nobody chose.
         feed: 'stats',
-        // Default container = the Stats shared overlay (small bar). `url` is its
-        // canonical source; the producer can feed any other named container too.
+        // `url` is the pre-2.0 named shell, kept as the canonical source so a
+        // browser source still pointing at it keeps rowing and feeding.
         url: '/layout/shared/stats-feed.html',
         width: 325,
         height: 120,
-        match: (url) => /shared\/stats-feed/i.test(url) || /stats/i.test(url),
+        // ANCHORED TO THE LAYOUT. The old fallback was a bare /stats/i, which
+        // answers to any URL with "stats" anywhere in it — including the shipped
+        // `container.html?container=roster-stats-2`, i.e. a CONTAINER claiming to
+        // be one of its own occupants. Harmless only because ./placements matches
+        // direct elements alone; a matcher that can be wrong is a matcher that
+        // will be.
+        match: (url) => /\/layout\/shared\/stats-feed/i.test(url),
     },
     {
         id: 'statscard',
@@ -197,11 +206,12 @@ export const ELEMENTS = [
         name: 'Commentary',
         // Registry-bound caster desk.
         flavor: 'direct',
-        // The condensed face is per-caster on-air toggles + sub-field quick switch
-        // + sub-plate toggle; the stage carries the whole desk (there is no
-        // Commentary tab — it duplicated the stage and was removed), and the
-        // casters' identity fields live on Address Book. Span 4 to fit up to
-        // four caster rows.
+        // The whole desk is on the STAGE — per-caster on-air toggles, sub-field
+        // switch and sub-plate toggle (there is no Commentary tab; it duplicated
+        // the stage and was removed), and the casters' identity fields live on
+        // Address Book. No quick face of its own: it takes the direct default
+        // (subject + visibility), because six per-caster controls cannot fit the
+        // rail's two-row cap.
         // Its own dedicated source: the caster strip. Slots are projected to
         // commentary.{i}.* server-side from the authored commentary.slots.
         // Native 1920×240 — full stream width (the row's spacing is measured
@@ -296,9 +306,10 @@ export const ELEMENTS = [
         // A re-themable SVG band
         // of FIVE independently toggleable slots (lowerthird.slots.1..5), each
         // one content type: logo · match · scorebox · merch · clock · message ·
-        // bracket. Direct element (own dedicated source); everything lives on
-        // the face — each slot row is a type picker + on/off that expands in
-        // place to that slot's content editor (no gear). Slot widths/looks
+        // bracket. Direct element (own dedicated source); the five slots are
+        // authored on its STAGE panel as five always-open columns in the order
+        // they render on air — each a type picker + on/off over that slot's
+        // content editor. Slot widths/looks
         // belong to the design package. Native 1920×320 — the band's own box,
         // not the stream canvas: vertical placement is a scene decision, and
         // the mount bottom-anchors a full-canvas theme inside it.
@@ -311,10 +322,13 @@ export const ELEMENTS = [
     {
         id: 'schedule',
         name: 'Upcoming Schedule',
-        // The producer's ordered match queue (schedule.queue, ids into
-        // match.{M}) rendered by the schedule overlay. Queue authoring lives on
-        // the face (add / reorder / remove, per-match display time); the title
-        // sits in the gear.
+        // The producer's running order (schedule.queue, ids into match.{M})
+        // rendered by the schedule overlay. THE ORDER IS NOT AUTHORED HERE:
+        // membership and position live on the Match desk, where the fixtures
+        // are, so a ticker's settings can't hold a second copy of tonight's
+        // running order free to disagree with the stack. This element's stage
+        // keeps what is genuinely its own — the overlay's heading, and each
+        // match's display time (per-match, so it follows a reorder).
         flavor: 'direct',
         url: '/layout/schedule/schedule.html',
         width: 1920,
@@ -341,11 +355,13 @@ export const ELEMENTS = [
     {
         id: 'bracket',
         name: 'Bracket',
-        // The tournament bracket, rendered from the bracket.* structure the
-        // Bracket desk publishes. winners_only.html / losers_only.html are thin
-        // redirects into index.html with a flag, so all three are the same
-        // element wearing different filters — the desk decides WHICH start.gg
-        // phase is on screen, this decides whether it's visible.
+        // The tournament bracket, rendered from the app-wide bracket.* structure.
+        // winners_only.html / losers_only.html are thin redirects into index.html
+        // with a flag, so all three are the same element wearing different
+        // filters. WHICH start.gg phase is drawn is chosen on this element's own
+        // stage (../bracket's shared useBracketDesk) and on the lower third's
+        // bracket slot — there is no Bracket desk; it was a third copy of a
+        // picker both consumers already carried.
         flavor: 'direct',
         url: '/layout/bracket/index.html',
         width: 1920,
@@ -396,8 +412,6 @@ export const ELEMENTS = [
         name: 'Hit Visualizer',
         flavor: 'direct',
         scope: 'board',
-        // Compact: live actions (Replay / Spotlight / Split) on the face, the
-        // spotlight scene + hold-ms + split config behind the gear.
         // Its own dedicated source: the 3D hit overlay. The provider pushes every
         // contact to score.{N}.hit.*; the producer reveals this to show one and can
         // re-fire it with Replay (writes score.{N}.hit.replay_nonce). Native 1280×720.
@@ -405,11 +419,12 @@ export const ELEMENTS = [
         width: 1280,
         height: 720,
         match: (url) => /hitvisualizer/i.test(url),
-        // Also a container MEMBER: its stage's "Split feed" pushes the hit into
-        // a shared container, so it is one of the few elements that can be both
-        // a dedicated source and an occupant. `flavor` answers "does it own a
-        // source"; this answers "can a container stand it up" (see
-        // containers.js CONTAINER_MEMBERS).
+        // Also a container MEMBER, so it is one of the elements that is both a
+        // dedicated source and an occupant — two rows, and the Push lives on the
+        // slot row's source strip. (Its stage used to carry a bespoke "Split
+        // feed" button, which is exactly what the strip exists to end.) `flavor`
+        // answers "does it own a source"; this answers "can a container stand it
+        // up" (see containers.js CONTAINER_MEMBERS).
         containerHostable: true,
     },
     {

@@ -384,6 +384,34 @@ describe('resolvePlacement — stored ids are resolved, never rewritten', () => 
             .toBe('R');
     });
 
+    /*
+     * A CONTAINER has no entry in ELEMENTS — its element is synthesised from the
+     * definition — so an id naming one used to resolve to nothing at all, and the
+     * stage fell through to its empty state. That inverted the rule this branch
+     * exists for: a container's own panel is the ONLY place its roster, resting
+     * occupant, scope and rules can be edited, and none of that needs a source.
+     * Deleting the browser source made the container unreachable, while closing
+     * OBS entirely brought it back (the catalog tier synthesises the same row).
+     */
+    it('opens a container’s panel when no source answers for it', () => {
+        const p = resolvePlacement('container:roster-stats-2@Break', [], {
+            'roster-stats-2': { name: 'Roster + Stats — Right', width: 452, height: 240 },
+        });
+        expect(p.element.id).toBe('container:roster-stats-2');
+        expect(p.element.name).toBe('Roster + Stats — Right');
+        expect(p.container).toBe('roster-stats-2');
+        expect(p.item).toBeNull();
+        expect(p.where).toBe('none');
+    });
+
+    // The definitions are optional: the panel still opens without them, it just
+    // falls back to the id for its name and has no canvas to preview at.
+    it('still opens one with no definition to hand', () => {
+        const p = sourcelessPlacement('container:gone');
+        expect(p.element.name).toBe('gone');
+        expect(p.element.width).toBeUndefined();
+    });
+
     it('returns null for an id no element answers to', () => {
         expect(resolvePlacement('retired-element', all)).toBeNull();
         expect(resolvePlacement(null, all)).toBeNull();

@@ -697,7 +697,14 @@ whichever `find()` reached first. Read out before the board and variant axes, so
   doesn't need a source working. The rack is a monitor and shows only what is
   real; the stage is a workbench, and several stage bodies write STATE, not OBS.
   Authoring a lower third the night before has nothing to do with whether a
-  browser source exists yet.
+  browser source exists yet. **A CONTAINER takes the same fallback**, and it has
+  to be spelled separately because a container is not in `ELEMENTS` — its element
+  is synthesised from the definition, so `resolvePlacement` takes the defs and
+  re-synthesises it (`CONTAINER_PREFIX`). Without that branch, deleting a
+  container's browser source made the container unreachable: its own panel is the
+  only place its roster, resting occupant, scope and rules can be edited, and none
+  of that needs a source — while closing OBS *entirely* brought it back, because
+  the catalog tier synthesises the same row.
 
 **Phase is gone** — no `PHASES`, no `elementsForPhase`, no `phase` on an element
 or a desk, no `prsh.ui.production.phase`. Draft / Live / Post-game / Break was
@@ -774,9 +781,28 @@ any of them.
   mirrored pair the automation engine was designed around: two scoped
   containers, the same members, one canned rule, one showing the batter and the
   other the pitcher. Without the exception that pair was only buildable by
-  hand-editing settings. `isSharedMember` in `containers.js`; a `containerScoped`
-  element also takes its Push payload's board **and side** from the container
-  definition rather than the board picker (`useContainerPush`).
+  hand-editing settings. `isSharedMember` in `containers.js`.
+- **A MEMBER'S FRAME OF REFERENCE IS ITS CONTAINER'S, and there is one hook that
+  says so**: `useMemberScope(element, placement.slot)` (`containers.js`) — the
+  row's container when it has one, else the roster that claims the element, else
+  board 1 / side 1 (the same default `_scope_of` takes server-side). *Every*
+  surface that asks a member anything asks through it, because the two ways of
+  guessing are both wrong on the shipped mirrored pair: a lookup from the element
+  answers with whichever roster comes first (which is how the rack's fed radio fed
+  the left container from the right container's rows, while the row's chip — which
+  reads the placement — disagreed with its own radio), and a hardcoded board 1
+  made the pickers list board 1's roster for a container scoped to board 2 and arm
+  a board-1 pick that Push then sent into it.
+- **A container-scoped member has NO INTENT, and the memory must not be replayed
+  as one.** Its Push payload is built from the container's scope
+  (`useContainerPush`), but `useFeedControl` records every feed at
+  `production.feed.last.{element}` and `resolveIntent` replays a remembered
+  payload verbatim for any feed with no `FEED_INTENT` entry — which is every
+  scoped member. So the FIRST Stat Card push anywhere used to fix its board and
+  side forever: push it left, then push it right, and the right-hand container
+  drew the left side; re-pointing a container's Board picker changed nothing.
+  Scope wins, always (`hasIntent` is gated on `!element.containerScoped`).
+  `feeds.test.jsx` pins all three.
 - **Sharing a container IS the definition of mutually exclusive.** That is what
   the producer is choosing when they tick two members onto one roster.
 - **No container is a real state.** `useContainerOf` returns `null` when no

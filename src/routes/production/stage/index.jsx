@@ -4,6 +4,7 @@ import { PanelShell, chipFor } from '../kit';
 import { isPinnable } from '../elements';
 import { DESK_PREFIX } from '../instances';
 import { placementDims } from '../bindings';
+import { useContainerDefs } from '../containers';
 import {
     isFedPlacement, placementTarget, resolvePlacement, useConsolePlacements, useConsoleScenes,
     usePlacementLabel,
@@ -163,6 +164,9 @@ export const Stage = memo(function Stage({ selection, deskBodies = {}, pins = []
     const scenes = useConsoleScenes();
     const placements = useConsolePlacements(scenes);
     const label = usePlacementLabel(placements);
+    // Handed to resolution so a container whose source has gone still opens its
+    // panel under its own name and size — see `sourcelessPlacement`.
+    const defs = useContainerDefs();
     const pinnedIds = useMemo(
         () => new Set(pins.map(p => placementTarget(p, placements))),
         [pins, placements],
@@ -202,7 +206,7 @@ export const Stage = memo(function Stage({ selection, deskBodies = {}, pins = []
     // Resolution, not a lookup: a selection persisted before scenes were the
     // axis — or naming a scene or board since removed — still lands on a real
     // panel instead of dumping the producer on the empty state.
-    const placement = resolvePlacement(selection, placements);
+    const placement = resolvePlacement(selection, placements, defs);
     if (!placement) {
         return (
             <PanelShell state="unbound" title="Stage" pinnable={false}>

@@ -379,9 +379,8 @@ class Settings:
                     "members": ["stats"],
                 },
                 # The hit visualizer is both: it owns a dedicated source AND can
-                # occupy a container ("Split feed" on its stage), which is why a
-                # roster is a list of members rather than a list of fed
-                # elements.
+                # occupy a container, which is why a roster is a list of members
+                # rather than a list of fed elements.
                 "split-screen": {
                     "name": "Split-Screen",
                     "width": 1280,

@@ -158,9 +158,14 @@ export function genericElement(url) {
  * as the producer's own container and the stage can preview it — the two things
  * a generic element cannot supply.
  */
+// A container's element id is `container:{id}`. Named because `sourcelessPlacement`
+// has to read it back out — a container is not in ELEMENTS, so it is the one
+// element id that must be re-synthesised rather than looked up.
+export const CONTAINER_PREFIX = 'container:';
+
 export function containerElement(id, def) {
     return {
-        id: `container:${id}`,
+        id: `${CONTAINER_PREFIX}${id}`,
         name: def?.name || id,
         flavor: 'direct',
         generic: true,
@@ -528,9 +533,31 @@ export function usePlacementLabel(placements) {
  * It is keyed in the pre-scene form, because that is exactly what it is: a
  * thing we know the identity of and not the location.
  */
-export function sourcelessPlacement(id) {
+export function sourcelessPlacement(id, defs = null) {
     const { instance } = parsePlacementId(id);
     const { elementId, board, variant, slot } = parseInstanceId(instance);
+    /*
+     * A CONTAINER is not in ELEMENTS — its element is synthesised from the
+     * definition — so an id naming one found nothing here and the panel never
+     * opened. That inverted the rule this function exists for: a container's own
+     * stage is the ONLY place its roster, resting occupant, scope and automation
+     * rules can be edited, and none of that needs a source. Deleting the browser
+     * source (or opening the console before its scene is mirrored) therefore made
+     * the container unreachable — while closing OBS entirely brought it back,
+     * because the catalog tier synthesises the same row.
+     *
+     * `defs` is optional: without it the row still works, it just falls back to
+     * the id for its name and has no native size to preview at.
+     */
+    if (elementId?.startsWith(CONTAINER_PREFIX)) {
+        const cid = elementId.slice(CONTAINER_PREFIX.length);
+        const element = containerElement(cid, defs?.[cid]);
+        return {
+            id: element.id, instance: element.id, element,
+            board: null, variant: '', container: cid,
+            scene: null, where: 'none', item: null,
+        };
+    }
     const element = ELEMENTS.find(e => e.id === elementId);
     if (!element) return null;
     const b = element.scope === 'board' ? (board ?? 1) : null;
@@ -570,7 +597,7 @@ export function sourcelessPlacement(id) {
  */
 const ROLE_RANK = { program: 0, preview: 1, other: 2, none: 3 };
 
-export function resolvePlacement(id, placements) {
+export function resolvePlacement(id, placements, defs = null) {
     if (!id) return null;
     const exact = placements.find(p => p.id === id);
     if (exact) return exact;
@@ -586,7 +613,7 @@ export function resolvePlacement(id, placements) {
     const pool = byInstance.length
         ? byInstance
         : placements.filter(p => p.element.id === elementId);
-    if (!pool.length) return sourcelessPlacement(id);
+    if (!pool.length) return sourcelessPlacement(id, defs);
 
     // A named scene still counts even when the instance half has gone stale —
     // 'scoreboard@Break' means the Break copy, and answering with the program

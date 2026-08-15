@@ -51,9 +51,9 @@ export const containerOfSource = (url) => (SHARED_PATH.test(url || '') ? contain
  *
  * Every `fed` element, by definition — a container is the only place its
  * content can go. Plus the elements that declare `containerHostable`: the hit
- * visualizer owns a dedicated source AND can be fed into a container ("Split
- * feed" on its stage), so being hostable is not the same question as flavor,
- * and a roster is a list of MEMBERS rather than a list of fed elements.
+ * visualizer and the two post-game callouts each own a dedicated source AND can
+ * be stood up in a container, so being hostable is not the same question as
+ * flavor, and a roster is a list of MEMBERS rather than a list of fed elements.
  *
  * This is the console's half of a fact `fed-container.js` also holds — the
  * mounts it can actually stand up. `containers.test.js` pins the two together
@@ -220,6 +220,40 @@ export function useContainerOf(element) {
         const container = id ? hostOf(defs, id) : null;
         return { container, def: container ? defs[container] : null };
     }, [defs, id]);
+}
+
+/*
+ * The FRAME OF REFERENCE a member draws from — the ROW's container when it has
+ * one, else whichever roster claims the element.
+ *
+ * A member's slot has no board axis of its own (the container is board-agnostic
+ * and the board rides in the pushed payload), so the container's own scope is
+ * the only thing that knows which board and side this row is looking at. Every
+ * surface that asks a member what to show has to ask through here: the pickers
+ * used to default to board 1 outright, so a container scoped to board 2 offered
+ * board 1's roster and armed a board-1 pick that Push then sent into it.
+ *
+ * `onContainer` is the placement's, and it must be preferred over the lookup: a
+ * container-scoped member sits on several rosters — that exception is what makes
+ * a mirrored pair buildable — so `hostOf` answers with whichever it finds first,
+ * which on a mirrored pair is a coin flip between the two sides.
+ *
+ * Board 1 / side 1 when no container answers, matching `_scope_of` server-side
+ * and every other place a missing `?scoreboard=` means board 1.
+ */
+export function useMemberScope(element, onContainer = null) {
+    const defs = useContainerDefs();
+    const own = useContainerOf(element);
+    const container = onContainer ?? own.container;
+    const def = container ? defs[container] : null;
+    return useMemo(
+        () => ({
+            container: container ?? null,
+            scoreboard: def?.scoreboard ?? 1,
+            team: def?.team ?? 1,
+        }),
+        [container, def],
+    );
 }
 
 // Release whatever a container is carrying. Broadcast-visible, so it goes

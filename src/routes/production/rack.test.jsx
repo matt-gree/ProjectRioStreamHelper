@@ -50,6 +50,9 @@ const obs = (sceneItems, extra = {}) => useObsStore.setState({
 const SB = 'http://x/layout/scoreboard1/scoreboard.html';
 const LOWER = 'http://x/layout/lowerthird/lowerthird.html';
 const CALLOUT = 'http://x/layout/shared/callout-stage.html';
+// The producer-built shell, told which definition to be — how every container
+// but the pre-2.0 named shells above reaches a scene.
+const PAIR = 'http://x/layout/shared/container.html?container=';
 
 // Rows read "<name><board?>"; several board-scoped elements share a board meta,
 // so rows are addressed structurally rather than by text. The row's select
@@ -547,6 +550,32 @@ describe('Rack fed containers', () => {
         expect(container.getByRole('button', { name: /Hide source/ })).toBeInTheDocument();
         expect(child.getByRole('button', { name: /container/ })).toBeInTheDocument();
         expect(child.queryByRole('button', { name: /source/ })).not.toBeInTheDocument();
+    });
+
+    /*
+     * THE RADIO DRIVES ITS OWN ROW'S CONTAINER.
+     *
+     * It used to resolve the container by element, which answers with the first
+     * roster naming it — and the shipped mirrored pair puts Roster and Stat Card
+     * on BOTH `roster-stats-1` and `roster-stats-2`. So every row under the
+     * right-hand container fed the left one, and the row's chip (which reads the
+     * placement) disagreed with its own radio.
+     */
+    it('feeds the container the row is nested under, not the first roster', () => {
+        obs({
+            Game: [
+                item(4, 'Left', `${PAIR}roster-stats-1`, true),
+                item(5, 'Right', `${PAIR}roster-stats-2`, true),
+            ],
+        });
+        ui(<Rack />);
+        const cards = document.querySelectorAll('[data-rack-row="Stat Card"]');
+        expect(cards).toHaveLength(2);
+        fireEvent.click(within(cards[1]).getByRole('button', { name: /Put on container/ }));
+        const fed = useStateStore.getState()?.production?.feed?.container;
+        expect(fed?.['roster-stats-1']).toBeUndefined();
+        // …and in the RIGHT container's frame of reference, which is its side.
+        expect(fed?.['roster-stats-2']).toMatchObject({ element: 'statscard', team: 2 });
     });
 });
 

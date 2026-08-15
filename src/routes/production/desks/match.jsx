@@ -36,12 +36,12 @@ import {
 } from '../../../context/schedule';
 
 /*
- * Match desk — the console's fixture-authoring surface (the full authoring
- * panel still lives on the Match tab). A match projects onto its bound boards —
- * broadcast-visible — so every edit here routes through the staging gateway
- * (key `match:{m}:{path}`); the Match tab stays immediate like other full tabs.
- * Creating a match and lifecycle hops (Next game) are authoring/momentary and
- * run immediately.
+ * Match desk — the console's fixture-authoring surface, and the ONLY one. The
+ * Match tab (its stack of fully-expanded MatchPanel cards) is deleted, so there
+ * is no second place these controls live. A match projects onto the board it is
+ * bound to — broadcast-visible — so every edit here routes through the staging
+ * gateway (key `match:{m}:{path}`). Creating a match and lifecycle hops (Next
+ * game) are authoring/momentary and run immediately.
  *
  * The accordion body is the contract's Custom block: dense fixture authoring
  * (captain grid, port swatches, series stepper) that the row kit deliberately
