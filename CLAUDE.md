@@ -248,6 +248,11 @@ PRSH does not ship MSB images (Nintendo IP). Users provide an asset pack under `
 
 `npm run dev` sets `TSH_DEV=1`, which enables CORS for the Vite origin. `scripts/freeze-version.py` bakes the version from the git tag during `prebuild`; `pyinstaller PRSH.spec` then produces `dist/PRSH.app` / `dist/PRSH/PRSH.exe`, and `installer/PRSH.iss` produces `PRSH-Setup.exe` on Windows.
 
+### Git: submodules and `gh`
+
+- **Push a submodule BEFORE the PRSH commit that pins it.** A pin is a bare SHA, resolvable on the machine that made it and nowhere else until the submodule is pushed — so pushing PRSH first publishes a pointer only that machine can follow, and CI dies in `git submodule update` with `upload-pack: not our ref`, naming neither the submodule nor the cause. `scripts/check-submodule-pins.py` runs from `.githooks/pre-push` and blocks exactly this (enable once per clone: `git config core.hooksPath .githooks`; override with `git push --no-verify`).
+- **PRSH is a GitHub fork of TournamentStreamHelper, and `gh` resolves a fork to its parent.** Left unset, `gh run list` returns *nothing* and `gh run rerun` 404s against the upstream repo — quietly, as an empty result rather than an error. Fixed here via `gh repo set-default matt-gree/ProjectRioStreamHelper` (`remote.origin.gh-resolved`); a fresh clone needs it again. The `upstream` remote was removed — we never pull from TSH, and it carried a live push URL to a repo we don't own.
+
 ## Testing
 
 Both suites run in CI and **both must stay green**. Design doc: [TESTING.md](TESTING.md).

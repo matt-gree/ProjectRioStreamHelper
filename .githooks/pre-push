@@ -1,0 +1,21 @@
+#!/bin/sh
+# PRSH pre-push checks. Enable with:  git config core.hooksPath .githooks
+# Bypass once with:  git push --no-verify
+#
+# Submodule pins are bare SHAs: push PRSH before the submodule and you publish
+# a pointer only your machine can follow. Catch it here, where the fix is one
+# push away, rather than in CI's checkout, whose error names neither the
+# submodule nor the cause.
+set -e
+root="$(git rev-parse --show-toplevel)"
+
+# Prefer the repo venv (the interpreter the project is actually developed
+# against), then whatever python is on PATH. Windows venvs put it in Scripts/.
+for py in "$root/venv/bin/python" "$root/venv/Scripts/python.exe" python3 python; do
+    if command -v "$py" >/dev/null 2>&1; then
+        exec "$py" "$root/scripts/check-submodule-pins.py"
+    fi
+done
+
+echo "pre-push: no python found; skipping submodule pin check" >&2
+exit 0
