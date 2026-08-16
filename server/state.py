@@ -452,7 +452,6 @@ class State:
     @classmethod
     async def _create_files_dict(cls, path, di):
         pathdirs = "/".join(path.split("/")[0:-1])
-
         _p = AsyncPath(f"{cls._labels_dir()}/{pathdirs}")
         if await _p.is_dir() == False:
             await _p.mkdir(parents=True, exist_ok=True)
@@ -490,8 +489,6 @@ class State:
 
     @classmethod
     async def _remove_files_dict(cls, path, di):
-        pathdirs = "/".join(path.split("/")[0:-1])
-
         if isinstance(di, dict):
             for k, i in di.items():
                 await cls._remove_files_dict(path + "/" + _safe_segment(k), i)

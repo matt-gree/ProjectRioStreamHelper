@@ -172,6 +172,49 @@ async def test_reset_clears_captured_post_games_and_both_rotation_keys(
     assert "2" not in (State.state.get("scoreboards", {}).get("rotation") or {})
 
 
+@pytest.mark.parametrize("teardown", ["remove", "reset"])
+async def test_board_teardown_drops_its_stats_diagnostics(
+    client, set_setting, teardown
+):
+    """A board's fetch diagnostics are per-board data and go with the board.
+
+    `stats_api._last_fetch_info` is keyed by board and describes the fetch that
+    filled the stats slot. `reset_fetch_info` existed for this and nothing ever
+    called it, so the entry outlived both teardown paths — and with ids re-used
+    the next board 2 came up with a deleted board's diagnostics in its popover,
+    stale error and all, reporting a failure that never happened to it.
+
+    Both paths are pinned together because they are the pair that has drifted
+    before (the rotation keys, opposite halves each). The drop now lives inside
+    `StatsTracker.reset_scoreboard`, which both call, so neither can lose it.
+    """
+    from server.rio import stats_api
+
+    set_setting("scoreboards.active", [1, 2])
+    stats_api._last_fetch_info[2] = {
+        "url": "https://api.projectrio.app/stats/?username=alice",
+        "tag": "some-tag",
+        "players": {},
+        "fetched_at": "2026-08-16T00:00:00Z",
+        "error": "429 Too Many Requests",
+    }
+    try:
+        if teardown == "remove":
+            client.delete("/api/v1/scoreboards/2")
+        else:
+            assert client.post("/api/v1/scoreboards/reset").json()["success"] is True
+
+        assert 2 not in stats_api._last_fetch_info
+        # What the board's popover actually reads: an empty shape, no stale error.
+        assert stats_api.get_last_fetch_info(2).get("error") is None
+
+        if teardown == "remove":
+            assert client.post("/api/v1/scoreboards").json()["id"] == 2  # id reused
+            assert stats_api.get_last_fetch_info(2).get("error") is None
+    finally:
+        stats_api._last_fetch_info.pop(2, None)
+
+
 async def test_board_removed_then_re_added_can_be_written_to(client, set_setting):
     """Remove a board and add one back — `_lowest_available_id` hands out the
     same id — then write live state into it. The Save after that write used to

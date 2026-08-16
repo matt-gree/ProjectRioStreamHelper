@@ -145,9 +145,6 @@ export function renderRoster(container, { state, settings, sb, team }) {
   }
 }
 
-export const ROSTER_REF_W = REF_W;
-export const ROSTER_REF_H = REF_H;
-
 /*
  * The roster as a CONTAINER MEMBER.
  *

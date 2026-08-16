@@ -3,27 +3,15 @@
 Logs live alongside user_data in the per-user writable root (see paths.py).
 """
 
-import os
-import subprocess
-import sys
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import ORJSONResponse
-from loguru import logger
 
-from server.paths import _frozen_writable_root
+from server.paths import logs_dir as _logs_dir, reveal_path
 from server.utils.router import method
 
 router = APIRouter()
-
-
-def _logs_dir() -> Path:
-    """Resolve the logs directory used by main.py."""
-    root = _frozen_writable_root() or Path(".").resolve()
-    p = root / "logs"
-    p.mkdir(parents=True, exist_ok=True)
-    return p
 
 
 def _safe_log_path(name: str) -> Path | None:
@@ -113,10 +101,5 @@ async def logs_tail(
 async def logs_reveal(session_id: str | None = None) -> ORJSONResponse:
     """Reveal the logs folder in the OS file manager."""
     d = _logs_dir()
-    if sys.platform == "darwin":
-        subprocess.Popen(["open", str(d)])
-    elif sys.platform == "win32":
-        os.startfile(str(d))  # type: ignore[attr-defined]
-    else:
-        subprocess.Popen(["xdg-open", str(d)])
+    reveal_path(d)
     return ORJSONResponse({"success": True, "dir": str(d)})

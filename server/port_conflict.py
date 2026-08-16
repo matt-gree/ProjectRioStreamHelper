@@ -5,7 +5,6 @@ conflict, presents a modal tkinter dialog offering auto-retry (pick the
 next free port + persist), reveal the settings folder, or quit.
 """
 
-import os
 import socket
 import subprocess
 import sys

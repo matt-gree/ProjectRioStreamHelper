@@ -65,3 +65,64 @@ def test_settings_path_resolves_lazily_from_env(monkeypatch, tmp_path):
     monkeypatch.setenv("PRSH_USER_DATA_DIR", str(tmp_path / "ud"))
     monkeypatch.setattr(Settings, "_settings_out", None)
     assert str(Settings._settings_file()) == str(tmp_path / "ud" / "settings.json")
+
+
+# --------------------------------------------------------------- reveal_path --
+#
+# Every "reveal this folder" button (assets, stream labels, the log viewer, the
+# tray) routes through one helper. There were four copies before, and they had
+# DRIFTED rather than merely repeated — different platform checks, different
+# Windows commands, and only some of them caught a failure. These pin the parts
+# that differed, so a fifth caller can't quietly reintroduce a variant.
+
+def test_reveal_path_uses_the_platform_file_manager(monkeypatch):
+    import server.paths as paths
+
+    calls = []
+    monkeypatch.setattr(paths.subprocess, "Popen", lambda argv: calls.append(argv))
+
+    monkeypatch.setattr(paths.sys, "platform", "darwin")
+    paths.reveal_path("/some/dir")
+    assert calls == [["open", "/some/dir"]]
+
+    calls.clear()
+    monkeypatch.setattr(paths.sys, "platform", "linux")
+    paths.reveal_path("/some/dir")
+    assert calls == [["xdg-open", "/some/dir"]]
+
+
+def test_reveal_path_on_windows_uses_startfile(monkeypatch):
+    """Not `explorer`: os.startfile honours the user's default handler, and
+    explorer.exe returns non-zero even when it succeeded."""
+    import server.paths as paths
+
+    seen = []
+    monkeypatch.setattr(paths.sys, "platform", "win32")
+    monkeypatch.setattr(paths.os, "startfile", seen.append, raising=False)
+    paths.reveal_path("C:/logs")
+    assert seen == ["C:/logs"]
+
+
+def test_reveal_path_swallows_failure(monkeypatch):
+    """A reveal is a convenience. A producer mid-broadcast is not helped by a
+    500, so a failure is logged and never raised — one of the behaviours the
+    four old copies disagreed on."""
+    import server.paths as paths
+
+    monkeypatch.setattr(paths.sys, "platform", "darwin")
+    monkeypatch.setattr(paths.subprocess, "Popen", _boom)
+    paths.reveal_path("/nope")  # must not raise
+
+
+def _boom(*_a, **_k):
+    raise OSError("no file manager")
+
+
+def test_logs_dir_is_created_under_the_writable_root(monkeypatch, tmp_path):
+    """The log viewer and the tray share this, so they cannot disagree."""
+    import server.paths as paths
+
+    monkeypatch.setattr(paths, "_frozen_writable_root", lambda: tmp_path)
+    d = paths.logs_dir()
+    assert d == tmp_path / "logs"
+    assert d.is_dir()

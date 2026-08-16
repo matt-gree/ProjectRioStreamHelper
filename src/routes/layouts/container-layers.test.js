@@ -97,30 +97,15 @@ describe('resolveFeed — what the container is being asked to draw', () => {
     });
 
     /*
-     * SCOPE WINS. Every source of one definition shares one feed key, so if a
-     * payload field could override the URL, two team-scoped sources of one
-     * container would render identically — and the mirrored pair that makes one
-     * flash the batter and the other the pitcher is the entire reason scope
-     * exists.
+     * The payload arrives ALREADY SCOPED — the definition's scope is applied by
+     * whoever writes the feed key (`_scope_of` server-side, `useMemberScope` for
+     * a Push), so a mirrored pair is two scoped definitions rather than two
+     * URL-scoped sources of one. Nothing here re-applies it.
      */
-    it('lets the source’s own scope beat the payload', () => {
+    it('passes a scoped payload through without second-guessing it', () => {
         expect(resolveFeed({
-            live: { element: 'stats', scoreboard: 1, team: 1, charIndex: 2 },
-            scope: { scoreboard: 4, team: 2 },
+            live: { element: 'stats', scoreboard: 4, team: 2, charIndex: 2 },
         })).toEqual({ element: 'stats', scoreboard: 4, team: 2, charIndex: 2 });
-    });
-
-    it('leaves the payload authoritative when the source is unscoped', () => {
-        expect(resolveFeed({
-            live: { element: 'stats', scoreboard: 1, team: 1 }, scope: null,
-        })).toEqual({ element: 'stats', scoreboard: 1, team: 1 });
-    });
-
-    // A half-scoped source pins only the axis its URL names.
-    it('pins only the axes the URL declares', () => {
-        expect(resolveFeed({
-            live: { element: 'stats', scoreboard: 1, team: 1 }, scope: { team: 2 },
-        })).toEqual({ element: 'stats', scoreboard: 1, team: 2 });
     });
 });
 

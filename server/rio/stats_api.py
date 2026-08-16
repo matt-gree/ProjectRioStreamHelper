@@ -5,7 +5,6 @@ RioWeb uses sync requests.Session, so calls are wrapped in asyncio.to_thread().
 """
 import asyncio
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Optional
 from urllib.parse import urlencode
 
@@ -72,7 +71,13 @@ async def set_no_players_diagnostic(scoreboard_number: int, tag: str | None) -> 
 
 
 def reset_fetch_info(scoreboard_number: int) -> None:
-    """Drop a scoreboard's diagnostics slot (e.g. on source change/removal)."""
+    """Drop a scoreboard's diagnostics slot.
+
+    Called by `StatsTracker.reset_scoreboard`, which is the one place that knows
+    every moment a board's stats stop applying — don't call it beside that
+    instead of through it, or the slot and the diagnostics describing it can
+    disagree.
+    """
     _last_fetch_info.pop(scoreboard_number, None)
 
 
@@ -161,7 +166,7 @@ async def fetch_character_stats(
 
     # Build diagnostic URL
     user_qs = "&".join(f"username={u}" for u in usernames)
-    base_qs = f"by_char=1&by_user=1&exclude_fielding=1"
+    base_qs = "by_char=1&by_user=1&exclude_fielding=1"
     if tag:
         base_qs += f"&tag={tag}"
     diag_url = f"{client.base_url}/stats/?{base_qs}&{user_qs}"

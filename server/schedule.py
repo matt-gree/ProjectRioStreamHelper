@@ -95,10 +95,6 @@ class Schedule:
         return out
 
     @classmethod
-    def queue_ids(cls) -> list[str]:
-        return [q["id"] for q in cls.queues()]
-
-    @classmethod
     def first_queue_id(cls) -> str | None:
         qs = cls.queues()
         return qs[0]["id"] if qs else None

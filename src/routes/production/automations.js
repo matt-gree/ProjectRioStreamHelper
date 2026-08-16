@@ -28,7 +28,6 @@ import { ELEMENTS } from './elements';
  */
 
 export const AUTOMATIONS_KEY = 'production.automations';
-export const REASON_PREFIX = 'production.feed.reason';
 
 // The deciding tier, as the engine mirrors it.
 export const REASONS = {

@@ -7,7 +7,6 @@
  * the whole config object (mode · source · matchId · two sides). The server
  * normalizes + re-projects the resolved overlay keys.
  */
-import { useStateStore } from "./store";
 // The sub-plate field vocabulary is shared with Commentary (the server validates
 // against the same SUBFIELD_LABELS), so re-export it rather than duplicate.
 import { SUBFIELD_OPTIONS } from "./commentary";
@@ -58,11 +57,6 @@ export function normalizeConfig(c) {
             2: { ...blankSide("right"), ...(sides["2"] || sides[2] || {}) },
         },
     };
-}
-
-/** Current authored config, read live off the State store. */
-export function getConfig() {
-    return normalizeConfig(useStateStore.getState()?.playerplates?.config);
 }
 
 /** Replace the whole config (server normalizes + re-projects). */

@@ -21,7 +21,6 @@ from loguru import logger
 
 from server.participants import Participants
 from server.rio.resurface import RESURFACE_MAP
-from server.settings import Settings
 from server.state import State
 from server.utils.deep_dict import deep_get
 from server.utils.projection import run_startup_projection
@@ -435,14 +434,6 @@ class Match:
         if s2 and right == s2:
             return False
         return None
-
-    @classmethod
-    def orientation_for_parsed(cls, parsed: dict, sb) -> bool | None:
-        """``orientation_for_sides`` from a parsed game's entrant rioNames."""
-        entrants = parsed.get("entrants") or [[{}], [{}]]
-        left = entrants[0][0].get("rioName", "") if entrants[0] else ""
-        right = entrants[1][0].get("rioName", "") if entrants[1] else ""
-        return cls.orientation_for_sides(sb, left, right)
 
     @classmethod
     def identity_entries(cls, sb, left_rio: str, right_rio: str) -> list[tuple]:

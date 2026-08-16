@@ -8,7 +8,6 @@ WebSocket + HTML overlay that OBS can capture as a browser source.
 import asyncio
 import os
 import platform
-import signal
 import socket
 import subprocess
 import sys

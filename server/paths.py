@@ -23,6 +23,7 @@ Isolation overrides for agent/CI runs (see .claude/skills/run-and-verify):
 import os
 import sys
 import shutil
+import subprocess
 from pathlib import Path
 
 from loguru import logger
@@ -89,6 +90,44 @@ def env_port() -> int | None:
 def suppress_browser() -> bool:
     """Whether PRSH_NO_BROWSER asks us to skip the autostart browser tab."""
     return bool(os.environ.get("PRSH_NO_BROWSER"))
+
+
+def reveal_path(path: Path | str) -> None:
+    """Open ``path`` in the OS file manager (Finder / Explorer / xdg-open).
+
+    Every "reveal this folder" button lands here. There were four copies of
+    this before, and they had drifted apart rather than merely repeated: three
+    branched on ``platform.system()`` and one on ``sys.platform``; three ran
+    ``explorer`` and one ``os.startfile``; two swallowed the failure and two
+    let it escape. Which button you pressed decided whether a reveal that could
+    not run told you so — so the differences were behaviour, not style.
+
+    Failure is logged, never raised: a reveal is a convenience, and a producer
+    who cannot open a folder mid-broadcast is not helped by a 500.
+    """
+    path = str(path)
+    try:
+        if sys.platform == "win32":
+            # Preferred over `explorer`: it honours the user's default handler
+            # and does not return a non-zero exit code on success the way
+            # explorer.exe does.
+            os.startfile(path)  # type: ignore[attr-defined]
+        else:
+            subprocess.Popen(["open" if sys.platform == "darwin" else "xdg-open", path])
+    except Exception:
+        logger.exception("[paths] failed to reveal {}", path)
+
+
+def logs_dir() -> Path:
+    """The rotated-log directory main.py writes to. Created on access.
+
+    Shared by the log viewer and the tray's "Open logs folder" so the two
+    cannot point at different directories. (main.py resolves this itself, in
+    `os.path` terms, because it runs before the server package is importable.)
+    """
+    p = (_frozen_writable_root() or Path(".").resolve()) / "logs"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
 
 
 def default_msb_assets_dir() -> Path:

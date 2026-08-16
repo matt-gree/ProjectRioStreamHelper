@@ -35,6 +35,16 @@ const named = (label) => (typeof label === 'string' && label ? label : undefined
 const normalize = (opts = []) =>
     opts.map((o) => (typeof o === 'string' ? { label: o, value: o } : o));
 
+// The inline label every control row draws to the left of its control, in one
+// place: it carries the amber staged tint, and a row that spelled it out for
+// itself was a row that could be missed when that tint changed. `null` for an
+// absent label so a row can drop it in directly.
+const RowLabel = ({ label, staged, tone }) => (label == null ? null : (
+    <Text size="xs" span truncate className={cn(KIT_LABEL, tone || (staged ? 'text-amber-400' : 'text-muted-foreground'))}>
+        {label}
+    </Text>
+));
+
 /*
  * The SUBJECT row — what the element is currently drawing. A readout, not a
  * control, and the only row in the kit with no interaction at all.
@@ -171,11 +181,7 @@ export const SelectRow = memo(function SelectRow({
 }) {
     return (
         <div className={cn(ROW, className)}>
-            {label != null && (
-                <Text size="xs" span truncate className={cn(KIT_LABEL, staged ? 'text-amber-400' : 'text-muted-foreground')}>
-                    {label}
-                </Text>
-            )}
+            <RowLabel label={label} staged={staged} />
             <select
                 className={cn(KIT_INPUT, 'min-w-0 flex-1', staged && 'border-amber-400/60 text-amber-400')}
                 value={value ?? ''}
@@ -200,11 +206,7 @@ export const NumberRow = memo(function NumberRow({
 }) {
     return (
         <div className={cn(ROW, className)}>
-            {label != null && (
-                <Text size="xs" span truncate className={cn(KIT_LABEL, staged ? 'text-amber-400' : 'text-muted-foreground')}>
-                    {label}
-                </Text>
-            )}
+            <RowLabel label={label} staged={staged} />
             <input
                 type="number" min={min} max={max} step={step} disabled={disabled}
                 aria-label={named(label)}
@@ -294,11 +296,7 @@ export const TextRow = memo(function TextRow({
     const deferred = debounceMs > 0;
     return (
         <div className={cn(ROW, className)}>
-            {label != null && (
-                <Text size="xs" span truncate className={cn(KIT_LABEL, staged ? 'text-amber-400' : 'text-muted-foreground')}>
-                    {label}
-                </Text>
-            )}
+            <RowLabel label={label} staged={staged} />
             <input
                 type="text" disabled={disabled} placeholder={placeholder}
                 aria-label={ariaLabel || named(label)}
@@ -325,11 +323,7 @@ export const ColorRow = memo(function ColorRow({
     const has = value != null && value !== '';
     return (
         <div className={cn(ROW, className)}>
-            {label != null && (
-                <Text size="xs" span truncate className={cn(KIT_LABEL, staged ? 'text-amber-400' : 'text-muted-foreground')}>
-                    {label}
-                </Text>
-            )}
+            <RowLabel label={label} staged={staged} />
             <input
                 type="color" disabled={disabled} aria-label={label}
                 value={has ? value : '#000000'}
@@ -411,9 +405,7 @@ export const FieldRow = memo(function FieldRow({ label, staged, stacked, childre
     }
     return (
         <div className={cn(ROW, className)}>
-            {label != null && (
-                <Text size="xs" span truncate className={cn(KIT_LABEL, labelTone)}>{label}</Text>
-            )}
+            <RowLabel label={label} tone={labelTone} />
             <div className="flex min-w-0 flex-1 items-center gap-1.5">{children}</div>
         </div>
     );
@@ -434,9 +426,7 @@ export const SegmentedRow = memo(function SegmentedRow({
 }) {
     return (
         <div className={cn(ROW, className)}>
-            {label != null && (
-                <Text size="xs" span truncate className={cn(KIT_LABEL, 'text-muted-foreground')}>{label}</Text>
-            )}
+            <RowLabel label={label} />
             <SegmentedControl
                 size="xs" fullWidth={fill} data={data} value={value}
                 onChange={onChange} disabled={disabled}

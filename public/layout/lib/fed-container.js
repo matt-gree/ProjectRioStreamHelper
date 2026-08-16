@@ -137,25 +137,6 @@ export function containerIdFromLocation(explicit) {
   return window.location.pathname.replace(/^.*\/([^/]+)\.html?(?:\?.*)?$/, '$1');
 }
 
-/*
- * This source's SCOPE — the frame of reference it renders in, off its own URL.
- *
- * Every source of one definition shares one feed key, so the feed says WHAT to
- * show and the URL says WHOSE: two `?team=`-scoped sources of the same container
- * flash the same member for the same trigger, one resolving to the batter and
- * the other to the pitcher. Only the params actually present are returned, so an
- * unscoped container (the common case) leaves the pushed payload authoritative
- * exactly as before.
- */
-export function scopeFromParams(params) {
-  const scope = {};
-  const sb = parseInt(params?.get?.('scoreboard'), 10);
-  const team = parseInt(params?.get?.('team'), 10);
-  if (Number.isFinite(sb)) scope.scoreboard = sb;
-  if (Number.isFinite(team)) scope.team = team;
-  return Object.keys(scope).length ? scope : null;
-}
-
 /**
  * This container's sample bundle: the occupant's own captured game, plus the
  * feed key standing that occupant up inside this container.
@@ -261,7 +242,7 @@ function fitHostForPreview(host, container) {
 
 export async function initFedContainer({
   host, perf = false, sample = null, forceElement = null, previewSel = null,
-  containerId = null, scope = null,
+  containerId = null,
 }) {
   const CONTAINER_ID = containerIdFromLocation(containerId);
   const FEED_KEY = `production.feed.container.${CONTAINER_ID}`;
@@ -300,7 +281,7 @@ export async function initFedContainer({
 
   async function render() {
     const live = OverlayBase.deepGet(OverlayBase.state, FEED_KEY, null);
-    const sel = resolveFeed({ live, forceElement, previewSel, scope });
+    const sel = resolveFeed({ live, forceElement, previewSel });
     if (!sel) {
       layers.clear();
       OverlayBase.setBlank('nothing is fed to this container', CONTAINER_ID);

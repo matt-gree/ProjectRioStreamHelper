@@ -38,11 +38,6 @@ export async function updateMatch(m, partial) {
     return req(`/match/${m}`, { ...jsonBody(partial), method: "PUT" });
 }
 
-/** Convenience: set one side's fixture field. */
-export function setMatchPlayerField(m, side, field, value) {
-    return updateMatch(m, { player: { [side]: { [field]: value } } });
-}
-
 /** Bind board `sb` to match `m`, or unbind when `m` is null. */
 export async function bindScoreboard(sb, m) {
     return req(`/scoreboards/${sb}/match`, {

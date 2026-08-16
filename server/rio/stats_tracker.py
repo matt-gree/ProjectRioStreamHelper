@@ -155,18 +155,27 @@ class StatsTracker:
 
     @classmethod
     def reset_scoreboard(cls, sb: int):
-        """Reset state for a single scoreboard."""
+        """Reset state for a single scoreboard: the stats slot AND its diagnostics.
+
+        The two belong together. `stats_api._last_fetch_info[sb]` describes the
+        fetch that filled the slot being dropped here, so a reset that kept it
+        left the board's diagnostics popover reporting a fetch for stats the
+        board no longer has — including a stale error, which is the one thing a
+        producer checks that popover to rule out.
+
+        Board ids are RE-USED (`_lowest_available_id`), so on the removal path
+        that leftover is not dormant: the next board to take this id inherits
+        another board's failure. Every caller wants both halves — a new game, a
+        HUD-target change, a playback-mode change, board removal, and the reset
+        hatch — so the drop lives HERE rather than beside each call, where the
+        set is exactly large enough for one site to be missed (it was: nothing
+        called `reset_fetch_info` at all).
+        """
         slot = cls._slots.get(sb)
         if slot and slot.fetch_task and not slot.fetch_task.done():
             slot.fetch_task.cancel()
         cls._slots[sb] = _SbSlot()
-
-    @classmethod
-    def reset_all(cls):
-        for slot in cls._slots.values():
-            if slot.fetch_task and not slot.fetch_task.done():
-                slot.fetch_task.cancel()
-        cls._slots = {}
+        stats_api.reset_fetch_info(sb)
 
     @classmethod
     def set_sides_swapped(cls, sb: int, swapped: bool):

@@ -273,37 +273,3 @@ query EventEntrantsListQuery($eventSlug: String!, $page: Int!) {
     }
 }
 """
-
-ENTRANT_QUERY = """
-query EntrantQuery($id: ID!) {
-    entrant(id: $id) {
-        id
-        name
-        initialSeedNum
-        participants {
-            player {
-                id
-                gamerTag
-                prefix
-            }
-            user {
-                id
-                slug
-                name
-                genderPronoun
-                location {
-                    country
-                    state
-                    city
-                }
-                authorizations(types: [TWITTER]) {
-                    externalUsername
-                }
-                images(type: "profile") {
-                    url
-                }
-            }
-        }
-    }
-}
-"""

@@ -6,7 +6,6 @@ from typing import Callable, Awaitable
 from loguru import logger
 from watchfiles import awatch, Change
 from server.rio.pyrio.stat_file_parser import HudObj
-from server.utils import json
 
 
 def _norm_hand(val) -> int:
@@ -50,10 +49,6 @@ class HudWatcher:
             except asyncio.CancelledError:
                 pass
         logger.info("[HudWatcher] Stopped")
-
-    def update_hud_file(self, new_hud_file: Path):
-        self.hud_file = new_hud_file
-        logger.info(f"[HudWatcher] Updated path to {self.hud_file}")
 
     async def reload(self) -> dict | None:
         """One-shot read of the HUD file. Returns the game dict or None.

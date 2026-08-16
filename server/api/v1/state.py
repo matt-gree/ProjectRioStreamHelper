@@ -1,11 +1,10 @@
 import asyncio
-import platform
-import subprocess
 from pathlib import Path
 
 from loguru import logger
 
 from server import socketio
+from server.paths import reveal_path
 from server.utils.router import method
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import ORJSONResponse
@@ -99,13 +98,7 @@ async def state_stream_labels_reveal(session_id: str | None = None):
     except OSError as e:
         raise HTTPException(status_code=500, detail=f"Cannot create folder: {e}")
 
-    system = platform.system()
-    if system == "Darwin":
-        await asyncio.to_thread(subprocess.Popen, ["open", str(path)])
-    elif system == "Windows":
-        await asyncio.to_thread(subprocess.Popen, ["explorer", str(path)])
-    else:
-        await asyncio.to_thread(subprocess.Popen, ["xdg-open", str(path)])
+    await asyncio.to_thread(reveal_path, path)
 
     return ORJSONResponse({"success": True, "path": str(path)})
 

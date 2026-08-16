@@ -2,19 +2,6 @@ import { useState, useCallback } from 'react';
 
 const BASE = '/api/v1/startgg';
 
-/**
- * Detect whether a URL/slug points at a start.gg tournament.
- * Returns 'startgg' or null (kept as a validator now that start.gg is the
- * only provider).
- */
-export function detectSource(url) {
-    if (!url) return null;
-    if (/start\.gg/i.test(url)) return 'startgg';
-    // Fallback: if it looks like a start.gg slug
-    if (/^tournament\//i.test(url)) return 'startgg';
-    return null;
-}
-
 async function api(path, options = {}) {
     const resp = await fetch(`${BASE}${path}`, options);
     const data = await resp.json();

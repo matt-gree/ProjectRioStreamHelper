@@ -58,19 +58,20 @@ const DEFAULT_FADE_MS = 200;
  * Both preview inputs are gated on PREVIEW_MODE by the caller, so a source on
  * air always follows the real feed.
  *
- * SCOPE IS APPLIED LAST, and that ordering is the whole point of it. A scoped
- * container source carries its own frame of reference on its URL
- * (`?scoreboard=N&team=T`) and every source of one definition shares ONE feed
- * key — so the feed says WHAT to show and the URL says WHOSE. If a payload
- * field could win, two team-scoped sources of one container would render
- * identically and the mirrored pair that makes one flash the batter and the
- * other the pitcher would collapse into two copies of the same thing.
+ * SCOPE IS NOT AN INPUT HERE. A container's frame of reference lives in its
+ * DEFINITION (`container_defs.{id}.scope`), and both writers of the feed key
+ * apply it before writing: the automation engine via `_scope_of`
+ * (server/automations.py), a producer's Push via `useMemberScope`
+ * (src/routes/production/feeds.js). So the payload that arrives is already
+ * scoped, and a mirrored pair is two scoped definitions — not two differently
+ * URL-scoped sources of one. Don't re-add a `scope` argument: a second place to
+ * apply it can only disagree with the first.
  */
-export function resolveFeed({ live = null, forceElement = null, previewSel = null, scope = null } = {}) {
+export function resolveFeed({ live = null, forceElement = null, previewSel = null } = {}) {
     const base = forceElement ? { ...(live || {}), element: forceElement } : live;
     const withContent = previewSel ? { ...(base || {}), ...previewSel } : base;
     if (!withContent || !withContent.element) return null;
-    return scope ? { ...withContent, ...scope } : withContent;
+    return withContent;
 }
 
 /*

@@ -39,18 +39,3 @@ export const Panel = React.forwardRef(function Panel(
     </div>
   );
 });
-
-// Standalone header strip (still exported for any bespoke use).
-export function PanelHeader({ className, children, ...props }) {
-  return (
-    <div
-      className={cn(
-        "label-display border-b border-border bg-popover px-4 py-2.5 text-xs text-foreground",
-        className
-      )}
-      {...props}
-    >
-      {children}
-    </div>
-  );
-}

@@ -26,32 +26,8 @@ export const MSB_CAPTAINS = [
   "Wario", "Waluigi", "DK", "Diddy", "Bowser", "Bowser Jr",
 ];
 
-export const MSB_TEAMS = [
-  // Mario
-  "Mario Fireballs", "Mario Sunshines", "Mario All Stars", "Mario Heroes",
-  // Luigi
-  "Luigi Gentlemen", "Luigi Leapers", "Luigi Mansioneers", "Luigi Vacuums",
-  // Peach
-  "Peach Dynasties", "Peach Monarchs", "Peach Princesses", "Peach Roses",
-  // Daisy
-  "Daisy Cupids", "Daisy Lillies", "Daisy Petals", "Daisy Queen Bees",
-  // Yoshi
-  "Yoshi Eggs", "Yoshi Flutters", "Yoshi Islanders", "Yoshi Speed Stars",
-  // Birdo
-  "Birdo Beauties", "Birdo Bows", "Birdo Fans", "Birdo Models",
-  // Wario
-  "Wario Beasts", "Wario Garlics", "Wario Greats", "Wario Steakheads",
-  // Waluigi
-  "Waluigi Flankers", "Waluigi Mashers", "Waluigi Mystiques", "Waluigi Smart Alecks",
-  // DK
-  "DK Animals", "DK Explorers", "DK Kongs", "DK Wild Ones",
-  // Diddy
-  "Diddy Ninjas", "Diddy Red Caps", "Diddy Survivors", "Diddy Tails",
-  // Bowser
-  "Bowser Black Stars", "Bowser Blue Shells", "Bowser Flames", "Bowser Monsters",
-  // Bowser Jr
-  "Jr Bombers", "Jr Fangs", "Jr Pixies", "Jr Rookies",
-];
+// The team-name vocabulary is MSB_TEAM_IDS' key set (below) — it maps every
+// name to its game id, so a second bare list could only drift from it.
 
 export const ROSTER_SIZE = 9;
 

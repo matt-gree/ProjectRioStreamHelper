@@ -128,11 +128,6 @@ def is_rotating(sb_id: int) -> bool:
     return get_binding(sb_id).get("playback", {}).get("mode") == "rotate"
 
 
-def playback_mode(sb_id: int) -> str:
-    """The scoreboard's playback mode: 'single' or 'rotate'."""
-    return get_binding(sb_id).get("playback", {}).get("mode", "single")
-
-
 def pool(sb_id: int) -> dict:
     """The scoreboard's pool config (filters/scope/pinned/excluded)."""
     return get_binding(sb_id).get("pool", dict(DEFAULT_POOL))

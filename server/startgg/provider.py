@@ -25,7 +25,6 @@ from server.startgg.queries import (
     SETS_QUERY,
     SET_QUERY,
     ENTRANTS_QUERY,
-    ENTRANT_QUERY,
     BRACKET_SETS_QUERY,
 )
 
@@ -508,19 +507,6 @@ class StartGGProvider:
             if str(s.get("id")) == str(set_id):
                 return s
         return {"error": "Set not found"}
-
-    @classmethod
-    async def GetEntrant(cls, entrant_id: int) -> dict | None:
-        """Fetch a single entrant by ID with full user profile data."""
-        data = await cls._query(
-            "EntrantQuery",
-            ENTRANT_QUERY,
-            {"id": entrant_id},
-        )
-        raw = _deep(data, "data.entrant")
-        if not raw:
-            return None
-        return parse_entrant(raw)
 
     @classmethod
     async def GetEntrants(cls, page: int = 1) -> dict:

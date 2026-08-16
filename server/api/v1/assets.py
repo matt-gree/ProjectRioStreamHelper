@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import ORJSONResponse
 
-from server.paths import default_msb_assets_dir
+from server.paths import default_msb_assets_dir, reveal_path
 from server.rio.pyrio.assets import (
     required_captain_filenames,
     required_character_filenames,
@@ -290,12 +290,6 @@ async def assets_msb_reveal(session_id: str | None = None) -> ORJSONResponse:
     if not path.is_dir():
         path = default_msb_assets_dir()
 
-    system = platform.system()
-    if system == "Darwin":
-        await asyncio.to_thread(subprocess.Popen, ["open", str(path)])
-    elif system == "Windows":
-        await asyncio.to_thread(subprocess.Popen, ["explorer", str(path)])
-    else:
-        await asyncio.to_thread(subprocess.Popen, ["xdg-open", str(path)])
+    await asyncio.to_thread(reveal_path, path)
 
     return ORJSONResponse({"success": True, "path": str(path)})
