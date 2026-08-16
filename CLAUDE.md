@@ -153,7 +153,7 @@ The deciding layer is mirrored to `score.{N}.side_reason`. Manual scope is the c
 
 ## Production Tab & Elements
 
-The Production tab is a **console with three surfaces** — rack (monitor + select), stage (work on the one selected thing), quick rail (producer-pinned cards). Every element declares the same contract (registration · quick face · stage body) and all three surfaces compose from the shared row kit. **Read `.claude/skills/production-console-contract/SKILL.md` before touching `src/routes/production/`.**
+The Production tab is a **console with three surfaces** — rack (monitor + select), stage (work on the one selected thing), quick rail (producer-pinned cards). Every element declares the same contract (registration · quick face · stage body) and all three surfaces compose from the shared row kit. **Read `.claude/skills/production-console-contract/SKILL.md` before touching `src/routes/production/`** — it is a router (surfaces · cross-cutting invariants · checklist) that names the one file under `reference/` to load for the area you're in.
 
 - **OBS scenes are the rack's grouping axis**, and rows are **placements** (`src/routes/production/placements.js`): one row per source per scene, keyed `{element}:{board}@{scene}`. The rack lists only what is really in a scene — derivation runs source → row — and the **+** in each scene header (`addsource.jsx`) is how a source is created. There is no "phase" concept; it was removed in favour of the producer's own scene list.
 
