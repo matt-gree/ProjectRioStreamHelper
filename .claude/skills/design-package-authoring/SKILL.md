@@ -66,12 +66,19 @@ Production stage.
 
 ## Element inventory (what a package may theme)
 
-Slot-only (easiest): `stats`, `matchup`, `scoreboard-{xs,s,m,l}`,
+Slot-only (easiest): `stats`, `statscard`, `matchup`, `scoreboard-{s,m,l}`,
 `scorecard`. Template-cloning (author a prototype in `<defs>`/a group; the
 mount clones it): `ticker`, `lowerthird`. Layout-JSON reflow (SVG + an
 embedded `<script type="application/json" data-layouts="1">` block):
 `commentary` (per-count arrangements — the hardest element),
 `playerplates` (anchor offsets only — the gentle version).
+
+**`stats` and `statscard` are one element at two aspects** — same mount, same
+slots, the bar (452×118) and the 2×2 container card (380×240). A package that
+themes one gets `default`'s for the other, sat right next to it: **theme both
+or neither.** The card's optional caption bands are declared as edge
+attributes on `card-bg` (`data-top-open` / `data-bot-closed` / …), not as
+extra layouts — see the `statscard.svg` section of `public/design/README.md`.
 
 **Palette + backdrop only** (layout is mount-owned JS, ~2,200 lines — NOT
 re-layoutable via SVG): the Character Spotlight and Game Summary share

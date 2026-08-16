@@ -1147,7 +1147,7 @@ Rules:
   `Scoreboard 4` + `JustAGrump 6–7 Dyla81` measured 218px, and the widest case
   was the most interesting one — a live game between two real usernames. So the
   board row is the board's NAME (its alias, or `Scoreboard {N}`) and nothing
-  else; `useBoardDeskIdle` keeps only the dim, which costs no width and is the
+  else; `useBoardDeskRow` keeps only the dim, which costs no width and is the
   monitoring half a truncated sentence served worst. Everything the summary said
   is on the board's panel at full length, one click away. Don't reintroduce a
   meta here: the next long username puts it straight back over the edge.

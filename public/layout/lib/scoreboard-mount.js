@@ -2,8 +2,8 @@
 //
 // One mount drives every size variant: the look lives in the active DESIGN
 // PACKAGE's per-size theme SVG (/design/{package}/scoreboard-{size}.svg,
-// element-by-element fallback to `default`). Sizes: xs · s · m · l. Legacy
-// ?size=xl OBS sources resolve to l.
+// element-by-element fallback to `default`). Sizes: s · m · l. Legacy
+// ?size=xs / ?size=xl OBS sources resolve to l.
 //
 // ROW-STACK CONTRACT (a lighter cousin of the Scorecard meld): a theme is a
 // card whose content rows are groups marked data-slot="row-*", each authored
@@ -86,7 +86,6 @@ const DEFAULT_PACKAGE = 'default';
 const MAX_INN = 9;
 
 export const SIZE_DIMS = {
-  xs: { w: 400, h: 50 },
   s:  { w: 388, h: 156 },
   m:  { w: 600, h: 200 },
   l:  { w: 800, h: 460 },

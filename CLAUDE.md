@@ -58,7 +58,7 @@ These terms have specific meanings in this codebase. Use them precisely; correct
 | **Overlay** | Generic OBS Browser Source terminology. Not PRSH-specific; do not use as a synonym for any of the terms above. |
 | **Sample bundle** | A Layout's canned state fragment under `public/layout/preview/*_sample.json`, declared via `OverlayBase.init({ sample })`. Every Layout has one. Keys carry `{sb}`/`{team}` tokens resolved from the page URL. |
 | **Demo mode** | State `production.sample` — the app-wide switch that makes every overlay render its sample bundle instead of live state, for building OBS scenes with no game running. Global, never self-enabling, guarded by an app-wide banner. |
-| **Size variant** | `?size=s\|m\|l` query param, scoreboard layouts only (`xs`/`xl` retired with the SVG conversion; legacy URLs fall back to `l`). |
+| **Size variant** | `?size=` query param, scoreboard layouts only. Which sizes exist and their canvases live in `server/theme_contracts.py` (`CONTRACTS`) — the one source of truth, pinned across runtimes by `tests/unit/test_size_dims_parity.py`. The mount resolves any unknown or retired size to `l`, so legacy OBS sources keep working. |
 | **Team variant** | `?team=1\|2` query param. Applies to stats, roster, teamlogo, controller, playername. |
 | **Rotation / Rotating** | A board whose playback mode is `rotate`, cycling its pool at an interval. Managed by `PoolManager` (`server/rio/rotation.py`). No other meaning — there is no "player rotation" concept. |
 | **Rotator (layout group)** | `public/layout/rotator/*.html` — standalone layouts (e.g. the results ticker) that display rotating content. Distinct from rotate playback. |

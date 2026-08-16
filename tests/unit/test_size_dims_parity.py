@@ -14,7 +14,7 @@ from server.theme_contracts import CONTRACTS
 
 REPO = Path(__file__).resolve().parents[2]
 
-SIZES = ("xs", "s", "m", "l")
+SIZES = ("s", "m", "l")
 
 
 def _canvas(size: str) -> tuple[int, int]:
@@ -91,3 +91,50 @@ def test_builtin_theme_svg_viewboxes_match_contracts():
         assert (int(m.group(1)), int(m.group(2))) == _canvas(size), (
             f"{svg.relative_to(REPO)} viewBox drifted from scoreboard-{size} canvas"
         )
+
+
+# The designer-facing docs are the spec a theme is drawn against, so a canvas
+# quoted there is as load-bearing as one in code — and it drifts the same way,
+# silently (the 2.0.0 review found scoreboard-s quoted as both 500×80 and
+# 388×128, and stats.svg as 325×120, against a real 388×156 / 452×118). These
+# pin the two SPEC blocks; prose elsewhere may still cite a legacy canvas
+# deliberately, e.g. the older 380×220 statscard that still renders centred.
+
+
+def test_design_readme_tree_canvases_match_contracts():
+    src = (REPO / "public/design/README.md").read_text()
+    tree = re.search(r"```\n<package>/\n(.*?)```", src, re.DOTALL)
+    assert tree, "package tree block not found in public/design/README.md"
+
+    quoted = {
+        element: (int(w), int(h))
+        for element, w, h in re.findall(
+            r"([\w-]+)\.svg.*?(\d+)×(\d+)", tree.group(1)
+        )
+    }
+    assert quoted, "no element canvases quoted in the README package tree"
+    unknown = set(quoted) - set(CONTRACTS)
+    assert not unknown, f"README tree lists non-existent theme files: {sorted(unknown)}"
+    for element, dims in quoted.items():
+        assert dims == CONTRACTS[element].canvas, (
+            f"README package tree: {element}.svg quoted at {dims[0]}×{dims[1]}, "
+            f"contract says {CONTRACTS[element].canvas[0]}×{CONTRACTS[element].canvas[1]}"
+        )
+
+
+def test_designer_guide_scoreboard_row_matches_contracts():
+    src = (REPO / "public/design/DESIGNER-GUIDE.md").read_text()
+    row = re.search(r"\| Scoreboard \(([^)]*)\) \| ([^|]*)\|", src)
+    assert row, "Scoreboard canvas row not found in DESIGNER-GUIDE.md"
+
+    sizes = [s.strip() for s in row.group(1).split("/")]
+    dims = [
+        (int(w), int(h))
+        for w, h in re.findall(r"(\d+)×(\d+)", row.group(2))
+    ]
+    assert sizes == list(SIZES), (
+        f"DESIGNER-GUIDE lists scoreboard sizes {sizes}, offered sizes are {list(SIZES)}"
+    )
+    assert dims == [_canvas(s) for s in SIZES], (
+        "DESIGNER-GUIDE scoreboard canvases drifted from the contracts"
+    )

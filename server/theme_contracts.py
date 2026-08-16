@@ -112,7 +112,7 @@ def _stats_slots() -> dict[str, Slot]:
 def _scoreboard_slots() -> dict[str, Slot]:
     # Authoritative inventory: the ROW-STACK + DATA SLOTS header in
     # public/layout/lib/scoreboard-mount.js. All optional — each size
-    # implements whatever subset fits (xs/s are row-top only), and the mount
+    # implements whatever subset fits (s omits the box score), and the mount
     # skips absent slots. Count dots / bases are recoloured by the mount via
     # setAttribute, so any shape works ("any").
     s: dict[str, Slot] = {
@@ -218,8 +218,6 @@ CONTRACTS: dict[str, Contract] = {
         note="callout is a pure backdrop — it recolors via CSS vars, data slots are ignored",
     ),
     # scoreboards share one slot vocabulary; each size uses a subset (all optional)
-    "scoreboard-xs": Contract((400, 50), "xMidYMid meet", slots=_scoreboard_slots(),
-                              parts={"div": Slot("any")}),
     "scoreboard-s": Contract((388, 156), "xMidYMid meet", slots=_scoreboard_slots(),
                              parts={"div": Slot("any")}),
     "scoreboard-m": Contract((600, 200), "xMidYMid meet", slots=_scoreboard_slots(),

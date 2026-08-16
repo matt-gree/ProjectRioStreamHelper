@@ -137,7 +137,8 @@ disagree.
 | Backend logic (state, match, bindings, cascade) | targeted pytest + full `./venv/bin/python -m pytest` |
 | API route | TestClient integration test in `tests/integration/test_api.py`, same style as neighbors |
 | Frontend React | `npm run test:run` + `npm run build` (build catches import/JSX errors tests miss) |
-| Overlay HTML / `lib/*.js` / theme SVGs | **No automated coverage.** `npm run dev`, open `http://localhost:5260/layout/<group>/<file>.html?scoreboard=1` in a browser, **hard refresh**, check the console; drive state via the UI or `PUT /api/v1/state` |
+| Theme SVGs / design packages | **Run the suite first — it pins more than you'd expect** (~200 tests): `test_design_package_svgs.py` (well-formedness, style-block hygiene, sprite bounds, rebindable drawers, the inlined Rio mark), `test_design_packages.py`, `test_theme_compiler.py`, and `test_size_dims_parity.py` (every canvas, across contracts → JS → theme SVG → the designer docs). Browser-check the *look* after those pass, not instead of them |
+| Overlay HTML / `lib/*.js` | Frontend suite covers the seams (`src/routes/layouts/*.test.js` — sample bundles, class toggles, container layers, captain framing). Rendering itself is uncovered: `npm run dev`, open `http://localhost:5260/layout/<group>/<file>.html?scoreboard=1`, **hard refresh**, check the console; drive state via the UI or `PUT /api/v1/state` |
 | Layout catalog metadata | `GET /api/v1/layouts` — type, dims, variants, supportedSettings |
 | Settings schema / migrations | pytest (`tests/unit/test_settings_logic.py`) + boot once and check the log for migration output |
 | OBS animation behavior (reveal/conceal/intro/shutdown) | Manual only: real OBS, toggle the source eye + cut scenes; watch for the stale-frame flash |

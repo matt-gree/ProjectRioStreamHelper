@@ -205,8 +205,10 @@ Known deliberate deviations (don't "fix" them):
   appended last in the feed's SetBatch so the drafted identity wins) — it
   never blanks.
 - `RESURFACE_MAP` (`server/rio/resurface.py`) is the shared registry→score
-  field mapping used by both the provider resurface path and the Match
-  projector. Change it in one place; it mirrors `src/lib/participants.js`.
+  field mapping used by both the provider resurface path (`provider.py`) and
+  the Match projector (`match.py`, which also derives its owned key set from
+  `RESURFACE_MAP.values()`). Server-side only — there is no client copy, so
+  change it in the one place and both consumers follow.
 
 ## Checklist: adding a 5th projected element
 
