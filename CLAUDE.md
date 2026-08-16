@@ -116,7 +116,11 @@ Every change flows through `State.Set(key, value)` or `State.SetBatch(entries)`.
 - `State.Save()` — diff from tracked keys only.
 - File export off by default (`general.disable_export: True`).
 
-**Scoreboard config lives in Settings, not State.** `scoreboards.active`, `scoreboards.aliases`, `scoreboards.binding.{N}` and `scoreboards.match_queue.{N}` are **Settings** keys. Legacy `scoreboards.sources` / flat `scoreboards.rotation` settings are read-only migration fallbacks — never write them. **A new per-board key must be torn down in `remove_scoreboard`** alongside the others — board ids are re-used (`_lowest_available_id`), so a leftover isn't dormant, it's inherited by the next board with that id.
+**Scoreboard config lives in Settings, not State.** `scoreboards.active`, `scoreboards.aliases`, `scoreboards.binding.{N}` and `scoreboards.match_queue.{N}` are **Settings** keys. Legacy `scoreboards.sources` / flat `scoreboards.rotation` settings are read-only migration fallbacks — never write them.
+
+**A new per-board KEY — state or settings — must be torn down in BOTH `remove_scoreboard` and `POST /scoreboards/reset`.** Board ids are re-used (`_lowest_available_id`), so a leftover isn't dormant, it's inherited by the next board with that id. Read that as per-board **data**, not per-board *setting*: stating it as a settings rule is exactly how `postgame.{N}` — per-board state that doesn't live under `score.{N}`, so `State.Unset("score.{N}")` never reached it — sat outside the teardown while all four settings keys were handled right. The two paths also drifted into opposite halves of the same pair (see below), so **fix both or neither**; `tests/integration/test_scoreboards_api.py` pins the whole set against id re-use.
+
+**`scoreboards.rotation.{N}` is TWO keys in two stores.** In **State** it's the live status mirror (`running` / `game_ids` / `cached_games`, written by `PoolManager`) that the rack badge reads; in **Settings** it's the legacy flat config. Both must go when a board does — and `PoolManager.stop_rotation` clears neither, it drops the task and the binding flag, not the projection. Don't "simplify" either call site to a single store.
 
 > Deep dive: `.claude/skills/state-keys-and-projectors/SKILL.md` — the full state-key namespace map, the Settings-vs-State split, and the projector pattern.
 

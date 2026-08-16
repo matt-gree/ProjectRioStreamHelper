@@ -64,6 +64,7 @@ def reset_singletons():
     from server.postgame import PostGame
     from server.postgame_watch import StatFileWatcher
     from server.rio.game_end import GameEndWatcher
+    from server.rio.game_pool import CompletedGamePool, OngoingGamePool
     from server.rio.provider import RioGameDataProvider as Provider
     from server.rio.stats_tracker import StatsTracker
     from server.rio.rotation import PoolManager
@@ -89,6 +90,17 @@ def reset_singletons():
         "autocapture_done": set(StatFileWatcher._done),
         "announcements_active": list(Announcements._active),
         "participants": dict(Participants.participants),
+        # The API-game pools and the post-game caches are class-level dicts
+        # like every entry above. They were missed, so a test that seeded a
+        # pool or captured a box score left it visible to every later test —
+        # latent only because nothing yet asserts on an empty pool.
+        "ongoing_games": dict(OngoingGamePool.games),
+        "ongoing_follow_misses": dict(OngoingGamePool._follow_misses),
+        "ongoing_ended_follow": dict(OngoingGamePool._ended_follow),
+        "completed_games": dict(CompletedGamePool.games),
+        "pg_captured": dict(PostGame._captured),
+        "pg_stat_objs": dict(PostGame._stat_objs),
+        "pg_contacts": dict(PostGame._contacts),
     }
 
     # Clean baseline for the test.
@@ -131,6 +143,13 @@ def reset_singletons():
     StatFileWatcher._done = set()
     Announcements._active = []
     Participants.participants = {}
+    OngoingGamePool.games = {}
+    OngoingGamePool._follow_misses = {}
+    OngoingGamePool._ended_follow = {}
+    CompletedGamePool.games = {}
+    PostGame._captured = {}
+    PostGame._stat_objs = {}
+    PostGame._contacts = {}
 
     yield
 
@@ -159,6 +178,13 @@ def reset_singletons():
     StatFileWatcher._done = saved["autocapture_done"]
     Announcements._active = saved["announcements_active"]
     Participants.participants = saved["participants"]
+    OngoingGamePool.games = saved["ongoing_games"]
+    OngoingGamePool._follow_misses = saved["ongoing_follow_misses"]
+    OngoingGamePool._ended_follow = saved["ongoing_ended_follow"]
+    CompletedGamePool.games = saved["completed_games"]
+    PostGame._captured = saved["pg_captured"]
+    PostGame._stat_objs = saved["pg_stat_objs"]
+    PostGame._contacts = saved["pg_contacts"]
 
 
 @pytest.fixture

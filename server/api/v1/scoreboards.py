@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import ORJSONResponse
 from server.bindings import DEFAULT_BINDING, get_binding, transport
 from server.bindings import hud_target_scoreboards as _hud_target_scoreboards
+from server.postgame import PostGame
 from server.rio.provider import RioGameDataProvider
 from server.rio.rotation import PoolManager
 from server.rio.stats_tracker import StatsTracker
@@ -88,25 +89,45 @@ async def remove_scoreboard(sb_id: int, session_id: str | None = None) -> ORJSON
     if sb_id not in active:
         raise HTTPException(status_code=404, detail="Scoreboard not found")
 
-    # Clear state for this scoreboard
+    # Clear state for this scoreboard. `score.{N}` is not all of it — the
+    # post-game box score is its own top-level namespace (`postgame.{N}`) plus
+    # three in-memory caches, and `PostGame.clear` is the one thing that drops
+    # both. Unsetting only `score.{N}` left a captured box score behind, which
+    # id re-use then handed to the next board (see the teardown note below).
     await State.Unset(f"score.{sb_id}")
+    await PostGame.clear(sb_id)
 
     was_hud = transport(sb_id) == "hud"
 
     # Tear down any background work owned by this scoreboard before its
     # settings are removed, so resume-on-startup can't pick it back up.
+    #
+    # BOTH `scoreboards.rotation.{N}` keys go, and they are different things:
+    # the Settings one is the legacy flat config, the State one is the live
+    # status mirror (`running`/`game_ids`) that the rack badge reads. Clearing
+    # only the config left the mirror behind saying `running: true`, which id
+    # re-use then handed to the next board as a rotating badge for a rotation
+    # that does not exist. `stop_rotation` does not clear it — it drops the
+    # task and the binding flag, not the projection.
     await PoolManager.stop_rotation(sb_id, user_stop=False)
     await Settings.Unset(f"scoreboards.rotation.{sb_id}")
+    await State.Unset(f"scoreboards.rotation.{sb_id}")
 
     active.remove(sb_id)
     await Settings.Set("scoreboards.active", active)
     await Settings.Unset(f"scoreboards.binding.{sb_id}")
     await Settings.Unset(f"scoreboards.aliases.{sb_id}")
-    # Every per-board settings key goes when the board does. Ids are RE-USED
-    # (`_lowest_available_id`), so a leftover here is not dormant: removing the
-    # board that took fixtures from Losers and adding one back hands the new
-    # board 2 that assignment, silently, with nothing on its panel explaining
-    # where it came from.
+    # EVERY per-board key goes when the board does — settings and state alike.
+    # Ids are RE-USED (`_lowest_available_id`), so a leftover here is not
+    # dormant: removing the board that took fixtures from Losers and adding one
+    # back hands the new board 2 that assignment, silently, with nothing on its
+    # panel explaining where it came from.
+    #
+    # Read that as "per-board DATA", not "per-board setting". Stating it as a
+    # settings rule is how `postgame.{N}` — per-board state that does not live
+    # under `score.{N}` — sat outside the teardown while all four settings keys
+    # were handled correctly. `tests/integration/test_scoreboards_api.py` pins
+    # the whole set against id re-use; add new per-board keys there too.
     await Settings.Unset(f"scoreboards.match_queue.{sb_id}")
 
     StatsTracker.reset_scoreboard(sb_id)
@@ -265,7 +286,18 @@ async def reset_scoreboard_state(session_id: str | None = None) -> ORJSONRespons
     for sb_id in list(active):
         await Settings.Set(f"scoreboards.binding.{sb_id}", copy.deepcopy(DEFAULT_BINDING))
         await State.Set(f"score.{sb_id}", {})
+        # `scoreboards.rotation.{N}` names TWO different things in two stores:
+        # in State the live status mirror (`running`, `game_ids`,
+        # `cached_games`), and in Settings the legacy flat rotation config the
+        # v2 migration reads as a fallback. Clear BOTH — this hatch and
+        # `remove_scoreboard` used to do one each, opposite halves, which is
+        # what made the split easy to miss. Don't "simplify" either to one.
         await State.Unset(f"scoreboards.rotation.{sb_id}")
+        await Settings.Unset(f"scoreboards.rotation.{sb_id}")
+        # Blank the captured box score too. A board reset to a clean baseline
+        # that still reports a post-game is exactly the stuck state this hatch
+        # exists to clear.
+        await PostGame.clear(sb_id)
         StatsTracker.reset_scoreboard(sb_id)
 
     await State.Save()
