@@ -68,6 +68,7 @@ def reset_singletons():
     from server.rio.provider import RioGameDataProvider as Provider
     from server.rio.stats_tracker import StatsTracker
     from server.rio.rotation import PoolManager
+    from server.startgg.provider import StartGGProvider
 
     saved = {
         "state": copy.deepcopy(State.state),
@@ -101,6 +102,13 @@ def reset_singletons():
         "pg_captured": dict(PostGame._captured),
         "pg_stat_objs": dict(PostGame._stat_objs),
         "pg_contacts": dict(PostGame._contacts),
+        # The loaded event and its parsed brackets are class state too, so a
+        # test that loads one leaves every later test looking at a provider
+        # that already has an event.
+        "sgg_bracket_cache": dict(StartGGProvider._bracket_cache),
+        "sgg_event_slug": StartGGProvider._event_slug,
+        "sgg_event_url": StartGGProvider._event_url,
+        "sgg_tournament_data": StartGGProvider._tournament_data,
     }
 
     # Clean baseline for the test.
@@ -150,6 +158,10 @@ def reset_singletons():
     PostGame._captured = {}
     PostGame._stat_objs = {}
     PostGame._contacts = {}
+    StartGGProvider._bracket_cache = {}
+    StartGGProvider._event_slug = None
+    StartGGProvider._event_url = None
+    StartGGProvider._tournament_data = None
 
     yield
 
@@ -185,6 +197,10 @@ def reset_singletons():
     PostGame._captured = saved["pg_captured"]
     PostGame._stat_objs = saved["pg_stat_objs"]
     PostGame._contacts = saved["pg_contacts"]
+    StartGGProvider._bracket_cache = saved["sgg_bracket_cache"]
+    StartGGProvider._event_slug = saved["sgg_event_slug"]
+    StartGGProvider._event_url = saved["sgg_event_url"]
+    StartGGProvider._tournament_data = saved["sgg_tournament_data"]
 
 
 @pytest.fixture

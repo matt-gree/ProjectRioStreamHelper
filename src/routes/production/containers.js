@@ -359,6 +359,22 @@ export function useContainerActions() {
         const next = { ...defs };
         delete next[id];
         releaseFeed(id);
+        /*
+         * The engine's mirrored REASON goes too, and it needs its own call:
+         * `releaseFeed` early-returns when the container is carrying nothing,
+         * so a container deleted at rest never unset anything, and the server
+         * only ever writes `production.feed.reason.{id}` — `settle_all` walks
+         * the definitions that still exist, so nothing revisits a dead one.
+         *
+         * Ids are derived from the NAME (`containerIdFor` slugs it), so this is
+         * not merely stale bytes: delete "Callout Stage" and build another one
+         * called "Callout Stage" and it reclaims `callout-stage` — inheriting a
+         * reason for a feed it never had. `ReasonLine` doesn't gate on carrying
+         * anything, so the new container's panel opened saying "Manual — you
+         * pushed it", in amber, which is the console's way of saying a
+         * producer's push is suspending the rules.
+         */
+        useStateStore.getState().deleteItems([`production.feed.reason.${id}`]);
         // A rule for a container that no longer exists is inert, but leaving it
         // in settings means it revives the day an id is reused.
         dropRules({ container: id });

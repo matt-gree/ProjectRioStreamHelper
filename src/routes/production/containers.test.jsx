@@ -389,4 +389,26 @@ describe('roster mutations', () => {
         expect(defsOf().a).toBeUndefined();
         expect(feedOf('a')).toBeUndefined();
     });
+
+    /*
+     * The engine's mirrored REASON is per-container state the server only ever
+     * writes — `settle_all` walks the definitions that still exist, so nothing
+     * revisits a deleted one. Ids come off the NAME, so rebuilding a container
+     * with the same name reclaims the id and inherited that reason; because
+     * `ReasonLine` doesn't gate on carrying anything, the fresh container's
+     * panel opened claiming a producer push was suspending its rules.
+     *
+     * Deleting AT REST is the case that matters: `releaseFeed` early-returns
+     * with nothing carried, so this needs its own unset rather than riding the
+     * feed clear.
+     */
+    it('drops the mirrored feed reason, even deleting a container at rest', () => {
+        useStateStore.setState({
+            production: { feed: { container: {}, reason: { a: 'manual' } } },
+        });
+
+        act.remove('a');
+
+        expect(useStateStore.getState()?.production?.feed?.reason?.a).toBeUndefined();
+    });
 });
