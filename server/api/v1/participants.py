@@ -89,4 +89,10 @@ async def import_startgg(payload: StartGGImportPayload):
     rows = []
     for player in payload.players:
         rows.append(await Participants.UpsertFromStartGG(player))
+    # Fan out ONCE for the batch, here rather than inside UpsertFromStartGG:
+    # an event import is one call per entrant, and each projector writes its
+    # full key set, so re-projecting per row would multiply a 64-player import
+    # into 320 full re-projections for a single button press.
+    if rows:
+        await Participants.reproject_dependents()
     return {"imported": len(rows), "rows": rows}

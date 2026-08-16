@@ -162,6 +162,8 @@ def reset_singletons():
     StartGGProvider._event_slug = None
     StartGGProvider._event_url = None
     StartGGProvider._tournament_data = None
+    # Same loop-binding hazard as the two locks above.
+    StartGGProvider._load_lock = None
 
     yield
 

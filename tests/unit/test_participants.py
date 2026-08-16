@@ -158,3 +158,97 @@ async def test_export_import_round_trip():
     row = Participants.participants["p_1"]
     assert row["identities"]["rioName"] == "RioA"
     assert row["display"]["tag"] == "A"
+
+
+async def _bound_match(pid, sb=1):
+    """A match whose side 1 resolves to `pid`, projected onto board `sb`."""
+    from server.match import Match, default_match
+    from server.state import State
+
+    m = Match.next_id()
+    match = default_match()
+    match["player"]["1"]["participantId"] = pid
+    await State.Set(f"match.{m}", match)
+    await State.Set(f"score.{sb}.match", m)
+    await Match.project_scoreboard(sb, m)
+    return m
+
+
+# --- reprojection fan-out ---
+#
+# The registry is the join point, and the projectors are resolve-by-COPY: they
+# read a row once and write the result into the keys overlays render. That is
+# why an overlay never re-resolves — and why the copies go stale the moment the
+# book changes. Each projector re-projected on its own config change and at
+# boot, but nothing re-projected when the thing they all resolve AGAINST
+# changed, so a producer correcting a name mid-broadcast watched the Address
+# Book update and the overlay keep the old one until the next launch.
+
+async def test_editing_a_participant_reflows_the_bound_match(set_setting):
+    """The typo-fix case, end to end: the copy in `score.{N}` follows the book."""
+    from server.state import State
+
+    _seed("p_1", rio="MattGree", tag="OldTag")
+    await _bound_match("p_1")
+    assert State.state["score"]["1"]["player"]["1"]["name"] == "OldTag"
+
+    await Participants.Update("p_1", {"display": {"tag": "NewTag"}})
+
+    assert State.state["score"]["1"]["player"]["1"]["name"] == "NewTag"
+
+
+async def test_deleting_a_participant_blanks_what_it_had_filled():
+    """A deleted row is still COPIED into every projection that resolved it.
+
+    Blanking is the honest answer — the projectors write their full key set,
+    value or "" — because the alternative is an overlay naming somebody who is
+    no longer in the book at all.
+    """
+    from server.state import State
+
+    _seed("p_1", rio="MattGree", tag="Gone")
+    await _bound_match("p_1")
+    assert State.state["score"]["1"]["player"]["1"]["name"] == "Gone"
+
+    await Participants.Delete("p_1")
+
+    assert State.state["score"]["1"]["player"]["1"]["name"] == ""
+
+
+async def test_a_replace_import_reflows_every_dependent():
+    """`replace=True` wipes the book, so every copy resolved against a registry
+    that no longer exists. One fan-out after the batch, not one per row."""
+    from server.state import State
+
+    _seed("p_1", rio="MattGree", tag="Before")
+    await _bound_match("p_1")
+
+    await Participants.ImportRows([], replace=True)
+
+    assert State.state["score"]["1"]["player"]["1"]["name"] == ""
+
+
+async def test_matchup_tags_follow_the_book_without_refetching_its_games():
+    """The head-to-head band is a FETCHED artifact, so it has no cheap full
+    re-projection and is absent from the boot pass. Only `side{1,2}.tag` comes
+    out of the book, and the payload remembers its match — so a book edit
+    re-resolves those two fields and leaves the fetched half alone."""
+    from server.match import Match, default_match
+    from server.state import State
+
+    _seed("p_1", rio="MattGree", tag="Old")
+    m = Match.next_id()
+    match = default_match()
+    match["player"]["1"]["participantId"] = "p_1"
+    await State.Set(f"match.{m}", match)
+    await State.Set("matchup", {
+        "present": True, "matchId": m,
+        "side1": {"rioName": "MattGree", "tag": "Old", "wins": 0},
+        "side2": {"rioName": "Other", "tag": "X", "wins": 0},
+        "games": [], "totalGames": 0,
+    })
+
+    await Participants.Update("p_1", {"display": {"tag": "New"}})
+
+    assert State.state["matchup"]["side1"]["tag"] == "New"
+    assert State.state["matchup"]["totalGames"] == 0   # no refetch

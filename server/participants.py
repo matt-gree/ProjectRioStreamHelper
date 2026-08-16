@@ -124,6 +124,48 @@ class Participants:
             },
         }
 
+    # ----- reprojection ----------------------------------------------------
+
+    @classmethod
+    async def reproject_dependents(cls) -> None:
+        """Re-resolve every surface that COPIED a row out of this registry.
+
+        The projectors are resolve-by-copy: they read a participant once and
+        write the result into the keys overlays render, so an overlay never
+        re-resolves. That is the whole point — and it means the copies go stale
+        the moment the book changes underneath them. Each projector re-projects
+        when its OWN config changes and at boot, but nothing re-projected when
+        the thing they all resolve AGAINST changed, so a producer fixing a
+        caster's name mid-broadcast saw the Address Book update and the overlay
+        keep the old name until the next launch.
+
+        This is the one statement of "who read the book". A new projector that
+        resolves `Participants.Get` belongs in this list in the same change, or
+        it inherits exactly that bug.
+
+        Imported locally: `match` and the rest import this module, so a
+        top-level import here is a cycle. Each is guarded on its own — one bad
+        persisted record must not stop the others re-resolving, the same
+        contract `project_all` has at boot.
+        """
+        from server.commentary import Commentary
+        from server.match import Match
+        from server.organizers import Organizers
+        from server.playerplates import PlayerPlates
+        from server.utils.projection import run_startup_projection
+
+        await run_startup_projection("Participants→Match", Match.project_all())
+        await run_startup_projection("Participants→Commentary", Commentary.project())
+        await run_startup_projection("Participants→PlayerPlates", PlayerPlates.project())
+        await run_startup_projection("Participants→Organizers", Organizers.project())
+        # The head-to-head band is a FETCHED artifact (its games come from the
+        # Rio API), so it has no boot re-projection to borrow. Only its per-side
+        # tag comes from the book, and the payload remembers its match — so
+        # re-resolve just the tags rather than re-running the fetch.
+        from server.matchup import Matchup
+
+        await run_startup_projection("Participants→Matchup", Matchup.refresh_tags())
+
     # ----- CRUD ------------------------------------------------------------
 
     @classmethod
@@ -153,6 +195,10 @@ class Participants:
         }
         cls.participants[pid] = row
         await cls.Save()
+        # A NEW row matters too: the resolvers fall back to a rioName lookup
+        # (`MatchByRioName`), so adding the player who is on air right now is
+        # what makes their plate stop showing a bare Rio username.
+        await cls.reproject_dependents()
         return row
 
     @classmethod
@@ -171,6 +217,10 @@ class Participants:
             )
         row["meta"]["updatedAt"] = _now()
         await cls.Save()
+        # The edit is the whole point of this call — a name or pronoun a
+        # projector already copied. Re-resolve before returning so the overlay
+        # matches the book the producer just corrected.
+        await cls.reproject_dependents()
         return row
 
     @classmethod
@@ -178,6 +228,11 @@ class Participants:
         existed = cls.participants.pop(pid, None) is not None
         if existed:
             await cls.Save()
+            # A deleted row is still copied into every projection that resolved
+            # it. Re-resolving blanks those fields (the projectors write their
+            # full key set, value or ""), which is the honest answer — the
+            # alternative is an overlay naming someone no longer in the book.
+            await cls.reproject_dependents()
         return existed
 
     # ----- backup / restore (manual import + export) -----------------------
@@ -249,6 +304,12 @@ class Participants:
                 created += 1
 
         await cls.Save()
+        # ONCE, after the whole batch — a restore can rewrite hundreds of rows,
+        # and each projector writes its full key set, so per-row fan-out would
+        # be that many full re-projections for one import. `replace=True` makes
+        # this mandatory rather than nice: it wipes the book, so every copy in
+        # every projection is resolved against a registry that no longer exists.
+        await cls.reproject_dependents()
         return {"imported": created + updated, "created": created, "updated": updated}
 
     # ----- matching (the resurface loop) -----------------------------------

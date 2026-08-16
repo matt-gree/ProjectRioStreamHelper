@@ -161,6 +161,36 @@ class Matchup:
         return payload
 
     @classmethod
+    async def refresh_tags(cls) -> None:
+        """Re-resolve just the per-side Address Book tags on the live band.
+
+        The band is a FETCHED artifact — its games come from the Rio API — so
+        unlike the other projectors it has no cheap full re-projection and is
+        absent from the boot pass. But only `side{1,2}.tag` comes out of the
+        Address Book, and the payload remembers the match it was built for, so
+        a book edit can re-resolve those two fields without paying for the
+        fetch again. Called by `Participants.reproject_dependents`.
+
+        No-ops when nothing is on the band, or when the match it was built for
+        is gone — a stale band is Clear's business, not this method's.
+        """
+        payload = State.state.get("matchup") or {}
+        if not payload.get("present"):
+            return
+        m = payload.get("matchId")
+        if m is None or not Match.exists(m):
+            return
+
+        players = Match.get(m).get("player") or {}
+        entries = []
+        for side in (1, 2):
+            p = players.get(str(side)) or players.get(side)
+            rio = (payload.get(f"side{side}") or {}).get("rioName") or ""
+            entries.append((f"matchup.side{side}.tag", _display_tag(p, rio)))
+        await State.SetBatch(entries)
+        await State.Save()
+
+    @classmethod
     async def Clear(cls) -> None:
         """Blank the band (overlay hides itself on present=False)."""
         await State.Set("matchup", {"present": False})

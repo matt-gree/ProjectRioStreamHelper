@@ -99,7 +99,14 @@ class StartGGProvider:
     _event_url: str | None = None
     _tournament_data: dict | None = None
     _bracket_cache: dict[int, dict] = {}  # phase_group_id -> parsed bracket dict
-    _load_lock: asyncio.Lock = asyncio.Lock()
+    # Created lazily so it binds to the RUNNING event loop, matching
+    # `RioGameDataProvider._lock` and `PostGame._lock`. Built eagerly at class
+    # definition this bound to whichever loop first contended for it — harmless
+    # in the app (one long-lived loop) and latent in tests only because
+    # `asyncio.Lock.acquire` returns early when uncontended and never asks for
+    # the loop. The first test to actually contend would have got "attached to
+    # a different loop" from a line nowhere near the cause.
+    _load_lock: asyncio.Lock | None = None
     _restore_task: asyncio.Task | None = None
     _prefetch_task: asyncio.Task | None = None
     # Cap concurrency against the unauthenticated start.gg endpoint —
@@ -231,9 +238,15 @@ class StartGGProvider:
     # ── public methods ─────────────────────────────────────────
 
     @classmethod
+    def _lock(cls) -> asyncio.Lock:
+        if cls._load_lock is None:
+            cls._load_lock = asyncio.Lock()
+        return cls._load_lock
+
+    @classmethod
     async def LoadEvent(cls, url: str) -> dict:
         """Load tournament + event data from a start.gg URL and write to State."""
-        async with cls._load_lock:
+        async with cls._lock():
             return await cls._load_event_impl(url)
 
     @classmethod
