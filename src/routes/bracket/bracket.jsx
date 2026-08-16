@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Stack, Text, Title, Loader } from '../../components/ui/primitives';
-import { Panel } from '../../components/ui/panel';
+import { Stack, Text, Loader } from '../../components/ui/primitives';
 import { Input } from '../../components/ui/input';
+import { ScrollArea } from '../../components/ui/scroll-area';
 import { Button } from '../../components/ui/button';
 import { SimpleSelect } from '../../components/ui/simple-select';
 import { Badge } from '../../components/ui/badge';
@@ -151,15 +151,27 @@ export default function Bracket() {
         : [];
 
     return (
-        <Stack gap="md">
-            <Title order={3}>Bracket</Title>
-
-            {/* Phase / Pool Selectors + Fetch Sets */}
+        /*
+         * THE SETS OF THE LOADED EVENT — a peer of the entrants list, in the
+         * Competition page's one right-hand column (../competition/competition).
+         *
+         * It was the "Bracket" half of a segmented control that split one tab in
+         * two, so a producer chose between the event's FACTS and the event's
+         * SETS. Both are views of the same loaded event; the form belongs beside
+         * either. Its own `Title` and its "no tournament loaded" empty state are
+         * gone with the split — the page says that once, for both lists.
+         *
+         * NOTE the phase select here is NOT the on-air bracket phase. This one is
+         * `useBracketStore.selectedPhase`, browser-local, "which sets am I
+         * browsing"; the overlay's is `bracket.*` in State via `useBracketDesk`
+         * (routes/production/bracket.jsx). Same word, two questions.
+         */
+        <Stack gap="sm" className="min-h-0 flex-1">
+            {/* Phase / Pool selectors — this view's own toolbar, above its table */}
             {tournament && phases.length > 0 && (
-                <Panel title="Phase & Pool">
-                    <div className="flex flex-wrap items-end gap-3 p-4">
-                        <div className="flex min-w-[200px] flex-col gap-1">
-                            <Label className="field-label">Phase</Label>
+                <div className="flex flex-wrap items-end gap-3">
+                    <div className="flex min-w-[200px] flex-col gap-1">
+                        <Label className="field-label">Phase</Label>
                             <SimpleSelect
                                 placeholder="Select phase"
                                 data={phaseOptions}
@@ -217,42 +229,35 @@ export default function Bracket() {
                             />
                             Include completed
                         </Label>
+                    <div className="ml-auto flex items-center gap-2">
+                        {bs.lastFetchedAt && (
+                            <Text size="xs" dimmed>Updated {formatRelative(bs.lastFetchedAt)}</Text>
+                        )}
+                        <Button size="xs" variant="secondary" onClick={() => handleFetchSets()} disabled={setsFetching}>
+                            {setsFetching && <Loader size={10} />}
+                            Refresh
+                        </Button>
                     </div>
-                </Panel>
+                </div>
             )}
 
             {/* Loading state when fetching sets */}
             {setsFetching && allSets.length === 0 && (
-                <Panel glow={false} className="p-8">
-                    <div className="flex items-center justify-center gap-2">
-                        <Loader size={18} />
-                        <Text size="sm" dimmed>Loading sets…</Text>
-                    </div>
-                </Panel>
+                <div className="flex items-center justify-center gap-2 py-8">
+                    <Loader size={18} />
+                    <Text size="sm" dimmed>Loading sets…</Text>
+                </div>
             )}
 
             {/* Sets Table */}
             {allSets.length > 0 && (
-                <Panel
-                    title={`Sets ${searching ? `(${filteredSets.length} of ${allSets.length})` : `(${allSets.length})`}`}
-                    actions={
-                        <>
-                            {bs.lastFetchedAt && (
-                                <Text size="xs" dimmed>Updated {formatRelative(bs.lastFetchedAt)}</Text>
-                            )}
-                            <Button size="xs" variant="secondary" onClick={() => handleFetchSets()} disabled={setsFetching}>
-                                {setsFetching && <Loader size={10} />}
-                                Refresh
-                            </Button>
-                        </>
-                    }
-                >
-                    <Stack gap="sm" className="p-4">
-                        <Input
-                            placeholder="Search players"
-                            value={playerSearch}
-                            onChange={e => setPlayerSearch(e.currentTarget.value)}
-                        />
+                <Stack gap="sm" className="min-h-0 flex-1">
+                    <Input
+                        placeholder="Search players"
+                        value={playerSearch}
+                        onChange={e => setPlayerSearch(e.currentTarget.value)}
+                    />
+                    <ScrollArea className="min-h-0 flex-1">
                         <Table>
                             <TableHeader>
                                 <TableRow>
@@ -312,35 +317,22 @@ export default function Bracket() {
                                 ))}
                             </TableBody>
                         </Table>
-                        {searching && filteredSets.length === 0 && (
-                            <Text size="xs" dimmed ta="center">No sets match "{playerSearch}".</Text>
-                        )}
-                    </Stack>
-                </Panel>
+                    </ScrollArea>
+                    {searching && filteredSets.length === 0 && (
+                        <Text size="xs" dimmed ta="center">No sets match "{playerSearch}".</Text>
+                    )}
+                </Stack>
             )}
 
-            {/* Empty state when no tournament loaded */}
-            {!tournament && !loading && (
-                <Panel glow={false} className="p-8">
-                    <div className="flex flex-col items-center gap-2">
-                        <Text size="sm" dimmed>
-                            No tournament loaded. Paste a start.gg URL above to get started.
-                        </Text>
-                    </div>
-                </Panel>
-            )}
-
-            {/* Empty state when tournament loaded but no sets for selected phase */}
+            {/* The "no tournament loaded" state belongs to the PAGE now — it is
+                the same sentence for both lists, and printing it here as well
+                would say it twice on one screen. */}
             {tournament && selectedPhase && allSets.length === 0 && !loading && !setsFetching && (
-                <Panel glow={false} className="p-8">
-                    <div className="flex flex-col items-center gap-2">
-                        <Text size="sm" dimmed>
-                            No sets found for this phase. Try enabling "Include completed" or selecting a different phase.
-                        </Text>
-                    </div>
-                </Panel>
+                <Text size="sm" dimmed className="py-8 text-center">
+                    No sets found for this phase. Try enabling "Include completed" or selecting a
+                    different phase.
+                </Text>
             )}
-
         </Stack>
     );
 }

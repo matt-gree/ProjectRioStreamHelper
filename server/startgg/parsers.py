@@ -86,9 +86,27 @@ def parse_set(raw: dict) -> dict:
     p2 = slots[1] if len(slots) > 1 else {}
 
     def entrant_name(slot):
+        """The entrant's TAG, without the sponsor prefix.
+
+        start.gg's ``entrant.name`` is ``"AAA | Alice"`` for anyone carrying a
+        prefix, and the prefix is a sponsor's initials: it identifies nobody,
+        while costing a third of every name column that prints it. The cached
+        bracket path has always answered with the bare gamerTag
+        (``bracket_cache.sets_from_cache``), so the same set read from the API
+        and read from the cache printed two different names for one player.
+
+        A multi-participant entrant keeps its own name — there is no single
+        gamerTag to answer with — and so does one with no participant detail,
+        which is what a preview set from an unseeded phase looks like.
+        """
         e = slot.get("entrant")
         if not e:
             return ""
+        parts = e.get("participants") or []
+        if len(parts) == 1:
+            tag = (parts[0].get("player") or {}).get("gamerTag")
+            if tag:
+                return tag
         return e.get("name", "")
 
     def entrant_seed(slot):

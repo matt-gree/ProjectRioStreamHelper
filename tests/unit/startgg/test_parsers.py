@@ -173,6 +173,39 @@ def test_parse_set_fallback_synthesizes_single_player_from_entrant_name():
     assert result["entrants"][0] == [{"gamerTag": "Alice", "prefix": "", "playerId": None}]
 
 
+def test_parse_set_name_drops_the_sponsor_prefix():
+    """start.gg's entrant name is "AAA | Alice"; every set list prints the tag.
+
+    The cached-bracket path (bracket_cache.sets_from_cache) already answered
+    with the bare gamerTag, so the same set read two ways used to print two
+    different names.
+    """
+    raw = _raw_set()
+    raw["slots"][0]["entrant"]["name"] = "AAA | Alice"
+    result = parse_set(raw)
+    assert result["p1_name"] == "Alice"
+
+
+def test_parse_set_name_keeps_a_team_entrants_own_name():
+    """Two participants have no single gamerTag to answer with."""
+    raw = _raw_set()
+    e = raw["slots"][0]["entrant"]
+    e["name"] = "The Bench"
+    e["participants"] = [
+        {"player": {"id": 101, "gamerTag": "Alice", "prefix": ""}},
+        {"player": {"id": 103, "gamerTag": "Carol", "prefix": ""}},
+    ]
+    assert parse_set(raw)["p1_name"] == "The Bench"
+
+
+def test_parse_set_name_falls_back_when_participant_detail_is_absent():
+    """A preview set from an unseeded phase carries only the entrant name."""
+    raw = _raw_set()
+    raw["slots"][0]["entrant"]["participants"] = []
+    raw["slots"][0]["entrant"]["name"] = "AAA | Alice"
+    assert parse_set(raw)["p1_name"] == "AAA | Alice"
+
+
 def test_parse_set_empty_slots_produce_empty_names():
     raw = _raw_set(slots=[])
     result = parse_set(raw)

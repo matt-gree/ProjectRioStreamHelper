@@ -55,8 +55,13 @@ describe('OrganizerRows', () => {
      * An ABSENT authored list is legacy hand-typed text the projector
      * deliberately doesn't own (server/organizers.py). The producer gets one
      * warning that picking anyone takes ownership of all three.
+     *
+     * Afterwards there is NO note at all. A standing line explaining that socials
+     * come from the Address Book used to take its place — true of every row, so
+     * never news, under three pickers that demonstrate it. This warning survives
+     * because it is conditional and it warns about a loss.
      */
-    it('warns while there is legacy text to lose, and not afterwards', () => {
+    it('warns while there is legacy text to lose, and says nothing afterwards', () => {
         useStateStore.setState({ tournamentInfo: { organizer_0_name: 'Typed By Hand' } });
         const { rerender } = ui();
         expect(screen.getByText(/Picking anyone here replaces all three/)).toBeInTheDocument();
@@ -66,7 +71,15 @@ describe('OrganizerRows', () => {
         });
         rerender(<OrganizerRows />);
         expect(screen.queryByText(/Picking anyone here replaces all three/)).not.toBeInTheDocument();
-        expect(screen.getByText(/come from the Address Book/)).toBeInTheDocument();
+        expect(screen.queryByText(/Address Book/)).not.toBeInTheDocument();
+    });
+
+    // An empty slot draws no meta at all — a column of em dashes beside three
+    // empty pickers is punctuation restating that the rows are empty.
+    it('draws no placeholder meta beside an empty slot', () => {
+        useStateStore.setState({ tournamentInfo: {} });
+        ui();
+        expect(screen.queryByText('—')).not.toBeInTheDocument();
     });
 
     /*

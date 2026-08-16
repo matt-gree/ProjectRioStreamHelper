@@ -3,7 +3,6 @@ import { Stack, Text, Loader } from '../../components/ui/primitives';
 import { Panel } from '../../components/ui/panel';
 import { TextField } from '../../components/ui/text-field';
 import { Button } from '../../components/ui/button';
-import { Badge } from '../../components/ui/badge';
 import { Alert, AlertTitle, AlertDescription } from '../../components/ui/alert';
 import { notifications } from '../../lib/notify';
 import { RotateCw } from 'lucide-react';
@@ -210,13 +209,25 @@ export default function TournamentLoader() {
 
     return (
         <Stack gap="sm">
+            {/*
+             * ONE STATEMENT OF WHAT THIS IS. The card carried four: a panel
+             * title, a "Tournament URL" field label, the URL placeholder, and a
+             * "Paste a start.gg event URL" line underneath — for a single input
+             * and a button. The placeholder is the one that shows the SHAPE of
+             * what goes in, so it stays; the title says which act this is; the
+             * other two said neither and cost the card two rows of its height.
+             */}
+            {/* The LEFT COLUMN owns the width (../competition) — this used to
+                span the page, drawing an 1822px box for a ~70-character URL and
+                making the page read as two unrelated column widths, the wider
+                one belonging to the smaller thing. */}
             <Panel title="Load Tournament">
-                <Stack gap="xs" className="p-4">
-                    <div className="flex items-end gap-2">
+                <Stack gap="xs" className="p-3">
+                    <div className="flex items-center gap-2">
                         <TextField
-                            label="Tournament URL"
                             placeholder="https://start.gg/tournament/.../event/..."
-                            className="flex-1"
+                            aria-label="Tournament URL"
+                            className="min-w-0 flex-1"
                             value={url}
                             onChange={e => { update({ url: e.currentTarget.value }); setUrlDirty(true); }}
                             onKeyDown={e => e.key === 'Enter' && handleLoadEvent()}
@@ -246,11 +257,8 @@ export default function TournamentLoader() {
                             </Button>
                         )}
                     </div>
-                    <Text size="xs" dimmed>
-                        Paste a start.gg event URL
-                    </Text>
                     {statusText && (
-                        <div className="mt-1 flex items-center gap-2">
+                        <div className="flex items-center gap-2">
                             <Loader size={12} />
                             <Text size="xs" dimmed>{statusText}</Text>
                         </div>
@@ -265,23 +273,20 @@ export default function TournamentLoader() {
                 </Alert>
             )}
 
-            {tournament && (
-                <Panel glow={false} className="p-3">
-                    <div className="flex flex-wrap items-center gap-6">
-                        <Text fw={600}>{tournament.tournamentName}</Text>
-                        {tournament.eventName && (
-                            <Badge variant="secondary">{tournament.eventName}</Badge>
-                        )}
-                        <Text size="sm" dimmed>{tournament.numEntrants} entrants</Text>
-                        {tournament.address && (
-                            <Text size="sm" dimmed>{tournament.address}</Text>
-                        )}
-                        {tournament.isOnline && (
-                            <Badge className="bg-[#22b8cf] text-black">Online</Badge>
-                        )}
-                    </div>
-                </Panel>
-            )}
+            {/*
+             * NO SUMMARY BAND. A loaded event used to print a full-width strip
+             * reading "Slice 2026 · Stars Off · 30 entrants · 29200 Dequindre
+             * Rd…" directly above the Competition Info form — whose first four
+             * fields are the competition name, the event name, the entrant count
+             * and the location, filled from the same load. It was the form's own
+             * contents, restated a centimetre higher, in a band as wide as the
+             * page and taller than any row it was summarising.
+             *
+             * The load's own feedback is the toast, and the evidence that it
+             * worked is the form filling in. `isOnline` was the one fact not in
+             * the form, and a whole band cannot be justified by a badge nobody
+             * had asked for.
+             */}
         </Stack>
     );
 }

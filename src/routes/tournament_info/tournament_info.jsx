@@ -1,94 +1,15 @@
-import { memo, useCallback, useState, useEffect, useMemo } from 'react';
+import { memo, useCallback, useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import { X } from 'lucide-react';
-import { Stack, Text, Title, Divider } from '../../components/ui/primitives';
+import { Link2, X } from 'lucide-react';
+import { Stack, Text } from '../../components/ui/primitives';
 import { Panel } from '../../components/ui/panel';
 import { TextField } from '../../components/ui/text-field';
 import { Button } from '../../components/ui/button';
-import { Badge } from '../../components/ui/badge';
-import { ScrollArea } from '../../components/ui/scroll-area';
-import { SimplePagination } from '../../components/ui/simple-pagination';
-import {
-    Table, TableHeader, TableBody, TableHead, TableRow, TableCell,
-} from '../../components/ui/table';
-import { Loader } from '../../components/ui/primitives';
-import { cn } from '../../lib/utils';
 import { notifications } from '../../lib/notify';
-import { useStateStore, useBracketStore } from '../../context/store';
-import { useParticipantsStore } from '../../context/participants';
+import { useStateStore } from '../../context/store';
 import { setOrganizers, MAX_ORGANIZERS } from '../../context/organizers';
+import { SimpleTooltip } from '../../components/ui/simple-tooltip';
 import ParticipantPicker from '../../components/ParticipantPicker';
-import useTournament from '../../hooks/useTournament';
-
-// Flatten a start.gg entrant to its primary parsed player (the import unit).
-const playerOf = (entrant) => entrant?.players?.[0] || {};
-
-/*
- * One entrant row in the import/mapping surface (Phase 2). Shows the parsed
- * start.gg columns plus a registry link-state badge and an inline Rio-ID field.
- * Typing a Rio ID (or "+ Add") routes through the start.gg-aware upsert so the
- * row de-dupes by start.gg userId — never a stray manual duplicate.
- */
-function EntrantRow({ entrant, columns, getPlayerField, matchedRow, onAssignRio, onImport }) {
-    const row = matchedRow(entrant);
-    const mappedRio = row?.identities?.rioName || '';
-    const [draft, setDraft] = useState(mappedRio);
-    const [busy, setBusy] = useState(false);
-
-    // Re-seed when the backing row changes (import, external edit).
-    useEffect(() => { setDraft(mappedRio); }, [mappedRio]);
-
-    const state = !row ? 'unlinked' : (mappedRio ? 'mapped' : 'imported');
-    const badge = {
-        unlinked: { label: 'Not in book', cls: 'bg-muted text-muted-foreground' },
-        imported: { label: 'Imported', cls: 'bg-[#3b82f6]/15 text-[#60a5fa]' },
-        mapped: { label: `Rio: ${mappedRio}`, cls: 'bg-[#22c55e]/15 text-[#4ade80]' },
-    }[state];
-
-    const commitRio = useCallback(async () => {
-        if (draft === mappedRio) return;
-        setBusy(true);
-        try { await onAssignRio(entrant, draft.trim()); }
-        finally { setBusy(false); }
-    }, [draft, mappedRio, entrant, onAssignRio]);
-
-    const importRow = useCallback(async () => {
-        setBusy(true);
-        try { await onImport(entrant); }
-        finally { setBusy(false); }
-    }, [entrant, onImport]);
-
-    return (
-        <TableRow>
-            {columns.map(col => (
-                <TableCell key={col.field}>
-                    <Text size="xs" truncate>{getPlayerField(entrant, col.field) || '—'}</Text>
-                </TableCell>
-            ))}
-            <TableCell>
-                <Badge className={cn('whitespace-nowrap', badge.cls)}>{badge.label}</Badge>
-            </TableCell>
-            <TableCell>
-                <div className="flex items-center gap-1">
-                    <TextField
-                        placeholder="Rio ID"
-                        value={draft}
-                        onChange={e => setDraft(e.currentTarget.value)}
-                        onBlur={commitRio}
-                        onKeyDown={e => e.key === 'Enter' && e.currentTarget.blur()}
-                        inputClassName="w-[130px]"
-                        disabled={busy}
-                    />
-                    {state === 'unlinked' && (
-                        <Button variant="outline" size="xs" onClick={importRow} disabled={busy}>
-                            + Add
-                        </Button>
-                    )}
-                </div>
-            </TableCell>
-        </TableRow>
-    );
-}
 
 /*
  * ORGANIZERS ARE ADDRESS-BOOK REFERENCES, not nine text fields.
@@ -149,41 +70,63 @@ export const OrganizerRows = memo(function OrganizerRows() {
 
     return (
         <Stack gap="xs">
-            {slots.map((slot, i) => (
-                <div className="grid grid-cols-12 items-center gap-2" key={i}>
-                    <div className="col-span-7">
-                        <ParticipantPicker
-                            value={slot.name}
-                            selectedId={org.authored?.[i]?.participantId ?? null}
-                            onResolve={(row) => assign(i, row?.id ?? null)}
-                            placeholder={`Organizer ${i + 1}`}
-                        />
-                    </div>
-                    {/* Read-only: these come from the picked row, so the edit
-                        belongs in Address Book. Showing them anyway is what makes
-                        it obvious WHICH record got picked. */}
-                    <div className="col-span-4 min-w-0">
-                        <Text size="xs" dimmed truncate>
-                            {[slot.twitter, slot.pronoun].filter(Boolean).join(' · ') || '—'}
-                        </Text>
-                    </div>
-                    <div className="col-span-1 flex justify-end">
-                        {(slot.name || org.authored?.[i]?.participantId) && (
-                            <Button
-                                size="xs" variant="ghost" aria-label={`Clear organizer ${i + 1}`}
-                                onClick={() => assign(i, null)}
-                            >
-                                <X size={13} />
-                            </Button>
+            {slots.map((slot, i) => {
+                const meta = [slot.twitter, slot.pronoun].filter(Boolean).join(' · ');
+                const filled = slot.name || org.authored?.[i]?.participantId;
+                return (
+                    <div className="flex items-center gap-2" key={i}>
+                        <div className="min-w-0 flex-1">
+                            <ParticipantPicker
+                                value={slot.name}
+                                selectedId={org.authored?.[i]?.participantId ?? null}
+                                onResolve={(row) => assign(i, row?.id ?? null)}
+                                placeholder={`Organizer ${i + 1}`}
+                            />
+                        </div>
+                        {/* Read-only: these come from the picked row, so the edit
+                            belongs in Address Book. Showing them anyway is what
+                            makes it obvious WHICH record got picked — which is
+                            also why an EMPTY slot draws nothing here rather than
+                            an em dash. Three "—" down the side of three empty
+                            pickers is a column of punctuation saying only that
+                            the rows above it are empty, which they already say. */}
+                        {meta && (
+                            <Text size="xs" dimmed truncate className="min-w-0 max-w-[14rem]">{meta}</Text>
                         )}
+                        {/* Holds its place, so the pickers keep one right edge
+                            instead of stepping in and out as slots are filled. */}
+                        <div className="w-7 shrink-0">
+                            {filled && (
+                                <Button
+                                    size="xs" variant="ghost" aria-label={`Clear organizer ${i + 1}`}
+                                    onClick={() => assign(i, null)}
+                                >
+                                    <X size={13} />
+                                </Button>
+                            )}
+                        </div>
                     </div>
-                </div>
-            ))}
-            <Text size="xs" dimmed>
-                {legacy
-                    ? 'Typed by hand on an older version. Picking anyone here replaces all three with Address Book entries.'
-                    : 'Socials and pronouns come from the Address Book, so an edit there updates them everywhere.'}
-            </Text>
+                );
+            })}
+            {/*
+             * The legacy warning ONLY. The standing note underneath ("socials and
+             * pronouns come from the Address Book…") explained the mechanism to a
+             * producer who had asked nothing: it was true of every row, so it was
+             * never news, and it sat under three pickers whose whole visible
+             * behaviour already is "pick a person, their details appear beside
+             * them". A note that restates what the surface demonstrates is a line
+             * every producer reads once and scrolls past forever.
+             *
+             * This one survives because it is CONDITIONAL and it warns about a
+             * loss: hand-typed organizers from an older version are erased by the
+             * first pick, and nothing else on the panel says so.
+             */}
+            {legacy && (
+                <Text size="xs" dimmed>
+                    Typed by hand on an older version. Picking anyone here replaces all three
+                    with Address Book entries.
+                </Text>
+            )}
         </Stack>
     );
 });
@@ -199,24 +142,37 @@ export const OrganizerRows = memo(function OrganizerRows() {
  * silently change under a producer who thought they owned it, or stubbornly
  * refuse to update because of an edit they'd forgotten making.
  *
- * The badge states which case a field is in, and it rides the label rather than
- * the input — it describes where the value comes from, not what it is.
+ * The marker states which case a field is in.
  */
-const AutoLabel = memo(function AutoLabel({ children, field }) {
-    const tracking = useStateStore(s => {
+function useTrackingStartGG(field) {
+    return useStateStore(s => {
         const info = s?.tournamentInfo ?? {};
         const auto = info._auto ?? {};
         return field in auto && (info[field] ?? '') === (auto[field] ?? '');
     });
+}
+
+/*
+ * THE MARKER RIDES THE INPUT, NOT THE LABEL.
+ *
+ * It was "from start.gg" appended to the label text — eleven characters of
+ * suffix on labels as short as "Entrants", inside a 91px column. The label
+ * wrapped onto a second line and collided with the one beside it: the panel
+ * read "ENTRANTS from PRIZE / start.gg". A label has to fit its field's width,
+ * and this one grew with a value that had nothing to do with the field's size.
+ *
+ * As an adornment inside the input it costs the label nothing at any width, it
+ * lands in the same place on all six auto-filled fields, and it sits on the
+ * thing it actually describes — where the VALUE came from, not what the field
+ * is. The tooltip carries the sentence the suffix used to imply.
+ */
+const AutoMark = memo(function AutoMark({ field }) {
+    const tracking = useTrackingStartGG(field);
+    if (!tracking) return null;
     return (
-        <span className="flex items-center gap-1.5">
-            {children}
-            {tracking && (
-                <Text size="xs" span dimmed className="font-normal normal-case">
-                    from start.gg
-                </Text>
-            )}
-        </span>
+        <SimpleTooltip label="Filled from start.gg — type here to take it over">
+            <Link2 size={12} className="text-muted-foreground/70" />
+        </SimpleTooltip>
     );
 });
 
@@ -237,262 +193,70 @@ export default function TournamentInfo() {
     const date         = useStateStore(s => s?.tournamentInfo?.date ?? '');
     const entrants     = useStateStore(s => s?.tournamentInfo?.entrants ?? '');
     const prize_pool   = useStateStore(s => s?.tournamentInfo?.prize_pool ?? '');
-    const bracket_link = useStateStore(s => s?.tournamentInfo?.bracket_link ?? '');
-
-    // Loading a tournament now lives in the shared TournamentLoader (Competition
-    // tab chrome). This view only needs the entrants fetch.
-    const { fetchEntrants } = useTournament();
-
-    // Entrants list — persisted in the bracket store so switching tabs
-    // doesn't trigger a refetch.
-    const entrantsList = useBracketStore(s => s.entrants);
-    const entrantsPage = useBracketStore(s => s.entrantsPage);
-    const entrantsTotalPages = useBracketStore(s => s.entrantsTotalPages);
-    const entrantsLoadedFor = useBracketStore(s => s.entrantsLoadedFor);
-    const updateBracket = useBracketStore(s => s.update);
-    const [entrantsLoading, setEntrantsLoading] = useState(false);
-
-    // Participant registry — the import/mapping target (Phase 2).
-    const { participants, loadParticipants, updateParticipant, importStartGG } =
-        useParticipantsStore(useShallow(s => ({
-            participants: s.participants,
-            loadParticipants: s.load,
-            updateParticipant: s.update,
-            importStartGG: s.importStartGG,
-        })));
-    useEffect(() => { loadParticipants(); }, [loadParticipants]);
-
-    // Link an entrant to its registry row by start.gg userId (the de-dupe key).
-    const matchedRow = useCallback((entrant) => {
-        const uid = playerOf(entrant).userId;
-        if (uid == null) return null;
-        return participants.find(p => (p.identities?.startgg?.userId === uid)) || null;
-    }, [participants]);
-
-    // Set an entrant's Rio ID: import the row if needed (upsert de-dupes), then
-    // write rioName so the Phase 1 HUD/Live/Rotator resurface fires for them.
-    const assignRio = useCallback(async (entrant, rioName) => {
-        let row = matchedRow(entrant);
-        if (!row) {
-            const res = await importStartGG([playerOf(entrant)]);
-            row = res?.rows?.[0];
-        }
-        if (row) await updateParticipant(row.id, { identities: { rioName } });
-    }, [matchedRow, importStartGG, updateParticipant]);
-
-    const importEntrant = useCallback(async (entrant) => {
-        await importStartGG([playerOf(entrant)]);
-    }, [importStartGG]);
-
-    const [importingAll, setImportingAll] = useState(false);
-    const importAllEntrants = useCallback(async () => {
-        const players = entrantsList.map(playerOf).filter(p => p.gamerTag || p.userId != null);
-        if (!players.length) return;
-        setImportingAll(true);
-        try {
-            const res = await importStartGG(players);
-            notifications.show({ message: `Imported ${res?.imported ?? players.length} entrant(s) to Address Book`, color: 'green' });
-        } finally {
-            setImportingAll(false);
-        }
-    }, [entrantsList, importStartGG]);
-
-    const handleFetchEntrants = useCallback(async (page = 1) => {
-        setEntrantsLoading(true);
-        const result = await fetchEntrants(page);
-        if (result) {
-            updateBracket({
-                entrants: result.entrants,
-                entrantsPage: result.pageInfo.page,
-                entrantsTotalPages: result.pageInfo.totalPages,
-                entrantsLoadedFor: bracket_link,
-            });
-        }
-        setEntrantsLoading(false);
-    }, [fetchEntrants, updateBracket, bracket_link]);
-
-    // Entrants sorting
-    const [sortField, setSortField] = useState('seed');
-    const [sortDir, setSortDir] = useState('asc');
-
-    const ENTRANT_COLUMNS = [
-        { field: 'seed', label: 'Seed' },
-        { field: 'tag', label: 'Tag' },
-        { field: 'prefix', label: 'Prefix' },
-        { field: 'full_name', label: 'Name' },
-        { field: 'pronoun', label: 'Pronouns' },
-        { field: 'country', label: 'Country' },
-        { field: 'state', label: 'State' },
-    ];
-
-    const handleSort = useCallback((field) => {
-        setSortDir(prev => sortField === field ? (prev === 'asc' ? 'desc' : 'asc') : 'asc');
-        setSortField(field);
-    }, [sortField]);
-
-    const getPlayerField = useCallback((entrant, field) => {
-        const p = entrant.players?.[0] || {};
-        if (field === 'seed') return entrant.seed;
-        if (field === 'tag') return p.gamerTag || entrant.name || '';
-        if (field === 'prefix') return p.prefix || '';
-        return p[field] || '';
-    }, []);
-
-    const sortedEntrants = useMemo(() => {
-        if (!entrantsList.length) return entrantsList;
-        const list = [...entrantsList];
-        const dir = sortDir === 'asc' ? 1 : -1;
-        list.sort((a, b) => {
-            const valA = getPlayerField(a, sortField);
-            const valB = getPlayerField(b, sortField);
-            if (sortField === 'seed') {
-                return dir * ((valA ?? 9999) - (valB ?? 9999));
-            }
-            return dir * String(valA).toLowerCase().localeCompare(String(valB).toLowerCase());
-        });
-        return list;
-    }, [entrantsList, sortField, sortDir, getPlayerField]);
-
-    // Auto-fetch entrants when bracket_link is set and we haven't already
-    // loaded entrants for that exact link.
-    useEffect(() => {
-        if (bracket_link && entrantsLoadedFor !== bracket_link) {
-            handleFetchEntrants(1);
-        }
-        if (!bracket_link && entrantsLoadedFor) {
-            updateBracket({ entrants: [], entrantsPage: 1, entrantsTotalPages: 0, entrantsLoadedFor: null });
-        }
-    }, [bracket_link]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const set = useCallback((field, value) => {
         setItem(`tournamentInfo.${field}`, value);
     }, [setItem]);
 
     return (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-12">
-            {/* Left column — Tournament form */}
-            <div className={bracket_link ? 'md:col-span-4' : 'md:col-span-12'}>
-                <Stack gap="md">
-                    <Title order={3}>Competition Info</Title>
-                    <Panel title="Details">
-                        <Stack gap="sm" className="p-4">
-                            <div className="grid grid-cols-12 gap-2">
-                                <div className="col-span-8">
-                                    <TextField label={<AutoLabel field="name">Competition Name</AutoLabel>} placeholder="Enter competition name" value={name} onChange={e => set('name', e.currentTarget.value)} />
-                                </div>
-                                <div className="col-span-4">
-                                    <TextField label="Abbreviation" placeholder="Short name" value={abbreviation} onChange={e => set('abbreviation', e.currentTarget.value)} />
-                                </div>
-                            </div>
+        /*
+         * JUST THE FORM. It used to be a 12-column grid holding the entrants
+         * table as its right-hand column, which made the FORM's width a function
+         * of whether a tournament had been loaded: `col-span-4` with entrants,
+         * `col-span-12` without, so the same nine fields were 437px or 1326px
+         * wide and neither number was chosen for the form. Empty, it put "Top 8"
+         * in a 1326px box.
+         *
+         * The page (../competition) owns the layout now and gives this a fixed
+         * width; the entrants table is a peer of the bracket's sets table in the
+         * one right-hand column, which is what they always were.
+         */
+        <Panel title="Competition Info">
+            <Stack gap="sm" className="p-4">
+                {/* One grid, and each field spans what its VALUE needs —
+                    a date is ten characters and had a 437px box, an
+                    entrant count is three and had the same. Short fields
+                    share a row instead of each taking one. */}
+                <div className="grid grid-cols-12 items-start gap-x-3 gap-y-2">
+                    <div className="col-span-12 sm:col-span-8">
+                        <TextField label="Competition Name" rightSection={<AutoMark field="name" />} placeholder="Enter competition name" value={name} onChange={e => set('name', e.currentTarget.value)} />
+                    </div>
+                    <div className="col-span-12 sm:col-span-4">
+                        <TextField label="Abbreviation" placeholder="Short name" value={abbreviation} onChange={e => set('abbreviation', e.currentTarget.value)} />
+                    </div>
 
-                            <TextField label={<AutoLabel field="event_name">Event Name</AutoLabel>} placeholder="e.g. Stars Off (start.gg event under the competition)" value={event_name} onChange={e => set('event_name', e.currentTarget.value)} />
+                    <div className="col-span-12 sm:col-span-8">
+                        <TextField label="Event Name" rightSection={<AutoMark field="event_name" />} placeholder="e.g. Stars Off" value={event_name} onChange={e => set('event_name', e.currentTarget.value)} />
+                    </div>
+                    {/* The phase is filled by every SET load, not by the
+                        event load — the one field here a fixture can
+                        change mid-broadcast. */}
+                    <div className="col-span-12 sm:col-span-4">
+                        <TextField label="Phase" rightSection={<AutoMark field="phase" />} placeholder="e.g. Top 8" value={phase} onChange={e => set('phase', e.currentTarget.value)} />
+                    </div>
 
-                            {/* The phase is filled by every SET load, not by the
-                                event load — the one field here a fixture can
-                                change mid-broadcast. */}
-                            <TextField label={<AutoLabel field="phase">Competition Phase</AutoLabel>} placeholder="e.g. Season 9 Week 2, Top 8" value={phase} onChange={e => set('phase', e.currentTarget.value)} />
-
-                            <div className="grid grid-cols-12 gap-2">
-                                <div className="col-span-8">
-                                    <TextField label={<AutoLabel field="location">Location</AutoLabel>} placeholder="City, State" value={location} onChange={e => set('location', e.currentTarget.value)} />
-                                </div>
-                                <div className="col-span-4">
-                                    <TextField label={<AutoLabel field="date">Date</AutoLabel>} placeholder="YYYY-MM-DD" value={date} onChange={e => set('date', e.currentTarget.value)} />
-                                </div>
-                            </div>
-
-                            <Divider />
-
-                            <div className="grid grid-cols-12 gap-2">
-                                <div className="col-span-4">
-                                    <TextField label={<AutoLabel field="entrants">Entrants</AutoLabel>} placeholder="0" value={String(entrants)} onChange={e => set('entrants', e.currentTarget.value)} />
-                                </div>
-                                <div className="col-span-8">
-                                    <TextField label="Prize Pool" placeholder="$0" value={prize_pool} onChange={e => set('prize_pool', e.currentTarget.value)} />
-                                </div>
-                            </div>
-
-                            <Divider label="Organizers" />
-
-                            <OrganizerRows />
-                        </Stack>
-                    </Panel>
-                </Stack>
-            </div>
-
-            {/* Right column — Entrants list */}
-            {bracket_link && (
-                <div className="md:col-span-8">
-                    <Panel
-                        title="Entrants"
-                        actions={
-                            entrantsList.length > 0 ? (
-                                <Button size="xs" variant="outline" onClick={importAllEntrants} disabled={importingAll}>
-                                    {importingAll && <Loader size={12} />}
-                                    Import all to Address Book
-                                </Button>
-                            ) : null
-                        }
-                    >
-                        <Stack gap="sm" className="p-4">
-                            <ScrollArea style={{ height: 'calc(100vh - 200px)' }}>
-                                {entrantsList.length > 0 ? (
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                {ENTRANT_COLUMNS.map(col => (
-                                                    <TableHead key={col.field} className="whitespace-nowrap">
-                                                        <button type="button" onClick={() => handleSort(col.field)}>
-                                                            <span className="flex flex-nowrap items-center gap-1">
-                                                                <Text size="xs" fw={600} span>{col.label}</Text>
-                                                                <Text size="xs" dimmed span>
-                                                                    {sortField === col.field ? (sortDir === 'asc' ? '▲' : '▼') : '▼'}
-                                                                </Text>
-                                                            </span>
-                                                        </button>
-                                                    </TableHead>
-                                                ))}
-                                                <TableHead className="whitespace-nowrap">
-                                                    <Text size="xs" fw={600} span>Registry</Text>
-                                                </TableHead>
-                                                <TableHead className="whitespace-nowrap">
-                                                    <Text size="xs" fw={600} span>Rio ID</Text>
-                                                </TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {sortedEntrants.map(e => (
-                                                <EntrantRow
-                                                    key={e.id}
-                                                    entrant={e}
-                                                    columns={ENTRANT_COLUMNS}
-                                                    getPlayerField={getPlayerField}
-                                                    matchedRow={matchedRow}
-                                                    onAssignRio={assignRio}
-                                                    onImport={importEntrant}
-                                                />
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                ) : (
-                                    <Text size="sm" dimmed>
-                                        {entrantsLoading ? 'Loading...' : 'No entrants found.'}
-                                    </Text>
-                                )}
-                            </ScrollArea>
-                            {entrantsTotalPages > 1 && (
-                                <div className="flex justify-center">
-                                    <SimplePagination
-                                        total={entrantsTotalPages}
-                                        value={entrantsPage}
-                                        onChange={(page) => handleFetchEntrants(page)}
-                                    />
-                                </div>
-                            )}
-                        </Stack>
-                    </Panel>
+                    <div className="col-span-12 sm:col-span-5">
+                        <TextField label="Location" rightSection={<AutoMark field="location" />} placeholder="City, State" value={location} onChange={e => set('location', e.currentTarget.value)} />
+                    </div>
+                    <div className="col-span-4 sm:col-span-3">
+                        <TextField label="Date" rightSection={<AutoMark field="date" />} placeholder="YYYY-MM-DD" value={date} onChange={e => set('date', e.currentTarget.value)} />
+                    </div>
+                    <div className="col-span-4 sm:col-span-2">
+                        <TextField label="Entrants" rightSection={<AutoMark field="entrants" />} placeholder="0" value={String(entrants)} onChange={e => set('entrants', e.currentTarget.value)} />
+                    </div>
+                    <div className="col-span-4 sm:col-span-2">
+                        <TextField label="Prize" placeholder="$0" value={prize_pool} onChange={e => set('prize_pool', e.currentTarget.value)} />
+                    </div>
                 </div>
-            )}
-        </div>
+
+                {/* An eyebrow, not a captioned rule. The centred
+                    `Divider label` drew two hairlines across the panel to
+                    introduce three rows, which is more chrome than the
+                    section it announces — and the unlabelled Divider
+                    above it split the fields for no stated reason at all. */}
+                <Text size="xs" className="label-display pt-1 text-muted-foreground">Organizers</Text>
+                <OrganizerRows />
+            </Stack>
+        </Panel>
     );
 }
