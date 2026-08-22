@@ -9,7 +9,7 @@ import {
     CONTAINER_MEMBERS, containerIdFor, containerOfSource, containerSizeClasses,
     containerUrl, fedTargets, fitsContainer, hostOf, useContainerActions,
 } from './containers';
-import { MEMBERS } from '../../../public/layout/lib/container-members.js';
+import { MEMBERS, memberWatches } from '../../../public/layout/lib/container-members.js';
 
 /*
  * Containers are producer-built definitions, and membership lives on the
@@ -192,6 +192,27 @@ describe('members the engine can actually mount', () => {
         for (const el of CONTAINER_MEMBERS) {
             expect(!!engine[el.id].sample, `no sample occupant for "${el.id}"`).toBe(true);
         }
+    });
+
+    /*
+     * A member that reads state OUTSIDE what a container shell already listens
+     * to has to say so, or it renders once and then goes deaf — while its own
+     * dedicated source, which declares its own `shouldRender`, updates fine.
+     * That asymmetry is the whole trap: the element looks correct everywhere a
+     * developer checks it first.
+     *
+     * The shell covers its feed key, `score.N.*`, `postgame.N.*` and
+     * `tournamentInfo.*` (fed-container.js). The Upcoming Schedule reads the
+     * queue and the fixtures behind it; the Event Header reads the fixture its
+     * Phase field names. Neither is in that list.
+     */
+    it('wakes a container for the state its members read past the shell', () => {
+        expect(memberWatches('schedule.queue')).toBe(true);
+        expect(memberWatches('schedule.title')).toBe(true);
+        expect(memberWatches('match.7.phase')).toBe(true);
+        // Settings are a separate channel (shouldRenderSettings) — a state
+        // watcher matching one would only add wake-ups that never fire.
+        expect(memberWatches('overlays.global.accentColor')).toBe(false);
     });
 });
 

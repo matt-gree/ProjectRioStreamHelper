@@ -35,7 +35,7 @@
 // Requires overlay-base.js (and rio-data.js for the roster/stats members)
 // loaded first, and the host page's `three` importmap for the hit member.
 import { createLayers, resolveFeed } from '/layout/lib/container-layers.js';
-import { MEMBERS } from '/layout/lib/container-members.js';
+import { MEMBERS, memberWatches } from '/layout/lib/container-members.js';
 
 // The container id this page is: what `?container=` names, else the filename
 // stem. Exported so the shell and the console agree on one derivation.
@@ -188,8 +188,11 @@ export async function initFedContainer({
     // This container's assignment, plus any score change (stats read across a
     // scoreboard; hit-mount.update no-ops unless the contact actually changed).
     // tournamentInfo feeds the Game Summary's top match strip.
+    // …plus whatever the members themselves declare (`watch` in the registry,
+    // unioned by `memberWatches`).
     shouldRender: (key) => key.startsWith(FEED_KEY) || /^score\.\d+\./.test(key)
-      || /^postgame\.\d+\./.test(key) || key.startsWith('tournamentInfo.'),
+      || /^postgame\.\d+\./.test(key) || key.startsWith('tournamentInfo.')
+      || memberWatches(key),
     shouldRenderSettings: (key) => key.startsWith('overlays.') || key === 'project_rio.hud_enabled',
   });
 

@@ -31,6 +31,12 @@
  *   payload   (sel) => second argument to `mount.update`. Defaults to `sel`.
  *   identity  (sel) => layer key, when one member needs more than one layer.
  *             Defaults to the member id.
+ *   watch     (key) => bool. State keys this member needs that the container
+ *             shell does not already listen to (`fed-container.js` covers the
+ *             feed key, `score.N.*`, `postgame.N.*` and `tournamentInfo.*`).
+ *             Without it a member reading anything else — a queue, a fixture —
+ *             renders once and then goes deaf inside a container while its own
+ *             dedicated source updates fine.
  *
  * `OverlayBase` is a window global (overlay-base.js), not an import — the entries
  * below read it at mount time, which is always inside a real overlay page.
@@ -252,6 +258,7 @@ export const MEMBERS = {
             const { mountSchedule } = await load('schedule-mount');
             return mountSchedule({ host: hostIn(box) });
         },
+        watch: (key) => key.startsWith('schedule.') || key.startsWith('match.'),
         sample: { file: 'schedule', content: {} },
     },
     // Wraps gc-overlay, a SUBPROCESS on its own port — so unlike every other
@@ -275,6 +282,22 @@ export const MEMBERS = {
         sample: { file: 'scoreboard', content: { scoreboard: 1, team: 1 } },
     },
 };
+
+/*
+ * Does ANY member need this state key?
+ *
+ * A container shell listens to the keys a container is about — its feed, the
+ * boards, the post-game capture, the event — and a member that reads anything
+ * else (the schedule's queue, the Event Header's fixture) would render once and
+ * then go deaf inside a container while its own dedicated source updated fine.
+ * Each such member declares a `watch`, and this is their union.
+ *
+ * The union, not the active member's: a container that has not been fed yet has
+ * no active layer to ask, and a render only updates the layer that IS up — so
+ * the extra wake-ups cost one feed lookup and the alternative costs a bug.
+ */
+const WATCHERS = Object.values(MEMBERS).map((m) => m.watch).filter(Boolean);
+export const memberWatches = (key) => WATCHERS.some((w) => w(key));
 
 /*
  * This container's sample bundle: the occupant's own captured game, plus the
