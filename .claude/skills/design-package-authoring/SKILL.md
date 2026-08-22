@@ -331,6 +331,32 @@ the grammar lowercases every name, so a designer's export silently blanked the
 box score's runs column. If a slot name cannot survive `parse_grammar_id`, it
 cannot survive a design tool — rename it, don't special-case it.
 
+## An element whose look is CSS gets a CAPTURE, and it is one-way
+
+The two post-game callouts draw their layout in HTML/CSS (89 flex + 10 grid
+declarations), not from a theme file — only `callout.svg`, the backdrop, is
+themable. `scripts/dom-to-svg.js` (+ `scripts/capture-receiver.py`) captures a
+live render into editable SVG at true 1920×1080 coordinates, landing in
+`design-templates/captures/`. **Never present one as a template**: it does not
+compile back, so an edit returns as a code change. `captures/README.md` is the
+note that goes with them.
+
+Three things the capture teaches that apply to any future one:
+
+- **Capture the END state.** These overlays sit at `opacity:0` until a GSAP
+  reveal runs (5.7s across 40 tweens, and the agent pane never fires it because
+  `visibilityState` is permanently hidden). Force every timeline to `progress(1)`
+  first, or you capture a blank canvas that reads as a broken exporter.
+- **`text-transform` is CSS, and the DOM's `textContent` is untransformed.** A
+  capture that copies it verbatim lowercases every label the design sets in
+  caps, which reads as a font substitution and sends the designer to the wrong
+  place entirely.
+- **A WebGL canvas cannot be read back** — the drawing buffer is cleared after
+  compositing unless the context set `preserveDrawingBuffer`, which three.js
+  does not. `toDataURL()` returns the clear colour, so the AB Theater came back
+  a clean sky gradient that looked like a deliberate empty panel. Emit a
+  labelled footprint instead; half a frame is worse than an honest hole.
+
 ## Verifying a theme
 
 Boot an **isolated server** (run-and-verify skill: `PRSH_USER_DATA_DIR` +
