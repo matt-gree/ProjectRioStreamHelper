@@ -246,6 +246,26 @@ export const MEMBERS = {
         mount: simple('matchup-mount', 'mountMatchup'),
         sample: { file: 'matchup', content: {} },
     },
+    // Wraps gc-overlay, a SUBPROCESS on its own port — so unlike every other
+    // member there is a second thing that has to be running for it to draw. It
+    // reports that itself (the iframe stays hidden and the mount keeps asking),
+    // which is the right answer for a container too.
+    //
+    // Side-scoped like the roster and the stat card: it binds `score.{N}
+    // .player.{T}.port` at mount time, so a scope change is a new layer.
+    controller: {
+        size: [512, 256],
+        mount: async (box, ctx, sel) => {
+            const { mountController } = await load('controller-mount');
+            return mountController({
+                host: hostIn(box),
+                sb: Number(sel?.scoreboard) || 1,
+                team: Number(sel?.team) === 2 ? 2 : 1,
+            });
+        },
+        identity: (sel) => `controller:${Number(sel.scoreboard) || 1}:${Number(sel.team) === 2 ? 2 : 1}`,
+        sample: { file: 'scoreboard', content: { scoreboard: 1, team: 1 } },
+    },
 };
 
 /*

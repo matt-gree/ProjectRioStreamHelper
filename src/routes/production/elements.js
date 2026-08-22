@@ -447,6 +447,11 @@ export const ELEMENTS = [
         width: 512,
         height: 256,
         match: (url) => /\/layout\/controller\//i.test(url),
+        // Container-scoped for the same reason the roster is: it has no content
+        // of its own, it draws whoever the container's scope has on that side.
+        // So it is added to a roster rather than moved onto one, and a mirrored
+        // pair can carry it on both.
+        containerScoped: true,
     },
 ];
 
