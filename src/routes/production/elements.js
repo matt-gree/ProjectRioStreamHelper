@@ -19,8 +19,9 @@
  * of WHERE a source is, not of what an element is: a member sitting on a
  * container's roster rows under that container and pushes into it, and the same
  * element's own dedicated source rows on its own and just shows and hides. Both
- * are real at once — that is what `containerHostable` has always meant for the
- * hit visualizer, and what the two post-game callouts now mean too. So `flavor`
+ * are real at once, for every element that owns a source — which is now all of
+ * them, since being hostable is read off the mount registry
+ * (`container-members.js`) rather than declared by a flag here. So `flavor`
  * answers only "does it own a source of its own"; ./placements decides which
  * kind of row you are looking at, and every surface branches on the placement
  * (see placementFlavor there). An element that is `fed` has one possible answer,
@@ -198,7 +199,6 @@ export const ELEMENTS = [
         // Anchored to the full path so a sibling in the same folder whose stem
         // merely STARTS with "roster" can't bind here.
         match: (url) => /\/layout\/scoreboard\d*\/roster\.html/i.test(url),
-        containerHostable: true,
         containerScoped: true,
     },
     {
@@ -277,7 +277,6 @@ export const ELEMENTS = [
         // and a container that identified as one of its own occupants would row
         // twice and drive the wrong source.
         match: (url) => /\/layout\/postgame\/spotlight/i.test(url),
-        containerHostable: true,
     },
     {
         id: 'postgamevs',
@@ -298,7 +297,6 @@ export const ELEMENTS = [
         width: 1920,
         height: 1080,
         match: (url) => /\/layout\/postgame\/summary/i.test(url),
-        containerHostable: true,
     },
     {
         id: 'lowerthird',
@@ -425,7 +423,6 @@ export const ELEMENTS = [
         // feed" button, which is exactly what the strip exists to end.) `flavor`
         // answers "does it own a source"; this answers "can a container stand it
         // up" (see containers.js CONTAINER_MEMBERS).
-        containerHostable: true,
     },
     {
         id: 'controller',

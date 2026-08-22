@@ -4,6 +4,7 @@ import { useSettingsStore, useStateStore } from '../../context/store';
 import { stageOrRun } from '../../context/staging';
 import { containerId, ELEMENTS } from './elements';
 import { dropRules } from './automations';
+import { MEMBERS } from '../../../public/layout/lib/container-members.js';
 
 /*
  * Shared containers — producer-built.
@@ -47,20 +48,20 @@ const SHARED_PATH = /\/layout\/shared\//i;
 export const containerOfSource = (url) => (SHARED_PATH.test(url || '') ? containerId(url) : null);
 
 /*
- * What a container can hold.
+ * What a container can hold: whatever the ENGINE can stand up.
  *
- * Every `fed` element, by definition — a container is the only place its
- * content can go. Plus the elements that declare `containerHostable`: the hit
- * visualizer and the two post-game callouts each own a dedicated source AND can
- * be stood up in a container, so being hostable is not the same question as
- * flavor, and a roster is a list of MEMBERS rather than a list of fed elements.
+ * Not a flag on the element. `containerHostable` was one, and it was a second
+ * copy of a fact `container-members.js` already states by having an entry — so
+ * the two could disagree, and a test existed to catch it when they did. An
+ * element is hostable exactly when there is a mount for it, which is what the
+ * registry is; asking the registry removes both the flag and the drift.
  *
- * This is the console's half of a fact `fed-container.js` also holds — the
- * mounts it can actually stand up. `containers.test.js` pins the two together
- * until the mount registry makes them one list.
+ * `fed` elements are members by definition — a container is the only place their
+ * content can go — and each has a registry entry too, so the flavor check is
+ * belt-and-braces rather than a second rule.
  */
 export const CONTAINER_MEMBERS = ELEMENTS.filter(
-    el => el.flavor === 'fed' || el.containerHostable,
+    el => el.flavor === 'fed' || !!MEMBERS[el.id],
 );
 
 /*

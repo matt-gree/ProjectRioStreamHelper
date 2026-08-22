@@ -48,6 +48,56 @@
  */
 const load = (mod) => import(/* @vite-ignore */ `/layout/lib/${mod}.js`);
 
+/*
+ * The host to hand a mount, inside the box the layer centered for it.
+ *
+ * EVERY element mount styles its own host `position: fixed; inset: 0` — correct
+ * when the mount owns the whole page, which is what it normally does. Inside a
+ * container it pins the element to the VIEWPORT rather than to the centered box
+ * it was given, so the member escapes its layer and lands in the corner. Setting
+ * `position` INLINE here is what fixes it: the mounts declare theirs in a class
+ * rule (`.sb-host`, `.st-host`, …) and an inline style outranks a class.
+ *
+ * The stat card carried this workaround alone, as a comment about itself. It was
+ * never specific to the stat card — it is the cost of admission for any mount
+ * written to be a page, which is all of them.
+ */
+const hostIn = (box) => {
+    const host = document.createElement('div');
+    host.style.cssText = 'position:absolute; inset:0;';
+    box.appendChild(host);
+    return host;
+};
+
+/*
+ * The common member: a mount that takes the box, reads its own state, and has
+ * the `update(state, settings)` signature every standalone layout's render call
+ * uses. `container-layers` calls `update(state, payload)`, so settings are bound
+ * here instead — the same wrapper the stat card has always needed.
+ *
+ * These mounts also expose `setShown`/`setActive` for the OBS reveal gate, and a
+ * container deliberately leaves them alone: the gate defaults to shown
+ * (`wantShown = true`), the CONTAINER is the OBS source whose visibility matters,
+ * and the layer's own cross-fade is what hides a member that is not up. Wiring a
+ * member's gate to the container's visibility would give one element two
+ * independent things holding it dark.
+ */
+const simple = (mod, fn) => async (box) => {
+    const inst = (await load(mod))[fn]({ host: hostIn(box) });
+    return { ...inst, update: (state) => inst.update(state, OverlayBase.settings) };
+};
+
+// …and the same for a mount that binds a BOARD at mount time. Pair it with an
+// `identity` keyed on the board, or the layer outlives the board it bound.
+const boardScoped = (mod, fn, extra = {}) => async (box, ctx, sel) => {
+    const inst = (await load(mod))[fn]({
+        host: hostIn(box), sb: Number(sel?.scoreboard) || 1, ...extra,
+    });
+    return { ...inst, update: (state) => inst.update(state, OverlayBase.settings) };
+};
+
+const boardIdentity = (id) => (sel) => `${id}:${Number(sel.scoreboard) || 1}`;
+
 export const MEMBERS = {
     hitvisualizer: {
         size: [1280, 720],
@@ -102,14 +152,8 @@ export const MEMBERS = {
         // identity below — a scope change is a new layer, not an update.
         mount: async (box, ctx, sel) => {
             const { mountStatsCard } = await load('stats-card-mount');
-            // Inline positioning beats stats-card-mount's `.st-host { position:
-            // fixed }`, which would pin the card to the viewport instead of the
-            // centered box this member was given.
-            const cardHost = document.createElement('div');
-            cardHost.style.cssText = 'position:absolute; inset:0;';
-            box.appendChild(cardHost);
             const card = mountStatsCard({
-                host: cardHost,
+                host: hostIn(box),
                 sb: Number(sel?.scoreboard) || 1,
                 team: Number(sel?.team) === 2 ? 2 : 1,
                 settingsType: 'statscard',
@@ -140,6 +184,68 @@ export const MEMBERS = {
         },
         sample: { file: 'postgame', content: { scoreboard: 1 } },
     },
+
+    // ── the bands and boards ────────────────────────────────────────────────
+    //
+    // Elements that own a dedicated source AND can occupy a container. Nothing
+    // about them is special: each already had a `lib/*-mount.js` that renders
+    // into a host it is handed, which is the whole contract a member needs.
+    // They were absent because being hostable was an opt-in nobody had finished,
+    // not because a container could not stand them up.
+
+    scoreboard: {
+        size: [800, 460],
+        // `size: 'l'` is the variant, not the pixels — the mount takes s|m|l and
+        // resolves anything else to l. A container's scoreboard is the large one
+        // because that is the size the element registry declares; a roster that
+        // wanted the small board would be a different member, not a flag here.
+        mount: boardScoped('scoreboard-mount', 'mountScoreboard', { size: 'l' }),
+        identity: boardIdentity('scoreboard'),
+        sample: { file: 'scoreboard', content: { scoreboard: 1 } },
+    },
+    scorecard: {
+        size: [1920, 1080],
+        mount: boardScoped('scorecard-mount', 'mountScorecard'),
+        identity: boardIdentity('scorecard'),
+        // Its standalone bundle seeds SETTINGS as well as state — the phase and
+        // game-mode bars are producer text, and without them a sample render
+        // collapses those rows. Carried through rather than dropped, or a
+        // scorecard would preview worse in a container than on its own source.
+        sample: {
+            file: 'scoreboard',
+            content: { scoreboard: 1 },
+            settings: {
+                'scoreboards.binding.{sb}.stats_tag': 'Superstar',
+                'overlays.scorecard.{sb}.phaseText': 'Winners Final',
+            },
+        },
+    },
+    ticker: {
+        size: [1920, 80],
+        mount: boardScoped('ticker-mount', 'mountTicker'),
+        identity: boardIdentity('ticker'),
+        sample: { file: 'ticker', content: { scoreboard: 1 } },
+    },
+    commentary: {
+        size: [1920, 240],
+        mount: simple('commentary-mount', 'mountCommentary'),
+        sample: { file: 'commentary', content: {} },
+    },
+    playerplates: {
+        size: [1920, 240],
+        mount: simple('playerplates-mount', 'mountPlayerPlates'),
+        sample: { file: 'playerplates', content: {} },
+    },
+    lowerthird: {
+        size: [1920, 320],
+        mount: simple('lowerthird-mount', 'mountLowerThird'),
+        sample: { file: 'lowerthird', content: {} },
+    },
+    matchuphistory: {
+        size: [1920, 480],
+        mount: simple('matchup-mount', 'mountMatchup'),
+        sample: { file: 'matchup', content: {} },
+    },
 };
 
 /*
@@ -164,5 +270,9 @@ export function containerSample(id, occupant) {
         state: {
             [`production.feed.container.${id}`]: { element: occupant, ...spec.sample.content },
         },
+        // Only a member whose own bundle seeds settings has these (the
+        // scorecard's phase and game-mode text). Omitted entirely otherwise so
+        // OverlayBase sees "no seeds" rather than an empty map.
+        ...(spec.sample.settings ? { settings: spec.sample.settings } : {}),
     };
 }
