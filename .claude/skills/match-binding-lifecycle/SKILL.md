@@ -189,9 +189,11 @@ description: PRSH match fixture model, scoreboard bindings (pool + playback + de
 - The projector copies fixture fields onto bound boards' `score.{N}.*` keys —
   full-key-set, value-or-`""` (see the state-keys-and-projectors skill). It
   writes only fixture/identity keys, never live data (inning/outs/roster) —
-  the live feed stays authoritative for those. Special cases: the captain
-  guard (a captain-less projection must never blank a live HUD captain) and a
-  `gameMode` only writes `stats_tag` when non-empty.
+  the live feed stays authoritative for those. Special cases: the
+  **feed-shared rule** (an empty projected value defers over a board carrying a
+  game rather than blanking it — see the state-keys-and-projectors skill; the
+  captain guard is the case it generalises) and a `gameMode` only writes
+  `stats_tag` when non-empty.
 - `flip_sides(m)` swaps the **authored** fixture sides (series wins travel
   with the player) — distinct from live orientation, which `_decide` handles.
 - **Primary match** (`PRIMARY_MATCH_ID = 1`): setting its two players

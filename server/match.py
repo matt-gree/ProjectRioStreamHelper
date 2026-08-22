@@ -35,6 +35,37 @@ _PLAYER_KEYS = [
     "rioName", "port", "rio_captainIndex", "character.0.name", *RESURFACE_MAP.values(),
 ]
 
+# Which of those keys the LIVE FEED also writes (provider.apply_parsed_game_to_state
+# and its `_apply_resurface` pass). `score.{N}.player.{T}.*` is the one place a
+# projector and a feed meet, and for this projector the overlap is total — every
+# key above is feed-shared.
+#
+# THE RULE: a feed-shared key is written with a VALUE, never blanked over live
+# data. "Write the full key set, value or ''" is what makes re-projection
+# deterministic, but a board carrying a game already has a truer answer for these
+# than an empty fixture does, so an empty projected value defers instead of
+# winning. Only an empty side (`_board_side_is_empty`) gets the blank, which is
+# what keeps unbinding a fixture on an idle board from leaving stale names.
+#
+# This started as a two-key carve-out for the captain, and the two keys it left
+# out were the ones that name the player: unbinding a match mid-game blanked both
+# sides' `rioName` while the board kept its teams, rosters, batter and inning, so
+# the Quick Rail reported "No game on this board yet" for a board at inning 9 and
+# the scoreboard went nameless — until the next HUD frame healed it, which is
+# never while the feed is idle.
+_FEED_SHARED_KEYS = frozenset(_PLAYER_KEYS)
+
+# Deferring on *every* empty value would trade that bug for its mirror image, so
+# the rule turns on whether the blank is an ANSWER or the absence of one:
+#
+#   - Address-book fields (RESURFACE_MAP targets) are answers once a participant
+#     resolves. A person with no twitter really has no twitter, and re-binding a
+#     board from someone who has one to someone who doesn't must clear it.
+#   - These three are never answers. A fixture that doesn't pick a port or a
+#     captain is not claiming the player has none — the live game knows, and the
+#     captain carve-out this generalises existed for exactly that reason.
+_OPTIONAL_PICK_KEYS = frozenset({"port", "rio_captainIndex", "character.0.name"})
+
 # Default shape of a freshly-created match. `captain` is a character name (the
 # chosen captain), not a roster slot. provider.startgg.setId records which
 # start.gg set was loaded into this match (see the /match/{m}/startgg-set route).
@@ -143,17 +174,31 @@ class Match:
 
     @classmethod
     def _board_side_is_empty(cls, sb: int, t: int) -> bool:
-        """True if the board's side has no existing name/roster data yet.
-
-        Only an empty board may have its captain slot blanked by a
-        captain-less match projection — a board already carrying real data
-        (most commonly a live HUD game) must keep it, or binding a
-        captain-less match clears the live roster out from under the feed.
-        """
+        """True if the board's side has no existing name/roster data yet."""
         side = deep_get(State.state, f"score.{sb}.player.{t}") or {}
         if not isinstance(side, dict):
             return True
         return not side.get("rioName") and not deep_get(side, "character.0.name")
+
+    @classmethod
+    def _board_side_has_feed_data(cls, sb: int, t: int) -> bool:
+        """True if a FEED — not this projector — put the data on the board's side.
+
+        The distinction is what makes the feed-shared rule safe to apply. Asking
+        only "is the side populated" cannot answer it, because a projection's own
+        output populates the side: bind a match to an empty board and the very
+        next unbind sees a populated side and defers, stranding the fixture it was
+        supposed to clear (the stale-fixture-on-air bug the full-key-set rule
+        exists to prevent).
+
+        `game_id` is the honest discriminator — it is written by both feed paths
+        (`apply_parsed_game_to_state` / `apply_completed_game_to_state`), never by
+        a projection, and it goes when the board's game does. A board with no game
+        has nothing but projections on it, so blanking is right there.
+        """
+        if not deep_get(State.state, f"score.{sb}.game_id"):
+            return False
+        return not cls._board_side_is_empty(sb, t)
 
     @classmethod
     def _side_entries(cls, sb: int, t: int, player: dict | None) -> list[tuple]:
@@ -182,15 +227,6 @@ class Match:
         if captain:
             vals["character.0.name"] = captain
             vals["rio_captainIndex"] = 0
-        elif cls._board_side_is_empty(sb, t):
-            vals["character.0.name"] = ""
-            vals["rio_captainIndex"] = ""
-        else:
-            # A blank match captain must never clear an already-populated
-            # board (e.g. a live HUD game) — drop these two keys from this
-            # projection so the existing data survives untouched.
-            del vals["character.0.name"]
-            del vals["rio_captainIndex"]
 
         if row:
             display = row.get("display") or {}
@@ -198,6 +234,17 @@ class Match:
                 v = display.get(src)
                 if v:
                     vals[dst] = v
+
+        # Apply the feed-shared rule (see _FEED_SHARED_KEYS). A side with no feed
+        # data behind it still takes the full deterministic blank; over live feed
+        # data an empty value defers unless it is an answer.
+        if cls._board_side_has_feed_data(sb, t):
+            resolves_identity = row is not None
+            for k in list(vals):
+                if k not in _FEED_SHARED_KEYS or vals[k] != "":
+                    continue
+                if k in _OPTIONAL_PICK_KEYS or not resolves_identity:
+                    del vals[k]
 
         return [(f"{base}.{k}", v) for k, v in vals.items()]
 

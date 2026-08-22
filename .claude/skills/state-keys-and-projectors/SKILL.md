@@ -195,12 +195,41 @@ The shape:
 6. Re-projection triggers: every authored-data mutation, and startup. An
    address-book edit re-flows on the next mutation/restart (not live).
 
+### The feed-shared rule (step 2's one exception)
+
+`score.{N}.player.{T}.*` is the only place a projector and a live feed both
+write, and for the Match projector the overlap is **total** — every key it owns
+is fed too (`_FEED_SHARED_KEYS`). So the full-key-set rule gets one qualifier:
+
+> **A feed-shared key is written with a value, never blanked over live data.**
+
+Full determinism still applies to a board with no game. Over a board carrying
+one, an empty projected value defers to the feed.
+
+Two things make it safe, and both were learned the hard way:
+
+- **Not every empty value defers, or you get the mirror-image bug.** The test is
+  whether the blank is an *answer*. Once a participant resolves, their
+  address-book fields are answers — re-binding from someone with a twitter to
+  someone without must clear it. `port`, `rio_captainIndex` and
+  `character.0.name` are never answers: a fixture that doesn't pick a port isn't
+  claiming the player has none (`_OPTIONAL_PICK_KEYS`).
+- **"Is the side populated" is the wrong question** — a projection's own output
+  populates it, so an empty board that was just bound looks protected on the
+  very next unbind, stranding the fixture the blank exists to clear. The
+  discriminator is `score.{N}.game_id` (`_board_side_has_feed_data`): written by
+  both feed paths, never by a projection, gone when the board's game is.
+
+What the missing half looked like: this shipped as a two-key captain carve-out,
+and the two keys it left out were the ones that name the player. Unbinding a
+match mid-game blanked both sides' `rioName` while the board kept its teams,
+rosters, batter and inning — so one console surface said "No game on this board
+yet" for a board at inning 9 while another rendered that board's live stats.
+Pinned by `tests/unit/test_match_projection.py` and, at the seam,
+`tests/integration/test_invariants.py`.
+
 Known deliberate deviations (don't "fix" them):
 
-- **Match captain guard** (`Match._side_entries`): a captain-less match
-  projection *drops* `character.0.name` + `rio_captainIndex` from the batch
-  when the board side already has data — binding a captain-less match must
-  never blank a live HUD captain. Only an empty side gets blanked.
 - **`Match.identity_entries`** is enrich-only (writes non-empty values,
   appended last in the feed's SetBatch so the drafted identity wins) — it
   never blanks.
