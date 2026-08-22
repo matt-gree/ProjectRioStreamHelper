@@ -78,6 +78,7 @@ def reset_singletons():
         "prev_sides": dict(Provider._prev_player_sides),
         "prev_inning": Provider._prev_inning,
         "prev_game_id": Provider._prev_game_id,
+        "raw_game": Provider._raw_game,
         "sides_swapped": Provider._sides_swapped,
         "user_overridden": Provider._user_overridden,
         "feed_released": Provider._feed_released,
@@ -130,6 +131,7 @@ def reset_singletons():
     Provider._prev_player_sides = {}
     Provider._prev_inning = None
     Provider._prev_game_id = None
+    Provider._raw_game = None
     Provider._sides_swapped = False
     Provider._user_overridden = False
     Provider._feed_released = False
@@ -177,6 +179,7 @@ def reset_singletons():
     Provider._prev_player_sides = saved["prev_sides"]
     Provider._prev_inning = saved["prev_inning"]
     Provider._prev_game_id = saved["prev_game_id"]
+    Provider._raw_game = saved["raw_game"]
     Provider._sides_swapped = saved["sides_swapped"]
     Provider._user_overridden = saved["user_overridden"]
     Provider._feed_released = saved["feed_released"]

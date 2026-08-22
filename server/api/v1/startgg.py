@@ -133,7 +133,7 @@ async def startgg_load_set(
     # Through `bind_board`, not a direct `score.{N}.match` write: the one-match-
     # one-board rule lives there, and loading the same set onto a second board used
     # to leave it bound to both. `project=False` because apply_startgg_set ends in
-    # project_match + _regate_bound_boards.
+    # project_match + _resettle_bound_boards.
     await bind_board(scoreboard_number, m, project=False)
     await apply_startgg_set(m, set_data, set_id)
     return ORJSONResponse({"success": True, "match": m, "set": set_data})

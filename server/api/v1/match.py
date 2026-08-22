@@ -25,13 +25,27 @@ from server.state import State
 router = APIRouter(prefix="/match", tags=["match"])
 
 
-async def _regate_bound_boards(m) -> None:
-    """Re-run the identity gate on every board bound to match ``m`` against the
-    current live game. Called after a match mutation that can change identity
-    (participant edit, flip, set load, decide) so a conflict raised/cleared by
-    the change surfaces immediately instead of only on the next new game."""
+async def _resettle_bound_boards(m) -> None:
+    """Settle every board bound to match ``m`` against the current live game.
+
+    Called after a match mutation that can change identity (participant edit,
+    flip, set load, decide). Two things consult the fixture and normally only run
+    when a FRAME arrives, so both have to be nudged here or the board keeps
+    describing the previous fixture until the feed speaks again:
+
+    1. the identity gate, so a conflict raised or cleared by the change surfaces
+       now rather than on the next new game;
+    2. the side cascade, so the live team, logo and roster follow the names. A
+       flip moved only the projected names, leaving one player's name over the
+       other's logo, and `side_reason` naming a layer that had changed.
+
+    Gate first: it can auto-retire a decided mismatch, and that unbind changes
+    what the cascade decides.
+    """
     for sb in Match.bound_scoreboards(m):
         await RioGameDataProvider.evaluate_match_gate_for_board(sb)
+    for sb in Match.bound_scoreboards(m):
+        await RioGameDataProvider.reorient_board(sb)
 
 
 def _sync_primary_if(m) -> None:
@@ -134,7 +148,7 @@ async def update_match(m: int, payload: MatchPayload):
         await State.SetBatch(entries)
         await State.Save()
     await Match.project_match(m)
-    await _regate_bound_boards(m)
+    await _resettle_bound_boards(m)
     _sync_primary_if(m)
     return Match.get(m)
 
@@ -154,6 +168,7 @@ async def delete_match(m: int):
         )
     for sb in bound:
         await Match.clear_scoreboard(sb)
+        await RioGameDataProvider.reorient_board(sb)
 
     await State.Unset(f"match.{m}")
     await State.Save()
@@ -176,7 +191,7 @@ async def flip_match(m: int):
     if not Match.exists(m):
         raise HTTPException(404, f"match {m!r} not found")
     await Match.flip_sides(m)
-    await _regate_bound_boards(m)
+    await _resettle_bound_boards(m)
     _sync_primary_if(m)
     return Match.get(m)
 
@@ -193,7 +208,7 @@ async def decide_match(m: int, payload: DecidePayload):
     if not Match.exists(m):
         raise HTTPException(404, f"match {m!r} not found")
     await Match.force_decide(m, payload.side)
-    await _regate_bound_boards(m)
+    await _resettle_bound_boards(m)
     return Match.get(m)
 
 
@@ -288,7 +303,7 @@ async def apply_startgg_set(m, s: dict, set_id: int) -> None:
     await State.SetBatch(entries)
     await State.Save()
     await Match.project_match(m)
-    await _regate_bound_boards(m)
+    await _resettle_bound_boards(m)
     _sync_primary_if(m)
 
 
@@ -377,10 +392,17 @@ def require_board(sb: int) -> int:
 
 
 async def _unbind_board(sb: int) -> None:
-    """Drop board ``sb``'s binding and blank the keys the projector owns."""
+    """Drop board ``sb``'s binding and blank the keys the projector owns.
+
+    Then re-settle the board: the cascade consulted the match that just went
+    away, so without this the board keeps reporting `side_reason` as `match` —
+    explaining its orientation by a layer no longer there — and keeps the
+    orientation that layer chose, until the next feed frame.
+    """
     await State.UnsetBatch([f"score.{sb}.match", f"score.{sb}.match_conflict"])
     await State.Save()
     await Match.clear_scoreboard(sb)
+    await RioGameDataProvider.reorient_board(sb)
 
 
 async def bind_board(sb: int, m, *, project: bool = True) -> None:
@@ -399,7 +421,7 @@ async def bind_board(sb: int, m, *, project: bool = True) -> None:
     match on two boards, a state nothing in the UI can draw.
 
     ``project=False`` is for a caller that projects immediately afterwards
-    (`apply_startgg_set` ends in `project_match` + `_regate_bound_boards`), so a
+    (`apply_startgg_set` ends in `project_match` + `_resettle_bound_boards`), so a
     fixture isn't projected twice — once empty, then once filled.
     """
     for other in Match.bound_scoreboards(m):

@@ -475,6 +475,11 @@ class RioGameDataProvider:
     hud_watcher: HudWatcher | None = None
     current_game: dict | None = None
 
+    # The last frame in RAW feed order (away/home as Project Rio reported it).
+    # `current_game` is the same frame already globally oriented, which is the
+    # wrong input to `_decide` — re-deciding a board needs the raw order back.
+    _raw_game: dict | None = None
+
     # Cached HUD-target list — avoids re-scanning settings on every HUD event.
     # Derived transport: board 1 when project_rio.hud_enabled (see
     # server/bindings.py); refreshed in _reset_side_preservation (called
@@ -853,14 +858,14 @@ class RioGameDataProvider:
         raw_left = entrants[0][0].get("rioName", "") if entrants[0] else ""
         raw_right = entrants[1][0].get("rioName", "") if entrants[1] else ""
 
+        # The frame in RAW feed order, kept so one board can be re-decided later
+        # without another frame (see reorient_board). `current_game` below is
+        # already globally oriented, which is the wrong input for `_decide`.
+        cls._raw_game = parsed
+
         swaps: dict[int, bool] = {}
         for sb in cls._hud_targets:
-            swapped, reason = cls._decide(raw_left, raw_right, sb=sb)
-            board = cls._orient_copy(parsed) if swapped else parsed
-            await apply_parsed_game_to_state(
-                board, sb, home_team=1 if swapped else 2, side_reason=reason,
-            )
-            swaps[sb] = swapped
+            swaps[sb] = await cls._apply_board(parsed, sb)
 
         # current_game + back-to-back tracking use the global (match-agnostic)
         # orientation — the "streamer's side" reference that should be stable
@@ -875,6 +880,49 @@ class RioGameDataProvider:
         if parsed.get("game_id"):
             cls._prev_game_id = parsed["game_id"]
         return swaps
+
+    @classmethod
+    async def _apply_board(cls, parsed: dict, sb: int) -> bool:
+        """Run the cascade for ONE board and write the frame in that orientation.
+
+        Returns whether the board's sides ended up swapped, so the caller can
+        push stats the same way round.
+        """
+        entrants = parsed.get("entrants") or [[{}], [{}]]
+        raw_left = entrants[0][0].get("rioName", "") if entrants[0] else ""
+        raw_right = entrants[1][0].get("rioName", "") if entrants[1] else ""
+        swapped, reason = cls._decide(raw_left, raw_right, sb=sb)
+        board = cls._orient_copy(parsed) if swapped else parsed
+        await apply_parsed_game_to_state(
+            board, sb, home_team=1 if swapped else 2, side_reason=reason,
+        )
+        return swapped
+
+    @classmethod
+    async def reorient_board(cls, sb: int) -> None:
+        """Re-run the cascade for one board against the frame already on air.
+
+        The cascade normally only runs when a FRAME arrives, so a change to the
+        thing it consults — binding, unbinding or flipping a match — left the
+        board describing the previous decision until the feed spoke again. During
+        a busy game that is one frame; between games, on a paused feed or on a
+        board whose game has stopped updating, it is forever.
+
+        What that looked like: flipping a fixture's sides moved the projected
+        names but not the live team, logo and roster underneath them, so the left
+        side showed one player's name over the other's logo. And unbinding left
+        `side_reason` reading `match` on a board with no match — the console
+        explaining an orientation by a layer that was no longer there.
+
+        Callers on the bind/flip/unbind paths invoke this so the board settles in
+        the same breath as the change. No-op for a board with no live HUD frame,
+        and for a producer who has cleared the board by hand (`_feed_released`) —
+        a fixture edit is not a request to bring their game back.
+        """
+        if sb not in cls._hud_targets or cls._feed_released or cls._raw_game is None:
+            return
+        swapped = await cls._apply_board(cls._raw_game, sb)
+        await StatsTracker.push_stats_to_state(sb, swapped)
 
     # --- Per-game match identity gate (Phase B) ---
 

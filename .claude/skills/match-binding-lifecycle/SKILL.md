@@ -196,6 +196,18 @@ description: PRSH match fixture model, scoreboard bindings (pool + playback + de
   `stats_tag` when non-empty.
 - `flip_sides(m)` swaps the **authored** fixture sides (series wins travel
   with the player) — distinct from live orientation, which `_decide` handles.
+- **Every fixture mutation re-settles its bound boards** (`_resettle_bound_boards`
+  in `server/api/v1/match.py`; `_unbind_board` and `delete_match` do it for the
+  board they release). The gate and the cascade both read the fixture and both
+  normally run only on a *frame*, so a bind/flip/unbind otherwise left the board
+  describing the previous fixture — a flip moved the projected names but not the
+  live team and logo under them, and an unbind left `side_reason` naming `match`
+  with no match bound. Gate first (it can auto-retire, changing what the cascade
+  decides), then `RioGameDataProvider.reorient_board(sb)`: it re-runs `_decide`
+  for one board against `_raw_game`, the last frame in **raw feed order**
+  (`current_game` is the same frame already oriented, so it is the wrong input).
+  It no-ops for a non-HUD board, for no frame, and for `_feed_released` — a
+  fixture edit is not a request to bring a hand-cleared board's game back.
 - **Primary match** (`PRIMARY_MATCH_ID = 1`): setting its two players
   auto-preps the Matchup band + Player Plates via
   `schedule_primary_sync()` (fire-and-forget; deduped on the rioName pair).
