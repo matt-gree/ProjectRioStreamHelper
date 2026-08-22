@@ -155,7 +155,11 @@ export async function initFedContainer({
 
   const layerHost = fitHostForPreview(host, container);
 
-  const layers = createLayers({ host: layerHost, registry: MEMBERS, container });
+  // `offsets` is per-member and lives on the DEFINITION beside the roster, so
+  // the same element can sit low in one container and centered in another.
+  const layers = createLayers({
+    host: layerHost, registry: MEMBERS, container, offsets: def?.offsets || null,
+  });
 
   // A definition-backed container resolves its own sample from its roster; the
   // legacy named shells still pass theirs in literally.

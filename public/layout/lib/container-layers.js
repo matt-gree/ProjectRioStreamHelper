@@ -94,7 +94,7 @@ export function resolveFeed({ live = null, forceElement = null, previewSel = nul
  *     before containers became definitions, so an overflowing member degrades
  *     to its old behaviour instead of being clipped by a box it overflows.
  */
-export function memberBox(native, container) {
+export function memberBox(native, container, offset = null) {
     const [nw, nh] = Array.isArray(native) ? native : [];
     if (!nw || !nh) return { fill: true };
     const cw = Number(container?.width) || 0;
@@ -103,7 +103,49 @@ export function memberBox(native, container) {
     // the member's own size rather than guessing from the viewport.
     if (!cw || !ch) return { fill: false, width: nw, height: nh };
     if (nw > cw || nh > ch) return { fill: true, overflow: true };
-    return { fill: false, width: nw, height: nh };
+    const box = { fill: false, width: nw, height: nh };
+    const at = memberOffset(nw, nh, cw, ch, offset);
+    return at ? { ...box, ...at } : box;
+}
+
+/*
+ * Where a member sits in its container: an ANCHOR, plus a nudge.
+ *
+ * Called an OFFSET, not a placement — `placement` is already the console's word
+ * for a rack row (one source, in one scene) and overloading it would make two
+ * unrelated things share a name in the same subsystem.
+ *
+ * Centering alone is what stops a container holding a band. A 1920×80 ticker
+ * centered in a full-canvas container floats 500px above where a ticker belongs,
+ * and the bands are the elements most worth putting in a container — they are
+ * bottom-anchored by nature (their themes are authored `xMidYMax`, pinned to the
+ * bottom of the canvas and cropped).
+ *
+ * Two fields rather than one, because raw coordinates alone would make "put it
+ * at the bottom" a sum the producer has to do — and redo whenever the container
+ * or the member changes size. The anchor is the intent and survives a resize;
+ * `x`/`y` are the nudge on top of it, in container pixels, positive right/down.
+ *
+ * THIS IS NOT A SCALING SYSTEM and must not become one. A member is drawn at its
+ * native size, always; this decides only where that box is put. Absent — which
+ * is every container that existed before this — returns null and leaves the
+ * old flex centering exactly as it was.
+ */
+const H_ANCHOR = { left: 0, center: 0.5, right: 1 };
+const V_ANCHOR = { top: 0, center: 0.5, bottom: 1 };
+
+export function memberOffset(nw, nh, cw, ch, offset) {
+    if (!offset || typeof offset !== 'object') return null;
+    const { anchor = 'center', x = 0, y = 0 } = offset;
+    // "bottom-left" and friends; a bare "bottom" means bottom-center.
+    const parts = String(anchor).split('-');
+    const v = parts.find(p => p in V_ANCHOR) ?? 'center';
+    const h = parts.find(p => p in H_ANCHOR) ?? 'center';
+    if (anchor === 'center' && !x && !y) return null;   // the default, expressed
+    return {
+        left: Math.round((cw - nw) * H_ANCHOR[h]) + (Number(x) || 0),
+        top: Math.round((ch - nh) * V_ANCHOR[v]) + (Number(y) || 0),
+    };
 }
 
 const CSS = `
@@ -122,6 +164,10 @@ const CSS = `
    case where the viewport IS narrower. */
 .fc-box { position: relative; flex: none; }
 .fc-box.fc-fill { position: absolute; inset: 0; }
+/* An OFFSET member takes itself out of the layer's flex centering and sits where
+   its anchor puts it. Absent (every container before offsets existed) leaves the
+   box a plain flex item, centered exactly as before. */
+.fc-box.fc-at { position: absolute; }
 `;
 /*
  * No `will-change: opacity` on the layers, deliberately. It would pin every one
@@ -168,7 +214,7 @@ export function _resetCssForTests() { _cssInjected = false; }
  * mid-pose.
  */
 export function createLayers({
-    host, registry, container = null, fadeMs = DEFAULT_FADE_MS,
+    host, registry, container = null, offsets = null, fadeMs = DEFAULT_FADE_MS,
     doc = typeof document !== 'undefined' ? document : null,
     warn = (...a) => console.warn('[container-layers]', ...a),
     raf = (fn) => (typeof requestAnimationFrame === 'function' ? requestAnimationFrame(fn) : fn()),
@@ -200,7 +246,7 @@ export function createLayers({
 
         const box = doc.createElement('div');
         box.className = 'fc-box';
-        const geom = memberBox(spec.size, container);
+        const geom = memberBox(spec.size, container, offsets?.[element]);
         if (geom.fill) {
             box.classList.add('fc-fill');
             if (geom.overflow) {
@@ -211,6 +257,11 @@ export function createLayers({
         } else {
             box.style.width = `${geom.width}px`;
             box.style.height = `${geom.height}px`;
+            if (geom.left !== undefined) {
+                box.classList.add('fc-at');
+                box.style.left = `${geom.left}px`;
+                box.style.top = `${geom.top}px`;
+            }
         }
         layer.appendChild(box);
         host.appendChild(layer);

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
-    createLayers, memberBox, resolveFeed, _resetCssForTests,
+    createLayers, memberBox, memberOffset, resolveFeed, _resetCssForTests,
 } from '../../../public/layout/lib/container-layers.js';
 
 /*
@@ -106,6 +106,70 @@ describe('resolveFeed — what the container is being asked to draw', () => {
         expect(resolveFeed({
             live: { element: 'stats', scoreboard: 4, team: 2, charIndex: 2 },
         })).toEqual({ element: 'stats', scoreboard: 4, team: 2, charIndex: 2 });
+    });
+});
+
+/*
+ * OFFSETS — the anchor that lets a container hold a band.
+ *
+ * Centering is right for a card and wrong for a ticker: 1920×80 centered in a
+ * full-canvas container floats 500px above where a ticker belongs. The anchor
+ * carries the INTENT so it survives a resize; x/y are the nudge on top.
+ */
+describe('memberOffset — anchor plus nudge', () => {
+    const band = (offset) => memberOffset(1920, 80, 1920, 1080, offset);
+
+    it('is absent for a container with no offset at all', () => {
+        expect(band(null)).toBeNull();
+        expect(band(undefined)).toBeNull();
+        expect(band('bottom')).toBeNull();          // not an object: ignored
+    });
+
+    it('is absent for an explicit centered offset with no nudge', () => {
+        // The default expressed rather than omitted still means "leave the flex
+        // centering alone" — one code path for the same picture.
+        expect(band({ anchor: 'center' })).toBeNull();
+        expect(band({ anchor: 'center', x: 0, y: 0 })).toBeNull();
+    });
+
+    it('puts a band on the floor of a full-canvas container', () => {
+        expect(band({ anchor: 'bottom' })).toEqual({ left: 0, top: 1000 });
+    });
+
+    it('reads a bare vertical anchor as horizontally centered', () => {
+        expect(memberOffset(800, 460, 1920, 1080, { anchor: 'top' }))
+            .toEqual({ left: 560, top: 0 });
+    });
+
+    it('takes the corners, in either word order', () => {
+        expect(memberOffset(400, 200, 1000, 600, { anchor: 'bottom-right' }))
+            .toEqual({ left: 600, top: 400 });
+        expect(memberOffset(400, 200, 1000, 600, { anchor: 'right-bottom' }))
+            .toEqual({ left: 600, top: 400 });
+    });
+
+    it('adds the nudge to the anchor, positive right and down', () => {
+        expect(band({ anchor: 'bottom', y: -40 })).toEqual({ left: 0, top: 960 });
+        expect(memberOffset(400, 200, 1000, 600, { anchor: 'top-left', x: 24, y: 16 }))
+            .toEqual({ left: 24, top: 16 });
+    });
+
+    it('nudges from the center when only x/y are given', () => {
+        expect(memberOffset(400, 200, 1000, 600, { x: 0, y: 100 }))
+            .toEqual({ left: 300, top: 300 });
+    });
+
+    it('ignores an anchor it does not know rather than throwing', () => {
+        expect(memberOffset(400, 200, 1000, 600, { anchor: 'sideways' }))
+            .toEqual({ left: 300, top: 200 });
+    });
+
+    it('rides along on memberBox, which still never scales', () => {
+        expect(memberBox([1920, 80], { width: 1920, height: 1080 }, { anchor: 'bottom' }))
+            .toEqual({ fill: false, width: 1920, height: 80, left: 0, top: 1000 });
+        // An overflowing member fills; an offset cannot rescue it or shrink it.
+        expect(memberBox([1280, 720], { width: 960, height: 1080 }, { anchor: 'top' }))
+            .toEqual({ fill: true, overflow: true });
     });
 });
 

@@ -3,7 +3,7 @@ import { Check, Plus, Trash2 } from 'lucide-react';
 import { Group, Stack, Text } from '../../../components/ui/primitives';
 import { Button } from '../../../components/ui/button';
 import { Popover, PopoverTrigger, PopoverContent } from '../../../components/ui/popover';
-import { IconToggle, ListRow, TextRow } from '../kit';
+import { IconToggle, ListRow, NumberRow, SelectRow, TextRow } from '../kit';
 import {
     CONTAINER_MEMBERS, fitsContainer, isSharedMember, useContainerActions,
     useContainerDefs,
@@ -52,7 +52,50 @@ function useHolders(defs) {
     }, [defs]);
 }
 
-const MemberRow = memo(function MemberRow({ element, def, holders, carrying, setMember }) {
+/*
+ * Where a member sits in its container.
+ *
+ * Only reachable for a member SMALLER than the container, because one that fills
+ * it has nowhere to go. The anchor carries the intent — "on the floor" stays on
+ * the floor if either size changes — and the nudge is pixels on top of it.
+ *
+ * This is what lets a container hold a band. A 1920×80 ticker centered in a
+ * full-canvas container floats 500px above where a ticker belongs.
+ */
+const ANCHORS = [
+    { value: 'top-left', label: 'Top left' },
+    { value: 'top', label: 'Top' },
+    { value: 'top-right', label: 'Top right' },
+    { value: 'left', label: 'Left' },
+    { value: 'center', label: 'Center' },
+    { value: 'right', label: 'Right' },
+    { value: 'bottom-left', label: 'Bottom left' },
+    { value: 'bottom', label: 'Bottom' },
+    { value: 'bottom-right', label: 'Bottom right' },
+];
+
+const OffsetEditor = memo(function OffsetEditor({ element, def, setOffset }) {
+    const cur = def.offsets?.[element.id] || { anchor: 'center', x: 0, y: 0 };
+    const write = (patch) => setOffset(def.id, element.id, { ...cur, ...patch });
+    return (
+        <div className="ml-4 flex flex-col gap-0.5 border-l border-border/50 pl-2">
+            <SelectRow
+                label="Position" value={cur.anchor} options={ANCHORS}
+                onChange={(v) => write({ anchor: v })}
+            />
+            <NumberRow
+                label="Nudge X" value={cur.x} suffix="px" step={1}
+                onChange={(v) => write({ x: v || 0 })}
+            />
+            <NumberRow
+                label="Nudge Y" value={cur.y} suffix="px" step={1}
+                onChange={(v) => write({ y: v || 0 })}
+            />
+        </div>
+    );
+});
+
+const MemberRow = memo(function MemberRow({ element, def, holders, carrying, setMember, setOffset }) {
     const on = (holders || []).some(h => h.id === def.id);
     const others = (holders || []).filter(h => h.id !== def.id);
     // A shared member is ADDED, not moved: several containers legitimately draw
@@ -62,6 +105,7 @@ const MemberRow = memo(function MemberRow({ element, def, holders, carrying, set
     const otherNames = others.map(h => h.name).join(', ');
     const smaller = element.width < def.width || element.height < def.height;
     return (
+        <>
         <ListRow
             dot={carrying ? 'bg-emerald-400' : on ? 'bg-foreground/30' : 'bg-transparent'}
             name={element.name}
@@ -73,7 +117,11 @@ const MemberRow = memo(function MemberRow({ element, def, holders, carrying, set
                 elsewhere ? `${shared ? 'also on' : 'held by'} ${otherNames}` : null,
                 // Centering is the one size relaxation, so name it where the
                 // producer decides — not as a surprise on air.
-                on && smaller ? `${element.width} × ${element.height} · centered` : null,
+                on && smaller
+                    ? `${element.width} × ${element.height} · ${
+                        ANCHORS.find(a => a.value === (def.offsets?.[element.id]?.anchor || 'center'))?.label
+                        ?? 'Center'}`.toLowerCase()
+                    : null,
             ].filter(Boolean).join(' · ') || null}
             controls={(
                 <IconToggle
@@ -87,6 +135,10 @@ const MemberRow = memo(function MemberRow({ element, def, holders, carrying, set
                 />
             )}
         />
+        {on && smaller && (
+            <OffsetEditor element={element} def={def} setOffset={setOffset} />
+        )}
+        </>
     );
 });
 
@@ -95,7 +147,7 @@ export default function ContainerStage({ element, placement }) {
     const defs = useContainerDefs();
     const def = id ? defs[id] : null;
     const holders = useHolders(defs);
-    const { rename, remove, setMember } = useContainerActions();
+    const { rename, remove, setMember, setOffset } = useContainerActions();
     const [confirmDel, setConfirmDel] = useState(false);
 
     /*
@@ -149,6 +201,7 @@ export default function ContainerStage({ element, placement }) {
                         holders={holders[el.id]}
                         carrying={placement?.carrying === el.id}
                         setMember={setMember}
+                        setOffset={setOffset}
                     />
                 ))}
             </div>

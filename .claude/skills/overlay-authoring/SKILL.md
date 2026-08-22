@@ -142,12 +142,12 @@ engine.refitText();                                  // after text binds + on fo
   `true` only when a different SVG was injected — reset your diff/animation
   state (`firstPaint`, prev-value caches) exactly then.
 
-## The container runtime — `fed-container.js` + `container-layers.js`
+## The container runtime — `container-members.js` + `fed-container.js` + `container-layers.js`
 
 A shared container is one browser source hosting whichever of its **members** is
 fed to it. The engine is split in two on purpose:
 
-- **`fed-container.js` = the REGISTRY and the wiring.** One `MEMBERS` table:
+- **`container-members.js` = the REGISTRY; `fed-container.js` = the wiring.** One `MEMBERS` table:
   `size` (native px), `mount(box, ctx, sel)`, optional `payload(sel)` (what that
   member's `update` takes) and `identity(sel)` (when one member needs more than
   one layer — the hit caches stadium/playback per board, so a board change is a
@@ -294,7 +294,7 @@ screenshot; get the user's eyes or reason from first principles.
    **Give it its own layout unless it genuinely cannot have one** — `fed` means
    no source of its own (the Stat Card, which draws whoever its container's
    scope has on the field). Anything that can also stand alone is `direct` +
-   `containerHostable`, which is both post-game callouts
+   an entry in `container-members.js`, which is now every element with a mount
    (`public/layout/postgame/{spotlight,summary}.html`) and the hit visualizer:
    one row for its own source, one row under any container that rosters it. An
    element whose content is a PICK reads that pick straight out of state on its
@@ -313,7 +313,7 @@ screenshot; get the user's eyes or reason from first principles.
    base; on air neither param exists and the real feed governs. See
    `callout-stage.html` + `fed-container.js`.
    **Adding a container MEMBER?** You add one entry to the `MEMBERS` registry in
-   `fed-container.js` — never control flow. See "The container runtime" below.
+   `container-members.js` — never control flow. See "The container runtime" below.
 
 6. Declare a **sample bundle** (`init({ sample })`) — see below. The
    coverage guard fails without one.

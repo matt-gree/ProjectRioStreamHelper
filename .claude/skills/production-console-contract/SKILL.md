@@ -20,7 +20,7 @@ reading the whole contract.
 
 | Load | When you're touching |
 |---|---|
-| `reference/element-contract.md` | Adding an element, or changing registration, `flavor`, `containerHostable`, quick faces, stage bodies |
+| `reference/element-contract.md` | Adding an element, or changing registration, `flavor`, container membership, quick faces, stage bodies |
 | `reference/scenes-and-placements.md` | `placements.js`, rack sections, row identity, the board/variant/slot axes |
 | `reference/desks.md` | The board desk, the Match desk, or adding a desk |
 | `reference/source-strip.md` | `sourcestrip.jsx`, panel headers, Bind/Air/Push, which source a panel commands |
@@ -104,7 +104,8 @@ before proceeding.
 2. Register in `elements.js`: id, name, flavor, url/dims/match, and
    quick face (or accept the flavor default, or explicit `null`). `flavor: 'fed'`
    only when the element genuinely has NO source of its own; an element that can
-   go in a container *and* stand alone is `direct` + `containerHostable`.
+   go in a container *and* stand alone is `direct` with a `container-members.js`
+   entry — hostability is read off that registry, never declared on the element.
 3. Write the stage body as kit rows in its own file under
    `src/routes/production/stage/`. No freeform JSX layout. **Do not write a
    show/hide row or a push button into the body** — the source strip in the

@@ -147,6 +147,29 @@ function normalizeDef(id, raw) {
         resting: members.includes(raw.resting) ? raw.resting : null,
         scoreboard: Number(scope.scoreboard) || 1,
         team: Number(scope.team) === 2 ? 2 : 1,
+        /*
+         * Where each member sits in this container — `{ [memberId]: { anchor,
+         * x, y } }`, read by `memberOffset` in container-layers.js. Absent means
+         * centered, which is what every container did before offsets existed.
+         *
+         * Per MEMBER and per CONTAINER, because that is what the pair of facts
+         * actually is: the same lower third belongs at the bottom of a
+         * full-canvas container and dead center of one cut to its own size. An
+         * offset on the element would have to be wrong in one of them.
+         *
+         * Entries for members no longer on the roster are dropped, the same way
+         * `resting` is — a roster edit must not leave geometry addressed to
+         * something the container can no longer draw.
+         */
+        offsets: Object.fromEntries(
+            Object.entries(raw.offsets && typeof raw.offsets === 'object' ? raw.offsets : {})
+                .filter(([m, v]) => members.includes(m) && v && typeof v === 'object')
+                .map(([m, v]) => [m, {
+                    anchor: typeof v.anchor === 'string' ? v.anchor : 'center',
+                    x: Number(v.x) || 0,
+                    y: Number(v.y) || 0,
+                }]),
+        ),
         url: containerUrl(id),
     };
 }
@@ -449,5 +472,28 @@ export function useContainerActions() {
         });
     }, []);
 
-    return { create, rename, remove, setMember, setResting, setScope };
+    /*
+     * Where one member sits in this container.
+     *
+     * Stored on the CONTAINER, keyed by member, because that is what the fact
+     * is: the same lower third belongs on the floor of a full-canvas container
+     * and dead center of one cut to its own size.
+     *
+     * A centered offset with no nudge is DELETED rather than stored — that is
+     * the default the engine already applies, and writing it would leave a
+     * definition full of entries that mean "unchanged".
+     */
+    const setOffset = useCallback((id, elementId, offset) => {
+        const defs = rawDefs();
+        if (!defs[id] || !(defs[id].members || []).includes(elementId)) return;
+        const offsets = { ...(defs[id].offsets || {}) };
+        const anchor = offset?.anchor || 'center';
+        const x = Number(offset?.x) || 0;
+        const y = Number(offset?.y) || 0;
+        if (anchor === 'center' && !x && !y) delete offsets[elementId];
+        else offsets[elementId] = { anchor, x, y };
+        writeDefs({ ...defs, [id]: { ...defs[id], offsets } });
+    }, []);
+
+    return { create, rename, remove, setMember, setResting, setScope, setOffset };
 }

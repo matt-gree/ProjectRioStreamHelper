@@ -1,6 +1,6 @@
 # The element contract
 
-> Reference for `production-console-contract`. Load when adding an element, changing how one registers, or touching flavor / containerHostable / quick faces.
+> Reference for `production-console-contract`. Load when adding an element, changing how one registers, or touching flavor / container membership / quick faces.
 
 ## The element contract
 
@@ -22,8 +22,9 @@ Every broadcast element registers in `src/routes/production/elements.js` with:
 element is: a member sitting on a container's roster rows under that container
 and pushes into it, and that same element's own dedicated source rows on its own
 and just shows and hides. Both are true at once for a member that owns a source
-— what `containerHostable` has always meant for the hit visualizer, and what the
-two post-game callouts mean now. So `flavor` answers only "does it own a source
+— true for every element that owns a source, since being hostable is read off
+the mount registry (`container-members.js`) rather than declared here. So
+`flavor` answers only "does it own a source
 of its own", every surface branches on `isFedPlacement(placement)`, and an
 element declared `fed` (Stats, Stat Card) has one possible answer, which is why
 the floor still earns a name.

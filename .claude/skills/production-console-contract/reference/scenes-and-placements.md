@@ -189,7 +189,8 @@ any of them.
   those dimensions, and changing it later would leave the source at the old size
   with nothing to say so. Two sizes means two containers.
 - **`CONTAINER_MEMBERS` is not the same question as `flavor`.** Every `fed`
-  element, plus anything declaring `containerHostable` — the hit visualizer and
+  element, plus anything with a `container-members.js` entry — which is now
+  every element that has a mount, the hit visualizer and
   both post-game callouts own a dedicated source AND can be stood up in a
   container. It is the console's half of a fact `fed-container.js` also holds
   (the mounts it can stand up); `containers.test.jsx` pins the two together
