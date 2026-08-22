@@ -29,7 +29,10 @@ const PREVIEW_ROWS = [
     ],
     [
         { label: 'Small Scoreboard', path: '/layout/scoreboard1/scoreboard.html?scoreboard=1&size=s', w: 388,  h: 156 },
-        { label: 'Bracket',          path: '/layout/bracket/index.html',                              w: 960, h: 540 },
+        // The Bracket tile sat here. It is shelved (elements.js `hidden` +
+        // _SHELVED_GROUPS in server/api/v1/layouts.py), and previewing the
+        // design settings on a layout the producer can no longer add is a tile
+        // that asks a question with no answer. Restore it with the shelf.
     ],
     [
         { label: 'Ticker',           path: '/layout/rotator/ticker.html',                             w: 1920, h: 80  },

@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { ELEMENTS } from './elements';
 import {
     catalogPlacements, genericElement, parsePlacementId, placementFlavor, placementId,
     placementTarget, placementsInScene, resolvePlacement, sceneRole, sourcelessPlacement,
@@ -566,5 +567,25 @@ describe('catalogPlacements — what PRSH can configure with no OBS', () => {
     it('never rows the same thing twice', () => {
         const ids = idsOf(all({ boards: [1, 2] }));
         expect(new Set(ids).size).toBe(ids.length);
+    });
+
+    /*
+     * SHELVED ≠ GONE. A `hidden` element drops out of the catalog — the rows the
+     * console invents when there is no OBS to discover them from — and stays in
+     * the source → row lookup, so a producer who already has one in a scene
+     * keeps their row, their stage panel and their settings. Filtering the
+     * lookup instead would quietly demote a live source to a generic layout.
+     */
+    it('leaves a shelved element out of the catalog but still recognises its source', () => {
+        const shelved = ELEMENTS.filter(el => el.hidden);
+        expect(shelved.length, 'nothing is shelved — drop this test with the flag').toBeGreaterThan(0);
+
+        const offered = all({ boards: [1, 2] }).map(p => p.element.id);
+        for (const el of shelved) expect(offered, el.id).not.toContain(el.id);
+
+        // …and the same element still derives a row from a real source.
+        const el = shelved[0];
+        const online = rows(scene('Game', 'program', item(1, 'X', `http://x${el.url}`)));
+        expect(online.map(p => p.element.id)).toContain(el.id);
     });
 });

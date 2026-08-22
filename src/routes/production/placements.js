@@ -89,6 +89,19 @@ const DIRECT_ELEMENTS = ELEMENTS.filter(el => el.flavor === 'direct');
 const FED_ELEMENTS = ELEMENTS.filter(el => el.flavor === 'fed');
 
 /*
+ * What the console OFFERS, as opposed to what it understands.
+ *
+ * A `hidden` element is shelved, not gone (see elements.js): a source already
+ * pointing at it still derives a row from `DIRECT_ELEMENTS` above and keeps its
+ * stage panel, and only the catalog tier — the rows the console invents when
+ * there is no OBS to discover them from — leaves it out. Filtering the
+ * source→row lookup instead would demote a producer's live source to a generic
+ * layout, which is the opposite of shelving.
+ */
+const OFFERED_DIRECT = DIRECT_ELEMENTS.filter(el => !el.hidden);
+const OFFERED_FED = FED_ELEMENTS.filter(el => !el.hidden);
+
+/*
  * WHICH KIND OF ROW THIS IS — the one statement of it, read by every surface.
  *
  * Fed is a property of the PLACEMENT, not of the element. A member sitting on a
@@ -383,7 +396,7 @@ export function catalogPlacements({ defs = {}, boards = [1], feeds = {} } = {}) 
      * tag is the same `zs`/`zm`/`zl` the online path derives from a URL, so a
      * selection made here still resolves once the source exists.
      */
-    for (const el of DIRECT_ELEMENTS) {
+    for (const el of OFFERED_DIRECT) {
         /*
          * The default size gets the BARE instance id, because a source with no
          * ?size= is exactly that size — so the row a producer pinned with OBS
@@ -433,7 +446,7 @@ export function catalogPlacements({ defs = {}, boards = [1], feeds = {} } = {}) 
     // where the producer finds out it needs a container and which one to add it
     // to. A member that owns a source has already rowed above, from
     // DIRECT_ELEMENTS, which is the whole point of it owning one.
-    for (const f of FED_ELEMENTS) if (!targets[f.id]) out.push(row(f));
+    for (const f of OFFERED_FED) if (!targets[f.id]) out.push(row(f));
 
     return out;
 }

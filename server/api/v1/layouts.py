@@ -40,6 +40,20 @@ def layout_url(base: str, rel) -> str:
 # Hide that layout group from the catalog on other platforms.
 _CONTROLLER_SUPPORTED = platform.system() == "Darwin"
 
+# Layout groups NOT OFFERED right now, though the files still serve.
+#
+# Shelving is a catalog decision, not a deletion: a browser source already
+# pointing at one of these keeps rendering, and the console still recognises it
+# (`hidden` in src/routes/production/elements.js is the same idea on that side —
+# not offered, still understood). What goes away is the Add picker's row.
+#
+# `bracket` — the whole start.gg-drawn group (index + the winners/losers
+# redirects + player_schedule). Shelved 2026-08-22 while the bracket work is
+# parked; the element is still registered, its stage panel still resolves, and
+# `bracket.*` state is still what the lower third's bracket slot reads. Delete
+# this entry to bring it back — nothing else has to change.
+_SHELVED_GROUPS = {"bracket"}
+
 _body_w_re = re.compile(r"body\s*\{[^}]*width:\s*(\d+)px", re.DOTALL)
 _body_h_re = re.compile(r"body\s*\{[^}]*height:\s*(\d+)px", re.DOTALL)
 _settings_re = re.compile(
@@ -223,6 +237,10 @@ async def list_layouts(request: Request):
 
             # Containers come from the definitions above, not from the folder.
             if group == _CONTAINER_GROUP:
+                continue
+
+            # Parked for now — see _SHELVED_GROUPS.
+            if group in _SHELVED_GROUPS:
                 continue
 
             layout_type = _derive_type(f.stem, group)

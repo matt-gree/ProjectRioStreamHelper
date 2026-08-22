@@ -43,6 +43,16 @@
  *                   deviate.
  *   - `scope`     : 'board' when the SOURCE carries ?scoreboard=N, so two of
  *                   them in one scene are two instances. Omitted = global.
+ *   - `hidden`    : NOT OFFERED, still understood. The console stops proposing
+ *                   the element — no catalog row with OBS closed, and the
+ *                   server drops its layout group from the Add picker — but a
+ *                   source already pointing at it still derives a row, still
+ *                   resolves its stage panel and still reads its settings. An
+ *                   entry deleted instead would file a producer's live source
+ *                   as a generic layout and cost it all three. Shelving is
+ *                   temporary by construction: remove the flag (and the
+ *                   matching `_SHELVED_GROUPS` entry in
+ *                   server/api/v1/layouts.py) to bring it back.
  *
  * Two board mechanisms, and conflating them is how multiplicity ends up feeling
  * bolted on:
@@ -360,7 +370,13 @@ export const ELEMENTS = [
         // stage (../bracket's shared useBracketDesk) and on the lower third's
         // bracket slot — there is no Bracket desk; it was a third copy of a
         // picker both consumers already carried.
+        //
+        // SHELVED (2026-08-22) while the bracket work is parked — see `hidden`
+        // below and `_SHELVED_GROUPS` in server/api/v1/layouts.py, which drops
+        // the same group from the Add picker. The two have to agree: the server
+        // decides what OBS can be given, this decides what the console offers.
         flavor: 'direct',
+        hidden: true,
         url: '/layout/bracket/index.html',
         width: 1920,
         height: 1080,

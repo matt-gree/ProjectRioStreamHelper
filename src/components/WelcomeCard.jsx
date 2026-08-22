@@ -193,7 +193,7 @@ export default function WelcomeCard() {
                                 promising something that needs OBS: the Add picker
                                 opens without it, for Copy URL. */}
                             <ChecklistRow done={false} title="Add OBS browser sources">
-                                Open the <Anchor href="#/" onClick={handleDismiss} style={{ color: '#ffb3b8' }}>Production tab</Anchor> and hit the + beside a scene to add scoreboards, brackets and the rest — or copy their URLs to paste into OBS yourself.
+                                Open the <Anchor href="#/" onClick={handleDismiss} style={{ color: '#ffb3b8' }}>Production tab</Anchor> and hit the + beside a scene to add scoreboards, lower thirds and the rest — or copy their URLs to paste into OBS yourself.
                             </ChecklistRow>
                             <ChecklistRow done={tournamentLoaded} title="Tournament integration (optional)">
                                 Load a bracket from start.gg on the Competition tab.
