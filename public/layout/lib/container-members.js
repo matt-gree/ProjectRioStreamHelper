@@ -246,6 +246,14 @@ export const MEMBERS = {
         mount: simple('matchup-mount', 'mountMatchup'),
         sample: { file: 'matchup', content: {} },
     },
+    schedule: {
+        size: [1920, 1080],
+        mount: async (box) => {
+            const { mountSchedule } = await load('schedule-mount');
+            return mountSchedule({ host: hostIn(box) });
+        },
+        sample: { file: 'schedule', content: {} },
+    },
     // Wraps gc-overlay, a SUBPROCESS on its own port — so unlike every other
     // member there is a second thing that has to be running for it to draw. It
     // reports that itself (the iframe stays hidden and the mount keeps asking),
