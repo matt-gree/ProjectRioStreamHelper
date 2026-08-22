@@ -43,7 +43,7 @@ async def test_seeds_the_containers_the_app_ships_with(isolate_user_data):
 # Members with no content of their own: they draw whoever the CONTAINER's own
 # scope has on the field, so they are the exception to exclusivity below.
 # Mirrors `containerScoped` in src/routes/production/elements.js.
-SCOPED_MEMBERS = {"roster", "statscard"}
+SCOPED_MEMBERS = {"roster", "statscard", "controller"}
 
 
 async def test_rosters_are_mutually_exclusive_across_containers(isolate_user_data):
