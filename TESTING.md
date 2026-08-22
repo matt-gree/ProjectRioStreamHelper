@@ -276,8 +276,9 @@ entrant order, and `_user_overridden`.
 | 10 | mid-game, `_user_overridden=True`, no pin | none | mid | sides held; no reset |
 | 11 | `toggle_sides_swapped()` | — | manual | flips `_sides_swapped`, sets `_user_overridden=True` |
 
-These mirror the rules in CLAUDE.md (§ Player-Side Preservation) — keep the table
-and that doc in sync.
+These mirror the rules in CLAUDE.md (§ Player-Side Cascade) — keep the table
+and that doc in sync. The table predates the `match` layer, which sits between
+manual and pin; `test_side_preservation.py` covers that layer directly.
 
 ---
 

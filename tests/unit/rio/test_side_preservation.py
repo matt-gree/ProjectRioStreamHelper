@@ -1,11 +1,13 @@
 """Player-side orientation — the Phase-5 unified cascade + override state machine.
 
-This is the highest-risk logic in the app (CLAUDE.md § Player-Side Preservation).
+This is the highest-risk logic in the app (CLAUDE.md § Player-Side Cascade).
 Since the Draft→Live reconciliation (Phase 5) the responsibilities are split:
 
 * ``_decide(left, right, sb, allow_manual)`` — the per-board cascade,
-  precedence **manual > pin > match > back_to_back > none**, returning
-  ``(sides_swapped, reason)``. The actual entrant swap happens later in
+  precedence **manual > match > pin > back_to_back > none**, returning
+  ``(sides_swapped, reason)``. A bound match encodes *both* sides, so it
+  supersedes the pin on that board; the pin stays authoritative for every
+  unbound board. The actual entrant swap happens later in
   ``_apply_game_to_state`` per board; ``_preserve_player_sides`` no longer
   mutates ``parsed``.
 * ``_preserve_player_sides(parsed)`` — the manual-override state machine only:
