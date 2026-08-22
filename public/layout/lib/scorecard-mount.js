@@ -359,8 +359,8 @@ export function mountScorecard({ host, sb }) {
       engine.setText(`box-away-${i}`, active ? (a != null ? a : '-') : '');
       engine.setText(`box-home-${i}`, active ? (h != null ? h : '-') : '');
     }
-    engine.setText('box-away-R', d.sL);
-    engine.setText('box-home-R', d.sR);
+    engine.setText('box-away-r', d.sL);
+    engine.setText('box-home-r', d.sR);
   }
 
   function bindHeader(vis) {

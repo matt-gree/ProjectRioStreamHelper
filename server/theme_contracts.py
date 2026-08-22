@@ -151,8 +151,8 @@ def _scoreboard_slots() -> dict[str, Slot]:
         "meta-game-mode": Slot("text"),
         "elo1-group": Slot("group"),
         "elo2-group": Slot("group"),
-        "box-away-R": Slot("text"),
-        "box-home-R": Slot("text"),
+        "box-away-r": Slot("text"),
+        "box-home-r": Slot("text"),
         "box-away-name": Slot("text"),
         "box-home-name": Slot("text"),
     }

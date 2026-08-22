@@ -62,7 +62,7 @@
 //     context; it self-hides when the mode is unknown.
 //   sT-char-0..8(image) sT-cap-ring(shape; mount moves it to the captain slot)
 //   box-col-1..9(g) box-h-1..9(text) box-away-1..9 box-home-1..9(text)
-//   box-away-R box-home-R(text) box-away-name box-home-name(text)
+//   box-away-r box-home-r(text) box-away-name box-home-name(text)
 //   logo(image branding) logo-default(g fallback mark)
 //
 // COLOUR SEAMS: the mount sets --side1/--side2 on the host from each player's
@@ -680,8 +680,8 @@ export function mountScoreboard({ host, sb, size }) {
       engine.setText(`box-away-${i}`, active ? (a != null ? a : '-') : '');
       engine.setText(`box-home-${i}`, active ? (h != null ? h : '-') : '');
     }
-    engine.setText('box-away-R', d.sL);
-    engine.setText('box-home-R', d.sR);
+    engine.setText('box-away-r', d.sL);
+    engine.setText('box-home-r', d.sR);
     engine.setText('box-away-name', d.p1 || 'Away');
     engine.setText('box-home-name', d.p2 || 'Home');
     return nInn > 0;

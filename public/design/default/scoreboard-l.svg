@@ -176,7 +176,7 @@
     <text data-slot="box-away-7" x="494" y="59" text-anchor="middle" class="sb-num" font-size="16">-</text>
     <text data-slot="box-away-8" x="548" y="59" text-anchor="middle" class="sb-num" font-size="16">-</text>
     <text data-slot="box-away-9" x="602" y="59" text-anchor="middle" class="sb-num" font-size="16">-</text>
-    <text data-slot="box-away-R" x="700" y="59" text-anchor="middle" style="fill:var(--accent)" font-family="var(--font-mono)" font-size="17" font-weight="700">0</text>
+    <text data-slot="box-away-r" x="700" y="59" text-anchor="middle" style="fill:var(--accent)" font-family="var(--font-mono)" font-size="17" font-weight="700">0</text>
 
     <circle cx="42" cy="85" r="6" style="fill:var(--side2)"/>
     <text data-slot="box-home-name" data-maxw="88" x="56" y="91" class="sb-dim" font-size="14" font-weight="600">Home</text>
@@ -189,6 +189,6 @@
     <text data-slot="box-home-7" x="494" y="91" text-anchor="middle" class="sb-num" font-size="16">-</text>
     <text data-slot="box-home-8" x="548" y="91" text-anchor="middle" class="sb-num" font-size="16">-</text>
     <text data-slot="box-home-9" x="602" y="91" text-anchor="middle" class="sb-num" font-size="16">-</text>
-    <text data-slot="box-home-R" x="700" y="91" text-anchor="middle" style="fill:var(--accent)" font-family="var(--font-mono)" font-size="17" font-weight="700">0</text>
+    <text data-slot="box-home-r" x="700" y="91" text-anchor="middle" style="fill:var(--accent)" font-family="var(--font-mono)" font-size="17" font-weight="700">0</text>
   </g>
 </svg>
