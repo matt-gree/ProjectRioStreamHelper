@@ -18,16 +18,16 @@
  *                            each into a separate catalog row), so a producer
  *                            picking "Stats — Team 2" has already chosen one.
  *
- * The variant axis is not optional bookkeeping. Team-variant layouts (stats,
- * roster, teamlogo, playername) are unregistered, so they row
- * through `genericElement`, which keys on the PATHNAME — and left at that,
- * team 1's and team 2's sources produce the same id. Two rows with one identity
- * means duplicate React keys in the rack and a stage that drives whichever
- * `find()` reached first: the left-team panel toggling the right-team source.
- * That is the exact bug board-aware binding fixed, one axis over. The same
- * split applies to a REGISTERED element with a variant: Controller is now a
- * registered element whose ?team= variant is read straight off the URL here,
- * so its left/right sources stay two rows.
+ * The variant axis is not optional bookkeeping, and it is deliberately not
+ * gated on registration. An UNREGISTERED team-variant layout rows through
+ * `genericElement`, which keys on the PATHNAME — and left at that, team 1's and
+ * team 2's sources produce the same id. Two rows with one identity means
+ * duplicate React keys in the rack and a stage that drives whichever `find()`
+ * reached first: the left-team panel toggling the right-team source. That is the
+ * exact bug board-aware binding fixed, one axis over. Registering an element
+ * does not change the answer — Stats, Roster, Controller, Player Name and Team
+ * Logo are all registered and all read their ?team= straight off the URL here,
+ * which is what keeps their left/right sources two rows.
  *
  * Feed-scoped elements deliberately get neither. Their container is
  * board-agnostic and the board rides in the pushed payload — see the "two board

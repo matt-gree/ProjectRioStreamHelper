@@ -212,6 +212,40 @@ export const ELEMENTS = [
         containerScoped: true,
     },
     {
+        id: 'playername',
+        name: 'Player Name',
+        // One side's name (?scoreboard=N&team=T) as its own source, with the
+        // Address Book prefix beside it — for placing a name somewhere the
+        // scoreboard isn't. Alignment and prefix position are its own settings
+        // (overlays.playername.*), authored in the stage's Style section.
+        //
+        // No `scope: 'board'`, and its two sources differ by ?team=, which the
+        // instance grammar reads off the URL as a variant. Same shape as the
+        // Roster and the Controller.
+        flavor: 'direct',
+        url: '/layout/scoreboard1/playername.html',
+        width: 400,
+        height: 100,
+        // Anchored to the full path, like the roster's — a sibling in the same
+        // folder whose stem merely starts with "playername" must not bind here.
+        match: (url) => /\/layout\/scoreboard\d*\/playername\.html/i.test(url),
+        containerScoped: true,
+    },
+    {
+        id: 'teamlogo',
+        name: 'Team Logo',
+        // One side's MSB team banner (?scoreboard=N&team=T), from the user's own
+        // asset pack. No settings of its own — the logo is the whole element —
+        // which is why LAYOUT_SETTINGS.teamlogo is an empty list rather than
+        // absent: the namespace exists, it just has nothing in it yet.
+        flavor: 'direct',
+        url: '/layout/scoreboard1/teamlogo.html',
+        width: 360,
+        height: 360,
+        match: (url) => /\/layout\/scoreboard\d*\/teamlogo\.html/i.test(url),
+        containerScoped: true,
+    },
+    {
         id: 'commentary',
         name: 'Commentary',
         // Registry-bound caster desk.

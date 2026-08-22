@@ -277,6 +277,36 @@ export const MEMBERS = {
         watch: (key) => key.startsWith('match.'),
         sample: { file: 'eventheader', content: { scoreboard: 1 } },
     },
+    // One side's name and one side's team banner. Side-scoped like the roster
+    // and the stat card — they bind `score.{N}.player.{T}.*` at mount time, so a
+    // scope change is a new layer rather than an update.
+    playername: {
+        size: [400, 100],
+        mount: async (box, ctx, sel) => {
+            const { mountPlayerName } = await load('playername-mount');
+            const pn = mountPlayerName({
+                host: hostIn(box),
+                sb: Number(sel?.scoreboard) || 1,
+                team: Number(sel?.team) === 2 ? 2 : 1,
+            });
+            return { ...pn, update: (state) => pn.update(state, OverlayBase.settings) };
+        },
+        identity: (sel) => `playername:${Number(sel.scoreboard) || 1}:${Number(sel.team) === 2 ? 2 : 1}`,
+        sample: { file: 'scoreboard', content: { scoreboard: 1, team: 1 } },
+    },
+    teamlogo: {
+        size: [360, 360],
+        mount: async (box, ctx, sel) => {
+            const { mountTeamLogo } = await load('teamlogo-mount');
+            return mountTeamLogo({
+                host: hostIn(box),
+                sb: Number(sel?.scoreboard) || 1,
+                team: Number(sel?.team) === 2 ? 2 : 1,
+            });
+        },
+        identity: (sel) => `teamlogo:${Number(sel.scoreboard) || 1}:${Number(sel.team) === 2 ? 2 : 1}`,
+        sample: { file: 'scoreboard', content: { scoreboard: 1, team: 1 } },
+    },
     // Wraps gc-overlay, a SUBPROCESS on its own port — so unlike every other
     // member there is a second thing that has to be running for it to draw. It
     // reports that itself (the iframe stays hidden and the mount keeps asking),

@@ -47,6 +47,7 @@ describe('overlay-settings whitelist parity', () => {
     const cases = [
         ['eventheader', 'public/layout/eventheader/eventheader.html'],
         ['scorecard', 'public/layout/scorecard/scorecard.html'],
+        ['playername', 'public/layout/scoreboard1/playername.html'],
     ];
 
     for (const [type, file] of cases) {

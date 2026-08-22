@@ -1,85 +1,40 @@
 <!DOCTYPE html>
 <html>
+<!--
+  Team Logo — a thin shell over lib/teamlogo-mount.js, which is also what a
+  container stands up when this element is fed into one. One side's MSB team
+  banner (?scoreboard=N&team=1|2), from the user's own asset pack.
+-->
 <head>
   <meta charset="utf-8" />
   <meta name="overlay-settings" content="" />
   <style>
-    body {
-      overflow: hidden;
-      margin: 0;
-      width: 360px;
-      height: 360px;
-      background: transparent;
-    }
-    .team-logo-container {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 360px;
-      height: 360px;
-      transform-origin: top left;
-    }
-    .team-logo {
-      width: 360px;
-      height: 360px;
-      object-fit: contain;
-    }
+    html, body { margin: 0; overflow: hidden; }
+    body { width: 360px; height: 360px; background: transparent; }
+    #host { position: fixed; inset: 0; }
   </style>
 </head>
 <body>
-  <div class="team-logo-container" id="team-logo-container"></div>
+  <div id="host"></div>
 
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <script src="/layout/lib/overlay-base.js"></script>
-  <script>
-    const REF_W = 360, REF_H = 360;
-    document.body.dataset.refW = REF_W;
-    document.body.dataset.refH = REF_H;
-    function autoScale() {
-      const el = document.getElementById('team-logo-container');
-      const needsScale = Math.abs(window.innerWidth - REF_W) > 2 || Math.abs(window.innerHeight - REF_H) > 2;
-      if (needsScale) {
-        const scale = Math.min(window.innerWidth / REF_W, window.innerHeight / REF_H);
-        document.body.style.width = window.innerWidth + 'px';
-        document.body.style.height = window.innerHeight + 'px';
-        el.style.transform = `scale(${scale})`;
-        el.style.transformOrigin = 'top left';
-      } else {
-        document.body.style.width = REF_W + 'px';
-        document.body.style.height = REF_H + 'px';
-        el.style.transform = '';
-      }
-    }
-    window.addEventListener('resize', autoScale);
-    autoScale();
+  <script type="module">
+    import { mountTeamLogo } from '/layout/lib/teamlogo-mount.js';
 
     const params = new URLSearchParams(window.location.search);
-    const SCOREBOARD = parseInt(params.get('scoreboard')) || 1;
-    const TEAM_NUM = parseInt(params.get('team')) || 1;
-    // Prefer the explicit in-game banner (player.T.logo); fall back to the
-    // roster-derived team name (msb_team) when no banner is set.
-    const LOGO_KEY = `score.${SCOREBOARD}.player.${TEAM_NUM}.logo`;
-    const TEAM_KEY = `score.${SCOREBOARD}.player.${TEAM_NUM}.msb_team`;
-    const { deepGet, teamId, BASE_URL, state } = OverlayBase;
+    const SB = parseInt(params.get('scoreboard')) || 1;
+    const TEAM = parseInt(params.get('team')) || 1;
 
-    function render() {
-      const container = document.getElementById('team-logo-container');
-      container.innerHTML = '';
-      const teamName = deepGet(state, LOGO_KEY) || deepGet(state, TEAM_KEY);
-      const id = teamId(teamName);
-      if (id !== undefined) {
-        const img = document.createElement('img');
-        img.src = `${BASE_URL}/game_assets/msb/teamLogos/${id}.png`;
-        img.className = 'team-logo';
-        img.onerror = () => img.style.display = 'none';
-        container.appendChild(img);
-      }
-    }
+    document.body.dataset.refW = 360;
+    document.body.dataset.refH = 360;
+
+    const tl = mountTeamLogo({ host: document.getElementById('host'), sb: SB, team: TEAM });
 
     OverlayBase.init({
-      render,
+      render: () => tl.update(OverlayBase.state),
       sample: 'scoreboard',
-      shouldRender: (key) => key === LOGO_KEY || key === TEAM_KEY,
+      shouldRender: tl.shouldRender,
     });
   </script>
 </body>

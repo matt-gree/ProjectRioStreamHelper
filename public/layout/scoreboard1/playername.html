@@ -1,128 +1,49 @@
 <!DOCTYPE html>
 <html>
+<!--
+  Player Name — a thin shell over lib/playername-mount.js, which is also what a
+  container stands up when this element is fed into one. One side's name
+  (?scoreboard=N&team=1|2) with the address-book prefix beside it; alignment and
+  prefix position are authored on this element's Production stage panel.
+-->
 <head>
   <meta charset="utf-8" />
-  <meta name="overlay-settings" content="textColor, accentColor, fontFamily, textShadow" />
+  <!-- The whitelist must name every knob the mount reads: the stage's Style
+       section filters LAYOUT_SETTINGS.playername down to what appears here, so
+       an omitted key is a setting the mount honours but nobody can reach. -->
+  <meta name="overlay-settings" content="align, prefixPosition, textColor, accentColor, fontFamily, textShadow" />
   <!-- Inter is bundled locally and injected by overlay-base.js. -->
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    /* A transform doesn't change the layout box, so a container sized to the
-       viewport and then scaled UP sticks out of the body — scrollbars on any
-       source bigger than native. autoScale() sizes it in PRE-scale units for
-       exactly that reason; this is the backstop, and what every sibling layout
-       already does. */
-    html, body { overflow: hidden; }
-    body {
-      width: 400px;
-      height: 100px;
-      background: transparent;
-      font-family: var(--font-family, 'Inter', sans-serif);
-    }
-    .name-container {
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      width: 100%;
-      height: 100%;
-      padding: 16px;
-      transform-origin: top left;
-      gap: 2px;
-    }
-    /* Side 1 hugs the left edge, Side 2 hugs the right edge. */
-    body[data-team="1"] .name-container { align-items: flex-start; text-align: left; }
-    body[data-team="2"] .name-container { align-items: flex-end;   text-align: right; }
-    .player-tag {
-      font-size: 18px;
-      font-weight: 800;
-      line-height: 1;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      color: var(--tag-color, var(--accent, #f59f00));
-      text-shadow: var(--text-shadow, none);
-      white-space: nowrap;
-    }
-    .player-tag:empty { display: none; }
-    .player-name {
-      font-size: 36px;
-      font-weight: 700;
-      line-height: 1.05;
-      color: var(--text-primary, #ffffff);
-      text-shadow: var(--text-shadow, none);
-      white-space: nowrap;
-    }
+    html, body { margin: 0; overflow: hidden; }
+    body { width: 400px; height: 100px; background: transparent; }
+    /* The mount scales its native card to this box, so a bigger or smaller OBS
+       source resizes the name rather than cropping it. */
+    #host { position: fixed; inset: 0; }
   </style>
 </head>
 <body>
-  <div class="name-container" id="name-container">
-    <span class="player-tag" id="tag-text"></span>
-    <span class="player-name" id="name-text"></span>
-  </div>
+  <div id="host"></div>
 
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <script src="/layout/lib/overlay-base.js"></script>
-  <script>
-    const REF_W = 400, REF_H = 100;
-    document.body.dataset.refW = REF_W;
-    document.body.dataset.refH = REF_H;
-
-    function autoScale() {
-      const el = document.getElementById('name-container');
-      const needsScale = Math.abs(window.innerWidth - REF_W) > 2 || Math.abs(window.innerHeight - REF_H) > 2;
-      if (needsScale) {
-        const scale = Math.min(window.innerWidth / REF_W, window.innerHeight / REF_H);
-        document.body.style.width = window.innerWidth + 'px';
-        document.body.style.height = window.innerHeight + 'px';
-        // PRE-scale size: the container still fills the source (so side 2 keeps
-        // hugging its right edge on a source that isn't the native aspect), but
-        // it is laid out at the size that BECOMES the viewport once scaled.
-        // Sizing it to the viewport and then scaling by >1 — which is what a
-        // preview or an oversized OBS source does — overflowed the body.
-        el.style.width = (window.innerWidth / scale) + 'px';
-        el.style.height = (window.innerHeight / scale) + 'px';
-        el.style.transform = `scale(${scale})`;
-        el.style.transformOrigin = 'top left';
-      } else {
-        document.body.style.width = REF_W + 'px';
-        document.body.style.height = REF_H + 'px';
-        el.style.width = '';
-        el.style.height = '';
-        el.style.transform = '';
-      }
-    }
-    window.addEventListener('resize', autoScale);
-    autoScale();
+  <script type="module">
+    import { mountPlayerName } from '/layout/lib/playername-mount.js';
 
     const params = new URLSearchParams(window.location.search);
-    const SCOREBOARD = parseInt(params.get('scoreboard')) || 1;
-    const TEAM_NUM = parseInt(params.get('team')) || 1;
-    document.body.dataset.team = TEAM_NUM;
+    const SB = parseInt(params.get('scoreboard')) || 1;
+    const TEAM = parseInt(params.get('team')) || 1;
 
-    const NAME_KEY = `score.${SCOREBOARD}.player.${TEAM_NUM}.rioName`;
-    // Address-book prefix (sponsor/tag) projects to score.player.{T}.team.
-    const TAG_KEY  = `score.${SCOREBOARD}.player.${TEAM_NUM}.team`;
-    const { deepGet, state, settings, applyDesignSettings } = OverlayBase;
+    document.body.dataset.refW = 400;
+    document.body.dataset.refH = 100;
 
-    // Slice26's palette (lime side 1 / teal side 2) isn't exposed as a
-    // settings-driven color anywhere else, so it's hardcoded here to match
-    // the package's other themed elements.
-    const SLICE26_SIDE_COLOR = { 1: '#C5F707', 2: '#57E0E7' };
-
-    function render() {
-      applyDesignSettings('playername');
-      const designPackage = deepGet(settings, 'overlays.global.designPackage', 'default');
-      const tagColor = designPackage === 'slice26' ? SLICE26_SIDE_COLOR[TEAM_NUM] : null;
-      if (tagColor) document.documentElement.style.setProperty('--tag-color', tagColor);
-      else document.documentElement.style.removeProperty('--tag-color');
-      document.getElementById('name-text').textContent = deepGet(state, NAME_KEY, '');
-      document.getElementById('tag-text').textContent = deepGet(state, TAG_KEY, '');
-    }
+    const pn = mountPlayerName({ host: document.getElementById('host'), sb: SB, team: TEAM });
 
     OverlayBase.init({
-      render,
+      render: () => pn.update(OverlayBase.state, OverlayBase.settings),
       sample: 'scoreboard',
       fetchSettings: true,
-      shouldRender: (key) => key === NAME_KEY || key === TAG_KEY,
-      shouldRenderSettings: (key) => key.startsWith('overlays.'),
+      shouldRender: pn.shouldRender,
+      shouldRenderSettings: pn.shouldRenderSettings,
     });
   </script>
 </body>

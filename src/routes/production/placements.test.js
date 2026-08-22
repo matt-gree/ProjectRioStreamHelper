@@ -39,11 +39,19 @@ const CALLOUT = 'http://x/layout/shared/callout-stage.html';
 // The Character Spotlight's OWN source. It is a container member AND a direct
 // element now, which is the pair these tests exist to keep apart.
 const SPOTLIGHT = 'http://x/layout/postgame/spotlight.html';
-// An unregistered PRSH layout with a ?team= variant. Roster used to be the
-// exemplar here; it is a registered element now (it is also a container
-// member), so the unregistered case needs a layout that really is one.
-const TEAMLOGO = 'http://x/layout/scoreboard1/teamlogo.html';
+/*
+ * A PRSH layout the registry has never heard of, with a ?team= variant.
+ *
+ * SYNTHETIC ON PURPOSE. This exemplar has already had to move twice — Roster,
+ * then Team Logo — because each time the console grew a stage panel for one, it
+ * stopped being unregistered and took these tests with it. What is under test is
+ * the GENERIC path, not any particular layout, so the URL is one no element will
+ * ever claim. Registering something must not be able to break the fallback for
+ * everything else.
+ */
+const UNREGISTERED = 'http://x/layout/custom/panel.html';
 const ROSTER = 'http://x/layout/scoreboard1/roster.html';
+const PLAYERNAME = 'http://x/layout/scoreboard1/playername.html';
 const SHELL = 'http://x/layout/shared/container.html';
 
 describe('placement ids', () => {
@@ -182,7 +190,7 @@ describe('placementsInScene — source → row', () => {
     // An unregistered overlay outside shared/ is NOT a container — it gets a
     // plain row, and nothing nests under it.
     it('does not treat an ordinary unregistered overlay as a container', () => {
-        const [p] = rows(scene('Game', 'program', item(4, 'Team Logo', TEAMLOGO)));
+        const [p] = rows(scene('Game', 'program', item(4, 'Panel', UNREGISTERED)));
         expect(p.container).toBeNull();
         expect(p.feeds).toEqual([]);
     });
@@ -193,10 +201,10 @@ describe('placementsInScene — source → row', () => {
      * adding something the producer then cannot find.
      */
     it('rows an unregistered PRSH source rather than dropping it', () => {
-        const [p] = rows(scene('Game', 'program', item(4, 'Team Logo', TEAMLOGO)));
+        const [p] = rows(scene('Game', 'program', item(4, 'Panel', UNREGISTERED)));
         expect(p.element.generic).toBe(true);
-        expect(p.element.name).toBe('Teamlogo');
-        expect(p.id).toBe('layout:/layout/scoreboard1/teamlogo.html@Game');
+        expect(p.element.name).toBe('Panel');
+        expect(p.id).toBe('layout:/layout/custom/panel.html@Game');
     });
 
     it('names a generic element from its file, not its query', () => {
@@ -205,21 +213,20 @@ describe('placementsInScene — source → row', () => {
     });
 
     /*
-     * THE TEAM AXIS. An unregistered team-variant layout (teamlogo,
-     * playername…) rows through genericElement — which keys on the PATHNAME.
-     * Left at that, team 1 and team 2 share one id:
-     * duplicate React keys in the rack, and `resolvePlacement`'s find() handing
-     * the left-side panel the right-side source. Same class of bug as two boards
-     * sharing a row, one axis over.
+     * THE TEAM AXIS, on a layout the registry does not carry. It rows through
+     * genericElement — which keys on the PATHNAME. Left at that, team 1 and
+     * team 2 share one id: duplicate React keys in the rack, and
+     * `resolvePlacement`'s find() handing the left-side panel the right-side
+     * source. Same class of bug as two boards sharing a row, one axis over.
      */
     it('rows two team variants of one layout separately', () => {
         const out = rows(scene('Game', 'program',
-            item(4, 'Logo L', `${TEAMLOGO}?team=1`), item(5, 'Logo R', `${TEAMLOGO}?team=2`)));
+            item(4, 'Panel L', `${UNREGISTERED}?team=1`), item(5, 'Panel R', `${UNREGISTERED}?team=2`)));
         expect(out.map(p => p.id)).toEqual([
-            'layout:/layout/scoreboard1/teamlogo.html~t1@Game',
-            'layout:/layout/scoreboard1/teamlogo.html~t2@Game',
+            'layout:/layout/custom/panel.html~t1@Game',
+            'layout:/layout/custom/panel.html~t2@Game',
         ]);
-        expect(out.map(p => p.item.sourceName)).toEqual(['Logo L', 'Logo R']);
+        expect(out.map(p => p.item.sourceName)).toEqual(['Panel L', 'Panel R']);
         // One TYPE wearing two variants — the element is still the layout.
         expect(new Set(out.map(p => p.element.id)).size).toBe(1);
     });
@@ -236,6 +243,20 @@ describe('placementsInScene — source → row', () => {
             item(6, 'Roster L', `${ROSTER}?scoreboard=1&team=1`),
             item(7, 'Roster R', `${ROSTER}?scoreboard=1&team=2`)));
         expect(out.map(p => p.id)).toEqual(['roster~t1@Game', 'roster~t2@Game']);
+        expect(out.every(p => p.element.generic)).toBe(false);
+    });
+
+    /*
+     * Player Name is registered too, so a producer who places a name outside the
+     * scoreboard gets a rack row and a stage panel for it — which is where its
+     * alignment and prefix-position settings live. Without the registration the
+     * settings exist and nothing can reach them.
+     */
+    it('rows a registered player name as an element, one row per side', () => {
+        const out = rows(scene('Game', 'program',
+            item(8, 'Name L', `${PLAYERNAME}?scoreboard=1&team=1`),
+            item(9, 'Name R', `${PLAYERNAME}?scoreboard=1&team=2`)));
+        expect(out.map(p => p.id)).toEqual(['playername~t1@Game', 'playername~t2@Game']);
         expect(out.every(p => p.element.generic)).toBe(false);
     });
 
@@ -380,8 +401,8 @@ describe('resolvePlacement — stored ids are resolved, never rewritten', () => 
     // A variant is part of the identity, so it narrows like the board does.
     it('does not answer one variant with another', () => {
         const two = rows(scene('Game', 'program',
-            item(1, 'L', `${TEAMLOGO}?team=1`), item(2, 'R', `${TEAMLOGO}?team=2`)));
-        expect(resolvePlacement('layout:/layout/scoreboard1/teamlogo.html~t2@Game', two).item.sourceName)
+            item(1, 'L', `${UNREGISTERED}?team=1`), item(2, 'R', `${UNREGISTERED}?team=2`)));
+        expect(resolvePlacement('layout:/layout/custom/panel.html~t2@Game', two).item.sourceName)
             .toBe('R');
     });
 

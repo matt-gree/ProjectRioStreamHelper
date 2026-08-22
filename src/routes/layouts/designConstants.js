@@ -74,6 +74,20 @@ export const LAYOUT_SETTINGS = {
     // configured independently; the Production stage reaches these from the Stat
     // Card row nested under its container.
     statscard: [...STAT_CARD_SETTINGS, ...TOP_LINE_SETTINGS],
+    /*
+     * Player Name — one side's name as its own source.
+     *
+     * These are GLOBAL (`overlays.playername.*`, one namespace for both sides,
+     * same as the roster's), which is what makes `auto` a value rather than a
+     * cop-out: the shipped behaviour is side-dependent — side 1 on the left,
+     * side 2 on the right, so a pair of them frames a scoreboard — and one
+     * setting cannot say that with three literal edges. It is also the default,
+     * so a source already in a producer's scene does not move.
+     */
+    playername: [
+        { key: 'align', type: 'select', label: 'Alignment', description: 'Which edge the name sits on. Mirror Sides puts side 1 left and side 2 right — the pair that frames a scoreboard.', options: [{ value: 'auto', label: 'Mirror Sides' }, { value: 'left', label: 'Left' }, { value: 'center', label: 'Middle' }, { value: 'right', label: 'Right' }], defaultValue: 'auto' },
+        { key: 'prefixPosition', type: 'select', label: 'Prefix Position', description: 'Where the Address Book prefix (sponsor / tag) sits relative to the name. Off hides it without editing the Address Book.', options: [{ value: 'above', label: 'Above Name' }, { value: 'below', label: 'Below Name' }, { value: 'inline', label: 'Before Name' }, { value: 'off', label: 'Off' }], defaultValue: 'above' },
+    ],
     teamlogo: [],
     bracket: [
         { key: 'connectorColor', type: 'color-override', label: 'Connector Line Color', description: 'Color of bracket connector lines' },
