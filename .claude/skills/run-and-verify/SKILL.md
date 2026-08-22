@@ -139,6 +139,29 @@ pin overlay/OBS contracts. When a change alters behavior a test encodes,
 update the test **in the same commit** — code, tests, and CLAUDE.md must never
 disagree.
 
+### The invariant layer (`tests/integration/test_invariants.py`)
+
+Rules that live BETWEEN models — a projector and a feed sharing
+`score.{N}.player.{T}.*`, a container's feed and its roster, `schedule.queue`
+and the orders it projects — belong to no module, so no module's unit tests can
+see them break. They are written down once in `server/invariants.py` and run
+from three places off that one list: this test file, `GET /api/v1/invariants`,
+and `scripts/prsh-agent.py doctor --assert`.
+
+- **Drive a real workflow, then `assert_healthy()`.** The value is in the seam,
+  so a test that hand-writes the end state proves nothing about the path to it.
+  Go through the routes a producer's clicks go through.
+- **Seed a live board through the provider, not through `State.SetBatch`.** A
+  hand-seeded board has no `_raw_game` and is in no `_hud_targets`, so the whole
+  re-settle path (`reorient_board`) silently no-ops and the test passes for the
+  wrong reason. `seed_live_board` / `next_frame` in that file are the pattern.
+- **Some seams only break after a frame lands *following* the change.** Binding
+  never writes `side_reason = "match"`; the next frame does, and the unbind
+  after that is where it goes stale. If a workflow test passes with the fix
+  reverted, that ordering is the usual reason.
+- **Each check has a test that watches it fail.** A check nobody has seen fire
+  might be asserting nothing.
+
 ## Writing frontend tests (vitest + Testing Library)
 
 Config lives in `vite.config.js` (`test:` block, read by vitest itself):

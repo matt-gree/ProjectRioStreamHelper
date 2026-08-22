@@ -25,6 +25,7 @@ from server.api.v1 import (
     playerplates,
     postgame,
     design,
+    invariants,
 )
 
 router_v1 = APIRouter(
@@ -33,6 +34,7 @@ router_v1 = APIRouter(
 )
 
 router_v1.include_router(state.router)
+router_v1.include_router(invariants.router)
 router_v1.include_router(action.router)
 router_v1.include_router(settings.router)
 router_v1.include_router(rio.router)
