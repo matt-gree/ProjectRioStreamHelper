@@ -284,16 +284,52 @@ the reference. What matters when carrying it onto a *different* card:
   the inner one — which is what the lower third's bob/sway nesting is doing
   before it is doing anything about phase.
 
-## Keep a Figma-reimport template (a real workflow win)
+## Figma-reimport templates are GENERATED — never hand-maintain one
 
-For any theme complex enough that the designer will keep iterating, commit a
-`design-templates/<element>.template.svg` beside the shipped file: **literal
-seam colors + grammar layer-ids** (`slot=… maxw=…`, `anim=`, `cardw=`,
-`compactw=`, `layout=absolute`, `scaffold=…`) + the re-added transparent image
-slots. Import → edit in Figma → export → `compile-theme.py` reproduces the
-shipped SVG. Verify parity by diffing the compiled slot inventory against the
-shipped file (they must match). This gives the designer a 1:1 editable source
-and makes the round-trip lossless — worth the upkeep for flagship themes.
+`design-templates/<element>.template.svg` is the editable source a designer
+opens; **`scripts/figma-template.py` generates it from the shipped SVG** and is
+the exact inverse of the compiler (`server/figma_template.py`):
+
+```bash
+python scripts/figma-template.py            # dry run, all of `default`
+python scripts/figma-template.py --write    # write them
+python scripts/figma-template.py --package classic --element matchup --write
+```
+
+Regenerate after any change to a shipped theme; the templates are derived
+artifacts, and a hand-edit is lost on the next run.
+
+**A shipped SVG cannot just be opened in Figma** — four things vanish silently,
+which is what the generator exists to bake out:
+
+- **`<style>` blocks.** Figma applies presentation attributes and inline
+  `style=`, never stylesheet CSS. Every theme but `scoreboard-s` paints its
+  type through classes, so a raw import is **black text in the wrong face** —
+  `stats.svg` has ten text nodes and not one carries a `fill`.
+- **`var()`.** Resolved nowhere, in a stylesheet or inline.
+- **Empty `<image>` slots.** Authored href-less at `opacity:0` (PRSH ships no
+  game art), so Figma drops them and the slot never appears.
+- **`data-*` markers.** Figma keeps layer NAMES, so the generator rewrites
+  every marker into the grammar (`slot=side1-name maxw=420`) on the way out.
+
+Two things it deliberately does **not** touch. **Motion** is dropped, not
+frozen — animation belongs to the mount, and a baked pose would read as
+authored geometry. **Hidden state stays hidden**: a contract-hidden layer
+(`opacity:0`) is still a real layer in Figma's panel and can be toggled to
+edit, and revealing it would compile back as permanently visible.
+
+**Verification is the round trip, and it is a multiset.** `--write` compiles
+each template back and compares slot counts *per name* against the shipped
+file. A plain set comparison passes with every duplicate but one dropped —
+the lower third binds 33 nodes across 20 names, so that is a real hole.
+Pinned by `tests/unit/test_figma_template.py`, which runs the loop on every
+shipped theme in every package.
+
+**The round trip is also an audit of the theme files.** It is how `box-away-R`
+/ `box-home-R` were caught: the only uppercase slot names in the codebase, and
+the grammar lowercases every name, so a designer's export silently blanked the
+box score's runs column. If a slot name cannot survive `parse_grammar_id`, it
+cannot survive a design tool — rename it, don't special-case it.
 
 ## Verifying a theme
 
