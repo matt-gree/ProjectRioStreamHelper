@@ -18,148 +18,30 @@
 // (callout-stage.html, stats-feed.html, split-screen.html) — and any browser
 // source still pointing at one — rendering exactly as before.
 //
-// THIS FILE IS THE REGISTRY AND THE WIRING. The layer mechanics — one retained
-// layer per member, native-size centering, the cross-fade, which member gets
-// updated — live in container-layers.js, which imports nothing and is unit
-// tested. They used to be an if-chain in here, where a test could not reach
-// them and every new member meant editing control flow.
+// THIS FILE IS THE WIRING, AND ONLY THAT. Two neighbours own the rest, and both
+// import nothing so both are unit tested directly:
+//
+//   container-members.js  WHAT can be stood up — size, sample, mount. Each mount
+//                         is a dynamic import(), which is what lets the console
+//                         and its tests read this table instead of regex-parsing
+//                         it out of a file that drags in three.js and GSAP.
+//   container-layers.js   The layer MECHANICS — one retained layer per member,
+//                         native-size centering, the cross-fade, which member
+//                         gets updated.
+//
+// Both used to live in here: the mechanics as an if-chain no test could reach,
+// the registry beside static mount imports no test could load.
 //
 // Requires overlay-base.js (and rio-data.js for the roster/stats members)
 // loaded first, and the host page's `three` importmap for the hit member.
 import { createLayers, resolveFeed } from '/layout/lib/container-layers.js';
-import { mountHit } from '/layout/lib/hit-mount.js';
-import { mountStats } from '/layout/lib/stats-mount.js';
-import { mountRoster } from '/layout/lib/roster-mount.js';
-import { mountStatsCard } from '/layout/lib/stats-card-mount.js';
-import { mountPostgameCallout } from '/layout/lib/postgame-callout-mount.js';
-import { mountPostgameVs } from '/layout/lib/postgame-vs-mount.js';
-
-/*
- * ── The member registry ──────────────────────────────────────────────────
- *
- * Every element a container can stand up, in ONE table: how to mount it, what
- * its update takes, its native pixel size, and the sample occupant that lets a
- * container preview itself with no game running.
- *
- * This is the engine's half of a fact the console also holds
- * (`CONTAINER_MEMBERS` and the element registry in src/routes/production).
- * There is no shared module between `public/layout/lib` and `src/`, so
- * `containers.test.jsx` pins the two together — same ids, same sizes, no member
- * the console offers that this cannot mount.
- *
- * See container-layers.js for the full entry contract. `size` is the member's
- * NATIVE size: a member smaller than its container centers inside it and is
- * never scaled.
- */
-const MEMBERS = {
-  hitvisualizer: {
-    size: [1280, 720],
-    // A GL renderer wants a viewport plus a non-scaling label plane over it, so
-    // it builds its own two divs inside the box rather than taking it directly.
-    mount: (box, { perf }) => {
-      const viewport = document.createElement('div');
-      viewport.style.cssText = 'position:absolute;inset:0;';
-      const labels = document.createElement('div');
-      labels.style.cssText = 'position:absolute;inset:0;pointer-events:none;overflow:hidden;';
-      viewport.appendChild(labels);
-      box.appendChild(viewport);
-      return mountHit({ viewport, labels, perf });
-    },
-    // The hit reads a whole board's contact, not a content selection.
-    payload: (sel) => Number(sel.scoreboard) || 1,
-    // …and it caches stadium geometry and playback per board, so a board change
-    // is a separate mount rather than an update.
-    identity: (sel) => `hitvisualizer:${Number(sel.scoreboard) || 1}`,
-    sample: { file: 'scoreboard', content: { scoreboard: 1 } },
-  },
-  stats: {
-    size: [325, 120],
-    mount: (box) => mountStats({ host: box }),
-    sample: {
-      file: 'scoreboard',
-      content: { scoreboard: 1, team: 1, charIndex: 0, role: 'batting' },
-    },
-  },
-  roster: {
-    size: [452, 140],
-    mount: (box) => mountRoster({ host: box }),
-    sample: { file: 'scoreboard', content: { scoreboard: 1, team: 1 } },
-  },
-  // The themed 2x2 stat card — the SAME data as `stats`, wearing the design
-  // package's `statscard` element instead of the fed bar's DOM markup. Two
-  // members rather than a mode on one because a container's roster is a list of
-  // things that can be on screen, and these two are different pictures at
-  // different sizes; a container holds whichever one its look calls for.
-  statscard: {
-    size: [380, 240],
-    // Binds its side at MOUNT time (mountStatsCard closes over sb/team and
-    // resolves the line itself), so it takes `sel` here and declares an
-    // identity below — a scope change is a new layer, not an update.
-    mount: (box, ctx, sel) => {
-      // Inline positioning beats stats-card-mount's `.st-host { position:
-      // fixed }`, which would pin the card to the viewport instead of the
-      // centered box this member was given.
-      const cardHost = document.createElement('div');
-      cardHost.style.cssText = 'position:absolute; inset:0;';
-      box.appendChild(cardHost);
-      const card = mountStatsCard({
-        host: cardHost,
-        sb: Number(sel?.scoreboard) || 1,
-        team: Number(sel?.team) === 2 ? 2 : 1,
-        settingsType: 'statscard',
-        svgElement: 'statscard',
-      });
-      return {
-        update: (state) => card.update(state, OverlayBase.settings),
-        dispose: () => card.dispose(),
-        replay: () => {},
-      };
-    },
-    identity: (sel) => `statscard:${Number(sel.scoreboard) || 1}:${Number(sel.team) === 2 ? 2 : 1}`,
-    sample: { file: 'scoreboard', content: { scoreboard: 1, team: 1 } },
-  },
-  postgamecallout: {
-    size: [1920, 1080],
-    mount: (box) => mountPostgameCallout({ host: box }),
-    sample: { file: 'postgame', content: { scoreboard: 1, team: 1, charIndex: 0 } },
-  },
-  postgamevs: {
-    size: [1920, 1080],
-    mount: (box) => mountPostgameVs({ host: box }),
-    sample: { file: 'postgame', content: { scoreboard: 1 } },
-  },
-};
+import { MEMBERS } from '/layout/lib/container-members.js';
 
 // The container id this page is: what `?container=` names, else the filename
 // stem. Exported so the shell and the console agree on one derivation.
 export function containerIdFromLocation(explicit) {
   if (explicit) return explicit;
   return window.location.pathname.replace(/^.*\/([^/]+)\.html?(?:\?.*)?$/, '$1');
-}
-
-/**
- * This container's sample bundle: the occupant's own captured game, plus the
- * feed key standing that occupant up inside this container.
- *
- * A container draws whatever is FED to it, and neither the picker preview nor
- * app-wide demo mode has a live feed to follow — so the bundle has to name an
- * occupant as well as the game behind it. `occupant` is whatever the caller
- * resolved (`?feed=` in a gallery preview, else the definition's first member),
- * so a producer's own container samples as the thing they built it for.
- *
- * With no occupant at all there is nothing to draw, so the bundle is just the
- * game — the container renders transparent, which is the honest sample for an
- * empty container.
- */
-export function containerSample(id, occupant) {
-  const spec = MEMBERS[occupant];
-  if (!spec?.sample) return { file: 'scoreboard' };
-  return {
-    file: spec.sample.file,
-    state: {
-      [`production.feed.container.${id}`]: { element: occupant, ...spec.sample.content },
-    },
-  };
 }
 
 /*

@@ -20,7 +20,9 @@
  *
  *   size      [w, h] native pixel size. Omit for a member that has no native
  *             size of its own and simply fills whatever it is given.
- *   mount     (box, ctx, sel) => { update, dispose, replay? }. `box` is the
+ *   mount     (box, ctx, sel) => { update, dispose, replay? }, sync or async —
+ *             `container-members.js` reaches every real mount through a dynamic
+ *             import, so a container loads only what it stands up. `box` is the
  *             sized, centered element to render into; `ctx` is whatever the
  *             caller passed to `show` (state, perf, …); `sel` is the selection
  *             that caused this layer to be built, for a member that binds its
@@ -175,6 +177,8 @@ export function createLayers({
     if (host && fadeMs !== DEFAULT_FADE_MS) host.style.setProperty('--fc-fade', `${fadeMs}ms`);
 
     const layers = new Map();
+    // Builds in flight, by layer key — see `show`.
+    const building = new Map();
     let activeKey = null;
     let disposed = false;
     let zTop = 1;
@@ -187,7 +191,7 @@ export function createLayers({
         return spec.identity ? spec.identity(sel) : element;
     }
 
-    function build(element, key, ctx, sel) {
+    async function build(element, key, ctx, sel) {
         const spec = specOf(element);
         const layer = doc.createElement('div');
         layer.className = 'fc-layer';
@@ -213,7 +217,11 @@ export function createLayers({
 
         let mount;
         try {
-            mount = spec.mount(box, ctx, sel);
+            // `await` so a member may reach its own module through a dynamic
+            // import (container-members.js does, so a container downloads only
+            // the mounts it actually stands up). A synchronous mount — every
+            // test registry, and any future one — awaits to itself unchanged.
+            mount = await spec.mount(box, ctx, sel);
         } catch (e) {
             // A member that cannot stand up must not take the container with it:
             // the source stays alive and the next feed still draws.
@@ -251,8 +259,25 @@ export function createLayers({
         const key = keyOf(element, sel);
         if (!key) return false;
 
-        const entry = layers.get(key) || build(element, key, ctx, sel);
-        if (!entry) return false;
+        /*
+         * One build per key, even under overlapping shows. Building is async now
+         * (a member's module may be dynamically imported), so a second `show` for
+         * the same key can arrive while the first is still standing it up — and
+         * two builds of one member means two mounts, which for the hit visualizer
+         * is two GL contexts, one of them orphaned. The in-flight promise is the
+         * dedupe: whoever asks second awaits the same build.
+         */
+        let entry = layers.get(key);
+        if (!entry) {
+            let pending = building.get(key);
+            if (!pending) {
+                pending = build(element, key, ctx, sel)
+                    .finally(() => building.delete(key));
+                building.set(key, pending);
+            }
+            entry = await pending;
+        }
+        if (!entry || disposed) return false;
 
         const payload = entry.spec.payload ? entry.spec.payload(sel) : sel;
         try {

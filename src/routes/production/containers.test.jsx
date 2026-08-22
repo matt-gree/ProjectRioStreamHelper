@@ -9,6 +9,7 @@ import {
     CONTAINER_MEMBERS, containerIdFor, containerOfSource, containerSizeClasses,
     containerUrl, fedTargets, fitsContainer, hostOf, useContainerActions,
 } from './containers';
+import { MEMBERS } from '../../../public/layout/lib/container-members.js';
 
 /*
  * Containers are producer-built definitions, and membership lives on the
@@ -149,39 +150,20 @@ describe('a new container id', () => {
 
 /*
  * The console's list of what can occupy a container and the ENGINE's list of
- * what it can actually mount are the same fact in two runtimes with no shared
- * module between `public/layout/lib` and `src/`, so they are pinned against each
- * other here.
+ * what it can actually mount are the same fact in two runtimes, so they are
+ * pinned against each other here.
  *
- * Read out of the source text rather than imported: `fed-container.js` imports
- * the mounts by absolute `/layout/…` URL and drags in three.js and GSAP, none of
- * which belongs in a unit test. The mechanics it delegates to
- * `container-layers.js` ARE imported and tested directly — see
- * container-layers.test.js.
+ * IMPORTED, not read as source text. The registry used to sit in
+ * `fed-container.js` beside static imports of every mount — three.js and GSAP
+ * among them — so a unit test could only regex the table out of the file and
+ * never see a mount at all. It lives in `container-members.js` now, which
+ * imports nothing (each mount is reached through a dynamic `import()`), so this
+ * checks the real object: a renamed member or a mistyped size fails here rather
+ * than surviving because the regex stopped matching.
  */
-function engineMembers() {
-    const src = readFileSync('public/layout/lib/fed-container.js', 'utf8');
-    const start = src.indexOf('const MEMBERS = {');
-    expect(start, 'fed-container.js no longer declares a MEMBERS registry').toBeGreaterThan(-1);
-    const table = src.slice(start, src.indexOf('\n};', start));
-
-    // Entries are the table's own two-space-indented keys, so a nested `size:`
-    // or `sample:` can't be mistaken for one.
-    const marks = [...table.matchAll(/\n {2}(\w+): \{/g)];
-    const out = {};
-    marks.forEach((m, i) => {
-        const body = table.slice(m.index, i + 1 < marks.length ? marks[i + 1].index : table.length);
-        const size = /size: \[(\d+), (\d+)\]/.exec(body);
-        out[m[1]] = {
-            size: size ? [Number(size[1]), Number(size[2])] : null,
-            hasSample: /sample: \{/.test(body),
-        };
-    });
-    return out;
-}
 
 describe('members the engine can actually mount', () => {
-    const engine = engineMembers();
+    const engine = MEMBERS;
 
     it('has an entry for every member the console offers', () => {
         for (const el of CONTAINER_MEMBERS) {
@@ -208,7 +190,7 @@ describe('members the engine can actually mount', () => {
 
     it('gives every member a sample occupant, so a container is never a blank preview', () => {
         for (const el of CONTAINER_MEMBERS) {
-            expect(engine[el.id].hasSample, `no sample occupant for "${el.id}"`).toBe(true);
+            expect(!!engine[el.id].sample, `no sample occupant for "${el.id}"`).toBe(true);
         }
     });
 });
