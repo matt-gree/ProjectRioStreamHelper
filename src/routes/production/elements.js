@@ -395,6 +395,8 @@ export const ELEMENTS = [
         // producer would be styling the same two strips twice. The board only
         // decides which fixture Round comes from, and the documented default —
         // no param means board 1 — is the right answer for a single canvas.
+        // (Inside a container that board is the container's scope instead; the
+        // settings stay app-wide either way. See container-members.js.)
         flavor: 'direct',
         url: '/layout/eventheader/eventheader.html',
         width: 1920,

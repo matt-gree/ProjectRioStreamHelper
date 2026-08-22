@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { fieldSource } from '../../../../public/layout/lib/eventheader-mount.js';
 import { render, screen, cleanup, fireEvent, within } from '@testing-library/react';
 import { TooltipProvider } from '../../../components/ui/tooltip';
 import { useSettingsStore, useStateStore } from '../../../context/store';
@@ -71,7 +72,7 @@ describe('overlay-settings whitelist parity', () => {
 
 /*
  * ONE CENSUS OF THE FIELDS, in three runtimes: the console (../eventheader), the
- * overlay (eventheader.html's `fieldSource`) and the server, which migrates and
+ * overlay (`lib/eventheader-mount.js`'s `fieldSource`) and the server, which migrates and
  * heals the stored lists. A field in one and not the others is either a segment
  * with no label, a segment that draws nothing, or a field with no way back into
  * a band.
@@ -87,11 +88,54 @@ describe('the field census agrees across runtimes', () => {
         expect(new Set(serverFields())).toEqual(new Set(Object.keys(FIELDS)));
     });
 
+    /*
+     * IMPORTED, not read as source text. This used to regex `fieldSource` out
+     * of eventheader.html and count its `case` labels — which proved a label
+     * existed and nothing about what it drew. The resolver lives in
+     * `lib/eventheader-mount.js` now (a module that imports nothing and reads
+     * `OverlayBase` only at call time), so the test can run it: a field the
+     * console lists and the mount cannot resolve comes back empty and fails.
+     */
+    const STATE = {
+        tournamentInfo: {
+            name: 'Slice 2026', event_name: 'MSB Singles',
+            location: 'Chicago, IL', date: 'Aug 15–17', phase: 'Top Cut',
+        },
+        score: { 1: { match: '7', phase: 'Winners Semis' } },
+        match: { 7: { phase: 'Bracket A' } },
+    };
+    // `message` is the entry whose whole content is its own text — it has no
+    // source on purpose, which is what makes it the banner line.
+    const NO_SOURCE = new Set(['message']);
+
+    beforeEach(() => {
+        globalThis.OverlayBase = {
+            deepGet: (obj, path, def) => {
+                const v = String(path).split('.').reduce(
+                    (o, k) => (o == null ? undefined : o[k]), obj,
+                );
+                return v === undefined ? def : v;
+            },
+        };
+    });
+
     it('matches the overlay’s own resolver', () => {
-        const html = readFileSync('public/layout/eventheader/eventheader.html', 'utf8');
-        const body = html.match(/function fieldSource\(id\) \{([\s\S]*?)\n {4}\}/)[1];
-        const drawn = new Set([...body.matchAll(/case '(\w+)':/g)].map(m => m[1]));
-        for (const id of Object.keys(FIELDS)) expect(drawn.has(id), id).toBe(true);
+        for (const id of Object.keys(FIELDS)) {
+            const drawn = fieldSource(id, STATE, 1);
+            if (NO_SOURCE.has(id)) expect(drawn, id).toBe('');
+            else expect(drawn, `"${id}" draws nothing`).toBeTruthy();
+        }
+    });
+
+    it('reads Phase off the bound fixture, and Event off the competition when the event has no name', () => {
+        // The board's fixture wins over the competition-wide phase…
+        expect(fieldSource('phase', STATE, 1)).toBe('Bracket A');
+        // …and falls back to it when no fixture is bound.
+        expect(fieldSource('phase', { ...STATE, score: {} }, 1)).toBe('Top Cut');
+        // A manually-entered tournament has no event_name; the Event field
+        // carries the competition rather than going blank.
+        const noEvent = { ...STATE, tournamentInfo: { ...STATE.tournamentInfo, event_name: '' } };
+        expect(fieldSource('event', noEvent, 1)).toBe('Slice 2026');
     });
 
     it('places every field in exactly one default band', () => {

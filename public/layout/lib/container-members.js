@@ -261,6 +261,22 @@ export const MEMBERS = {
         watch: (key) => key.startsWith('schedule.') || key.startsWith('match.'),
         sample: { file: 'schedule', content: {} },
     },
+    // Full-canvas chrome: two thin bands, top and bottom, with 1080px of
+    // nothing between them. As a member it is one occupant like any other —
+    // a container it shares is a container it is alone in.
+    //
+    // Board-scoped HERE but not in the element registry: the element declares
+    // no `scope: 'board'` because that would make every band setting per-board,
+    // and there is one set of bands per broadcast. A board still decides which
+    // fixture the Round and Phase fields read, and inside a container that
+    // board is the container's scope rather than the URL's.
+    eventheader: {
+        size: [1920, 1080],
+        mount: boardScoped('eventheader-mount', 'mountEventHeader'),
+        identity: boardIdentity('eventheader'),
+        watch: (key) => key.startsWith('match.'),
+        sample: { file: 'eventheader', content: { scoreboard: 1 } },
+    },
     // Wraps gc-overlay, a SUBPROCESS on its own port — so unlike every other
     // member there is a second thing that has to be running for it to draw. It
     // reports that itself (the iframe stays hidden and the mount keeps asking),

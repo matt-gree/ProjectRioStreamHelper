@@ -1,220 +1,47 @@
 <!DOCTYPE html>
 <html>
+<!--
+  Event Header — a thin shell over lib/eventheader-mount.js, which is also what
+  a container stands up when this element is fed into one. Two thin bands
+  framing the canvas, each an ordered list of fields
+  (overlays.eventheader.bands.{header,footer}); band authoring lives on this
+  element's Production stage panel.
+-->
 <head>
   <meta charset="utf-8" />
-  <!-- The whitelist must name every knob this file reads: Setup filters
+  <!-- The whitelist must name every knob the mount reads: Setup filters
        LAYOUT_SETTINGS.eventheader down to what appears here, so an omitted key
        is a setting the mount honours but nobody can reach. -->
   <meta name="overlay-settings" content="showHeader, headerOffsetY, showFooter, footerOffsetY, bands, bandWidth, fontScale, bgStyle, separator, textColor, accentColor, fontFamily" />
   <style>
-    /* Inter is bundled locally and injected by overlay-base.js. */
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { width: 1920px; height: 1080px; background: transparent; overflow: hidden; }
-    body {
-      /* The Design-tab Font Family (overlays.global.fontFamily → --font-family)
-         drives the face; Inter is the bundled fallback, then system sans-serif.
-         --font-family already resolves to Inter by default. */
-      font-family: var(--font-family, 'Inter'), 'Inter', sans-serif;
-      color: var(--text-primary, #ffffff);
-    }
-    #stage {
-      position: relative;
-      width: 1920px;
-      height: 1080px;
-      transform-origin: top left;
-    }
-    /* Two thin single-row bands, each 45px of vertical space. Text is bottom-
-       aligned so its baseline sits on the band's bottom edge:
-         header band bottom → y = 45     (top 45px to work with)
-         footer band bottom → y = 1078   (bottom 45px to work with) */
-    .band {
-      position: absolute;
-      left: 50%;
-      transform: translateX(-50%);
-      height: 45px;
-      display: flex;
-      align-items: flex-end;   /* seat the row on the band's bottom edge */
-      justify-content: center;
-    }
-    #header { top: 0px; }       /* band bottom at y = 45   */
-    #footer { bottom: 2px; }    /* band bottom at y = 1078 */
-    .band[hidden] { display: none; }
-    /* Optional readability plate (off by default). */
-    .band.bg-scrim { background: radial-gradient(ellipse at center, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0) 72%); }
-    .band.bg-bar   { background: rgba(0,0,0,0.72); border-radius: 8px; }
-    .row {
-      display: flex;
-      align-items: baseline;
-      justify-content: center;
-      gap: calc(16px * var(--font-scale, 1));
-      white-space: nowrap;
-      /* Line box must fully contain ascenders + descenders so nothing is
-         clipped at the band edge (34 * 1.2 ≈ 41px, inside the 45px band). */
-      line-height: 1.2;
-      /* Same size top and bottom. */
-      font-size: calc(34px * var(--font-scale, 1));
-      font-weight: 700;
-      letter-spacing: 0.01em;
-    }
-    /* No overflow clip here — that was cropping glyph descenders. */
-    .field { flex: 0 0 auto; }
-    .sep {
-      color: var(--accent, #f59f00);
-      font-size: 0.5em;
-      align-self: center;
-      opacity: 0.9;
-    }
+    html, body { margin: 0; width: 1920px; height: 1080px; background: transparent; overflow: hidden; }
+    /* The mount scales its 1920×1080 stage to this box, so a smaller OBS
+       source shrinks the bands rather than cropping them. */
+    #host { position: fixed; inset: 0; }
   </style>
 </head>
 <body>
-  <div id="stage">
-    <div class="band" id="header"><div class="row" id="hdr-row"></div></div>
-    <div class="band" id="footer"><div class="row" id="ftr-row"></div></div>
-  </div>
+  <div id="host"></div>
 
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <script src="/layout/lib/overlay-base.js"></script>
-  <script>
-    const REF_W = 1920, REF_H = 1080;
-    document.body.dataset.refW = REF_W;
-    document.body.dataset.refH = REF_H;
-
-    function autoScale() {
-      const el = document.getElementById('stage');
-      const scale = Math.min(window.innerWidth / REF_W, window.innerHeight / REF_H);
-      if (Math.abs(scale - 1) > 0.002) {
-        document.body.style.width = window.innerWidth + 'px';
-        document.body.style.height = window.innerHeight + 'px';
-        el.style.transform = `scale(${scale})`;
-      } else {
-        document.body.style.width = REF_W + 'px';
-        document.body.style.height = REF_H + 'px';
-        el.style.transform = '';
-      }
-    }
-    window.addEventListener('resize', autoScale);
-    autoScale();
+  <script type="module">
+    import { mountEventHeader } from '/layout/lib/eventheader-mount.js';
 
     const params = new URLSearchParams(window.location.search);
-    const SCOREBOARD = parseInt(params.get('scoreboard')) || 1;
-    const { deepGet, state, settings, applyDesignSettings } = OverlayBase;
+    const SB = parseInt(params.get('scoreboard')) || 1;
 
-    // overlays.eventheader.<key> element setting, with a hard default.
-    const s = (key, def) => deepGet(settings, `overlays.eventheader.${key}`, def);
-    const on = (key) => s(key, true) !== false; // switches default ON
+    document.body.dataset.refW = 1920;
+    document.body.dataset.refH = 1080;
 
-    // Render one row: drop blank fields, join the rest with accent separators so
-    // the surviving fields stay centered (spec: "skip blank fields, re-center").
-    function renderRow(el, values, sep) {
-      el.innerHTML = '';
-      const present = values.filter(v => v != null && String(v).trim() !== '');
-      present.forEach((v, i) => {
-        if (i > 0 && sep) {
-          const d = document.createElement('span');
-          d.className = 'sep';
-          d.textContent = sep;
-          el.appendChild(d);
-        }
-        const span = document.createElement('span');
-        span.className = 'field';
-        span.textContent = v;
-        el.appendChild(span);
-      });
-      return present.length;
-    }
-
-    /*
-     * What each field DRAWS when it has no override of its own.
-     *
-     * The bands are ordered lists of these ids (overlays.eventheader.bands, see
-     * EVENTHEADER_FIELDS in server/settings.py), so position is the producer's
-     * and the source is ours. `message` has no source on purpose: it is the
-     * entry whose whole content is its own `text`, which is what the element's
-     * banner line always was.
-     */
-    function fieldSource(id) {
-      // Header leads with the parent competition ("Slice 2026"); the Event
-      // field carries the specific start.gg event ("Stars Off"), falling back
-      // to the competition name when no event_name is present
-      // (manually-entered tournaments).
-      const competitionName = deepGet(state, `tournamentInfo.name`, '');
-      switch (id) {
-        case 'competition': return competitionName;
-        case 'event':       return deepGet(state, `tournamentInfo.event_name`, '') || competitionName;
-        case 'location':    return deepGet(state, `tournamentInfo.location`, '');
-        case 'dates':       return deepGet(state, `tournamentInfo.date`, '');
-        case 'phase': {
-          const matchId = deepGet(state, `score.${SCOREBOARD}.match`, '');
-          const hasMatch = matchId !== '' && matchId != null;
-          return (hasMatch ? deepGet(state, `match.${matchId}.phase`, '') : '')
-                 || deepGet(state, `tournamentInfo.phase`, '');
-        }
-        // Round = the match label (start.gg round name), projected onto the
-        // board as score.{N}.phase so it tracks the live board.
-        case 'round':       return deepGet(state, `score.${SCOREBOARD}.phase`, '');
-        case 'message':     return '';
-        default:            return '';
-      }
-    }
-
-    // One band's drawable values, in the producer's order. A field is dropped
-    // when it is switched off OR when nothing is behind it — an override wins
-    // over the source, and a field with neither is not a gap, it is absent.
-    function bandValues(band) {
-      const entries = deepGet(settings, `overlays.eventheader.bands.${band}`, null);
-      if (!Array.isArray(entries)) return [];
-      return entries
-        .filter(e => e && e.on !== false)
-        .map(e => String(e.text || '').trim() || fieldSource(e.id))
-        .filter(v => v != null && String(v).trim() !== '');
-    }
-
-    function render() {
-      applyDesignSettings('eventheader');
-
-      // ── layout knobs ────────────────────────────────────────────────
-      const sep    = s('separator', '◆');
-      const scale  = (Number(s('fontScale', 100)) || 100) / 100;
-      const width  = Number(s('bandWidth', 1263)) || 1263;
-      const hOff   = Number(s('headerOffsetY', 0));
-      const fOff   = Number(s('footerOffsetY', 2));
-      const bg     = s('bgStyle', 'none');
-
-      document.getElementById('stage').style.setProperty('--font-scale', scale);
-
-      const header = document.getElementById('header');
-      const footer = document.getElementById('footer');
-      for (const band of [header, footer]) {
-        band.style.width = width + 'px';
-        band.classList.remove('bg-scrim', 'bg-bar');
-        if (bg === 'scrim') band.classList.add('bg-scrim');
-        else if (bg === 'bar') band.classList.add('bg-bar');
-      }
-      header.style.top = hOff + 'px';
-      footer.style.bottom = fOff + 'px';
-
-      // ── the two bands, each in the order its field list is in ───────
-      const showHeader = on('showHeader');
-      const headerCount = showHeader
-        ? renderRow(document.getElementById('hdr-row'), bandValues('header'), sep) : 0;
-      header.hidden = !showHeader || headerCount === 0;
-
-      const showFooter = on('showFooter');
-      const footerCount = showFooter
-        ? renderRow(document.getElementById('ftr-row'), bandValues('footer'), sep) : 0;
-      footer.hidden = !showFooter || footerCount === 0;
-    }
+    const eh = mountEventHeader({ host: document.getElementById('host'), sb: SB });
 
     OverlayBase.init({
-      render,
+      render: () => eh.update(OverlayBase.state, OverlayBase.settings),
       sample: 'eventheader',
       fetchSettings: true,
-      shouldRender: (key) =>
-        key.startsWith('tournamentInfo.') ||
-        key === `score.${SCOREBOARD}.match` ||
-        key === `score.${SCOREBOARD}.phase` ||
-        key.startsWith('match.'),
-      shouldRenderSettings: (key) => key.startsWith('overlays.'),
+      shouldRender: eh.shouldRender,
+      shouldRenderSettings: eh.shouldRenderSettings,
     });
   </script>
 </body>

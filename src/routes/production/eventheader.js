@@ -103,7 +103,8 @@ export function useBands() {
 
 /*
  * What each field draws with no override — the app-side twin of `fieldSource`
- * in eventheader.html. Both read the same state; keep them in step.
+ * in lib/eventheader-mount.js. Both read the same state; keep them in step
+ * (`stage/eventheader.test.jsx` imports that one and runs it).
  *
  * The board is the one the SOURCE's url names (no param means board 1, the
  * documented default), because the Event Header is full-canvas chrome and is
