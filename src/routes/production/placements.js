@@ -390,31 +390,44 @@ export function catalogPlacements({ defs = {}, boards = [1], feeds = {} } = {}) 
      * no OBS there is nothing to discover them from, and Settings genuinely
      * knows how many boards the rig has.
      *
-     * An element declaring `sizes` gets one row per SIZE on top of that, because
-     * online the size is read off a source that already exists — so with OBS
-     * closed the console could only ever offer the default canvas, and Copy URL
-     * handed over a Large board however small the one you wanted. The variant
-     * tag is the same `zs`/`zm`/`zl` the online path derives from a URL, so a
+     * An element declaring `sizes` or `perSide` gets one row per VARIANT on top
+     * of that, because online a variant is read off a source that already
+     * exists — so with OBS closed the console could only ever offer the one row
+     * a bare URL resolves to. For sizes that meant Copy URL handing over a Large
+     * board however small the one you wanted; for sides it meant side 1 of the
+     * Roster, the Player Name, the Team Logo and the Controller and no way to
+     * reach side 2 at all, which is half of every element that comes in pairs.
+     * The tags are the same `t1`/`zs` the online path derives from a URL, so a
      * selection made here still resolves once the source exists.
      */
     for (const el of OFFERED_DIRECT) {
         /*
-         * The default size gets the BARE instance id, because a source with no
-         * ?size= is exactly that size — so the row a producer pinned with OBS
-         * closed is the row their source becomes when OBS comes up.
+         * The two axes differ in whether there is a DEFAULT.
          *
-         * Rows come out in DECLARED order (small → medium → large), because that
-         * is the order a list of sizes should read in now that all three are
-         * named — the default one used to print no label, so its position looked
-         * arbitrary rather than wrong. It used to be hoisted to the front so a
-         * bare pin ('scoreboard') resolved to it; `resolvePlacement` prefers the
-         * canonical instance outright now, so order no longer carries that.
+         * A size has one: a source with no ?size= is exactly that size, so the
+         * default size takes the BARE instance id and the row a producer pinned
+         * with OBS closed is the row their source becomes when OBS comes up.
+         * Rows come out in DECLARED order (small → medium → large), which is the
+         * order a list of sizes should read in now that all three are named.
+         *
+         * A side has none. `?team=` has a URL default of 1, but the Add picker
+         * only ever creates explicit `?team=1` / `?team=2` sources
+         * (`_TEAM_VARIANTS`, layouts.py), so both real rows carry a tag and a
+         * bare `roster` row would resolve to neither of them. Emitting `t1` and
+         * `t2` is what makes the offline pin land on the source the producer
+         * later adds.
+         *
+         * Composed side-before-size to match VARIANT_PARAMS order, so a catalog
+         * id is the same string `variantOf` derives from the real URL. Nothing
+         * shipped declares both today; getting the order right costs a line and
+         * a wrong one would be a silent mismatch at the moment something does.
          */
-        const variants = (el.sizes ?? [])
-            .map(s => (s.default ? '' : variantTagFor('size', s.value)));
-        const forBoard = (b) => (variants.length
-            ? variants.forEach(v => out.push(row(el, b, { variant: v })))
-            : out.push(row(el, b)));
+        const sides = el.perSide ? [1, 2].map(n => variantTagFor('team', n)) : [''];
+        const sizes = (el.sizes ?? []).length
+            ? el.sizes.map(z => (z.default ? '' : variantTagFor('size', z.value)))
+            : [''];
+        const variants = sides.flatMap(t => sizes.map(z => [t, z].filter(Boolean).join('.')));
+        const forBoard = (b) => variants.forEach(v => out.push(row(el, b, { variant: v })));
         if (el.scope === 'board') for (const b of boards) forBoard(b);
         else forBoard(null);
     }

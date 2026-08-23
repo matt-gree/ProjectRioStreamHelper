@@ -6,6 +6,7 @@ import {
     togglePin,
 } from './placements';
 import { chipFor } from './kit';
+import { instanceUrl } from './bindings';
 
 /*
  * Placements are the console's row identity now: element + board + SCENE. These
@@ -519,6 +520,45 @@ describe('catalogPlacements — what PRSH can configure with no OBS', () => {
     it('answers a bare pin with the canonical instance, not the first row', () => {
         const rowsOut = all({ boards: [1] });
         expect(resolvePlacement('scoreboard', rowsOut).id).toBe('scoreboard:1');
+    });
+
+    /*
+     * The side axis, and the thing that made it necessary: an element that comes
+     * in PAIRS had one catalog row, which resolves to side 1, so with OBS closed
+     * half of the Roster, Player Name, Team Logo and Controller was unreachable —
+     * no row, no stage, no preview, no Copy URL.
+     *
+     * Both rows carry a tag, unlike sizes. `?team=` has a URL default of 1, but
+     * the Add picker only ever creates explicit `?team=1`/`?team=2` sources, so a
+     * bare `roster` row would resolve to neither of the two a producer ends up
+     * with — which is the whole point of the pre-scene id form.
+     */
+    it('rows both sides of a per-side element, each with its own tag', () => {
+        const ids = idsOf(all()).filter(i => i.startsWith('roster'));
+        expect(ids).toEqual(['roster~t1', 'roster~t2']);
+        // Every per-side element, not just the one: this is the axis, not a case.
+        for (const el of ['playername', 'teamlogo', 'controller']) {
+            expect(idsOf(all()).filter(i => i.startsWith(`${el}~`)))
+                .toEqual([`${el}~t1`, `${el}~t2`]);
+        }
+    });
+
+    // The offer has to be able to WRITE the variant back into a URL — offline
+    // there is no source to read it off, and Copy URL is the only way to wire a
+    // source at all. A row that says "Side 2" and copies side 1 is the bug.
+    it('offers each side’s own URL, so Copy URL is not a coin flip', () => {
+        const side2 = all().find(p => p.id === 'roster~t2');
+        expect(instanceUrl(side2.element, side2.board, side2.variant))
+            .toBe('/layout/scoreboard1/roster.html?team=2');
+    });
+
+    // An offline pick resolves to the matching real source once OBS opens —
+    // the same read-time resolution the board and size axes rely on.
+    it('resolves a side row to that side’s source, not the other one', () => {
+        const online = rows(scene('Game', 'program',
+            item(1, 'R1', '/layout/scoreboard1/roster.html?team=1'),
+            item(2, 'R2', '/layout/scoreboard1/roster.html?team=2')));
+        expect(resolvePlacement('roster~t2', online).item.sourceName).toBe('R2');
     });
 
     // The one legitimate reader left for the DECLARED board list: with no OBS

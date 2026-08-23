@@ -43,6 +43,13 @@
  *                   deviate.
  *   - `scope`     : 'board' when the SOURCE carries ?scoreboard=N, so two of
  *                   them in one scene are two instances. Omitted = global.
+ *   - `perSide`   : the element has one source PER SIDE (?team=1|2). Online
+ *                   the side is read off a source that already exists, so this
+ *                   is only consulted by the catalog tier — which otherwise
+ *                   offers a single row that resolves to side 1 and no way to
+ *                   reach side 2 with OBS closed. Mirrors `_TEAM_VARIANTS` in
+ *                   server/api/v1/layouts.py (the Add picker's half of the
+ *                   same fact); pinned by tests/unit/test_per_side_parity.py.
  *   - `hidden`    : NOT OFFERED, still understood. The console stops proposing
  *                   the element — no catalog row with OBS closed, and the
  *                   server drops its layout group from the Add picker — but a
@@ -206,6 +213,8 @@ export const ELEMENTS = [
         url: '/layout/scoreboard1/roster.html',
         width: 452,
         height: 140,
+        // One source per side (?team=1|2) — see `perSide` in the header note.
+        perSide: true,
         // Anchored to the full path so a sibling in the same folder whose stem
         // merely STARTS with "roster" can't bind here.
         match: (url) => /\/layout\/scoreboard\d*\/roster\.html/i.test(url),
@@ -226,6 +235,7 @@ export const ELEMENTS = [
         url: '/layout/scoreboard1/playername.html',
         width: 400,
         height: 100,
+        perSide: true,
         // Anchored to the full path, like the roster's — a sibling in the same
         // folder whose stem merely starts with "playername" must not bind here.
         match: (url) => /\/layout\/scoreboard\d*\/playername\.html/i.test(url),
@@ -242,6 +252,7 @@ export const ELEMENTS = [
         url: '/layout/scoreboard1/teamlogo.html',
         width: 360,
         height: 360,
+        perSide: true,
         match: (url) => /\/layout\/scoreboard\d*\/teamlogo\.html/i.test(url),
         containerScoped: true,
     },
@@ -498,6 +509,7 @@ export const ELEMENTS = [
         url: '/layout/controller/controller.html',
         width: 512,
         height: 256,
+        perSide: true,
         match: (url) => /\/layout\/controller\//i.test(url),
         // Container-scoped for the same reason the roster is: it has no content
         // of its own, it draws whoever the container's scope has on that side.
