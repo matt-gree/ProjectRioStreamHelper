@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { TooltipProvider } from '../../../components/ui/tooltip';
 import { useStateStore } from '../../../context/store';
 import { ELEMENTS } from '../elements';
-import StagePreview, { previewUrl } from './preview';
+import StagePreview, { previewUrl, frameMaxWidth } from './preview';
 
 const el = (id) => ELEMENTS.find(e => e.id === id);
 const bind = (url) => ({ item: { sourceName: 'SB', url }, scene: 'Main', where: 'program' });
@@ -193,6 +193,42 @@ describe('previewUrl — the intro preference beats the source url', () => {
     it('leaves the url alone when there is no preference', () => {
         expect(previewUrl(el('scoreboard'), 1, bind(`${SB}&intro=0`), 0, null, null))
             .toContain('intro=0');
+    });
+});
+
+/*
+ * The frame is the SOURCE'S shape, and never bigger than the source.
+ *
+ * The regression: the frame was `w-full` and only its HEIGHT came from the
+ * aspect, so anything smaller than the stage got the panel's width whatever its
+ * shape — the 360×360 team logo sat in a 1180×720 landscape box, blown up to
+ * 200%, and the stats card to over 300%. Upscaling is the tell, because the
+ * readout beside the label is there to say how far DOWN a source is scaled.
+ */
+describe('frameMaxWidth', () => {
+    it('never lets a small element be drawn bigger than the source', () => {
+        // The team logo: square, and 360 is its own width, so 100% on any stage.
+        expect(frameMaxWidth(360, 360)).toBe(360);
+        expect(frameMaxWidth(325, 120)).toBe(325);   // the stats card
+    });
+
+    it('leaves a full-size element the panel, up to what the cap allows', () => {
+        // A 16:9 source is wider than any stage, so the panel is the limiting
+        // side until the 720 cap is — and at the cap the frame is 1280×720, the
+        // element's own shape rather than a 720-tall box with dead sides.
+        expect(frameMaxWidth(1920, 1080)).toBe(1280);
+        expect(frameMaxWidth(800, 460)).toBe(800);
+    });
+
+    it('narrows a TALL source so the height cap does not leave dead width', () => {
+        // A 400×800 container capped at 720 tall is 360 wide — the frame follows
+        // the iframe rather than letterboxing it at the sides.
+        expect(frameMaxWidth(400, 800)).toBe(360);
+    });
+
+    it('has no answer for an element with no declared size', () => {
+        expect(frameMaxWidth(0, 0)).toBeUndefined();
+        expect(frameMaxWidth(undefined, undefined)).toBeUndefined();
     });
 });
 

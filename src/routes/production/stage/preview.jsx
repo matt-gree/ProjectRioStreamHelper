@@ -127,10 +127,10 @@ export function previewUrl(element, board, placement, nonce = 0, feedSel = null,
 }
 
 /*
- * The box takes the panel's full width and derives its HEIGHT from the
- * element's own aspect ratio, so a 1920×1080 scene gets a 16:9 frame and an
- * 800×460 band gets a letterbox — each overlay shown in its own shape rather
- * than every overlay squeezed into one arbitrary rectangle.
+ * The box takes the panel's width — up to the source's own — and derives its
+ * HEIGHT from the element's aspect ratio, so a 1920×1080 scene gets a 16:9
+ * frame and an 800×460 band gets a letterbox — each overlay shown in its own
+ * shape rather than every overlay squeezed into one arbitrary rectangle.
  *
  * Capped, because the ratio alone would give a 16:9 overlay a ~620px frame at
  * stage width and push the controls above it off-screen. Floored, because a
@@ -150,6 +150,41 @@ export function previewUrl(element, board, placement, nonce = 0, feedSel = null,
 // empty under the panel for no reason.
 const MAX_PREVIEW_HEIGHT = 720;
 const MIN_PREVIEW_HEIGHT = 140;
+
+/*
+ * The widest the FRAME may be — and the reason a 360×360 team logo is a square
+ * on screen rather than a 360-px badge marooned in a 1180×720 landscape box.
+ *
+ * The frame was `w-full` and only its height came from the aspect, so an
+ * element smaller than the stage got the panel's width whatever its shape:
+ * ScaledIframe then fitted the overlay to that box and BLEW IT UP — the team
+ * logo at 200%, the stats card at over 300%. Upscaling is the part that gives
+ * the game away, because the readout beside the label exists to say how far
+ * DOWN a source is scaled: "a preview that fills the panel gives no sense of
+ * scale — a 1920×1080 scene and an 800×460 band both just look big", and the
+ * source size is the number the producer types into OBS.
+ *
+ * So the frame never exceeds the source, and never exceeds what the height cap
+ * allows at that aspect either — which leaves the checkerboard exactly the
+ * element's shape whether the panel or the cap is the limiting side. (The
+ * `minHeight` floor still breaks that on purpose for a ticker, which would
+ * otherwise be a 49-px sliver.)
+ *
+ * Native size is a CONSTANT off the registry, never a measurement, so capping
+ * the frame with it cannot close the width→height→width loop ScaledIframe's
+ * header warns about. It is the same shape design.jsx's gallery tiles have
+ * always used (`maxWidth: w` + `aspectRatio`).
+ */
+export function frameMaxWidth(nativeW, nativeH, maxHeight = MAX_PREVIEW_HEIGHT) {
+    if (!(nativeW > 0 && nativeH > 0)) return undefined;
+    return Math.round(Math.min(nativeW, nativeW * (maxHeight / nativeH)));
+}
+
+// The frame's border is chrome, not canvas. It is `border-box`, so a bare
+// `maxWidth` of 360 leaves the checkerboard 358 across and the team logo
+// renders at "99%" — right shape, wrong number, on the one readout that exists
+// to be trusted about scale. The cap is the interior plus the border.
+const FRAME_BORDER = 1;
 
 const StagePreview = memo(function StagePreview({ element, board, binding: maybe, width, height }) {
     // Same rule as BindingNote: no item, no binding.
@@ -189,6 +224,11 @@ const StagePreview = memo(function StagePreview({ element, board, binding: maybe
         introDisabled,
     );
     if (!src) return null;
+
+    // Constants off the registry (or, for a container, off the layout catalog)
+    // — never a measurement, so capping the frame with them cannot close the
+    // width→height→width loop ScaledIframe's header warns about.
+    const frameWidth = frameMaxWidth(width ?? element.width, height ?? element.height);
 
     return (
         <div className="flex min-w-0 flex-col gap-1.5">
@@ -234,6 +274,7 @@ const StagePreview = memo(function StagePreview({ element, board, binding: maybe
                     <div
                         className="w-full overflow-hidden rounded-md border border-border/60"
                         style={{
+                            maxWidth: frameWidth && frameWidth + FRAME_BORDER * 2,
                             backgroundColor: '#15151c',
                             backgroundImage:
                                 'linear-gradient(45deg,#20202a 25%,transparent 25%,transparent 75%,#20202a 75%),'
