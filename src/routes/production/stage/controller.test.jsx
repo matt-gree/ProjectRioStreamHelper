@@ -54,8 +54,8 @@ describe('ControllerStage', () => {
     it('always offers the two per-side follow URLs; per-port only while running', async () => {
         vi.stubGlobal('fetch', mockFetch({ available: true, running: false, port: 8069 }));
         ui();
-        expect(await screen.findByText(/Left \(side 1\)/)).toBeInTheDocument();
-        expect(screen.getByText(/Right \(side 2\)/)).toBeInTheDocument();
+        expect(await screen.findByText('Side 1')).toBeInTheDocument();
+        expect(screen.getByText('Side 2')).toBeInTheDocument();
         // Per-port copy buttons are present but disabled until running.
         const copies = screen.getAllByRole('button', { name: /copy/i });
         // 2 per-side (enabled) + 4 per-port (disabled) = 6.
@@ -66,9 +66,9 @@ describe('ControllerStage', () => {
     it('copies the per-side URL host-qualified from the browser origin', async () => {
         vi.stubGlobal('fetch', mockFetch({ available: true, running: true, port: 8069 }));
         ui();
-        const leftLabel = await screen.findByText(/Left \(side 1\)/);
+        const side1 = await screen.findByText('Side 1');
         // The row's copy button sits beside the label.
-        const row = leftLabel.closest('div');
+        const row = side1.closest('div');
         fireEvent.click(row.querySelector('button'));
         await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
             `${window.location.origin}/layout/controller/controller.html?team=1`,

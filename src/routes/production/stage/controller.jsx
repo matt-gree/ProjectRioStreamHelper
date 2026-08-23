@@ -5,6 +5,7 @@ import { Button } from '../../../components/ui/button';
 import { CopyButton } from '../../../components/ui/copy-button';
 import { notifications } from '../../../lib/notify';
 import { DirectStage } from './generic';
+import { useSideLabels } from '../sides';
 
 /*
  * Controller stage — the gc-overlay controller-input display, lifted out of
@@ -27,8 +28,6 @@ import { DirectStage } from './generic';
  *     These aren't in the layout catalog, so copying them here is the only way
  *     to wire them.
  */
-
-const SIDE_LABEL = { 1: 'Left (side 1)', 2: 'Right (side 2)' };
 
 // A url + a copy button, kit-row shaped.
 const UrlRow = memo(function UrlRow({ label, url, disabled }) {
@@ -60,6 +59,7 @@ export default function ControllerStage({ element, placement }) {
 }
 
 const ControllerContent = memo(function ControllerContent() {
+    const sides = useSideLabels();
     const [status, setStatus] = useState(null);
     const [loading, setLoading] = useState(false);
 
@@ -167,7 +167,7 @@ const ControllerContent = memo(function ControllerContent() {
                 <Text size="xs" className="label-display text-muted-foreground">Per-side follow</Text>
                 {[1, 2].map(side => (
                     <UrlRow
-                        key={side} label={SIDE_LABEL[side]}
+                        key={side} label={sides.label(side)}
                         url={`${origin}/layout/controller/controller.html?team=${side}`}
                     />
                 ))}

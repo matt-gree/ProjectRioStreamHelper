@@ -364,20 +364,26 @@ things with their own source, air state and settings.
   straight off the URL for ANY element — registered or generic — as a `~` variant
   tag (`roster~t1`, `scoreboard:2~zs`). They are the layout catalog's own variant
   rows (`layouts.py`), so the producer already chose one when they picked
-  "Stats — Team 2" in the Add picker.
+  "Stats — Side 2" in the Add picker.
   The two axes are deliberately asymmetrical: **board** is declared (`scope:
   'board'`) and is the only one with a documented default (no param = board 1),
   so it keeps its bare-number suffix; everything else is discovered. A URL naming
   no variant yields exactly the id it always had, which is what keeps
   pre-variant selections and pins resolving.
-  This is not bookkeeping: the team-variant layouts (roster, stats, teamlogo,
-  playername) are **unregistered**, so both sides row through `genericElement`,
-  which keys on the pathname. Without the variant, team 1 and team 2 are one id —
-  duplicate React keys in the rack and `resolvePlacement`'s `find()` handing the
-  left-side panel the right-side source. The same split holds for a REGISTERED
-  element with a variant: **Controller** is a registered element (its stage owns
-  the gc-overlay subprocess) whose `?team=` per-side-follow sources row as
-  `controller~t1` / `controller~t2` off the variant axis.
+  This is not bookkeeping, and it is deliberately **not gated on registration**:
+  an unregistered team-variant layout rows through `genericElement`, which keys
+  on the pathname, so without the variant team 1 and team 2 are one id —
+  duplicate React keys in the rack and `resolvePlacement`'s `find()` handing one
+  side's panel the other side's source. Registering changes nothing: Stats,
+  Roster, Controller, Player Name and Team Logo are all registered and all read
+  their `?team=` straight off the URL, rowing as `roster~t1` / `roster~t2`.
+- **`?team=` is the one variant whose LABEL is a preference.** It names a side,
+  and what the console calls a side is `production.side_labels`
+  (`../sides.js` — Side 1/2 by default, Left/Right or Top/Bottom by choice), so
+  `variantLabel` and `rowLabel` both take the mode. The rack row and the stage
+  panel name the same source; letting the row say "Team 2" beside a panel headed
+  "Right" is two spellings of one fact. `?dir=` is the control case — it names
+  which way the artwork points, so it keeps its literal words.
 - **Nothing derives a board on its own.** It used to be a hidden per-element
   preference each surface resolved separately, which meant a two-board rig had
   ONE rack row silently commanding whichever board a stored value named, and a
@@ -393,7 +399,7 @@ things with their own source, air state and settings.
   thing that knows which board it is looking at.
 - **Name the detail only when there's more than one INSTANCE** of that element —
   counted distinctly, not per placement. The detail is the board alias, the
-  variant ("Team 2", "Small"), or both. One board's scoreboard in three scenes is
+  variant ("Side 2", "Small"), or both. One board's scoreboard in three scenes is
   still one thing to tell apart from nothing, and the section header already says
   which scene the row is in. `usePlacementLabel` returns `{ name, detail }`; the
   rack, stage and rail all render that one answer.

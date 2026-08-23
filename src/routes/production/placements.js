@@ -12,6 +12,7 @@ import {
     withVariant,
 } from './instances';
 import { useActiveBoards, useBoardTag } from './boards';
+import { useSideLabels } from './sides';
 
 /*
  * Placements — what the rack actually lists once the grouping axis is SCENES.
@@ -510,6 +511,9 @@ export function useConsolePlacements(consoleScenes) {
  */
 export function usePlacementLabel(placements) {
     const boardTag = useBoardTag();
+    // The `?team=` variant reads in the producer's side vocabulary, so the row
+    // and the panel it opens name the same source the same way (./sides).
+    const { mode } = useSideLabels();
     return useMemo(() => {
         const axes = new Map();
         for (const p of placements) {
@@ -524,11 +528,11 @@ export function usePlacementLabel(placements) {
             const a = axes.get(p.element.id);
             const detail = [
                 a?.boards.size > 1 && p.board != null ? boardTag(p.board) : null,
-                a?.variants.size > 1 ? variantLabelFor(p.element, p.variant) : null,
+                a?.variants.size > 1 ? variantLabelFor(p.element, p.variant, mode) : null,
             ].filter(Boolean).join(' · ');
             return { name: p.element.name, detail: detail || null };
         };
-    }, [placements, boardTag]);
+    }, [placements, boardTag, mode]);
 }
 
 /*

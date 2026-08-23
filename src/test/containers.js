@@ -39,7 +39,7 @@ export const SEEDED_CONTAINER_DEFS = {
     // neither carries content of its own, so neither has a push destination to
     // be ambiguous about.
     'roster-stats-1': {
-        name: 'Roster + Stats — Left',
+        name: 'Roster + Stats — Side 1',
         width: 452,
         height: 240,
         members: ['roster', 'statscard'],
@@ -47,7 +47,7 @@ export const SEEDED_CONTAINER_DEFS = {
         scope: { scoreboard: 1, team: 1 },
     },
     'roster-stats-2': {
-        name: 'Roster + Stats — Right',
+        name: 'Roster + Stats — Side 2',
         width: 452,
         height: 240,
         members: ['roster', 'statscard'],

@@ -28,6 +28,7 @@ import { cn } from '../../../lib/utils';
 import { KIT_FIELD, FieldRow, KitColumn, KitColumns } from '../kit';
 import { StagedDot, MoveButtons } from '../controls';
 import { useActiveBoards, useMatchBindableBoards } from '../boards';
+import { useSideLabels } from '../sides';
 import { useNextInOrder, useQueueOrder, useQueues, useWaitingReason } from '../queue';
 import { useGameModes } from '../gamemodes';
 import {
@@ -305,16 +306,20 @@ const GameModeSelect = memo(function GameModeSelect({ value, modes, onChange, cl
 
 /*
  * One side of the draft, as a card standing where that side stands on the
- * broadcast: side 1 is the left card and labels itself LEFT, side 2 is the
- * right card and labels itself RIGHT, its eyebrow pushed to the outer edge.
- * Position is the identity everywhere else in PRSH (glossary: Side), so the
- * authoring surface says so too rather than making the producer decode "1".
+ * broadcast: side 1 on one edge, side 2 on the other with its eyebrow pushed
+ * outward, so the pair is read the way the scene is.
+ *
+ * The card's POSITION carries the arrangement; the eyebrow names the side in
+ * whatever vocabulary the producer chose (../sides). It used to say "Side 1 ·
+ * left" outright, which spelt one fact twice and made the second spelling wrong
+ * for anyone whose sides aren't side by side.
  *
  * A staged pick carries a client-only _name display tag (the projection hasn't
  * resolved it yet), stripped by the commit PUT which only sends participantId
  * + rioName.
  */
 const DraftSide = memo(function DraftSide({ m, side, draft, className }) {
+    const sides = useSideLabels();
     const live = draft.match?.player?.[side] ?? draft.match?.player?.[String(side)] ?? {};
     const pick = draft.val(`player.${side}.pick`, null);
     const name = pick ? (pick._name || pick.rioName) : (live.rioName || '');
@@ -351,7 +356,7 @@ const DraftSide = memo(function DraftSide({ m, side, draft, className }) {
                     side === 2 && 'justify-end',
                 )}
             >
-                Side {side} · {side === 1 ? 'left' : 'right'}
+                {sides.label(side)}
             </Text>
             {/* No per-field labels here. Each control's placeholder IS its
                 label ("Pick participant…", "Captain…", "Port"), so a caps label

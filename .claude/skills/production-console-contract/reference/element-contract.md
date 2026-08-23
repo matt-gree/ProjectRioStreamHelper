@@ -43,7 +43,7 @@ arrangement is supposed to mean.
 *what can I do to this*; the subject is the one that answers *what is this
 showing*. Before it, a panel could describe a source completely — its OBS name,
 its scene, its air state, its transport verbs — and never once say what was on
-it, and a panel titled "Roster · Team 2" could not tell a producer whether team
+it, and a panel titled "Roster · Side 2" could not tell a producer whether side
 2 was the player they meant (Rio reassigns away/home every game, so a side is a
 position, not an identity).
 

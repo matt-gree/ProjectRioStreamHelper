@@ -291,3 +291,22 @@ async def test_the_exemption_does_not_leak_to_the_rest_of_production(
     # …the default everywhere they didn't.
     assert production["spotlight"]["holdMs"] == 1500
     assert production["confirm"]["enabled"] is False
+    # Including a scalar added to `production` after this user's settings.json
+    # was written — the case the exemption must not swallow.
+    assert production["side_labels"] == "numeric"
+
+
+async def test_side_labels_default_to_the_numbers(isolate_user_data):
+    """The console's side vocabulary, and why the default is what it is.
+
+    Left/Right describes ONE arrangement of one scene. A producer who stacks
+    their sides, or simply puts side 2 on the left, gets a board desk that lies
+    to them about the exact thing they opened it to check — so the shipped
+    default is the numbers, which are true in every layout, and the positional
+    pairs are opt-in.
+
+    Vocabulary only: nothing here reaches state (`score.{N}.player.{T}`), the
+    overlay URLs (`?team=`) or any layout. Client: src/routes/production/sides.js.
+    """
+    await Settings.Load()
+    assert Settings.settings["production"]["side_labels"] == "numeric"

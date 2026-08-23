@@ -14,6 +14,7 @@ import ScaledIframe from '../../components/ScaledIframe';
 import { cn } from '../../lib/utils';
 import { notifications } from '../../lib/notify';
 import { ELEMENTS } from './elements';
+import { sideLabel, useSideLabels } from './sides';
 import { useActiveBoards, useBoardLabel } from './boards';
 import {
     CONTAINER_MEMBERS, containerSizeClasses, containerUrl, fitsContainer,
@@ -131,10 +132,17 @@ export function pickerPreviewUrl(layout, board) {
     }
 }
 
-// How a catalog row names itself: the layout, plus the variant that makes this
-// row different from its siblings (size / team).
-export const rowLabel = (l) => {
-    const variant = l.sizeLabel || (l.team ? `Team ${l.team}` : '') || '';
+/*
+ * How a catalog row names itself: the layout, plus the variant that makes this
+ * row different from its siblings (size / team).
+ *
+ * A `?team=` row is a SIDE, so it reads in the producer's side vocabulary
+ * (./sides) — the same words the rack row and the stage panel for that source
+ * will use. `mode` is optional and defaults to the default vocabulary, which is
+ * what keeps this a pure function the tests can call without a store.
+ */
+export const rowLabel = (l, mode) => {
+    const variant = l.sizeLabel || (l.team ? sideLabel(l.team, mode) : '') || '';
     const name = l.parentName || l.name;
     return variant ? `${name} — ${variant}` : name;
 };
@@ -161,8 +169,8 @@ export const pickKey = (layout, board) => `${layout?.url ?? ''}|${board ?? ''}`;
  * Board-suffixed only on a multi-board rig — otherwise the producer gets a "1"
  * that means nothing (same rule as the source strip's Bind).
  */
-export function addName(layout, board, boards) {
-    const base = layout ? rowLabel(layout) : 'PRSH Overlay';
+export function addName(layout, board, boards, mode) {
+    const base = layout ? rowLabel(layout, mode) : 'PRSH Overlay';
     return isBoardScoped(layout) && board != null && boards.length > 1
         ? `${base} ${board}`
         : base;
@@ -280,6 +288,7 @@ const PANE_HEIGHT = 416;
 const PickerPreview = memo(function PickerPreview({
     layout, board, boardLabel, boards, pickedBoards, sceneBoards, onToggleBoard,
 }) {
+    const { mode } = useSideLabels();
     const [fit, setFit] = useState(null);
     const onFit = useCallback((f) => {
         setFit(prev => (prev && prev.w === f.w && prev.scale === f.scale ? prev : f));
@@ -293,7 +302,7 @@ const PickerPreview = memo(function PickerPreview({
         <div className="flex min-w-0 flex-col gap-1.5 overflow-hidden">
             <div className="flex items-baseline gap-2">
                 <Text size="xs" span truncate className="min-w-0 flex-1 text-foreground">
-                    {layout ? `${rowLabel(layout)}${detail}` : 'Preview'}
+                    {layout ? `${rowLabel(layout, mode)}${detail}` : 'Preview'}
                 </Text>
                 {layout && fit && (
                     <SimpleTooltip label="Source size in OBS, and how far down the preview is scaled">
@@ -420,7 +429,7 @@ const PickerPreview = memo(function PickerPreview({
                         nativeHeight={nativeH(layout)}
                         height={PANE_HEIGHT}
                         onFit={onFit}
-                        title={`${rowLabel(layout)} preview`}
+                        title={`${rowLabel(layout, mode)} preview`}
                         className="absolute inset-0"
                     />
                 ) : (
@@ -575,7 +584,8 @@ const NewContainerForm = memo(function NewContainerForm({ onCreate, onCancel }) 
 const CatalogRow = memo(function CatalogRow({
     layout, focused, picked, boardsNote, inScene, onFocus, onToggle,
 }) {
-    const label = rowLabel(layout);
+    const { mode } = useSideLabels();
+    const label = rowLabel(layout, mode);
 
     return (
         <div
@@ -653,6 +663,7 @@ const CatalogRow = memo(function CatalogRow({
  * Add is the only slot that stands down.
  */
 export const AddSourceDialog = memo(function AddSourceDialog({ scene, open: openProp, onClose }) {
+    const { mode: sideMode } = useSideLabels();
     const open = openProp ?? !!scene;
     const { layouts, error } = useLayoutCatalog(open);
     const boards = useActiveBoards();
@@ -730,13 +741,13 @@ export const AddSourceDialog = memo(function AddSourceDialog({ scene, open: open
         for (const l of rows) {
             const key = GROUP_LABELS[l.group] ?? l.group;
             if (q
-                && !rowLabel(l).toLowerCase().includes(q)
+                && !rowLabel(l, sideMode).toLowerCase().includes(q)
                 && !key.toLowerCase().includes(q)) continue;
             if (!out.has(key)) out.set(key, []);
             out.get(key).push(l);
         }
         return [...out.entries()].sort(([a], [b]) => groupRank(a) - groupRank(b));
-    }, [layouts, containerRows, query]);
+    }, [layouts, containerRows, query, sideMode]);
 
     // The visible rows in list order — what the arrow keys walk.
     const flatRows = useMemo(() => groups.flatMap(([, rows]) => rows), [groups]);
@@ -848,7 +859,7 @@ export const AddSourceDialog = memo(function AddSourceDialog({ scene, open: open
         for (const p of picks) {
             try {
                 const res = await useObsStore.getState().addBrowserSource({
-                    inputName: addName(p.layout, p.board, boards),
+                    inputName: addName(p.layout, p.board, boards, sideMode),
                     url: overlayUrl(p.layout, p.board),
                     width: p.layout.width,
                     height: p.layout.height,
@@ -873,7 +884,7 @@ export const AddSourceDialog = memo(function AddSourceDialog({ scene, open: open
             return;
         }
 
-        const names = failed.map(f => rowLabel(f.pick.layout)).join(', ');
+        const names = failed.map(f => rowLabel(f.pick.layout, sideMode)).join(', ');
         notifications.show({
             message: done.length
                 ? `Added ${done.length} of ${done.length + failed.length} to ${scene} — ${names} failed.`
@@ -1089,7 +1100,7 @@ export const AddSourceDialog = memo(function AddSourceDialog({ scene, open: open
                             >
                                 {picks.map((p) => {
                                     const key = pickKey(p.layout, p.board);
-                                    const label = rowLabel(p.layout)
+                                    const label = rowLabel(p.layout, sideMode)
                                         + (p.board != null && boards.length > 1
                                             ? ` · ${p.board}` : '');
                                     return (

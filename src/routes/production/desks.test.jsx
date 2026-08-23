@@ -304,7 +304,7 @@ describe('Board desk', () => {
         });
         ui(<BoardDesk board={1} />);
         expect(screen.getByText('Alice 3–2 Bob')).toBeInTheDocument();
-        expect(screen.getByText('Alice on the left — pinned in Settings')).toBeInTheDocument();
+        expect(screen.getByText('Alice on side 1 — pinned in Settings')).toBeInTheDocument();
         // The fixture is a SLOT with the match in it, not a sentence about one:
         // its id, both participants, the series between them, the round after.
         expect(screen.getByText('M2')).toBeInTheDocument();
@@ -472,13 +472,18 @@ describe('Board desk', () => {
     });
 
     it('has a sentence for every layer of the cascade, and none for raw feed order', () => {
-        expect(sideReasonLine('manual', 'Alice')).toBe('Alice on the left — set by hand for this game');
-        expect(sideReasonLine('match', 'Alice')).toBe('Alice on the left — from the bound match');
-        expect(sideReasonLine('pin', 'Alice')).toBe('Alice on the left — pinned in Settings');
-        expect(sideReasonLine('back_to_back', 'Alice')).toBe('Alice on the left — where they were last game');
+        expect(sideReasonLine('manual', 'Alice')).toBe('Alice on side 1 — set by hand for this game');
+        expect(sideReasonLine('match', 'Alice')).toBe('Alice on side 1 — from the bound match');
+        expect(sideReasonLine('pin', 'Alice')).toBe('Alice on side 1 — pinned in Settings');
+        expect(sideReasonLine('back_to_back', 'Alice')).toBe('Alice on side 1 — where they were last game');
         // Raw feed order is not a decision, so there is nothing to explain.
         expect(sideReasonLine('', 'Alice')).toBeNull();
         expect(sideReasonLine(undefined, 'Alice')).toBeNull();
+        // The side is named by the CALLER, in the producer's vocabulary — the
+        // sentence explaining a side assignment is the last place that should
+        // hard-code one arrangement of one scene (../sides).
+        expect(sideReasonLine('pin', 'Alice', 'the left side'))
+            .toBe('Alice on the left side — pinned in Settings');
     });
 
     /*
@@ -579,28 +584,52 @@ describe('Board desk', () => {
     });
 
     /*
-     * Home is a per-side chip, not a Left/Right picker: it is a choice between
-     * two sides, so the side that has it cannot be clicked off — only the other
-     * side can take it.
+     * Home is a per-side chip, not a two-way picker: it is a choice between two
+     * sides, so the side that has it cannot be clicked off — only the other side
+     * can take it.
      */
     it('moves home to the other side, and will not turn it off', () => {
         useStateStore.setState({ score: { 1: { home_team: 2, player: {} } }, match: {} });
         ui(<BoardDesk board={1} />);
-        const left = screen.getByRole('button', { name: 'Left side bats last' });
-        const right = screen.getByRole('button', { name: 'Right side bats last' });
-        expect(right).toHaveAttribute('aria-pressed', 'true');
-        expect(left).toHaveAttribute('aria-pressed', 'false');
+        const one = screen.getByRole('button', { name: 'side 1 bats last' });
+        const two = screen.getByRole('button', { name: 'side 2 bats last' });
+        expect(two).toHaveAttribute('aria-pressed', 'true');
+        expect(one).toHaveAttribute('aria-pressed', 'false');
 
-        fireEvent.click(left);
+        fireEvent.click(one);
         expect(useStateStore.getState().score[1].home_team).toBe(1);
     });
 
     it('ignores a click on the side that is already home', () => {
         useStateStore.setState({ score: { 1: { home_team: 2, player: {} } }, match: {} });
         ui(<BoardDesk board={1} />);
-        fireEvent.click(screen.getByRole('button', { name: 'Right side bats last' }));
+        fireEvent.click(screen.getByRole('button', { name: 'side 2 bats last' }));
         expect(useStagingStore.getState().order).toEqual([]);
         expect(useStateStore.getState().score[1].home_team).toBe(2);
+    });
+
+    /*
+     * The desk is the surface the vocabulary setting exists for: its columns are
+     * where a wrong word costs the most, because a producer checking a
+     * mislabelled board is comparing the panel against a screen.
+     *
+     * Note what does NOT move — `score_left` / `score_right` are state keys the
+     * feed writes, and renaming a key is a migration, not a label change.
+     */
+    it('says the sides in the vocabulary the producer picked', () => {
+        useSettingsStore.setState({
+            project_rio: { hud_enabled: true },
+            production: { side_labels: 'tb' },
+            scoreboards: { active: [1], aliases: {}, binding: {} },
+        });
+        useStateStore.setState({
+            score: { 1: { home_team: 2, score_left: 1, score_right: 0, player: {}, side_reason: 'pin' } },
+            match: {},
+        });
+        ui(<BoardDesk board={1} />);
+        expect(screen.getByRole('button', { name: 'the top side bats last' })).toBeInTheDocument();
+        expect(screen.getByLabelText('Score — Bottom')).toBeInTheDocument();
+        expect(screen.getByText('Side 1 on the top side — pinned in Settings')).toBeInTheDocument();
     });
 
     it('warns when the live players do not match the bound fixture', () => {
@@ -793,7 +822,7 @@ describe('Board desk', () => {
         });
         useStateStore.setState({ score: { 1: { score_left: 1, score_right: 0, player: {} } }, match: {} });
         ui(<BoardDesk board={1} />);
-        fireEvent.change(screen.getByLabelText('Score, left side'), { target: { value: '4' } });
+        fireEvent.change(screen.getByLabelText('Score — Side 1'), { target: { value: '4' } });
         expect(useStagingStore.getState().pending['board:1:score_left']?.value).toBe(4);
         expect(useStateStore.getState().score[1].score_left).toBe(1);
     });

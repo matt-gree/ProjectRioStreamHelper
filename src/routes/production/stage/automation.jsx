@@ -4,6 +4,7 @@ import { Text } from '../../../components/ui/primitives';
 import { IconToggle, ListRow, NumberRow, SegmentedRow, SelectRow } from '../kit';
 import { useActiveBoards, useBoardLabel } from '../boards';
 import { useContainerActions } from '../containers';
+import { useSideLabels } from '../sides';
 import {
     REASONS, memberName, templatesFor, useAutomationActions, useContainerAutomations,
     useFeedReason,
@@ -93,6 +94,8 @@ export default memo(function AutomationSection({ def }) {
         return templatesFor(def).filter(t => !taken.has(t.id));
     }, [def, rules]);
 
+    const sides = useSideLabels();
+
     const restingOptions = useMemo(() => [
         { label: 'Empty — transparent', value: '' },
         ...(def.members || []).map(m => ({ label: memberName(m), value: m })),
@@ -112,7 +115,10 @@ export default memo(function AutomationSection({ def }) {
             />
             <SegmentedRow
                 label="Side" value={String(def.team)}
-                data={[{ label: 'Left', value: '1' }, { label: 'Right', value: '2' }]}
+                data={[
+                    { label: sides.label(1), value: '1' },
+                    { label: sides.label(2), value: '2' },
+                ]}
                 onChange={(v) => setScope(def.id, def.scoreboard, v)}
             />
             <SelectRow

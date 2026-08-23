@@ -18,6 +18,7 @@ import { useObsStore } from '../context/obs';
 import { comboFromEvent } from '../context/staging';
 import { useAssetsVersionStore } from '../lib/assets';
 import { SupportLinks } from './SupportLinks';
+import { SIDE_LABEL_MODES, useSideLabels } from '../routes/production/sides';
 
 const OBS_DOT = {
     connected: 'bg-emerald-500',
@@ -166,6 +167,15 @@ export default function SettingsModal({ opened, onClose }) {
         setSetting('production.confirm.hotkey', combo);
     }, [setSetting]);
 
+    // What the console calls side 1 and side 2 (src/routes/production/sides.js).
+    // `.mode` is the stored value with the fallback already applied, so the
+    // control's value and the words it hands the rest of this modal cannot
+    // disagree about which mode is selected.
+    const sideWords = useSideLabels();
+    const handleSideLabels = useCallback((value) => {
+        setSetting('production.side_labels', value);
+    }, [setSetting]);
+
     // Auto-capture — the stat file Project Rio writes at the final out is the
     // end-of-game signal for a local board (server/postgame_watch.py).
     const autoCapture = useSettingsStore(state => state?.postgame?.auto_capture) !== false;
@@ -235,14 +245,16 @@ export default function SettingsModal({ opened, onClose }) {
                 fetch(`/api/v1/settings?key=project_rio.pinned_side&value=${encodeURIComponent(pinnedSide)}`, { method: 'PUT' }),
             ]);
             notifications.show({
-                message: pinnedPlayer.trim() ? `Locked "${pinnedPlayer.trim()}" to ${pinnedSide}` : 'Player lock cleared',
+                message: pinnedPlayer.trim()
+                    ? `Locked "${pinnedPlayer.trim()}" to ${sideWords.label(pinnedSide === 'Team 2' ? 2 : 1)}`
+                    : 'Player lock cleared',
                 color: 'green',
             });
         } catch {
             notifications.show({ message: 'Failed to save player lock', color: 'red' });
         }
         setPinnedSaving(false);
-    }, [pinnedPlayer, pinnedSide]);
+    }, [pinnedPlayer, pinnedSide, sideWords]);
 
     const handleRefreshGameData = useCallback(async () => {
         setGameDataRefreshing(true);
@@ -703,11 +715,20 @@ export default function SettingsModal({ opened, onClose }) {
                         onResolve={(row) => setPinnedPlayer(row.identities?.rioName || '')}
                         onRawValue={(text) => setPinnedPlayer(text)}
                     />
+                    {/* The VALUE is the stored string "Team 1"/"Team 2" —
+                        `project_rio.pinned_side` persists the label itself, and
+                        two server-side readers compare against it
+                        (rio/provider.py, rio/game_pool.py). Only the caption
+                        moves with the side vocabulary; changing the value would
+                        be a settings migration, not a rename. */}
                     <SegmentedControl
                         size="xs"
                         value={pinnedSide}
                         onChange={setPinnedSide}
-                        data={['Team 1', 'Team 2']}
+                        data={[
+                            { label: sideWords.label(1), value: 'Team 1' },
+                            { label: sideWords.label(2), value: 'Team 2' },
+                        ]}
                     />
                     <Button size="xs" variant="outline" onClick={handleSavePinnedPlayer} disabled={pinnedSaving}>
                         {pinnedSaving && <Loader size={12} />}
@@ -824,6 +845,24 @@ export default function SettingsModal({ opened, onClose }) {
                     </Label>
 
                     <Divider label="Production" />
+
+                    <div className="flex items-start justify-between gap-4">
+                        <span className="flex flex-col">
+                            <Text size="sm">Side labels</Text>
+                            <Text size="xs" dimmed>
+                                What the Production console calls each side. Sides are always 1 and 2 in
+                                state and in overlay URLs — this is only what the panels say, so pick the
+                                pair that matches how your scenes are actually laid out.
+                            </Text>
+                        </span>
+                        <SegmentedControl
+                            size="xs"
+                            value={sideWords.mode}
+                            onChange={handleSideLabels}
+                            data={SIDE_LABEL_MODES}
+                            className="shrink-0"
+                        />
+                    </div>
 
                     <Label className="flex items-start gap-2">
                         <Switch checked={confirmEnabled} onCheckedChange={handleConfirmEnabled} className="mt-0.5" />

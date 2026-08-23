@@ -44,6 +44,8 @@
  * keys on.
  */
 
+import { sideLabel } from './sides';
+
 const ORIGIN = typeof window !== 'undefined' && window.location
     ? window.location.origin
     : 'http://localhost';
@@ -59,7 +61,18 @@ const ORIGIN = typeof window !== 'undefined' && window.location
  * it a tag here would produce two spellings of one fact.
  */
 const VARIANT_PARAMS = [
-    ['team', 't', (v) => `Team ${v}`],
+    /*
+     * `?team=` is a SIDE, so it reads in the producer's side vocabulary
+     * (./sides) rather than spelling one out. The rack row and the stage panel
+     * name the same source, and "Roster · Team 2" beside a panel headed "Right"
+     * is two spellings of one fact — the thing this table's own note warns
+     * about one axis over.
+     *
+     * Which is why the formatters take the mode: it is the only variant whose
+     * label is a preference. `?dir=` below is NOT — it names a direction the
+     * artwork points, so it keeps its literal words.
+     */
+    ['team', 't', (v, mode) => sideLabel(v, mode)],
     ['size', 'z', (v) => ({ s: 'Small', m: 'Medium', l: 'Large' }[v] ?? String(v).toUpperCase())],
     // `dir` outlives the only layout that ever offered it (the 4-cam scorecard,
     // deleted with the full-scene group). Kept because it costs nothing and it
@@ -160,19 +173,19 @@ export function variantParams(variant) {
  * The name comes off the element's own size table. Nothing about the id changes:
  * this is what the row SAYS, not what it is.
  */
-export function variantLabelFor(element, variant) {
-    if (variant) return variantLabel(variant);
+export function variantLabelFor(element, variant, mode) {
+    if (variant) return variantLabel(variant, mode);
     return element?.sizes?.find(s => s.default)?.label ?? null;
 }
 
-// How a variant reads in the rack ('t2' → "Team 2"). Null when there is
+// How a variant reads in the rack ('t2' → "Side 2", or "Right"). Null when there is
 // nothing to say, so a caller can drop the slot rather than print an empty one.
-export function variantLabel(variant) {
+export function variantLabel(variant, mode) {
     if (!variant) return null;
     const out = [];
     for (const part of String(variant).split('.')) {
         const entry = VARIANT_PARAMS.find(([, tag]) => part.startsWith(tag));
-        if (entry) out.push(entry[2](part.slice(entry[1].length)));
+        if (entry) out.push(entry[2](part.slice(entry[1].length), mode));
     }
     return out.length ? out.join(' · ') : null;
 }

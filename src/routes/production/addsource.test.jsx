@@ -4,7 +4,7 @@ import { TooltipProvider } from '../../components/ui/tooltip';
 import { useSettingsStore } from '../../context/store';
 import { useObsStore } from '../../context/obs';
 import {
-    AddSourceDialog, addName, overlayUrl, isBoardScoped, pickKey, pickerPreviewUrl,
+    AddSourceDialog, addName, overlayUrl, isBoardScoped, pickKey, pickerPreviewUrl, rowLabel,
     boardsNote,
 } from './addsource';
 
@@ -126,6 +126,21 @@ describe('addName', () => {
         // A "1" that means nothing is worse than no suffix at all.
         expect(addName(layout(), 1, [1])).toBe('Scoreboard — Large');
         expect(addName(lowerthird, 2, [1, 2])).toBe('Lower Third');
+    });
+
+    /*
+     * A `?team=` row is a SIDE, so it names itself in the producer's side
+     * vocabulary (./sides) — and the OBS source inherits that name, because the
+     * name in OBS is the label they clicked. Everything else about the row is
+     * untouched: this is the only variant whose label is a preference.
+     */
+    it('names a side row in the producer’s vocabulary', () => {
+        const roster = { name: 'Roster', type: 'roster', team: 2, url: '/layout/scoreboard1/roster.html?team=2' };
+        expect(rowLabel(roster)).toBe('Roster — Side 2');
+        expect(rowLabel(roster, 'lr')).toBe('Roster — Right');
+        expect(addName(roster, null, [1], 'tb')).toBe('Roster — Bottom');
+        // A size row is not a side and does not move with it.
+        expect(rowLabel(layout(), 'lr')).toBe('Scoreboard — Large');
     });
 });
 

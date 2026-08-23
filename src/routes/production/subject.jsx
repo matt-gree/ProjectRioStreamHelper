@@ -9,6 +9,7 @@ import { useContainerDefs, useContainerOf } from './containers';
 import { isFedPlacement } from './placements';
 import { memberName, useFeedReason } from './automations';
 import { bandLine, useBands, useFieldValues } from './eventheader';
+import { useSideLabels } from './sides';
 
 /*
  * THE SUBJECT — what an element is currently drawing.
@@ -74,6 +75,7 @@ export function battingSide(homeTeam, halfInning) {
  * surfaces would start disagreeing about what is on air.
  */
 export const BoardGameSubject = memo(function BoardGameSubject({ board }) {
+    const { label } = useSideLabels();
     const g = useStateStore(useShallow(s => {
         const b = s?.score?.[board];
         return {
@@ -94,7 +96,7 @@ export const BoardGameSubject = memo(function BoardGameSubject({ board }) {
         : null;
     return (
         <SubjectRow
-            text={`${g.n1 || 'Side 1'} ${g.l ?? 0}–${g.r ?? 0} ${g.n2 || 'Side 2'}`}
+            text={`${g.n1 || label(1)} ${g.l ?? 0}–${g.r ?? 0} ${g.n2 || label(2)}`}
             meta={inning}
         />
     );
@@ -107,7 +109,8 @@ const SideSubject = memo(function SideSubject({ board, team }) {
         const side = s?.score?.[board]?.player?.[team];
         return { name: side?.rioName || '', msbTeam: side?.msb_team || '' };
     }));
-    const where = team === 1 ? 'Left' : 'Right';
+    const { label } = useSideLabels();
+    const where = label(team);
     if (!p.name) return <SubjectRow text={`${where} — nobody on this side yet`} />;
     return <SubjectRow text={`${where} — ${p.name}`} meta={p.msbTeam || null} />;
 });
@@ -127,6 +130,7 @@ const ScopedMemberSubject = memo(function ScopedMemberSubject({ element, contain
      * mirrored pair that is a coin flip between the two sides. The placement
      * knows which one it is nested under; take it.
      */
+    const { phrase } = useSideLabels();
     const defs = useContainerDefs();
     const { def: found } = useContainerOf(element);
     const def = (container ? defs[container] : null) ?? found;
@@ -141,8 +145,7 @@ const ScopedMemberSubject = memo(function ScopedMemberSubject({ element, contain
         };
     }));
     if (!def) return null;
-    const where = team === 1 ? 'left' : 'right';
-    if (!live.name) return <SubjectRow text={`Draws the ${where} side — nobody there yet`} />;
+    if (!live.name) return <SubjectRow text={`Draws ${phrase(team)} — nobody there yet`} />;
     const batting = battingSide(live.home, live.half) === team;
     const who = batting ? live.batter : live.pitcher;
     return (

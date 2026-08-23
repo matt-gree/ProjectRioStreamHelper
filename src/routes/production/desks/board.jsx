@@ -25,6 +25,7 @@ import PostGameSection, { PostGameSubject, usePostGame } from '../postgame';
 import { useBoardQueueId, useNextUp, useQueues } from '../queue';
 import { useGameModes, withHeldModes } from '../gamemodes';
 import { useMatchBindableBoards } from '../boards';
+import { useSideLabels } from '../sides';
 import { bindScoreboard, takeNextMatch } from '../../../context/match';
 
 /*
@@ -80,12 +81,18 @@ import { bindScoreboard, takeNextMatch } from '../../../context/match';
 const halfInningOptions = HALF_INNINGS.map(h => ({ value: h, label: h }));
 
 /*
- * THE BOARD IS MIRRORED, because the thing it controls is: side 1 down the left,
- * the shared frame (runs, count, inning) in the middle, side 2 down the right,
- * with the right side's contents reversed and right-aligned so each column runs
- * outward from the score the way a scoreboard does. A producer checking a wrong
- * board is comparing the panel against a screen — if left isn't on the left, the
- * check is a translation step, which is exactly the bug they're hunting.
+ * THE BOARD IS MIRRORED: side 1 down one column, the shared frame (runs, count,
+ * inning) in the middle, side 2 down the other, with side 2's contents reversed
+ * and outer-aligned so each column runs outward from the score the way a
+ * scoreboard does.
+ *
+ * The MIRRORING is what makes a producer's check a glance instead of a
+ * translation step. The WORDS "left" and "right" were doing that job too, and
+ * they were the half that could be wrong: they describe one arrangement of one
+ * scene, and a stacked canvas (or a producer who simply put side 2 on the left)
+ * turns the panel into a lie about the exact thing it was opened to check. The
+ * column position carries the geometry; the eyebrow now carries the side, in
+ * whatever vocabulary the producer picked (../sides).
  */
 const BOARD_GRID = 'grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-x-3';
 const EYEBROW = 'label-display text-[10px] text-muted-foreground';
@@ -122,11 +129,20 @@ const SIDE_REASON = {
     back_to_back: 'where they were last game',
 };
 
-export function sideReasonLine(reason, leftName) {
+/*
+ * Why side 1 is where it is. `where` is side 1's label in the producer's chosen
+ * vocabulary (../sides), passed in rather than looked up so this stays a pure
+ * function the test can call directly.
+ *
+ * The sentence used to be "Alice on the left — pinned in Settings", which
+ * hard-coded an arrangement into the one line whose whole job is explaining a
+ * side assignment. It now names the side the same way the column above it does.
+ */
+export function sideReasonLine(reason, name1, where = 'side 1') {
     const why = SIDE_REASON[reason];
     if (!why) return null;
-    const who = leftName || 'Side 1';
-    return `${who} on the left — ${why}`;
+    const who = name1 || 'Side 1';
+    return `${who} on ${where} — ${why}`;
 }
 
 /*
@@ -1233,8 +1249,11 @@ const RosterGrid = memo(function RosterGrid({ roster, captain, mirror }) {
  * clicking the side that already has it does nothing, because this is a choice
  * between two sides and not a toggle that can be off.
  */
-const SidePanel = memo(function SidePanel({ side, label, d }) {
+const SidePanel = memo(function SidePanel({ side, d }) {
     const { g } = d;
+    const sides = useSideLabels();
+    const label = sides.label(side);
+    const phrase = sides.phrase(side);
     const team = useSideTeam(d.sb, side);
     const urls = useAssetUrls();
     const mirror = side === 2;
@@ -1260,10 +1279,10 @@ const SidePanel = memo(function SidePanel({ side, label, d }) {
                 </div>
                 <ToggleChip
                     label="Home"
-                    ariaLabel={`${label} side bats last`}
+                    ariaLabel={`${phrase} bats last`}
                     title={isHome
                         ? `${shown || label} bats last`
-                        : `Make the ${label.toLowerCase()} side home`}
+                        : `Make ${phrase} home`}
                     checked={isHome}
                     staged={d.isStaged('home_team')}
                     onChange={() => { if (!isHome) d.setField('home_team', side); }}
@@ -1284,12 +1303,16 @@ const SidePanel = memo(function SidePanel({ side, label, d }) {
 
 // One side's runs, in the centre block beside the other side's — the pair is how
 // a score is read, so they sit together rather than one per side column.
-const ScoreBox = memo(function ScoreBox({ side, label, d }) {
+const ScoreBox = memo(function ScoreBox({ side, d }) {
+    const { label } = useSideLabels();
+    // `score_left` / `score_right` are the STATE keys and stay as they are —
+    // renaming a state key is a migration, and the feed writes them. Only what
+    // the box says about itself is vocabulary.
     const field = side === 1 ? 'score_left' : 'score_right';
     const live = side === 1 ? d.g.scoreLeft : d.g.scoreRight;
     return (
         <NumberInput
-            aria-label={`Score, ${label.toLowerCase()} side`}
+            aria-label={`Score — ${label(side)}`}
             value={d.val(field, live)}
             onChange={v => d.setField(field, v === '' ? 0 : Number(v))}
             min={0}
@@ -1305,6 +1328,7 @@ export default function BoardDesk({ board }) {
     const sb = Number(board);
     const d = useBoardDesk(sb);
     const { g } = d;
+    const sides = useSideLabels();
     const stats = useStatsDiagnostics(sb);
     const postgame = usePostGame(sb);
     const { options: gameModes } = useGameModes();
@@ -1327,7 +1351,7 @@ export default function BoardDesk({ board }) {
             .catch(e => notifications.show({ message: `Rename: ${e?.message || e}`, color: 'red' }));
     }, [sb, storedAlias]);
 
-    const reasonLine = sideReasonLine(g.sideReason, g.name1);
+    const reasonLine = sideReasonLine(g.sideReason, g.name1, sides.phrase(1));
 
     return (
         <>
@@ -1355,7 +1379,7 @@ export default function BoardDesk({ board }) {
                 {/* score.{N}.*: what is on air this game. */}
                 <KitColumn label="Game state">
                     <div className={BOARD_GRID}>
-                        <SidePanel side={1} d={d} label="Left" />
+                        <SidePanel side={1} d={d} />
 
                         {/* The shared frame, between the two sides that share it:
                             the runs as a pair, then the inning, then the count.
@@ -1363,9 +1387,9 @@ export default function BoardDesk({ board }) {
                             level with the two name fields. */}
                         <div className="flex shrink-0 flex-col items-center gap-1.5 pt-[1.1rem]">
                             <div className="flex items-center gap-1">
-                                <ScoreBox side={1} label="Left" d={d} />
+                                <ScoreBox side={1} d={d} />
                                 <Text size="sm" span dimmed>–</Text>
-                                <ScoreBox side={2} label="Right" d={d} />
+                                <ScoreBox side={2} d={d} />
                             </div>
                             <div className="flex items-center gap-1.5">
                                 <SimpleSelect
@@ -1411,7 +1435,7 @@ export default function BoardDesk({ board }) {
                             </div>
                         </div>
 
-                        <SidePanel side={2} d={d} label="Right" />
+                        <SidePanel side={2} d={d} />
                     </div>
 
                     {/* Belongs to the game, not to either side, so it sits under

@@ -99,10 +99,29 @@ describe('variants', () => {
     });
 
     it('reads back the way the producer picked it in the catalog', () => {
-        expect(variantLabel('t2')).toBe('Team 2');
+        expect(variantLabel('t2')).toBe('Side 2');
         expect(variantLabel('zs')).toBe('Small');
         expect(variantLabel('dleft')).toBe('Point Left');
-        expect(variantLabel('t1.zl')).toBe('Team 1 · Large');
+        expect(variantLabel('t1.zl')).toBe('Side 1 · Large');
         expect(variantLabel('')).toBeNull();
+    });
+
+    /*
+     * `?team=` is the ONE variant whose label is a producer preference — the
+     * rack row and the stage panel name the same source, so the row has to be
+     * able to say what the panel says.
+     *
+     * `?dir=` is here as the control: it names which way the artwork points, so
+     * it must NOT move with the side vocabulary. Left/right is geometry there
+     * and identity above, and the two used to be one hard-coded word.
+     */
+    it('says the side in the producer’s vocabulary, and leaves geometry alone', () => {
+        expect(variantLabel('t2', 'lr')).toBe('Right');
+        expect(variantLabel('t1', 'tb')).toBe('Top');
+        expect(variantLabel('t1.zl', 'lr')).toBe('Left · Large');
+        expect(variantLabel('dleft', 'tb')).toBe('Point Left');
+        // A mode nobody defined is the default, not a crash: this value is
+        // persisted settings, and settings.json gets hand-edited.
+        expect(variantLabel('t2', 'sideways')).toBe('Side 2');
     });
 });

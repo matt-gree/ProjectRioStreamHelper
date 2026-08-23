@@ -308,11 +308,19 @@ sources).
   feed has given no characters** (nine "Slot n" placeholders on an idle board is
   nine rows of nothing). The lineup is what the deleted editor was actually used
   for; seeing it is correction grade, editing it never was.
-- **Home is a chip on the side that has it**, not a Left/Right segmented row.
+- **Home is a chip on the side that has it**, not a two-way position picker.
   Which side bats last is a fact about a player, and "MattGree bats last" is the
   sentence being checked against the game. It is a choice between two sides, so
   clicking the side that already has it does nothing — it cannot be off. Both
   chips read "Home", so each takes `ariaLabel` (`ToggleChip`) to be nameable.
+- **The columns are mirrored; the WORDS are a setting.** Side 1 down one column,
+  the shared frame in the middle, side 2 down the other — that geometry is what
+  makes a producer's check a glance instead of a translation step. The eyebrows,
+  score-box labels and `sideReasonLine` all name the side through `../sides.js`
+  (`sideLabel` standalone, `sidePhrase` mid-sentence), defaulting to the numbers.
+  Hard-coding "Left" here is the worst place to do it: a producer checking a
+  mislabelled board is comparing the panel against a screen, so a word that is
+  wrong for their arrangement breaks the exact check they opened it to make.
 - **The mirror takes the whole panel width; the wiring reads below it.** A lineup
   does not compress — beside a wiring column, nine character names truncated to
   "Dry Bon…", which is the one thing a roster readout exists to avoid. Under the

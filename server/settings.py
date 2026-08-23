@@ -400,12 +400,19 @@ class Settings:
                 # true if the FLIP comes with them. The two rules that do it are
                 # seeded below, in `automations`.
                 #
-                # Scope is board 1 / left and board 1 / right. A rig running
+                # Scope is board 1 / side 1 and board 1 / side 2. A rig running
                 # more boards re-points the Board picker on each container's
                 # stage; there is no seeding a pair per board without inventing
                 # a show structure nobody asked for.
+                #
+                # The names say "Side 1"/"Side 2" for the same reason
+                # `side_labels` defaults to numeric: a container's name is free
+                # text a producer can change, so a SEED must not assume an
+                # arrangement. Only fresh installs see this — `container_defs`
+                # is merge-exempt, so anyone who already has the pair keeps the
+                # name they have.
                 "roster-stats-1": {
-                    "name": "Roster + Stats — Left",
+                    "name": "Roster + Stats — Side 1",
                     "width": 452,
                     "height": 240,
                     "members": ["roster", "statscard"],
@@ -413,7 +420,7 @@ class Settings:
                     "scope": {"scoreboard": 1, "team": 1},
                 },
                 "roster-stats-2": {
-                    "name": "Roster + Stats — Right",
+                    "name": "Roster + Stats — Side 2",
                     "width": 452,
                     "height": 240,
                     "members": ["roster", "statscard"],
@@ -492,7 +499,23 @@ class Settings:
             "confirm": {
                 "enabled": False,
                 "hotkey": "F9"
-            }
+            },
+            # What the CONSOLE calls side 1 and side 2 — "numeric" (Side 1 /
+            # Side 2), "lr" (Left / Right) or "tb" (Top / Bottom). Vocabulary
+            # only: the model is `score.{N}.player.{T}` whatever this says, and
+            # overlays never read it.
+            #
+            # Numeric is the default because it is the only one true in every
+            # arrangement. Left/Right is a fact about ONE scene layout, and a
+            # producer who stacks their sides vertically (or simply puts side 2
+            # on the left) gets a board desk that lies to them about the thing
+            # they opened it to check.
+            #
+            # Server settings rather than browser-local workspace state: it
+            # describes how the broadcast is laid out, so a second producer on a
+            # second machine must see the same words. Client:
+            # src/routes/production/sides.js.
+            "side_labels": "numeric"
         },
         "announcements": {
             "dismissed_ids": [],

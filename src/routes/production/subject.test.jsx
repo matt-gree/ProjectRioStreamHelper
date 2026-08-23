@@ -64,7 +64,7 @@ describe('Subject', () => {
 
     /*
      * The answer a `?team=` source cannot give about itself. Rio reassigns
-     * away/home every game, so "Team 2" is a position and not an identity —
+     * away/home every game, so a side is a position and not an identity —
      * which is the whole reason this row exists.
      */
     it('a team-variant source names who is on that side', () => {
@@ -72,7 +72,7 @@ describe('Subject', () => {
         render(<Subject placement={placementFor('roster', {
             variant: 't2', item: { sourceName: 's', url: '/layout/scoreboard1/roster.html?team=2' },
         })} />);
-        expect(screen.getByText('Right — Jake')).toBeInTheDocument();
+        expect(screen.getByText('Side 2 — Jake')).toBeInTheDocument();
     });
 
     it('a container states its occupant AND why, so a push reads apart from a rule', () => {
