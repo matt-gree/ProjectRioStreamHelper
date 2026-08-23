@@ -94,25 +94,25 @@ describe('a member has to fit', () => {
 
 describe('the roster is the membership relation', () => {
     const defs = {
-        a: { id: 'a', members: ['stats'] },
+        a: { id: 'a', members: ['hitvisualizer'] },
         b: { id: 'b', members: ['postgamecallout', 'postgamevs'] },
     };
 
     it('answers which container holds an element', () => {
-        expect(hostOf(defs, 'stats')).toBe('a');
+        expect(hostOf(defs, 'hitvisualizer')).toBe('a');
         expect(hostOf(defs, 'postgamevs')).toBe('b');
     });
 
     // No implicit default any more: an element nobody rostered has nowhere to
     // be pushed, and every surface reports that rather than inventing one.
     it('answers null for an element on no roster', () => {
-        expect(hostOf(defs, 'hitvisualizer')).toBeNull();
-        expect(fedTargets(defs).hitvisualizer).toBeUndefined();
+        expect(hostOf(defs, 'statscard')).toBeNull();
+        expect(fedTargets(defs).statscard).toBeUndefined();
     });
 
     it('maps every rostered member to its container', () => {
         expect(fedTargets(defs)).toEqual({
-            stats: 'a', postgamecallout: 'b', postgamevs: 'b',
+            hitvisualizer: 'a', postgamecallout: 'b', postgamevs: 'b',
         });
     });
 });

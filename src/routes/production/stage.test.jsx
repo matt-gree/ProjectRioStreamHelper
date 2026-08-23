@@ -75,11 +75,11 @@ describe('stageBodyComponent', () => {
 
     it('falls back by flavor for elements without a dedicated body', () => {
         const scoreboard = ELEMENTS.find(e => e.id === 'scoreboard');
-        const stats = ELEMENTS.find(e => e.id === 'stats');
+        const statscard = ELEMENTS.find(e => e.id === 'statscard');
         expect(stageBodyComponent(scoreboard)).toBe(DirectStage);
-        // Stats has no source of its own, so it is fed wherever it is asked
-        // about — there is no other answer for it.
-        expect(stageBodyComponent(stats)).toBe(FedStage);
+        // The Stat Card has no source of its own, so it is fed wherever it is
+        // asked about — there is no other answer for it.
+        expect(stageBodyComponent(statscard)).toBe(FedStage);
     });
 
     /*

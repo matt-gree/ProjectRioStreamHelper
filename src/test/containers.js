@@ -6,7 +6,7 @@
  * has anywhere to be pushed — there is no implicit default any more, and that
  * absence is the point of the phase.
  *
- * These mirror the three the server seeds (server/settings.py). They are a
+ * These mirror the ones the server seeds (server/settings.py). They are a
  * FIXTURE, not a second source of truth: the seed itself is pinned by
  * tests/unit/test_settings_containers.py, and what matters here is only that a
  * test starts from a rig that looks like a real one.
@@ -17,15 +17,6 @@ export const SEEDED_CONTAINER_DEFS = {
         width: 1920,
         height: 1080,
         members: ['postgamecallout', 'postgamevs'],
-    },
-    'stats-feed': {
-        name: 'Stats Bar',
-        // The FED stats bar's native size (stats-mount.js). 452x118 is the
-        // standalone stats.html card — a different layout — and seeding that here
-        // put the fixture at a size its own member did not fit.
-        width: 325,
-        height: 120,
-        members: ['stats'],
     },
     'split-screen': {
         name: 'Split-Screen',

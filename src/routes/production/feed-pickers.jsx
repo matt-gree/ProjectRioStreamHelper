@@ -2,7 +2,6 @@ import { memo, useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useStateStore } from '../../context/store';
 import { Stack, Group, Text } from '../../components/ui/primitives';
-import { SegmentedControl } from '../../components/ui/segmented-control';
 import { cn } from '../../lib/utils';
 import { StagedDot } from './controls';
 import { useFeedControl, useFeedSelect } from './feeds';
@@ -21,7 +20,7 @@ const NO_INTENT = Object.freeze({});
  * shape — { groups, value, choose, empty } — so the stage can render the full
  * picker and the rail card can render the same choices as a single kit row.
  * Before this, the rail could only re-push whatever the stage last picked,
- * which made a pinned Stats card useless on its own.
+ * which made a pinned card useless on its own.
  */
 
 /*
@@ -32,7 +31,6 @@ const NO_INTENT = Object.freeze({});
  * elements.test.js pins the two against each other.
  */
 export const FEED_OPTION_HOOKS = {
-    stats: useStatsFeedOptions,
     postgamecallout: usePostgameCalloutOptions,
 };
 
@@ -43,93 +41,6 @@ export function flattenGroups(groups) {
         label: groups.length > 1 ? `${g.label} — ${o.label}` : o.label,
     })));
 }
-
-// Content picker for the 'stats' fed element: choose WHICH roster character's
-// stats to put on the chosen shared container. Scoreboard 1 for now;
-// multi-scoreboard is later.
-export function useStatsFeedOptions(element, scoreboard = 1) {
-    const { mine, staged, select, clear } = useFeedSelect(element, scoreboard);
-    const players = useStateStore(s => s?.score?.[scoreboard]?.player);
-    // The armed pick (intent) — what Push would air, and the live feed when this
-    // element holds the container. Flattened for useShallow.
-    const intent = useStateStore(useShallow(s => {
-        const i = resolveIntent(s, element, scoreboard);
-        return i ? { team: i.team, charIndex: i.charIndex, role: i.role || 'batting' } : NO_INTENT;
-    }));
-
-    // Build per-team option groups from the live roster (9 slots each).
-    const teams = useMemo(() => {
-        const out = [];
-        for (const team of [1, 2]) {
-            const p = players?.[team];
-            const chars = [];
-            for (let i = 0; i < 9; i++) {
-                const name = p?.character?.[i]?.name;
-                if (name) chars.push({ charIndex: i, name });
-            }
-            if (chars.length) {
-                out.push({ team, label: p?.msb_team || p?.rioName || `Team ${team}`, chars });
-            }
-        }
-        return out;
-    }, [players]);
-
-    const role = intent.role || 'batting';
-    const selValue = intent.charIndex != null ? `${intent.team}:${intent.charIndex}` : '';
-
-    const nameOf = (team, charIndex) =>
-        teams.find(t => t.team === team)?.chars.find(c => c.charIndex === charIndex)?.name || 'stats';
-    // Arms the pick; airs it only if this element already holds the container
-    // (useFeedSelect). `name` rides along so a remembered pick can be
-    // re-validated against the live roster before Push replays it — charIndex
-    // alone goes stale when the game changes underneath it (suggest.js).
-    const feed = (team, charIndex, r) =>
-        select({ element: 'stats', scoreboard, team, charIndex, role: r, name: nameOf(team, charIndex) },
-            `Feed stats: ${nameOf(team, charIndex)}`);
-    const choose = (value) => {
-        if (!value) { clear(); return; }
-        const [team, charIndex] = value.split(':').map(Number);
-        feed(team, charIndex, role);
-    };
-    const setRole = (r) => {
-        if (!selValue) return;
-        const [team, charIndex] = selValue.split(':').map(Number);
-        feed(team, charIndex, r);
-    };
-
-    return {
-        label: 'Content — whose stats to show',
-        groups: teams.map(t => ({
-            label: t.label,
-            options: t.chars.map(c => ({ value: `${t.team}:${c.charIndex}`, label: c.name })),
-        })),
-        value: selValue, choose, staged, live: !!mine,
-        role, setRole,
-        empty: teams.length === 0
-            ? `No roster in live state yet — start or load a game on scoreboard ${scoreboard}.`
-            : null,
-    };
-}
-
-export const StatsFeedPicker = memo(function StatsFeedPicker({ element, scoreboard = 1 }) {
-    const o = useStatsFeedOptions(element, scoreboard);
-    if (o.empty) return <Text size="sm" className="text-muted-foreground">{o.empty}</Text>;
-    return (
-        <Stack gap="xs">
-            {/* "Nothing fed" only means something while on air — off air the
-                select shows the armed pick, and a clear that isn't running would
-                just snap back. */}
-            <GroupedFeedSelect o={o} allowNone={o.live} />
-            {o.value && (
-                <SegmentedControl
-                    data={[{ label: 'Batting', value: 'batting' }, { label: 'Pitching', value: 'pitching' }]}
-                    value={o.role}
-                    onChange={o.setRole}
-                />
-            )}
-        </Stack>
-    );
-});
 
 // The stage-width form of a grouped content picker: label + staged dot above a
 // grouped select. Shared by every fed element that has choices.

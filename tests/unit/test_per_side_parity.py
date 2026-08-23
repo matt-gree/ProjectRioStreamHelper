@@ -20,13 +20,17 @@ from server.api.v1.layouts import _TEAM_VARIANTS
 
 REPO = Path(__file__).resolve().parents[2]
 
-# `stats` is the deliberate exception, and it is one because the console's
-# `stats` element is NOT the `?team=` layout. The element is fed-only and points
-# at /layout/shared/stats-feed.html; /layout/scoreboard1/stats.html matches no
-# element's `match()` and rows through `genericElement`, so there is nothing to
-# hang a `perSide` on. Registering a stats element means adding the flag, and
-# this test is where that lands.
-UNREGISTERED = {"stats"}
+# Every `?team=` layout now has an element declaring `perSide`, and this set is
+# empty on purpose rather than deleted: an unregistered team-variant layout is a
+# legal state (it rows through `genericElement` online, keyed on its pathname)
+# and it is a state a producer pays for, because a generic row has no stage
+# panel, no preview and no catalog row with OBS closed. `stats` was the one
+# entry here — the console's `stats` element used to be the fed bar at
+# /layout/shared/stats-feed.html while /layout/scoreboard1/stats.html, the
+# overlay a broadcast actually uses, matched nothing. If a name lands here
+# again, this comment is the argument for registering it rather than widening
+# the exception.
+UNREGISTERED: set[str] = set()
 
 
 def _per_side_element_ids() -> set[str]:

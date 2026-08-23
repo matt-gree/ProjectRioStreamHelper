@@ -110,9 +110,9 @@ describe('THEME_ELEMENT', () => {
     it('covers exactly the types carrying an app-palette setting', () => {
         const gated = Object.keys(LAYOUT_SETTINGS)
             .filter(type => LAYOUT_SETTINGS[type].some(d => d.appPalette));
-        // `stats` is deliberately ungated: the type is shared by the fed HTML
-        // bar (always app-painted) and the themed SVG source, so there is no
-        // single answer for it. See the comment on THEME_ELEMENT.
-        expect(gated.filter(t => t !== 'stats')).toEqual(Object.keys(THEME_ELEMENT));
+        // No exceptions. `stats` used to be one, because the type was shared by
+        // the fed HTML bar (always app-painted) and the themed SVG source and
+        // there was no single answer. The fed bar is shelved, so there is.
+        expect(gated).toEqual(Object.keys(THEME_ELEMENT));
     });
 });

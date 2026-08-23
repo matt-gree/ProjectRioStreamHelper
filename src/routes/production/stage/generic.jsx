@@ -8,7 +8,7 @@ import { useContainerBinding } from '../feeds';
 import { useContainerDefs, useContainerOf, useMemberScope } from '../containers';
 import { boardOfUrl } from '../../../lib/obs-binding';
 import { useConsoleOffline } from '../placements';
-import { PostgameCalloutPicker, PostgameVsPicker, StatsFeedPicker } from '../feed-pickers';
+import { PostgameCalloutPicker, PostgameVsPicker } from '../feed-pickers';
 
 /*
  * The two stage bodies every element gets for free from its flavor:
@@ -131,9 +131,6 @@ export const ReadinessNote = memo(function ReadinessNote({ element, board }) {
 export const FeedContentPicker = memo(function FeedContentPicker({
     element, fed = true, scoreboard = 1,
 }) {
-    if (element.feed === 'stats') {
-        return <StatsFeedPicker element={element} scoreboard={scoreboard} />;
-    }
     if (element.feed === 'postgamecallout') {
         return <PostgameCalloutPicker element={element} fed={fed} scoreboard={scoreboard} />;
     }

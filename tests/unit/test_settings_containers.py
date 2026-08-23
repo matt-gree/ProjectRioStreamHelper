@@ -23,7 +23,7 @@ def _defs():
 
 
 SEEDED = {
-    "callout-stage", "stats-feed", "split-screen",
+    "callout-stage", "split-screen",
     "roster-stats-1", "roster-stats-2",
 }
 
@@ -131,21 +131,21 @@ async def test_every_container_is_sized_to_its_member(isolate_user_data):
     split-screen really was undersized (960x1080 around a 1280x720 hit
     visualizer) and now takes its member's size.
 
-    stats-feed is the cautionary one. It was moved to 452x118 on the strength of
-    a census line reading "stats 452x118" — but that is `stats.html`, the
-    STANDALONE stat card (stats-card-mount, a ?team= variant). The fed `stats`
-    element is the bar in stats-mount.js, whose native size is 325x120. The
-    "fix" therefore left the container 2px too short for its only member, which
-    `fitsContainer` would have filtered out of the container's own member picker.
-    Two runtimes, one number: containers.test.jsx now pins the seeded defs
-    against the element registry so this cannot recur silently.
+    The cautionary case was the seeded "Stats Bar", and it is instructive even
+    though the container is gone. It was moved to 452x118 on the strength of a
+    census line reading "stats 452x118" — but that is `stats.html`, which is now
+    the dedicated per-side Stats SOURCE and was never that container's member.
+    Its member was the fed bar at 325x120, so the "fix" left the container 2px
+    too short for the only thing it could hold, which `fitsContainer` would have
+    filtered out of its own member picker. One name over two runtimes meaning two
+    different overlays is what made that possible, and is why `stats` now names
+    exactly one of them.
     """
     await Settings.Load()
     defs = _defs()
-    assert (defs["stats-feed"]["width"], defs["stats-feed"]["height"]) == (325, 120)
-    assert defs["stats-feed"]["members"] == ["stats"]
     assert (defs["split-screen"]["width"], defs["split-screen"]["height"]) == (1280, 720)
     assert defs["split-screen"]["members"] == ["hitvisualizer"]
+    assert (defs["roster-stats-1"]["width"], defs["roster-stats-1"]["height"]) == (452, 240)
 
 
 async def test_legacy_per_element_membership_is_dropped(isolate_user_data):
@@ -161,7 +161,7 @@ async def test_legacy_per_element_membership_is_dropped(isolate_user_data):
     await Settings.Load()
     assert "containers" not in Settings.settings["production"]
     # …and the seed is intact, so nothing lost its home in the process.
-    assert _defs()["stats-feed"]["members"] == ["stats"]
+    assert _defs()["split-screen"]["members"] == ["hitvisualizer"]
 
 
 # --- The seed is a seed, not a default ---------------------------------------

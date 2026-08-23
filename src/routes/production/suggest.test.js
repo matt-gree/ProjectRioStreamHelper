@@ -147,18 +147,6 @@ describe('resolveIntent', () => {
         expect(resolveIntent(s, el('postgamevs'), 1)).toEqual(vs);
     });
 
-    it('validates a stats pick against the LIVE roster', () => {
-        const stats = el('stats');
-        const live = (name) => ({
-            score: { 1: { player: { 1: { character: [{ name }] } } } },
-            production: { feed: { last: { stats: { element: 'stats', scoreboard: 1, team: 1, charIndex: 0, name: 'Mario' } } } },
-        });
-        expect(resolveIntent(live('Mario'), stats, 1)).toMatchObject({ name: 'Mario' });
-        // New game, new roster: the remembered slot is somebody else now, and
-        // stats has no suggester — better nothing than the wrong character.
-        expect(resolveIntent(live('Bowser'), stats, 1)).toBeNull();
-    });
-
     it('has no intent for an element that has never fed', () => {
         expect(resolveIntent({}, spotlight, 1)).toBeNull();
         expect(resolveIntent({}, null, 1)).toBeNull();

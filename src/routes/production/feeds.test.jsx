@@ -20,7 +20,8 @@ import { SEEDED_CONTAINER_DEFS, withContainers } from '../../test/containers';
  */
 
 const statscard = ELEMENTS.find(e => e.id === 'statscard');
-const stats = ELEMENTS.find(e => e.id === 'stats');
+const spotlight = ELEMENTS.find(e => e.id === 'postgamecallout');
+const hitvisualizer = ELEMENTS.find(e => e.id === 'hitvisualizer');
 
 beforeEach(() => {
     vi.stubGlobal('localStorage', {
@@ -98,16 +99,15 @@ describe('a container-scoped member is pushed in its CONTAINER’s frame', () =>
     // replays. (Validated against live state first — see suggest.js.)
     it('but a content-bearing member still replays its own pick', () => {
         useStateStore.setState({
-            score: { 1: { player: { 1: { character: { 0: { name: 'Daisy' } } } } } },
+            postgame: { 1: { present: true, player: { 1: { characters: [{ name: 'Daisy' }] } } } },
             production: {},
         });
         const pick = {
-            element: 'stats', scoreboard: 1, team: 1, charIndex: 0,
-            role: 'batting', name: 'Daisy',
+            element: 'postgamecallout', scoreboard: 1, team: 1, charIndex: 0, name: 'Daisy',
         };
-        remember('stats', pick);
-        harness(() => useContainerPush(stats, 1, 'stats-feed')).toggle();
-        expect(feedOn('stats-feed')).toMatchObject(pick);
+        remember('postgamecallout', pick);
+        harness(() => useContainerPush(spotlight, 1, 'callout-stage')).toggle();
+        expect(feedOn('callout-stage')).toMatchObject(pick);
     });
 
     // Clear still leaves the memory — for a scoped member it is inert either
@@ -134,8 +134,8 @@ describe('useMemberScope', () => {
     });
 
     it('falls back to whichever roster claims the element', () => {
-        expect(harness(() => useMemberScope(stats, null)))
-            .toMatchObject({ container: 'stats-feed' });
+        expect(harness(() => useMemberScope(hitvisualizer, null)))
+            .toMatchObject({ container: 'split-screen' });
     });
 
     // Board 1 / side 1, the same default `_scope_of` takes server-side and the

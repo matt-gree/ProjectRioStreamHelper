@@ -127,17 +127,6 @@ export const MEMBERS = {
         identity: (sel) => `hitvisualizer:${Number(sel.scoreboard) || 1}`,
         sample: { file: 'scoreboard', content: { scoreboard: 1 } },
     },
-    stats: {
-        size: [325, 120],
-        mount: async (box) => {
-            const { mountStats } = await load('stats-mount');
-            return mountStats({ host: box });
-        },
-        sample: {
-            file: 'scoreboard',
-            content: { scoreboard: 1, team: 1, charIndex: 0, role: 'batting' },
-        },
-    },
     roster: {
         size: [452, 140],
         mount: async (box) => {
@@ -146,8 +135,10 @@ export const MEMBERS = {
         },
         sample: { file: 'scoreboard', content: { scoreboard: 1, team: 1 } },
     },
-    // The themed 2x2 stat card — the SAME data as `stats`, wearing the design
-    // package's `statscard` element instead of the fed bar's DOM markup. Two
+    // The themed 2x2 stat card, as a container member. The dedicated per-side
+    // Stats SOURCE renders the same data in the wide `stats.svg`; this is the
+    // 2x2 art, under its own settings namespace, so a container's card and a
+    // standalone Stats source are configured independently. Two
     // members rather than a mode on one because a container's roster is a list of
     // things that can be on screen, and these two are different pictures at
     // different sizes; a container holds whichever one its look calls for.

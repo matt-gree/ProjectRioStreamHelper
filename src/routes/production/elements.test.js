@@ -22,11 +22,17 @@ describe('pickable feeds', () => {
         for (const f of PICKABLE_FEEDS) expect(feeds, f).toContain(f);
     });
 
-    it('classifies the registry: stats picks, game summary pushes wholesale', () => {
+    it('classifies the registry: the spotlight picks, game summary pushes wholesale', () => {
         const byId = Object.fromEntries(ELEMENTS.map(e => [e.id, e]));
-        expect(isPickableFeed(byId.stats)).toBe(true);
+        // The spotlight picks WHICH player, so Push has nothing to send until a
+        // pick exists; the Game Summary is the whole game and always does.
+        expect(isPickableFeed(byId.postgamecallout)).toBe(true);
         expect(isPickableFeed(byId.postgamevs)).toBe(false);
         expect(isPickableFeed(byId.scoreboard)).toBe(false); // direct: no feed at all
+        // Stats is a DIRECT per-side source, not a pickable feed. It was the
+        // fed stats bar and the exemplar of this test; the swap is the reason
+        // the assertion moved rather than the reason it went away.
+        expect(isPickableFeed(byId.stats)).toBe(false);
     });
 });
 

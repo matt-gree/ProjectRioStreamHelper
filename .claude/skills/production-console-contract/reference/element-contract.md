@@ -365,8 +365,7 @@ position, not an identity).
   `data-design-vars`, reported by the server as `appVarElements`, never from a
   manifest; and **anything unknown shows the row** — a knob that turns out inert
   is a confusion, a knob that silently vanished is a control with no way back.
-  A type is gated only if `THEME_ELEMENT` names its theme file, which is why
-  `stats` isn't: two renderers share that namespace and only one is themed.
+  A type is gated only if `THEME_ELEMENT` names its theme file.
 - **The reveal-animation toggle is a stage row too** (`stage/intro.jsx`, "On
   show"). It renders only for animated overlays (`ANIMATED_ELEMENT_TYPES`) and
   is a source BEHAVIOUR, not a `LAYOUT_SETTINGS` knob: it writes

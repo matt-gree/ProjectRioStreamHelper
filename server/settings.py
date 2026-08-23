@@ -353,30 +353,23 @@ class Settings:
             # new installs only; a settings file that already has this key needs
             # a one-time migration in Load() to pick it up.
             #
-            # These three are seeded so a fresh install has the containers the
-            # app already shipped with. Both non-full-canvas ones were sized
-            # smaller than the element they host and worked only because those
-            # two mounts happen to reflow — seeded here at their member's real
-            # native size (stats-feed 325x120 -> 452x118, split-screen
-            # 960x1080 -> 1280x720) rather than grandfathered.
+            # These are seeded so a fresh install has the containers the app
+            # already shipped with, at their member's real native size rather
+            # than grandfathered (split-screen 960x1080 -> 1280x720).
+            #
+            # The "Stats Bar" container is gone from the seed: its only member
+            # was the fed 325x120 stats bar, and `stats` is now the dedicated
+            # per-side Stats source instead of a container member. An install
+            # that already has the container keeps it — container_defs is
+            # merge-exempt — but its roster no longer names anything hostable,
+            # so the container's own stage panel is where it gets a new member
+            # or gets deleted.
             "container_defs": {
                 "callout-stage": {
                     "name": "Callout Stage",
                     "width": 1920,
                     "height": 1080,
                     "members": ["postgamecallout", "postgamevs"],
-                },
-                # 325x120 is the FED stats bar's native size (stats-mount.js
-                # REF_W/REF_H). The standalone stats.html card is 452x118 and is
-                # a different layout entirely — seeding that number gave this
-                # container a size its only member did not fit (120 > 118), which
-                # `fitsContainer` would have filtered out of its own member
-                # picker. containers.test.jsx pins the pair now.
-                "stats-feed": {
-                    "name": "Stats Bar",
-                    "width": 325,
-                    "height": 120,
-                    "members": ["stats"],
                 },
                 # The hit visualizer is both: it owns a dedicated source AND can
                 # occupy a container, which is why a roster is a list of members

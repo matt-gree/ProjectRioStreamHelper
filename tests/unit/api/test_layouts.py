@@ -90,7 +90,7 @@ def test_parse_html_meta_case_insensitive_meta(tmp_path):
 # The definitions a fresh install ships with (server/settings.py); pinned in
 # full by tests/unit/test_settings_containers.py.
 SEEDED_CONTAINERS = {
-    "callout-stage", "stats-feed", "split-screen",
+    "callout-stage", "split-screen",
     "roster-stats-1", "roster-stats-2",
 }
 

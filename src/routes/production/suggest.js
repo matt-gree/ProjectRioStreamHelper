@@ -119,13 +119,6 @@ function spotlightValid(state, p) {
     return !!p?.name && Array.isArray(chars) && chars[p?.charIndex]?.name === p.name;
 }
 
-// Same test against the LIVE roster for the stats element.
-function statsValid(state, p) {
-    const name = state?.score?.[p?.scoreboard ?? 1]?.player?.[p?.team]
-        ?.character?.[p?.charIndex]?.name;
-    return !!p?.name && name === p.name;
-}
-
 /*
  * Per-feed intent rules. A feed with no entry has no memory validation and no
  * suggestion — its remembered payload is replayed as-is, which is right for a
@@ -133,7 +126,6 @@ function statsValid(state, p) {
  */
 export const FEED_INTENT = {
     postgamecallout: { valid: spotlightValid, suggest: spotlightSuggestion },
-    stats: { valid: statsValid },
 };
 
 /**

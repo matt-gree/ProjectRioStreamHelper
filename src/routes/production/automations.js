@@ -44,18 +44,19 @@ export const REASONS = {
  *
  * `members` is what the rule can show, in PREFERENCE ORDER, and a template only
  * offers itself for a container whose roster already holds one of them — a rule
- * that feeds a non-member is inert by design and would just look broken. A list
- * rather than a single id because "flash the stat card" is one decision the
- * producer makes, and which card their container holds (the themed 2x2 Stat
- * Card, or the fed Stats bar) is a look they already chose when they built the
- * roster. The rule itself always stores the resolved member, so the engine
- * still reads exactly one.
+ * that feeds a non-member is inert by design and would just look broken. It
+ * stays a LIST with one entry in it: "flash the stat card" is one decision the
+ * producer makes, and which card their container holds is a look they already
+ * chose when they built the roster. It held two while the fed Stats bar was
+ * also hostable; that element is now the dedicated per-side Stats source and no
+ * longer a member, so `statscard` is the only card a roster can carry. The rule
+ * always stores the resolved member, so the engine still reads exactly one.
  */
 export const AUTOMATION_LIBRARY = [
     {
         id: 'batter-card',
         name: 'Batter change → stat card',
-        members: ['statscard', 'stats'],
+        members: ['statscard'],
         trigger: 'score.{sb}.batter',
         triggerLabel: 'the batter changes',
         guard: 'content',

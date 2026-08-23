@@ -24,7 +24,7 @@ function defs(extra = {}) {
     return {
         [CONTAINER]: {
             name: 'Stats Left', width: 452, height: 240,
-            members: ['stats'], resting: 'stats',
+            members: ['statscard'], resting: 'statscard',
             scope: { scoreboard: 2, team: 2 },
             ...extra,
         },
@@ -53,11 +53,10 @@ describe('the quick-add library', () => {
     it('ships the Roster + Stats case study as its first entry', () => {
         const t = libraryEntry('batter-card');
         expect(t).toBeTruthy();
-        // Either card, in preference order: the themed 2x2 Stat Card when the
-        // container holds one, else the fed Stats bar. Which card a container
-        // holds is a look the producer chose when they built the roster, not a
-        // second rule to pick.
-        expect(t.members).toEqual(['statscard', 'stats']);
+        // A LIST with one entry, not a bare id: which card a container holds
+        // is a look the producer chose when they built the roster, not a second
+        // rule to pick. It held two while the fed Stats bar was also hostable.
+        expect(t.members).toEqual(['statscard']);
         // `{sb}` resolves from the CONTAINER's scope server-side, so one canned
         // rule reads the same on every board instead of naming one.
         expect(t.trigger).toBe('score.{sb}.batter');
@@ -78,7 +77,7 @@ describe('the quick-add library', () => {
      * one would be offering something that quietly does nothing.
      */
     it('only offers a template whose member is on the roster', () => {
-        expect(templatesFor({ members: ['stats'] }).map(t => t.id)).toEqual(['batter-card']);
+        expect(templatesFor({ members: ['statscard'] }).map(t => t.id)).toEqual(['batter-card']);
         expect(templatesFor({ members: ['roster', 'statscard'] }).map(t => t.id))
             .toEqual(['batter-card']);
         expect(templatesFor({ members: ['postgamevs'] })).toEqual([]);
@@ -96,7 +95,7 @@ describe('rule mutations', () => {
         const rule = useSettingsStore.getState().production.automations[id];
         expect(rule).toMatchObject({
             enabled: true, template: 'batter-card', container: CONTAINER,
-            member: 'stats', trigger: 'score.{sb}.batter', dwell: 7,
+            member: 'statscard', trigger: 'score.{sb}.batter', dwell: 7,
         });
     });
 
@@ -111,7 +110,7 @@ describe('rule mutations', () => {
             production: {
                 container_defs: {
                     ...defs(),
-                    'stats-right': { name: 'R', width: 452, height: 240, members: ['stats'] },
+                    'stats-right': { name: 'R', width: 452, height: 240, members: ['statscard'] },
                 },
                 automations: {},
             },
@@ -154,29 +153,24 @@ describe('rule mutations', () => {
      * preference — and stops a later roster edit silently re-pointing a live
      * rule at a different card mid-broadcast.
      */
-    it('resolves the member off the roster and stores it, preferring the themed card', () => {
+    it('resolves the member off the roster and stores it', () => {
         useSettingsStore.setState({
             production: {
                 container_defs: {
-                    bar: { name: 'Bar', width: 452, height: 240, members: ['stats'] },
                     pair: { name: 'Pair', width: 452, height: 240, members: ['roster', 'statscard'] },
-                    both: {
-                        name: 'Both', width: 452, height: 240,
-                        members: ['stats', 'statscard'],
-                    },
+                    bare: { name: 'Bare', width: 452, height: 240, members: ['roster'] },
                 },
                 automations: {},
             },
         });
         const { add } = harness(useAutomationActions);
         const rules = () => useSettingsStore.getState().production.automations;
-        add('batter-card', 'bar');
-        expect(rules()['bar:batter-card'].member).toBe('stats');
         add('batter-card', 'pair');
         expect(rules()['pair:batter-card'].member).toBe('statscard');
-        // Preference order decides when a roster holds both.
-        add('batter-card', 'both');
-        expect(rules()['both:batter-card'].member).toBe('statscard');
+        // Nothing on the roster the template can show: a rule fed a non-member
+        // is inert, so there is no rule to write rather than an inert one.
+        expect(add('batter-card', 'bare')).toBeNull();
+        expect(rules()['bare:batter-card']).toBeUndefined();
     });
 
     it('refuses a template no member on the roster can satisfy', () => {
@@ -234,8 +228,8 @@ describe('a roster edit takes its rules with it', () => {
             production: {
                 container_defs: defs(),
                 automations: {
-                    mine: { container: CONTAINER, member: 'stats' },
-                    theirs: { container: 'other', member: 'stats' },
+                    mine: { container: CONTAINER, member: 'statscard' },
+                    theirs: { container: 'other', member: 'statscard' },
                 },
             },
         });
@@ -249,11 +243,11 @@ describe('a roster edit takes its rules with it', () => {
         useSettingsStore.setState({
             production: {
                 container_defs: defs(),
-                automations: { mine: { container: CONTAINER, member: 'stats' } },
+                automations: { mine: { container: CONTAINER, member: 'statscard' } },
             },
         });
         const { setMember } = harness(useContainerActions);
-        setMember(CONTAINER, 'stats', false);
+        setMember(CONTAINER, 'statscard', false);
 
         const def = useSettingsStore.getState().production.container_defs[CONTAINER];
         expect(def.members).toEqual([]);
@@ -274,17 +268,17 @@ describe('a roster edit takes its rules with it', () => {
         useSettingsStore.setState({
             production: {
                 container_defs: {
-                    ...defs(),
-                    'stats-right': { name: 'R', width: 452, height: 240, members: [] },
+                    ...defs({ members: ['scoreboard'], resting: 'scoreboard' }),
+                    'stats-right': { name: 'R', width: 800, height: 460, members: [] },
                 },
-                automations: { mine: { container: CONTAINER, member: 'stats' } },
+                automations: { mine: { container: CONTAINER, member: 'scoreboard' } },
             },
         });
         const { setMember } = harness(useContainerActions);
-        setMember('stats-right', 'stats', true);
+        setMember('stats-right', 'scoreboard', true);
 
         const after = useSettingsStore.getState().production;
-        expect(after.container_defs['stats-right'].members).toEqual(['stats']);
+        expect(after.container_defs['stats-right'].members).toEqual(['scoreboard']);
         expect(after.container_defs[CONTAINER].members).toEqual([]);
         expect(after.container_defs[CONTAINER].resting).toBeUndefined();
         expect(after.automations).toEqual({});
@@ -293,12 +287,12 @@ describe('a roster edit takes its rules with it', () => {
     it('drops them when a NEW container claims the member', () => {
         useSettingsStore.setState({
             production: {
-                container_defs: defs(),
-                automations: { mine: { container: CONTAINER, member: 'stats' } },
+                container_defs: defs({ members: ['scoreboard'], resting: 'scoreboard' }),
+                automations: { mine: { container: CONTAINER, member: 'scoreboard' } },
             },
         });
         const { create } = harness(useContainerActions);
-        create('Stats Right', 452, 240, ['stats']);
+        create('Stats Right', 800, 460, ['scoreboard']);
 
         const after = useSettingsStore.getState().production;
         expect(after.container_defs[CONTAINER].members).toEqual([]);
@@ -331,7 +325,7 @@ describe('the container definition carries the automation fields', () => {
 
         setResting(CONTAINER, 'postgamevs');
         expect(useSettingsStore.getState().production.container_defs[CONTAINER].resting)
-            .toBe('stats');   // unchanged: not on the roster
+            .toBe('statscard');   // unchanged: not on the roster
 
         setResting(CONTAINER, null);
         expect(useSettingsStore.getState().production.container_defs[CONTAINER].resting)

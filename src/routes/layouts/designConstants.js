@@ -67,6 +67,9 @@ export const LAYOUT_SETTINGS = {
         { key: 'showRoleIcon', type: 'switch', label: 'Batting / Fielding Icon', description: 'Display the bat or glove icon indicating the team role' },
         { key: 'showTeamLogo', type: 'switch', label: 'Team Logo', description: 'Display the team logo next to the roster' },
     ],
+    // Stats — the per-side stat card as its OWN source (?scoreboard=N&team=T),
+    // drawing whoever that side has on the field. One namespace for both sides,
+    // same as the roster's.
     stats: [...STAT_CARD_SETTINGS],
     // Stat Card — the compact 2x2 card as a CONTAINER MEMBER (no standalone
     // layout of its own). Same knobs as the standalone Stats source under its
@@ -193,11 +196,15 @@ export const LAYOUT_SETTINGS = {
 // app's knobs or brings its own palette (see ./designPackage.js). Adding a type
 // with no such setting would gate nothing.
 //
-// `stats` is deliberately ABSENT even though `stats.svg` exists. The type is
-// shared by two renderers — the fed Stats bar (stats-mount.js) is plain HTML and
-// always honours the app palette, while the standalone stats.html source is the
-// themed SVG — so there is no single answer, and the safe one is not to gate.
+// `stats` was deliberately ABSENT for as long as the type was shared by two
+// renderers — the fed Stats bar (stats-mount.js) is plain HTML and always
+// honours the app palette, while stats.html is the themed SVG — so there was no
+// single answer and the safe one was not to gate. The fed bar is shelved and
+// `overlays.stats.*` now has exactly one reader, so the answer exists: under a
+// full-art theme the card brings its own palette and the two colour rows are
+// dead, which is the state this map takes them off the panel for.
 export const THEME_ELEMENT = {
+    stats: 'stats',
     statscard: 'statscard',
 };
 

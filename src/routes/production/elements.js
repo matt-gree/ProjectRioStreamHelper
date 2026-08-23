@@ -6,14 +6,14 @@
  *                      listed on the Production page under the OBS scene its
  *                      source lives in.
  *   - Direct element : owns a DEDICATED source; fire = show/hide it.
- *   - Fed element    : has no source of its own AT ALL — the Stat Card and the
- *                      fed Stats bar are container members and nothing else, so
- *                      a container is the only place their content can go. An
- *                      element on no roster has nowhere to be pushed, which is a
- *                      real state every surface reports rather than defaulting
- *                      around. A `feed` kind additionally names a content picker
- *                      ('stats' = which roster character), and the pick is
- *                      written to `production.feed.container.{id}`.
+ *   - Fed element    : has no source of its own AT ALL — the Stat Card is a
+ *                      container member and nothing else, so a container is the
+ *                      only place its content can go. An element on no roster
+ *                      has nowhere to be pushed, which is a real state every
+ *                      surface reports rather than defaulting around. A `feed`
+ *                      kind additionally names a content picker
+ *                      ('postgamecallout' = which player's spotlight), and the
+ *                      pick is written to `production.feed.container.{id}`.
  *
  * FLAVOR IS THE FLOOR, AND THE PLACEMENT IS THE ANSWER. Being fed is a property
  * of WHERE a source is, not of what an element is: a member sitting on a
@@ -143,27 +143,39 @@ export const ELEMENTS = [
     {
         id: 'stats',
         name: 'Stats',
-        flavor: 'fed',
-        // `feed` names the content picker the card renders: 'stats' = pick which
-        // roster character's stats to show. The pick is written to the feed key
-        // of the container whose ROSTER names this element
-        // (production.feed.container.<id> = { element: 'stats', … }); the
-        // container overlay renders it. There is no default container — an
-        // element no roster claims has nowhere to be pushed, which every surface
-        // reports rather than falling back to one nobody chose.
-        feed: 'stats',
-        // `url` is the pre-2.0 named shell, kept as the canonical source so a
-        // browser source still pointing at it keeps rowing and feeding.
-        url: '/layout/shared/stats-feed.html',
-        width: 325,
-        height: 120,
-        // ANCHORED TO THE LAYOUT. The old fallback was a bare /stats/i, which
-        // answers to any URL with "stats" anywhere in it — including the shipped
-        // `container.html?container=roster-stats-2`, i.e. a CONTAINER claiming to
-        // be one of its own occupants. Harmless only because ./placements matches
-        // direct elements alone; a matcher that can be wrong is a matcher that
-        // will be.
-        match: (url) => /\/layout\/shared\/stats-feed/i.test(url),
+        /*
+         * The per-side stat card, as its own source (?scoreboard=N&team=T):
+         * whoever this side has on the field right now — the batter when it is
+         * batting, the pitcher when it is not. The wide `stats.svg` from the
+         * active design package; `overlays.stats.*` is its namespace.
+         *
+         * THIS ID USED TO NAME SOMETHING ELSE. It was the fed 325x120 DOM bar
+         * (`stats-mount.js`) hosted by a seeded "Stats Bar" container, with a
+         * content picker for choosing a roster character by hand — while
+         * /layout/scoreboard1/stats.html, the overlay a producer actually puts
+         * on a stream, matched no element at all and rowed generically. So the
+         * console's Stats was the one a broadcast doesn't use and the real one
+         * had no panel, no preview and (with OBS closed) no row. The fed bar is
+         * shelved: its layout and mount are still on disk, but nothing offers
+         * it. What survives of "a card inside a container" is `statscard`,
+         * which is the same data in the themed 2x2 art and was always the
+         * better half of the pair.
+         *
+         * No `scope: 'board'` — settings are global (`overlays.stats.*`) and
+         * its two sources differ by ?team=, which the instance grammar reads
+         * off the URL as a variant. Same shape as the Roster, Player Name and
+         * Team Logo.
+         */
+        flavor: 'direct',
+        url: '/layout/scoreboard1/stats.html',
+        width: 452,
+        height: 118,
+        // Anchored to the full path, like the roster's. The pre-2.0 matcher here
+        // was a bare /stats/i, which answers to any URL with "stats" in it —
+        // including `container.html?container=roster-stats-2`, i.e. a CONTAINER
+        // claiming to be one of its own occupants.
+        match: (url) => /\/layout\/scoreboard\d*\/stats\.html/i.test(url),
+        perSide: true,
     },
     {
         id: 'statscard',
@@ -568,7 +580,7 @@ export const isPinnable = (el) => quickFaceFor(el) !== null;
 // rail's FEED_OPTION_HOOKS (which picker to render) and the source strip's
 // push slot (whether Push can do anything yet). elements.test.js pins them
 // against each other.
-export const PICKABLE_FEEDS = ['stats', 'postgamecallout'];
+export const PICKABLE_FEEDS = ['postgamecallout'];
 
 export const isPickableFeed = (el) => PICKABLE_FEEDS.includes(el?.feed);
 

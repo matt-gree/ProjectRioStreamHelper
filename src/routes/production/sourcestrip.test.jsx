@@ -159,9 +159,8 @@ describe('SourceStrip push slot', () => {
 
     it('renders on a slot even with nothing bound, disabled until pickable content exists', () => {
         connected([]);
-        ui(<SourceStrip element={el('stats')} placement={on('stats-bar')} />);
-        // 'stats' is a pickable feed with nothing ever picked: honest and grey,
-        // not hidden.
+        ui(<SourceStrip element={el('postgamecallout')} placement={on('callout-stage')} />);
+        // A pickable feed with nothing ever picked: honest and grey, not hidden.
         expect(screen.getByRole('button', { name: /^push$/i })).toBeDisabled();
     });
 

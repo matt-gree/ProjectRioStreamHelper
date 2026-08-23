@@ -64,7 +64,10 @@ describe('Rail', () => {
         ui(<Rail pins={pins} onReorder={noop} onUnpin={noop} onOpen={noop} />);
         const titles = [...document.querySelectorAll('header')]
             .map(h => h.querySelector('button').textContent);
-        expect(titles).toEqual(['Stats', 'Scoreboard · Large']);
+        // A bare pin names the ELEMENT, and the card names the placement it
+        // resolves to. Stats has no variant-less row — a side has no default —
+        // so `stats` answers with side 1, which is what the seeded rail gets.
+        expect(titles).toEqual(['Stats · Side 1', 'Scoreboard · Large']);
     });
 
     it('drops a pin naming an element that no longer exists', () => {
@@ -89,9 +92,9 @@ describe('Rail', () => {
 
     it('disables the move that would run off the end of the rail', () => {
         ui(<Rail pins={['stats', 'scoreboard']} onReorder={noop} onUnpin={noop} onOpen={noop} />);
-        expect(screen.getByRole('button', { name: 'Move Stats up' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Move Stats · Side 1 up' })).toBeDisabled();
         expect(screen.getByRole('button', { name: 'Move Scoreboard · Large down' })).toBeDisabled();
-        expect(screen.getByRole('button', { name: 'Move Stats down' })).toBeEnabled();
+        expect(screen.getByRole('button', { name: 'Move Stats · Side 1 down' })).toBeEnabled();
     });
 
     /*

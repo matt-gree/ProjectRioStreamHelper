@@ -97,11 +97,13 @@ rail picker, the Push slot and the preview so they can never disagree.
 - **Memory.** `useFeedSelect.select` / `useFeedControl.setFeed` write
   `production.feed.last.{element}`. Clear deliberately leaves it — Clear takes
   the element off air, it does not un-pick the character.
-- **Validated, never trusted.** `charIndex` indexes ONE game's roster, so every
+- **Validated, never trusted.** `charIndex` indexes ONE game's roster, so the
   pickable payload carries the character's `name` and `FEED_INTENT[feed].valid`
-  re-reads it from live state (`postgame.*` for the spotlight, `score.*` for
-  stats). A mismatch discards the memory. Feeds with no entry (a whole-game push
-  like `postgamevs`) replay as-is — nothing in them can go stale.
+  re-reads it from live state (`postgame.*` for the spotlight). A mismatch
+  discards the memory. Feeds with no entry (a whole-game push like `postgamevs`)
+  replay as-is — nothing in them can go stale. The spotlight is now the only
+  pickable feed: the fed Stats bar, which read `score.*`, is shelved and `stats`
+  is a dedicated per-side source with no pick at all.
 - **Suggestion.** With no usable memory, `FEED_INTENT[feed].suggest` proposes.
   The spotlight's opener is the **winning side's leader in total bases** (ties:
   homeruns → RBI → roster order), never a loser's big day. It is the floor, not
