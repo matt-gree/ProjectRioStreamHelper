@@ -7,7 +7,7 @@ A web-based tournament stream overlay manager for **Mario Superstar Baseball (MS
 **Server:** `server/` — FastAPI + SocketIO on configurable port (default 5260).
 **Frontend:** `src/` — React SPA served by FastAPI in production, Vite dev server in development.
 **Builds:** PyInstaller (`PRSH.spec`) → standalone macOS `.app` / Windows `.exe`; Inno Setup (`installer/PRSH.iss`) → Windows installer.
-**Submodules:** `server/rio/pyrio` (MSB data + stat parsing), `gc-overlay/` (controller overlay, macOS), `rio-visualizer/` (hit-trajectory simulation).
+**Submodules:** `server/rio/pyrio` (MSB data + stat parsing), `gc-overlay/` (controller overlay), `rio-visualizer/` (hit-trajectory simulation).
 
 See [README.md](README.md) for end-user docs and [TESTING.md](TESTING.md) for the test-suite design.
 
@@ -239,7 +239,7 @@ There is **no direct set→score path**. (Challonge was fully removed in July 20
 - **macOS** — system-tray icon (`tray.py`, pystray) holds the process; no visible window.
 - **Windows** — `win_window.py` opens a Tk taskbar window — the only clean way for end users to close the app on Windows.
 - **Both frozen only** — `port_conflict.py` dialog if the configured port is taken. Source checkouts skip all of this and run headless.
-- **Controller overlay (gc-overlay)** is **macOS only** (AF_UNIX MemoryWatcher sockets) and bundled via the `gc-overlay/` submodule. See `.claude/skills/controller-overlay/SKILL.md`.
+- **Controller overlay (gc-overlay)** runs on **every platform** and is bundled via the `gc-overlay/` submodule. It had four platform gates until 2026-08-28; gc-overlay 1.1.0 carries two peer Dolphin transports (MemoryWatcher on macOS/Linux, a process-memory poll on Windows/Linux — the constraint is inverted between them), so **presence, not platform, is what gates it**. Don't reintroduce a gate. See `.claude/skills/controller-overlay/SKILL.md`.
 
 ### MSB Image Assets
 

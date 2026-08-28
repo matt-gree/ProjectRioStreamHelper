@@ -16,10 +16,11 @@ import { ConnBody } from './connections';
 /*
  * gc-overlay — the controller-input reader.
  *
- * It is a SUBPROCESS on its own port (default 8069), not something PRSH renders,
- * and it is macOS-only (AF_UNIX MemoryWatcher sockets). Its whole install lives
- * here: where the binary is, what port it serves on, whether it boots with PRSH,
- * and whether it is up right now.
+ * It is a SUBPROCESS on its own port (default 8069), not something PRSH renders.
+ * It runs on every platform as of gc-overlay 1.1.0, which carries a Dolphin
+ * transport for each; what varies is whether it is INSTALLED. Its whole install
+ * lives here: where the binary is, what port it serves on, whether it boots with
+ * PRSH, and whether it is up right now.
  *
  * WHY THE LIFECYCLE MOVED OFF THE PRODUCTION STAGE PANEL. Start/Stop used to sit
  * on the Controller element's stage body, which meant you could not start the

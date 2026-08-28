@@ -1,4 +1,3 @@
-import platform
 import re
 from pathlib import Path
 from fastapi import APIRouter, Request
@@ -35,10 +34,6 @@ def layout_url(base: str, rel) -> str:
     which costs it its stage panel, preview and style settings.
     """
     return f"{base}/layout/{rel.as_posix()}"
-
-# The controller browser-source wraps gc-overlay, which only runs on macOS.
-# Hide that layout group from the catalog on other platforms.
-_CONTROLLER_SUPPORTED = platform.system() == "Darwin"
 
 # Layout groups NOT OFFERED right now, though the files still serve.
 #
@@ -238,10 +233,6 @@ async def list_layouts(request: Request):
         for f in sorted(_layout_dir.rglob("*.html")):
             rel = f.relative_to(_layout_dir)
             group = str(rel.parent) if rel.parent != Path(".") else "ungrouped"
-
-            # gc-overlay is macOS-only; omit its browser source elsewhere.
-            if not _CONTROLLER_SUPPORTED and group == "controller":
-                continue
 
             # Containers come from the definitions above, not from the folder.
             if group == _CONTAINER_GROUP:

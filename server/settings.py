@@ -1,7 +1,6 @@
 import asyncio
 import copy
 import importlib.util
-import platform
 import sys
 import tomllib
 import orjson
@@ -969,10 +968,10 @@ class Config:
         "description": "Tournament scoreboard helper and overlays for Mario Superstar Baseball via Project Rio",
         "authors": [],
         "server_url": "",
-        # gc-overlay (controller input display) only works on macOS. The
-        # frontend reads this to hide the feature's UI elsewhere; the build
-        # only bundles gc-overlay in macOS builds. See controller_overlay.py.
-        "controller_overlay_supported": platform.system() == "Darwin",
+        # gc-overlay runs on every platform PRSH does as of gc-overlay 1.1.0
+        # (two peer transports; see controller_overlay.py). Kept as a constant
+        # so an older frontend build still reads a truthy value.
+        "controller_overlay_supported": True,
     }
 
     @classmethod

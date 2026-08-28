@@ -15,8 +15,9 @@ naming `controller` before this file asserted that the filename derives the type
    source follows whoever is on that side. That only holds because the port
    travels with the entrant through the side cascade.
 
-The resolver half is platform-neutral on purpose — `PLATFORM_SUPPORTED` is
-monkeypatched rather than skipped, so Linux CI checks the same order macOS runs.
+The resolver is platform-neutral, and now genuinely so: gc-overlay 1.1.0 carries
+a transport for every platform PRSH runs on, so there is no platform gate left to
+monkeypatch. What decides the feature is whether gc-overlay is FOUND.
 """
 import os
 import sys
@@ -70,16 +71,13 @@ def test_a_directory_with_neither_is_not(tmp_path):
 
 # ── 1b. the search order ────────────────────────────────────────────────────
 
-def test_off_darwin_the_resolver_answers_none_without_probing(monkeypatch):
-    """The runtime gate. One of four that must agree; see the
-    controller-overlay skill. If this one goes, the other three hide a feature
-    that would then fail at launch instead of being absent."""
-    probed = []
-    monkeypatch.setattr(co, "PLATFORM_SUPPORTED", False)
-    monkeypatch.setattr(co, "_is_gc_overlay_dir", lambda p: probed.append(p) or True)
+def test_the_resolver_answers_none_when_nothing_is_installed(monkeypatch):
+    """Presence is the only gate. It replaced a platform gate that hid the
+    feature on Windows — which, once gc-overlay grew a Windows transport, was
+    hiding it from the only machine that could confirm the transport works."""
+    monkeypatch.setattr(co, "_is_gc_overlay_dir", lambda p: False)
 
     assert co._find_gc_overlay() is None
-    assert probed == []
 
 
 def test_the_search_order_is_frozen_then_in_repo_then_sibling(monkeypatch):
@@ -87,7 +85,6 @@ def test_the_search_order_is_frozen_then_in_repo_then_sibling(monkeypatch):
     and must never reach past it to a checkout that happens to sit next to the
     .app on a developer's machine."""
     probed = []
-    monkeypatch.setattr(co, "PLATFORM_SUPPORTED", True)
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     monkeypatch.setattr(sys, "_MEIPASS", "/fake/bundle", raising=False)
     monkeypatch.setattr(co, "_is_gc_overlay_dir", lambda p: probed.append(p) or False)
@@ -104,7 +101,6 @@ def test_the_search_order_is_frozen_then_in_repo_then_sibling(monkeypatch):
 
 def test_an_unfrozen_run_never_probes_a_bundle(monkeypatch):
     probed = []
-    monkeypatch.setattr(co, "PLATFORM_SUPPORTED", True)
     monkeypatch.delattr(sys, "frozen", raising=False)
     monkeypatch.setattr(co, "_is_gc_overlay_dir", lambda p: probed.append(p) or False)
 
@@ -118,7 +114,6 @@ def test_the_first_launchable_candidate_wins(monkeypatch):
     """Not merely 'a launchable one' — later candidates must not be consulted
     once an earlier one answers."""
     repo_root = Path(co.__file__).resolve().parent.parent
-    monkeypatch.setattr(co, "PLATFORM_SUPPORTED", True)
     monkeypatch.delattr(sys, "frozen", raising=False)
     monkeypatch.setattr(co, "_is_gc_overlay_dir", lambda p: True)
 

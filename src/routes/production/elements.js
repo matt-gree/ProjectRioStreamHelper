@@ -540,11 +540,11 @@ export const ELEMENTS = [
     {
         id: 'controller',
         name: 'Controller',
-        // The optional gc-overlay controller-input display — macOS-only (it reads
-        // controller state over AF_UNIX MemoryWatcher sockets; see the
-        // controller-overlay skill). The layouts API omits controller/ off-Darwin,
-        // so the Add picker never offers it there, and off-Darwin no controller
-        // source exists to derive a rack row from.
+        // The optional gc-overlay controller-input display. Offered on every
+        // platform: gc-overlay 1.1.0 carries two peer Dolphin transports, so the
+        // old off-Darwin catalog omission is gone (see the controller-overlay
+        // skill). What decides whether it works is whether gc-overlay is
+        // installed, which the element reports as its "no reader" blank.
         //
         // Direct element: the rack row shows/hides the OBS source like any other.
         // The heavy part — starting/stopping the gc-overlay SUBPROCESS and handing

@@ -34,11 +34,14 @@ describe('ControllerStage', () => {
     });
     afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
-    // Off-Darwin (or no submodule) the status endpoint reports available: false.
-    it('shows the not-available note when gc-overlay is absent, and points at Connections', async () => {
+    // With no submodule and no configured path the status endpoint reports
+    // available: false. That is now the ONLY thing that makes this panel empty —
+    // there is no platform gate, so a producer on any OS reaches this note and
+    // learns there is something to install.
+    it('shows the not-installed note when gc-overlay is absent, and points at Connections', async () => {
         vi.stubGlobal('fetch', mockFetch({ available: false }));
         ui();
-        expect(await screen.findByText(/isn.t available here/i)).toBeInTheDocument();
+        expect(await screen.findByText(/isn.t installed/i)).toBeInTheDocument();
         expect(screen.getByRole('link', { name: /connections/i })).toHaveAttribute('href', '/connections');
     });
 

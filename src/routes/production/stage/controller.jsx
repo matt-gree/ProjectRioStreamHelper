@@ -24,8 +24,9 @@ import { useSideLabels } from '../sides';
  * when Rio reassigns away/home. Host-qualified from the address this browser
  * reached PRSH on, which is the address OBS should use too.
  *
- * macOS-only; off-Darwin the layout catalog omits controller/, so no rack row
- * derives and this body is never reached.
+ * Offered on every platform — gc-overlay 1.1.0 carries a Dolphin transport for
+ * each. When the reader isn't installed this body says so rather than being
+ * unreachable, which is how a producer discovers there is something to install.
  */
 
 // A url + a copy button, kit-row shaped.
@@ -72,8 +73,8 @@ const ControllerContent = memo(function ControllerContent() {
     if (!status.available) {
         return (
             <Text size="xs" className="text-muted-foreground">
-                The controller reader isn’t available here — it’s macOS-only, and needs the gc-overlay
-                repository beside this project or a folder set on the{' '}
+                The controller reader isn’t installed — it needs the gc-overlay
+                repository beside this project, or a folder set on the{' '}
                 <Link to="/connections" className="underline hover:text-foreground">Connections</Link> tab.
             </Text>
         );

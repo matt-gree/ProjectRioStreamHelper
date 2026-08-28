@@ -17,10 +17,12 @@ from loguru import logger
 
 from server.settings import Settings
 
-# gc-overlay only functions on macOS (its Dolphin MemoryWatcher reader uses
-# AF_UNIX sockets and macOS-only config paths). PRSH gates the whole feature
-# — UI, API, and build bundling — on this. See CLAUDE.md "Controller Overlay".
-PLATFORM_SUPPORTED = platform.system() == "Darwin"
+# There is no platform gate. gc-overlay carries two peer transports as of
+# 1.1.0 — MemoryWatcher (AF_UNIX; macOS, Linux) and a process-memory poll
+# (Windows, Linux) — so every platform PRSH runs on can read a controller.
+# What varies is whether gc-overlay is actually PRESENT, which _find_gc_overlay
+# already answers; "supported" was standing in for "found" and hid the feature
+# on the one platform that needed to be able to test it.
 
 
 def _port_free(port: int) -> bool:
@@ -125,9 +127,6 @@ def _find_gc_overlay() -> Path | None:
     A custom override (settings controller_overlay.path) is applied by the
     caller, not here.
     """
-    if not PLATFORM_SUPPORTED:
-        return None
-
     candidates: list[Path] = []
 
     if getattr(sys, "frozen", False):
@@ -158,12 +157,6 @@ class ControllerOverlay:
     @classmethod
     async def Start(cls):
         """Initialize and optionally auto-start the overlay."""
-        if not PLATFORM_SUPPORTED:
-            logger.debug("[controller_overlay] unsupported platform — feature disabled")
-            cls._gc_overlay_path = None
-            cls._version = None
-            return
-
         cls._gc_overlay_path = _find_gc_overlay()
 
         # Check for custom path in settings
@@ -197,13 +190,6 @@ class ControllerOverlay:
     @classmethod
     async def Launch(cls) -> dict:
         """Launch the gc-overlay subprocess."""
-        if not PLATFORM_SUPPORTED:
-            return {
-                "success": False,
-                "reason": "unsupported_platform",
-                "error": "The controller overlay is only supported on macOS.",
-            }
-
         if cls._running and cls._process and cls._process.returncode is None:
             return {"success": True, "already_running": True, "port": cls._port}
 
@@ -287,7 +273,7 @@ class ControllerOverlay:
         """Get current status of the overlay."""
         running = cls._running and cls._process is not None and cls._process.returncode is None
         return {
-            "supported": PLATFORM_SUPPORTED,
+            "supported": True,  # kept for API compatibility; always true now
             "available": cls._gc_overlay_path is not None,
             "path": str(cls._gc_overlay_path) if cls._gc_overlay_path else None,
             "version": cls._version,

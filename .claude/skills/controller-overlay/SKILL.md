@@ -1,6 +1,6 @@
 ---
 name: controller-overlay
-description: The optional gc-overlay controller-input overlay — macOS-only platform gating, submodule detection order, the build hook in PRSH.spec, and the per-side controller-port follow that makes a left/right browser source track whoever is on that side. Read before touching server/controller_overlay.py, server/api/v1/controller.py, public/layout/controller/, or the gc-overlay submodule wiring.
+description: The optional gc-overlay controller-input overlay — its two peer Dolphin transports and why there is no longer a platform gate, submodule detection order, the build hook in PRSH.spec, and the per-side controller-port follow that makes a left/right browser source track whoever is on that side. Read before touching server/controller_overlay.py, server/api/v1/controller.py, public/layout/controller/, or the gc-overlay submodule wiring.
 ---
 
 # Controller Overlay (gc-overlay)
@@ -8,18 +8,37 @@ description: The optional gc-overlay controller-input overlay — macOS-only pla
 `ControllerOverlay` (`server/controller_overlay.py`) manages an optional
 subprocess that draws controller inputs as a separate OBS browser source.
 
-## macOS-only — four gates, keep them in sync
+## No platform gate — presence is the only condition
 
-gc-overlay reads controller state over AF_UNIX MemoryWatcher sockets, which is
-why it is Darwin-only. The restriction is enforced in four places; if you touch
-one, check the others:
+**There used to be four gates and there are now none** (removed 2026-08-28):
+`PLATFORM_SUPPORTED`, `Config.controller_overlay_supported`, the layouts-catalog
+omission, and the `PRSH.spec` build condition. Don't reintroduce one.
 
-1. `controller_overlay.PLATFORM_SUPPORTED` — the runtime gate.
-2. `Config.controller_overlay_supported` — hides the UI off-Darwin.
-3. `server/api/v1/layouts.py` — omits `controller/` from the layout catalog
-   off-Darwin. **Platform-gate any test that asserts on the catalog**, or it
-   fails on Linux CI.
-4. `PRSH.spec` — bundles gc-overlay on Darwin only.
+gc-overlay 1.1.0 carries **two peer Dolphin transports**, and which is available
+is a property of the platform — but between them they cover every platform PRSH
+runs on:
+
+| Transport | How | macOS | Windows | Linux |
+|---|---|:-:|:-:|:-:|
+| `memorywatcher` | Dolphin pushes changes over an AF_UNIX socket | ✅ | ❌ | ✅ |
+| `dme` | We poll the Dolphin process's memory, as M'Overlay does | ❌ | ✅ | ✅ |
+
+**The constraint is inverted between them**, which is why neither is a fallback.
+MemoryWatcher cannot exist on Windows — Dolphin guards `MemoryWatcher.cpp` with
+`if(UNIX)` (and `USE_MEMORYWATCHER` at every call site), and the class is
+`AF_UNIX` + `SOCK_DGRAM`, a socket type Windows' AF_UNIX does not support at
+all, so this is not a build flag. Process-memory reads cannot work on macOS,
+where Rio ships a hardened runtime with no `get-task-allow` entitlement — which
+is the reason the MemoryWatcher path was written in the first place.
+gc-overlay's own `main.resolve_transport` picks; PRSH passes only `--port`.
+
+**What actually gates the feature is whether gc-overlay is FOUND** —
+`_find_gc_overlay()` answering `None`, surfaced as `available` in
+`GetStatus()`, which the Connections card already renders as "Not found" with
+a manual path input. "Supported" was standing in for "present," and on the one
+platform whose transport most needed real-world testing it hid the feature from
+the machine that could do the testing. `GetStatus()` still reports
+`"supported": True` for API compatibility with an older frontend build.
 
 ## Detection order
 
@@ -37,7 +56,7 @@ run `python main.py` inside gc-overlay's *own* venv, not PRSH's.
 
 ## Build
 
-`scripts/build-gc-overlay.py`, invoked from `PRSH.spec`. Set
+`scripts/build-gc-overlay.py`, invoked from `PRSH.spec` on every platform. Set
 `SKIP_GC_OVERLAY_BUILD=1` to skip it during local PRSH builds.
 
 gc-overlay owns its own version; update it with:
@@ -64,9 +83,9 @@ only what is about the BROADCAST: the two per-side follow URLs, plus a read-only
 status line linking to Connections. **Don't add a second Start there** — one
 owner for the lifecycle is the whole point of the split.
 
-`controller` is a registered Production element; off-Darwin the layouts catalog
-omits it, so the Add picker never offers it and no rack row derives, and the
-Connections card hides on `Config.controller_overlay_supported`.
+`controller` is a registered Production element, offered by the Add picker on
+every platform. If gc-overlay isn't installed the source simply draws its
+"no reader" blank and the Connections card says so.
 
 **There was a `controller_overlay.controller` setting and a
 `PUT /controller/player` endpoint** — "which controller port to display",

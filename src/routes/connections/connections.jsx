@@ -4,7 +4,7 @@ import { Badge } from '../../components/ui/badge';
 import { Switch } from '../../components/ui/switch';
 import { Label } from '../../components/ui/label';
 import { notifications } from '../../lib/notify';
-import { useSettingsStore, useConfigStore } from '../../context/store';
+import { useSettingsStore } from '../../context/store';
 import { useCallback } from 'react';
 import { RioHudConnection, MsbAssetsConnection } from './rio';
 import ObsConnection from './obs';
@@ -100,12 +100,6 @@ function NetworkConnection() {
 }
 
 export default function Connections() {
-    // gc-overlay is macOS-only (AF_UNIX MemoryWatcher sockets). Off-Darwin the
-    // Config flag hides the card outright rather than showing a connection this
-    // machine can never make — one of the four platform gates, see the
-    // controller-overlay skill.
-    const controllerSupported = useConfigStore(state => state.controller_overlay_supported);
-
     return (
         <div className="flex flex-col gap-4">
             <Title order={3}>Connections</Title>
@@ -132,7 +126,7 @@ export default function Connections() {
                 <RioHudConnection />
                 <ObsConnection />
                 <MsbAssetsConnection />
-                {controllerSupported !== false && <ControllerConnection />}
+                <ControllerConnection />
                 <NetworkConnection />
             </div>
         </div>

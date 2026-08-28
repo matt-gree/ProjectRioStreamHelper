@@ -3,7 +3,6 @@
 socketio.emit is mocked and all disk paths are redirected to tmp (conftest), so
 these exercise the real routers without a network or touching user_data.
 """
-import platform
 
 import pytest
 from fastapi import FastAPI
@@ -87,14 +86,10 @@ def test_layouts_variant_matrix(client):
     assert {e["sizeVariant"] for e in by_type["scoreboard"]} == {"s", "m", "l"}
     assert all("?size=" in e["url"] for e in by_type["scoreboard"])
 
-    # Team-variant layouts expand into ?team=1 / ?team=2. The controller
-    # layout is macOS-only (gc-overlay gating): present and expanded on
-    # Darwin, omitted from the catalog everywhere else — CI runs Linux.
-    team_types = ["statsbar", "roster", "teamlogo"]
-    if platform.system() == "Darwin":
-        team_types.append("controller")
-    else:
-        assert "controller" not in by_type
+    # Team-variant layouts expand into ?team=1 / ?team=2. `controller` is in
+    # this list on every platform: gc-overlay 1.1.0 carries a transport for
+    # each, so the catalog no longer hides it off-Darwin.
+    team_types = ["statsbar", "roster", "teamlogo", "controller"]
     for t in team_types:
         assert len(by_type[t]) == 2, t
         assert {e["team"] for e in by_type[t]} == {1, 2}

@@ -27,16 +27,14 @@ if _freeze.is_file():
     subprocess.run([sys.executable, str(_freeze)], check=True)
 
 # Freeze the bundled gc-overlay submodule into its own one-folder app before
-# we vendor it below. gc-overlay only functions on macOS, so it is built and
-# bundled in macOS builds only — Windows builds omit it entirely (UI + API
-# gate the feature off there too). Builds in an isolated venv (gc-overlay's
-# own deps stay out of PRSH's interpreter). Honors SKIP_GC_OVERLAY_BUILD=1.
+# we vendor it below. Built on every platform as of gc-overlay 1.1.0, which
+# carries a transport for each. Builds in an isolated venv (gc-overlay's own
+# deps stay out of PRSH's interpreter). Honors SKIP_GC_OVERLAY_BUILD=1.
 # See scripts/build-gc-overlay.py.
 _gc_overlay_dist = Path('gc-overlay/dist/gc-overlay')
-if platform.system() == 'Darwin':
-    _gc_build = Path('scripts/build-gc-overlay.py')
-    if _gc_build.is_file():
-        subprocess.run([sys.executable, str(_gc_build)], check=True)
+_gc_build = Path('scripts/build-gc-overlay.py')
+if _gc_build.is_file():
+    subprocess.run([sys.executable, str(_gc_build)], check=True)
 
 # PyInstaller on Windows silently drops files inside hidden (dot-prefixed)
 # directories, which strips dist/.vite/manifest.json from the bundle and
@@ -100,11 +98,11 @@ a = Analysis(
         *([('rio-visualizer/web', 'rio-visualizer/web')]
           if Path('rio-visualizer/web').is_dir() else []),
 
-        # Bundled gc-overlay (frozen one-folder app, built above) — macOS
-        # only. PRSH launches the nested binary as a managed subprocess. Lands
-        # under the bundle root at gc-overlay/ — see controller_overlay.py.
+        # Bundled gc-overlay (frozen one-folder app, built above). PRSH
+        # launches the nested binary as a managed subprocess. Lands under the
+        # bundle root at gc-overlay/ — see controller_overlay.py.
         *([('gc-overlay/dist/gc-overlay', 'gc-overlay')]
-          if platform.system() == 'Darwin' and _gc_overlay_dist.is_dir() else []),
+          if _gc_overlay_dist.is_dir() else []),
 
         # Frozen version stamp (generated above by scripts/freeze-version.py).
         # Read at runtime by Config.Load() since `git describe` isn't
