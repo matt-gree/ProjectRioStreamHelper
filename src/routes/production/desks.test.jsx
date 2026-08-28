@@ -304,7 +304,7 @@ describe('Board desk', () => {
         });
         ui(<BoardDesk board={1} />);
         expect(screen.getByText('Alice 3–2 Bob')).toBeInTheDocument();
-        expect(screen.getByText('Alice on side 1 — pinned in Settings')).toBeInTheDocument();
+        expect(screen.getByText('Alice on side 1 — pinned in the Address Book')).toBeInTheDocument();
         // The fixture is a SLOT with the match in it, not a sentence about one:
         // its id, both participants, the series between them, the round after.
         expect(screen.getByText('M2')).toBeInTheDocument();
@@ -474,7 +474,7 @@ describe('Board desk', () => {
     it('has a sentence for every layer of the cascade, and none for raw feed order', () => {
         expect(sideReasonLine('manual', 'Alice')).toBe('Alice on side 1 — set by hand for this game');
         expect(sideReasonLine('match', 'Alice')).toBe('Alice on side 1 — from the bound match');
-        expect(sideReasonLine('pin', 'Alice')).toBe('Alice on side 1 — pinned in Settings');
+        expect(sideReasonLine('pin', 'Alice')).toBe('Alice on side 1 — pinned in the Address Book');
         expect(sideReasonLine('back_to_back', 'Alice')).toBe('Alice on side 1 — where they were last game');
         // Raw feed order is not a decision, so there is nothing to explain.
         expect(sideReasonLine('', 'Alice')).toBeNull();
@@ -483,7 +483,7 @@ describe('Board desk', () => {
         // sentence explaining a side assignment is the last place that should
         // hard-code one arrangement of one scene (../sides).
         expect(sideReasonLine('pin', 'Alice', 'the left side'))
-            .toBe('Alice on the left side — pinned in Settings');
+            .toBe('Alice on the left side — pinned in the Address Book');
     });
 
     /*
@@ -629,7 +629,7 @@ describe('Board desk', () => {
         ui(<BoardDesk board={1} />);
         expect(screen.getByRole('button', { name: 'the top side bats last' })).toBeInTheDocument();
         expect(screen.getByLabelText('Score — Bottom')).toBeInTheDocument();
-        expect(screen.getByText('Side 1 on the top side — pinned in Settings')).toBeInTheDocument();
+        expect(screen.getByText('Side 1 on the top side — pinned in the Address Book')).toBeInTheDocument();
     });
 
     it('warns when the live players do not match the bound fixture', () => {
@@ -781,7 +781,7 @@ describe('Board desk', () => {
         });
         ui(<BoardDesk board={1} />);
         expect(screen.getByText('HUD')).toBeInTheDocument();
-        expect(screen.getByText(/Disable HUD in Settings to rebind/)).toBeInTheDocument();
+        expect(screen.getByText(/Turn off Follow local HUD on Connections to rebind/)).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /Find a game/ })).not.toBeInTheDocument();
         expect(screen.queryByRole('radio', { name: 'Rotating' })).not.toBeInTheDocument();
     });

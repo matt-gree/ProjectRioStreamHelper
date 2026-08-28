@@ -56,11 +56,11 @@ The folder is created automatically on first launch. Drop your asset pack inside
 └── gameIcons/         bat.png, glove.png, superstar.png
 ```
 
-**Settings → Project Rio → MSB Image Assets** validates the folder against the canonical filename lists from [pyrio](https://github.com/matt-gree/pyrio) and shows exactly what's missing per category.
+The **Connections** tab's MSB image pack card validates the folder against the canonical filename lists from [pyrio](https://github.com/matt-gree/pyrio) and shows exactly what's missing per category.
 
-The fastest way to find the folder is **Settings → Project Rio → MSB Image Assets → Open Folder**, which reveals it in Finder/Explorer. The Welcome screen also shows whether assets were found on first launch.
+The fastest way to find the folder is **Connections → MSB image pack → Open Folder**, which reveals it in Finder/Explorer — drop your files in, tab back to PRSH, and the census re-checks itself. The Welcome screen also shows whether assets were found on first launch.
 
-**Custom location.** If you keep a shared asset pack for use across multiple tools, point PRSH at it via **Settings → Project Rio → MSB Image Assets → Browse...** and select your folder. The override persists in `settings.json`.
+**Custom location.** If you keep a shared asset pack for use across multiple tools, point PRSH at it via **Connections → MSB image pack → Browse…** and select your folder. The override persists in `settings.json`.
 
 ---
 
@@ -89,12 +89,14 @@ PRSH watches Project Rio's `decoded.hud.json` file and pushes every change into 
 **HUD file default paths (auto-detected):**
 - macOS: `~/Library/Application Support/Project Rio/HudFiles/decoded.hud.json`
 - Windows: `%APPDATA%\Project Rio\HudFiles\decoded.hud.json`
-- Override for custom path located in Settings
+- Override for custom path on the **Connections** tab
 
 The watcher uses OS-level file events (kqueue / inotify / ReadDirectoryChanges via `watchfiles`), so there's no polling cost between game updates.
 
 **Side preservation.** Project Rio randomly assigns away/home each game. PRSH keeps the same player on the same side across back-to-back games via three layers:
-1. **Pinned player** (Settings → Project Rio) — always force a named player onto Team 1 or Team 2.
+1. **Pinned player** (Address Book → **Side**) — give someone a preferred side and PRSH always seats
+   them there. Any number of people can have one; if two players in the same game want the *same*
+   side, the pin steps aside and the next layer decides.
 2. **Back-to-back detection** — if a returning player switched sides, auto-swap.
 3. **Manual swap button** — persists for the rest of the current game.
 

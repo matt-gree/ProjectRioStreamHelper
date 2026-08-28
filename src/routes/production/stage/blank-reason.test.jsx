@@ -20,6 +20,9 @@ describe('blank-reason coverage — every silent mount says why (phase 6b)', () 
     const mounts = [
         'scoreboard', 'matchup', 'ticker', 'lowerthird', 'playerplates',
         'commentary', 'postgame-callout', 'postgame-vs', 'stats-card',
+        // Three blanks that look identical on a transparent source: no reader
+        // running, no port on this side, no game at all.
+        'controller',
     ];
 
     for (const name of mounts) {

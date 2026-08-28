@@ -10,6 +10,7 @@ from server.rio.provider import (
     RioGameDataProvider,
     apply_parsed_game_to_state,
     apply_completed_game_to_state,
+    pin_swap,
 )
 from server.rio import stats_api
 from server.rio.stats_api import get_last_completed_fetch_info
@@ -55,25 +56,6 @@ def _stable_ongoing_game_id(away_player: str, home_player: str, start_time) -> i
     return int.from_bytes(digest[:4], "big") % (2 ** 31)
 
 
-def _pinned_swap_needed(player0: str, player1: str) -> bool | None:
-    """Check if the pinned player setting requires swapping sides.
-
-    Returns True if swap needed, False if no swap needed, None if
-    pinned player is not in this game.
-    """
-    pinned_player = Settings.Get("project_rio.pinned_player", "").strip()
-    if not pinned_player:
-        return None
-    pinned_side = Settings.Get("project_rio.pinned_side", "Team 1")
-    pinned_index = 0 if pinned_side == "Team 1" else 1
-
-    if player0 == pinned_player:
-        return pinned_index == 1
-    elif player1 == pinned_player:
-        return pinned_index == 0
-    return None
-
-
 def _orient_pin_match(left: str, right: str, sb: int) -> tuple[bool, str]:
     """Side orientation for an API game as (swap, reason).
 
@@ -81,7 +63,7 @@ def _orient_pin_match(left: str, right: str, sb: int) -> tuple[bool, str]:
     cascade is just pin > match (matching the global precedence). `reason` names
     the deciding layer (or "" for raw order) and is mirrored to side_reason.
     """
-    pin = _pinned_swap_needed(left, right)
+    pin = pin_swap(left, right)
     if pin is not None:
         return pin, "pin"
     mo = Match.orientation_for_sides(sb, left, right)
@@ -316,7 +298,7 @@ class OngoingGamePool:
             entrants = parsed.get("entrants", [[{}], [{}]])
             p0 = entrants[0][0].get("rioName", "") if entrants[0] else ""
             p1 = entrants[1][0].get("rioName", "") if entrants[1] else ""
-            sides_swapped = _pinned_swap_needed(p0, p1) is True
+            sides_swapped = pin_swap(p0, p1) is True
             StatsTracker.on_live_game_update(game, sb_id)
             await StatsTracker.push_stats_to_state(sb_id, sides_swapped)
 

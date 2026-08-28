@@ -184,6 +184,25 @@ export const useObsStore = create((set) => ({
         }
         await obs.call('SetSceneItemEnabled', { sceneName, sceneItemId, sceneItemEnabled: enabled });
     },
+    /*
+     * Take a source out of ONE scene — the inverse of addBrowserSource, and the
+     * verb behind the rack row's trash.
+     *
+     * RemoveSceneItem, never RemoveInput: a PRSH overlay can be placed in
+     * several scenes, and each placement is its own row with its own enabled
+     * state (../routes/production/placements). Removing the Game copy must
+     * leave the Break copy alone. OBS reference-counts inputs, so when this
+     * WAS the last scene item the input goes with it on its own — which is the
+     * behaviour we want and the reason the confirm names it.
+     *
+     * No optimistic mutation: SceneItemRemoved reloads the scene (see the event
+     * wiring below), so the rack drops the row when OBS says it is gone.
+     */
+    removeSceneItem: async (sceneName, sceneItemId) => {
+        if (!obs) throw new Error('Not connected to OBS');
+        await obs.call('RemoveSceneItem', { sceneName, sceneItemId });
+    },
+
     // Pull a scene's items into the mirror and keep them live from then on.
     // Idempotent and safe to call from render effects — a scene already tracked
     // returns immediately rather than re-fetching, which is what makes "expand
@@ -400,7 +419,7 @@ function friendlyError(e) {
     if (e?.code === 4009) return 'Authentication failed — check the OBS WebSocket password.';
     // A drop reads as a hang, so name the likely causes rather than the symptom.
     if (e?.name === TIMED_OUT) {
-        return `${msg} Check the host and port in Settings → OBS, and that a firewall `
+        return `${msg} Check the host and port on the Connections tab, and that a firewall `
             + 'or VPN is not blocking the connection.';
     }
     return msg;

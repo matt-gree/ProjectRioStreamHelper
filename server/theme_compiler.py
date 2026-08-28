@@ -59,7 +59,35 @@ _MODIFIERS = {
     # Horizontal-meld metadata (Scoreboard S): a segment's card width when it is
     # the rightmost-visible, and card-bg's collapsed width.
     "cardw": "cardw", "compactw": "compact-w", "compact-w": "compact-w",
+    # Vertical-meld metadata (Scoreboard S's game-mode band): a segment's card
+    # height while it shows, and card-bg's collapsed height. The same axis pair
+    # as the two above — miss one and the card silently stops growing.
+    "cardh": "cardh", "compacth": "compact-h", "compact-h": "compact-h",
+    # Stat card: the card edges with and without the header / last-line band.
+    "topopen": "top-open", "top-open": "top-open",
+    "topclosed": "top-closed", "top-closed": "top-closed",
+    "botopen": "bot-open", "bot-open": "bot-open",
+    "botclosed": "bot-closed", "bot-closed": "bot-closed",
+    # Lower third: a logo's caption-less box, "x y w h".
+    "full": "full",
+    # Scoreboard S's game-mode band: a slot whose x tracks the MELDING card's
+    # centre rather than sitting at a fixed one (scoreboard-mount centerToCard).
+    "center": "center",
+    # Template-only: where the generator PLACED a stack row for preview, so the
+    # compiler can put its local origin back. Never reaches a shipped theme.
+    "at": "at",
 }
+
+# Modifiers whose value is a coordinate LIST. A layer name is split on spaces,
+# so the designer spells these comma-separated (`full=32,28,176,176`) and the
+# compiler hands the mount back the whitespace form it parses.
+_LIST_MODIFIERS = {"full"}
+
+# Bare modifier tokens — a flag, not a key=value. `hidden` restores the authored
+# opacity:0 of a layer the template deliberately REVEALS so the designer can see
+# and style it (a FINAL badge, a runner icon). Without it the reveal compiles
+# back as a permanently visible layer; see server/figma_template.py.
+_FLAGS = {"hidden": ("opacity", "0")}
 
 # A layer tagged with a `scaffold` token (e.g. `scaffold=s1-logo`) is a
 # design-tool editing aid — the dashed placeholder boxes marking an image slot's
@@ -106,7 +134,9 @@ def parse_grammar_id(raw: str) -> tuple[str, str, dict[str, str], list[str]] | N
     ``slot``/``part``/``tpl``/``band`` (translated into data-* attributes),
     plus the layer-level markers ``layout=absolute|stack`` (mode lifted onto
     the root <svg>, layer dropped) and ``scaffold`` (design-tool editing aid,
-    layer stripped). None means "not a grammar id at all" — an ordinary
+    layer stripped). Modifiers are ``key=value`` except the bare flags in
+    ``_FLAGS`` (``hidden`` -> ``opacity="0"``), which is why the returned attrs
+    are not all ``data-*``. None means "not a grammar id at all" — an ordinary
     designer id, left alone. A recognized marker with problems still returns,
     so the caller can report them.
     """
@@ -140,17 +170,51 @@ def parse_grammar_id(raw: str) -> tuple[str, str, dict[str, str], list[str]] | N
 
     attrs: dict[str, str] = {}
     for tok in mods:
+        flag = _FLAGS.get(tok.lower())
+        if flag:
+            attrs[flag[0]] = flag[1]
+            continue
         km = re.match(r"^([a-zA-Z-]+)[=:](.+)$", tok)
         if not km:
             problems.append(f"unrecognized modifier {tok!r}")
             continue
         key, value = km.group(1).lower(), km.group(2)
+        flag = _FLAGS.get(key)
+        if flag:
+            # `hidden=1` / `hidden=false`: not the documented spelling, but a
+            # flag misread as an unknown modifier is a hidden state silently
+            # lost, which is the failure this whole grammar exists to prevent.
+            if value.strip().lower() not in ("0", "false", "no", ""):
+                attrs[flag[0]] = flag[1]
+            continue
         suffix = _MODIFIERS.get(key)
         if suffix is None:
             problems.append(f"unknown modifier {key!r}")
             continue
+        if key in _LIST_MODIFIERS:
+            value = re.sub(r"[,\s]+", " ", value).strip()
         attrs[f"data-{suffix}"] = value
     return marker, name, attrs, problems
+
+
+_TRANSLATE_RE = re.compile(
+    r"^\s*translate\(\s*(-?[\d.]+)\s*[,\s]\s*(-?[\d.]+)\s*\)\s*$", re.I
+)
+
+
+def _translate_xy(transform: str | None) -> tuple[float, float] | None:
+    """(x, y) of a lone ``translate()``, or None for absent//other transforms.
+
+    Deliberately narrow. A row the template placed carries exactly this, and a
+    matrix or a rotate means the designer did something the caller must not
+    unpick by arithmetic — None is the signal to say so rather than guess.
+    """
+    if not transform:
+        return None
+    m = _TRANSLATE_RE.match(transform)
+    if not m:
+        return None
+    return float(m.group(1)), float(m.group(2))
 
 
 def _defuse_comments(text: str) -> tuple[str, bool]:
@@ -332,13 +396,92 @@ def compile_svg(
         elif el.get(key) != value:
             report.add("info", f"id {raw_id!r} ignored — element already has {key}=\"{el.get(key)}\"")
         for k, v in attrs.items():
-            if el.get(k) is None:
+            if k == "opacity":
+                # `hidden` is a state RESTORE, not a data marker: the template
+                # revealed this layer, so the export always carries a visible
+                # opacity (as an attribute, inline style, or neither) that has
+                # to be overwritten rather than deferred to.
+                el.set(k, v)
+                style = el.get("style")
+                if style and "opacity" in style:
+                    kept = [d for d in style.split(";")
+                            if d.strip() and d.split(":", 1)[0].strip() != "opacity"]
+                    if kept:
+                        el.set("style", ";".join(kept))
+                    else:
+                        el.attrib.pop("style", None)
+                mutations += 1
+            elif el.get(k) is None:
                 el.set(k, v)
                 mutations += 1
     if translated:
         report.add("info", f"translated {translated} grammar id(s) into data-* markers")
     for p in grammar_problems:
         report.add("warn", p)
+
+    # --- stack-row origins: undo the template's preview placement ---------
+    # A stack theme's rows are authored at a LOCAL y origin of 0 and stacked by
+    # the mount at runtime, which in a static file draws every row on top of
+    # every other one. The template moves them to the offsets they actually
+    # land on so the designer sees a card rather than a pile, and records where
+    # it put each one as `at=K`. Put the origin back — whichever way the design
+    # tool chose to express the placement:
+    #   kept as a group transform  -> subtract it (a nudge the designer made on
+    #                                 top of K survives as the remainder)
+    #   BAKED into the children    -> no transform came back, so translate the
+    #                                 group by -K to restore the local origin
+    # Getting this wrong is invisible in the file and doubles the offset on air,
+    # so the baked case is reported rather than silently corrected.
+    restored, baked = 0, []
+    for el in root.iter():
+        if not isinstance(el.tag, str) or el.get("data-at") is None:
+            continue
+        at, raw = el.get("data-at"), el.get("transform")
+        del el.attrib["data-at"]
+        try:
+            placed = float(at)
+        except ValueError:
+            continue
+        offset = _translate_xy(raw)
+        if offset is None:
+            if raw:
+                # A rotate/matrix/scale we will not silently unpick.
+                report.add("warn", f"row {el.get('data-slot')!r} carries transform {raw!r} — "
+                                   "its stack origin could not be restored, check it by hand")
+                continue
+            if placed:
+                baked.append(el.get("data-slot") or "?")
+            # No transform came back, so the contents themselves sit at +K and
+            # the group has to be pulled back by K. Treated as translate(0,0)
+            # here so the one subtraction below covers both cases.
+            x, y = 0.0, 0.0
+        else:
+            x, y = offset
+        # What is left once the template's own placement is taken out: zero for
+        # a clean round trip, and whatever the designer moved on top of it
+        # otherwise. It goes on an INNER wrapper, never back on the row group —
+        # the mount owns that group's transform and rewrites it on every
+        # relayout, so a correction parked there survives exactly until the
+        # first one.
+        el.attrib.pop("transform", None)
+        x, y = round(x, 3), round(y - placed, 3)
+        if x or y:
+            wrapper = ET.Element(f"{{{SVG_NS}}}g")
+            wrapper.set("transform", f"translate({x:g},{y:g})")
+            wrapper.extend(list(el))
+            for child in list(el):
+                el.remove(child)
+            el.append(wrapper)
+        restored += 1
+        mutations += 1
+    if restored:
+        report.add("info", f"restored {restored} stack row(s) to their local y origin")
+    if baked:
+        report.add(
+            "info",
+            f"row(s) {', '.join(sorted(baked))} came back with the preview offset baked into "
+            "their contents (no group transform) — translated back; check the stack on air",
+        )
 
     # --- Figma tspan-positioned text -> flat <text> ---
     # Design tools export text as <text><tspan x=.. y=..>value</tspan></text>,

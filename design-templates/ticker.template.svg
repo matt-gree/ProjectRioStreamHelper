@@ -14,6 +14,10 @@
       slot=NAME maxw=N     text that auto shrinks past N units
       part=NAME            a styling part the mount recolours
       tpl=NAME w=N         a prototype the mount clones per row
+      slot=NAME hidden     a layer the APP toggles on (a FINAL badge, a runner
+                           icon). Shown here so you can style it; the compiler
+                           puts it back to invisible. Drop the flag and it
+                           ships permanently visible.
       scaffold=NAME        editing only guide (dashed boxes), STRIPPED on compile
       layout=absolute      invisible marker carrying the root layout mode
     Keep them. Rename freely otherwise.
@@ -29,6 +33,21 @@
     Dashed boxes mark image slots (team logos, character icons). PRSH ships no
     game art, so design the BOX as the no art look; the app draws the real icon
     on top and hides it when there is none.
+
+    STACK ROWS (slot=row-*) have been moved to the offsets the app stacks them
+    to, so this file shows the assembled card rather than every band piled on
+    the frame origin. `at=N` in the name records where each was put and the
+    compiler takes it back out; anything you move ON TOP of that is kept. Two
+    rows sharing one `at=` are ALTERNATES - a live game or a completed one,
+    never both - so they are drawn overlapping on purpose. Toggle one off in
+    the layers panel to work on the other, and design each to fill the band.
+
+    CYAN DASHED BOXES (scaffold=stage-*) are the sizes this card takes at
+    runtime, labelled with the row that triggers each. The card GROWS to enclose
+    a segment when the app shows it, so content sitting outside the resting box
+    is not misplaced - it belongs to a larger stage. Design every stage to look
+    finished, and keep each stage's content inside its own box. The guides are
+    editing only and never ship.
     --><!--
     DEFAULT package - Results Ticker (1920x80): the Rio marquee bar. A RESULTS
     badge pins the left edge; ticker-mount.js clones the card-template once per
@@ -59,10 +78,10 @@
   <text x="75" y="47" text-anchor="middle" fill="#ffffff" font-family="Rajdhani" font-size="18" font-weight="700" letter-spacing="2.5">RESULTS</text>
 
   <!-- prototype game card (hidden; cloned + bound by the mount) -->
-  <g opacity="0" id="slot=card-template w=340">
+  <g opacity="1" id="slot=card-template w=340 hidden">
     <rect x="0" y="12" width="340" height="56" rx="10" fill="#10101a" stroke="#1f1f30" stroke-width="1" id="part=card-bg" />
 
-    <image x="10" y="17" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="part=away-cap" />
+    <image x="10" y="17" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="part=away-cap hidden" />
     <text x="44" y="39" font-size="17" font-weight="700" fill="#f5f5f8" font-family="Rajdhani" id="part=away-name maxw=98">Away</text>
 
     <g id="part=score-group">
@@ -71,10 +90,10 @@
       <text x="170" y="38" text-anchor="middle" font-size="12" fill="#8f8fa3" font-family="Inter">–</text>
       <text x="174" y="39" text-anchor="start" font-size="16" font-weight="700" style="font-variant-numeric:tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="part=score-home">0</text>
     </g>
-    <text x="170" y="38" text-anchor="middle" font-family="Rajdhani" font-size="12" font-weight="700" letter-spacing="1.5" opacity="0" fill="#8f8fa3" id="part=vs">VS</text>
+    <text x="170" y="38" text-anchor="middle" font-family="Rajdhani" font-size="12" font-weight="700" letter-spacing="1.5" opacity="1" fill="#8f8fa3" id="part=vs hidden">VS</text>
 
     <text x="296" y="39" text-anchor="end" font-size="17" font-weight="700" fill="#f5f5f8" font-family="Rajdhani" id="part=home-name maxw=98">Home</text>
-    <image x="302" y="17" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="part=home-cap" />
+    <image x="302" y="17" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="part=home-cap hidden" />
 
     <text x="170" y="62" text-anchor="middle" font-size="10.5" font-weight="600" letter-spacing="0.7" fill="#8f8fa3" font-family="Inter" id="part=meta maxw=310">STADIUM · DATE</text>
   </g>

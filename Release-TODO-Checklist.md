@@ -66,7 +66,7 @@ Redesign using existing Plum glass design language.
 - [ ] Increase height to ~2 rows
 - [ ] Larger typography in the extra space
 - [ ] Improve readability, keep visual style
-- Current: `stats.html` is still 452×118, a single `stats-row` (`stats-mount.js`);
+- Current: `stats.html` is still 452×118 (`stats-card-mount.js`);
   `design/default/stats.svg` has a matching `viewBox="0 0 452 118"`. A height
   change is a theme re-author across every package, not just a mount edit.
 

@@ -3,6 +3,7 @@ import { render, screen, cleanup, fireEvent, within } from '@testing-library/rea
 import { TooltipProvider } from '../../components/ui/tooltip';
 import { useSettingsStore, useStateStore } from '../../context/store';
 import { useObsStore } from '../../context/obs';
+import { commitPending, useStagingStore } from '../../context/staging';
 import { DESKS, RAIL_SEED, Rack } from './rack';
 import { withContainers } from '../../test/containers';
 
@@ -24,6 +25,8 @@ beforeEach(() => {
 });
 afterEach(() => {
     cleanup();
+    useStagingStore.getState().discardAll();
+    while (restoreObs.length) restoreObs.pop()();
     vi.unstubAllGlobals();
     useObsStore.setState({
         status: 'disconnected', studioMode: false, programScene: null,
@@ -32,6 +35,17 @@ afterEach(() => {
 });
 
 const ui = (node) => render(<TooltipProvider>{node}</TooltipProvider>);
+
+// Swap in a spy for the OBS removal verb, restoring the real one afterwards so
+// it can't leak into a later test in this file.
+const mockRemove = () => {
+    const real = useObsStore.getState().removeSceneItem;
+    const spy = vi.fn(() => Promise.resolve());
+    useObsStore.setState({ removeSceneItem: spy });
+    restoreObs.push(() => useObsStore.setState({ removeSceneItem: real }));
+    return spy;
+};
+const restoreObs = [];
 
 const item = (id, sourceName, url, enabled = false) =>
     ({ id, sourceName, url, enabled, inputKind: 'browser_source', isGroup: false, isPrsh: true });
@@ -408,6 +422,82 @@ describe('Rack scene sections', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Add an overlay to Game' }));
         expect(onAdd).toHaveBeenCalledWith('Game');
     });
+
+    /*
+     * The Add button's inverse, on the row rather than in the header — the same
+     * treatment the BOARDS tier gives its rows, because "what is in this scene"
+     * is one question and both halves of it should read the same way.
+     */
+    it('removes a source from its own row, after a confirm', () => {
+        const remove = mockRemove();
+        obs({ Game: [item(1, 'SB', SB, true)] });
+        ui(<Rack />);
+        fireEvent.click(screen.getByRole('button', { name: 'Remove Scoreboard from Game' }));
+        expect(remove).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+        expect(remove).toHaveBeenCalledWith('Game', 1);
+    });
+
+    /*
+     * A REMOVAL IS NOT A TWO-STATE CONTROL, and it used to be staged as if it
+     * were — under visibility's own key, with the item's enabled flag as its
+     * liveValue. On a HIDDEN source that made the staged value equal the live
+     * one, so the confirm buffer discarded it as a change that cancelled itself
+     * out: the producer confirmed, pressed Go Live, and the source stayed.
+     */
+    it('stages a hidden source’s removal instead of collapsing it to a no-op', async () => {
+        const remove = mockRemove();
+        useSettingsStore.setState({
+            scoreboards: {},
+            production: { ...withContainers(), confirm: { enabled: true } },
+        });
+        obs({ Game: [item(1, 'SB', SB, false)] });
+        ui(<Rack />);
+        fireEvent.click(screen.getByRole('button', { name: 'Remove Scoreboard from Game' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+        // Staged, not run — and the row says so before the commit does it.
+        expect(remove).not.toHaveBeenCalled();
+        expect(screen.getByRole('button', { name: 'Remove Scoreboard from Game' }))
+            .toHaveAttribute('title', 'Staged — goes live on confirm');
+        await commitPending();
+        expect(remove).toHaveBeenCalledWith('Game', 1);
+    });
+
+    /*
+     * The confirm states the CONSEQUENCE, and for this action the whole
+     * consequence is whether another scene still holds the source: one that does
+     * makes this free, and one that doesn't means OBS releases the input and the
+     * transform the producer set by hand goes with it.
+     */
+    it('says the source survives when another scene holds it', () => {
+        obs({ Game: [item(1, 'SB', SB, true)], Break: [item(9, 'SB', SB)] });
+        ui(<Rack />);
+        fireEvent.click(screen.getByRole('button', { name: 'Remove Scoreboard from Game' }));
+        expect(screen.getByText('The source stays in Break.')).toBeInTheDocument();
+    });
+
+    it('warns that the OBS transform goes with the last copy', () => {
+        obs({ Game: [item(1, 'SB', SB, true)] });
+        ui(<Rack />);
+        fireEvent.click(screen.getByRole('button', { name: 'Remove Scoreboard from Game' }));
+        expect(screen.getByText(/only scene/)).toBeInTheDocument();
+        expect(screen.getByText(/size and position in OBS go with it/)).toBeInTheDocument();
+    });
+
+    /*
+     * THE MIRROR IS LAZY, so "no other scene has it" is only ever "none that we
+     * can see" until every scene has been expanded. The confirm hedges rather
+     * than promising a producer they are deleting a spare copy.
+     */
+    it('hedges the last-copy claim while a scene is still unmirrored', () => {
+        obs({ Game: [item(1, 'SB', SB, true)] }, {
+            scenes: ['Game', 'Break'], mirroredScenes: ['Game'],
+        });
+        ui(<Rack />);
+        fireEvent.click(screen.getByRole('button', { name: 'Remove Scoreboard from Game' }));
+        expect(screen.getByText(/If no other scene uses it/)).toBeInTheDocument();
+        expect(screen.queryByText(/only scene/)).not.toBeInTheDocument();
+    });
 });
 
 /*
@@ -538,6 +628,21 @@ describe('Rack fed containers', () => {
         ui(<Rack />);
         expect(rowChip('Callout Stage')).toBe('off');
         expect(rowChip('Character Spotlight')).toBe('off');
+    });
+
+    /*
+     * A FED ROW HAS NO TRASH. Its `item` is the CONTAINER's scene item — the
+     * members nest under one source — so a remove there would delete the
+     * container out from under every member on its roster while appearing to
+     * remove one of them. Roster membership is the container panel's.
+     */
+    it('offers remove on the container and on none of its members', () => {
+        obs({ Game: [item(3, 'Callout', CALLOUT, true)] });
+        ui(<Rack />);
+        expect(screen.getByRole('button', { name: 'Remove Callout Stage from Game' }))
+            .toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Remove Character Spotlight/ })).toBeNull();
+        expect(screen.queryByRole('button', { name: /Remove Game Summary/ })).toBeNull();
     });
 
     // The eye belongs to the source; a fed row decides only whether its content

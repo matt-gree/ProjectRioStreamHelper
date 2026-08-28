@@ -38,7 +38,7 @@ describe('container id resolution', () => {
      * is its filename stem.
      */
     it('falls back to the filename stem for a pre-2.0 named shell', () => {
-        expect(containerId('http://x/layout/shared/stats-feed.html')).toBe('stats-feed');
+        expect(containerId('http://x/layout/shared/split-screen.html')).toBe('split-screen');
         expect(containerId('http://x/layout/shared/callout-stage.html?preview=1'))
             .toBe('callout-stage');
     });

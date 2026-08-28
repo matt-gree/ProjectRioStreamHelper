@@ -29,7 +29,7 @@ export const ENDED_GROUP = 'Ended';
  * Both tiers, fetched once per mount. The server answers each from its own
  * cache (the active list in memory, the catalogue from pyrio's disk cache), so
  * this is two cheap calls rather than two round-trips to Project Rio — and the
- * per-mount fetch is what makes Settings → Refresh game data show up here.
+ * per-mount fetch is what makes Connections → Refresh game data show up here.
  */
 export function useGameModes() {
     const [tiers, setTiers] = useState({ active: [], ended: [] });

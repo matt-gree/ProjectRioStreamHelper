@@ -239,9 +239,25 @@ Project Rio randomizes away/home per game. Each HUD frame,
 |---|---|---|
 | manual | swap button → `_user_overridden` + `_sides_swapped` | not overridden |
 | match | `Match.orientation_for_sides(sb, left, right)` | board unbound, or live players don't match the fixture |
-| pin | `project_rio.pinned_player` + `pinned_side` Settings | no pin, or pinned player not in this game |
+| pin | `pin_swap(left, right)` over each person's `prefs.side` in the Address Book | neither is pinned, or **both are pinned to the same side** (unsatisfiable → abstain) |
 | back_to_back | `_prev_player_sides` from the previous game | no prior game / neither player returning |
 
+- **A pin is a fact about a PERSON, not about the app.** It was one app-wide
+  `project_rio.pinned_player` + `pinned_side` pair; it is now `prefs.side` on a
+  participant row (`Participants.PreferredSide`), authored as the **Side** column
+  in the Address Book. The old pair migrates onto its person once, at boot
+  (`Participants.adopt_legacy_pin`, called from the lifespan — the one place both
+  stores are in memory), and is then cleared.
+- **`pin_swap` (`server/rio/provider.py`) is the ONE statement of the layer** —
+  the HUD cascade, the API pools (`rio/game_pool.py`) and the pool endpoint
+  (`api/v1/game_pool.py`) all import it. It was two copies reading the same
+  settings pair, which agreed only because neither had changed since it was
+  written.
+- **Two pins can now collide, and the layer ABSTAINS when they do.** One pinned →
+  satisfy it; both pinned to opposite sides → they agree, satisfy both; both to
+  the same side → return None and fall through to back-to-back. Picking a winner
+  could only be arbitrary, and an arbitrary pin is worse than none: the producer
+  would watch one of their two pins silently lose every game.
 - The deciding layer is mirrored to `score.{N}.side_reason`, and the board desk
   (`src/routes/production/desks/board.jsx`, `sideReasonLine`) is what reads it —
   one sentence per layer. A new layer needs a sentence there or the board will

@@ -16,6 +16,14 @@
  * and defaulting to it is what keeps every source already in a producer's scene
  * looking the way it does today.
  *
+ * The font border (`overlays.global.textStrokeWidth` / `…Color`, pinnable per
+ * element from this element's Production stage panel — the Style Overrides
+ * section) is drawn on BOTH runs. `paint-order: stroke fill` puts the stroke
+ * behind the glyph so an outline grows outward instead of eating into the
+ * letterform; a browser source too old to honour it still draws the border,
+ * centred on the outline, which is thinner but never wrong. The prefix takes
+ * half the width — see the rule.
+ *
  * Styles are injected and class-scoped (`.pn-*`) rather than left in the page,
  * because this mount also runs inside a container shell that has no stylesheet
  * of its own.
@@ -71,6 +79,13 @@ const CSS = `
   text-transform: uppercase;
   color: var(--tag-color, var(--accent, #f59f00));
   text-shadow: var(--text-shadow, none);
+  /* HALF the border, because this run is half the type size (18px against the
+     name's 36px). One width across two sizes is not one border: 3px around the
+     name is a rim, and the same 3px around the prefix closed over the counters
+     and swallowed the accent colour whole. The producer sets the border they
+     can see — the name — and the prefix keeps the same optical weight. */
+  -webkit-text-stroke: calc(var(--text-stroke-width, 0px) * 0.5) var(--text-stroke-color, transparent);
+  paint-order: stroke fill;
   white-space: nowrap;
 }
 /* A participant with no prefix leaves no gap — the gap belongs to a row that
@@ -83,6 +98,8 @@ const CSS = `
   line-height: 1.05;
   color: var(--text-primary, #ffffff);
   text-shadow: var(--text-shadow, none);
+  -webkit-text-stroke: var(--text-stroke-width, 0px) var(--text-stroke-color, transparent);
+  paint-order: stroke fill;
   white-space: nowrap;
 }
 `;
@@ -146,7 +163,9 @@ export function mountPlayerName({ host, sb = 1, team = 1 }) {
     // Fit the native card to the box this mount was handed — its own host, not
     // the window, so a member centered in a container is not blown up to it.
     function autoScale() {
-        if (OverlayBase.PREVIEW_MODE) { stage.style.transform = ''; return; }
+        // Preview included: ScaledIframe SIZES the iframe to the fit box
+        // rather than transforming it, so a mount that stands down there
+        // draws at native into a smaller frame (see eventheader-mount).
         const w = root.clientWidth || window.innerWidth;
         const h = root.clientHeight || window.innerHeight;
         const scale = Math.min(w / REF_W, h / REF_H) || 1;

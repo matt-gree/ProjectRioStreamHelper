@@ -267,10 +267,7 @@ class Settings:
             # game auto-fills scoreboard 1). When False, board 1 behaves like any
             # API board. This is the single control for "is board 1 the HUD board"
             # — there is no per-board source selector. Toggled beside the HUD path.
-            "hud_enabled": True,
-            "pinned_player": "",
-            "pinned_side": "Team 1",
-            "pinned_hud_only": False
+            "hud_enabled": True
         },
         "postgame": {
             # Capture a finished game's box score as soon as Project Rio writes
@@ -517,7 +514,6 @@ class Settings:
         "controller_overlay": {
             "path": "",
             "port": 8069,
-            "controller": 1,
             "auto_start": False
         },
         "overlays": {
@@ -536,6 +532,13 @@ class Settings:
                 "textShadowEnabled": False,
                 "textShadowBlur": 4,
                 "textShadowColor": "rgba(0, 0, 0, 0.8)",
+                # Font border (text stroke). 0 = off, and there is no enable
+                # flag: the width is the switch. Left global at 0, a producer
+                # pins one on a single element from its Production stage panel
+                # (overlays.{type}.textStrokeWidth), which is the shape this
+                # feature is usually wanted in.
+                "textStrokeWidth": 0,
+                "textStrokeColor": "rgba(0, 0, 0, 0.9)",
                 "showCaptains": True,
                 "showLogo": True,
                 "finalBadgeColor": None,
@@ -565,7 +568,7 @@ class Settings:
                 "showRoleIcon": True,
                 "showTeamLogo": True,
             },
-            "stats": {
+            "statsbar": {
                 "transitionType": "fade",
                 "statValueColor": None,
                 "subtextColor": None,
@@ -635,6 +638,24 @@ class Settings:
                 cls.settings["server"]["allow_lan"] = True
         cls.settings.get("server", {}).pop("host", None)
         if "host" in loaded_server:
+            await cls.Save()
+
+        # `overlays.stats` -> `overlays.statsbar`. The element was renamed when
+        # the wide bar and the 2x2 card stopped sharing the ambiguous name
+        # "Stats": the bar is `statsbar` (its own ?team= source, statsbar.svg)
+        # and the card stays `statscard`. The namespace is the producer's
+        # authored look — accent, card background, shadows — so it MOVES rather
+        # than resetting to defaults. Merge-under, never overwrite: a producer
+        # who has already configured the new key wins, which also makes this
+        # idempotent across restarts.
+        _overlays = cls.settings.get("overlays")
+        if isinstance(_overlays, dict) and isinstance(_overlays.get("stats"), dict):
+            legacy_stats = _overlays.pop("stats")
+            current = _overlays.get("statsbar")
+            _overlays["statsbar"] = {
+                **legacy_stats,
+                **(current if isinstance(current, dict) else {}),
+            }
             await cls.Save()
 
         # One-time overlay schema migration to v2: keys that were previously

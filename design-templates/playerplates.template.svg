@@ -14,6 +14,10 @@
       slot=NAME maxw=N     text that auto shrinks past N units
       part=NAME            a styling part the mount recolours
       tpl=NAME w=N         a prototype the mount clones per row
+      slot=NAME hidden     a layer the APP toggles on (a FINAL badge, a runner
+                           icon). Shown here so you can style it; the compiler
+                           puts it back to invisible. Drop the flag and it
+                           ships permanently visible.
       scaffold=NAME        editing only guide (dashed boxes), STRIPPED on compile
       layout=absolute      invisible marker carrying the root layout mode
     Keep them. Rename freely otherwise.
@@ -31,6 +35,21 @@
     Dashed boxes mark image slots (team logos, character icons). PRSH ships no
     game art, so design the BOX as the no art look; the app draws the real icon
     on top and hides it when there is none.
+
+    STACK ROWS (slot=row-*) have been moved to the offsets the app stacks them
+    to, so this file shows the assembled card rather than every band piled on
+    the frame origin. `at=N` in the name records where each was put and the
+    compiler takes it back out; anything you move ON TOP of that is kept. Two
+    rows sharing one `at=` are ALTERNATES - a live game or a completed one,
+    never both - so they are drawn overlapping on purpose. Toggle one off in
+    the layers panel to work on the other, and design each to fill the band.
+
+    CYAN DASHED BOXES (scaffold=stage-*) are the sizes this card takes at
+    runtime, labelled with the row that triggers each. The card GROWS to enclose
+    a segment when the app shows it, so content sitting outside the resting box
+    is not misplaced - it belongs to a larger stage. Design every stage to look
+    finished, and keep each stage's content inside its own box. The guides are
+    editing only and never ship.
     --><!--
     DEFAULT package - Player Plates: the same card as default/commentary.svg,
     which is the same card as default/lowerthird.svg. A sibling of Commentary by
@@ -231,8 +250,8 @@
        same places read as a copy-paste, which is the one thing atmosphere must
        never look like. -->
 
-  <g opacity="0" id="slot=side1">
-    <g opacity="0" id="slot=side1-sub">
+  <g opacity="1" id="slot=side1 hidden">
+    <g opacity="1" id="slot=side1-sub hidden">
       <rect x="200" y="94" width="550" height="100" rx="18" style="filter:drop-shadow(0 10px 30px rgba(0,0,0,0.55))" fill="#0b0b12" stroke="#1f1f30" stroke-width="1.5" id="part=sub-rect" />
       <g clip-path="url(#pp-subfield-clip-1)" id="part=sub-field">
         <g transform="translate(217,94)"><g style="will-change:auto;--bob-dur:14.5s;--bob-amp:12.75px;--bob-delay:-3.91s"><use href="#rio-mark" width="32" height="32" opacity="0.06" style="will-change:auto;--sway-dur:21.47s;--sway-amp:24.31px;--sway-delay:-12.7s" id="part=sub-glyph" /></g></g>  <!-- 32, at the seam -->
@@ -241,7 +260,7 @@
         <g transform="translate(596,190)"><g style="will-change:auto;--bob-dur:11.22s;--bob-amp:21.1px;--bob-delay:-3.92s"><use href="#rio-mark" width="48" height="48" opacity="0.08" style="will-change:auto;--sway-dur:18.9s;--sway-amp:34.76px;--sway-delay:-11.35s" id="part=sub-glyph" /></g></g>  <!-- 48, under the bottom rim -->
         <g transform="translate(678,150)"><g style="will-change:auto;--bob-dur:16.92s;--bob-amp:13.4px;--bob-delay:-9.3s"><use href="#rio-mark" width="32" height="32" opacity="0.06" style="will-change:auto;--sway-dur:19.44s;--sway-amp:21.5px;--sway-delay:-12.45s" id="part=sub-glyph" /></g></g>  <!-- 32, mid-drawer -->
       </g>
-      <use href="#rio-mark" x="674" y="142" width="32" height="32" opacity="0" id="part=sub-icon" />
+      <use href="#rio-mark" x="674" y="142" width="32" height="32" opacity="1" id="part=sub-icon hidden" />
       <text x="244" y="168" font-size="28" font-weight="600" fill="#f5f5f8" font-family="Inter" id="slot=side1-sub-value maxw=482">Side1 Sub Value</text>
     </g>
     <rect x="200" y="26" width="550" height="96" rx="18" style="filter:drop-shadow(0 10px 30px rgba(0,0,0,0.55))" fill="#0b0b12" stroke="#1f1f30" stroke-width="1.5" id="part=main-rect" />
@@ -257,8 +276,8 @@
     <text x="244" y="90" font-size="46" font-weight="700" letter-spacing="0.5" fill="#f5f5f8" font-family="Rajdhani" id="slot=side1-name maxw=482">Player One</text>
   </g>
 
-  <g opacity="0" id="slot=side2">
-    <g opacity="0" id="slot=side2-sub">
+  <g opacity="1" id="slot=side2 hidden">
+    <g opacity="1" id="slot=side2-sub hidden">
       <rect x="200" y="94" width="550" height="100" rx="18" style="filter:drop-shadow(0 10px 30px rgba(0,0,0,0.55))" fill="#0b0b12" stroke="#1f1f30" stroke-width="1.5" id="part=sub-rect" />
       <g clip-path="url(#pp-subfield-clip-2)" id="part=sub-field">
         <g transform="translate(273,156)"><g style="will-change:auto;--bob-dur:13.83s;--bob-amp:24.17px;--bob-delay:-4.2s"><use href="#rio-mark" width="48" height="48" opacity="0.08" style="will-change:auto;--sway-dur:18.71s;--sway-amp:38.44px;--sway-delay:-9.89s" id="part=sub-glyph" /></g></g>  <!-- 48, under the bottom rim -->
@@ -267,7 +286,7 @@
         <g transform="translate(582,191)"><g style="will-change:auto;--bob-dur:15.51s;--bob-amp:14.29px;--bob-delay:-2.6s"><use href="#rio-mark" width="32" height="32" opacity="0.05" style="will-change:auto;--sway-dur:21.9s;--sway-amp:22.1px;--sway-delay:-8.06s" id="part=sub-glyph" /></g></g>  <!-- 32, under the bottom rim -->
         <g transform="translate(663,92)"><g style="will-change:auto;--bob-dur:15.17s;--bob-amp:12.91px;--bob-delay:-9.45s"><use href="#rio-mark" width="32" height="32" opacity="0.05" style="will-change:auto;--sway-dur:23.05s;--sway-amp:25.06px;--sway-delay:-0.98s" id="part=sub-glyph" /></g></g>  <!-- 32, at the seam -->
       </g>
-      <use href="#rio-mark" x="674" y="142" width="32" height="32" opacity="0" id="part=sub-icon" />
+      <use href="#rio-mark" x="674" y="142" width="32" height="32" opacity="1" id="part=sub-icon hidden" />
       <text x="244" y="168" font-size="28" font-weight="600" fill="#f5f5f8" font-family="Inter" id="slot=side2-sub-value maxw=482">Side2 Sub Value</text>
     </g>
     <rect x="200" y="26" width="550" height="96" rx="18" style="filter:drop-shadow(0 10px 30px rgba(0,0,0,0.55))" fill="#0b0b12" stroke="#1f1f30" stroke-width="1.5" id="part=main-rect" />

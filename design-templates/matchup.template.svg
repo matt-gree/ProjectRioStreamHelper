@@ -14,6 +14,10 @@
       slot=NAME maxw=N     text that auto shrinks past N units
       part=NAME            a styling part the mount recolours
       tpl=NAME w=N         a prototype the mount clones per row
+      slot=NAME hidden     a layer the APP toggles on (a FINAL badge, a runner
+                           icon). Shown here so you can style it; the compiler
+                           puts it back to invisible. Drop the flag and it
+                           ships permanently visible.
       scaffold=NAME        editing only guide (dashed boxes), STRIPPED on compile
       layout=absolute      invisible marker carrying the root layout mode
     Keep them. Rename freely otherwise.
@@ -31,6 +35,21 @@
     Dashed boxes mark image slots (team logos, character icons). PRSH ships no
     game art, so design the BOX as the no art look; the app draws the real icon
     on top and hides it when there is none.
+
+    STACK ROWS (slot=row-*) have been moved to the offsets the app stacks them
+    to, so this file shows the assembled card rather than every band piled on
+    the frame origin. `at=N` in the name records where each was put and the
+    compiler takes it back out; anything you move ON TOP of that is kept. Two
+    rows sharing one `at=` are ALTERNATES - a live game or a completed one,
+    never both - so they are drawn overlapping on purpose. Toggle one off in
+    the layers panel to work on the other, and design each to fill the band.
+
+    CYAN DASHED BOXES (scaffold=stage-*) are the sizes this card takes at
+    runtime, labelled with the row that triggers each. The card GROWS to enclose
+    a segment when the app shows it, so content sitting outside the resting box
+    is not misplaced - it belongs to a larger stage. Design every stage to look
+    finished, and keep each stage's content inside its own box. The guides are
+    editing only and never ship.
     --><!--
     DEFAULT package - Matchup History: the Project Rio head-to-head band.
     Layout: BRAND CAP · all-time series summary (names + win counts) · match
@@ -255,7 +274,7 @@
     <g transform="translate(1829,618)"><g style="will-change:auto;--bob-dur:7.63s;--bob-amp:84.31px;--bob-delay:-2.07s"><use href="#rio-mark" width="96" height="96" opacity="0.08" style="will-change:auto;--sway-dur:12.35s;--sway-amp:97.47px;--sway-delay:-11.07s" /></g></g>  <!-- 96, over the top rim -->
 
     <!-- ░░ BRAND CAP ░░ -->
-    <rect id="scaffold=logo" x="84" y="664" width="110" height="110" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="84" y="664" width="110" height="110" preserveAspectRatio="xMidYMid meet" opacity="0" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=logo" />
+    <rect id="scaffold=logo" x="84" y="664" width="110" height="110" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="84" y="664" width="110" height="110" preserveAspectRatio="xMidYMid meet" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=logo hidden" />
     <g id="slot=logo-default">
       <!-- The BOX stays 110: it is a slot for whatever logo the user uploaded,
            and that is arbitrary artwork with no grid. The MARK inside it is not
@@ -272,82 +291,82 @@
     <text x="338" y="680" text-anchor="middle" font-size="18" font-weight="700" letter-spacing="2.5" fill="#ffffff" font-family="Rajdhani">HEAD TO HEAD</text>
     <text x="228" y="768" font-size="21" font-weight="500" letter-spacing="1" fill="#8f8fa3" font-family="Inter" id="slot=total-games">ALL TIME</text>
 
-    <rect id="scaffold=side1-sprite" x="488" y="660" width="72" height="72" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="488" y="660" width="72" height="72" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=side1-sprite" />
+    <rect id="scaffold=side1-sprite" x="488" y="660" width="72" height="72" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="488" y="660" width="72" height="72" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=side1-sprite hidden" />
     <text x="576" y="712" font-size="40" font-weight="700" fill="#f5f5f8" font-family="Rajdhani" id="slot=side1-name maxw=280">Player One</text>
     <text x="898" y="748" text-anchor="end" font-size="82" font-weight="700" font-variant-numeric="tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=side1-wins maxw=110">0</text>
     <text x="960" y="740" text-anchor="middle" font-size="52" font-weight="600" fill="#8f8fa3" font-family="Rajdhani">–</text>
     <text x="1022" y="748" text-anchor="start" font-size="82" font-weight="700" font-variant-numeric="tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=side2-wins maxw=110">0</text>
     <text x="1344" y="712" text-anchor="end" font-size="40" font-weight="700" fill="#f5f5f8" font-family="Rajdhani" id="slot=side2-name maxw=280">Player Two</text>
-    <rect id="scaffold=side2-sprite" x="1360" y="660" width="72" height="72" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="1360" y="660" width="72" height="72" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=side2-sprite" />
+    <rect id="scaffold=side2-sprite" x="1360" y="660" width="72" height="72" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="1360" y="660" width="72" height="72" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=side2-sprite hidden" />
 
-    <text x="1836" y="700" text-anchor="end" font-size="30" font-weight="700" opacity="0" fill="#f5f5f8" font-family="Rajdhani" id="slot=subtitle maxw=380">Winners Final</text>
+    <text x="1836" y="700" text-anchor="end" font-size="30" font-weight="700" opacity="1" fill="#f5f5f8" font-family="Rajdhani" id="slot=subtitle maxw=380 hidden">Winners Final</text>
     <text x="1836" y="740" text-anchor="end" font-size="20" font-weight="500" letter-spacing="2" fill="#8f8fa3" font-family="Inter">LAST 5 GAMES</text>
 
     <!-- divider between summary and cards -->
     <rect x="64" y="798" width="1792" height="2" fill="#1f1f30" />
 
     <!-- ░░ GAME CARDS (newest first) ░░ -->
-    <g opacity="0" id="slot=game1">
+    <g opacity="1" id="slot=game1 hidden">
       <rect x="72" y="816" width="344" height="188" rx="10" fill="#ffffff" opacity="0.04" />
       <rect x="72" y="816" width="344" height="188" rx="10" fill="none" stroke-width="1" stroke="#1f1f30" />
       <text x="396" y="848" text-anchor="end" font-size="17" font-weight="500" fill="#8f8fa3" font-family="Inter" id="slot=game1-date">JUN 1</text>
-      <rect id="scaffold=game1-side1-logo" x="96" y="850" width="48" height="48" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="96" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="0" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=game1-side1-logo" />
+      <rect id="scaffold=game1-side1-logo" x="96" y="850" width="48" height="48" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="96" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=game1-side1-logo hidden" />
       <text x="196" y="896" text-anchor="middle" font-size="46" font-weight="700" font-variant-numeric="tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=game1-side1-score maxw=72">0</text>
       <text x="244" y="892" text-anchor="middle" font-size="28" font-weight="600" fill="#8f8fa3" font-family="Rajdhani">–</text>
       <text x="292" y="896" text-anchor="middle" font-size="46" font-weight="700" font-variant-numeric="tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=game1-side2-score maxw=72">0</text>
-      <rect id="scaffold=game1-side2-logo" x="344" y="850" width="48" height="48" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="344" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="0" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=game1-side2-logo" />
+      <rect id="scaffold=game1-side2-logo" x="344" y="850" width="48" height="48" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="344" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=game1-side2-logo hidden" />
       <text x="96" y="948" font-size="19" font-weight="500" fill="#8f8fa3" font-family="Inter" id="slot=game1-mode maxw=296">Game mode</text>
       <text x="96" y="980" font-size="19" font-weight="500" fill="#8f8fa3" font-family="Inter" id="slot=game1-stadium maxw=296">Stadium</text>
     </g>
 
-    <g opacity="0" id="slot=game2">
+    <g opacity="1" id="slot=game2 hidden">
       <rect x="430" y="816" width="344" height="188" rx="10" fill="#ffffff" opacity="0.04" />
       <rect x="430" y="816" width="344" height="188" rx="10" fill="none" stroke-width="1" stroke="#1f1f30" />
       <text x="754" y="848" text-anchor="end" font-size="17" font-weight="500" fill="#8f8fa3" font-family="Inter" id="slot=game2-date">JUN 1</text>
-      <rect id="scaffold=game2-side1-logo" x="454" y="850" width="48" height="48" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="454" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="0" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=game2-side1-logo" />
+      <rect id="scaffold=game2-side1-logo" x="454" y="850" width="48" height="48" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="454" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=game2-side1-logo hidden" />
       <text x="554" y="896" text-anchor="middle" font-size="46" font-weight="700" font-variant-numeric="tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=game2-side1-score maxw=72">0</text>
       <text x="602" y="892" text-anchor="middle" font-size="28" font-weight="600" fill="#8f8fa3" font-family="Rajdhani">–</text>
       <text x="650" y="896" text-anchor="middle" font-size="46" font-weight="700" font-variant-numeric="tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=game2-side2-score maxw=72">0</text>
-      <rect id="scaffold=game2-side2-logo" x="702" y="850" width="48" height="48" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="702" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="0" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=game2-side2-logo" />
+      <rect id="scaffold=game2-side2-logo" x="702" y="850" width="48" height="48" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="702" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=game2-side2-logo hidden" />
       <text x="454" y="948" font-size="19" font-weight="500" fill="#8f8fa3" font-family="Inter" id="slot=game2-mode maxw=296">Game mode</text>
       <text x="454" y="980" font-size="19" font-weight="500" fill="#8f8fa3" font-family="Inter" id="slot=game2-stadium maxw=296">Stadium</text>
     </g>
 
-    <g opacity="0" id="slot=game3">
+    <g opacity="1" id="slot=game3 hidden">
       <rect x="788" y="816" width="344" height="188" rx="10" fill="#ffffff" opacity="0.04" />
       <rect x="788" y="816" width="344" height="188" rx="10" fill="none" stroke-width="1" stroke="#1f1f30" />
       <text x="1112" y="848" text-anchor="end" font-size="17" font-weight="500" fill="#8f8fa3" font-family="Inter" id="slot=game3-date">JUN 1</text>
-      <rect id="scaffold=game3-side1-logo" x="812" y="850" width="48" height="48" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="812" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="0" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=game3-side1-logo" />
+      <rect id="scaffold=game3-side1-logo" x="812" y="850" width="48" height="48" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="812" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=game3-side1-logo hidden" />
       <text x="912" y="896" text-anchor="middle" font-size="46" font-weight="700" font-variant-numeric="tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=game3-side1-score maxw=72">0</text>
       <text x="960" y="892" text-anchor="middle" font-size="28" font-weight="600" fill="#8f8fa3" font-family="Rajdhani">–</text>
       <text x="1008" y="896" text-anchor="middle" font-size="46" font-weight="700" font-variant-numeric="tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=game3-side2-score maxw=72">0</text>
-      <rect id="scaffold=game3-side2-logo" x="1060" y="850" width="48" height="48" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="1060" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="0" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=game3-side2-logo" />
+      <rect id="scaffold=game3-side2-logo" x="1060" y="850" width="48" height="48" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="1060" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=game3-side2-logo hidden" />
       <text x="812" y="948" font-size="19" font-weight="500" fill="#8f8fa3" font-family="Inter" id="slot=game3-mode maxw=296">Game mode</text>
       <text x="812" y="980" font-size="19" font-weight="500" fill="#8f8fa3" font-family="Inter" id="slot=game3-stadium maxw=296">Stadium</text>
     </g>
 
-    <g opacity="0" id="slot=game4">
+    <g opacity="1" id="slot=game4 hidden">
       <rect x="1146" y="816" width="344" height="188" rx="10" fill="#ffffff" opacity="0.04" />
       <rect x="1146" y="816" width="344" height="188" rx="10" fill="none" stroke-width="1" stroke="#1f1f30" />
       <text x="1470" y="848" text-anchor="end" font-size="17" font-weight="500" fill="#8f8fa3" font-family="Inter" id="slot=game4-date">JUN 1</text>
-      <rect id="scaffold=game4-side1-logo" x="1170" y="850" width="48" height="48" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="1170" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="0" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=game4-side1-logo" />
+      <rect id="scaffold=game4-side1-logo" x="1170" y="850" width="48" height="48" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="1170" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=game4-side1-logo hidden" />
       <text x="1270" y="896" text-anchor="middle" font-size="46" font-weight="700" font-variant-numeric="tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=game4-side1-score maxw=72">0</text>
       <text x="1318" y="892" text-anchor="middle" font-size="28" font-weight="600" fill="#8f8fa3" font-family="Rajdhani">–</text>
       <text x="1366" y="896" text-anchor="middle" font-size="46" font-weight="700" font-variant-numeric="tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=game4-side2-score maxw=72">0</text>
-      <rect id="scaffold=game4-side2-logo" x="1418" y="850" width="48" height="48" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="1418" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="0" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=game4-side2-logo" />
+      <rect id="scaffold=game4-side2-logo" x="1418" y="850" width="48" height="48" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="1418" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=game4-side2-logo hidden" />
       <text x="1170" y="948" font-size="19" font-weight="500" fill="#8f8fa3" font-family="Inter" id="slot=game4-mode maxw=296">Game mode</text>
       <text x="1170" y="980" font-size="19" font-weight="500" fill="#8f8fa3" font-family="Inter" id="slot=game4-stadium maxw=296">Stadium</text>
     </g>
 
-    <g opacity="0" id="slot=game5">
+    <g opacity="1" id="slot=game5 hidden">
       <rect x="1504" y="816" width="344" height="188" rx="10" fill="#ffffff" opacity="0.04" />
       <rect x="1504" y="816" width="344" height="188" rx="10" fill="none" stroke-width="1" stroke="#1f1f30" />
       <text x="1828" y="848" text-anchor="end" font-size="17" font-weight="500" fill="#8f8fa3" font-family="Inter" id="slot=game5-date">JUN 1</text>
-      <rect id="scaffold=game5-side1-logo" x="1528" y="850" width="48" height="48" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="1528" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="0" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=game5-side1-logo" />
+      <rect id="scaffold=game5-side1-logo" x="1528" y="850" width="48" height="48" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="1528" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=game5-side1-logo hidden" />
       <text x="1628" y="896" text-anchor="middle" font-size="46" font-weight="700" font-variant-numeric="tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=game5-side1-score maxw=72">0</text>
       <text x="1676" y="892" text-anchor="middle" font-size="28" font-weight="600" fill="#8f8fa3" font-family="Rajdhani">–</text>
       <text x="1724" y="896" text-anchor="middle" font-size="46" font-weight="700" font-variant-numeric="tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=game5-side2-score maxw=72">0</text>
-      <rect id="scaffold=game5-side2-logo" x="1776" y="850" width="48" height="48" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="1776" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="0" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=game5-side2-logo" />
+      <rect id="scaffold=game5-side2-logo" x="1776" y="850" width="48" height="48" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="1776" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=game5-side2-logo hidden" />
       <text x="1528" y="948" font-size="19" font-weight="500" fill="#8f8fa3" font-family="Inter" id="slot=game5-mode maxw=296">Game mode</text>
       <text x="1528" y="980" font-size="19" font-weight="500" fill="#8f8fa3" font-family="Inter" id="slot=game5-stadium maxw=296">Stadium</text>
     </g>

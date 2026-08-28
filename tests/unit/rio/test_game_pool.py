@@ -8,9 +8,9 @@ import pytest
 
 from server.rio.game_pool import (
     _sanitize_row,
-    _pinned_swap_needed,
     apply_completed_game_dict,
 )
+from server.rio.provider import pin_swap
 from server.settings import Settings
 from server.state import State
 from server.utils.deep_dict import deep_get
@@ -48,27 +48,43 @@ def test_sanitize_passthrough_plain_values():
     assert out == {"s": "hello", "n": 7, "ok": True}
 
 
-# --- _pinned_swap_needed ---
+# --- pin_swap (the address-book pin layer) ---
 
 def test_pinned_swap_none_when_no_pin():
-    assert _pinned_swap_needed("Alice", "Bob") is None
+    assert pin_swap("Alice", "Bob") is None
 
 
-def test_pinned_swap_none_when_pin_not_in_game(set_setting):
-    set_setting("project_rio.pinned_player", "Zoe")
-    assert _pinned_swap_needed("Alice", "Bob") is None
+def test_pinned_swap_none_when_pin_not_in_game(pin_player):
+    pin_player("Zoe", 1)
+    assert pin_swap("Alice", "Bob") is None
 
 
 @pytest.mark.parametrize("side,p0,p1,expected", [
-    ("Team 1", "Alice", "Bob", False),  # pinned Alice already on left
-    ("Team 2", "Alice", "Bob", True),   # pinned Alice on left, wants right
-    ("Team 1", "Bob", "Alice", True),   # pinned Alice on right, wants left
-    ("Team 2", "Bob", "Alice", False),  # pinned Alice already on right
+    (1, "Alice", "Bob", False),  # pinned Alice already on side 1
+    (2, "Alice", "Bob", True),   # pinned Alice on side 1, wants side 2
+    (1, "Bob", "Alice", True),   # pinned Alice on side 2, wants side 1
+    (2, "Bob", "Alice", False),  # pinned Alice already on side 2
 ])
-def test_pinned_swap_decisions(set_setting, side, p0, p1, expected):
-    set_setting("project_rio.pinned_player", "Alice")
-    set_setting("project_rio.pinned_side", side)
-    assert _pinned_swap_needed(p0, p1) is expected
+def test_pinned_swap_decisions(pin_player, side, p0, p1, expected):
+    pin_player("Alice", side)
+    assert pin_swap(p0, p1) is expected
+
+
+# A pin is a fact about a PERSON now, so both players can carry one — the case
+# the old app-wide lock could not express. See `pin_swap`.
+
+def test_two_pins_agreeing_are_both_satisfied(pin_player):
+    pin_player("Alice", 2)
+    pin_player("Bob", 1)
+    assert pin_swap("Alice", "Bob") is True   # swap puts Bob on side 1
+
+
+def test_two_pins_to_the_same_side_abstain(pin_player):
+    pin_player("Alice", 1)
+    pin_player("Bob", 1)
+    # Unsatisfiable: the layer declines rather than picking a winner, and the
+    # cascade falls through to back-to-back.
+    assert pin_swap("Alice", "Bob") is None
 
 
 # --- apply_completed_game_dict ---
@@ -102,10 +118,9 @@ async def test_apply_completed_dict_no_pin(mock_socket):
     assert Settings.Get("scoreboards.binding.1.playback.gameId") == "C1"
 
 
-async def test_apply_completed_dict_applies_pinned_swap(set_setting, mock_socket):
-    # Pin the home player to Team 1 → away/home must swap before applying.
-    set_setting("project_rio.pinned_player", "Bob")
-    set_setting("project_rio.pinned_side", "Team 1")
+async def test_apply_completed_dict_applies_pinned_swap(pin_player, mock_socket):
+    # Pin the home player to side 1 → away/home must swap before applying.
+    pin_player("Bob", 1)
     await apply_completed_game_dict(_completed(), 1)
     assert s("score.1.player.1.rioName") == "Bob"      # swapped to the left
     assert s("score.1.player.2.rioName") == "Alice"

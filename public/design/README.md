@@ -32,7 +32,7 @@ still applies verbatim when authoring by hand.
 ├── scoreboard-m.svg     # horizontal scoreboard, 600×200
 ├── scoreboard-l.svg     # horizontal scoreboard, 800×460
 ├── ticker.svg           # the Results Ticker marquee bar, 1920×80
-├── stats.svg            # the per-team batter/pitcher stat card, 452×118
+├── statsbar.svg         # the per-team batter/pitcher stat bar, 452×118
 ├── statscard.svg        # the container-scoped stat card, 380×240
 └── sources/             # (optional) raw design exports, ignored by the app
 ```
@@ -116,7 +116,7 @@ App-vars themes may use: `--accent`, `--card-bg`, `--text-primary`,
 * Author at `viewBox="0 0 1920 1080"`. Bottom-anchored elements (lower third)
   use `preserveAspectRatio="xMidYMax meet"`; full-bleed backdrops (callout) use
   `xMidYMid slice`. Exception: the sized elements (scoreboard variants, ticker,
-  stats) are authored at their native OBS-source canvas (e.g.
+  statsbar) are authored at their native OBS-source canvas (e.g.
   `viewBox="0 0 800 460"`) with `xMidYMid meet`.
 * **The two band elements (`commentary`, `playerplates`) are `1920 × 240`** —
   full stream width, because their horizontal placement is measured against the
@@ -412,9 +412,10 @@ whose inner parts are marked `data-part` (`away-name`, `home-name`,
 (declare the visible width with `data-vw`) and scrolls it; clip the track
 region with a `<clipPath>` so cards don't escape the bar.
 
-### `stats.svg`
+### `statsbar.svg`
 
-The per-team stat card (`public/layout/lib/stats-card-mount.js`), 452×118:
+The per-team stat BAR (`public/layout/lib/stats-card-mount.js`), 452×118 — the
+wide, four-across half of the pair `statscard.svg` completes:
 `char-icon`, `stat-{0..5}-value` / `stat-{0..5}-label` (four filled today),
 and a `line-group` bottom row (`line-label` + `line-text`) that hides when
 empty — declare `data-h-full` / `data-h-compact` on `card-bg` so the card
@@ -424,10 +425,10 @@ batter-change dissolve target).
 ### `statscard.svg`
 
 **The same element at a different aspect** — same mount, same slots, same
-`RioData.getStatsLine` resolution as `stats.svg`, authored 380×240 as a 2×2
+`RioData.getStatsLine` resolution as `statsbar.svg`, authored 380×240 as a 2×2
 grid instead of a four-across bar. It is what the **Stat Card** container member
 renders (`fed-container.js`) — including what a container flashes over its
-resting roster on a batter change; there is no standalone Stats Card source. A package that themes `stats` and not `statscard` gets the
+resting roster on a batter change; there is no standalone Stats Card source. A package that themes `statsbar` and not `statscard` gets the
 `default` 2×2 card next to its own bar, so theme both or neither.
 
 It adds two **optional caption bands** the wide bar has no room for: a header
@@ -447,7 +448,7 @@ theme declaring neither keeps its authored geometry. A theme still authored at
 the older 380×220 renders at natural size, centred in the taller box — nothing
 scales — which is how `slice26`'s card keeps working untouched.
 
-One more difference from `stats.svg`: the mount stamps `data-team` on the root
+One more difference from `statsbar.svg`: the mount stamps `data-team` on the root
 `<svg>`, so a theme can paint per side with `svg[data-team="1"] …` (the built-in
 doesn't; `slice26` does on its bar).
 
@@ -487,5 +488,5 @@ export can't express:
   relocates them into `<defs>` but the designer must still mark which group is
   the template.
 
-Slot-only elements (matchup, stats, scoreboards, scorecard) are the fully
+Slot-only elements (matchup, statsbar, scoreboards, scorecard) are the fully
 round-trippable ones today.

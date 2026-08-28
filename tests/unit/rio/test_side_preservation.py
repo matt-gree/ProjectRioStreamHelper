@@ -56,27 +56,23 @@ def test_first_game_no_swap_no_reason():
 
 # --- Pinned player ---
 
-def test_pin_team1_player_already_left_no_swap(set_setting):
-    set_setting("project_rio.pinned_player", "A")
-    set_setting("project_rio.pinned_side", "Team 1")
+def test_pin_team1_player_already_left_no_swap(pin_player):
+    pin_player("A", 1)
     assert P._decide("A", "B") == (False, "pin")
 
 
-def test_pin_team2_player_on_left_swaps(set_setting):
-    set_setting("project_rio.pinned_player", "A")
-    set_setting("project_rio.pinned_side", "Team 2")
+def test_pin_team2_player_on_left_swaps(pin_player):
+    pin_player("A", 2)
     assert P._decide("A", "B") == (True, "pin")
 
 
-def test_pin_team1_player_on_right_swaps(set_setting):
-    set_setting("project_rio.pinned_player", "A")
-    set_setting("project_rio.pinned_side", "Team 1")
+def test_pin_team1_player_on_right_swaps(pin_player):
+    pin_player("A", 1)
     assert P._decide("B", "A") == (True, "pin")
 
 
-def test_pin_absent_player_does_not_govern(set_setting):
-    set_setting("project_rio.pinned_player", "C")
-    set_setting("project_rio.pinned_side", "Team 1")
+def test_pin_absent_player_does_not_govern(pin_player):
+    pin_player("C", 1)
     assert P._decide("A", "B") == (False, "")
 
 
@@ -100,18 +96,16 @@ def test_back_to_back_no_returning_player_does_not_govern():
 
 # --- Precedence ---
 
-def test_pin_overrides_back_to_back(set_setting):
+def test_pin_overrides_back_to_back(pin_player):
     # Back-to-back alone would swap (A was on the right), but the pin keeps A
     # on Team 1 (left) and the back-to-back layer is never consulted.
-    set_setting("project_rio.pinned_player", "A")
-    set_setting("project_rio.pinned_side", "Team 1")
+    pin_player("A", 1)
     P._prev_player_sides = {"A": 1, "B": 0}
     assert P._decide("A", "B") == (False, "pin")
 
 
-def test_manual_overrides_pin(set_setting):
-    set_setting("project_rio.pinned_player", "A")
-    set_setting("project_rio.pinned_side", "Team 1")
+def test_manual_overrides_pin(pin_player):
+    pin_player("A", 1)
     P._user_overridden = True
     P._sides_swapped = True
     assert P._decide("A", "B") == (True, "manual")
@@ -128,11 +122,10 @@ def test_match_governs_between_pin_and_b2b(monkeypatch):
     assert P._decide("A", "B") == (False, "back_to_back")
 
 
-def test_match_overrides_pin(monkeypatch, set_setting):
+def test_match_overrides_pin(monkeypatch, pin_player):
     # A bound match encodes BOTH sides, so it supersedes the pin on that board
     # (Phase B). The pin still governs when no board/match is in play.
-    set_setting("project_rio.pinned_player", "A")
-    set_setting("project_rio.pinned_side", "Team 1")
+    pin_player("A", 1)
     monkeypatch.setattr(Match, "orientation_for_sides", classmethod(lambda cls, sb, l, r: True))
     assert P._decide("A", "B", sb=1) == (True, "match")
     # sb=None (global/back-to-back orientation) has no match layer: pin decides.
@@ -154,11 +147,10 @@ def test_new_game_resets_flags_from_previous_game():
     assert left(out) == "A" and right(out) == "B"
 
 
-def test_new_game_reseeds_manual_base_from_pin(set_setting):
+def test_new_game_reseeds_manual_base_from_pin(pin_player):
     # The manual base (_sides_swapped) reseeds from the non-manual cascade so a
     # later swap-button click flips from the sensible default.
-    set_setting("project_rio.pinned_player", "A")
-    set_setting("project_rio.pinned_side", "Team 2")
+    pin_player("A", 2)
     P._prev_inning = 9
     P._preserve_player_sides(make_parsed("A", "B", inning=1))
     assert P._sides_swapped is True
@@ -167,9 +159,8 @@ def test_new_game_reseeds_manual_base_from_pin(set_setting):
 
 # --- Mid-game (inning did not decrease) ---
 
-def test_mid_game_user_swapped_back_to_pin_clears_override(set_setting):
-    set_setting("project_rio.pinned_player", "A")
-    set_setting("project_rio.pinned_side", "Team 2")  # pin wants swap=True
+def test_mid_game_user_swapped_back_to_pin_clears_override(pin_player):
+    pin_player("A", 2)  # pin wants swap=True
     P._prev_inning = 3
     P._user_overridden = True
     P._sides_swapped = True  # equals pin_swap → override should clear

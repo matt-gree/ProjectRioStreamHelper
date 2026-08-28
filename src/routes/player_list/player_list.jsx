@@ -13,6 +13,7 @@ import {
     Table, TableHeader, TableBody, TableHead, TableRow, TableCell,
 } from '../../components/ui/table';
 import { useParticipantsStore } from '../../context/participants';
+import { useSideLabels } from '../production/sides';
 import { MSB_CHARACTERS } from '../../data/msb';
 
 const characterOptions = MSB_CHARACTERS.map(c => ({ value: c, label: c }));
@@ -33,6 +34,40 @@ function SourceChip({ source, startggTag }) {
         >
             {meta.label}
         </Badge>
+    );
+}
+
+/*
+ * The side this person is pinned to — the `pin` layer of the side cascade,
+ * which used to be one app-wide "Player Lock" in the Settings modal.
+ *
+ * It lives HERE because it was always a fact about a person, not about the app:
+ * "JustAGrump always sits on side 1" is the same kind of statement as their
+ * pronouns. One global pin was an implementation ceiling, not a decision, and
+ * moving it onto the row lifts it — every person in the book can carry one.
+ *
+ * Persists immediately (a select has no blur to wait for, same as the character
+ * combobox), and writes `null` for "no preference" rather than 0: a magic zero
+ * beside a vocabulary where sides are 1 and 2 is one typo from orienting a
+ * broadcast (see `_clean_side`, server/participants.py).
+ *
+ * Named in the producer's own side vocabulary (../production/sides), so a book
+ * row and the board panel that explains its effect cannot disagree.
+ */
+function SidePin({ value, onChange }) {
+    const sides = useSideLabels();
+    return (
+        <select
+            value={value ?? ''}
+            onChange={e => onChange(e.currentTarget.value === '' ? null : Number(e.currentTarget.value))}
+            aria-label="Pinned side"
+            className="h-8 w-[90px] rounded-md border border-input bg-transparent px-2 text-xs
+                       text-foreground outline-none focus:ring-1 focus:ring-ring"
+        >
+            <option value="">—</option>
+            <option value="1">{sides.label(1)}</option>
+            <option value="2">{sides.label(2)}</option>
+        </select>
     );
 }
 
@@ -108,6 +143,12 @@ function AddressBookRow({ row, onPersist, onDelete }) {
                     value={draft.mainCharacter || null}
                     onChange={val => setMain(val ?? '')}
                     className="w-[150px]"
+                />
+            </TableCell>
+            <TableCell>
+                <SidePin
+                    value={row.prefs?.side ?? null}
+                    onChange={side => onPersist(row.id, { prefs: { side } })}
                 />
             </TableCell>
             <TableCell>
@@ -239,6 +280,7 @@ export default function PlayerList() {
                             <TableHead>Pronoun</TableHead>
                             <TableHead>Country</TableHead>
                             <TableHead>Main</TableHead>
+                            <TableHead>Side</TableHead>
                             <TableHead>Twitter</TableHead>
                             <TableHead>Source</TableHead>
                             <TableHead className="w-10"></TableHead>

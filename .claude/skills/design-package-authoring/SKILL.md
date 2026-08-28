@@ -38,6 +38,21 @@ the package selector. So a theme that forgets `data-design-vars="app"` doesn't
 just render with the wrong palette — it takes its own colour controls off the
 Production stage.
 
+**Two questions, one per surface.** An element's own stage panel asks the
+per-element question (`paintedByApp`); the Design tab's GLOBAL knobs ask
+whether the palette still reaches *any* themed element
+(`appPaletteThemesAnything`), because one colour there reaches all of them at
+once — so under an all-full-art package (`default` included) Card Chrome and
+the card-surface colours are hidden outright. What survives every package is
+listed in `THEME_ONLY_GLOBAL_KEYS`' comment (`designConstants.js`) and is a
+fact about the OVERLAYS, not a judgement: the Event Header and Player Name
+carry no theme SVG, so their mounts call `applyDesignSettings` unconditionally
+and always read `--accent`, `--text-primary`, `--font-family` and
+`--text-shadow`; `showCaptains`/`showLogo` are `readSetting` content toggles,
+never CSS vars. Add a key to that list only after checking who reads it —
+hiding a live control is the worse failure, which is why every unknown answers
+"show it".
+
 ## Package anatomy + install rules (`server/design_packages.py`)
 
 - A package = folder of per-element SVGs + optional `package.json`
@@ -305,7 +320,7 @@ which is what the generator exists to bake out:
 - **`<style>` blocks.** Figma applies presentation attributes and inline
   `style=`, never stylesheet CSS. Every theme but `scoreboard-s` paints its
   type through classes, so a raw import is **black text in the wrong face** —
-  `stats.svg` has ten text nodes and not one carries a `fill`.
+  `statsbar.svg` has ten text nodes and not one carries a `fill`.
 - **`var()`.** Resolved nowhere, in a stylesheet or inline.
 - **Empty `<image>` slots.** Authored href-less at `opacity:0` (PRSH ships no
   game art), so Figma drops them and the slot never appears.

@@ -33,6 +33,27 @@ whichever `find()` reached first. Read out before the board and variant axes, so
 - **The rack lists only what is in a scene.** The Add picker (below) is the
   other half of that trade — with unbound rows gone, it is how a source comes
   into being.
+- **A scene row's trash is the section `+`'s inverse** (`PlacementRemove` in
+  `rack.jsx` → `removeSourceFromScene`). Same `RowRemove` the `BOARDS` tier uses,
+  same treatment: **visible at rest**, last on the row, a confirm that states the
+  consequence rather than asking whether you meant it. Three things it must keep
+  doing:
+  - **`RemoveSceneItem`, never `RemoveInput`.** A placement is one scene's copy;
+    removing the Game copy must leave the Break copy alone. OBS reference-counts
+    inputs, so the last scene item takes the input with it on its own.
+  - **The note branches on the census** (`useOtherScenesWith`), because the only
+    real cost is the hand-set OBS transform, and it is only paid on the last
+    copy. **The mirror is lazy**, so "no other scene has it" is honestly "none we
+    can see" until every scene is mirrored — the confirm hedges rather than
+    promising a producer they are deleting a spare.
+  - **NO TRASH ON A FED ROW.** A member's `item` is the *container's* scene item,
+    so a remove there would delete the container out from under the whole roster
+    while appearing to remove one member. The row keeps the empty column (pins
+    stay in one line); roster membership is the container panel's.
+  It stages under its **own key** with no `liveValue` — a removal is not a
+  two-state control, and sharing visibility's key made a hidden source's removal
+  `value === liveValue`, which the buffer discarded as a change that cancelled
+  itself out.
 - **Members are NOT discovered from sources, and they NEST under their
   container.** Character Spotlight and Game Summary can share one Callout Stage
   source; a source→row scan alone would collapse two separately-driven elements

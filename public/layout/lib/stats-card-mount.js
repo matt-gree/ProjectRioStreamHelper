@@ -1,9 +1,14 @@
-// stats-card-mount.js — the re-themable per-team Stats bar (?team=1|2).
+// stats-card-mount.js — the shared stat-line mount, worn two ways.
+//
+// ONE mount, two elements: the wide Stat Bar (`statsbar`, 452x118, its own
+// ?team= source) and the 2x2 Stat Card (`statscard`, 380x240, a container
+// member). The caller picks which by passing `settingsType` + `svgElement`;
+// the defaults below are the bar's.
 //
 // The scoreboard-bound stats element: shows the character currently batting /
 // pitching for one side, with their headline stats and (HUD games) the
 // current-game line. The look lives in the active DESIGN PACKAGE's theme SVG
-// (/design/{package}/stats.svg, element-by-element fallback to `default`).
+// (/design/{package}/statsbar.svg, element-by-element fallback to `default`).
 // Data resolution stays in RioData.getStatsLine — this mount only binds.
 //
 // DATA SLOTS (all optional):
@@ -42,7 +47,7 @@
 import { createThemeEngine } from './svg-theme-engine.js';
 import { ensureGsap } from './gsap-loader.js';
 
-const ELEMENT = 'stats';
+const ELEMENT = 'statsbar';
 const DEFAULT_PACKAGE = 'default';
 const MAX_STATS = 6;
 
@@ -81,7 +86,7 @@ function injectCss() {
   _cssInjected = true;
 }
 
-export function mountStatsCard({ host, sb, team, settingsType = 'stats',
+export function mountStatsCard({ host, sb, team, settingsType = 'statsbar',
                                  svgElement = ELEMENT, fallbackSvg = FALLBACK_SVG }) {
   injectCss();
   host.classList.add('st-host');
@@ -90,7 +95,7 @@ export function mountStatsCard({ host, sb, team, settingsType = 'stats',
   // Which settings namespace this card reads (overlays.{SETTINGS_TYPE}.*). The
   // standalone Stats source uses 'stats' and the container MEMBER passes
   // 'statscard', so each card is configured independently.
-  const SETTINGS_TYPE = settingsType || 'stats';
+  const SETTINGS_TYPE = settingsType || 'statsbar';
 
   // Which design-package SVG this card renders. The standalone Stats source uses
   // the wide 4-across 'stats' card; the Stat Card container member passes

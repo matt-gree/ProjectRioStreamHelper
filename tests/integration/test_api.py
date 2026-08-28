@@ -90,7 +90,7 @@ def test_layouts_variant_matrix(client):
     # Team-variant layouts expand into ?team=1 / ?team=2. The controller
     # layout is macOS-only (gc-overlay gating): present and expanded on
     # Darwin, omitted from the catalog everywhere else — CI runs Linux.
-    team_types = ["stats", "roster", "teamlogo"]
+    team_types = ["statsbar", "roster", "teamlogo"]
     if platform.system() == "Darwin":
         team_types.append("controller")
     else:

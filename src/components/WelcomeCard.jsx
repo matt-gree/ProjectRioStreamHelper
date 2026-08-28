@@ -176,13 +176,13 @@ export default function WelcomeCard() {
                                     : assetsState.complete
                                         ? `Complete (${assetsState.total_found} images) — overlays will render correctly.`
                                         : assetsState.total_found > 0
-                                            ? `Incomplete (${assetsState.total_found}/${assetsState.total_expected}). Open Settings → Project Rio → MSB Image Assets to see what's missing.`
-                                            : 'Not found. Open Settings → Project Rio → MSB Image Assets and click "Open Folder" to drop your image pack in.'}
+                                            ? `Incomplete (${assetsState.total_found}/${assetsState.total_expected}). Open the Connections tab to see what's missing.`
+                                            : 'Not found. Open the Connections tab and click "Open Folder" to drop your image pack in.'}
                             </ChecklistRow>
                             <ChecklistRow done={hudResolved === true} title="Project Rio HUD file">
                                 {hudResolved
                                     ? 'Found — game data will sync automatically.'
-                                    : 'Not found yet. Open Settings → Project Rio to set the path.'}
+                                    : 'Not found yet. Set the path on the Connections tab.'}
                             </ChecklistRow>
                             {/* The Setup tab is GONE, and this pointed at it by
                                 name — `#/layouts` has been the Design tab since

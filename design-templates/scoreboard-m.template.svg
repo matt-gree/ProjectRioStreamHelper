@@ -14,6 +14,10 @@
       slot=NAME maxw=N     text that auto shrinks past N units
       part=NAME            a styling part the mount recolours
       tpl=NAME w=N         a prototype the mount clones per row
+      slot=NAME hidden     a layer the APP toggles on (a FINAL badge, a runner
+                           icon). Shown here so you can style it; the compiler
+                           puts it back to invisible. Drop the flag and it
+                           ships permanently visible.
       scaffold=NAME        editing only guide (dashed boxes), STRIPPED on compile
       layout=absolute      invisible marker carrying the root layout mode
     Keep them. Rename freely otherwise.
@@ -29,6 +33,21 @@
     Dashed boxes mark image slots (team logos, character icons). PRSH ships no
     game art, so design the BOX as the no art look; the app draws the real icon
     on top and hides it when there is none.
+
+    STACK ROWS (slot=row-*) have been moved to the offsets the app stacks them
+    to, so this file shows the assembled card rather than every band piled on
+    the frame origin. `at=N` in the name records where each was put and the
+    compiler takes it back out; anything you move ON TOP of that is kept. Two
+    rows sharing one `at=` are ALTERNATES - a live game or a completed one,
+    never both - so they are drawn overlapping on purpose. Toggle one off in
+    the layers panel to work on the other, and design each to fill the band.
+
+    CYAN DASHED BOXES (scaffold=stage-*) are the sizes this card takes at
+    runtime, labelled with the row that triggers each. The card GROWS to enclose
+    a segment when the app shows it, so content sitting outside the resting box
+    is not misplaced - it belongs to a larger stage. Design every stage to look
+    finished, and keep each stage's content inside its own box. The guides are
+    editing only and never ship.
     --><!--
     DEFAULT package - Scoreboard M (600x200): the row-top band plus a live
     situation band (batter/pitcher, count, diamond) that swaps for an ELO/meta
@@ -51,44 +70,44 @@
   <rect x="18" y="6" width="568" height="188" rx="12" fill="#0b0b12" stroke="#1f1f30" stroke-width="1.5" id="slot=card-bg" />
 
   <!-- ░░ TOP: names / logos / score / inning ░░ -->
-  <g id="slot=row-top h=78">
+  <g transform="translate(0,6)" id="slot=row-top h=78 at=6">
     <rect x="28" y="14" width="200" height="50" rx="8" fill="url(#sbm-w1)" />
     <rect x="376" y="14" width="200" height="50" rx="8" fill="url(#sbm-w2)" />
     <rect x="28" y="14" width="4" height="50" rx="2" opacity="0.85" fill="#E53935" />
     <rect x="572" y="14" width="4" height="50" rx="2" opacity="0.85" fill="#1E88E5" />
 
-    <rect id="scaffold=s1-logo" x="40" y="18" width="42" height="42" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="40" y="18" width="42" height="42" preserveAspectRatio="xMidYMid meet" opacity="0" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=s1-logo" />
+    <rect id="scaffold=s1-logo" x="40" y="18" width="42" height="42" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="40" y="18" width="42" height="42" preserveAspectRatio="xMidYMid meet" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=s1-logo hidden" />
     <text x="90" y="47" font-size="22" font-weight="700" fill="#f5f5f8" font-family="Rajdhani" id="slot=s1-name maxw=132">Player One</text>
-    <rect id="scaffold=s2-logo" x="522" y="18" width="42" height="42" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="522" y="18" width="42" height="42" preserveAspectRatio="xMidYMid meet" opacity="0" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=s2-logo" />
+    <rect id="scaffold=s2-logo" x="522" y="18" width="42" height="42" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="522" y="18" width="42" height="42" preserveAspectRatio="xMidYMid meet" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=s2-logo hidden" />
     <text x="514" y="47" text-anchor="end" font-size="22" font-weight="700" fill="#f5f5f8" font-family="Rajdhani" id="slot=s2-name maxw=132">Player Two</text>
 
     <text x="272" y="52" text-anchor="end" font-size="36" font-weight="700" style="font-variant-numeric:tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=s1-score maxw=50">0</text>
     <text x="328" y="52" text-anchor="start" font-size="36" font-weight="700" style="font-variant-numeric:tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=s2-score maxw=50">0</text>
 
     <g id="slot=inn-arrow-up"><polygon points="291,24 309,24 300,14" fill="#E60012" /></g>
-    <g opacity="0" id="slot=inn-arrow-down"><polygon points="291,54 309,54 300,64" fill="#E60012" /></g>
+    <g opacity="1" id="slot=inn-arrow-down hidden"><polygon points="291,54 309,54 300,64" fill="#E60012" /></g>
     <text x="300" y="49" text-anchor="middle" font-size="21" font-weight="700" style="font-variant-numeric:tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=inn-num">1</text>
     <!-- The badge takes the inning's place at final, so it has to fit the gap
          the SCORES leave: they are anchored end/start at 272/328, i.e. 56 units.
          It was authored 64 wide and cut into both numbers. Sized to leave 4
          units either side, which is the clearance the L theme already has. -->
-    <g opacity="0" id="slot=final-badge">
+    <g opacity="1" id="slot=final-badge hidden">
       <rect x="276" y="28" width="48" height="24" rx="5" fill="#E60012" />
       <text x="300" y="45" text-anchor="middle" fill="#ffffff" font-family="Rajdhani" font-size="13" font-weight="700" letter-spacing="0.5">FINAL</text>
     </g>
 
     <!-- Game mode: standing context, so it lives in row-top (always shown)
          rather than the completed-game row. Self-hides when unknown. -->
-    <text x="302" y="74" text-anchor="middle" font-size="10" font-weight="600" letter-spacing="0.6" opacity="0" fill="#8f8fa3" font-family="Inter" id="slot=meta-game-mode maxw=200">Game Mode</text>
+    <text x="302" y="74" text-anchor="middle" font-size="10" font-weight="600" letter-spacing="0.6" opacity="1" fill="#8f8fa3" font-family="Inter" id="slot=meta-game-mode maxw=200 hidden">Game Mode</text>
   </g>
 
   <!-- ░░ LIVE: batter / pitcher / count / diamond ░░ -->
-  <g id="slot=row-live h=110">
+  <g transform="translate(0,84)" id="slot=row-live h=110 at=84">
     <rect x="28" y="0" width="548" height="1.5" fill="#1f1f30" id="part=div" />
 
     <rect x="28" y="44" width="32" height="20" rx="4" fill="#E60012" />
     <text x="44" y="59" text-anchor="middle" fill="#ffffff" font-family="Rajdhani" font-size="12" font-weight="700">AB</text>
-    <rect id="scaffold=bat-icon" x="68" y="34" width="40" height="40" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="68" y="34" width="40" height="40" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=bat-icon" />
+    <rect id="scaffold=bat-icon" x="68" y="34" width="40" height="40" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="68" y="34" width="40" height="40" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=bat-icon hidden" />
     <text x="116" y="60" font-size="17" font-weight="600" fill="#f5f5f8" font-family="Rajdhani" id="slot=bat-name maxw=106">Batter</text>
 
     <!-- maxw is the budget refitText shrinks into, so it has to be REAL space:
@@ -96,7 +115,7 @@
          and 64 is the safe read. Authored at 106 it grew left THROUGH the
          diamond — "Peach" already overlapped, a long name by ~70. -->
     <text x="484" y="60" text-anchor="end" font-size="17" font-weight="600" fill="#f5f5f8" font-family="Rajdhani" id="slot=pit-name maxw=64">Pitcher</text>
-    <rect id="scaffold=pit-icon" x="492" y="34" width="40" height="40" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="492" y="34" width="40" height="40" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=pit-icon" />
+    <rect id="scaffold=pit-icon" x="492" y="34" width="40" height="40" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="492" y="34" width="40" height="40" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=pit-icon hidden" />
     <rect x="540" y="44" width="24" height="20" rx="4" fill="#1E88E5" />
     <text x="552" y="59" text-anchor="middle" fill="#ffffff" font-family="Rajdhani" font-size="12" font-weight="700">P</text>
 
@@ -123,13 +142,13 @@
     <polygon points="397,38 378,48 359,38 378,28" fill="rgba(255,255,255,0.08)" stroke="#1f1f30" stroke-width="1.5" id="slot=base-2" />
     <polygon points="378,56 359,66 340,56 359,46" fill="rgba(255,255,255,0.08)" stroke="#1f1f30" stroke-width="1.5" id="slot=base-3" />
     <polygon points="416,56 397,66 378,56 397,46" fill="rgba(255,255,255,0.08)" stroke="#1f1f30" stroke-width="1.5" id="slot=base-1" />
-    <rect id="scaffold=runner-2" x="369" y="29" width="18" height="18" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="369" y="29" width="18" height="18" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=runner-2" />
-    <rect id="scaffold=runner-3" x="350" y="47" width="18" height="18" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="350" y="47" width="18" height="18" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=runner-3" />
-    <rect id="scaffold=runner-1" x="388" y="47" width="18" height="18" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="388" y="47" width="18" height="18" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=runner-1" />
+    <rect id="scaffold=runner-2" x="369" y="29" width="18" height="18" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="369" y="29" width="18" height="18" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=runner-2 hidden" />
+    <rect id="scaffold=runner-3" x="350" y="47" width="18" height="18" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="350" y="47" width="18" height="18" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=runner-3 hidden" />
+    <rect id="scaffold=runner-1" x="388" y="47" width="18" height="18" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="388" y="47" width="18" height="18" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=runner-1 hidden" />
   </g>
 
   <!-- ░░ FINAL: ELO swings + game meta (completed games) ░░ -->
-  <g id="slot=row-final h=110">
+  <g transform="translate(0,84)" id="slot=row-final h=110 at=84">
     <rect x="28" y="0" width="548" height="1.5" fill="#1f1f30" id="part=div" />
 
     <g id="slot=elo1-group">

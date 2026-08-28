@@ -8,6 +8,7 @@ import Production from './production/production';
 import Competition from './competition/competition';
 import PlayerList from './player_list/player_list';
 import DesignTab from "./layouts/layouts";
+import Connections from "./connections/connections";
 
 // Nav tabs. Rendered in the header row by TSHFields; routes wired below.
 const allTabs = [
@@ -15,6 +16,10 @@ const allTabs = [
   { name: "Competition", path: "/competition" },
   { name: "Address Book", path: "/player_list" },
   { name: "Design", path: "/layouts" },
+  // Everything PRSH talks to outside itself. Last, because it is once-per-machine
+  // setup rather than run-of-show work — see connections/connections.jsx for the
+  // membership rule that keeps it from turning back into the Settings modal.
+  { name: "Connections", path: "/connections" },
 ];
 
 export default function Root() {
@@ -40,6 +45,7 @@ export default function Root() {
           <Route path="/commentary" element={<Production />} />
           <Route path="/player_list" element={<PlayerList />} />
           <Route path="/layouts" element={<DesignTab />} />
+          <Route path="/connections" element={<Connections />} />
         </Routes>
       </div>
     </div>

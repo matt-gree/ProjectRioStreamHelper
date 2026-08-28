@@ -93,7 +93,7 @@ def _matchup_slots() -> dict[str, Slot]:
     return s
 
 
-def _stats_slots() -> dict[str, Slot]:
+def _statsbar_slots() -> dict[str, Slot]:
     s: dict[str, Slot] = {
         "char-icon": Slot("image"),
         "card-bg": Slot("any", required=True),
@@ -202,7 +202,7 @@ CONTRACTS: dict[str, Contract] = {
     # and a full-canvas theme is bottom-anchored and cropped by the mount.
     "matchup": Contract((1920, 480), "xMidYMax meet", slots=_matchup_slots(),
                         alt_canvases=((1920, 1080),)),
-    "stats": Contract((452, 118), "xMidYMid meet", slots=_stats_slots()),
+    "statsbar": Contract((452, 118), "xMidYMid meet", slots=_statsbar_slots()),
     "ticker": Contract(
         (1920, 80), "xMidYMid meet",
         slots={

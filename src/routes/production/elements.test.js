@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
     ELEMENTS, PICKABLE_FEEDS, isPickableFeed,
-    quickFaceFor, isPinnable, stageBodyFor,
+    quickFaceFor, isPinnable, stageBodyFor, settingsTypeOf,
 } from './elements';
+import { OVERRIDE_CAPABLE_TYPES, LAYOUT_SETTINGS } from '../layouts/designConstants';
 import { FEED_OPTION_HOOKS } from './feed-pickers';
 
 /*
@@ -126,7 +127,7 @@ describe('element URL binding (match)', () => {
 
     it('scoreboard binds the band, not siblings in the same folder', () => {
         expect(byId.scoreboard.match(
-            `${HOST}/layout/scoreboard1/stats.html?team=1`)).toBe(false);
+            `${HOST}/layout/scoreboard1/statsbar.html?team=1`)).toBe(false);
         expect(byId.scoreboard.match(
             `${HOST}/layout/scoreboard1/roster.html`)).toBe(false);
     });
@@ -156,9 +157,120 @@ describe('element URL binding (match)', () => {
         expect(byId.postgamevs.match(`${HOST}/layout/postgame/spotlight.html`)).toBe(false);
     });
 
+    /*
+     * THE GENERAL FORM of the callout-stage bug above, and the reason it is a
+     * loop rather than three more literals.
+     *
+     * A container's id is slugged from a name the PRODUCER types, and it rides
+     * in the query string — so `container.html?container=lowerthird-box` is a
+     * legal source for a container built to hold the Lower Third. The rack asks
+     * the direct elements FIRST (./placements) and takes the first yes, so an
+     * element whose matcher answers to that URL doesn't merely mis-label a row:
+     * the container loses its member roster, its feed and its stage panel, and
+     * the element's panel is left driving a source that ignores every setting
+     * it writes.
+     *
+     * Naming a container after the element it holds is the ordinary case, not a
+     * corner one, so every element is checked against its own id — which is
+     * exactly the slug a producer types their way into.
+     */
+    it('no element claims a container source, whatever the producer named it', () => {
+        const direct = ELEMENTS.filter(e => e.flavor === 'direct');
+        for (const e of direct) {
+            for (const id of [e.id, `${e.id}-box`, `${e.id}-2`]) {
+                expect(
+                    e.match(`${HOST}/layout/shared/container.html?container=${id}`),
+                    `${e.id} claims container "${id}"`,
+                ).toBe(false);
+            }
+        }
+        // …and the pre-2.0 named shells, which are containers by their filename.
+        for (const shell of ['callout-stage', 'split-screen']) {
+            for (const e of direct) {
+                expect(e.match(`${HOST}/layout/shared/${shell}.html`), `${e.id} / ${shell}`)
+                    .toBe(false);
+            }
+        }
+    });
+
     it('no element binds a non-PRSH browser source', () => {
         for (const e of ELEMENTS) {
             expect(e.match('https://example.com/some/page.html'), e.id).toBe(false);
+        }
+    });
+});
+
+/*
+ * ── The settings namespace ──
+ *
+ * `settingsTypeOf` is what every stage panel keys its settings and its style
+ * overrides on, and getting it wrong is INVISIBLE from inside the console: a
+ * write to `overlays.matchuphistory.accentColor` stores, broadcasts, and reads
+ * back on the panel exactly like a real one. It simply never reaches an overlay,
+ * because matchup-mount.js reads `overlays.matchup.*`.
+ *
+ * A mount's namespace is its layout FILE's name (server/api/v1/layouts.py
+ * derives the layout type the same way), so that is what this checks against —
+ * one rule rather than a hand-kept table that would need the same policing.
+ */
+describe('settingsTypeOf', () => {
+    /*
+     * The layout type as the SERVER derives it (`_derive_type`,
+     * server/api/v1/layouts.py) — filename stem, with the group folder winning
+     * for the bracket (every file in it is `bracket`, including index.html) and
+     * trailing digits stripped. Mirrored rather than approximated: it is the
+     * same derivation the console's own catalog rows carry, so an approximation
+     * here would be a third opinion about a layout's name.
+     */
+    const fileType = (el) => {
+        const path = String(el.url || '').split('?')[0];
+        const parts = path.split('/').filter(Boolean);
+        const stem = (parts.pop() || '').replace(/\.html$/i, '');
+        const group = parts.pop() || '';
+        if (group === 'bracket') return 'bracket';
+        return stem.replace(/[0-9]+$/, '') || stem || null;
+    };
+
+    it('defaults to the element id', () => {
+        expect(settingsTypeOf({ id: 'ticker' })).toBe('ticker');
+        expect(settingsTypeOf({ id: 'ticker', settingsType: 'other' })).toBe('other');
+    });
+
+    it('matches the layout file, for every element something reads settings for', () => {
+        // Only where a namespace can actually do damage. An element nothing
+        // reads settings for (the post-game callouts take only `overlays.global`
+        // keys, never their own) has no namespace to get wrong, and holding it
+        // to the file rule would pin a name for its own sake — the Character
+        // Spotlight is `postgamecallout` in the console and spotlight.html on
+        // disk, and neither fact is reachable from the other.
+        const reads = new Set([
+            // An EMPTY registry entry is a namespace with no settings in it —
+            // `postgamecallout: []` records that the element is known and has
+            // none, so it reads nothing under its own name either.
+            ...Object.keys(LAYOUT_SETTINGS).filter(t => LAYOUT_SETTINGS[t].length),
+            ...OVERRIDE_CAPABLE_TYPES,
+        ]);
+        for (const el of ELEMENTS) {
+            // A FED element has no layout file of its own — the Stat Card is
+            // drawn by the container shell, so its `url` is container.html and
+            // says nothing about its namespace.
+            if (el.flavor === 'fed') continue;
+            const type = settingsTypeOf(el);
+            if (!reads.has(type)) continue;
+            const expected = fileType(el);
+            if (!expected) continue;
+            expect({ id: el.id, type }).toEqual({ id: el.id, type: expected });
+        }
+    });
+
+    /*
+     * The override list is keyed by settings type, so a type missing from
+     * ELEMENTS would offer overrides on a panel that never opens.
+     */
+    it('reaches every type offered style overrides', () => {
+        const known = new Set(ELEMENTS.map(settingsTypeOf));
+        for (const type of OVERRIDE_CAPABLE_TYPES) {
+            expect(known).toContain(type);
         }
     });
 });

@@ -27,7 +27,7 @@ def test_default_is_full_art_and_classic_is_a_token_skin():
     assert default["appVarElements"] == []
     assert "commentary" in default["elements"]
     # `classic` is the pre-2.0 look — the knobs paint it.
-    assert "stats" in classic["appVarElements"]
+    assert "statsbar" in classic["appVarElements"]
     assert "ticker" in classic["appVarElements"]
 
 

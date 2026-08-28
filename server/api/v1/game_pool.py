@@ -2,7 +2,8 @@ from loguru import logger
 from server.utils.router import method
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import ORJSONResponse
-from server.rio.game_pool import OngoingGamePool, CompletedGamePool, _pinned_swap_needed
+from server.rio.game_pool import OngoingGamePool, CompletedGamePool
+from server.rio.provider import pin_swap
 from server.rio.stats_tracker import StatsTracker
 from server.rio.provider import RioGameDataProvider
 from server.rio.stats_api import get_last_completed_fetch_info
@@ -172,7 +173,7 @@ async def assign_game(
             entrants = parsed.get("entrants", [[{}], [{}]])
             p0 = entrants[0][0].get("rioName", "") if entrants[0] else ""
             p1 = entrants[1][0].get("rioName", "") if entrants[1] else ""
-            sides_swapped = _pinned_swap_needed(p0, p1) is True
+            sides_swapped = pin_swap(p0, p1) is True
 
             if is_new_game:
                 # New live game on this scoreboard — sync the per-scoreboard

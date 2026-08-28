@@ -1,3 +1,5 @@
+import { useMemo } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useObsStore } from '../../context/obs';
 import { stageOrRun, usePending } from '../../context/staging';
 import { sizeOptionFor } from './elements';
@@ -78,6 +80,76 @@ export function setSourceVisibility(sceneName, item, enabled) {
         liveValue: item.enabled,
         run: () => useObsStore.getState().setSceneItemEnabled(sceneName, item.id, enabled),
     });
+}
+
+/*
+ * Take a source out of one scene, through the same confirm-to-live buffer.
+ *
+ * It stages like visibility does, and for the same reason: confirm mode's whole
+ * promise is that nothing done on this page reaches the broadcast until the
+ * producer says so, and removing a source that is on air reaches it hard. The
+ * row's popover and the pending bar answer different questions — the popover
+ * says what you lose, the commit says when it lands.
+ *
+ * Keyed by (scene, item) like every other control on that source, so a staged
+ * removal and a staged visibility flip on the same item can't both sit in the
+ * queue describing different futures — the later one replaces the earlier.
+ */
+const removalKey = (sceneName, item) => `obs:remove:${sceneName}:${item.id}`;
+
+export function removeSourceFromScene(sceneName, item) {
+    stageOrRun({
+        key: removalKey(sceneName, item),
+        label: `Remove ${item.sourceName} from ${sceneName}`,
+        value: true,
+        // NO liveValue, and its own key namespace — both for the same reason.
+        // A removal is not a two-state control that can be staged back to where
+        // it started: there is no "un-remove" click, so there is nothing for the
+        // toggled-twice collapse to catch. Sharing visibility's key gave a
+        // HIDDEN source `value === liveValue === false` and the buffer threw the
+        // removal away as a no-op — a producer confirming the popover, pressing
+        // Go Live, and watching nothing happen.
+        run: () => useObsStore.getState().removeSceneItem(sceneName, item.id),
+    });
+}
+
+// Whether a removal is sitting in the confirm buffer for this source — the row
+// keeps its trash amber until the commit, like every other staged control.
+export function useRemovalStaged(sceneName, item) {
+    return !!usePending(item ? removalKey(sceneName, item) : '∅');
+}
+
+/*
+ * The other scenes holding this same source — what the remove confirm needs to
+ * state its consequence, since removing one placement of a source that lives in
+ * three scenes costs nothing at all.
+ *
+ * `complete` is the honest half. The mirror is LAZY (obs.jsx mirrorScene): a
+ * scene the producer has never expanded has no items here, so an empty `scenes`
+ * means "none that we can see", not "none". Only when every scene OBS lists has
+ * been mirrored can the confirm promise that this is the last copy — otherwise
+ * it hedges, because the difference is whether the producer loses the source's
+ * hand-set transform.
+ */
+export function useOtherScenesWith(sourceName, exceptScene) {
+    // The selector hands back the store's OWN references and the census is
+    // derived here. Building the array inside the selector returns a fresh
+    // object every call, which useShallow compares by reference one level down
+    // — so it never settles and the row re-renders until React gives up.
+    const { sceneItems, scenes, mirroredScenes } = useObsStore(useShallow(s => ({
+        sceneItems: s.sceneItems, scenes: s.scenes, mirroredScenes: s.mirroredScenes,
+    })));
+    return useMemo(() => {
+        const others = [];
+        for (const [scene, items] of Object.entries(sceneItems)) {
+            if (scene === exceptScene) continue;
+            if (items.some(it => it.sourceName === sourceName)) others.push(scene);
+        }
+        return {
+            scenes: others,
+            complete: scenes.every(n => mirroredScenes.includes(n)),
+        };
+    }, [sceneItems, scenes, mirroredScenes, sourceName, exceptScene]);
 }
 
 // What a visibility control should DISPLAY for a source: the staged value if

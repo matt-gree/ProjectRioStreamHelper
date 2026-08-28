@@ -620,7 +620,7 @@ describe('catalogPlacements — what PRSH can configure with no OBS', () => {
      */
     it('still rows a fed element that no container has rostered', () => {
         const orphan = catalogPlacements({ defs: {}, boards: [1] })
-            .find(p => p.element.id === 'stats');
+            .find(p => p.element.id === 'statscard');
         expect(orphan).toBeTruthy();
         expect(orphan.parent).toBeUndefined();
     });

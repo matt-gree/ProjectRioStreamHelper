@@ -43,6 +43,14 @@
  *                   deviate.
  *   - `scope`     : 'board' when the SOURCE carries ?scoreboard=N, so two of
  *                   them in one scene are two instances. Omitted = global.
+ *   - `settingsType`: the `overlays.{type}.*` namespace the element's MOUNT
+ *                   reads, when it isn't the element id. Declare only to
+ *                   deviate — `settingsTypeOf()` defaults it to the id.
+ *                   Matchup History is the one that deviates: the console calls
+ *                   it `matchuphistory` and matchup-mount.js reads
+ *                   `overlays.matchup.*`, so a stage panel keyed on the id
+ *                   would write every setting where nothing reads it. Pinned to
+ *                   the layout file's own name by elements.test.js.
  *   - `perSide`   : the element has one source PER SIDE (?team=1|2). Online
  *                   the side is read off a source that already exists, so this
  *                   is only consulted by the catalog tier — which otherwise
@@ -121,7 +129,13 @@ export const ELEMENTS = [
     },
     {
         id: 'scorecard',
-        name: 'Scorecard',
+        // "Vertical" is load-bearing in a picker that also lists the Scoreboard:
+        // the two names differ by two letters otherwise, and the whole point of
+        // this element is the axis. Every comment in the codebase already calls
+        // it this, and so does the layout catalog — the registry was the one
+        // place saying "Scorecard", so the rack row and the Add picker row a
+        // producer clicked to create it disagreed.
+        name: 'Vertical Scorecard',
         // The vertical scorecard — a stack of independently toggleable bands
         // (header, phase, game mode, score block, rosters, bases, at-bat, box
         // score, stadium) that the producer flips live; the mount animates each
@@ -141,40 +155,49 @@ export const ELEMENTS = [
         quickFace: { rows: ['visibility', 'setting'] },
     },
     {
-        id: 'stats',
-        name: 'Stats',
+        id: 'statsbar',
+        // NAMED BY SHAPE, because the shape is the difference. This and the
+        // Stat Card are the same data — whoever this side has on the field —
+        // so "Stats" and "Stat Card" left the producer nothing to tell them
+        // apart by, and one name was a prefix of the other. The art really is
+        // a wide bar (452x118) and a 2x2 card (380x240). The id stays `stats`:
+        // it is a settings namespace and a URL, and renaming those is a
+        // migration for no gain.
+        name: 'Stat Bar',
         /*
          * The per-side stat card, as its own source (?scoreboard=N&team=T):
          * whoever this side has on the field right now — the batter when it is
-         * batting, the pitcher when it is not. The wide `stats.svg` from the
-         * active design package; `overlays.stats.*` is its namespace.
+         * batting, the pitcher when it is not. The wide `statsbar.svg` from
+         * the active design package; `overlays.statsbar.*` is its namespace.
          *
-         * THIS ID USED TO NAME SOMETHING ELSE. It was the fed 325x120 DOM bar
-         * (`stats-mount.js`) hosted by a seeded "Stats Bar" container, with a
-         * content picker for choosing a roster character by hand — while
-         * /layout/scoreboard1/stats.html, the overlay a producer actually puts
+         * THIS ID USED TO NAME SOMETHING ELSE. It was a fed 325x120 DOM bar
+         * hosted by a seeded "Stats Bar" container, with a content picker for
+         * choosing a roster character by hand — while
+         * /layout/scoreboard1/statsbar.html, the overlay a producer actually puts
          * on a stream, matched no element at all and rowed generically. So the
          * console's Stats was the one a broadcast doesn't use and the real one
          * had no panel, no preview and (with OBS closed) no row. The fed bar is
-         * shelved: its layout and mount are still on disk, but nothing offers
-         * it. What survives of "a card inside a container" is `statscard`,
-         * which is the same data in the themed 2x2 art and was always the
-         * better half of the pair.
+         * DELETED — mount and shell both — rather than shelved: shelving means
+         * "not offered, still works", and its member entry was already gone
+         * from container-members.js, so no surface could stand it up. What
+         * survives of "a card inside a container" is `statscard`, which is the
+         * same data in the themed 2x2 art and was always the better half of the
+         * pair.
          *
-         * No `scope: 'board'` — settings are global (`overlays.stats.*`) and
+         * No `scope: 'board'` — settings are global (`overlays.statsbar.*`) and
          * its two sources differ by ?team=, which the instance grammar reads
          * off the URL as a variant. Same shape as the Roster, Player Name and
          * Team Logo.
          */
         flavor: 'direct',
-        url: '/layout/scoreboard1/stats.html',
+        url: '/layout/scoreboard1/statsbar.html',
         width: 452,
         height: 118,
         // Anchored to the full path, like the roster's. The pre-2.0 matcher here
         // was a bare /stats/i, which answers to any URL with "stats" in it —
         // including `container.html?container=roster-stats-2`, i.e. a CONTAINER
         // claiming to be one of its own occupants.
-        match: (url) => /\/layout\/scoreboard\d*\/stats\.html/i.test(url),
+        match: (url) => /\/layout\/scoreboard\d*\/statsbar\.html/i.test(url),
         perSide: true,
     },
     {
@@ -382,7 +405,13 @@ export const ELEMENTS = [
         url: '/layout/lowerthird/lowerthird.html',
         width: 1920,
         height: 320,
-        match: (url) => /lowerthird/i.test(url),
+        // Anchored to the layout, like the roster's and the callouts'. The
+        // bare word answered to `container.html?container=lowerthird-box`,
+        // i.e. to a producer's CONTAINER — and the source→row lookup asks
+        // the direct elements first (./placements), so the container lost
+        // its roster, its feed and its stage to an element whose panel then
+        // drove a source that doesn't read `overlays.lowerthird.*`.
+        match: (url) => /\/layout\/lowerthird\/lowerthird\.html/i.test(url),
     },
     {
         id: 'schedule',
@@ -404,6 +433,9 @@ export const ELEMENTS = [
     {
         id: 'matchuphistory',
         name: 'Matchup History',
+        // matchup-mount.js reads `overlays.matchup.*` (SETTINGS_TYPE), not the
+        // console's id for it.
+        settingsType: 'matchup',
         // Head-to-head band: all-time series summary + last-5 game cards for a
         // match's two participants, fetched from the Project Rio API into the
         // singleton matchup.* state (POST /matchup/fetch). Direct element; SVG
@@ -474,7 +506,9 @@ export const ELEMENTS = [
         url: '/layout/eventheader/eventheader.html',
         width: 1920,
         height: 1080,
-        match: (url) => /eventheader/i.test(url),
+        // Anchored — see the Lower Third's note. A container named
+        // "Eventheader" slugs to an id this word matched.
+        match: (url) => /\/layout\/eventheader\/eventheader\.html/i.test(url),
         // Its source visibility plus the two band switches would be three rows;
         // the bands are the pair that matters live, and the source toggle stays
         // one click away on the stage.
@@ -491,7 +525,11 @@ export const ELEMENTS = [
         url: '/layout/hitvisualizer/hitvisualizer.html',
         width: 1280,
         height: 720,
-        match: (url) => /hitvisualizer/i.test(url),
+        // Anchored — see the Lower Third's note. This one is the likeliest of
+        // the three to bite: the hit visualizer is a container MEMBER, so a
+        // producer naming the container after its occupant is the ordinary
+        // case, not a corner one.
+        match: (url) => /\/layout\/hitvisualizer\/hitvisualizer\.html/i.test(url),
         // Also a container MEMBER, so it is one of the elements that is both a
         // dedicated source and an occupant — two rows, and the Push lives on the
         // slot row's source strip. (Its stage used to carry a bespoke "Split
@@ -590,8 +628,8 @@ export const isPickableFeed = (el) => PICKABLE_FEEDS.includes(el?.feed);
  * Containers are producer-built definitions (settings.production.container_defs)
  * rendered by ONE generic shell, so the id is what `?container=` names. The
  * filename stem is the fallback, which is what keeps a browser source still
- * pointing at a pre-2.0 named shell ('/layout/shared/stats-feed.html' →
- * 'stats-feed') rowing and feeding exactly as it did. The overlay side derives
+ * pointing at a pre-2.0 named shell ('/layout/shared/callout-stage.html' →
+ * 'callout-stage') rowing and feeding exactly as it did. The overlay side derives
  * it the same way, in fed-container.js — the two must agree, or a producer's
  * Push writes a key the source isn't reading.
  */
@@ -606,6 +644,17 @@ export function containerId(url) {
 
 // Key of the element's stage panel (stage/<key>); defaults to the element id.
 export const stageBodyFor = (el) => el.stageBody ?? el.id;
+
+/*
+ * The `overlays.{type}.*` namespace an element's mount reads.
+ *
+ * Defaults to the id, which is right for every element but Matchup History —
+ * and that one exception is why the console must never key settings off the id
+ * directly. A write to `overlays.matchuphistory.accentColor` is not wrong in
+ * any way a test or a console can see: the key stores, the socket broadcasts,
+ * the panel reads its own value back. It simply never reaches an overlay.
+ */
+export const settingsTypeOf = (el) => el?.settingsType ?? el?.id;
 
 /*
  * The `sizes` entry a variant tag names ('zs' → the Small row), or null.

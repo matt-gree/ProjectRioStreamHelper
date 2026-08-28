@@ -38,7 +38,7 @@ describe('rail seeding', () => {
     it('seeds a never-touched rail and leaves a deliberately emptied one empty', () => {
         expect(seededRail(null)).toEqual(RAIL_SEED);
         expect(seededRail([])).toEqual([]);
-        expect(seededRail(['stats'])).toEqual(['stats']);
+        expect(seededRail(['statsbar'])).toEqual(['statsbar']);
     });
 
     it('only seeds elements that are actually pinnable', () => {
@@ -60,14 +60,14 @@ describe('Rail', () => {
     });
 
     it('renders a card per pin, in the producer’s order, and never re-sorts', () => {
-        const pins = ['stats', 'scoreboard'];
+        const pins = ['statsbar', 'scoreboard'];
         ui(<Rail pins={pins} onReorder={noop} onUnpin={noop} onOpen={noop} />);
         const titles = [...document.querySelectorAll('header')]
             .map(h => h.querySelector('button').textContent);
         // A bare pin names the ELEMENT, and the card names the placement it
-        // resolves to. Stats has no variant-less row — a side has no default —
+        // resolves to. The Stat Bar has no variant-less row — a side has no default —
         // so `stats` answers with side 1, which is what the seeded rail gets.
-        expect(titles).toEqual(['Stats · Side 1', 'Scoreboard · Large']);
+        expect(titles).toEqual(['Stat Bar · Side 1', 'Scoreboard · Large']);
     });
 
     it('drops a pin naming an element that no longer exists', () => {
@@ -85,16 +85,16 @@ describe('Rail', () => {
      */
     it('reorders from the card header, so the rail is not mouse-only', () => {
         const onReorder = vi.fn();
-        ui(<Rail pins={['stats', 'scoreboard']} onReorder={onReorder} onUnpin={noop} onOpen={noop} />);
+        ui(<Rail pins={['statsbar', 'scoreboard']} onReorder={onReorder} onUnpin={noop} onOpen={noop} />);
         fireEvent.click(screen.getByRole('button', { name: 'Move Scoreboard · Large up' }));
-        expect(onReorder).toHaveBeenCalledWith(['scoreboard', 'stats']);
+        expect(onReorder).toHaveBeenCalledWith(['scoreboard', 'statsbar']);
     });
 
     it('disables the move that would run off the end of the rail', () => {
-        ui(<Rail pins={['stats', 'scoreboard']} onReorder={noop} onUnpin={noop} onOpen={noop} />);
-        expect(screen.getByRole('button', { name: 'Move Stats · Side 1 up' })).toBeDisabled();
+        ui(<Rail pins={['statsbar', 'scoreboard']} onReorder={noop} onUnpin={noop} onOpen={noop} />);
+        expect(screen.getByRole('button', { name: 'Move Stat Bar · Side 1 up' })).toBeDisabled();
         expect(screen.getByRole('button', { name: 'Move Scoreboard · Large down' })).toBeDisabled();
-        expect(screen.getByRole('button', { name: 'Move Stats · Side 1 down' })).toBeEnabled();
+        expect(screen.getByRole('button', { name: 'Move Stat Bar · Side 1 down' })).toBeEnabled();
     });
 
     /*
@@ -107,12 +107,12 @@ describe('Rail', () => {
         const onReorder = vi.fn();
         ui(
             <Rail
-                pins={['stats', 'gone-in-a-later-build', 'scoreboard']}
+                pins={['statsbar', 'gone-in-a-later-build', 'scoreboard']}
                 onReorder={onReorder} onUnpin={noop} onOpen={noop}
             />,
         );
         fireEvent.click(screen.getByRole('button', { name: 'Move Scoreboard · Large up' }));
-        expect(onReorder).toHaveBeenCalledWith(['scoreboard', 'stats', 'gone-in-a-later-build']);
+        expect(onReorder).toHaveBeenCalledWith(['scoreboard', 'statsbar', 'gone-in-a-later-build']);
     });
 
     it('opens a card on the stage and unpins from its header', () => {

@@ -1,13 +1,16 @@
 <!DOCTYPE html>
 <html lang="en">
 <!--
-  Stats — a re-themable SVG stat card for the character currently batting /
+  Stat Bar — a re-themable SVG stat card for the character currently batting /
   pitching on one side (?team=1|2) of a scoreboard (?scoreboard=N, default 1).
+  The wide one; the 2x2 Stat Card is the same data and the same mount, worn as
+  a container member (statscard.svg).
 
   Thin shell: the look lives in the active DESIGN PACKAGE's theme SVG
-  (/design/{package}/stats.svg), the binding/transitions in
+  (/design/{package}/statsbar.svg), the binding/transitions in
   stats-card-mount.js, the data resolution in RioData.getStatsLine. Drop into
-  OBS as a 325x120 browser source.
+  OBS as a 452x118 browser source — the canvas `body` declares below, and the
+  one `theme_contracts.CONTRACTS['statsbar']` pins.
 -->
 <head>
   <meta charset="utf-8" />
@@ -46,7 +49,7 @@
       sample: 'scoreboard',
       shouldRender: (key) => key.startsWith(`score.${SB}.`),
       shouldRenderSettings: (key) =>
-        key.startsWith('overlays.stats.') || key.startsWith('overlays.global.') ||
+        key.startsWith('overlays.statsbar.') || key.startsWith('overlays.global.') ||
         key.startsWith('scoreboards.'),
       fetchSettings: true,
     });

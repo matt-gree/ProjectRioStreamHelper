@@ -14,6 +14,10 @@
       slot=NAME maxw=N     text that auto shrinks past N units
       part=NAME            a styling part the mount recolours
       tpl=NAME w=N         a prototype the mount clones per row
+      slot=NAME hidden     a layer the APP toggles on (a FINAL badge, a runner
+                           icon). Shown here so you can style it; the compiler
+                           puts it back to invisible. Drop the flag and it
+                           ships permanently visible.
       scaffold=NAME        editing only guide (dashed boxes), STRIPPED on compile
       layout=absolute      invisible marker carrying the root layout mode
     Keep them. Rename freely otherwise.
@@ -29,6 +33,21 @@
     Dashed boxes mark image slots (team logos, character icons). PRSH ships no
     game art, so design the BOX as the no art look; the app draws the real icon
     on top and hides it when there is none.
+
+    STACK ROWS (slot=row-*) have been moved to the offsets the app stacks them
+    to, so this file shows the assembled card rather than every band piled on
+    the frame origin. `at=N` in the name records where each was put and the
+    compiler takes it back out; anything you move ON TOP of that is kept. Two
+    rows sharing one `at=` are ALTERNATES - a live game or a completed one,
+    never both - so they are drawn overlapping on purpose. Toggle one off in
+    the layers panel to work on the other, and design each to fill the band.
+
+    CYAN DASHED BOXES (scaffold=stage-*) are the sizes this card takes at
+    runtime, labelled with the row that triggers each. The card GROWS to enclose
+    a segment when the app shows it, so content sitting outside the resting box
+    is not misplaced - it belongs to a larger stage. Design every stage to look
+    finished, and keep each stage's content inside its own box. The guides are
+    editing only and never ship.
     --><rect id="layout=absolute" x="0" y="0" width="1" height="1" opacity="0" /><!--
     DEFAULT package - Scoreboard S (388x128): a vertical two-row card (side 1 over
     side 2), all Inter, HORIZONTAL-MELD absolute layout. The core (names + scores)
@@ -36,7 +55,9 @@
     to fit whichever are visible (each segment declares data-cardw = the card width
     when it is the rightmost-visible; card-bg declares data-compact-w = collapsed):
       row-inning  the inning number (arrows), swapping to final-badge on a
-                  completed game. Producer toggle overlays.scoreboard.showInning.
+                  completed game. Producer toggle overlays.scoreboard.showInning
+                  — but a shown live cluster forces it on, since row-live's edge
+                  is outboard of it and would otherwise open a hole here.
       row-live    the live cluster (count + base diamond). Shows during play,
                   collapses on completion. Producer master overlays.scoreboard.showLive.
     Both segments carry data-anim expand-right (wipe open left to right on show,
@@ -56,14 +77,14 @@
     </linearGradient>
   </defs>
 
-  <rect x="8" width="380" height="128" rx="20" fill="#0B0B12" id="slot=card-bg compactw=224" />
+  <rect x="8" width="380" height="128" rx="20" fill="#0B0B12" id="slot=card-bg compactw=224 compacth=128" />
   <rect width="6" height="128" rx="3" fill="#E60012" id="slot=card-rail" />
 
   <!-- ░░ CORE side 1 (always shown) ░░ -->
   <g id="slot=row-top">
     <path d="M179 10H25C20.5817 10 17 13.5817 17 18V50C17 54.4183 20.5817 58 25 58H179C183.418 58 187 54.4183 187 50V18C187 13.5817 183.418 10 179 10Z" fill="url(#sbs-w1)" />
     <path opacity="0.85" d="M21 12C21 10.8954 20.1046 10 19 10C17.8954 10 17 10.8954 17 12V56C17 57.1046 17.8954 58 19 58C20.1046 58 21 57.1046 21 56V12Z" fill="#E53935" />
-    <rect id="scaffold=s1-logo" x="29" y="13" width="38" height="38" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="29" y="13" width="38" height="38" preserveAspectRatio="xMidYMid meet" opacity="0" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=s1-logo" />
+    <rect id="scaffold=s1-logo" x="29" y="13" width="38" height="38" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="29" y="13" width="38" height="38" preserveAspectRatio="xMidYMid meet" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=s1-logo hidden" />
     <text x="75" y="42.27" fill="#F5F5F8" font-family="Inter" font-size="20" font-weight="bold" id="slot=s1-name maxw=108">Player One</text>
     <text x="223.63" y="46.14" text-anchor="end" fill="#F5F5F8" font-family="Inter" font-size="32" font-weight="bold" id="slot=s1-score maxw=44">0</text>
   </g>
@@ -72,7 +93,7 @@
   <g id="slot=row-bottom">
     <path d="M181 118L27 118C22.5817 118 19 114.418 19 110L19 78C19 73.5817 22.5817 70 27 70L181 70C185.418 70 189 73.5817 189 78V110C189 114.418 185.418 118 181 118Z" fill="url(#sbs-w2)" />
     <path opacity="0.85" d="M21 72C21 70.8954 20.1046 70 19 70C17.8954 70 17 70.8954 17 72V116C17 117.105 17.8954 118 19 118C20.1046 118 21 117.105 21 116V72Z" fill="#1E88E5" />
-    <rect id="scaffold=s2-logo" x="29" y="75" width="38" height="38" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="29" y="75" width="38" height="38" preserveAspectRatio="xMidYMid meet" opacity="0" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=s2-logo" />
+    <rect id="scaffold=s2-logo" x="29" y="75" width="38" height="38" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="29" y="75" width="38" height="38" preserveAspectRatio="xMidYMid meet" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=s2-logo hidden" />
     <text x="75" y="102.27" fill="#F5F5F8" font-family="Inter" font-size="20" font-weight="bold" id="slot=s2-name maxw=108">Player Two</text>
     <text x="223.63" y="106.14" text-anchor="end" fill="#F5F5F8" font-family="Inter" font-size="32" font-weight="bold" id="slot=s2-score maxw=44">0</text>
   </g>
@@ -80,21 +101,32 @@
   <!-- ░░ GAME MODE band (toggle + content) — melds card to 156 tall ░░
        A real bottom section: data-cardh grows card-bg (and the rail with it)
        from the compact 128 to 156 when the band shows, and collapses back when
-       the producer switches it off or the mode is unknown. Left-aligned to the
-       plates above rather than centred on the card, because the card's WIDTH
-       melds underneath it — a centred label would slide sideways every time the
-       live cluster opened. -->
-  <g id="slot=row-mode">
-    <rect x="17" y="126" width="4" height="16" rx="2" opacity="0.85" fill="#E60012" />
-    <text x="29" y="139" fill="#F5F5F8" fill-opacity="0.62" font-family="Inter" font-size="12" font-weight="600" letter-spacing="0.4" id="slot=meta-game-mode maxw=176">Game Mode</text>
+       the producer switches it off or the mode is unknown.
+
+       Centred on the card, and the card's WIDTH melds underneath it — so the
+       label can't sit at an authored x. `center=card` (data-center) hands the
+       x to the mount, which drives it off the same tween as the card edge
+       (scoreboard-mount centerToCard); text-anchor="middle" is what makes that
+       a centre rather than a left edge. No marker bar: a rule that started at
+       the plates' left inset was reading as a third row of the stack once the
+       label stopped being left-aligned with them.
+
+       16px, baseline 143: with the bar gone the band is the label's alone, and
+       12px in a 38px gap (the side-2 plate's bottom edge to the card's) read as
+       a footnote under the card rather than a section of it. The baseline is
+       where the text's box centres in that gap — measured, not eyeballed; at
+       the old y=139 a 16px label sits ~2 units high. data-maxw is sized for the
+       COMPACT card (224 wide), the narrowest centre this ever has. -->
+  <g id="slot=row-mode cardh=156">
+    <text x="120" y="143" text-anchor="middle" fill="#F5F5F8" fill-opacity="0.62" font-family="Inter" font-size="16" font-weight="600" letter-spacing="0.4" id="slot=meta-game-mode maxw=184 center=card">Game Mode</text>
   </g>
 
   <!-- ░░ INNING segment (toggle) — melds card to 292 ░░ -->
   <g id="slot=row-inning anim=expand-right cardw=292">
     <text x="250.883" y="81.45" fill="#F5F5F8" font-family="Inter" font-size="48" font-weight="bold" id="slot=inn-num">1</text>
     <g id="slot=inn-arrow-up"><path d="M250 37H282L266 19L250 37Z" fill="#E60012" /></g>
-    <g opacity="0" id="slot=inn-arrow-down"><path d="M250 91H282L266 109L250 91Z" fill="#E60012" /></g>
-    <g opacity="0" id="slot=final-badge">
+    <g opacity="1" id="slot=inn-arrow-down hidden"><path d="M250 91H282L266 109L250 91Z" fill="#E60012" /></g>
+    <g opacity="1" id="slot=final-badge hidden">
       <path d="M287.31 51H243.69C240.547 51 238 53.6863 238 57V71C238 74.3137 240.547 77 243.69 77H287.31C290.453 77 293 74.3137 293 71V57C293 53.6863 290.453 51 287.31 51Z" fill="#E60012" />
       <text x="245.088" y="69.59" fill="#FFFFFF" font-family="Inter" font-size="14" font-weight="bold">FINAL</text>
     </g>
@@ -111,4 +143,4 @@
     <rect x="325" y="26.9706" width="24" height="24" transform="rotate(-45 325 26.9706)" fill="rgba(255,255,255,0.08)" id="slot=base-2" />
     <rect x="344" y="45.9706" width="24" height="24" transform="rotate(-45 344 45.9706)" fill="rgba(255,255,255,0.08)" id="slot=base-1" />
   </g>
-</svg>
+<g id="scaffold=meld-stages" fill="none" stroke="#00E5FF" stroke-opacity="0.75" stroke-width="1" stroke-dasharray="4 4"><rect id="scaffold=stage-resting" x="8" y="0" width="224" height="128" rx="20" /><text id="scaffold=stage-resting-label" x="227" y="12" text-anchor="end" font-family="Inter" font-size="9" fill="#00E5FF" fill-opacity="0.75" stroke="none">resting 224x128</text><rect id="scaffold=stage-row-inning" x="8" y="0" width="292" height="128" rx="20" /><text id="scaffold=stage-row-inning-label" x="295" y="23" text-anchor="end" font-family="Inter" font-size="9" fill="#00E5FF" fill-opacity="0.75" stroke="none">row-inning 292x128</text><rect id="scaffold=stage-row-live" x="8" y="0" width="380" height="128" rx="20" /><text id="scaffold=stage-row-live-label" x="383" y="34" text-anchor="end" font-family="Inter" font-size="9" fill="#00E5FF" fill-opacity="0.75" stroke="none">row-live 380x128</text><rect id="scaffold=stage-row-mode" x="8" y="0" width="380" height="156" rx="20" /><text id="scaffold=stage-row-mode-label" x="383" y="45" text-anchor="end" font-family="Inter" font-size="9" fill="#00E5FF" fill-opacity="0.75" stroke="none">row-mode 380x156</text></g></svg>

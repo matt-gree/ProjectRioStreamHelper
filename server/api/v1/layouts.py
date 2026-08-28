@@ -105,7 +105,7 @@ _SIZE_VARIANTS = {
 # Team variants for layouts that support ?team= param.
 # Each: (team_num, label)
 _TEAM_VARIANTS = {
-    "stats":       [(1, "Team 1"), (2, "Team 2")],
+    "statsbar":    [(1, "Team 1"), (2, "Team 2")],
     "roster":      [(1, "Team 1"), (2, "Team 2")],
     "teamlogo":    [(1, "Team 1"), (2, "Team 2")],
     "controller":  [(1, "Team 1"), (2, "Team 2")],
@@ -114,7 +114,10 @@ _TEAM_VARIANTS = {
 
 # Human-readable display names for layout types shown in the UI
 _DISPLAY_NAMES = {
-    "stats":       "Stats",
+    # "Stat Bar", not "Stats" — named by shape against the 2x2 Stat Card, which
+    # is the same data in the other canvas. Kept in step with the registry by
+    # tests/unit/test_catalog_names_parity.py.
+    "statsbar":    "Stat Bar",
     "roster":      "Roster",
     "teamlogo":    "Team Logo",
     "controller":  "Controller",
@@ -149,6 +152,11 @@ _STANDALONE_DISPLAY_NAMES = {
     # Vertical Scorecard: a tall re-themable SVG scoreboard whose eight design
     # elements each toggle/animate independently (overlays.scorecard.*).
     "scorecard/scorecard": "Vertical Scorecard",
+    # The 3D hit overlay. Its own group of one, which is why it needs an entry
+    # here at all: with no size or team variants the catch-all branch names a
+    # row from the filename stem, and this one read "hitvisualizer" in the Add
+    # picker while the rack row for the same source read "Hit Visualizer".
+    "hitvisualizer/hitvisualizer": "Hit Visualizer",
     # Post-game callouts — each one's OWN full-canvas source. Both are also
     # container MEMBERS: a producer who wants them mutually exclusive puts both
     # on one container's roster instead, and that container is a catalog row of

@@ -11,11 +11,32 @@ Every broadcast element registers in `src/routes/production/elements.js` with:
   id, name,
   flavor,           // 'direct' (owns a dedicated source) | 'fed' (no source of
                     // its own — a container is the only place it can go)
-  url, width, height, match(url),   // OBS source binding — unchanged from today
+  url, width, height, match(url),   // OBS source binding — ANCHOR IT (below)
   quickFace,        // ≤ 2 kit rows, or explicit null (see rules below)
   stageBody,        // full controls — kit rows / labelled kit columns
+  settingsType,     // the `overlays.{type}.*` namespace its MOUNT reads, when
+                    // that isn't the id (see below)
 }
 ```
+
+**KEY SETTINGS ON `settingsTypeOf(el)`, NEVER ON `el.id`.** Matchup History is
+`matchuphistory` in the console and reads `overlays.matchup.*` in its mount, so
+a panel keyed on the id writes a namespace nothing reads — and nothing catches
+it, because the key stores, broadcasts, and reads back on the panel exactly like
+a real one. A mount's namespace is its layout FILE's name (the same derivation
+`server/api/v1/layouts.py` uses for the layout type), which is what
+`elements.test.js` holds every element to.
+
+**ANCHOR `match()` TO THE LAYOUT PATH.** A bare word (`/lowerthird/i`) is
+tested against the WHOLE url, query string included — and a container's source is
+`container.html?container={id}` where the id is slugged from a name the producer
+typed, so `container=lowerthird-box` matched the Lower Third. The rack asks the
+direct elements first (`placementsInScene`) and takes the first yes, so the
+container loses its roster, its feed and its stage to an element whose panel then
+drives a source that ignores every setting it writes. Same bug as the old
+`/stats/i` (which claimed `roster-stats-2`) and the old `/callout/`
+(which claimed `callout-stage.html`). Pinned for every element by "no element
+claims a container source" in `elements.test.js`.
 
 **FLAVOR IS THE FLOOR; THE PLACEMENT IS THE ANSWER** (`placementFlavor` in
 `placements.js`). Being fed is a property of WHERE a source is, not of what an
@@ -26,7 +47,7 @@ and just shows and hides. Both are true at once for a member that owns a source
 the mount registry (`container-members.js`) rather than declared here. So
 `flavor` answers only "does it own a source
 of its own", every surface branches on `isFedPlacement(placement)`, and an
-element declared `fed` (Stats, Stat Card) has one possible answer, which is why
+element declared `fed` (the Stat Card) has one possible answer, which is why
 the floor still earns a name.
 
 That split is the whole point: the Character Spotlight used to be fed-ONLY,
@@ -36,6 +57,72 @@ into nothing plus a paragraph explaining why. Sharing is what a container is
 FOR, not what an element is. A producer who wants the two callouts mutually
 exclusive puts both on one container's roster, which is the sentence that
 arrangement is supposed to mean.
+
+### Style, and style overrides
+
+A stage panel carries two settings sections and they are different kinds of
+thing (`stage/overlay-settings.jsx`):
+
+- **Style** — the element's OWN settings, from `LAYOUT_SETTINGS[type]`. A def
+  marked `appPalette` is DROPPED under a package that paints the element itself
+  (`useLiveDefs`): it has nowhere else to live, so a dead row is pure noise.
+- **Style overrides** — a GLOBAL design key pinned for this one element
+  (`overlays.{type}.accentColor` over `overlays.global.accentColor`). Under that
+  same full-art package an EXISTING pin is DISABLED rather than dropped, because
+  it is a pin on a key that still exists, may already be SET here from a preset,
+  and revives the moment the producer swaps packages — hiding it is how a live
+  `overlays.statsbar.cardBg` stayed invisible for a release, and a pin you
+  cannot see is a pin you cannot remove. The ADD picker closes instead, since
+  adding one there would do nothing. Why it is dead is a `title` on the
+  hoverable WRAPPER of each dead control, not a paragraph above the section —
+  and it has to be the wrapper, because a disabled `Button` is
+  `disabled:pointer-events-none` and a tooltip on the control itself would be
+  unreachable exactly when it is the only explanation there is. The two
+  treatments differ on purpose; don't unify them without reading both
+  rationales.
+
+**Style overrides is an EXCEPTION LIST, not a settings panel.** Nothing is on an
+element until the producer adds it from the `AddOverride` picker. Rendering all
+thirteen keys on every element made a wall of controls whose overwhelming answer
+was "Global", which reads as configuration rather than as the short list of
+departures it is — and every one of those keys already has a home on the Design
+tab. Three rules follow, and each one is load-bearing:
+
+- **Adding pins at the value the element already shows** (`seedValue`). Adding a
+  row hands over a knob; it must not turn one. Every def therefore has to seed
+  non-null, because a null write means *unpinned* and the row the producer just
+  asked for would simply not appear — which is why `finalBadgeColor`, the one
+  key with no global of its own (unset, the badge is `fill:var(--accent)`),
+  carries `seedFrom: 'accentColor'`.
+- **Membership counts a STAGED pin too** (`useAddedKeys`). Under confirm mode
+  the pin is staged, not stored; a section that listed only stored pins would
+  drop the row the instant it was added and hand back an empty panel.
+- **One removal per row.** `ColorRow` ships its own reset and the font row had a
+  Reset button; once a cleared value means "off this element", both said the same
+  thing in different words, side by side. Hence `ColorRow`'s `hideReset` and the
+  single `×`.
+
+There is deliberately no added-but-unset row: it would be a second source of
+truth for "is this element overriding this key".
+
+A key is offered as an override only where three things agree: the global
+registry offers it (`OVERRIDABLE_GLOBAL_KEYS`), the layout declares it (its
+`<meta name="overlay-settings">`, read back through `layouts/layoutWhitelist`),
+and it is actually read back on that type (`OVERRIDE_CAPABLE_TYPES` +
+`overrideReaches`). All three are needed and none implies another — the
+post-game callouts declare `accentColor` and honour it from `overlays.global`
+directly, never through `applyDesignSettings`, so a pin on them would be
+ignored; and `showShadow` is whitelisted by the scoreboard while no mount
+anywhere reads a per-element one.
+
+A key that fails any gate is **not offered at all**, never offered-and-inert: an
+option that silently does nothing costs a producer the ten minutes they spend
+believing they set it. Note this currently hides `cardBg`/`borderColor` on the
+Stat Bar, which draws a card and looks like it should take them — overlay-base's
+`LAYOUT_VAR_MAP` still keys those vars under `stats`, the element's pre-rename
+name, so the reads never fire. `OVERRIDE_READ_TYPES` says so out loud rather
+than offering a pin that goes nowhere; re-keying the map is an open decision,
+not a typo, because it would change what is on air.
 
 ### The subject — what the element is DRAWING
 

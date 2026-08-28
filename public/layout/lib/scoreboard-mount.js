@@ -19,7 +19,8 @@
 //   row-box     per-inning linescore
 // A theme implements whatever subset fits its size. row-inning/row-live are
 // gated by producer toggles overlays.scoreboard.showInning/showLive (both
-// default on); showLive is a master override the live game state ANDs with.
+// default on); showLive is a master override the live game state ANDs with, and
+// a shown live cluster forces the inning on regardless of its own toggle.
 // row-roster needs TWO characters on a side, not one — a completed game with no
 // roster in its record still has a captain, and one icon is not a roster band.
 //
@@ -60,6 +61,9 @@
 //   meta-game-mode(text) — BOTH states, unlike the meta-* pair above, which are
 //     completed-game only. Place it wherever the size has room for standing
 //     context; it self-hides when the mode is unknown.
+//   ANY slot may carry data-center="card" (grammar `center=card`): in a melding
+//     theme the mount drives its x from the card's live centre instead of the
+//     authored one. Pair it with text-anchor="middle".
 //   sT-char-0..8(image) sT-cap-ring(shape; mount moves it to the captain slot)
 //   box-col-1..9(g) box-h-1..9(text) box-away-1..9 box-home-1..9(text)
 //   box-away-r box-home-r(text) box-away-name box-home-name(text)
@@ -173,6 +177,7 @@ export function mountScoreboard({ host, sb, size }) {
   let revealKey = '';
   let laidOut = {};
   let animShown = {};   // absolute-mode row name -> last shown state (anim transitions)
+  let logoShown = {};   // logo/name slot -> last "logo drawn" state (reflow + fade)
   let clipProxy = {};   // absolute-mode row name -> { p } proxy tweened for expand-right
   let disposed = false;
 
@@ -326,6 +331,27 @@ export function mountScoreboard({ host, sb, size }) {
     }));
   }
 
+  /*
+   * Slots that ride the melding card's CENTRE instead of a fixed x — the
+   * game-mode band on Scoreboard S, tagged `center=card` (data-center="card").
+   *
+   * A melding card has no one width to centre against at author time, so the
+   * theme can't express this: the mount has to re-place the slot from the same
+   * tween that moves the card edge, or the label would jump to its new centre
+   * only after the meld finished. The slot must be text-anchor="middle" — this
+   * moves the anchor, it does not measure the glyphs.
+   *
+   * Cached per theme (reset with the rest of the layout memo on a theme swap),
+   * so a theme with no centred slot pays one empty query.
+   */
+  let centerEls = null;
+  function centerToCard(cardX, w) {
+    if (!centerEls) centerEls = Array.from(host.querySelectorAll('[data-center="card"]'));
+    if (!centerEls.length) return;
+    const cx = cardX + w / 2;
+    for (const el of centerEls) el.setAttribute('x', String(cx));
+  }
+
   function meldTo(bg, targetW, rows, fresh) {
     const cardX = parseFloat(bg.getAttribute('x')) || 0;
     const clipW = (w) => cardX + w + CLIP_PAD;
@@ -334,6 +360,7 @@ export function mountScoreboard({ host, sb, size }) {
     // First paint / theme swap / no gsap: snap, no clip layer.
     if (!gsap || fresh || prevW === undefined) {
       bg.setAttribute('width', String(Math.max(targetW, 1)));
+      centerToCard(cardX, Math.max(targetW, 1));
       rows.forEach((r) => {
         r.el.setAttribute('opacity', r.show ? '1' : '0');
         r.el.style.clipPath = '';
@@ -388,10 +415,12 @@ export function mountScoreboard({ host, sb, size }) {
       overwrite: true,
       onUpdate: () => {
         bg.setAttribute('width', String(Math.max(proxy.w, 1)));
+        centerToCard(cardX, Math.max(proxy.w, 1));
         if (rect) rect.setAttribute('width', String(clipW(proxy.w)));
       },
       onComplete: () => {
         bg.setAttribute('width', String(Math.max(targetW, 1)));
+        centerToCard(cardX, Math.max(targetW, 1));
         rows.forEach((r) => {
           r.el.style.clipPath = '';                 // steady state: no clip layer
           r.el.setAttribute('opacity', r.show ? '1' : '0');
@@ -527,13 +556,132 @@ export function mountScoreboard({ host, sb, size }) {
     return name ? charIconUrl(name) : '';
   }
 
-  function bindTop(d, vis) {
+  /*
+   * A side whose logo isn't drawn hands the box to its NAME instead of leaving a
+   * hole. Team Logos off is the case a producer hits on purpose (a completed
+   * game with no MSB team assigned still wants the toggle), and it was costing
+   * ~46 units of the name's width to nothing.
+   *
+   * DERIVED, not authored — no new theme attribute, because the geometry already
+   * says everything needed. Every shipped board puts the logo on the name's
+   * OUTER side: side 1 is a start-anchored name with the logo to its left, side
+   * 2 on the wide boards is an end-anchored name with the logo to its right. So
+   * the rule is one sentence in both cases — the name's anchor moves to the far
+   * edge of the logo box, and its fit bound grows by exactly the distance moved,
+   * which leaves the name's other edge (the one facing the score) where the
+   * designer put it. `gained > 0` is the guard: a theme that stacks the logo
+   * above the name, or overlaps them, gains nothing and is left alone.
+   *
+   * The authored pair is captured once per theme in data-basegeom (the same
+   * trick lowerthird-mount uses for its caption-less logo box), so the logo
+   * coming back restores the design rather than an accumulated offset.
+   */
+  function reclaimLogoBox(nameSlot, logoSlot, hasLogo, fresh) {
+    const text = engine.slots[nameSlot];
+    const logo = engine.slots[logoSlot];
+    if (!text || !logo) return;
+    if (!text.hasAttribute('data-basegeom')) {
+      // text-anchor can be an attribute or come off a theme's stylesheet, so it
+      // is read computed — once, here, rather than per frame.
+      const anchor = getComputedStyle(text).textAnchor || 'start';
+      text.setAttribute('data-basegeom',
+        `${parseFloat(text.getAttribute('x')) || 0} ${parseFloat(text.getAttribute('data-maxw')) || 0} ${anchor}`);
+    }
+    const [baseX, baseMaxw, anchor] = text.getAttribute('data-basegeom').split(/\s+/);
+    let x = parseFloat(baseX);
+    let maxw = parseFloat(baseMaxw);
+    if (!hasLogo) {
+      const lx = parseFloat(logo.getAttribute('x'));
+      const lw = parseFloat(logo.getAttribute('width'));
+      if (Number.isFinite(lx) && Number.isFinite(lw)) {
+        const edge = anchor === 'end' ? lx + lw : lx;   // the logo's far side
+        const gained = anchor === 'end' ? edge - x : x - edge;
+        if (gained > 0) { x = edge; maxw += gained; }
+      }
+    }
+
+    /*
+     * The fit bound moves NOW, in both directions, while x glides. Tweening the
+     * bound instead would mean a getComputedTextLength per frame per name — the
+     * one measurement refitText is carefully built to batch — to animate
+     * something only a name long enough to be shrunk would even show. Landing it
+     * up front also keeps a returning logo from ever meeting a name still sized
+     * for the wider box.
+     *
+     * refitText skips a slot whose TEXT hasn't changed, so a bound that moved
+     * under unchanged content is invisible to it: without invalidateFit the name
+     * keeps whatever size it was shrunk to for the old box.
+     */
+    if (parseFloat(text.getAttribute('data-maxw')) !== maxw) {
+      text.setAttribute('data-maxw', String(maxw));
+      engine.invalidateFit(text);
+    }
+
+    // Recorded BEFORE the no-op check: on first paint the name is already at its
+    // authored x, so an early return here would leave `prev` undefined and the
+    // first real toggle would snap instead of gliding.
+    const prev = logoShown[nameSlot];
+    logoShown[nameSlot] = hasLogo;
+    if (parseFloat(text.getAttribute('x')) === x) return;
+    // Snap on first paint and theme swaps — the same rule the row toggles and
+    // the meld follow. Only a live change animates, so a source coming up on air
+    // is never mid-slide.
+    if (!gsap || fresh || prev === undefined || prev === hasLogo) {
+      text.setAttribute('x', String(x));
+      return;
+    }
+    // MELD_DUR/MELD_EASE, shared with the card's own width tween: on a melding
+    // theme both can run off one producer click, and two eases would read as two
+    // separate things moving.
+    gsap.to(text, { attr: { x }, duration: MELD_DUR, ease: MELD_EASE, overwrite: true });
+  }
+
+  /*
+   * The logo's own half of that swap. It cross-fades over the same beat rather
+   * than snapping, or the box would empty a full 0.4s before the name arrives to
+   * fill it — the vacancy reads as the glitch the reflow exists to remove.
+   *
+   * The hide defers `setImage('')` to the end of the fade: dropping the href up
+   * front is what "hidden" means to the engine, and it would blank the image on
+   * frame one with the tween then fading nothing.
+   */
+  function swapLogo(slot, url, fresh) {
+    const el = engine.slots[slot];
+    if (!el) return;
+    const prev = logoShown[slot];
+    const has = !!url;
+    logoShown[slot] = has;
+    if (!gsap || fresh || prev === undefined || prev === has) {
+      engine.setImage(slot, url);          // steady state, and href swaps in place
+      return;
+    }
+    if (has) {
+      engine.setImage(slot, url);
+      gsap.fromTo(el, { attr: { opacity: 0 } },
+        { attr: { opacity: 1 }, duration: MELD_DUR, ease: MELD_EASE, overwrite: true });
+      return;
+    }
+    gsap.to(el, {
+      attr: { opacity: 0 }, duration: MELD_DUR, ease: MELD_EASE, overwrite: true,
+      onComplete: () => { if (!disposed) engine.setImage(slot, ''); },
+    });
+  }
+
+  function bindTop(d, vis, fresh) {
     engine.setText('s1-name', d.p1 || 'Player One');
     engine.setText('s2-name', d.p2 || 'Player Two');
     engine.setText('s1-score', d.sL);
     engine.setText('s2-score', d.sR);
-    engine.setImage('s1-logo', vis.showTeamLogos ? (teamLogoUrl(d.team1) || d.cap1) : '');
-    engine.setImage('s2-logo', vis.showTeamLogos ? (teamLogoUrl(d.team2) || d.cap2) : '');
+    // An empty URL is the honest test for "is there a logo here": it covers the
+    // producer toggle and a side with neither a team nor a resolvable captain.
+    // (A URL that 404s still counts as drawn — a missing asset pack is its own
+    // problem, surfaced in Settings, not something to reflow around.)
+    const url1 = vis.showTeamLogos ? (teamLogoUrl(d.team1) || d.cap1) : '';
+    const url2 = vis.showTeamLogos ? (teamLogoUrl(d.team2) || d.cap2) : '';
+    swapLogo('s1-logo', url1, fresh);
+    swapLogo('s2-logo', url2, fresh);
+    reclaimLogoBox('s1-name', 's1-logo', !!url1, fresh);
+    reclaimLogoBox('s2-name', 's2-logo', !!url2, fresh);
 
     const live = !d.isFinal;
     engine.setText('inn-half', live ? d.halfShort : '');
@@ -712,7 +860,7 @@ export function mountScoreboard({ host, sb, size }) {
     // The package's port palette rides along with its SVG: applyColours reads
     // it synchronously, so it has to have landed by the time this returns.
     const [themeChanged] = await Promise.all([engine.ensureTheme(theme), ensurePortPalette(theme)]);
-    if (themeChanged) { revealKey = ''; laidOut = {}; animShown = {}; clipProxy = {}; }
+    if (themeChanged) { revealKey = ''; laidOut = {}; animShown = {}; clipProxy = {}; centerEls = null; logoShown = {}; }
     if (disposed) return;
 
     if (engine.usesAppVars) OverlayBase.applyDesignSettings(SETTINGS_TYPE, NS);
@@ -774,7 +922,7 @@ export function mountScoreboard({ host, sb, size }) {
 
     applyColours(settings, g(state, `score.${SB}.player.1.port`, null), g(state, `score.${SB}.player.2.port`, null));
 
-    bindTop(d, vis);
+    bindTop(d, vis, themeChanged);
     bindLive(d);
     bindGameMode(d, vis);
     const hasFinalContent = bindFinal(state, d, vis);
@@ -789,7 +937,14 @@ export function mountScoreboard({ host, sb, size }) {
     vis.showLiveSeg = !isFinal && vis.showLive;
     // Inning segment: the inning number during play (producer toggle), swapping
     // to the final-badge on a completed game (bindTop drives which child shows).
-    vis.showInningSeg = isFinal || vis.showInning;
+    //
+    // The live cluster IMPLIES it. In a melding theme the live segment sits
+    // outboard of the inning (row-live's data-cardw is the wider one), so live-on
+    // with inning-off grew the card past the inning's position and left a hole in
+    // the middle of it — an empty column no producer asked for. The inning is
+    // also the thing the count is a count *within*: a board showing 2-1, two out
+    // and no inning is less legible than either segment alone.
+    vis.showInningSeg = isFinal || vis.showInning || vis.showLiveSeg;
     vis.showFinal = isFinal && isCompleted && hasFinalContent;
     // A band, not a captain portrait: two or more characters on a side is the
     // bar. Completed games now carry the real roster (away_roster/home_roster),

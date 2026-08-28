@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { paintedByApp, packagePortColors, resolvePortColors } from './designPackage';
-import { LAYOUT_SETTINGS, THEME_ELEMENT, DEFAULT_PORT_COLORS } from './designConstants';
+import {
+    paintedByApp, appPaletteThemesAnything, packagePortColors, resolvePortColors,
+} from './designPackage';
+import {
+    LAYOUT_SETTINGS, THEME_ELEMENT, DEFAULT_PORT_COLORS,
+    GLOBAL_DESIGN_KEYS, THEME_ONLY_GLOBAL_KEYS,
+} from './designConstants';
 
 // Shapes as the server reports them (server/design_packages.py _package_info).
 const DEFAULT = { id: 'default', elements: ['statscard', 'stats', 'callout'], appVarElements: [] };
@@ -40,6 +45,64 @@ describe('paintedByApp', () => {
         expect(paintedByApp(null, 'default', 'statscard')).toBe(true);         // still loading
         expect(paintedByApp(PACKAGES, 'deleted-on-disk', 'nothing')).toBe(true);
         expect(paintedByApp(PACKAGES, 'default', undefined)).toBe(true);       // type isn't themed
+    });
+});
+
+/*
+ * The Design tab's GLOBAL knobs are not one element's, so they ask a different
+ * question: is there any themed element left for the app palette to paint. The
+ * answer is assembled from the per-element one — never from a package-wide tier.
+ */
+describe('appPaletteThemesAnything', () => {
+    it('is false under a package that paints every element it themes', () => {
+        // `default` ships exactly this way, so it is the out-of-the-box answer.
+        expect(appPaletteThemesAnything(PACKAGES, 'default')).toBe(false);
+    });
+
+    it('is true while ONE element is still app-painted', () => {
+        // classic's own callout is full-art and its statscard falls back to
+        // default's — `stats` alone is enough to keep the knobs, because that
+        // element is what they still reach.
+        expect(appPaletteThemesAnything(PACKAGES, 'classic')).toBe(true);
+    });
+
+    /*
+     * The element-by-element fallback counts. A package that themes nothing at
+     * all (a manifest-only package declaring just portColors) draws every
+     * element from `default`, so it inherits default's answer rather than
+     * answering "no elements, nothing to paint".
+     */
+    it('follows the fallback for elements the active package omits', () => {
+        const PORTS_ONLY = { id: 'slice26', elements: [], appVarElements: [] };
+        expect(appPaletteThemesAnything([DEFAULT, PORTS_ONLY], 'slice26')).toBe(false);
+        expect(appPaletteThemesAnything([CLASSIC, PORTS_ONLY], 'slice26')).toBe(true);
+    });
+
+    it('shows the controls whenever it cannot answer', () => {
+        expect(appPaletteThemesAnything(null, 'default')).toBe(true);        // still loading
+        expect(appPaletteThemesAnything([], 'default')).toBe(true);          // no packages at all
+        expect(appPaletteThemesAnything(PACKAGES, 'deleted-on-disk')).toBe(false); // falls back to default
+    });
+});
+
+describe('THEME_ONLY_GLOBAL_KEYS', () => {
+    it('names only real global design keys', () => {
+        for (const key of THEME_ONLY_GLOBAL_KEYS) {
+            expect(GLOBAL_DESIGN_KEYS).toContain(key);
+        }
+    });
+
+    /*
+     * These reach the Event Header and Player Name, which are plain DOM
+     * overlays with no theme SVG — their mounts call applyDesignSettings
+     * unconditionally. Listing one here would hide a control that is live under
+     * every package, which is the failure this whole mechanism is meant to avoid.
+     */
+    it('never claims a key an unthemed overlay reads', () => {
+        for (const key of ['accentColor', 'textColor', 'fontFamily', 'textShadowEnabled',
+            'textShadowBlur', 'textShadowColor', 'showCaptains', 'showLogo', 'designPackage']) {
+            expect(THEME_ONLY_GLOBAL_KEYS).not.toContain(key);
+        }
     });
 });
 
@@ -103,16 +166,24 @@ describe('resolvePortColors', () => {
 
 describe('THEME_ELEMENT', () => {
     /*
-     * The map exists only to gate `appPalette` settings, so an entry with no
-     * such setting gates nothing and a setting with no entry is never gated.
-     * Either one is a silent no-op, which is why they're pinned together.
+     * A setting with no entry is never gated — a silent no-op — so every type
+     * carrying an `appPalette` def must have a stem.
+     *
+     * This used to be an EQUALITY: the map's only job was gating those settings,
+     * so an extra entry gated nothing and was just as much a mistake. It has a
+     * second caller now — the per-element style overrides, which every themed
+     * element has whether or not it carries an `appPalette` def of its own — so
+     * the map is deliberately wider than the settings that started it, and the
+     * rule that survives is the one that catches a real no-op. The other half
+     * moved to designConstants.test.js, which pins the map against the mounts.
      */
-    it('covers exactly the types carrying an app-palette setting', () => {
+    it('covers every type carrying an app-palette setting', () => {
         const gated = Object.keys(LAYOUT_SETTINGS)
             .filter(type => LAYOUT_SETTINGS[type].some(d => d.appPalette));
-        // No exceptions. `stats` used to be one, because the type was shared by
-        // the fed HTML bar (always app-painted) and the themed SVG source and
-        // there was no single answer. The fed bar is shelved, so there is.
-        expect(gated).toEqual(Object.keys(THEME_ELEMENT));
+        // `stats` used to be absent, because the type was shared by the fed HTML
+        // bar (always app-painted) and the themed SVG source and there was no
+        // single answer. The fed bar is deleted, so there is.
+        expect(gated).toEqual(['statsbar', 'statscard']);
+        for (const type of gated) expect(THEME_ELEMENT).toHaveProperty(type);
     });
 });

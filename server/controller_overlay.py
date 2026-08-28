@@ -150,7 +150,6 @@ class ControllerOverlay:
     _process: asyncio.subprocess.Process | None = None
     _task: asyncio.Task | None = None
     _port: int = 8069
-    _controller: int = 1
     _gc_overlay_path: Path | None = None
     _version: str | None = None
     _running: bool = False
@@ -175,7 +174,6 @@ class ControllerOverlay:
                 cls._gc_overlay_path = p
 
         cls._port = Settings.Get("controller_overlay.port", 8069)
-        cls._controller = Settings.Get("controller_overlay.controller", 1)
         cls._auto_start = Settings.Get("controller_overlay.auto_start", False)
         cls._version = _read_gc_version(cls._gc_overlay_path)
 
@@ -295,7 +293,6 @@ class ControllerOverlay:
             "version": cls._version,
             "running": running,
             "port": cls._port,
-            "controller": cls._controller,
             "pid": cls._process.pid if cls._process and running else None,
             "url": f"http://localhost:{cls._port}" if running else None,
         }
@@ -305,13 +302,6 @@ class ControllerOverlay:
         """Update the port (requires restart to take effect)."""
         cls._port = port
         await Settings.Set("controller_overlay.port", port)
-
-    @classmethod
-    async def SetController(cls, controller: int):
-        """Update the controller port (1-4). Requires restart."""
-        if 1 <= controller <= 4:
-            cls._controller = controller
-            await Settings.Set("controller_overlay.controller", controller)
 
     @classmethod
     async def SetPath(cls, path: str):

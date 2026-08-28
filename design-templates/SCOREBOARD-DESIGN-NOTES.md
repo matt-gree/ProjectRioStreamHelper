@@ -1,111 +1,201 @@
 # Scoreboard design notes (for the Figma round trip)
 
-Companion to `scoreboard-m.template.svg`. The scoreboard is the most
-data-dense element in PRSH, so read this before restyling.
+Companion to `scoreboard-s.template.svg`, `scoreboard-m.template.svg` and
+`scoreboard-l.template.svg`. The scoreboard is the most data-dense element in
+PRSH, so read this before restyling.
 
 ## The three sizes and what fits
 
-| Size | Canvas | Rows it uses |
+| Size | Canvas | Layout | Rows it uses |
+|---|---|---|---|
+| s | 388×156 | **absolute** (melds) | `row-top`, `row-bottom`, `row-inning`, `row-live`, `row-mode` |
+| m | 600×200 | **stack** | `row-top` + `row-live` / `row-final` |
+| l | 800×460 | **stack** | all rows (+ rosters, box score) |
+
+Each size is its own file and its own frame — there is no responsive
+relationship between them, and nothing is ever scaled. A size implements
+whatever subset of the slot vocabulary fits it. **Don't resize the outer
+frame**: place inside it freely, but keep it locked to the native size. (Legacy
+`xs` and `xl` sources are retired — the app resolves them to `l`.)
+
+The three canvases are pinned across the app, the server and the mount by
+`tests/unit/test_size_dims_parity.py`, so a size quoted anywhere else is a
+guess. These are the real ones.
+
+## Two layout contracts, and which one you're in
+
+The root frame either declares `data-layout="absolute"` or it doesn't, and that
+single fact changes what your positions mean.
+
+### Absolute — you place everything (Scoreboard S)
+
+WYSIWYG. What you see in the frame is exactly what ships. The app pours in
+content and shows/hides rows; it never moves a piece you placed. (One
+exception: the captain ring `sT-cap-ring` is snapped onto the captain's roster
+slot.)
+
+To declare absolute mode from a tool that can't edit the root `<svg>`, drop an
+invisible layer named **`layout=absolute`** anywhere — the compiler lifts it to
+the root and deletes the helper.
+
+### Stack — the app assembles the card (Scoreboard M and L)
+
+Each `row-*` group is a self-contained horizontal **band**, authored at a local
+y origin of 0 and declaring its height with `h=N` in its layer name. At runtime
+the app stacks whichever bands are showing, top down from the card's y, and
+resizes `card-bg` to their total. A completed game has no live band, so
+everything below it moves up — the card really does change height on air.
+
+Because the file authors every band at y=0, a static SVG would draw all of them
+on top of each other. **The template moves them to the offsets they land on**
+so you open an assembled card, and records where it put each one as `at=N` in
+the layer name. The compiler takes that back out. So:
+
+- **Keep the `at=` token.** Without it your export ships with the preview
+  offset baked in and the app stacks each row twice.
+- **Moving a row vertically does nothing on air.** The app owns where bands sit.
+  What you change is a band's `h=` (how tall it is) and its contents.
+- **Nudging content *inside* a row is yours** and survives.
+
+## Rows are toggle groups
+
+`row-top` always shows. Everything else appears when the game state calls for
+it. Two rows drawn at the **same `at=`** are alternates — `row-live` during a
+game, `row-final` once it completes — so the template draws them overlapping on
+purpose. Toggle one off in the layers panel to work on the other, and design
+each to fill the band on its own.
+
+In **absolute** mode a row named `slot=row-live anim=expand-right` wipes open to
+the right when a game starts and collapses when it ends, instead of just
+appearing. Draw it in its open position beside the core; the app animates the
+reveal and the core never moves. You author nothing extra — the tag opts in.
+
+## Scoreboard S melds, and the dashed cyan boxes show you how
+
+S is a compact pill that **grows** to enclose whatever is showing, on both axes:
+
+| Guide | Size | When |
 |---|---|---|
-| xs | 400×50 | row-top only |
-| s | 500×80 | row-top only |
-| m | 600×200 | row-top + row-live / row-final |
-| l | 800×460 | all rows (+ rosters, box score) |
+| `stage-resting` | 224×128 | names + scores only |
+| `stage-row-inning` | 292×128 | the inning segment opens |
+| `stage-row-live` | 380×128 | the live cluster opens |
+| `stage-row-mode` | 380×156 | the game-mode band drops in |
 
-Start with **m** (the template you have). Each size is its own file
-(`scoreboard-m.svg`, etc.); a size just implements whatever slots fit.
+`card-bg` carries its collapsed size as `compactw=` / `compacth=`, and each
+segment declares the card size it forces (`cardw=` / `cardh=`). **Content
+sitting outside the resting box is not misplaced** — it belongs to a larger
+stage, and the card will have grown by the time it shows. That is why the game
+mode line appears to float below the card in a static view.
 
-## Absolute layout — you place everything
+Design every stage to look finished on its own, and keep each stage's content
+inside its own box. The guides are `scaffold=` layers: editing-only, stripped
+on compile.
 
-This template is **`data-layout="absolute"`**: WYSIWYG. What you see in the
-600×200 frame is exactly what ships. You position every piece by hand, anywhere
-in the frame. The **one rule: don't resize the outer 600×200 frame** — place
-inside it freely, but keep the frame itself locked to the native size.
+## Hidden layers are shown at full opacity
 
-- **Everything's position, size, colour, font, spacing** — **yours.** The app
-  only pours in content (text, images, lit/unlit dots) and shows/hides the rows;
-  it never moves a piece you placed. (One exception: the captain ring
-  `sT-cap-ring` gets snapped onto the captain's roster slot.)
-- To declare absolute mode from a design tool that can't edit the root `<svg>`,
-  drop an invisible layer named **`layout=absolute`** anywhere — the compiler
-  lifts it to the root and deletes the helper. (This template already carries
-  `data-layout="absolute"` on the root, so you don't need to.)
+Anything the app toggles on — the FINAL badge, the down arrow, runner icons,
+character slots — is authored invisible in the shipped file, because those are
+game states rather than design choices. You can't style what the tool draws as
+nothing, so the template **reveals them** and tags the layer name `hidden`.
 
-> Without the flag, the app uses the older **stack** layout: it auto-stacks the
-> active rows and resizes the card. That mode still exists for elements built
-> around live collapse-and-reflow toggles (the vertical Scorecard) — but for
-> the scoreboard, absolute is the path.
+**Keep the `hidden` token.** The compiler puts the layer back to invisible on
+the way in. Drop it and that badge ships permanently on screen.
 
-## Rows are toggle groups the app shows in place
-
-`row-top` always shows. `row-live` and `row-final` occupy the **same lower
-band** — the app shows `row-live` during a game and crossfades to `row-final`
-once it's completed (ELO swings + stadium/date). You author **both, overlapping
-at that band position**; the app toggles which one is visible. In absolute mode
-it never moves them, so put each exactly where it should land on screen.
-
-**MLB-style expand:** to make the live panel *wipe open to the right* when a
-game starts (and collapse when it ends) instead of just appearing, name that
-group `slot=row-live anim=expand-right`. Draw it in its open position beside the
-core; the app animates the reveal (the core never moves). You author nothing
-extra — the motion is the app's, the tag just opts in.
+This is why several things overlap in a fresh template: the up arrow, the down
+arrow and the FINAL badge all live in the same spot because the app shows one
+at a time. Toggle them in the layers panel.
 
 ## What each named layer does
 
-**Always visible (row-top):**
+**Always visible (`row-top`):**
 - `slot=card-bg` / `slot=card-rail` — the card and its accent rail
-- `slot=s1-name` / `slot=s2-name` — player names (`maxw` auto-shrinks long ones)
+- `slot=s1-name` / `slot=s2-name` — player names (`maxw=` auto-shrinks long ones)
 - `slot=s1-score` / `slot=s2-score` — runs
 - `slot=s1-logo` / `slot=s2-logo` — team logos (image)
 - `slot=inn-num` + `slot=inn-arrow-up` / `slot=inn-arrow-down` — inning + top/bottom
 - `slot=final-badge` — the "FINAL" chip (app shows it on completed games)
+- `slot=meta-game-mode` — the game mode. Bound in **both** states, unlike the
+  `meta-*` pair below, so any size may place it.
 
-**Live game (row-live):**
+**Live game (`row-live`):**
 - `slot=bat-icon` / `slot=pit-icon` — batter/pitcher character (image)
 - `slot=bat-name` / `slot=pit-name` — their names
 - `slot=ball-0..3`, `slot=strike-0..2`, `slot=out-0..2` — count dots (app fills
   the active ones; style the empty state, the app sets the lit colour)
+- `slot=balls` / `slot=strikes` — the count as **numbers** instead of dots, for
+  a theme that would rather print "2-1" than light pips
 - `slot=base-1..3` — the diamond bases (app lights occupied ones)
 - `slot=runner-1..3` — runner character icons on base (image)
 
-**Completed game (row-final):**
+**Completed game (`row-final`):**
 - `slot=elo1-group` / `slot=elo2-group` — each wraps `elo{N}-in`, `elo{N}-out`,
   `elo{N}-delta` (rating before → after, and the swing)
 - `slot=meta-main` / `slot=meta-date` — stadium · innings, and the date
+
+**Rosters (`row-roster`, size l):**
+- `slot=s1-char-0..8` / `slot=s2-char-0..8` — the nine character icons per side
+- `slot=sT-cap-ring` — a ring the app moves onto the captain's slot
+
+**Box score (`row-box`, size l):**
+- `slot=box-col-1..9` — a per-inning column, wrapping `box-h-N` (the header),
+  `box-away-N` and `box-home-N`
+- `slot=box-away-r` / `slot=box-home-r` — the runs total
+- `slot=box-away-name` / `slot=box-home-name` — the row labels
 
 ## Colours: yours vs the app's
 
 Three hues are **live data** — leave them on the data layers and the app
 repaints them per game:
+
 - `#e53935` (side 1) / `#1e88e5` (side 2) = the two players' controller-port
   colours
 - `#e60012` (accent) = the producer's accent setting
 
 Everything else — card background, borders, dividers, text colour, fonts,
-corner radii, decorative shapes — is yours. When you send the file back, I
-convert those three live hues back into the app's colour variables; you just
-keep using them where you want a side/accent colour to appear.
+corner radii, decorative shapes — is yours. On the way back in, those three
+hues become the app's colour variables again; you just keep using them where
+you want a side or accent colour to appear.
+
+Note that side 1's sentinel is deliberately **not** the same red as the accent:
+they resolve to the same colour live, and the round trip has to tell them apart.
 
 ## Icons (team logos / characters)
 
 PRSH doesn't ship Nintendo art, so the icon slots are empty in Figma — you'll
-see a **dashed placeholder box** behind each one marking its footprint. Design
-the box (size, corner radius, a faint fill) as the "no art" look: because the
-app draws the real icon **on top** and hides it when there's none, your box
-shows through automatically as the fallback. No extra wiring needed.
+see a **grey dashed placeholder box** behind each one marking its footprint.
+Design the box (size, corner radius, a faint fill) as the "no art" look:
+because the app draws the real icon **on top** and hides it when there's none,
+your box shows through automatically as the fallback. No extra wiring needed.
 
-If you want a real placeholder *image* to design against, ask and I'll hand you
-a neutral silhouette set; the live app uses the tournament's own asset pack.
+(Grey dashed = an image slot's footprint. Cyan dashed = a meld stage. Both are
+`scaffold=` layers and neither ships.)
 
 ## Export from Figma
 
 - SVG, layer names included as ids, **text NOT outlined**.
-- Keep the frame at the exact canvas size (600×200 for m).
-- Keep the `slot=` / `part=` / `data-h` layer names. Figma may rewrite `=` or
-  add suffixes on export — that's fine, the compiler tolerates it, but glance
-  at the install report to confirm the slot count matches.
-- Keep the `data-layout="absolute"` on the root frame (or a `layout=absolute`
-  layer). Without it the app reverts to auto-stacking and ignores your vertical
-  positions.
-- Send me the `.svg` (or drop it in Setup → Design and read the report). I
-  reconcile the colour variables and hand back the installable theme.
+- Keep the frame at the exact canvas size for that file.
+- Keep every token in a layer name: `slot=` / `part=` / `tpl=`, and the
+  modifiers riding with them — `h=`, `maxw=`, `at=`, `cardw=`, `cardh=`,
+  `compactw=`, `compacth=`, `full=`, `anim=`, and the bare `hidden`. A modifier
+  that goes missing takes its behaviour with it, silently: the node still
+  arrives, the thing it did doesn't.
+- A value with commas (`full=32,28,176,176`) is a coordinate list — the commas
+  are there because layer names split on spaces. Leave them.
+- Keep `data-layout="absolute"` on the root frame of Scoreboard S (or a
+  `layout=absolute` layer). Without it the app auto-stacks and ignores your
+  vertical positions.
+- Send back the `.svg` (or drop it in the Design tab and read the report).
+  **Read the report** — it names every slot recovered, every modifier it could
+  not parse, and whether your tool baked the row offsets into the contents.
+
+## Regenerating these templates
+
+They're generated, never hand-edited:
+
+```bash
+python scripts/figma-template.py --write
+```
+
+That reads the shipped themes in `public/design/default/` and rewrites every
+`design-templates/*.template.svg`, round-tripping each one back through the
+compiler to verify no binding was lost on the way.

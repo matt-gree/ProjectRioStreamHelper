@@ -14,6 +14,10 @@
       slot=NAME maxw=N     text that auto shrinks past N units
       part=NAME            a styling part the mount recolours
       tpl=NAME w=N         a prototype the mount clones per row
+      slot=NAME hidden     a layer the APP toggles on (a FINAL badge, a runner
+                           icon). Shown here so you can style it; the compiler
+                           puts it back to invisible. Drop the flag and it
+                           ships permanently visible.
       scaffold=NAME        editing only guide (dashed boxes), STRIPPED on compile
       layout=absolute      invisible marker carrying the root layout mode
     Keep them. Rename freely otherwise.
@@ -29,6 +33,21 @@
     Dashed boxes mark image slots (team logos, character icons). PRSH ships no
     game art, so design the BOX as the no art look; the app draws the real icon
     on top and hides it when there is none.
+
+    STACK ROWS (slot=row-*) have been moved to the offsets the app stacks them
+    to, so this file shows the assembled card rather than every band piled on
+    the frame origin. `at=N` in the name records where each was put and the
+    compiler takes it back out; anything you move ON TOP of that is kept. Two
+    rows sharing one `at=` are ALTERNATES - a live game or a completed one,
+    never both - so they are drawn overlapping on purpose. Toggle one off in
+    the layers panel to work on the other, and design each to fill the band.
+
+    CYAN DASHED BOXES (scaffold=stage-*) are the sizes this card takes at
+    runtime, labelled with the row that triggers each. The card GROWS to enclose
+    a segment when the app shows it, so content sitting outside the resting box
+    is not misplaced - it belongs to a larger stage. Design every stage to look
+    finished, and keep each stage's content inside its own box. The guides are
+    editing only and never ship.
     --><!--
     DEFAULT package - Stat CARD (landscape, 380x240): the compact 2x2 stat card
     used by the combined Roster + Stats element (rosterstats-mount.js) and by the
@@ -111,11 +130,11 @@
     label beside it, so it gets the full 330.
   -->
   <!-- Card. Authored in its commonest state: header off, footer on. -->
-  <rect x="2" y="30" width="376" height="208" rx="16" fill="#0b0b12" stroke="#1f1f30" stroke-width="1.5" id="slot=card-bg hfull=208 hcompact=176" />
+  <rect x="2" y="30" width="376" height="208" rx="16" fill="#0b0b12" stroke="#1f1f30" stroke-width="1.5" id="slot=card-bg hfull=208 hcompact=176 topopen=2 topclosed=30 botopen=238 botclosed=206" />
 
   <g id="slot=content">
     <!-- Header caption: band 2..44.25, caption centred on a 30 baseline -->
-    <g opacity="0" id="slot=head-group">
+    <g opacity="1" id="slot=head-group hidden">
       <text x="190" y="30" text-anchor="middle" font-size="19" font-weight="700" letter-spacing="0.6" fill="#f5f5f8" font-family="Rajdhani" id="slot=head-text maxw=330">Head Text</text>
       <rect x="20" y="44.25" width="340" height="1.5" fill="#1f1f30" />
     </g>
@@ -123,7 +142,7 @@
     <!-- Character icon (left) in a soft well with an accent rail -->
     <rect x="20" y="58" width="110" height="120" rx="14" fill="rgba(255,255,255,0.045)" />
     <rect x="20" y="58" width="4" height="120" rx="2" fill="#E60012" />
-    <rect id="scaffold=char-icon" x="29" y="70" width="96" height="96" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="29" y="70" width="96" height="96" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=char-icon" />
+    <rect id="scaffold=char-icon" x="29" y="70" width="96" height="96" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="29" y="70" width="96" height="96" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=char-icon hidden" />
 
     <!-- 2x2 grid dividers -->
     <rect x="257.25" y="62" width="1.5" height="116" fill="#1f1f30" />

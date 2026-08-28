@@ -252,3 +252,83 @@ async def test_matchup_tags_follow_the_book_without_refetching_its_games():
 
     assert State.state["matchup"]["side1"]["tag"] == "New"
     assert State.state["matchup"]["totalGames"] == 0   # no refetch
+
+
+# --- production prefs: the side pin ---
+
+async def test_preferred_side_reads_the_pin_case_insensitively():
+    _seed("p_1", rio="MattGree", tag="Matt")
+    await Participants.Update("p_1", {"prefs": {"side": 2}})
+    assert Participants.PreferredSide("mattgree") == 2
+
+
+def test_preferred_side_is_none_for_an_unpinned_or_unknown_person():
+    _seed("p_1", rio="MattGree", tag="Matt")
+    assert Participants.PreferredSide("MattGree") is None
+    assert Participants.PreferredSide("Nobody") is None
+    assert Participants.PreferredSide("") is None
+
+
+async def test_an_unparseable_side_is_no_pin_at_all():
+    """A pin that half-parses would silently orient a broadcast, so anything
+    that isn't 1 or 2 — a legacy "Team 1" string, a 0 from a form, junk from a
+    hand-edited backup — is normalized to no preference."""
+    _seed("p_1", rio="MattGree", tag="Matt")
+    for junk in ("Team 1", 0, 3, "", None, "left", {}):
+        await Participants.Update("p_1", {"prefs": {"side": junk}})
+        assert Participants.PreferredSide("MattGree") is None
+
+
+async def test_normalize_keeps_a_stored_pin_across_a_reload():
+    row = Participants._normalize(
+        {"id": "p_1", "identities": {"rioName": "Zoe"}, "prefs": {"side": 2}}, "p_1")
+    assert row["prefs"]["side"] == 2
+
+
+# --- the one-shot migration off the global Player Lock ---
+
+async def test_adopt_legacy_pin_moves_the_setting_onto_an_existing_person(set_setting):
+    from server.settings import Settings
+
+    _seed("p_1", rio="MattGree", tag="Matt")
+    set_setting("project_rio.pinned_player", "MattGree")
+    set_setting("project_rio.pinned_side", "Team 2")
+
+    assert await Participants.adopt_legacy_pin() is True
+    assert Participants.PreferredSide("MattGree") == 2
+    # Cleared, so a second boot can't re-run it over a producer's later edit.
+    assert Settings.Get("project_rio.pinned_player") == ""
+
+
+async def test_adopt_legacy_pin_adds_someone_the_book_never_had(set_setting):
+    """Dropping the pin because the producer never added that person to the book
+    would be a silent regression — the old lock never required a row."""
+    set_setting("project_rio.pinned_player", "Ghost")
+    set_setting("project_rio.pinned_side", "Team 1")
+
+    assert await Participants.adopt_legacy_pin() is True
+    assert Participants.PreferredSide("Ghost") == 1
+    assert Participants.MatchByRioName("Ghost") is not None
+
+
+async def test_adopt_legacy_pin_is_a_no_op_with_nothing_pinned():
+    assert await Participants.adopt_legacy_pin() is False
+    assert Participants.participants == {}
+
+
+async def test_import_merge_refreshes_a_pin_but_no_preference_defers():
+    """Prefs refresh like display (incoming non-empty wins), not fill-empty like
+    identities — a backup's pin is the producer's own most recent answer, while
+    `None` means the backup has no opinion."""
+    _seed("p_1", rio="Zoe", tag="Zoe")
+    await Participants.Update("p_1", {"prefs": {"side": 1}})
+
+    await Participants.ImportRows([
+        {"identities": {"rioName": "Zoe"}, "display": {"tag": "Zoe"}, "prefs": {"side": 2}},
+    ])
+    assert Participants.PreferredSide("Zoe") == 2
+
+    await Participants.ImportRows([
+        {"identities": {"rioName": "Zoe"}, "display": {"tag": "Zoe"}},
+    ])
+    assert Participants.PreferredSide("Zoe") == 2

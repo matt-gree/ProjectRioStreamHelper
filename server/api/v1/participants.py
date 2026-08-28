@@ -21,6 +21,12 @@ class ParticipantPayload(BaseModel):
     applied; unknown keys inside each block are ignored by the singleton."""
     identities: dict[str, Any] | None = None
     display: dict[str, Any] | None = None
+    # Production preferences (today: `side`, the cascade's pin layer). A block
+    # missing here is dropped by pydantic before the singleton ever sees it,
+    # which is how a new field silently fails to save. `exclude_none` drops the
+    # BLOCK when absent, not an explicit `{"side": None}` — so clearing a pin
+    # still reaches Update.
+    prefs: dict[str, Any] | None = None
     meta: dict[str, Any] | None = None
 
 

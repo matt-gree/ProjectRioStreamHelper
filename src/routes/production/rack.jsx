@@ -13,11 +13,14 @@ import { cn } from '../../lib/utils';
 import { usePersistentState } from '../../hooks/usePersistentState';
 import { ELEMENTS, isPinnable } from './elements';
 import {
-    placementTarget, togglePin as togglePinIn, useConsoleOffline, useConsolePlacements,
-    useConsoleScenes, usePlacementLabel,
+    isFedPlacement, placementTarget, togglePin as togglePinIn, useConsoleOffline,
+    useConsolePlacements, useConsoleScenes, usePlacementLabel,
 } from './placements';
 import { StateChip, chipFor } from './kit';
-import { setSourceVisibility, useDisplayedEnabled } from './bindings';
+import {
+    removeSourceFromScene, setSourceVisibility, useDisplayedEnabled, useOtherScenesWith,
+    useRemovalStaged,
+} from './bindings';
 import { useContainerPush } from './feeds';
 import { useMemberScope } from './containers';
 import { boardDeskId, useActiveBoards, useBoardLabel } from './boards';
@@ -90,7 +93,7 @@ export function useShutTiers() {
 // `null` (never touched) is deliberately distinct from `[]` (emptied on
 // purpose) — only the former seeds. Stored in pre-scene form on purpose: they
 // resolve to wherever those sources actually are (./placements).
-export const RAIL_SEED = ['scoreboard', 'stats'];
+export const RAIL_SEED = ['scoreboard', 'statsbar'];
 
 export function seededRail(rail) {
     if (rail !== null && rail !== undefined) return rail;
@@ -204,18 +207,26 @@ const PinToggle = memo(function PinToggle({ pinned, onToggle }) {
  * than asking whether you are sure — what a board takes with it is the thing
  * worth a second look, not the click.
  */
-const RowRemove = memo(function RowRemove({ label, note, onRemove, disabled, disabledHint }) {
+const RowRemove = memo(function RowRemove({
+    label, note, onRemove, disabled, disabledHint, staged,
+}) {
     const [open, setOpen] = useState(false);
     const trigger = (
         <button
             type="button" disabled={disabled}
-            aria-label={label} title={disabled ? disabledHint : label}
+            aria-label={label}
+            title={disabled ? disabledHint : staged ? 'Staged — goes live on confirm' : label}
             className={cn(
                 'shrink-0 transition-colors',
                 disabled
                     ? 'cursor-not-allowed text-muted-foreground/40'
-                    : 'text-muted-foreground/70 hover:text-destructive',
-                open && 'text-destructive',
+                    // Amber is the console's staged tone everywhere else (the
+                    // eye, the feed radio); a row whose removal is waiting on
+                    // the commit says so in the same colour.
+                    : staged
+                        ? 'text-amber-400'
+                        : 'text-muted-foreground/70 hover:text-destructive',
+                open && !staged && 'text-destructive',
             )}
         >
             <Trash2 size={12} />
@@ -243,6 +254,47 @@ const RowRemove = memo(function RowRemove({ label, note, onRemove, disabled, dis
                 </div>
             </PopoverContent>
         </Popover>
+    );
+});
+
+/*
+ * A scene row's remove — the counterpart to its section's +, and the same
+ * treatment the BOARDS tier already gives its rows.
+ *
+ * ONLY ON A ROW THAT OWNS ITS SOURCE. A fed row's `item` is the CONTAINER's
+ * scene item (../placements: the members nest under one source), so a trash
+ * there would delete the container out from under every member on its roster
+ * while appearing to remove one of them. Roster membership is edited on the
+ * container's stage panel; this button removes sources from scenes and nothing
+ * else.
+ *
+ * The confirm states the CONSEQUENCE, which for this action is entirely a
+ * question of whether another scene still holds the source: if one does, this
+ * costs nothing and Add to OBS is not even needed to undo it. If none does,
+ * OBS releases the input and the transform the producer set by hand goes with
+ * it — that is the sentence worth stopping for, and the only one.
+ */
+const PlacementRemove = memo(function PlacementRemove({ placement, name }) {
+    const { scenes, complete } = useOtherScenesWith(placement.item?.sourceName, placement.scene);
+    const staged = useRemovalStaged(placement.scene, placement.item);
+    // A fed row keeps the COLUMN so the pin diamonds stay in one line down the
+    // rack — an empty cell, not a missing one.
+    if (!placement.item || isFedPlacement(placement)) {
+        return <span aria-hidden className="w-3 shrink-0" />;
+    }
+    const note = scenes.length
+        ? `The source stays in ${scenes.length === 1 ? scenes[0] : `${scenes.length} other scenes`}.`
+        : complete
+            ? 'This is its only scene — its size and position in OBS go with it. '
+                + 'Adding it back creates a fresh copy.'
+            : 'If no other scene uses it, its size and position in OBS go with it.';
+    return (
+        <RowRemove
+            label={`Remove ${name} from ${placement.scene}`}
+            note={note}
+            staged={staged}
+            onRemove={() => removeSourceFromScene(placement.scene, placement.item)}
+        />
     );
 });
 
@@ -630,6 +682,7 @@ const SceneSection = memo(function SceneSection({
                                     : <EyeAction placement={p} />}
                                 pinnable={isPinnable(p.element)} pinned={pinned.has(p.id)}
                                 onPinToggle={() => onPinToggle(p.id)}
+                                rowAction={<PlacementRemove placement={p} name={name} />}
                             />
                         );
                     })
@@ -730,7 +783,7 @@ export const Rack = memo(function Rack({
                                   + 'what’s in your scenes. Authoring, previews and container feeds all work; '
                                   + 'showing and hiding needs OBS. Use + to copy a source URL. To connect: '
                                   + 'enable the WebSocket server in OBS (Tools → WebSocket Server Settings), '
-                                  + 'then set it up in Settings → OBS.'}
+                                  + 'then set it up on the Connections tab.'}
                         </Text>
                     )}
                 </div>

@@ -35,7 +35,7 @@ const STAT_CARD_SETTINGS = [
 //
 // Not part of STAT_CARD_SETTINGS, because it is not part of every card: the
 // header is a band in `statscard.svg`, and the standalone Stats source renders
-// the wide `stats.svg`, which has no room for one. Offering the knob there would
+// the wide `statsbar.svg`, which has no room for one. Offering the knob there would
 // put a control on the stage that cannot change anything. The Stat Card
 // container member, which DOES render the 2x2 card, takes it below.
 const TOP_LINE_SETTINGS = [
@@ -60,7 +60,16 @@ export const LAYOUT_SETTINGS = {
         // Segment toggles honoured by melded themes (e.g. Small Scoreboard); a
         // theme without those segments ignores them.
         { key: 'showLive', type: 'switch', label: 'Live Cluster', description: 'The live count + base diamond. Off keeps it hidden even during a live game (the card stays compact).', defaultValue: true },
-        { key: 'showInning', type: 'switch', label: 'Inning', description: 'The inning number segment during a live game', defaultValue: true },
+        // forcedBy: the mount ORs this with the live cluster (scoreboard-mount
+        // showInningSeg), so with Live Cluster on this switch cannot say no —
+        // and a control that keeps offering a choice it doesn't have is the
+        // producer's next bug report. The console shows it held on instead.
+        {
+            key: 'showInning', type: 'switch', label: 'Inning',
+            description: 'The inning number segment during a live game. The live cluster needs it, so turning that on shows the inning too.',
+            forcedBy: { key: 'showLive', note: 'Held on by the Live Cluster — the count reads as a count within an inning, and on a melded theme the live segment sits outboard of this one. Turn the Live Cluster off to get this switch back.' },
+            defaultValue: true,
+        },
     ],
     roster: [
         { key: 'showSuperstars', type: 'switch', label: 'Superstar Icons', description: 'Display superstar badge on starred characters' },
@@ -70,7 +79,7 @@ export const LAYOUT_SETTINGS = {
     // Stats — the per-side stat card as its OWN source (?scoreboard=N&team=T),
     // drawing whoever that side has on the field. One namespace for both sides,
     // same as the roster's.
-    stats: [...STAT_CARD_SETTINGS],
+    statsbar: [...STAT_CARD_SETTINGS],
     // Stat Card — the compact 2x2 card as a CONTAINER MEMBER (no standalone
     // layout of its own). Same knobs as the standalone Stats source under its
     // own namespace, so a container's card and a dedicated stats source are
@@ -191,22 +200,85 @@ export const LAYOUT_SETTINGS = {
 };
 
 // ── Which design-package file draws a layout type ──
-// Only types that carry an `appPalette: true` setting need an entry: the map's
-// single job is to ask the active package whether that element is painted by the
-// app's knobs or brings its own palette (see ./designPackage.js). Adding a type
-// with no such setting would gate nothing.
+// Layout type → the theme SVG's file stem, which is what a package's `elements`
+// / `appVarElements` are named after. The map answers one question for two
+// callers: is this element painted by the app's palette under the active
+// package, or does the package bring its own (./designPackage.js).
 //
-// `stats` was deliberately ABSENT for as long as the type was shared by two
-// renderers — the fed Stats bar (stats-mount.js) is plain HTML and always
-// honours the app palette, while stats.html is the themed SVG — so there was no
-// single answer and the safe one was not to gate. The fed bar is shelved and
-// `overlays.stats.*` now has exactly one reader, so the answer exists: under a
-// full-art theme the card brings its own palette and the two colour rows are
-// dead, which is the state this map takes them off the panel for.
+// The two callers want DIFFERENT coverage, which is why this is no longer just
+// the `appPalette` types:
+//   - an element's own `appPalette` settings (statValueColor, subtextColor) —
+//     needs an entry or the gate silently never fires;
+//   - the per-element STYLE OVERRIDES of global keys, which every themed
+//     element has, so every themed element needs a stem.
+// A type ABSENT here is never drawn by a theme SVG at all — the Event Header
+// and Player Name are the two, and they are exactly the elements whose mounts
+// apply the palette unconditionally.
+//
+// `stats` was deliberately absent for as long as the type was shared by two
+// renderers — the fed Stats bar was plain HTML and always honoured the app
+// palette, while stats.html is the themed SVG — so there was no single answer
+// and the safe one was not to gate. The fed bar is deleted and
+// `overlays.statsbar.*` now has exactly one reader, so the answer exists.
 export const THEME_ELEMENT = {
-    stats: 'stats',
+    statsbar: 'statsbar',
     statscard: 'statscard',
+    commentary: 'commentary',
+    lowerthird: 'lowerthird',
+    matchup: 'matchup',
+    playerplates: 'playerplates',
+    scorecard: 'scorecard',
+    ticker: 'ticker',
+    // The scoreboard is THREE theme files, one per size, and a package may tier
+    // them differently — so its stem is a function of the source's ?size=, not
+    // a constant. `themeElementFor` is the only correct way to read this entry;
+    // the value here is the default size's file, for a caller with no variant.
+    scoreboard: 'scoreboard-l',
 };
+
+// Size codes the scoreboard ships (server/theme_contracts.py CONTRACTS is the
+// source of truth; the mount resolves anything unknown to `l`, so this does
+// too rather than inventing a stem no package can have shipped).
+const SCOREBOARD_SIZES = new Set(['s', 'm', 'l']);
+
+/**
+ * The theme stem for `type`, given the source's size variant where that matters.
+ *
+ * @param type layout/settings type ('scoreboard', 'statsbar', …)
+ * @param size the source's ?size= code, or null/undefined for the default
+ */
+export function themeElementFor(type, size) {
+    if (type !== 'scoreboard') return THEME_ELEMENT[type];
+    return `scoreboard-${SCOREBOARD_SIZES.has(size) ? size : 'l'}`;
+}
+
+// ── Which layouts can honour a PER-ELEMENT override ──
+// The settings types whose mount calls OverlayBase.applyDesignSettings, which is
+// the only code that ever reads `overlays.{type}.{key}` on top of the global
+// (its `perAccent` / `perFont` / `perBadge` / CARD_OVERRIDE_VARS reads). A mount
+// outside this list may still honour the GLOBAL key perfectly well — it just has
+// no path by which one element's pin could reach it.
+//
+// That is the distinction the `<meta name="overlay-settings">` whitelist cannot
+// draw, and why this list exists beside it. Both post-game callouts declare
+// `accentColor, fontFamily` and both mean it — postgame-callout-mount.js reads
+// `overlays.global.accentColor` for a portless side and `overlays.global.
+// fontFamily` for its type — but they read the GLOBAL directly and never call
+// applyDesignSettings, so a per-element pin on them would store, broadcast, and
+// be ignored. The meta is honest; it is answering a different question.
+//
+// Pinned against the mounts themselves by designConstants.test.js. If you add a
+// mount that applies the palette, add it here in the same change or its
+// overrides are unreachable.
+export const OVERRIDE_CAPABLE_TYPES = [
+    // Conditional — applied only when the active theme opts in
+    // (`engine.usesAppVars`), which is what THEME_ELEMENT above gates on.
+    'scoreboard', 'scorecard', 'statsbar', 'statscard',
+    'commentary', 'lowerthird', 'matchup', 'playerplates', 'ticker',
+    // Unconditional — no theme SVG exists for these, so the palette is the only
+    // thing that styles them under every package.
+    'eventheader', 'playername',
+];
 
 // ── Global design keys eligible for per-layout override ──
 // Each entry corresponds to a key in overlays.global.* that the user can pin a
@@ -223,12 +295,85 @@ export const OVERRIDABLE_GLOBAL_KEYS = [
     { key: 'borderWidth',    meta: ['borderWidth'],    type: 'number',        label: 'Border Thickness',   defaultValue: 1,  min: 0, max: 16, step: 1, suffix: 'px' },
     { key: 'cardShadowBlur', meta: ['cardShadow'],     type: 'number',        label: 'Card Shadow Blur',   defaultValue: 16, min: 0, max: 80, step: 2, suffix: 'px' },
     { key: 'textShadowBlur', meta: ['textShadow'],     type: 'number',        label: 'Text Shadow Blur',   defaultValue: 4,  min: 0, max: 40, step: 1, suffix: 'px' },
+    // Font border (text stroke). Two keys, one meta name, and no enable switch:
+    // 0 is off, so the width IS the switch and nothing can disagree with it.
+    // The global default is 0, which is what makes this override-shaped rather
+    // than global-shaped — pinning a width on one element gives that element an
+    // outline and leaves every other overlay exactly as it was.
+    { key: 'textStrokeWidth', meta: ['textStroke'],   type: 'number',        label: 'Font Border',        defaultValue: 0,  min: 0, max: 12, step: 0.5, suffix: 'px' },
+    { key: 'textStrokeColor', meta: ['textStroke'],   type: 'color-opacity', label: 'Font Border Color',  defaultValue: 'rgba(0, 0, 0, 0.9)' },
     { key: 'showCaptains',     meta: ['showCaptains'],     type: 'switch', label: 'Show Captains' },
     { key: 'showLogo',         meta: ['showLogo'],         type: 'switch', label: 'Show Overlay Logo' },
     { key: 'showShadow',       meta: ['showShadow'],       type: 'switch', label: 'Card Shadow' },
-    { key: 'finalBadgeColor',  meta: ['finalBadgeColor'],  type: 'color',  label: 'Final Badge Color' },
+    // No global default: unset, the shipped badge is `fill:var(--accent)` and
+    // follows the accent. `seedFrom` is what a freshly ADDED override starts
+    // at — the value the element is already drawing, so adding the row changes
+    // nothing on air. Without it this is the one key that resolves to null,
+    // and picking it from the Add menu would write null, which means unpinned:
+    // the row would not appear at all.
+    { key: 'finalBadgeColor',  meta: ['finalBadgeColor'],  type: 'color',  label: 'Final Badge Color', seedFrom: 'accentColor' },
     { key: 'fontFamily',       meta: ['fontFamily'],       type: 'font',   label: 'Font Family', defaultValue: 'Inter' },
 ];
+
+// ── Which types each override key actually REACHES ──
+// `OVERRIDABLE_GLOBAL_KEYS` says a key CAN be pinned per element; this says on
+// which elements the pin is read back. They are not the same list, because
+// overlay-base.js reads a per-element override in three different ways and only
+// one of them is universal:
+//
+//   every type   `perAccent` / `perFont` / `perBadge` / `perCardBlur` /
+//                `perTextBlur` — read straight off `overrideNs` in
+//                applyDesignSettings, so they work wherever it is called.
+//   some types   LAYOUT_VAR_MAP — the card surface and the text colour are read
+//                only for the types listed there. A `cardBg` pin on the
+//                commentary or the ticker stores and broadcasts and is never
+//                looked at.
+//   the mount    `showCaptains` / `showLogo` never go through
+//                applyDesignSettings at all — the ticker and the scoreboard
+//                read them with `readSetting`, which does its own
+//                per-layout-then-global resolution.
+//   nowhere      `showShadow` is read as `overlays.global.showShadow` with no
+//                per-element read anywhere, so it cannot be pinned at all.
+//
+// `null` = every type. `[]` = no type. Pinned against overlay-base.js by
+// designConstants.test.js, because a key promoted to a row it cannot reach is
+// exactly the silent no-op the override gating exists to prevent.
+//
+// `statsbar` is deliberately absent from the card-surface rows even though it
+// draws a card: LAYOUT_VAR_MAP still keys those vars under `stats`, the name
+// this element had before the 2026-08-23 rename, so the reads do not fire for
+// it. Fixing that key changes what is on air (a pinned transparent cardBg would
+// start applying), so it is a decision, not a typo — and until it is made, the
+// honest answer here is that the pin does not reach.
+const OVERRIDE_READ_TYPES = {
+    accentColor: null,
+    fontFamily: null,
+    finalBadgeColor: null,
+    cardShadowBlur: null,
+    textShadowBlur: null,
+    // Read off `overrideNs` like the blurs, so the pin reaches wherever
+    // applyDesignSettings runs. Which elements DRAW it is the layout's own
+    // question, answered by its <meta> whitelist: today only playername.html
+    // declares `textStroke`, because its mount is the only CSS that binds
+    // --text-stroke-* to anything. Same shape as textShadow, which the Event
+    // Header likewise never declares.
+    textStrokeWidth: null,
+    textStrokeColor: null,
+    cardBg: ['scoreboard'],
+    borderColor: ['scoreboard'],
+    borderRadius: ['scoreboard'],
+    borderWidth: ['scoreboard'],
+    textColor: ['scoreboard', 'playername'],
+    showLogo: ['scoreboard'],
+    showCaptains: ['ticker'],
+    showShadow: [],
+};
+
+/** Is a per-element pin of `key` read back on `type`? */
+export function overrideReaches(key, type) {
+    const types = OVERRIDE_READ_TYPES[key];
+    return types == null ? true : types.includes(type);
+}
 
 // ── The controller-port palette ──
 // Ports 1-4, in order. GLOBAL and not per-layout overridable: a controller port
@@ -245,10 +390,38 @@ export const PORT_COLOR_KEYS = ['port0Color', 'port1Color', 'port2Color', 'port3
 // public/layout/lib/port-colors.js (pinned by designConstants.test.js).
 export const DEFAULT_PORT_COLORS = ['#e53935', '#1e88e5', '#fdd835', '#43a047'];
 
+// ── Which global keys only reach an overlay through a THEME ──
+// The Design tab's knobs are not all the same kind of thing, and a design
+// package that paints every element itself kills only one kind: the ones whose
+// ONLY consumers are the design-package SVGs and the themed mounts that draw
+// them (via applyDesignSettings, which a full-art mount CLEARS — see
+// ./designPackage.js).
+//
+// Everything NOT listed here survives any package, and that is a fact about the
+// overlays rather than a judgement call:
+//   accentColor / textColor / fontFamily / textShadow* / textStroke*  the Event
+//     Header and Player Name are plain DOM overlays with no theme SVG at all,
+//     so their mounts call applyDesignSettings unconditionally and read
+//     --accent, --text-primary, --font-family, --text-shadow and
+//     --text-stroke-* whatever is installed.
+//   showCaptains / showLogo   content toggles read through readSetting, never a
+//     CSS var — the ticker and the scoreboard honour them under any theme.
+//   PORT_COLOR_KEYS   resolved by port-colors.js, with the package's own
+//     declaration UNDER them rather than instead of them.
+//
+// Add a key here only after checking who reads it; a key wrongly listed becomes
+// a control the producer can no longer reach.
+export const THEME_ONLY_GLOBAL_KEYS = [
+    'cardBg', 'borderColor', 'finalBadgeColor',
+    'borderRadius', 'borderWidth',
+    'showShadow', 'cardShadowBlur', 'cardShadowColor',
+];
+
 export const GLOBAL_DESIGN_KEYS = [
     'accentColor', 'cardBg', 'textColor', 'borderRadius', 'borderColor', 'borderWidth', 'fontFamily',
     'showShadow', 'cardShadowBlur', 'cardShadowColor',
     'textShadowEnabled', 'textShadowBlur', 'textShadowColor',
+    'textStrokeWidth', 'textStrokeColor',
     // Promoted from per-layout in v2:
     'showCaptains', 'showLogo', 'finalBadgeColor',
     // Promoted from the Character Spotlight's own settings in v4 (see above):
@@ -272,6 +445,9 @@ export const GLOBAL_DESIGN_DEFAULTS = {
     textShadowEnabled: false,
     textShadowBlur:    4,
     textShadowColor:   'rgba(0, 0, 0, 0.8)',
+    // 0 = no border anywhere until something pins one.
+    textStrokeWidth:   0,
+    textStrokeColor:   'rgba(0, 0, 0, 0.9)',
     showCaptains:      true,
     showLogo:          true,
     finalBadgeColor:   null,

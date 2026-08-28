@@ -194,7 +194,7 @@ function useLayoutCatalog(open) {
 
 const GROUP_LABELS = {
     scoreboard1: 'Scoreboard',
-    scorecard: 'Scorecard',
+    scorecard: 'Vertical Scorecard',
     shared: 'Shared containers',
     commentary: 'Talent',
     playerplates: 'Talent',
@@ -203,6 +203,11 @@ const GROUP_LABELS = {
     rotator: 'Rotators',
     bracket: 'Bracket',
     hitvisualizer: 'Hit Visualizer',
+    // The two full-canvas end-of-game callouts. Unlabelled they fell through to
+    // the raw folder name — a shelf reading "postgame", sorted last because an
+    // unlisted group ranks after every named one, holding two of the elements a
+    // producer reaches for every single game.
+    postgame: 'Post-game',
     schedule: 'Schedule',
     eventheader: 'Event Header',
     controller: 'Controller',
@@ -218,9 +223,9 @@ const GROUP_LABELS = {
  * catalog order.
  */
 const GROUP_ORDER = [
-    'Scoreboard', 'Scorecard', 'Shared containers', 'Talent', 'Break',
-    'Rotators', 'Event Header', 'Schedule', 'Hit Visualizer', 'Bracket',
-    'Controller', 'Other',
+    'Scoreboard', 'Vertical Scorecard', 'Shared containers', 'Talent', 'Break',
+    'Rotators', 'Event Header', 'Schedule', 'Hit Visualizer', 'Post-game',
+    'Bracket', 'Controller', 'Other',
 ];
 const groupRank = (label) => {
     const at = GROUP_ORDER.indexOf(label);
@@ -844,7 +849,7 @@ export const AddSourceDialog = memo(function AddSourceDialog({ scene, open: open
     /*
      * Sequential, never parallel: the OBS mirror reconciles one event at a time
      * and a burst of CreateInput races it (and races its own uniqueness check —
-     * two "Stats — Team 1" in flight both see the name free).
+     * two "Stat Bar — Team 1" in flight both see the name free).
      *
      * No rollback on partial failure. Deleting sources the producer can see
      * appear is worse than telling them plainly which one didn't make it, so the

@@ -99,11 +99,14 @@ export const SubjectRow = memo(function SubjectRow({ text, meta, tone, title, cl
  * one toggle and no input to align with, so there is no column to join.
  */
 export const ToggleRow = memo(function ToggleRow({
-    label, checked, onChange, disabled, staged, spread, className,
+    label, checked, onChange, disabled, staged, spread, title, className,
 }) {
     const tone = staged ? 'text-amber-400' : 'text-foreground';
+    // `title` on the LABEL, not the Switch: a disabled control doesn't see the
+    // pointer, so a tooltip on it is unreachable exactly when the row is
+    // disabled and the tooltip is the only thing saying why.
     return (
-        <label className={cn(ROW, spread && 'justify-between', className)}>
+        <label title={title || undefined} className={cn(ROW, spread && 'justify-between', className)}>
             <Text
                 size="xs" span truncate
                 className={cn('min-w-0', spread ? tone : cn(KIT_LABEL, tone))}
@@ -139,11 +142,29 @@ export const ToggleRow = memo(function ToggleRow({
  * foreground + fill and off is muted + hairline. Amber still means staged.
  */
 export const ToggleChip = memo(function ToggleChip({
-    label, checked, onChange, disabled, staged, title, ariaLabel, className,
+    label, checked, onChange, disabled, locked, staged, title, ariaLabel, className,
 }) {
     return (
         <button
-            type="button" onClick={() => onChange?.(!checked)} disabled={disabled}
+            type="button"
+            onClick={() => { if (!locked) onChange?.(!checked); }}
+            disabled={disabled}
+            /*
+             * `locked` is NOT `disabled`, for two reasons that both matter here.
+             *
+             * Weight: `disabled:opacity-40` fades the whole chip, and a locked
+             * chip is by definition an ON one — faded, it lands dimmer than the
+             * OFF chips beside it and the strip reads backwards. Locked keeps
+             * full contrast and marks itself with a dashed edge: on, but not by
+             * your hand.
+             *
+             * Reach: a natively disabled button never sees the pointer, so its
+             * own `title` is unreachable exactly when it is the only thing
+             * saying why the chip won't move (the trap AddOverride wraps its
+             * trigger to dodge). aria-disabled says the same to a screen reader
+             * while leaving hover alive.
+             */
+            aria-disabled={locked || undefined}
             aria-pressed={!!checked} title={title || undefined}
             /* `ariaLabel` for a chip whose text names the SETTING but not the
                thing it applies to — two "Home" chips, one per side, are two
@@ -153,6 +174,7 @@ export const ToggleChip = memo(function ToggleChip({
             className={cn(
                 'flex h-6 shrink-0 items-center rounded-md border px-2 text-xs transition-colors',
                 'disabled:cursor-not-allowed disabled:opacity-40',
+                locked && 'cursor-not-allowed border-dashed',
                 staged ? 'border-amber-400/60 bg-amber-400/10 text-amber-400'
                     : checked ? 'border-foreground/25 bg-foreground/10 text-foreground'
                         : 'border-border text-muted-foreground hover:text-foreground',
@@ -202,7 +224,7 @@ export const SelectRow = memo(function SelectRow({
 // producer sets while working. Commits on change like every other kit row;
 // callers that need debouncing own it.
 export const NumberRow = memo(function NumberRow({
-    label, value, onChange, min, max, step, suffix, disabled, staged, className,
+    label, value, onChange, min, max, step, suffix, disabled, staged, placeholder, className,
 }) {
     return (
         <div className={cn(ROW, className)}>
@@ -210,6 +232,11 @@ export const NumberRow = memo(function NumberRow({
             <input
                 type="number" min={min} max={max} step={step} disabled={disabled}
                 aria-label={named(label)}
+                // A blank number row means "nothing pinned here" for a style
+                // override, and the placeholder is where the inherited value
+                // shows through. Every other caller passes none and gets today's
+                // empty field.
+                placeholder={placeholder}
                 value={value ?? ''}
                 onChange={(e) => onChange?.(e.target.value === '' ? null : Number(e.target.value))}
                 className={cn(KIT_INPUT, 'w-20', staged && 'border-amber-400/60 text-amber-400')}
@@ -317,8 +344,15 @@ export const TextRow = memo(function TextRow({
 // "use the theme default": the swatch falls back to black for the native
 // picker but the field reads empty and shows a reset only once a colour is
 // pinned, so onChange(null) is how the producer clears back to the default.
+/*
+ * `hideReset` is for a caller that owns removal ITSELF — the style-override
+ * rows, where taking the value away means taking the whole row off the element,
+ * and a second reset beside that one does the same thing under a different
+ * word. Every other caller keeps the built-in reset.
+ */
 export const ColorRow = memo(function ColorRow({
-    label, value, onChange, disabled, staged, className,
+    label, value, onChange, disabled, staged, placeholder = 'Default', className,
+    hideReset,
 }) {
     const has = value != null && value !== '';
     return (
@@ -331,12 +365,12 @@ export const ColorRow = memo(function ColorRow({
                 className="h-7 w-8 shrink-0 rounded-md border border-border bg-card p-0.5"
             />
             <input
-                type="text" disabled={disabled} placeholder="Default"
+                type="text" disabled={disabled} placeholder={placeholder}
                 value={has ? value : ''}
                 onChange={(e) => onChange?.(e.target.value || null)}
                 className={cn(KIT_INPUT, 'min-w-0 flex-1', staged && 'border-amber-400/60 text-amber-400')}
             />
-            {has && (
+            {has && !hideReset && (
                 <button
                     type="button" onClick={() => onChange?.(null)} disabled={disabled}
                     aria-label={`Reset ${label}`}

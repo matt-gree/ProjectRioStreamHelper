@@ -39,8 +39,8 @@ export function mountController({ host, sb = 1, team = 1, portOverride = null })
      *
      * The status endpoint is the only thing that knows: the port is a setting,
      * PRSH hunts for a free one near it when it is taken, and nothing is serving
-     * at all until the producer starts the subprocess from the Controller
-     * element's stage panel.
+     * at all until the producer starts the subprocess from the Connections
+     * tab.
      */
     async function resolveGcBaseUrl() {
         try {
@@ -64,6 +64,7 @@ export function mountController({ host, sb = 1, team = 1, portOverride = null })
         // No port on this side: nothing to show. Blank rather than keep the last
         // player's controller on screen.
         if (port == null) {
+            OverlayBase.setBlank('No controller port on this side yet — the HUD reports a port only once a game is loaded.');
             frame.style.display = 'none';
             frame.src = 'about:blank';
             lastPort = undefined;
@@ -75,6 +76,11 @@ export function mountController({ host, sb = 1, team = 1, portOverride = null })
             if (!gcBaseUrl) {
                 // gc-overlay is not up yet — the producer may not have started it.
                 // Keep asking, quietly, rather than deciding it never will be.
+                //
+                // THREE different blanks look identical on a transparent source
+                // (no reader, no port, no game), so each says which — the note
+                // paints in PREVIEW_MODE and always lands on `data-prsh-blank`.
+                OverlayBase.setBlank('The controller reader isn’t running — start it on the Connections tab.');
                 frame.style.display = 'none';
                 if (retry === null && !disposed) {
                     retry = setTimeout(() => { retry = null; update(OverlayBase.state); }, 2000);
@@ -85,8 +91,24 @@ export function mountController({ host, sb = 1, team = 1, portOverride = null })
 
         if (port !== lastPort) {
             lastPort = port;
-            frame.src = `${gcBaseUrl}/?port=${port}`;
+            /*
+             * Two translations happen here, and skipping either is silent:
+             *
+             * - gc-overlay's `?port=` is 1-INDEXED (its page does `p - 1` and
+             *   ignores anything outside 1..4), while the HUD — and so
+             *   `score.{N}.player.{T}.port`, and this mount's own `?port=`
+             *   override — is 0-indexed. Untranslated, port 0 worked by
+             *   accident (it failed gc-overlay's range guard and fell back to
+             *   its default of 0) and every other side showed the WRONG
+             *   player's controller. The Connections tab's per-port previews
+             *   already speak gc-overlay's convention; only this path needed it.
+             * - `bg=transparent` is not optional: gc-overlay's page paints an
+             *   opaque #1a1a2e unless asked, so the iframe lands in OBS as a
+             *   solid dark box no matter how transparent this layout is.
+             */
+            frame.src = `${gcBaseUrl}/?port=${port + 1}&bg=transparent`;
         }
+        OverlayBase.setBlank(null);
         frame.style.display = '';
     }
 

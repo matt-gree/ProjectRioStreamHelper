@@ -93,6 +93,11 @@ async def lifespan(app: FastAPI):
     # it (resurface, Match projection). Without this the address book starts
     # empty every launch even though it persisted to participants.json.
     await Participants.Load()
+    # Player Lock moved off the global settings pair and onto the person — a pin
+    # is a fact about a participant, not about the app. Same seam as the event
+    # header adoption above: the book has to be in memory before anything can be
+    # written onto a row, and Settings already is. One-shot; it clears the keys.
+    await Participants.adopt_legacy_pin()
     await RioGameDataProvider.Start()
     # Warm the Rio caches once per launch rather than trusting a cache.pkl
     # timestamp that can be a day stale. Fire-and-forget so a slow/offline Rio

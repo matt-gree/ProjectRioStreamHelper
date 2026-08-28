@@ -125,7 +125,7 @@ const poolSize = (ids) => (Array.isArray(ids) ? ids.length : 0);
 const SIDE_REASON = {
     manual: 'set by hand for this game',
     match: 'from the bound match',
-    pin: 'pinned in Settings',
+    pin: 'pinned in the Address Book',
     back_to_back: 'where they were last game',
 };
 
@@ -136,7 +136,8 @@ const SIDE_REASON = {
  *
  * The sentence used to be "Alice on the left — pinned in Settings", which
  * hard-coded an arrangement into the one line whose whole job is explaining a
- * side assignment. It now names the side the same way the column above it does.
+ * side assignment. It now names the side the same way the column above it does
+ * — and the pin it points at is a person's own, not the app's (../../player_list).
  */
 export function sideReasonLine(reason, name1, where = 'side 1') {
     const why = SIDE_REASON[reason];
@@ -1553,7 +1554,7 @@ export default function BoardDesk({ board }) {
                                     poolCount: d.poolCount,
                                     live: d.g.gameLive,
                                 })}
-                                {d.transport === 'hud' && ' Disable HUD in Settings to rebind.'}
+                                {d.transport === 'hud' && ' Turn off Follow local HUD on Connections to rebind.'}
                             </Text>
                             {/* Exactly the condition the server polls under: a
                                 single-mode board with a pinned game still being

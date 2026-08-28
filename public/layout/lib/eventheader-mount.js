@@ -186,11 +186,19 @@ export function mountEventHeader({ host, sb = 1 }) {
      * the same number; inside a container the host is the centered member box,
      * and scaling to the window there would size the bands to the whole canvas
      * rather than to the box they were given.
+     *
+     * That measurement is the answer in a PREVIEW too, and this used to stand
+     * down there on the belief that the console scales the iframe for it. It
+     * does not: ScaledIframe SIZES the iframe to the fit box and hands the
+     * overlay that viewport, precisely so nothing is rasterised at the wrong
+     * scale — so standing down drew the 1920-wide stage 1:1 into an ~880-wide
+     * frame, i.e. at 217% of the size the readout beside it claimed. Inside a
+     * container preview the host is fed-container's `.fc-fit` wrapper at the
+     * container's native size, so this measures native and scales by 1 and
+     * that one transform still does all the fitting. The preview frame never
+     * exceeds the source (`frameMaxWidth`), so this can only scale down.
      */
     function autoScale() {
-        // In a preview the iframe itself is scaled (ScaledIframe, and a
-        // container's own fit box) — one authority, so this one stands down.
-        if (OverlayBase.PREVIEW_MODE) { stage.style.transform = ''; return; }
         const w = root.clientWidth || window.innerWidth;
         const h = root.clientHeight || window.innerHeight;
         const scale = Math.min(w / REF_W, h / REF_H) || 1;

@@ -16,7 +16,7 @@
  *                            element, registered or not. These are the layout
  *                            catalog's own variant axes (layouts.py expands
  *                            each into a separate catalog row), so a producer
- *                            picking "Stats — Team 2" has already chosen one.
+ *                            picking "Stat Bar — Team 2" has already chosen one.
  *
  * The variant axis is not optional bookkeeping, and it is deliberately not
  * gated on registration. An UNREGISTERED team-variant layout rows through

@@ -40,18 +40,35 @@ their rest transform, which is where the mount puts them at t=0. The header
 comment written into each template says how many rules were dropped, so the
 designer knows motion exists and is not theirs.
 
-The other deliberate non-change is HIDDEN STATE: layers the contract authors at
-``opacity:0`` (a FINAL badge, a runner icon, the completed-game row) stay at
-zero. They are still real layers in Figma's panel and can be toggled to edit,
-and leaving the authored value is what keeps the round trip lossless - a
-revealed layer would compile back as a permanently visible one.
+HIDDEN STATE is REVEALED. Layers the contract authors at ``opacity:0`` (a FINAL
+badge, a runner icon, the completed-game row) are states the app turns on, not
+design choices - and a designer cannot style what a design tool draws as
+nothing. So the template sets them to full opacity and spells the authored
+state in the layer name as the bare flag ``hidden``, which the compiler reads
+back into ``opacity="0"``. Revealing them WITHOUT that flag is what would make
+the round trip lossy: the layer would compile back permanently visible.
+
+MELD STAGES get dashed guides. A card that resizes at runtime (Scoreboard S
+grows sideways for the inning/live segments and downwards for the game-mode
+band) can only be ONE of its sizes in a static file, so the shipped SVG shows a
+game-mode line sitting outside a card 28 units too short. Every extent the card
+can take is drawn as a dashed ``scaffold=stage-*`` box, derived from the same
+``compact-w``/``compact-h``/``cardw``/``cardh`` attributes the mount melds to,
+so the guides cannot drift from the behaviour.
 """
 import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from server.theme_compiler import _MODIFIERS, _local, FileReport, SVG_NS, XLINK_NS
+from server.theme_compiler import (
+    _LIST_MODIFIERS,
+    _MODIFIERS,
+    _local,
+    FileReport,
+    SVG_NS,
+    XLINK_NS,
+)
 
 # Reverse of theme_compiler._MODIFIERS: data-<suffix> -> grammar key. Built from
 # that table rather than restated, so a modifier added there cannot go missing
@@ -275,14 +292,177 @@ def grammar_id(el: ET.Element) -> str | None:
     tokens = [f"{marker}={name}" if name else marker]
     for attr, key in _ATTR_TO_GRAMMAR.items():
         value = el.get(attr)
-        if value is not None:
-            tokens.append(f"{key}={value}")
+        if value is None:
+            continue
+        # A layer name is split on spaces, so a coordinate list rides on commas.
+        if key in _LIST_MODIFIERS:
+            value = ",".join(value.split())
+        tokens.append(f"{key}={value}")
+    # The authored hidden state, carried as a flag so the template can reveal
+    # the layer for editing without the reveal shipping (see module docstring).
+    if _is_hidden(el):
+        tokens.append("hidden")
     return " ".join(tokens)
+
+
+def _is_hidden(el: ET.Element) -> bool:
+    """Is this layer authored invisible? (step 3 has already lifted an inline
+    ``style="opacity:0"`` onto the attribute, so the attribute is enough.)"""
+    try:
+        return float(el.get("opacity", "1")) == 0
+    except ValueError:
+        return False
 
 
 # --------------------------------------------------------------------------
 # Build
 # --------------------------------------------------------------------------
+
+GUIDE_HUE = "#00E5FF"  # deliberately not a design colour and not a seam sentinel
+
+
+def _num(el: ET.Element, attr: str) -> float | None:
+    try:
+        return float(el.get(attr))  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+
+
+def _meld_stages(root: ET.Element) -> list[tuple[str, float, float, float, float, str]]:
+    """Every extent a melding card takes, as ``(label, x, y, w, h, rx)``.
+
+    Read off the meld attributes themselves — card-bg's collapsed size plus each
+    segment's ``data-cardw``/``data-cardh`` — so a guide cannot claim a size the
+    mount would not actually grow to. A theme with no meld gets nothing.
+    """
+    bg = next(
+        (el for el in root.iter()
+         if isinstance(el.tag, str) and el.get("data-slot") == "card-bg"),
+        None,
+    )
+    if bg is None:
+        return []
+    compact_w, compact_h = _num(bg, "data-compact-w"), _num(bg, "data-compact-h")
+    if compact_w is None and compact_h is None:
+        return []
+
+    x, y = _num(bg, "x") or 0.0, _num(bg, "y") or 0.0
+    rx = bg.get("rx") or "0"
+    widths: list[tuple[str, float]] = []
+    heights: list[tuple[str, float]] = []
+    for el in root.iter():
+        if not isinstance(el.tag, str):
+            continue
+        name = el.get("data-slot") or "segment"
+        w, h = _num(el, "data-cardw"), _num(el, "data-cardh")
+        if w is not None:
+            widths.append((name, w))
+        if h is not None:
+            heights.append((name, h))
+
+    # The axis a theme does not meld is fixed at the authored size.
+    rest_w = compact_w if compact_w is not None else (_num(bg, "width") or 0.0)
+    rest_h = compact_h if compact_h is not None else (_num(bg, "height") or 0.0)
+    full_w = max([rest_w] + [w for _, w in widths])
+    full_h = max([rest_h] + [h for _, h in heights])
+
+    stages = [("resting", x, y, rest_w, rest_h, rx)]
+    # A width stage is drawn at the resting height and a height stage at the
+    # full width: the two axes meld independently, so each box is one axis's
+    # answer rather than a combined state the card may never be in.
+    stages += [(name, x, y, w, rest_h, rx) for name, w in sorted(widths, key=lambda t: t[1])]
+    stages += [(name, x, y, full_w, h, rx) for name, h in sorted(heights, key=lambda t: t[1])]
+    return stages
+
+
+# Rows the mount never shows together, so the preview stacks them at ONE offset
+# instead of two. A board is showing a live game or a completed one, never both;
+# scoreboard-mount.js gates them on showLiveSeg / showFinal, which is logic and
+# not something a theme file declares — so the pairing is stated here.
+_EXCLUSIVE_ROWS = ({"row-live", "row-final"},)
+
+
+def _stack_rows(root: ET.Element) -> list[tuple[ET.Element, str, float]]:
+    """Every ``row-*`` group of a STACK theme with the y it lands on, in the
+    order the mount stacks them (which is document order in every shipped file).
+
+    Absolute themes place their own rows and get nothing. The preview is the
+    LIVE state: where two rows are alternates the taller one sets the advance,
+    so nothing below can collide in either state and the designer is authoring
+    against the card at its full height.
+    """
+    if (root.get("data-layout") or "stack").lower() != "stack":
+        return []
+    rows = [
+        el for el in root.iter()
+        if isinstance(el.tag, str) and (el.get("data-slot") or "").startswith("row-")
+    ]
+    if not rows:
+        return []
+    bg = next(
+        (el for el in root.iter()
+         if isinstance(el.tag, str) and el.get("data-slot") == "card-bg"),
+        None,
+    )
+    out: list[tuple[ET.Element, str, float]] = []
+    offset = (_num(bg, "y") if bg is not None else 0.0) or 0.0
+    group_at: dict[int, float] = {}
+    for el in rows:
+        name = el.get("data-slot") or ""
+        gi = next((k for k, g in enumerate(_EXCLUSIVE_ROWS) if name in g), None)
+        # An alternate of a row already placed sits ON it and advances nothing.
+        if gi is not None and gi in group_at:
+            out.append((el, name, group_at[gi]))
+            continue
+        out.append((el, name, offset))
+        height = _num(el, "data-h") or 0.0
+        if gi is not None:
+            group_at[gi] = offset
+            height = max(
+                (_num(other, "data-h") or 0.0)
+                for other in rows if (other.get("data-slot") or "") in _EXCLUSIVE_ROWS[gi]
+            )
+        offset += height
+    return out
+
+
+def _stage_guides(stages: list[tuple[str, float, float, float, float, str]]) -> ET.Element:
+    """The dashed boxes, on TOP of the art — an outline behind an opaque card
+    is an outline the designer never sees."""
+    def fmt(v: float) -> str:
+        return f"{v:g}"
+
+    group = ET.Element(f"{{{SVG_NS}}}g")
+    group.set("id", "scaffold=meld-stages")
+    group.set("fill", "none")
+    group.set("stroke", GUIDE_HUE)
+    group.set("stroke-opacity", "0.75")
+    group.set("stroke-width", "1")
+    group.set("stroke-dasharray", "4 4")
+    for i, (label, x, y, w, h, rx) in enumerate(stages):
+        rect = ET.SubElement(group, f"{{{SVG_NS}}}rect")
+        rect.set("id", f"scaffold=stage-{label}")
+        rect.set("x", fmt(x))
+        rect.set("y", fmt(y))
+        rect.set("width", fmt(w))
+        rect.set("height", fmt(h))
+        rect.set("rx", rx)
+        # Right-aligned to the box's OWN right edge (which is what names it),
+        # but stepped down one line per stage: two stages a few units apart
+        # would otherwise print their labels over each other.
+        text = ET.SubElement(group, f"{{{SVG_NS}}}text")
+        text.set("id", f"scaffold=stage-{label}-label")
+        text.set("x", fmt(x + w - 5))
+        text.set("y", fmt(y + 12 + i * 11))
+        text.set("text-anchor", "end")
+        text.set("font-family", "Inter")
+        text.set("font-size", "9")
+        text.set("fill", GUIDE_HUE)
+        text.set("fill-opacity", "0.75")
+        text.set("stroke", "none")
+        text.text = f"{label} {fmt(w)}x{fmt(h)}"
+    return group
+
 
 def build_template(
     svg_text: str,
@@ -434,6 +614,47 @@ def build_template(
     if images:
         report.add("info", f"added {images} dashed scaffold box(es) behind image slot(s)")
 
+    # --- 4b. meld stages: dashed guides for a card that resizes ----------
+    stages = _meld_stages(root)
+    if stages:
+        root.append(_stage_guides(stages))
+        report.add(
+            "info",
+            f"added {len(stages)} dashed meld-stage guide(s) — the card's runtime extents",
+        )
+
+    # --- 4c. stack rows: place them where the mount will -----------------
+    # Without this every row of a stack theme sits at y=0, so the designer opens
+    # scoreboard-l and finds five bands piled on the frame origin — the card
+    # they are supposed to be designing is nowhere in the file. `at=K` records
+    # the placement so compile_svg can put the local origins back.
+    stack = _stack_rows(root)
+    if stack:
+        for el, _name, y in stack:
+            if y:
+                el.set("transform", f"translate(0,{y:g})")
+            el.set("data-at", f"{y:g}")
+        report.add(
+            "info",
+            f"placed {len(stack)} stack row(s) at the offsets the mount stacks them to",
+        )
+        bg = next(
+            (el for el in root.iter()
+             if isinstance(el.tag, str) and el.get("data-slot") == "card-bg"),
+            None,
+        )
+        top = (_num(bg, "y") if bg is not None else 0.0) or 0.0
+        # The BOTTOM-most row, which is not the last in document order once two
+        # alternates share an offset.
+        total = max(y + (_num(el, "data-h") or 0.0) for el, _n, y in stack) - top
+        authored = _num(bg, "height") if bg is not None else None
+        if authored is not None and abs(authored - total) > 0.5:
+            report.add(
+                "warn",
+                f"card-bg is {authored:g} tall but the rows stack to {total:g} — the preview "
+                "card will not enclose them (the mount sizes the card to the rows)",
+            )
+
     # --- 5. placeholder text so an empty slot is visible -----------------
     filled = 0
     for el in root.iter():
@@ -449,6 +670,7 @@ def build_template(
 
     # --- 6. data-* markers -> layer names --------------------------------
     slots: list[str] = []
+    revealed = 0
     for el in root.iter():
         if not isinstance(el.tag, str):
             continue
@@ -456,12 +678,23 @@ def build_template(
         if not gid:
             continue
         el.set("id", gid)
+        # grammar_id has just recorded the authored state as `hidden`, so the
+        # layer can now be shown at full strength for editing.
+        if _is_hidden(el):
+            el.set("opacity", "1")
+            revealed += 1
         if el.get("data-slot"):
             slots.append(el.get("data-slot") or "")
         for attr in [a for a in el.attrib if a.startswith("data-")]:
             del el.attrib[attr]
     report.slots = slots
     report.add("info", f"rewrote {len(slots)} slot marker(s) into layer names")
+    if revealed:
+        report.add(
+            "info",
+            f"revealed {revealed} layer(s) authored at opacity 0 — tagged `hidden`, "
+            "which the compiler restores",
+        )
 
     # The root's own data-layout has no layer to carry it through Figma, so it
     # rides as a marker layer (the compiler lifts it back and drops the layer).
@@ -515,6 +748,10 @@ def _header(element: str, viewbox: str, keyframes: int) -> str:
       slot=NAME maxw=N     text that auto shrinks past N units
       part=NAME            a styling part the mount recolours
       tpl=NAME w=N         a prototype the mount clones per row
+      slot=NAME hidden     a layer the APP toggles on (a FINAL badge, a runner
+                           icon). Shown here so you can style it; the compiler
+                           puts it back to invisible. Drop the flag and it
+                           ships permanently visible.
       scaffold=NAME        editing only guide (dashed boxes), STRIPPED on compile
       layout=absolute      invisible marker carrying the root layout mode
     Keep them. Rename freely otherwise.
@@ -530,6 +767,21 @@ def _header(element: str, viewbox: str, keyframes: int) -> str:
     Dashed boxes mark image slots (team logos, character icons). PRSH ships no
     game art, so design the BOX as the no art look; the app draws the real icon
     on top and hides it when there is none.
+
+    STACK ROWS (slot=row-*) have been moved to the offsets the app stacks them
+    to, so this file shows the assembled card rather than every band piled on
+    the frame origin. `at=N` in the name records where each was put and the
+    compiler takes it back out; anything you move ON TOP of that is kept. Two
+    rows sharing one `at=` are ALTERNATES - a live game or a completed one,
+    never both - so they are drawn overlapping on purpose. Toggle one off in
+    the layers panel to work on the other, and design each to fill the band.
+
+    CYAN DASHED BOXES (scaffold=stage-*) are the sizes this card takes at
+    runtime, labelled with the row that triggers each. The card GROWS to enclose
+    a segment when the app shows it, so content sitting outside the resting box
+    is not misplaced - it belongs to a larger stage. Design every stage to look
+    finished, and keep each stage's content inside its own box. The guides are
+    editing only and never ship.
     """
 
 

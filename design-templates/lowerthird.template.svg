@@ -14,6 +14,10 @@
       slot=NAME maxw=N     text that auto shrinks past N units
       part=NAME            a styling part the mount recolours
       tpl=NAME w=N         a prototype the mount clones per row
+      slot=NAME hidden     a layer the APP toggles on (a FINAL badge, a runner
+                           icon). Shown here so you can style it; the compiler
+                           puts it back to invisible. Drop the flag and it
+                           ships permanently visible.
       scaffold=NAME        editing only guide (dashed boxes), STRIPPED on compile
       layout=absolute      invisible marker carrying the root layout mode
     Keep them. Rename freely otherwise.
@@ -31,6 +35,21 @@
     Dashed boxes mark image slots (team logos, character icons). PRSH ships no
     game art, so design the BOX as the no art look; the app draws the real icon
     on top and hides it when there is none.
+
+    STACK ROWS (slot=row-*) have been moved to the offsets the app stacks them
+    to, so this file shows the assembled card rather than every band piled on
+    the frame origin. `at=N` in the name records where each was put and the
+    compiler takes it back out; anything you move ON TOP of that is kept. Two
+    rows sharing one `at=` are ALTERNATES - a live game or a completed one,
+    never both - so they are drawn overlapping on purpose. Toggle one off in
+    the layers panel to work on the other, and design each to fill the band.
+
+    CYAN DASHED BOXES (scaffold=stage-*) are the sizes this card takes at
+    runtime, labelled with the row that triggers each. The card GROWS to enclose
+    a segment when the app shows it, so content sitting outside the resting box
+    is not misplaced - it belongs to a larger stage. Design every stage to look
+    finished, and keep each stage's content inside its own box. The guides are
+    editing only and never ship.
     --><!--
     DEFAULT package. Lower Third: the Project Rio brand band, SLOT SYSTEM.
 
@@ -69,7 +88,7 @@
        will-change puts each sprite on its own compositor layer — the marks are
        ~110 rects each, and this app renders alongside the game. -->
   <!-- shared bed: the mount sets x/width to the laid-out row (data-pad inset) -->
-  <rect x="48" y="792" width="1824" height="232" rx="18" style="filter:drop-shadow(0 10px 44px rgba(230,0,18,0.22))" opacity="0" fill="#0b0b12" stroke="#1f1f30" stroke-width="1.5" id="slot=band-bg pad=28" />
+  <rect x="48" y="792" width="1824" height="232" rx="18" style="filter:drop-shadow(0 10px 44px rgba(230,0,18,0.22))" opacity="1" fill="#0b0b12" stroke="#1f1f30" stroke-width="1.5" id="slot=band-bg pad=28 hidden" />
 
   <!-- segment row container (band-local y origin = 792) -->
   <g transform="translate(0,792)" id="band w=1768 h=232 x=76 gap=56 align=center" />
@@ -94,7 +113,7 @@
       If you retune this box, keep the mark's side on the 16 grid.
     -->
     <g id="tpl=logo w=240">
-      <rect id="scaffold=logo" x="46" y="26" width="148" height="148" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="46" y="26" width="148" height="148" preserveAspectRatio="xMidYMid meet" opacity="0" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=logo" />
+      <rect id="scaffold=logo" x="46" y="26" width="148" height="148" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="46" y="26" width="148" height="148" preserveAspectRatio="xMidYMid meet" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=logo full=32,28,176,176 hidden" />
       <g id="slot=logo-default">
         <!-- The Project Rio mark itself (#rio-mark, inlined from
              public/game_assets/ProjectRio.svg) — not an approximation of it. -->
@@ -109,25 +128,25 @@
       <!-- The status is producer-overridable free text ("GRAND FINAL RESET"),
            so it is fitted to its chip rather than trusted to be "UP NEXT". -->
       <text x="86" y="34" text-anchor="middle" font-size="19" font-weight="700" letter-spacing="2.5" fill="#ffffff" font-family="Rajdhani" id="slot=status maxw=156">UP NEXT</text>
-      <text x="608" y="36" text-anchor="end" font-size="22" font-weight="600" letter-spacing="1" opacity="0" fill="#8f8fa3" font-family="Rajdhani" id="slot=time maxw=400">Time</text>
+      <text x="608" y="36" text-anchor="end" font-size="22" font-weight="600" letter-spacing="1" opacity="1" fill="#8f8fa3" font-family="Rajdhani" id="slot=time maxw=400 hidden">Time</text>
 
       <rect x="0" y="62" width="6" height="42" fill="#E53935" />
-      <rect id="scaffold=side1-sprite" x="18" y="58" width="50" height="50" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="18" y="58" width="50" height="50" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=side1-sprite" />
+      <rect id="scaffold=side1-sprite" x="18" y="58" width="50" height="50" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="18" y="58" width="50" height="50" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=side1-sprite hidden" />
       <text x="82" y="96" font-size="34" font-weight="700" fill="#f5f5f8" font-family="Rajdhani" id="slot=side1-name maxw=440">Player One</text>
-      <text x="608" y="98" text-anchor="end" font-size="40" font-weight="700" font-variant-numeric="tabular-nums" opacity="0" fill="#f5f5f8" font-family="Rajdhani" id="slot=side1-score maxw=60">Side1 Score</text>
+      <text x="608" y="98" text-anchor="end" font-size="40" font-weight="700" font-variant-numeric="tabular-nums" opacity="1" fill="#f5f5f8" font-family="Rajdhani" id="slot=side1-score maxw=60 hidden">Side1 Score</text>
 
       <rect x="0" y="130" width="6" height="42" fill="#1E88E5" />
-      <rect id="scaffold=side2-sprite" x="18" y="126" width="50" height="50" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="18" y="126" width="50" height="50" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=side2-sprite" />
+      <rect id="scaffold=side2-sprite" x="18" y="126" width="50" height="50" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="18" y="126" width="50" height="50" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=side2-sprite hidden" />
       <text x="82" y="164" font-size="34" font-weight="700" fill="#f5f5f8" font-family="Rajdhani" id="slot=side2-name maxw=440">Player Two</text>
-      <text x="608" y="166" text-anchor="end" font-size="40" font-weight="700" font-variant-numeric="tabular-nums" opacity="0" fill="#f5f5f8" font-family="Rajdhani" id="slot=side2-score maxw=60">Side2 Score</text>
+      <text x="608" y="166" text-anchor="end" font-size="40" font-weight="700" font-variant-numeric="tabular-nums" opacity="1" fill="#f5f5f8" font-family="Rajdhani" id="slot=side2-score maxw=60 hidden">Side2 Score</text>
 
       <!-- auto Competition Phase · Round from the bound match (blanks collapse) -->
-      <text x="608" y="214" text-anchor="end" font-size="21" font-weight="600" letter-spacing="1.5" opacity="0" fill="#8f8fa3" font-family="Rajdhani" id="slot=meta maxw=600">Meta</text>
+      <text x="608" y="214" text-anchor="end" font-size="21" font-weight="600" letter-spacing="1.5" opacity="1" fill="#8f8fa3" font-family="Rajdhani" id="slot=meta maxw=600 hidden">Meta</text>
     </g>
 
     <!-- .. SCOREBOX (live board score) .............................. -->
     <g id="tpl=scorebox w=470">
-      <text x="0" y="36" font-size="22" font-weight="700" letter-spacing="2.5" opacity="0" fill="#E60012" font-family="Rajdhani" id="slot=status">UP NEXT</text>
+      <text x="0" y="36" font-size="22" font-weight="700" letter-spacing="2.5" opacity="1" fill="#E60012" font-family="Rajdhani" id="slot=status hidden">UP NEXT</text>
 
       <rect x="0" y="62" width="6" height="42" fill="#E53935" />
       <text x="24" y="96" font-size="34" font-weight="700" fill="#f5f5f8" font-family="Rajdhani" id="slot=side1-name maxw=340">Player One</text>
@@ -141,14 +160,14 @@
     <!-- .. MERCH / advert ........................................... -->
     <g id="tpl=merch w=470">
       <rect x="0" y="32" width="168" height="168" rx="12" opacity="0.10" fill="#E60012" />
-      <rect id="scaffold=image" x="8" y="40" width="152" height="152" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="8" y="40" width="152" height="152" preserveAspectRatio="xMidYMid meet" opacity="0" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=image" />
+      <rect id="scaffold=image" x="8" y="40" width="152" height="152" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="8" y="40" width="152" height="152" preserveAspectRatio="xMidYMid meet" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=image hidden" />
       <text x="192" y="106" font-size="36" font-weight="700" fill="#f5f5f8" font-family="Rajdhani" id="slot=title maxw=270">Title</text>
-      <text x="192" y="148" font-size="24" font-weight="500" opacity="0" fill="#8f8fa3" font-family="Inter" id="slot=subtitle maxw=270">Subtitle</text>
+      <text x="192" y="148" font-size="24" font-weight="500" opacity="1" fill="#8f8fa3" font-family="Inter" id="slot=subtitle maxw=270 hidden">Subtitle</text>
     </g>
 
     <!-- .. CLOCK .................................................... -->
     <g id="tpl=clock w=330">
-      <text x="0" y="58" font-size="22" font-weight="600" letter-spacing="3" opacity="0" fill="#8f8fa3" font-family="Rajdhani" id="slot=clock-label">Clock Label</text>
+      <text x="0" y="58" font-size="22" font-weight="600" letter-spacing="3" opacity="1" fill="#8f8fa3" font-family="Rajdhani" id="slot=clock-label hidden">Clock Label</text>
       <!-- data-maxw is not optional here. The digits are authored for a
            countdown ("5:00"), but the same slot renders time-of-day with a
            meridiem and an optional suffix ("11:11 AM ET") — two and a half
@@ -161,14 +180,14 @@
     <!-- .. MESSAGE (title / subtitle) ............................... -->
     <g id="tpl=message w=580">
       <text x="0" y="112" font-size="50" font-weight="700" letter-spacing="0.5" fill="#f5f5f8" font-family="Rajdhani" id="slot=title maxw=568">Stream Title</text>
-      <text x="0" y="164" font-size="26" font-weight="500" opacity="0" fill="#8f8fa3" font-family="Inter" id="slot=subtitle maxw=568">Subtitle</text>
+      <text x="0" y="164" font-size="26" font-weight="500" opacity="1" fill="#8f8fa3" font-family="Inter" id="slot=subtitle maxw=568 hidden">Subtitle</text>
     </g>
 
     <!-- .. BRACKET (loaded phase) ................................... -->
     <g id="tpl=bracket w=470">
       <text x="0" y="42" font-size="22" font-weight="700" letter-spacing="3" fill="#E60012" font-family="Rajdhani" id="slot=label">BRACKET</text>
       <text x="0" y="112" font-size="42" font-weight="700" fill="#f5f5f8" font-family="Rajdhani" id="slot=title maxw=460">Title</text>
-      <text x="0" y="156" font-size="24" font-weight="500" opacity="0" fill="#8f8fa3" font-family="Inter" id="slot=subtitle maxw=460">Subtitle</text>
+      <text x="0" y="156" font-size="24" font-weight="500" opacity="1" fill="#8f8fa3" font-family="Inter" id="slot=subtitle maxw=460 hidden">Subtitle</text>
     </g>
 
     <!-- .. THE PROJECT RIO MARK ..................................... -->

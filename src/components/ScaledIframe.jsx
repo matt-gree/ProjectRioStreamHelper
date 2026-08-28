@@ -11,8 +11,9 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
  * PRSH overlays are resolution-independent by contract: every one of them lays
  * itself out against its viewport and scales to fill it. The bracket runs
  * `autoScale()` off `window.innerWidth/innerHeight`; matchup and the other SVG
- * mounts use a `viewBox` with `preserveAspectRatio`; stats-mount and the
- * postgame mounts compute `min(innerWidth / REF_W, innerHeight / REF_H)`. The
+ * mounts use a `viewBox` with `preserveAspectRatio`; the player-name, team-logo
+ * and postgame mounts compute `min(width / REF_W, height / REF_H)` against the
+ * host they were handed. The
  * bracket's own source comment says it outright: "the body fills whatever OBS
  * browser source size the user picks".
  *

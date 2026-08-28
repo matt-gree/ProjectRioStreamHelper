@@ -58,7 +58,9 @@ export function mountTeamLogo({ host, sb = 1, team = 1 }) {
     host.appendChild(root);
 
     function autoScale() {
-        if (OverlayBase.PREVIEW_MODE) { stage.style.transform = ''; return; }
+        // Preview included: ScaledIframe SIZES the iframe to the fit box
+        // rather than transforming it, so a mount that stands down there
+        // draws at native into a smaller frame (see eventheader-mount).
         const w = root.clientWidth || window.innerWidth;
         const h = root.clientHeight || window.innerHeight;
         const scale = Math.min(w / REF, h / REF) || 1;

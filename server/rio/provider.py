@@ -463,6 +463,43 @@ async def apply_completed_game_to_state(game: dict, scoreboard_number: int, side
     await State.Save()
 
 
+def pin_swap(left: str, right: str) -> bool | None:
+    """The `pin` layer of the side cascade, for one pairing.
+
+    True=swap, False=already correct, None=the address book has nothing to say
+    about these two. `left`/`right` are raw rioNames in feed order; True means
+    put `right` on side 1.
+
+    ONE STATEMENT OF THE RULE, imported by everything that orients a pairing —
+    the HUD cascade (`_decide`), the API pools, and the pool endpoint. It was
+    two copies reading the same settings pair, which agreed only because neither
+    had changed since they were written.
+
+    A pin is now a fact about a PERSON (`prefs.side`), so unlike the old app-wide
+    lock both players can carry one, and the two can disagree:
+
+    - one pinned → satisfy it, whichever side of the feed they arrived on;
+    - both pinned to OPPOSITE sides → they agree about the arrangement, satisfy
+      both;
+    - both pinned to the SAME side → unsatisfiable, so the layer ABSTAINS and
+      the cascade falls through to back-to-back. Picking a winner here could
+      only be arbitrary, and an arbitrary pin is worse than none: the producer
+      would see one of their two pins silently lose every game. `side_reason`
+      then names whatever actually decided, which is the honest answer.
+    """
+    want_left = Participants.PreferredSide(left)
+    want_right = Participants.PreferredSide(right)
+    if want_left is None and want_right is None:
+        return None
+    if want_left is not None and want_right is not None and want_left == want_right:
+        return None
+    # One of the two is set; the other, if set, is its complement. Reduce to
+    # "which side does the LEFT player want" and the swap falls out.
+    if want_left is None:
+        want_left = 1 if want_right == 2 else 2
+    return want_left == 2
+
+
 class RioGameDataProvider:
     """Async singleton that watches the Project Rio HUD file and pushes
     game state updates to the central State store.
@@ -1308,20 +1345,6 @@ class RioGameDataProvider:
         await State.SetBatch(entries)
         await State.Save()
 
-    @classmethod
-    def _pin_swap(cls, left: str, right: str) -> bool | None:
-        """Pinned-player ("player lock") orientation. True=swap, False=already
-        correct, None=pinned player not in this game / no pin set."""
-        pinned = Settings.Get("project_rio.pinned_player", "").strip()
-        if not pinned:
-            return None
-        side = Settings.Get("project_rio.pinned_side", "Team 1")
-        idx = 0 if side == "Team 1" else 1
-        if left == pinned:
-            return idx == 1
-        if right == pinned:
-            return idx == 0
-        return None
 
     @classmethod
     def _b2b_swap(cls, left: str, right: str) -> bool | None:
@@ -1359,7 +1382,7 @@ class RioGameDataProvider:
             mo = Match.orientation_for_sides(sb, left, right)
             if mo is not None:
                 return mo, "match"
-        pin = cls._pin_swap(left, right)
+        pin = pin_swap(left, right)
         if pin is not None:
             return pin, "pin"
         b2b = cls._b2b_swap(left, right)
@@ -1391,7 +1414,7 @@ class RioGameDataProvider:
             cls._user_overridden = False
             cls._sides_swapped, _ = cls._decide(left, right, sb=None, allow_manual=False)
         elif cls._user_overridden:
-            pin = cls._pin_swap(left, right)
+            pin = pin_swap(left, right)
             if pin is not None and cls._sides_swapped == pin:
                 cls._user_overridden = False
                 logger.info("[RIO] User swapped back to pinned position, clearing override")

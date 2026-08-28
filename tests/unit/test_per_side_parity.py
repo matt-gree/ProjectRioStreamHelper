@@ -25,9 +25,9 @@ REPO = Path(__file__).resolve().parents[2]
 # legal state (it rows through `genericElement` online, keyed on its pathname)
 # and it is a state a producer pays for, because a generic row has no stage
 # panel, no preview and no catalog row with OBS closed. `stats` was the one
-# entry here — the console's `stats` element used to be the fed bar at
-# /layout/shared/stats-feed.html while /layout/scoreboard1/stats.html, the
-# overlay a broadcast actually uses, matched nothing. If a name lands here
+# entry here — the console's `stats` element used to be a fed bar in a shared
+# container (since deleted) while /layout/scoreboard1/stats.html, the overlay a
+# broadcast actually uses, matched nothing. If a name lands here
 # again, this comment is the argument for registering it rather than widening
 # the exception.
 UNREGISTERED: set[str] = set()

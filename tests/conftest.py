@@ -241,3 +241,27 @@ def set_setting():
         Settings.revision += 1
 
     return _set
+
+
+@pytest.fixture
+def pin_player():
+    """Pin a rioName to a side in the address book — the `pin` layer's input.
+
+    Writes the row straight into the in-memory registry (no IO, no await), the
+    same way `set_setting` writes Settings. `reset_singletons` empties
+    `Participants.participants` between tests, so nothing to restore.
+    """
+    from server.participants import Participants, _DISPLAY_DEFAULTS, _IDENTITY_DEFAULTS
+
+    def _pin(rio_name, side=1, pid=None):
+        pid = pid or f"p_test_{rio_name}"
+        Participants.participants[pid] = {
+            "id": pid,
+            "identities": {**_IDENTITY_DEFAULTS, "rioName": rio_name},
+            "display": {**_DISPLAY_DEFAULTS, "tag": rio_name},
+            "prefs": {"side": side},
+            "meta": {"createdAt": "", "updatedAt": "", "source": "manual"},
+        }
+        return Participants.participants[pid]
+
+    return _pin

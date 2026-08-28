@@ -1,7 +1,7 @@
 import { memo, useMemo } from 'react';
 import { Text } from '../../../components/ui/primitives';
 import { PanelShell, chipFor } from '../kit';
-import { isPinnable } from '../elements';
+import { isPinnable, settingsTypeOf, sizeOptionFor } from '../elements';
 import { DESK_PREFIX } from '../instances';
 import { placementDims } from '../bindings';
 import { useContainerDefs } from '../containers';
@@ -12,7 +12,7 @@ import {
 import { SourceStrip } from '../sourcestrip';
 import { Subject } from '../subject';
 import { DirectStage, FedStage } from './generic';
-import { ElementStyleSettings } from './overlay-settings';
+import { ElementStyleSettings, ElementStyleOverrides } from './overlay-settings';
 import { IntroRow } from './intro';
 import StagePreview from './preview';
 import HitVisualizerStage from './hitvisualizer';
@@ -106,6 +106,14 @@ function useContainerDims(placement) {
 
 const ElementStage = memo(function ElementStage({ placement, title, pinned, onPinToggle }) {
     const { element, board } = placement;
+    /* The settings NAMESPACE, never the element id — Matchup History is
+       `matchuphistory` here and `overlays.matchup.*` in its mount, and a panel
+       keyed on the id writes where nothing reads (see settingsTypeOf). */
+    const settingsType = settingsTypeOf(element);
+    const settingsBoard = element.scope === 'board' ? board : null;
+    const settingsLabel = element.scope === 'board'
+        ? `${element.name} ${board ?? ''}`.trim()
+        : element.name;
     const Body = stageBodyComponent(element, placement);
     const dims = useContainerDims(placement);
     return (
@@ -132,10 +140,21 @@ const ElementStage = memo(function ElementStage({ placement, title, pinned, onPi
                     still reachable on the stage (phase 7). A body names what it
                     already showed in `surfacedKeys` so nothing doubles up. */}
                 <ElementStyleSettings
-                    type={element.id}
-                    board={element.scope === 'board' ? board : null}
-                    label={element.scope === 'board' ? `${element.name} ${board ?? ''}`.trim() : element.name}
+                    type={settingsType}
+                    board={settingsBoard}
+                    label={settingsLabel}
                     exclude={Body.surfacedKeys}
+                />
+                {/* ...and the GLOBAL design keys this element can pin for
+                    itself. Separate section, below its own settings, because a
+                    pin is a different kind of decision: an element setting is
+                    what this overlay does, an override is this overlay
+                    disagreeing with the Design tab. */}
+                <ElementStyleOverrides
+                    type={settingsType}
+                    board={settingsBoard}
+                    label={settingsLabel}
+                    size={sizeOptionFor(element, placement.variant)?.value}
                 />
                 {/* Reveal behaviour for animated overlays — renders nothing for
                     the rest (see intro.jsx). A source-level toggle, so it sits

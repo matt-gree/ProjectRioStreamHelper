@@ -35,11 +35,13 @@ Rules:
   (`quickface.jsx`). All three are checked against each other in
   `rack.test.jsx`; adding a desk means adding all three.
 - They live in the rack's **two permanent tiers above the scenes** — `BOARDS`
-  (the rig) then `DESK` (the three workflows), both a faint red wash with the
-  `DESK` chip — a row with live meta (`M1 · 1–0`, `empty`/`captured`, the loaded
-  phase), dimmed when idle, selectable like any row. Never in the state sections.
-  Rack meta must read from state only: the rack draws every frame and must not
-  fire a desk's own fetches.
+  (the rig) then `DESK` (Match, the only one left once Capture and Bracket went
+  to the surfaces above), both a faint red wash with the `DESK` chip — a row with
+  live meta (`M1 · 1–0`), dimmed when idle, selectable like any row. Never in the
+  state sections. Rack meta must read from state only: the rack draws every frame
+  and must not fire a desk's own fetches — which is also what a new desk has to
+  clear: a health summary that costs three REST calls has no meta it is allowed
+  to show.
 - **The two tiers collapse, and the stored key names the SHUT ones**
   (`useShutTiers`, `prsh.ui.production.tiers`) — the inverse of `useOpenScenes`.
   A scene defaults closed because there can be a dozen and opening one is what
@@ -62,8 +64,9 @@ Rules:
   one shared word on the app's most-read surface is how the two get conflated.
 - **The budget is 176px, measured, and a BOARD ROW SPENDS THE REST ON ITS NAME.**
   A row leaves name + meta 176px (278 − 16 padding − 36 chip − 24 gaps − 19 pin
-  and trash) ≈ 27 characters at `text-xs`; an element row, with no trash, gets
-  ~203. A board row's summary was the one that could not live inside that:
+  and trash) ≈ 27 characters at `text-xs`. A scene row spends the same 176px —
+  it carries the trash too now (see `scenes-and-placements.md`), and a fed row
+  holds the column empty so the pins stay in one line. A board row's summary was the one that could not live inside that:
   `Scoreboard 4` + `JustAGrump 6–7 Dyla81` measured 218px, and the widest case
   was the most interesting one — a live game between two real usernames. So the
   board row is the board's NAME (its alias, or `Scoreboard {N}`) and nothing
@@ -218,7 +221,9 @@ sources).
   PROPERTIES.** The `+` in the `BOARDS` header adds (same rule as a scene's `+`:
   the affordance that brings a row into being lives in that section's header), and
   a per-row trash removes (`RowRemove` — **visible at rest**, muted until hover, after the
-  pin, a confirm that states the *consequence*). The panel keeps the name, the
+  pin, a confirm that states the *consequence*). Scene rows wear the same control
+  for the same reason, so the console has one removal language rather than a
+  trash on boards and nothing anywhere else. The panel keeps the name, the
   wiring and the game state. Remove lived on the panel first and the producer
   could not find it: the verb that ends a row's existence was inside the row, four
   scrolls down. Adding it to the rack **and** leaving it on the panel would have

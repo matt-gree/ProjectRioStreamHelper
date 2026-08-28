@@ -14,6 +14,10 @@
       slot=NAME maxw=N     text that auto shrinks past N units
       part=NAME            a styling part the mount recolours
       tpl=NAME w=N         a prototype the mount clones per row
+      slot=NAME hidden     a layer the APP toggles on (a FINAL badge, a runner
+                           icon). Shown here so you can style it; the compiler
+                           puts it back to invisible. Drop the flag and it
+                           ships permanently visible.
       scaffold=NAME        editing only guide (dashed boxes), STRIPPED on compile
       layout=absolute      invisible marker carrying the root layout mode
     Keep them. Rename freely otherwise.
@@ -31,6 +35,21 @@
     Dashed boxes mark image slots (team logos, character icons). PRSH ships no
     game art, so design the BOX as the no art look; the app draws the real icon
     on top and hides it when there is none.
+
+    STACK ROWS (slot=row-*) have been moved to the offsets the app stacks them
+    to, so this file shows the assembled card rather than every band piled on
+    the frame origin. `at=N` in the name records where each was put and the
+    compiler takes it back out; anything you move ON TOP of that is kept. Two
+    rows sharing one `at=` are ALTERNATES - a live game or a completed one,
+    never both - so they are drawn overlapping on purpose. Toggle one off in
+    the layers panel to work on the other, and design each to fill the band.
+
+    CYAN DASHED BOXES (scaffold=stage-*) are the sizes this card takes at
+    runtime, labelled with the row that triggers each. The card GROWS to enclose
+    a segment when the app shows it, so content sitting outside the resting box
+    is not misplaced - it belongs to a larger stage. Design every stage to look
+    finished, and keep each stage's content inside its own box. The guides are
+    editing only and never ship.
     --><!--
     DEFAULT package - Commentary: the Project Rio caster strip, built on the
     LOWER THIRD'S CARD LANGUAGE (see default/lowerthird.svg). Same bed - the band
@@ -136,10 +155,10 @@
        will-change puts each sprite on its own compositor layer.
        Class names are element-scoped (cm-) so two themed elements sharing a page
        in the Production preview can't animate each other's marks. -->
-  <g opacity="0" id="slot=slot0">
-    <g opacity="0" id="slot=slot0-sub">
+  <g opacity="1" id="slot=slot0 hidden">
+    <g opacity="1" id="slot=slot0-sub hidden">
       <rect x="74" y="94" width="425" height="100" rx="18" style="filter:drop-shadow(0 10px 30px rgba(0,0,0,0.55))" fill="#0b0b12" stroke="#1f1f30" stroke-width="1.5" id="part=sub-rect" />
-      <use href="#rio-mark" x="423" y="142" width="32" height="32" opacity="0" id="part=sub-icon" />
+      <use href="#rio-mark" x="423" y="142" width="32" height="32" opacity="1" id="part=sub-icon hidden" />
       <text x="118" y="168" font-size="28" font-weight="600" fill="#f5f5f8" font-family="Inter" id="slot=slot0-sub-value maxw=357">Slot0 Sub Value</text>
     </g>
     <rect x="74" y="26" width="425" height="96" rx="18" style="filter:drop-shadow(0 10px 30px rgba(0,0,0,0.55))" fill="#0b0b12" stroke="#1f1f30" stroke-width="1.5" id="part=main-rect" />
@@ -147,10 +166,10 @@
     <text x="118" y="90" font-size="46" font-weight="700" letter-spacing="0.5" fill="#f5f5f8" font-family="Rajdhani" id="slot=slot0-name maxw=357">Slot0 Name</text>
   </g>
 
-  <g opacity="0" id="slot=slot1">
-    <g opacity="0" id="slot=slot1-sub">
+  <g opacity="1" id="slot=slot1 hidden">
+    <g opacity="1" id="slot=slot1-sub hidden">
       <rect x="523" y="94" width="425" height="100" rx="18" style="filter:drop-shadow(0 10px 30px rgba(0,0,0,0.55))" fill="#0b0b12" stroke="#1f1f30" stroke-width="1.5" id="part=sub-rect" />
-      <use href="#rio-mark" x="872" y="142" width="32" height="32" opacity="0" id="part=sub-icon" />
+      <use href="#rio-mark" x="872" y="142" width="32" height="32" opacity="1" id="part=sub-icon hidden" />
       <text x="567" y="168" font-size="28" font-weight="600" fill="#f5f5f8" font-family="Inter" id="slot=slot1-sub-value maxw=357">Slot1 Sub Value</text>
     </g>
     <rect x="523" y="26" width="425" height="96" rx="18" style="filter:drop-shadow(0 10px 30px rgba(0,0,0,0.55))" fill="#0b0b12" stroke="#1f1f30" stroke-width="1.5" id="part=main-rect" />
@@ -158,10 +177,10 @@
     <text x="567" y="90" font-size="46" font-weight="700" letter-spacing="0.5" fill="#f5f5f8" font-family="Rajdhani" id="slot=slot1-name maxw=357">Slot1 Name</text>
   </g>
 
-  <g opacity="0" id="slot=slot2">
-    <g opacity="0" id="slot=slot2-sub">
+  <g opacity="1" id="slot=slot2 hidden">
+    <g opacity="1" id="slot=slot2-sub hidden">
       <rect x="972" y="94" width="425" height="100" rx="18" style="filter:drop-shadow(0 10px 30px rgba(0,0,0,0.55))" fill="#0b0b12" stroke="#1f1f30" stroke-width="1.5" id="part=sub-rect" />
-      <use href="#rio-mark" x="1321" y="142" width="32" height="32" opacity="0" id="part=sub-icon" />
+      <use href="#rio-mark" x="1321" y="142" width="32" height="32" opacity="1" id="part=sub-icon hidden" />
       <text x="1016" y="168" font-size="28" font-weight="600" fill="#f5f5f8" font-family="Inter" id="slot=slot2-sub-value maxw=357">Slot2 Sub Value</text>
     </g>
     <rect x="972" y="26" width="425" height="96" rx="18" style="filter:drop-shadow(0 10px 30px rgba(0,0,0,0.55))" fill="#0b0b12" stroke="#1f1f30" stroke-width="1.5" id="part=main-rect" />
@@ -169,10 +188,10 @@
     <text x="1016" y="90" font-size="46" font-weight="700" letter-spacing="0.5" fill="#f5f5f8" font-family="Rajdhani" id="slot=slot2-name maxw=357">Slot2 Name</text>
   </g>
 
-  <g opacity="0" id="slot=slot3">
-    <g opacity="0" id="slot=slot3-sub">
+  <g opacity="1" id="slot=slot3 hidden">
+    <g opacity="1" id="slot=slot3-sub hidden">
       <rect x="1421" y="94" width="425" height="100" rx="18" style="filter:drop-shadow(0 10px 30px rgba(0,0,0,0.55))" fill="#0b0b12" stroke="#1f1f30" stroke-width="1.5" id="part=sub-rect" />
-      <use href="#rio-mark" x="1770" y="142" width="32" height="32" opacity="0" id="part=sub-icon" />
+      <use href="#rio-mark" x="1770" y="142" width="32" height="32" opacity="1" id="part=sub-icon hidden" />
       <text x="1465" y="168" font-size="28" font-weight="600" fill="#f5f5f8" font-family="Inter" id="slot=slot3-sub-value maxw=357">Slot3 Sub Value</text>
     </g>
     <rect x="1421" y="26" width="425" height="96" rx="18" style="filter:drop-shadow(0 10px 30px rgba(0,0,0,0.55))" fill="#0b0b12" stroke="#1f1f30" stroke-width="1.5" id="part=main-rect" />

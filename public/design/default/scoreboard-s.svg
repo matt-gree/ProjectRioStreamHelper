@@ -6,7 +6,9 @@
     to fit whichever are visible (each segment declares data-cardw = the card width
     when it is the rightmost-visible; card-bg declares data-compact-w = collapsed):
       row-inning  the inning number (arrows), swapping to final-badge on a
-                  completed game. Producer toggle overlays.scoreboard.showInning.
+                  completed game. Producer toggle overlays.scoreboard.showInning
+                  — but a shown live cluster forces it on, since row-live's edge
+                  is outboard of it and would otherwise open a hole here.
       row-live    the live cluster (count + base diamond). Shows during play,
                   collapses on completion. Producer master overlays.scoreboard.showLive.
     Both segments carry data-anim expand-right (wipe open left to right on show,
@@ -50,13 +52,24 @@
   <!-- ░░ GAME MODE band (toggle + content) — melds card to 156 tall ░░
        A real bottom section: data-cardh grows card-bg (and the rail with it)
        from the compact 128 to 156 when the band shows, and collapses back when
-       the producer switches it off or the mode is unknown. Left-aligned to the
-       plates above rather than centred on the card, because the card's WIDTH
-       melds underneath it — a centred label would slide sideways every time the
-       live cluster opened. -->
+       the producer switches it off or the mode is unknown.
+
+       Centred on the card, and the card's WIDTH melds underneath it — so the
+       label can't sit at an authored x. `center=card` (data-center) hands the
+       x to the mount, which drives it off the same tween as the card edge
+       (scoreboard-mount centerToCard); text-anchor="middle" is what makes that
+       a centre rather than a left edge. No marker bar: a rule that started at
+       the plates' left inset was reading as a third row of the stack once the
+       label stopped being left-aligned with them.
+
+       16px, baseline 143: with the bar gone the band is the label's alone, and
+       12px in a 38px gap (the side-2 plate's bottom edge to the card's) read as
+       a footnote under the card rather than a section of it. The baseline is
+       where the text's box centres in that gap — measured, not eyeballed; at
+       the old y=139 a 16px label sits ~2 units high. data-maxw is sized for the
+       COMPACT card (224 wide), the narrowest centre this ever has. -->
   <g data-slot="row-mode" data-cardh="156">
-    <rect x="17" y="126" width="4" height="16" rx="2" style="fill:var(--accent,#e60012)" opacity="0.85"/>
-    <text data-slot="meta-game-mode" data-maxw="176" x="29" y="139" fill="#F5F5F8" fill-opacity="0.62" font-family="Inter" font-size="12" font-weight="600" letter-spacing="0.4">Game Mode</text>
+    <text data-slot="meta-game-mode" data-center="card" data-maxw="184" x="120" y="143" text-anchor="middle" fill="#F5F5F8" fill-opacity="0.62" font-family="Inter" font-size="16" font-weight="600" letter-spacing="0.4">Game Mode</text>
   </g>
 
   <!-- ░░ INNING segment (toggle) — melds card to 292 ░░ -->

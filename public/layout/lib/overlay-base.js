@@ -593,7 +593,8 @@
    * Fallback chain for colors: per-layout → global → hardcoded default.
    *
    * Sets: --accent, --accent-rgb, --card-bg, --text-primary, --border-radius,
-   *       --border-color, --font-family, and per-overlay specific vars.
+   *       --border-color, --font-family, --text-stroke-*, and per-overlay
+   *       specific vars.
    */
   // ── Per-layout element overrides: overlays.{type}.{key} → CSS var ──
   // Declarative so applyDesignSettings below and DESIGN_SETTING_PROPS stay in
@@ -707,6 +708,23 @@
     root.setProperty('--text-shadow',
       textShadowEnabled ? `0px 0px ${effTextBlur}px ${textShadowColor}` : 'none');
 
+    // ── Font border (text stroke), with per-layout overrides on BOTH halves ──
+    // No enable switch: a width of 0 IS no border, and a second flag would be a
+    // state that can disagree with the number under it. That also makes the
+    // per-element pin the point of the feature rather than a modifier of a
+    // global the producer had to turn on first — pin a width on one element and
+    // it is the only element with an outline.
+    // The colour is overridable too, because a border pinned on one element is
+    // usually pinned to sit on ONE background; the global underneath answers
+    // for everyone else.
+    const strokeWidth = g('overlays.global.textStrokeWidth', 0);
+    const strokeColor = g('overlays.global.textStrokeColor', 'rgba(0, 0, 0, 0.9)');
+    const perStrokeWidth = overrideNs ? g(`overlays.${overrideNs}.textStrokeWidth`, null) : null;
+    const perStrokeColor = overrideNs ? g(`overlays.${overrideNs}.textStrokeColor`, null) : null;
+    const effStrokeWidth = perStrokeWidth != null ? perStrokeWidth : strokeWidth;
+    root.setProperty('--text-stroke-width', `${effStrokeWidth}px`);
+    root.setProperty('--text-stroke-color', perStrokeColor || strokeColor);
+
     // ── Per-overlay specific vars (driven by LAYOUT_VAR_MAP above) ──
     // All per-layout reads gated by effectiveLayoutType so globals-only
     // preview mode shows the design system in isolation.
@@ -726,6 +744,7 @@
     '--accent', '--accent-rgb', '--card-bg', '--text-primary', '--border-radius',
     '--border-width', '--border-color', '--font-family', '--final-badge-color',
     '--card-shadow-filter', '--card-box-shadow', '--text-shadow',
+    '--text-stroke-width', '--text-stroke-color',
     ...Object.values(LAYOUT_VAR_MAP).flatMap((m) => Object.values(m).map((s) => s.prop)),
   ])];
 

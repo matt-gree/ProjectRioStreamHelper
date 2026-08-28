@@ -53,6 +53,39 @@ _IDENTITY_DEFAULTS = {
     "startgg": None,      # { userSlug, gamerTag } when imported; else None
 }
 
+# Production preferences — how PRSH treats this person, as opposed to what it
+# DISPLAYS about them. Deliberately not in `display`: that block is the
+# resolve-by-copy payload projectors write into `score.player.*`, and a value no
+# overlay ever draws does not belong in it.
+#
+# `side` is the old global "Player Lock", moved onto the person because that is
+# what it was always a fact about — one app-wide pinned player was an
+# implementation ceiling, not a decision. `None` = no preference; 1 or 2 name a
+# side in the usual vocabulary (never left/right — see the glossary).
+_PREFS_DEFAULTS = {
+    "side": None,         # 1 | 2 | None — the side cascade's `pin` layer
+}
+
+
+def _clean_side(value):
+    """A stored side is 1, 2, or nothing. Anything else — a legacy "Team 1"
+    string, a 0 from a form, junk from a hand-edited backup — is no preference,
+    because a pin that half-parses would silently orient a broadcast."""
+    try:
+        side = int(value)
+    except (TypeError, ValueError):
+        return None
+    return side if side in (1, 2) else None
+
+
+def _clean_prefs(prefs: dict) -> dict:
+    """Normalize a prefs block. One field today, so this is a thin wrapper — but
+    it is the single gate every write path goes through (`_normalize`, `Create`,
+    `Update`), which is what keeps an unparseable side out of the cascade."""
+    out = dict(prefs)
+    out["side"] = _clean_side(out.get("side"))
+    return out
+
 
 def _new_id() -> str:
     """Stable primary key for now: ``p_`` + short random hex."""
@@ -117,6 +150,7 @@ class Participants:
             "id": row.get("id") or pid,
             "identities": _merge_block(_IDENTITY_DEFAULTS, row.get("identities")),
             "display": _merge_block(_DISPLAY_DEFAULTS, row.get("display")),
+            "prefs": _clean_prefs(_merge_block(_PREFS_DEFAULTS, row.get("prefs"))),
             "meta": {
                 "createdAt": meta.get("createdAt") or _now(),
                 "updatedAt": meta.get("updatedAt") or _now(),
@@ -187,6 +221,7 @@ class Participants:
             "id": pid,
             "identities": _merge_block(_IDENTITY_DEFAULTS, partial.get("identities")),
             "display": _merge_block(_DISPLAY_DEFAULTS, partial.get("display")),
+            "prefs": _clean_prefs(_merge_block(_PREFS_DEFAULTS, partial.get("prefs"))),
             "meta": {
                 "createdAt": now,
                 "updatedAt": now,
@@ -215,6 +250,11 @@ class Participants:
             row["display"].update(
                 {k: v for k, v in partial["display"].items() if k in _DISPLAY_DEFAULTS}
             )
+        if isinstance(partial.get("prefs"), dict):
+            row.setdefault("prefs", dict(_PREFS_DEFAULTS)).update(
+                {k: v for k, v in partial["prefs"].items() if k in _PREFS_DEFAULTS}
+            )
+            row["prefs"] = _clean_prefs(row["prefs"])
         row["meta"]["updatedAt"] = _now()
         await cls.Save()
         # The edit is the whole point of this call — a name or pronoun a
@@ -293,6 +333,13 @@ class Participants:
                 for k, v in incoming["identities"].items():
                     if v and not match["identities"].get(k):
                         match["identities"][k] = v
+                # Prefs refresh like display (incoming non-empty wins) rather
+                # than fill-empty like identities: a backup's pin is the
+                # producer's own most recent answer, and `None` — no preference
+                # — is the empty value that defers to what is already here.
+                for k, v in (incoming.get("prefs") or {}).items():
+                    if v is not None:
+                        match.setdefault("prefs", dict(_PREFS_DEFAULTS))[k] = v
                 match["meta"]["updatedAt"] = _now()
                 updated += 1
             else:
@@ -311,6 +358,66 @@ class Participants:
         # every projection is resolved against a registry that no longer exists.
         await cls.reproject_dependents()
         return {"imported": created + updated, "created": created, "updated": updated}
+
+    # ----- production preferences ------------------------------------------
+
+    @classmethod
+    def PreferredSide(cls, rio_name: str) -> int | None:
+        """The side this person is pinned to (1 or 2), or None for no pin.
+
+        The `pin` layer of the side cascade reads this per HUD frame, so it goes
+        through `MatchByRioName` — an in-memory scan with no IO, already blessed
+        for the hot path by the resolvers that call it.
+        """
+        if not rio_name:
+            return None
+        row = cls.MatchByRioName(rio_name)
+        if row is None:
+            return None
+        return _clean_side((row.get("prefs") or {}).get("side"))
+
+    @classmethod
+    async def adopt_legacy_pin(cls) -> bool:
+        """One-shot migration of the old app-wide Player Lock onto the person.
+
+        `project_rio.{pinned_player,pinned_side}` was a single global pair: one
+        username, one side, for the whole app. It is now `prefs.side` on a
+        participant, which is where the fact always lived — so this reads the
+        settings pair once, writes it onto that person (adding them to the book
+        if the producer never did), and clears the keys so it cannot run twice.
+
+        Called from the lifespan, the one place both stores are in memory —
+        same seam, and for the same reason, as `adopt_eventheader_message`.
+        Returns True when it migrated something.
+        """
+        from server.settings import Settings
+
+        pinned = (Settings.Get("project_rio.pinned_player", "") or "").strip()
+        if not pinned:
+            return False
+        # The legacy value is the literal label "Team 1"/"Team 2" — two server
+        # readers compared against that string, so the stored form is a label,
+        # not a number (see the sides note in CLAUDE.md).
+        side = 2 if Settings.Get("project_rio.pinned_side", "Team 1") == "Team 2" else 1
+
+        row = cls.MatchByRioName(pinned)
+        if row is None:
+            row = await cls.Create({
+                "identities": {"rioName": pinned},
+                "display": {"tag": pinned},
+                "prefs": {"side": side},
+            })
+        else:
+            row.setdefault("prefs", dict(_PREFS_DEFAULTS))["side"] = side
+            await cls.Save()
+
+        await Settings.Set("project_rio.pinned_player", "")
+        await Settings.Set("project_rio.pinned_side", "")
+        logger.info(
+            "[Participants] migrated the global Player Lock onto {} (side {})",
+            pinned, side,
+        )
+        return True
 
     # ----- matching (the resurface loop) -----------------------------------
 

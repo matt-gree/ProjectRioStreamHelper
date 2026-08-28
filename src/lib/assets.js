@@ -3,7 +3,7 @@ import { MSB_CHARACTER_IDS, MSB_TEAM_IDS } from '../data/msb';
 
 // Bumping `version` invalidates browser-cached MSB image URLs by changing
 // their `?v=` query string, so newly-dropped assets render without a hard
-// refresh. Bump after the user updates the assets folder (Settings →
+// refresh. Bump after the user updates the assets folder (Connections →
 // MSB Image Assets → Open Folder / Browse) or closes the Settings modal.
 export const useAssetsVersionStore = create((set) => ({
     version: 0,

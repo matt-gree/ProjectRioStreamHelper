@@ -13,6 +13,12 @@
 // full-art throughout. "Is this package customisable" would therefore be wrong
 // in both directions, which is why nothing here asks it.
 //
+// The Design tab's GLOBAL knobs need a second question — not a per-package tier,
+// but "does the app palette still reach any themed element at all", since one
+// colour there reaches all of them at once. That is appPaletteThemesAnything(),
+// and it is answered by asking the per-element question over every element,
+// never by generalising one.
+//
 // The list is fetched once and cached for the session: packages are folders on
 // disk, so it only changes on an install or uninstall, and the Design tab calls
 // invalidateDesignPackages() there.
@@ -81,6 +87,45 @@ export function paintedByApp(packages, activeId, themeElement) {
         .find(p => p?.elements?.includes(themeElement));
     if (!owner) return true;
     return (owner.appVarElements ?? []).includes(themeElement);
+}
+
+/**
+ * Does the app's palette still paint ANY themed element under `activeId`?
+ *
+ * The per-element answer above is what gates one element's own settings. This
+ * is the question the DESIGN TAB's global knobs ask, because they are not one
+ * element's: a colour there reaches every themed element at once, so it is
+ * dead only when the active package leaves the app palette nothing to paint —
+ * which is the state `default` ships in (full-art throughout).
+ *
+ * Asked over the union of the active package's elements and `default`'s, so
+ * the element-by-element fallback is included: an element the active package
+ * omits is drawn by default's file and answers with default's tier.
+ *
+ * NOT "is this package customisable". Nothing here generalises a tier across a
+ * package — a single app-painted element is enough to keep the knobs, because
+ * that element is what they still reach.
+ *
+ * Unknown answers TRUE, for the same reason paintedByApp does.
+ */
+export function appPaletteThemesAnything(packages, activeId) {
+    if (!packages) return true;
+    const byId = id => packages.find(p => p.id === id);
+    const stems = new Set([
+        ...(byId(activeId)?.elements ?? []),
+        ...(byId(FALLBACK_PACKAGE)?.elements ?? []),
+    ]);
+    if (!stems.size) return true;
+    for (const stem of stems) {
+        if (paintedByApp(packages, activeId, stem)) return true;
+    }
+    return false;
+}
+
+/** appPaletteThemesAnything() against the live settings store, for a component. */
+export function useAppPaletteThemesAnything() {
+    const active = useSettingsStore(s => s?.overlays?.global?.designPackage) ?? FALLBACK_PACKAGE;
+    return appPaletteThemesAnything(useDesignPackages(), active);
 }
 
 /** paintedByApp() against the live settings store, for a component. */

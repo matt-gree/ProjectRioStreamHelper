@@ -405,3 +405,50 @@ def _message_text():
     bands = Settings.settings["overlays"].get("eventheader", {}).get("bands", {})
     return next((e["text"] for band in bands.values() for e in band
                  if e["id"] == "message"), "")
+
+
+async def test_legacy_overlays_stats_moves_to_statsbar(isolate_user_data):
+    """The Stat Bar's namespace is the producer's authored LOOK, so it moves.
+
+    `overlays.stats` was the wide bar's namespace before the element was renamed
+    (`stats` was ambiguous once the 2×2 `statscard` existed). Dropping the key
+    instead of moving it would silently reset a producer's accent, card
+    background and shadows to defaults — visible on air, and impossible to
+    attribute to an upgrade.
+    """
+    _write_settings(isolate_user_data, {"overlays": {"stats": {
+        "accentColor": "#ffffff",
+        "cardBg": "rgba(255, 255, 255, 0)",
+        "subLine": "gameLine",
+    }}})
+    await Settings.Load()
+    bar = Settings.settings["overlays"]["statsbar"]
+    assert bar["accentColor"] == "#ffffff"
+    assert bar["cardBg"] == "rgba(255, 255, 255, 0)"
+    # …and the legacy namespace is gone, so nothing reads a stale copy.
+    assert "stats" not in Settings.settings["overlays"]
+
+
+async def test_statsbar_settings_win_over_the_legacy_copy(isolate_user_data):
+    """Merge-under, never overwrite — which is also what makes it idempotent.
+
+    A file carrying BOTH keys is one that has already been through this once and
+    been edited since. The new namespace is the live one, so the legacy copy
+    fills only the gaps it leaves.
+    """
+    _write_settings(isolate_user_data, {"overlays": {
+        "stats": {"accentColor": "#old", "subLine": "gameLine"},
+        "statsbar": {"accentColor": "#new"},
+    }})
+    await Settings.Load()
+    bar = Settings.settings["overlays"]["statsbar"]
+    assert bar["accentColor"] == "#new"
+    assert bar["subLine"] == "gameLine"
+    assert "stats" not in Settings.settings["overlays"]
+
+
+async def test_no_legacy_stats_namespace_is_a_no_op(isolate_user_data):
+    _write_settings(isolate_user_data, {"overlays": {"statsbar": {"subLine": "off"}}})
+    await Settings.Load()
+    assert Settings.settings["overlays"]["statsbar"]["subLine"] == "off"
+    assert "stats" not in Settings.settings["overlays"]

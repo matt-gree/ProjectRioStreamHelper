@@ -189,7 +189,7 @@ describe('shutdown-property reconciliation (do not regress)', () => {
 
     it('static PRSH overlays (nothing animates) are never touched', async () => {
         const fake = await connectWith({
-            Stats: { url: 'http://localhost:5260/layout/scoreboard1/stats.html?team=1' },
+            Stats: { url: 'http://localhost:5260/layout/scoreboard1/statsbar.html?team=1' },
             Bracket: { url: 'http://localhost:5260/layout/bracket/bracket.html' },
         });
         expect(fake.callsOf('SetInputSettings')).toEqual([]);

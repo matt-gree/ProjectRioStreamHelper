@@ -17,7 +17,7 @@ import { useSettingsStore } from '../../context/store';
 import { useShallow } from 'zustand/react/shallow';
 import ScaledIframe from '../../components/ScaledIframe';
 import { COLOR_SWATCHES, ColorWithOpacity, LabeledColor, DebouncedColorInput } from './shared';
-import { invalidateDesignPackages, usePortColors, useDesignPackages } from './designPackage';
+import { invalidateDesignPackages, usePortColors, useDesignPackages, useAppPaletteThemesAnything } from './designPackage';
 import { PORT_COLOR_KEYS } from './designConstants';
 import { PresetsPanel } from './presets';
 
@@ -25,7 +25,11 @@ import { PresetsPanel } from './presets';
 const PREVIEW_ROWS = [
     [
         { label: 'Large Scoreboard', path: '/layout/scoreboard1/scoreboard.html?scoreboard=1&size=l', w: 800,  h: 460 },
-        { label: 'Player Stats',     path: '/layout/scoreboard1/stats.html?scoreboard=1',             w: 800,  h: 460 },
+        // 452x118 is the bar's own canvas — the tile was quoting the large
+        // scoreboard's 800x460 beside it, which is the one thing a preview
+        // frame must not do (ScaledIframe hands the overlay this aspect as
+        // its viewport).
+        { label: 'Stat Bar',         path: '/layout/scoreboard1/statsbar.html?scoreboard=1',          w: 452,  h: 118 },
     ],
     [
         { label: 'Small Scoreboard', path: '/layout/scoreboard1/scoreboard.html?scoreboard=1&size=s', w: 388,  h: 156 },
@@ -54,6 +58,12 @@ const PreviewTile = memo(function PreviewTile({ label, path: _path, w, h, src, r
 });
 
 const DesignPreviews = memo(function DesignPreviews({ baseUrl, showOverrides, onToggleOverrides }) {
+    // All three tiles are themed elements, so under a package that paints them
+    // itself nothing on the left moves them — and a caption promising otherwise
+    // is the same dead-control problem one level up. What still reaches an
+    // overlay there (accent, text colour, font, text shadow) reaches the Event
+    // Header and Player Name, neither of which has a tile.
+    const paletteLive = useAppPaletteThemesAnything();
     // `sample=1` is what makes these tiles render a representative game rather
     // than live state — a design gallery has to show something on a machine with
     // no game in progress. The Production console's stage preview deliberately
@@ -69,7 +79,9 @@ const DesignPreviews = memo(function DesignPreviews({ baseUrl, showOverrides, on
         <Stack gap="sm">
             <div className="flex flex-nowrap items-center justify-between">
                 <Text size="xs" dimmed className="flex-1">
-                    Live previews — every control on the left updates these in real time.
+                    {paletteLive
+                        ? 'Live previews — every control on the left updates these in real time.'
+                        : 'Live previews — the active design package paints these itself, so the controls on the left don’t change them.'}
                 </Text>
                 <SimpleTooltip label={showOverrides
                     ? 'Showing per-layout overrides on top of the global design'
@@ -197,6 +209,11 @@ const DesignPackageSection = memo(function DesignPackageSection() {
     // package: a token skin can still carry one fixed-palette element.
     const fixedPalette = (selected?.elements ?? [])
         .filter(e => !(selected?.appVarElements ?? []).includes(e));
+    // ...and whether ANY themed element is left for the app palette, which is
+    // what decides between "these knobs miss a few elements" and "these knobs
+    // are gone". Same hook the section below gates on, so the caption and the
+    // panel cannot disagree.
+    const paletteLive = useAppPaletteThemesAnything();
     const selectData = list.map(p => ({ value: p.id, label: p.builtin ? p.name : `${p.name} (installed)` }));
     // Keep an orphaned selection (package deleted on disk) visible so the user
     // understands why overlays fell back to Default.
@@ -233,8 +250,9 @@ const DesignPackageSection = memo(function DesignPackageSection() {
                 </Text>
                 {fixedPalette.length > 0 && (
                     <Text size="xs" dimmed>
-                        Brings its own palette on {fixedPalette.join(', ')} — the colour,
-                        border, shadow and font controls below don’t reach those.
+                        {paletteLive
+                            ? `Brings its own palette on ${fixedPalette.join(', ')} — the card, border and shadow controls below don’t reach those.`
+                            : 'Paints every element itself, so the card, border and shadow controls are hidden — nothing is left for them to change. Accent, text colour, font and text shadow stay: they still reach the Event Header and Player Name, which carry no theme.'}
                     </Text>
                 )}
                 {report && <InstallReport report={report} onDismiss={() => setReport(null)} />}
@@ -316,6 +334,14 @@ const PortColorsSection = memo(function PortColorsSection() {
 const GlobalDesignSection = memo(function GlobalDesignSection() {
     const globalDesign = useSettingsStore(useShallow(s => s?.overlays?.global ?? {}));
     const setItem = useSettingsStore(s => s.setItem);
+    // Does the app's palette still paint anything the active package themes? A
+    // package that paints every element itself (`default` ships that way) leaves
+    // the card-surface knobs below with nothing to change, and a control that
+    // cannot change anything does not belong on the panel — the same call the
+    // Production stage makes per element. Unknown answers yes: hiding a live
+    // control is the worse failure, and there is no affordance to ask where it
+    // went. See ./designPackage.js.
+    const paletteLive = useAppPaletteThemesAnything();
 
     const accentColor       = globalDesign.accentColor       ?? '#f59e0b';
     const cardBg            = globalDesign.cardBg            ?? 'rgba(15, 15, 25, 0.88)';
@@ -330,6 +356,8 @@ const GlobalDesignSection = memo(function GlobalDesignSection() {
     const textShadowEnabled = globalDesign.textShadowEnabled === true;
     const textShadowBlur    = globalDesign.textShadowBlur    ?? 4;
     const textShadowColor   = globalDesign.textShadowColor   ?? 'rgba(0, 0, 0, 0.8)';
+    const textStrokeWidth   = globalDesign.textStrokeWidth   ?? 0;
+    const textStrokeColor   = globalDesign.textStrokeColor   ?? 'rgba(0, 0, 0, 0.9)';
     const showCaptains      = globalDesign.showCaptains      !== false;
     const showLogo          = globalDesign.showLogo          !== false;
     const finalBadgeColor   = globalDesign.finalBadgeColor   ?? '';
@@ -341,26 +369,51 @@ const GlobalDesignSection = memo(function GlobalDesignSection() {
 
             <div>
                 <Text size="xs" fw={700} dimmed className="mb-2 uppercase tracking-wide">Color & Typography</Text>
+                {/* How far "global" actually reaches is a function of the active
+                    package, and it is worth saying when it collapses. A token
+                    skin puts these on eight mounts; a full-art package leaves
+                    two — the Event Header and Player Name, the only elements
+                    with no theme SVG at all. Without this line the section is a
+                    panel headed "Global Design" quietly driving two small
+                    overlays, which reads as a bug rather than as the package
+                    doing its job. */}
+                {!paletteLive && (
+                    <Text size="xs" dimmed className="mb-2">
+                        The package paints everything else, so these reach the Event Header
+                        and Player Name — the two elements with no theme of their own.
+                    </Text>
+                )}
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <LabeledColor label="Accent Color" value={accentColor} onChange={(color) => setItem('overlays.global.accentColor', color)} swatches={COLOR_SWATCHES} />
                     <LabeledColor label="Text Color" value={textColor} onChange={(color) => setItem('overlays.global.textColor', color)} swatches={['#ffffff', '#f1f5f9', '#e2e8f0', '#cbd5e1', '#94a3b8', '#64748b', '#1e293b', '#0f172a']} />
-                    <ColorWithOpacity label="Card Background" value={cardBg} onChange={(val) => setItem('overlays.global.cardBg', val)} />
-                    <ColorWithOpacity label="Border Color" value={borderColor} onChange={(val) => setItem('overlays.global.borderColor', val)} />
-                    <div className="flex flex-col gap-1">
-                        <Label className="field-label">Final Badge Color</Label>
-                        <div className="flex items-end gap-2">
-                            <DebouncedColorInput
-                                value={finalBadgeColor}
-                                placeholder="Default"
-                                onChange={(color) => setItem('overlays.global.finalBadgeColor', color || null)}
-                                swatches={COLOR_SWATCHES}
-                                className="flex-1"
-                            />
-                            {finalBadgeColor && (
-                                <Button variant="ghost" size="sm" onClick={() => setItem('overlays.global.finalBadgeColor', null)}>Reset</Button>
-                            )}
-                        </div>
-                    </div>
+                    {/* The card surface. Only a theme SVG painted from the app
+                        palette reads these three, so under a package that paints
+                        every element itself they are dead and the panel drops
+                        them — the same rule the Production stage applies per
+                        element (THEME_ONLY_GLOBAL_KEYS in designConstants.js).
+                        The two above and the font below stay: the Event Header
+                        and Player Name carry no theme and read them always. */}
+                    {paletteLive && (
+                        <>
+                            <ColorWithOpacity label="Card Background" value={cardBg} onChange={(val) => setItem('overlays.global.cardBg', val)} />
+                            <ColorWithOpacity label="Border Color" value={borderColor} onChange={(val) => setItem('overlays.global.borderColor', val)} />
+                            <div className="flex flex-col gap-1">
+                                <Label className="field-label">Final Badge Color</Label>
+                                <div className="flex items-end gap-2">
+                                    <DebouncedColorInput
+                                        value={finalBadgeColor}
+                                        placeholder="Default"
+                                        onChange={(color) => setItem('overlays.global.finalBadgeColor', color || null)}
+                                        swatches={COLOR_SWATCHES}
+                                        className="flex-1"
+                                    />
+                                    {finalBadgeColor && (
+                                        <Button variant="ghost" size="sm" onClick={() => setItem('overlays.global.finalBadgeColor', null)}>Reset</Button>
+                                    )}
+                                </div>
+                            </div>
+                        </>
+                    )}
                     <div className="flex flex-col gap-1">
                         <Label className="field-label">Font Family</Label>
                         <FontCombobox
@@ -373,22 +426,78 @@ const GlobalDesignSection = memo(function GlobalDesignSection() {
                         </p>
                     </div>
                 </div>
+                {/* Text shadow is typography, and it is the one shadow that
+                    survives a full-art package: playername-mount reads
+                    --text-shadow with no theme SVG of its own. It used to sit
+                    under Card Chrome, which is now the section that goes away
+                    whole — leaving it there would have taken it with it. */}
+                <div className="mt-2">
+                    <Label className="flex items-start gap-2">
+                        <Switch checked={textShadowEnabled} onCheckedChange={(c) => setItem('overlays.global.textShadowEnabled', c)} className="mt-0.5" />
+                        <span className="flex flex-col">
+                            <Text size="sm">Text Shadow</Text>
+                            <Text size="xs" dimmed>Drop shadow on text across overlays</Text>
+                        </span>
+                    </Label>
+                    <Collapsible open={textShadowEnabled}>
+                        <CollapsibleContent>
+                            <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                <div className="flex flex-col gap-1">
+                                    <Label className="field-label">Blur</Label>
+                                    <NumberInput value={textShadowBlur} onChange={(val) => setItem('overlays.global.textShadowBlur', val ?? 4)} min={0} max={40} step={1} suffix="px" />
+                                </div>
+                                <ColorWithOpacity label="Shadow Color" value={textShadowColor} onChange={(val) => setItem('overlays.global.textShadowColor', val)} />
+                            </div>
+                        </CollapsibleContent>
+                    </Collapsible>
+                </div>
+                {/* Font border — an outline around text, and the sibling of the
+                    shadow above rather than part of Card Chrome: both are
+                    typography, and both survive a full-art package for the same
+                    reason (playername-mount reads them with no theme SVG of its
+                    own).
+
+                    No enable switch, unlike the shadow: 0 is off. The shadow
+                    carries one because its blur has a meaningful non-zero
+                    default, so "off" and "4px" are different facts; a border of
+                    0px is simply no border, and a flag beside it could only
+                    ever disagree with the number.
+
+                    Left at 0 here, this changes nothing anywhere — which is the
+                    intent. A border is usually wanted on ONE element over busy
+                    footage, and that is pinned from that element's Production
+                    stage panel (Style Overrides → Font Border). */}
+                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <div className="flex flex-col gap-1">
+                        <Label className="field-label">Font Border</Label>
+                        <NumberInput value={textStrokeWidth} onChange={(val) => setItem('overlays.global.textStrokeWidth', val ?? 0)} min={0} max={12} step={0.5} suffix="px" />
+                        <p className="text-xs text-muted-foreground">
+                            Outline drawn around text. 0 is off. Pin it on a single element
+                            from that element’s Production stage panel.
+                        </p>
+                    </div>
+                    <ColorWithOpacity label="Font Border Color" value={textStrokeColor} onChange={(val) => setItem('overlays.global.textStrokeColor', val)} />
+                </div>
             </div>
 
-            <div>
-                <Text size="xs" fw={700} dimmed className="mb-2 uppercase tracking-wide">Card Chrome</Text>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    <div className="flex flex-col gap-1">
-                        <Label className="field-label">Border Radius</Label>
-                        <NumberInput value={borderRadius} onChange={(val) => setItem('overlays.global.borderRadius', val)} min={0} max={48} step={2} suffix="px" />
+            {/* Card Chrome reaches overlays ONLY through a theme SVG painted from
+                the app palette, so the whole section goes when the active package
+                leaves the palette nothing to paint — a heading over three inert
+                controls is worse than no heading. */}
+            {paletteLive && (
+                <div>
+                    <Text size="xs" fw={700} dimmed className="mb-2 uppercase tracking-wide">Card Chrome</Text>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <div className="flex flex-col gap-1">
+                            <Label className="field-label">Border Radius</Label>
+                            <NumberInput value={borderRadius} onChange={(val) => setItem('overlays.global.borderRadius', val)} min={0} max={48} step={2} suffix="px" />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                            <Label className="field-label">Border Thickness</Label>
+                            <NumberInput value={borderWidth} onChange={(val) => setItem('overlays.global.borderWidth', val)} min={0} max={16} step={1} suffix="px" />
+                        </div>
                     </div>
-                    <div className="flex flex-col gap-1">
-                        <Label className="field-label">Border Thickness</Label>
-                        <NumberInput value={borderWidth} onChange={(val) => setItem('overlays.global.borderWidth', val)} min={0} max={16} step={1} suffix="px" />
-                    </div>
-                </div>
-                <Stack gap="xs" className="mt-2">
-                    <div>
+                    <div className="mt-2">
                         <Label className="flex items-start gap-2">
                             <Switch checked={showShadow} onCheckedChange={(c) => setItem('overlays.global.showShadow', c)} className="mt-0.5" />
                             <span className="flex flex-col">
@@ -408,28 +517,8 @@ const GlobalDesignSection = memo(function GlobalDesignSection() {
                             </CollapsibleContent>
                         </Collapsible>
                     </div>
-                    <div>
-                        <Label className="flex items-start gap-2">
-                            <Switch checked={textShadowEnabled} onCheckedChange={(c) => setItem('overlays.global.textShadowEnabled', c)} className="mt-0.5" />
-                            <span className="flex flex-col">
-                                <Text size="sm">Text Shadow</Text>
-                                <Text size="xs" dimmed>Drop shadow on text across overlays</Text>
-                            </span>
-                        </Label>
-                        <Collapsible open={textShadowEnabled}>
-                            <CollapsibleContent>
-                                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                                    <div className="flex flex-col gap-1">
-                                        <Label className="field-label">Blur</Label>
-                                        <NumberInput value={textShadowBlur} onChange={(val) => setItem('overlays.global.textShadowBlur', val ?? 4)} min={0} max={40} step={1} suffix="px" />
-                                    </div>
-                                    <ColorWithOpacity label="Shadow Color" value={textShadowColor} onChange={(val) => setItem('overlays.global.textShadowColor', val)} />
-                                </div>
-                            </CollapsibleContent>
-                        </Collapsible>
-                    </div>
-                </Stack>
-            </div>
+                </div>
+            )}
 
             <div>
                 <Text size="xs" fw={700} dimmed className="mb-2 uppercase tracking-wide">Display Toggles</Text>

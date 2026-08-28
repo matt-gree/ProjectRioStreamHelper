@@ -15,8 +15,8 @@
 // scope), and container.html renders whichever the URL names. `containerId` is
 // therefore passed in from `?container=`; when it isn't, the id falls back to
 // the page's own filename stem, which is what keeps the pre-2.0 named shells
-// (callout-stage.html, stats-feed.html, split-screen.html) — and any browser
-// source still pointing at one — rendering exactly as before.
+// (callout-stage.html, split-screen.html) — and any browser source still
+// pointing at one — rendering exactly as before.
 //
 // THIS FILE IS THE WIRING, AND ONLY THAT. Two neighbours own the rest, and both
 // import nothing so both are unit tested directly:

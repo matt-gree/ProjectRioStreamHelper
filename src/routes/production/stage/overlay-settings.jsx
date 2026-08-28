@@ -1,12 +1,21 @@
-import { memo, useCallback } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useSettingsStore } from '../../../context/store';
-import { usePending } from '../../../context/staging';
+import { usePending, useStagingStore } from '../../../context/staging';
 import { Text } from '../../../components/ui/primitives';
-import { LAYOUT_SETTINGS, THEME_ELEMENT } from '../../layouts/designConstants';
-import { usePaintedByApp } from '../../layouts/designPackage';
 import {
-    SegmentedRow, ToggleRow, ToggleChip, ToggleChips, TextRow, NumberRow, ColorRow, KIT_LABEL,
+    LAYOUT_SETTINGS, THEME_ELEMENT, OVERRIDABLE_GLOBAL_KEYS, GLOBAL_DESIGN_DEFAULTS,
+    OVERRIDE_CAPABLE_TYPES, themeElementFor, overrideReaches,
+} from '../../layouts/designConstants';
+import { usePaintedByApp, useDesignPackages } from '../../layouts/designPackage';
+import { useLayoutWhitelists, declaresAny } from '../../layouts/layoutWhitelist';
+import { FontCombobox } from '../../../components/ui/font-combobox';
+import { Button } from '../../../components/ui/button';
+import { Popover, PopoverTrigger, PopoverContent } from '../../../components/ui/popover';
+import { Plus, X } from 'lucide-react';
+import {
+    SegmentedRow, ToggleRow, ToggleChip, ToggleChips, TextRow, NumberRow, ColorRow,
+    FieldRow, KIT_LABEL,
 } from '../kit';
 import { cn } from '../../../lib/utils';
 import { stageSettingsSet } from '../controls';
@@ -108,10 +117,34 @@ function useShowWhen(os, def) {
     return 'is' in gate ? v === gate.is : !!v;
 }
 
+/*
+ * A switch another setting HOLDS ON — the scoreboard's Inning while the Live
+ * Cluster is up, because the mount ORs the two (showInningSeg). The overlay
+ * already ignores this switch in that state, so the only question is whether the
+ * console admits it: a control that keeps offering a choice it does not have
+ * reads as a broken setting, and the producer's next move is to file it.
+ *
+ * Held-on, not hidden. The producer has to be able to see what the element is
+ * drawing and why, and a switch that vanished when its master came up would take
+ * the explanation with it. Reads the master the same way `useShowWhen` does —
+ * staged value first — so turning the Live Cluster on holds this now rather than
+ * after Go Live.
+ */
+function useForcedOn(os, def) {
+    const force = def.forcedBy;
+    // Unconditional, and undefined is a safe key — a hook may not be skipped.
+    const staged = usePending(force ? `settings:${settingKey(os.ns, force.key)}` : undefined);
+    if (!force) return null;
+    const masterDef = (LAYOUT_SETTINGS[os.type] ?? []).find(d => d.key === force.key) ?? force;
+    const v = staged ? staged.value : resolveSetting(os.bag, masterDef, os.board);
+    return v ? force : null;
+}
+
 // One setting as a row, showing the staged value while it waits on confirm.
 export const OverlaySettingRow = memo(function OverlaySettingRow({ os, def }) {
     const pending = usePending(`settings:${settingKey(os.ns, def.key)}`);
     const shown = useShowWhen(os, def);
+    const forced = useForcedOn(os, def);
     const value = pending ? pending.value : resolveSetting(os.bag, def, os.board);
 
     if (!shown) return null;
@@ -149,9 +182,12 @@ export const OverlaySettingRow = memo(function OverlaySettingRow({ os, def }) {
             />
         );
     }
+    // The title rides the ROW, not the Switch: a disabled control is not a
+    // reliable hover target, and the answer is about the row as a whole.
     return (
         <ToggleRow
-            label={def.label} checked={!!value} staged={!!pending}
+            label={def.label} checked={forced ? true : !!value}
+            staged={!forced && !!pending} disabled={!!forced} title={forced?.note}
             onChange={(v) => os.set(def, v)}
         />
     );
@@ -163,13 +199,17 @@ export const OverlaySettingRow = memo(function OverlaySettingRow({ os, def }) {
 export const OverlaySettingChip = memo(function OverlaySettingChip({ os, def, className }) {
     const pending = usePending(`settings:${settingKey(os.ns, def.key)}`);
     const shown = useShowWhen(os, def);
+    const forced = useForcedOn(os, def);
     const value = pending ? pending.value : resolveSetting(os.bag, def, os.board);
 
     if (!shown) return null;
+    // `locked`, not `disabled` — see ToggleChip. A held-on chip stays at full
+    // weight (it IS on) and takes a dashed edge, and its title stays hoverable.
     return (
         <ToggleChip
-            label={def.label} checked={!!value} staged={!!pending}
-            title={def.description} className={className}
+            label={def.label} checked={forced ? true : !!value}
+            staged={!forced && !!pending} locked={!!forced}
+            title={forced ? forced.note : def.description} className={className}
             onChange={(v) => os.set(def, v)}
         />
     );
@@ -408,6 +448,357 @@ export const ElementStyleSettings = memo(function ElementStyleSettings({ type, b
         <div className="mt-1 flex flex-col gap-1.5 border-t border-border/60 pt-2">
             <Text size="xs" className="label-display text-muted-foreground">Style</Text>
             <SettingGroups os={os} defs={defs} />
+        </div>
+    );
+});
+
+/*
+ * ── PER-ELEMENT STYLE OVERRIDES ──────────────────────────────────────────────
+ *
+ * One global design key, pinned for ONE element: `overlays.{type}.accentColor`
+ * read on top of `overlays.global.accentColor` by every mount that applies the
+ * palette (`applyDesignSettings`, overlay-base.js — the `perAccent` / `perFont`
+ * / `perBadge` / CARD_OVERRIDE_VARS reads).
+ *
+ * The mechanism never went away; its UI did. `OVERRIDABLE_GLOBAL_KEYS` and the
+ * `<meta>` matching rule were written for a "+ Add style override" picker on
+ * the old Setup tab, and when Setup became the Design tab the picker was
+ * dropped and nothing on the console replaced it. What that left behind is the
+ * argument for this section: a producer can have live per-element pins —
+ * `overlays.eventheader.fontFamily`, a transparent `overlays.statsbar.cardBg` —
+ * driving the broadcast with no surface anywhere that shows them, and the only
+ * control that touches them at all is Presets' "Reset all overrides", which
+ * wipes the lot without naming one.
+ *
+ * THREE THINGS MUST AGREE before a key is offered:
+ *   1. the global registry offers it (`OVERRIDABLE_GLOBAL_KEYS`),
+ *   2. the layout DECLARES it (`<meta name="overlay-settings">`, read back
+ *      through ../../layouts/layoutWhitelist),
+ *   3. the mount can honour a PIN, not just the global
+ *      (`OVERRIDE_CAPABLE_TYPES`), and the pin is read back on THIS type
+ *      (`overrideReaches` — overlay-base reads the card surface and the text
+ *      colour only for the types in its LAYOUT_VAR_MAP, and `showShadow`
+ *      nowhere at all).
+ * (3) is not implied by (2), and the difference is subtle enough to be worth
+ * the extra list: both post-game callouts declare `accentColor, fontFamily`
+ * and genuinely honour them — postgame-callout-mount.js reads
+ * `overlays.global.accentColor` for a portless side and `overlays.global.
+ * fontFamily` for its type — but they read the GLOBAL directly and never call
+ * applyDesignSettings, which is the only code that consults
+ * `overlays.{type}.{key}`. Believing the meta alone would put two rows on each
+ * that store, broadcast, and are ignored.
+ *
+ * WHY THESE ROWS ARE DISABLED AND NOT DROPPED, unlike `useLiveDefs` above.
+ * Both answer the same fact — the active package paints this element itself, so
+ * the app palette can't reach it — and they answer it differently ON PURPOSE.
+ * An element's own `appPalette` setting (the Stat Card's Stat Value Color) has
+ * nowhere else to live, so a dead row is pure noise and goes. An override is a
+ * pin on a GLOBAL key that still exists, still has a value, and may already be
+ * SET on this element from a preset or an earlier package — so the producer
+ * needs to see that it is there and that it is currently doing nothing. Hiding
+ * it is how `overlays.statsbar.cardBg` went invisible in the first place.
+ */
+
+const NO_DEFS = [];
+
+// The keys this element may pin. Registry ∩ the layout's own declaration, and
+// only for a type whose mount applies the palette at all.
+export function useOverrideDefs(type) {
+    const whitelists = useLayoutWhitelists();
+    return useMemo(() => {
+        if (!OVERRIDE_CAPABLE_TYPES.includes(type)) return NO_DEFS;
+        const defs = OVERRIDABLE_GLOBAL_KEYS.filter(
+            // Declared by the layout AND actually read back on this type. The
+            // second half is not redundant: scoreboard.html whitelists
+            // `showShadow`, and no mount anywhere reads a per-element one.
+            def => declaresAny(whitelists, type, def.meta) && overrideReaches(def.key, type),
+        );
+        return defs.length ? defs : NO_DEFS;
+    }, [type, whitelists]);
+}
+
+/*
+ * The pinned values, read from EXACTLY the namespace the write goes to.
+ *
+ * Not `resolveSetting`: that merges the bare `overlays.{type}.{key}` leaf under
+ * a board-scoped read as a legacy fallback, which is right for an element
+ * setting and wrong here — `applyDesignSettings` reads the override from the
+ * scoped namespace alone (`overrideNs`), so a value the panel merged in from
+ * the bare leaf would show as pinned while the overlay ignored it.
+ */
+function useOverrideBag(ns) {
+    return useSettingsStore(useShallow((s) => {
+        let cur = s?.overlays;
+        for (const seg of ns.split('.')) cur = cur?.[seg];
+        const out = {};
+        for (const def of OVERRIDABLE_GLOBAL_KEYS) {
+            const v = cur?.[def.key];
+            if (v != null) out[def.key] = v;
+        }
+        return out;
+    }));
+}
+
+// What this key resolves to with nothing pinned here — shown as the row's
+// placeholder so an unpinned row still says what the element is currently doing.
+function useGlobalValues() {
+    return useSettingsStore(useShallow((s) => {
+        const g = s?.overlays?.global ?? {};
+        const out = {};
+        for (const def of OVERRIDABLE_GLOBAL_KEYS) {
+            out[def.key] = g[def.key] ?? GLOBAL_DESIGN_DEFAULTS[def.key] ?? null;
+        }
+        return out;
+    }));
+}
+
+const SWITCH_OPTIONS = [
+    // "Global" rather than "Inherit" or "Default": the producer set it on the
+    // Design tab and that is what the tab is called. Three states because an
+    // override of a boolean has to be able to say OFF — a two-state switch
+    // cannot distinguish "pinned off" from "not pinned".
+    { value: 'global', label: 'Global' },
+    { value: 'on', label: 'On' },
+    { value: 'off', label: 'Off' },
+];
+
+/*
+ * What an override starts at when the producer adds it: the value the element
+ * is ALREADY showing. Adding a row must not change the broadcast — it hands
+ * over a knob, it does not turn one.
+ *
+ * Every def has to resolve to something non-null or the write would mean
+ * "unpinned" and the row would not appear at all; `designConstants.test.js`
+ * pins that for the whole table.
+ */
+export function seedValue(def, globals) {
+    return globals[def.key]
+        ?? (def.seedFrom ? globals[def.seedFrom] : null)
+        ?? def.defaultValue
+        ?? null;
+}
+
+const OverrideRow = memo(function OverrideRow({
+    os, def, pinned, globalValue, disabled, note, onRemove,
+}) {
+    const pending = usePending(`settings:${settingKey(os.ns, def.key)}`);
+    const value = pending ? pending.value : pinned;
+    const staged = !!pending;
+    const set = (v) => os.set(def, v);
+    // A placeholder can't render an object or a boolean, and a long rgba() eats
+    // the field — so the hint is the value for the shapes that fit and the word
+    // for the rest.
+    const hint = globalValue == null || globalValue === ''
+        ? 'Global'
+        : `Global · ${globalValue}`;
+
+    const control = (() => {
+    if (def.type === 'switch') {
+        const state = value == null ? 'global' : (value ? 'on' : 'off');
+        return (
+            <SegmentedRow
+                label={def.label} value={state} data={SWITCH_OPTIONS} fill={false}
+                disabled={disabled}
+                onChange={(v) => set(v === 'global' ? null : v === 'on')}
+            />
+        );
+    }
+    if (def.type === 'number') {
+        return (
+            <NumberRow
+                label={def.label} value={value ?? null} staged={staged} disabled={disabled}
+                min={def.min} max={def.max} step={def.step} suffix={def.suffix}
+                placeholder={globalValue == null ? '' : String(globalValue)}
+                onChange={(v) => set(v)}
+            />
+        );
+    }
+    if (def.type === 'font') {
+        return (
+            <FieldRow label={def.label} staged={staged}>
+                <FontCombobox
+                    value={value ?? globalValue ?? ''}
+                    disabled={disabled}
+                    onChange={(v) => set(v || null)}
+                />
+            </FieldRow>
+        );
+    }
+    // 'color' and 'color-opacity' alike. ColorRow's text field takes the value
+    // verbatim, so an rgba() from the opacity-carrying keys round-trips; only
+    // the swatch beside it can't render one, and it falls back to black rather
+    // than lying about the colour.
+    return (
+        <ColorRow
+            label={def.label} value={value ?? null} staged={staged} disabled={disabled}
+            placeholder={hint} hideReset
+            onChange={(v) => set(v)}
+        />
+    );
+    })();
+
+    // Every control here can already return to Global on its own (the switch's
+    // third state, the colour's reset, a blank number). The explicit × is what
+    // makes the SECTION legible: rows are a list the producer added to, so
+    // there has to be one obvious way to take one back out that reads the same
+    // on all four control shapes.
+    // The tooltip rides the WRAPPER, not the controls: a disabled input is not
+    // a reliable hover target, and the answer is about the row as a whole.
+    return (
+        <div className="flex min-w-0 items-center gap-1" title={disabled ? note : undefined}>
+            <div className="min-w-0 flex-1">{control}</div>
+            <button
+                type="button" onClick={onRemove} disabled={disabled}
+                aria-label={`Remove ${def.label} override`}
+                title="Remove override — back to the Design tab's value"
+                className="shrink-0 rounded-sm p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-40"
+            >
+                <X size={12} />
+            </button>
+        </div>
+    );
+});
+
+/*
+ * Which keys are ON this element right now.
+ *
+ * The stored pin is not the whole answer: under confirm mode an added override
+ * is STAGED, so a section that listed only stored pins would drop the row the
+ * instant the producer added it and hand back a blank panel. A key with a
+ * pending write is as much a member of the list as one with a stored value.
+ */
+function useAddedKeys(ns, pinned) {
+    const staged = useStagingStore(useShallow((s) => {
+        const out = [];
+        for (const def of OVERRIDABLE_GLOBAL_KEYS) {
+            const entry = s.pending[`settings:${settingKey(ns, def.key)}`];
+            // A staged UNPIN is a staged removal — the row stays until commit,
+            // but it is on its way out, not on its way in.
+            if (entry !== undefined && entry.value != null) out.push(def.key);
+        }
+        return out;
+    }));
+    return useMemo(() => {
+        const keys = new Set(staged);
+        for (const [key, value] of Object.entries(pinned)) if (value != null) keys.add(key);
+        return keys;
+    }, [staged, pinned]);
+}
+
+/*
+ * The picker. Only keys this element does not already carry, and — because a
+ * key that cannot reach the element is not a choice, it is a trap — only keys
+ * `useOverrideDefs` already filtered down to the ones it does reach.
+ */
+const AddOverride = memo(function AddOverride({ defs, onAdd, disabled, title }) {
+    const [open, setOpen] = useState(false);
+    const trigger = (
+        <Button size="xs" variant="secondary" className="h-7 self-start" disabled={disabled} title={title}>
+            <Plus size={12} />
+            <span>Add style override</span>
+        </Button>
+    );
+    // A disabled Button is `pointer-events-none`, so a title on it can never be
+    // hovered — the whole explanation would be unreachable exactly when it is
+    // the only explanation there is. The wrapper is what the pointer can hit.
+    if (disabled || defs.length === 0) {
+        return <span title={title} className="self-start">{trigger}</span>;
+    }
+    return (
+        <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+            <PopoverContent align="start" className="w-56 p-1">
+                <div className="flex flex-col">
+                    {defs.map(def => (
+                        <button
+                            key={def.key} type="button"
+                            onClick={() => { setOpen(false); onAdd(def); }}
+                            className="rounded-sm px-2 py-1.5 text-left text-xs text-foreground hover:bg-accent"
+                        >
+                            {def.label}
+                        </button>
+                    ))}
+                </div>
+            </PopoverContent>
+        </Popover>
+    );
+});
+
+/**
+ * The "Style overrides" section — the global design keys pinned ON this element.
+ *
+ * Added one at a time from the picker, never listed in full. Every key here is
+ * a knob that already has a home on the Design tab, and rendering all thirteen
+ * on every element made a wall of controls whose overwhelming answer was
+ * "Global" — the section read as configuration when it is an exception list.
+ * So a row exists because the producer put it there, and removing it is what
+ * hands the element back to the global.
+ *
+ * Adding PINS the key at the value the element is currently showing, which is
+ * the one honest starting point: it changes nothing on air, and it is a real
+ * value the producer can then move. There is deliberately no unset-but-present
+ * row — that would be a second source of truth for "is this overridden".
+ *
+ * @param type  the element's SETTINGS type (`settingsTypeOf`, not the id)
+ * @param board board id for the URL-scoped elements, else null
+ * @param size  the source's ?size= code, for the scoreboard's three theme files
+ */
+export const ElementStyleOverrides = memo(function ElementStyleOverrides({
+    type, board, label, size,
+}) {
+    const ns = board != null ? `${type}.${board}` : type;
+    const os = useOverlaySettings(type, ns, label ?? type, board ?? null);
+    const defs = useOverrideDefs(type);
+    const pinned = useOverrideBag(ns);
+    const globals = useGlobalValues();
+    // The stem is a function of the SIZE for the scoreboard, whose three theme
+    // files a package may tier differently.
+    const painted = usePaintedByApp(themeElementFor(type, size));
+    const packages = useDesignPackages();
+    const activeId = useSettingsStore(s => s?.overlays?.global?.designPackage) ?? 'default';
+    const added = useAddedKeys(ns, pinned);
+
+    const { on, off } = useMemo(() => ({
+        on: defs.filter(d => added.has(d.key)),
+        off: defs.filter(d => !added.has(d.key)),
+    }), [defs, added]);
+
+    if (defs.length === 0) return null;
+    const pkgName = packages?.find(p => p.id === activeId)?.name || activeId;
+    // The whole explanation of a dead control, as a tooltip on the dead control
+    // — it was a two-line paragraph standing above the section, which is a lot
+    // of panel spent on a state most producers are never in. Naming the package
+    // is the part that matters: "these don't work" without saying what owns the
+    // look leaves the producer where the Design tab's silent knobs left them.
+    const paintedNote = `${pkgName} paints this element itself`;
+
+    return (
+        <div className="mt-1 flex flex-col gap-1.5 border-t border-border/60 pt-2">
+            <Text size="xs" className="label-display text-muted-foreground">Style overrides</Text>
+            {/* Existing pins stay VISIBLE under a full-art package rather than
+                dropping out: a pin the producer cannot see is a pin they cannot
+                remove, and it starts working again the moment they swap
+                packages. The picker is what closes, because adding one there
+                would do nothing. */}
+            {on.map(def => (
+                <OverrideRow
+                    key={def.key} os={os} def={def}
+                    pinned={pinned[def.key] ?? null}
+                    globalValue={globals[def.key]}
+                    disabled={!painted} note={paintedNote}
+                    onRemove={() => os.set(def, null)}
+                />
+            ))}
+            <AddOverride
+                defs={off}
+                disabled={!painted || off.length === 0}
+                title={
+                    !painted ? paintedNote
+                        : off.length === 0 ? 'Every override this element reads is already on it'
+                            : undefined
+                }
+                onAdd={(def) => os.set(def, seedValue(def, globals))}
+            />
         </div>
     );
 });

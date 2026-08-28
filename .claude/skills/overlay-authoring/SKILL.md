@@ -188,8 +188,9 @@ Rules the runtime encodes:
   (split-screen.html is a 960×1080 page hosting a 1280×720 hit), so it degrades to
   its old fill behaviour rather than being clipped by a box it overflows.
   *Corollary:* **a member mount must measure its own host, not `window`.**
-  `stats-mount`'s autoScale read the window and would have blown a 325×120 card up
-  ~6× inside a 1920×1080 container, out of the box it is centered in.
+  The since-deleted fed stats bar read the window in its autoScale and would have
+  blown a 325×120 card up ~6× inside a 1920×1080 container, out of the box it is
+  centered in.
 - **Scope is applied LAST and beats the payload.** A scoped source carries its own
   frame of reference on its URL (`?scoreboard=N&team=T`, via `scopeFromParams`),
   and every source of one definition shares ONE feed key — so the feed says WHAT

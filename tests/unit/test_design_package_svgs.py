@@ -350,7 +350,7 @@ def test_inlined_rio_mark_matches_the_shipped_asset(svg: Path):
 # producer config) and the answer for the container shell is "any of them".
 TOKEN_HOSTS = [
     REPO / "public" / "layout" / "shared" / "container.html",
-    REPO / "public" / "layout" / "scoreboard1" / "stats.html",
+    REPO / "public" / "layout" / "scoreboard1" / "statsbar.html",
 ]
 
 
