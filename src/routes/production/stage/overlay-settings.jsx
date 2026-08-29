@@ -5,7 +5,7 @@ import { usePending, useStagingStore } from '../../../context/staging';
 import { Text } from '../../../components/ui/primitives';
 import {
     LAYOUT_SETTINGS, THEME_ELEMENT, OVERRIDABLE_GLOBAL_KEYS, GLOBAL_DESIGN_DEFAULTS,
-    OVERRIDE_CAPABLE_TYPES, themeElementFor, overrideReaches,
+    OVERRIDE_CAPABLE_TYPES, themeElementFor, overrideReaches, settingReachesSize,
 } from '../../layouts/designConstants';
 import { usePaintedByApp, useDesignPackages } from '../../layouts/designPackage';
 import { useLayoutWhitelists, declaresAny } from '../../layouts/layoutWhitelist';
@@ -436,12 +436,20 @@ export const OverlaySettingGroups = memo(function OverlaySettingGroups({ os, typ
  *
  * `board` is set only for the URL-scoped (?scoreboard=N) elements, whose config
  * lives at overlays.{type}.{board}.* so two sources stay independent.
+ *
+ * `size` is the source's ?size= code, and it FILTERS: the scoreboard's three
+ * sizes are one layout file with one `<meta>`, so a setting whose part exists
+ * only at some of them is dropped here rather than offered everywhere (ELO on
+ * the Small board, which has no completed-game cluster to draw it in). See
+ * settingReachesSize.
  */
-export const ElementStyleSettings = memo(function ElementStyleSettings({ type, board, label, exclude }) {
+export const ElementStyleSettings = memo(function ElementStyleSettings({ type, board, label, exclude, size }) {
     const ns = board != null ? `${type}.${board}` : type;
     const os = useOverlaySettings(type, ns, label ?? type, board ?? null);
     const defs = useLiveDefs(type, (LAYOUT_SETTINGS[type] ?? []).filter(
-        def => RENDERABLE.has(def.type) && !exclude?.includes(def.key),
+        def => RENDERABLE.has(def.type)
+            && !exclude?.includes(def.key)
+            && settingReachesSize(def, type, size),
     ));
     if (defs.length === 0) return null;
     return (
@@ -642,15 +650,26 @@ const OverrideRow = memo(function OverrideRow({
     // makes the SECTION legible: rows are a list the producer added to, so
     // there has to be one obvious way to take one back out that reads the same
     // on all four control shapes.
+    //
+    // AND IT IS NEVER DISABLED — `disabled` reaches the value control only. A
+    // full-art package makes a pin inert, not permanent: the row is kept
+    // visible under one precisely so the producer can still take it off ("a pin
+    // you cannot see is a pin you cannot remove"), and greying the × out was
+    // the one thing that defeated the reason it was kept. Removing is also the
+    // only act here that still MEANS something under a full-art package — the
+    // pin is stored, and it comes back the moment the package changes.
+    //
     // The tooltip rides the WRAPPER, not the controls: a disabled input is not
     // a reliable hover target, and the answer is about the row as a whole.
     return (
         <div className="flex min-w-0 items-center gap-1" title={disabled ? note : undefined}>
             <div className="min-w-0 flex-1">{control}</div>
             <button
-                type="button" onClick={onRemove} disabled={disabled}
+                type="button" onClick={onRemove}
                 aria-label={`Remove ${def.label} override`}
-                title="Remove override — back to the Design tab's value"
+                title={disabled
+                    ? 'Remove override — it does nothing under this package, but it is still stored'
+                    : "Remove override — back to the Design tab's value"}
                 className="shrink-0 rounded-sm p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-40"
             >
                 <X size={12} />

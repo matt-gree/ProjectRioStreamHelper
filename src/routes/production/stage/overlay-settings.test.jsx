@@ -209,6 +209,17 @@ describe('ElementStyleSettings — a switch its master holds on', () => {
     const board = () => render(<ElementStyleSettings type="scoreboard" label="Scoreboard 1" />);
     const inning = () => screen.getByRole('button', { name: 'Inning' });
 
+    /* The pair is ordered like the CARD, inning inboard of the live cluster —
+     * not like the dependency, which runs the other way. Registry order is what
+     * the panel follows, so it is worth one assertion. */
+    it('lists Inning before the Live Cluster', () => {
+        useSettingsStore.setState({ overlays: {}, production: {} });
+        board();
+        const labels = screen.getAllByRole('button')
+            .map(b => b.textContent).filter(t => t === 'Inning' || t === 'Live Cluster');
+        expect(labels).toEqual(['Inning', 'Live Cluster']);
+    });
+
     it('leaves the switch alone while the master is off', () => {
         // Confirm mode on, so a click is observable as a staged write rather
         // than going straight to the server the test has no socket for.
@@ -302,6 +313,52 @@ describe('ElementStyleSettings — app-palette settings under a full-art theme',
         useSettingsStore.setState({ overlays: { global: { designPackage: 'default' } }, production: {} });
         render(<ElementStyleSettings type="statscard" label="Stat Card" />);
         expect(screen.getByText('Stat Value Color')).toBeInTheDocument();
+    });
+});
+
+/*
+ * A setting whose PART only exists at some sizes. The scoreboard's three size
+ * variants are one HTML file with one `<meta>`, so the whitelist cannot draw
+ * this distinction — the registry does, and the stage reads the source's own
+ * ?size= to apply it. ELO is a completed-game number and the Small board has no
+ * completed-game cluster at all.
+ */
+describe('ElementStyleSettings — a setting the source’s size doesn’t draw', () => {
+    const board = (size) => render(
+        <ElementStyleSettings type="scoreboard" board={1} label="Scoreboard 1" size={size} />,
+    );
+
+    it('drops ELO on the Small board', () => {
+        board('s');
+        expect(screen.queryByText('ELO')).not.toBeInTheDocument();
+        // ...and the rest of the panel is untouched: this is one row, not a mode.
+        expect(screen.getByText('Team Logos')).toBeInTheDocument();
+        expect(screen.getByText('Live Cluster')).toBeInTheDocument();
+    });
+
+    it('keeps ELO on the sizes that draw it', () => {
+        board('m');
+        expect(screen.getByText('ELO')).toBeInTheDocument();
+        cleanup();
+        board('l');
+        expect(screen.getByText('ELO')).toBeInTheDocument();
+    });
+
+    /* A bare source carries no ?size= and the mount resolves that to `l`, so the
+     * console must not read "no size" as "no sizes drawn". */
+    it('treats an absent size as the default the mount falls back to', () => {
+        board(undefined);
+        expect(screen.getByText('ELO')).toBeInTheDocument();
+    });
+
+    /* The value is stored per BOARD, not per size — hiding the row on an S
+     * source must not disturb what the same board's L source is showing. */
+    it('leaves the stored value alone', () => {
+        useSettingsStore.setState({
+            overlays: { scoreboard: { 1: { showElo: true } } }, production: {},
+        });
+        board('s');
+        expect(useSettingsStore.getState().overlays.scoreboard[1].showElo).toBe(true);
     });
 });
 
@@ -573,6 +630,31 @@ describe('ElementStyleOverrides', () => {
             .toHaveAttribute('title', 'Default paints this element itself');
         expect(screen.getByLabelText('Accent Color').closest('[title]'))
             .toHaveAttribute('title', 'Default paints this element itself');
+    });
+
+    /*
+     * ...and the × STAYS LIVE, because removing is the only act on this row
+     * that still means something under a full-art package: the pin is stored,
+     * and it comes back the moment the package changes. Greying it out defeated
+     * the whole reason the row is kept visible — the producer could see a pin
+     * they could neither use nor get rid of.
+     */
+    it('still lets a dead pin be removed', async () => {
+        layouts([STATSBAR]);
+        packages([FULL_ART]);
+        useSettingsStore.setState({
+            overlays: { global: { designPackage: 'default' }, statsbar: { accentColor: '#abcdef' } },
+            production: {},
+        });
+        await show({ type: 'statsbar' });
+        const remove = screen.getByRole('button', { name: /Remove Accent Color override/ });
+        await waitFor(() => expect(screen.getByLabelText('Accent Color')).toBeDisabled());
+        expect(remove).not.toBeDisabled();
+        fireEvent.click(remove);
+        // null is this section's "not pinned" — the mount reads the pin with
+        // `??`, so it falls through to the global exactly as an absent key does.
+        expect(useSettingsStore.getState()?.overlays?.statsbar?.accentColor).toBeNull();
+        expect(screen.queryByLabelText('Accent Color')).not.toBeInTheDocument();
     });
 
     it('leaves them live under a token skin', async () => {

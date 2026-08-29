@@ -52,24 +52,35 @@ export const LAYOUT_SETTINGS = {
         // Default OFF: a one-game rating swing is a season-play number, and at a
         // tournament or in a league it was taking the widest thirds of the
         // completed-game row to say something nobody in the room was watching.
-        { key: 'showElo', type: 'switch', label: 'ELO', description: 'Rating change on completed games. Off unless you’re running ranked ladder play.', defaultValue: false },
+        // sizes: the SMALL board has no completed-game cluster at all — no
+        // elo slots, no meta line, no final row (it is a compact live card that
+        // swaps its inning for a FINAL badge), so neither shipped package draws
+        // a rating there and the switch was a control that could not change the
+        // picture. The VALUE is per board, not per size, so hiding the row on an
+        // S source leaves the same board's M/L sources holding what they had.
+        { key: 'showElo', type: 'switch', sizes: ['m', 'l'], label: 'ELO', description: 'Rating change on completed games. Off unless you’re running ranked ladder play.', defaultValue: false },
         { key: 'showTeamLogos', type: 'switch', label: 'Team Logos', description: 'Display MSB team logos' },
         // Both feeds write score.{N}.game_mode now, so this is standing context
         // rather than a completed-game detail.
         { key: 'showGameMode', type: 'switch', label: 'Game Mode', description: 'The game mode / tag set, during a game and after it', defaultValue: true },
         // Segment toggles honoured by melded themes (e.g. Small Scoreboard); a
         // theme without those segments ignores them.
-        { key: 'showLive', type: 'switch', label: 'Live Cluster', description: 'The live count + base diamond. Off keeps it hidden even during a live game (the card stays compact).', defaultValue: true },
-        // forcedBy: the mount ORs this with the live cluster (scoreboard-mount
-        // showInningSeg), so with Live Cluster on this switch cannot say no —
-        // and a control that keeps offering a choice it doesn't have is the
-        // producer's next bug report. The console shows it held on instead.
+        //
+        // INNING FIRST, and the order is the card's: on a melded theme the live
+        // segment sits OUTBOARD of the inning, so a column of switches that ran
+        // live-then-inning read right-to-left against the thing it described.
         {
             key: 'showInning', type: 'switch', label: 'Inning',
             description: 'The inning number segment during a live game. The live cluster needs it, so turning that on shows the inning too.',
             forcedBy: { key: 'showLive', note: 'Held on by the Live Cluster — the count reads as a count within an inning, and on a melded theme the live segment sits outboard of this one. Turn the Live Cluster off to get this switch back.' },
             defaultValue: true,
         },
+        // forcedBy on Inning above names this one as its master: the mount ORs
+        // the two (scoreboard-mount showInningSeg), so with this on the Inning
+        // switch cannot say no — and a control that keeps offering a choice it
+        // doesn't have is the producer's next bug report. The console shows it
+        // held on instead.
+        { key: 'showLive', type: 'switch', label: 'Live Cluster', description: 'The live count + base diamond. Off keeps it hidden even during a live game (the card stays compact).', defaultValue: true },
     ],
     roster: [
         { key: 'showSuperstars', type: 'switch', label: 'Superstar Icons', description: 'Display superstar badge on starred characters' },
@@ -249,7 +260,39 @@ const SCOREBOARD_SIZES = new Set(['s', 'm', 'l']);
  */
 export function themeElementFor(type, size) {
     if (type !== 'scoreboard') return THEME_ELEMENT[type];
-    return `scoreboard-${SCOREBOARD_SIZES.has(size) ? size : 'l'}`;
+    return `scoreboard-${sizeCodeFor(type, size)}`;
+}
+
+/**
+ * The size code a source ACTUALLY renders at — the mount resolves anything
+ * unknown or retired (and a bare URL with no ?size=) to `l`, so this does too.
+ * Split out of `themeElementFor` because the theme stem is not the only thing
+ * that turns on it: a per-size SETTING gate needs the same answer, and two
+ * copies of the fallback is how the console offers a knob for a size the source
+ * isn't on.
+ *
+ * @param type layout/settings type
+ * @param size the source's ?size= code, or null/undefined for the default
+ */
+export function sizeCodeFor(type, size) {
+    if (type !== 'scoreboard') return size ?? null;
+    return SCOREBOARD_SIZES.has(size) ? size : 'l';
+}
+
+/**
+ * Does `def` reach a source at this size?
+ *
+ * THE FOURTH GATE, and the one the `<meta>` whitelist structurally cannot draw:
+ * a layout declares what it honours per TYPE, and the scoreboard's three size
+ * variants are one HTML file with one `<meta>`. So a setting whose part only
+ * exists at some sizes says so here, and the console stops offering it where
+ * nothing would move — the same rule as `showWhen` and `appPalette`, which are
+ * the other two ways a registered setting can be inert on the source in front
+ * of you. A def with no `sizes` reaches every size.
+ */
+export function settingReachesSize(def, type, size) {
+    if (!def?.sizes) return true;
+    return def.sizes.includes(sizeCodeFor(type, size));
 }
 
 // ── Which layouts can honour a PER-ELEMENT override ──

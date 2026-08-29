@@ -116,6 +116,9 @@ const ElementStage = memo(function ElementStage({ placement, title, pinned, onPi
         : element.name;
     const Body = stageBodyComponent(element, placement);
     const dims = useContainerDims(placement);
+    /* The source's ?size=, read once: it picks the theme file an override has
+       to reach AND drops the element settings that size doesn't draw. */
+    const size = sizeOptionFor(element, placement.variant)?.value;
     return (
         <PanelShell
             state={chipFor(placement)} title={title}
@@ -144,6 +147,7 @@ const ElementStage = memo(function ElementStage({ placement, title, pinned, onPi
                     board={settingsBoard}
                     label={settingsLabel}
                     exclude={Body.surfacedKeys}
+                    size={size}
                 />
                 {/* ...and the GLOBAL design keys this element can pin for
                     itself. Separate section, below its own settings, because a
@@ -154,7 +158,7 @@ const ElementStage = memo(function ElementStage({ placement, title, pinned, onPi
                     type={settingsType}
                     board={settingsBoard}
                     label={settingsLabel}
-                    size={sizeOptionFor(element, placement.variant)?.value}
+                    size={size}
                 />
                 {/* Reveal behaviour for animated overlays — renders nothing for
                     the rest (see intro.jsx). A source-level toggle, so it sits

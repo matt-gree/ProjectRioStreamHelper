@@ -230,9 +230,9 @@ def test_meld_stages_are_drawn_from_the_melding_attributes(tokens):
     would never actually grow to."""
     src = PACKAGES / "default" / "scoreboard-s.svg"
     template, report = build_template(src.read_text(), "scoreboard-s", tokens)
-    # resting 224x128, the two expand-right segments (292, 380), the mode band (156)
+    # resting 232x128, the two expand-right segments (300, 380), the mode band (156)
     for label, w, h in [
-        ("resting", 224, 128), ("row-inning", 292, 128),
+        ("resting", 232, 128), ("row-inning", 300, 128),
         ("row-live", 380, 128), ("row-mode", 380, 156),
     ]:
         assert re.search(
