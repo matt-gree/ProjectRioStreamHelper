@@ -14,6 +14,7 @@ import { Subject } from '../subject';
 import { DirectStage, FedStage } from './generic';
 import { ElementStyleSettings, ElementStyleOverrides } from './overlay-settings';
 import { IntroRow } from './intro';
+import SizeMatchRow from './sizematch';
 import StagePreview from './preview';
 import HitVisualizerStage from './hitvisualizer';
 import MatchupStage from './matchup';
@@ -104,7 +105,9 @@ function useContainerDims(placement) {
     );
 }
 
-const ElementStage = memo(function ElementStage({ placement, title, pinned, onPinToggle }) {
+const ElementStage = memo(function ElementStage({
+    placement, placements, title, pinned, onPinToggle,
+}) {
     const { element, board } = placement;
     /* The settings NAMESPACE, never the element id — Matchup History is
        `matchuphistory` here and `overlays.matchup.*` in its mount, and a panel
@@ -138,6 +141,13 @@ const ElementStage = memo(function ElementStage({ placement, title, pinned, onPi
                     fully and never once say what was on it (../subject). */}
                 <Subject placement={placement} />
                 <Body element={element} board={board} placement={placement} />
+                {/* An OBS ACTION on this source, so it sits with the body's
+                    controls rather than under two sections of settings — and
+                    above them, because it is the only row here whose effect is
+                    a producer's own hand-placed geometry. Renders nothing
+                    unless this element comes in sides and both are in this
+                    scene (see sizematch.jsx). */}
+                <SizeMatchRow placement={placement} placements={placements} />
                 {/* The body surfaces the settings a producer reaches for live;
                     this is the catch-all so every remaining element setting is
                     still reachable on the stage (phase 7). A body names what it
@@ -244,6 +254,7 @@ export const Stage = memo(function Stage({ selection, deskBodies = {}, pins = []
     return (
         <ElementStage
             placement={placement}
+            placements={placements}
             title={detail ? `${name} · ${detail}` : name}
             pinned={pinnedIds.has(placement.id)}
             onPinToggle={() => onPinToggle?.(placement.id)}

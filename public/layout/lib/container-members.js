@@ -306,7 +306,7 @@ export const MEMBERS = {
     // Side-scoped like the roster and the stat card: it binds `score.{N}
     // .player.{T}.port` at mount time, so a scope change is a new layer.
     controller: {
-        size: [512, 256],
+        size: [512, 180],
         mount: async (box, ctx, sel) => {
             const { mountController } = await load('controller-mount');
             return mountController({

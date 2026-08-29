@@ -1,0 +1,103 @@
+import { memo, useCallback } from 'react';
+import { Scaling } from 'lucide-react';
+import { useObsStore } from '../../../context/obs';
+import { stageOrRun, usePending } from '../../../context/staging';
+import { notifications } from '../../../lib/notify';
+import { Button } from '../../../components/ui/button';
+import { FieldRow } from '../kit';
+import { StagedDot } from '../controls';
+import { sideSibling } from '../placements';
+import { sideOfVariant } from '../instances';
+import { useSideLabels } from '../sides';
+
+/*
+ * "Make this one the same size as the other one."
+ *
+ * A per-side element is placed by hand, twice. The producer drags side 2 to the
+ * right of the canvas, sizes it by eye until it reads well, and then has to hit
+ * that same number again on side 1 — from OBS's Edit Transform dialog, in a
+ * unit (scale, or a bounds box) that isn't the one they were dragging in. A
+ * pair that is two pixels apart is invisible in the dialog and glaring on air.
+ *
+ * IT PULLS, IT NEVER PUSHES. The panel resizes ITS OWN source to match the
+ * sibling's, and offers nothing that edits the sibling. That is the console's
+ * standing rule — a panel commands the placement it is opened on, and buttons
+ * that drive a source other than the one in the header are the exact confusion
+ * the source strip's three fixed slots exist to prevent. Both halves get this
+ * row, so "push" is one rack click away: open the other side and pull.
+ *
+ * SIZE, NOT POSITION — see lib/obs-transform.js. Two halves of a pair are a
+ * pair because they sit in different places.
+ *
+ * It renders only when BOTH sources are really in this scene, which is the
+ * whole situation it serves. A disabled button explaining that the other side
+ * isn't placed yet would sit on every single-sided Roster, Team Logo and Player
+ * Name panel in the console, saying nothing a producer who has placed one
+ * source doesn't already know.
+ */
+
+const pendingKey = (placement) => `obs:size:${placement.scene}:${placement.item.id}`;
+
+export function matchSize(placement, sibling, label) {
+    const mine = placement.item.sourceName;
+    const theirs = sibling.item.sourceName;
+    stageOrRun({
+        key: pendingKey(placement),
+        label: `Size ${mine} to ${theirs}`,
+        value: sibling.item.id,
+        /*
+         * No `liveValue`. A resize is not a two-state control that can be staged
+         * back to where it started — there is no click that means "un-match" —
+         * so there is nothing for the toggled-twice collapse to catch, and
+         * offering it one would only give it a chance to throw the change away.
+         * Same shape as removeSourceFromScene, for the same reason.
+         */
+        run: async () => {
+            const size = await useObsStore.getState().matchSceneItemSize({
+                scene: placement.scene,
+                itemId: placement.item.id,
+                modelScene: sibling.scene,
+                modelItemId: sibling.item.id,
+            });
+            notifications.show({
+                color: 'green',
+                message: size
+                    ? `${mine} is now ${Math.round(size.width)} × ${Math.round(size.height)}`
+                        + ` — the same as ${label}.`
+                    : `${mine} now matches ${theirs}.`,
+            });
+        },
+    });
+}
+
+const SizeMatchRow = memo(function SizeMatchRow({ placement, placements }) {
+    const sibling = sideSibling(placement, placements);
+    const { label } = useSideLabels();
+    // Hooks before the bail-out: a placement that gains or loses its sibling
+    // mid-session (the producer adds the other side while this panel is open)
+    // must not change how many hooks this component runs.
+    const staged = !!usePending(placement?.item ? pendingKey(placement) : '∅');
+    const run = useCallback(
+        () => sibling && matchSize(placement, sibling, label(sideOfVariant(sibling.variant))),
+        [placement, sibling, label],
+    );
+    if (!sibling) return null;
+
+    const other = label(sideOfVariant(sibling.variant));
+    return (
+        <FieldRow label="Size" staged={staged}>
+            <Button
+                size="xs" variant="secondary" onClick={run}
+                className="h-7 min-w-0 flex-1"
+                title={`Resize ${placement.item.sourceName} in OBS to exactly the size of `
+                    + `${sibling.item.sourceName}. Where it sits is left alone.`}
+            >
+                <Scaling size={11} className="mr-1" />
+                <span className="truncate">Match {other}</span>
+            </Button>
+            <StagedDot show={staged} />
+        </FieldRow>
+    );
+});
+
+export default SizeMatchRow;

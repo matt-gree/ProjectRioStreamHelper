@@ -43,6 +43,18 @@ const TOP_LINE_SETTINGS = [
     { key: 'topLineText', type: 'text', showWhen: { key: 'topLine', is: 'custom' }, label: 'Custom Top Text', description: 'Shown when Top Line is set to Custom Text', placeholder: 'e.g. Tournament Stats' },
 ];
 
+/*
+ * A per-element pin over an app-wide default: "leave it alone" first, then the
+ * two answers. Spelled Shown/Hidden rather than On/Off because each of these
+ * names a PART of the drawing, not a behaviour — see the LAYOUT_SETTINGS note
+ * on why a switch label names the part.
+ */
+export const INHERIT_OPTIONS = [
+    { value: 'inherit', label: 'Use Connections' },
+    { value: 'shown', label: 'Shown' },
+    { value: 'hidden', label: 'Hidden' },
+];
+
 export const LAYOUT_SETTINGS = {
     // A switch's label names the PART, not the verb: a row of "Show …" repeats
     // the control's own affordance once per line and pushes the word that
@@ -112,6 +124,40 @@ export const LAYOUT_SETTINGS = {
         { key: 'prefixPosition', type: 'select', label: 'Prefix Position', description: 'Where the Address Book prefix (sponsor / tag) sits relative to the name. Off hides it without editing the Address Book.', options: [{ value: 'above', label: 'Above Name' }, { value: 'below', label: 'Below Name' }, { value: 'inline', label: 'Before Name' }, { value: 'off', label: 'Off' }], defaultValue: 'above' },
     ],
     teamlogo: [],
+    /*
+     * gc-overlay's three appearance settings.
+     *
+     * The only settings in the registry that do not reach a PRSH renderer at
+     * all: the controller layout is an iframe around gc-overlay, a separate
+     * program on its own port, so a value here becomes a query param on that
+     * iframe's URL and nothing else (see DISPLAY_KEYS in lib/controller-mount.js,
+     * the one table mapping these names onto gc-overlay's own).
+     *
+     * ONE LAYER, like every other element. These briefly had an app-wide copy on
+     * the Connections tab with these as three-state pins over it, and the second
+     * layer bought nothing: a pin beats the global, so the moment an element was
+     * touched the global stopped reaching it — invisibly, from a tab that could
+     * not show you why. `overlays.controller.*` is already shared by both sides
+     * (the two ?team= sources are one element), so a single layer is app-wide
+     * for every controller source anyway. Authored where every other element's
+     * look is authored.
+     *
+     * Defaults are gc-overlay's own, so an untouched element draws exactly what
+     * the reader draws standalone.
+     */
+    controller: [
+        { key: 'labels', type: 'switch', label: 'Letters', description: 'The A/B/X/Y/Z/ST/L/R glyphs on the pad. Off for a shapes-only look.', defaultValue: true },
+        { key: 'keyline', type: 'switch', label: 'Keyline', description: 'A black outline behind every stroke and glyph, which is what keeps the pad readable over bright gameplay.', defaultValue: true },
+        /*
+         * A SLIDER, not a number field, and that is a correctness fix. Asked for
+         * a 0-1 opacity in a number box, a producer reads the label and types
+         * `10` meaning ten percent — off the scale by a factor of a hundred, and
+         * it drew as fully solid. A slider cannot express an out-of-range value
+         * (the range IS the scale) and its percent readout removes the ambiguity
+         * that invited one.
+         */
+        { key: 'idleFillOpacity', type: 'fraction-override', label: 'Idle Fill', description: 'Dark plate inside unpressed buttons. 0% leaves them hollow.', defaultValue: 0, step: 0.05 },
+    ],
     bracket: [
         { key: 'connectorColor', type: 'color-override', label: 'Connector Line Color', description: 'Color of bracket connector lines' },
         { key: 'activeColor', type: 'color-override', label: 'Active Match Color', description: 'Highlight color for active/in-progress matches' },

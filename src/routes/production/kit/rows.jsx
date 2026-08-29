@@ -247,6 +247,50 @@ export const NumberRow = memo(function NumberRow({
 });
 
 /*
+ * label · slider · % readout — a 0..1 fraction the producer judges BY EYE.
+ *
+ * A number field is the wrong control for one of these, and not merely a less
+ * pleasant one. It accepts values the setting does not have: asked for an
+ * opacity, a producer reads "Idle Fill Opacity" and types `10` meaning ten
+ * percent, which is off the 0..1 scale by a factor of a hundred and lands as
+ * fully solid. A slider cannot express that — the range IS the scale — and
+ * showing the percentage removes the ambiguity that invited the number.
+ *
+ * Fraction in, fraction out. The percent exists only between `value` and the
+ * DOM, so callers and storage never see a second unit.
+ */
+export const FractionRow = memo(function FractionRow({
+    label, value, onChange, step = 0.05, disabled, staged, className,
+}) {
+    // Clamped for DISPLAY as well as storage. A settings file written before
+    // this was a slider can hold anything, and a readout of "1000%" beside a
+    // thumb pinned at the far end explains nothing about what is drawing.
+    const shown = Math.min(1, Math.max(0, Number.isFinite(value) ? value : 0));
+    const pct = Math.round(shown * 100);
+    return (
+        <div className={cn(ROW, className)}>
+            <RowLabel label={label} staged={staged} />
+            <input
+                type="range" min={0} max={100} step={Math.round(step * 100)} disabled={disabled}
+                aria-label={named(label)}
+                value={pct}
+                onChange={(e) => onChange?.(Number(e.target.value) / 100)}
+                className={cn(
+                    'h-1 min-w-0 flex-1 cursor-pointer accent-[#60a5fa]',
+                    staged && 'accent-amber-400',
+                )}
+            />
+            <Text
+                size="xs" span dimmed
+                className={cn('w-10 shrink-0 text-right tabular-nums', staged && 'text-amber-400')}
+            >
+                {pct}%
+            </Text>
+        </div>
+    );
+});
+
+/*
  * Keystrokes are LOCAL; commits are not.
  *
  * A console text field writes to State or Settings, and both broadcast to every

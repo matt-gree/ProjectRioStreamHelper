@@ -513,7 +513,7 @@ class Settings:
         "controller_overlay": {
             "path": "",
             "port": 8069,
-            "auto_start": False
+            "auto_start": False,
         },
         "overlays": {
             "schema_version": 4,
@@ -615,6 +615,12 @@ class Settings:
     @classmethod
     async def Load(cls) -> dict:
         loaded_server: dict = {}
+        # The raw controller display block, captured for the same reason
+        # `loaded_server` is: once `_deep_merge` has run, a default is
+        # indistinguishable from a value the producer set to the same thing —
+        # and for `idle_fill_opacity` the default IS 0.0, the value a legacy
+        # `idle_fill: False` migrates to.
+        loaded_display: dict = {}
         file_existed = False
         try:
             async with cls._settings_file().open(mode='rb', encoding='utf-8') as f:
@@ -624,6 +630,10 @@ class Settings:
                 )
                 file_existed = isinstance(loaded, dict)
                 loaded_server = (loaded.get("server") or {}) if isinstance(loaded, dict) else {}
+                loaded_display = (
+                    ((loaded.get("controller_overlay") or {}).get("display") or {})
+                    if isinstance(loaded, dict) else {}
+                )
                 cls.settings = _deep_merge(cls.settings, loaded)
         except Exception:
             logger.debug("using default settings dict")
@@ -656,6 +666,64 @@ class Settings:
                 **(current if isinstance(current, dict) else {}),
             }
             await cls.Save()
+
+        # `controller_overlay.display` is gone entirely.
+        #
+        # gc-overlay's appearance briefly had an app-wide copy here, with
+        # per-element three-state pins over it. The second layer bought nothing:
+        # a pin beats the global, so the moment an element was touched the global
+        # stopped reaching it — invisibly, from a tab that could not show why.
+        # `overlays.controller.*` is shared by both sides already, so one layer
+        # is app-wide for every controller source anyway.
+        #
+        # Dropped rather than merged down: it never shipped, and a stale block in
+        # a namespace the producer can read is one they will one day try to use.
+        _co = cls.settings.get("controller_overlay")
+        if isinstance(_co, dict) and "display" in _co:
+            _co.pop("display", None)
+            await cls.Save()
+
+        # The controller element's own pins, from the same 1.4.0 change.
+        #
+        # `overlays.controller.idleFill` was a three-state select while the
+        # setting was a switch; nothing reads it now, and a dead key in a
+        # namespace the producer can see is a key they will one day try to use.
+        #
+        # `idleFillOpacity` is CLAMPED rather than reinterpreted. Out-of-range
+        # values got here one way — a percentage typed into a 0..1 number field,
+        # which is exactly why that control is a slider now — but 10 could mean
+        # "10%" or "as solid as it goes", and the mount already clamps, so
+        # storing what is actually being drawn is the reading that changes
+        # nothing on air. The producer moves it with one drag either way.
+        _pins = cls.settings.get("overlays", {}).get("controller")
+        if isinstance(_pins, dict):
+            _dirty = _pins.pop("idleFill", None) is not None
+
+            # `labels`/`keyline` were three-state selects while there was an
+            # app-wide layer to inherit from: 'inherit' | 'shown' | 'hidden'.
+            # They are plain booleans now, and leaving the strings would be
+            # SILENT and backwards — every one of them is truthy, so a producer
+            # who had switched the letters off would find them back on with the
+            # switch reading On, and the mount's `typeof === 'boolean'` guard
+            # would quietly substitute the default.
+            for _key in ("labels", "keyline"):
+                _v = _pins.get(_key)
+                if isinstance(_v, str):
+                    if _v == "inherit":
+                        # Inherited the app-wide value, which is gone. The
+                        # default is what it resolved to for anyone who never
+                        # touched that tab, and is gc-overlay's own.
+                        _pins.pop(_key)
+                    else:
+                        _pins[_key] = _v == "shown"
+                    _dirty = True
+
+            _opacity = _pins.get("idleFillOpacity")
+            if isinstance(_opacity, (int, float)) and not 0.0 <= _opacity <= 1.0:
+                _pins["idleFillOpacity"] = min(1.0, max(0.0, float(_opacity)))
+                _dirty = True
+            if _dirty:
+                await cls.Save()
 
         # One-time overlay schema migration to v2: keys that were previously
         # duplicated as per-layout overrides (showCaptains, showLogo, etc.)

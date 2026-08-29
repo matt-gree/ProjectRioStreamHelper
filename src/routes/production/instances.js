@@ -158,6 +158,40 @@ export function variantParams(variant) {
 }
 
 /*
+ * THE SIDE A VARIANT NAMES, and the same variant wearing the other one.
+ *
+ * A per-side element is two sources that differ in exactly one term of their
+ * id — `roster~t1` and `roster~t2`, `scoreboard:1~t2.zs` and its `t1` twin — so
+ * "the other half of this pair" is a question about the variant tag and nothing
+ * else. Read through VARIANT_PARAMS rather than by spelling `t1`/`t2` here: the
+ * one-letter tags belong to that table, and a second copy of them is how the id
+ * grammar and its readers drift apart.
+ *
+ * Composed so every OTHER axis survives the flip. A source at `t2.zs` has a
+ * side and a size, and its other half is `t1.zs` — the small one. Flipping to a
+ * bare `t1` would answer with a different-sized overlay, which for the one
+ * caller that exists (matching a pair's size in OBS) is precisely the wrong
+ * source.
+ */
+export function sideOfVariant(variant) {
+    for (const [param, value] of variantParams(variant)) {
+        if (param !== 'team') continue;
+        const n = Number(value);
+        return n === 1 || n === 2 ? n : null;
+    }
+    return null;
+}
+
+// The same variant with its side swapped, or null when it names no side.
+export function flipSideVariant(variant) {
+    const side = sideOfVariant(variant);
+    if (!side) return null;
+    const mine = variantTagFor('team', side);
+    const theirs = variantTagFor('team', side === 1 ? 2 : 1);
+    return String(variant).split('.').map(p => (p === mine ? theirs : p)).join('.');
+}
+
+/*
  * How a variant reads when its siblings are on screen with it — including the
  * DEFAULT one, which has no tag to read a name off.
  *

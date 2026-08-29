@@ -8,8 +8,8 @@ import {
     CONTAINER_MEMBERS, containerOfSource, fedTargets, useContainerDefs,
 } from './containers';
 import {
-    instanceId, parseInstanceId, slotInstanceId, variantLabelFor, variantOf, variantTagFor,
-    withVariant,
+    flipSideVariant, instanceId, parseInstanceId, slotInstanceId, variantLabelFor, variantOf,
+    variantTagFor, withVariant,
 } from './instances';
 import { useActiveBoards, useBoardTag } from './boards';
 import { useSideLabels } from './sides';
@@ -546,6 +546,42 @@ export function usePlacementLabel(placements) {
             return { name: p.element.name, detail: detail || null };
         };
     }, [placements, boardTag, mode]);
+}
+
+/*
+ * THE OTHER HALF OF A PAIR — this placement's own element, on the same board,
+ * in the same scene, wearing the other `?team=`.
+ *
+ * Derived from the SAME placement list every other surface reads, rather than
+ * scanning OBS for a URL: a sibling found any other way is a source the rack
+ * may not have a row for, and the console's whole claim is that one derivation
+ * decides what exists.
+ *
+ * All four coordinates have to match, and the scene is the one worth stating.
+ * A pair is placed per scene — side 1 and side 2 sit at their own sizes in
+ * Game and at different ones in Break — so "the other side" means the copy in
+ * THIS scene. Reaching across scenes would offer to size a source against one
+ * the producer isn't looking at.
+ *
+ * A FED row is excluded on purpose. A member's row commands the CONTAINER's
+ * source (see placementFlavor), which is shared with every other member and
+ * sized as the container — resizing it there would be a panel quietly editing
+ * something that isn't its own. The same element's dedicated source, one row
+ * over, is where its size lives.
+ */
+export function sideSibling(placement, placements = []) {
+    if (!placement?.item || !placement.scene || isFedPlacement(placement)) return null;
+    const other = flipSideVariant(placement.variant);
+    if (!other) return null;
+    return placements.find(p => (
+        p.scene === placement.scene
+        && p.variant === other
+        && p.board === placement.board
+        && p.element?.id === placement.element?.id
+        && p.item
+        && p.item.id !== placement.item.id
+        && !isFedPlacement(p)
+    )) ?? null;
 }
 
 /*

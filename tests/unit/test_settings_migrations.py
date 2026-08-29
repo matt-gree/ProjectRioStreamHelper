@@ -452,3 +452,117 @@ async def test_no_legacy_stats_namespace_is_a_no_op(isolate_user_data):
     await Settings.Load()
     assert Settings.settings["overlays"]["statsbar"]["subLine"] == "off"
     assert "stats" not in Settings.settings["overlays"]
+
+
+# ── controller_overlay.display is gone ────────────────────────────────────
+#
+# gc-overlay's appearance briefly had an app-wide copy under
+# `controller_overlay.display`, with per-element three-state pins over it. The
+# second layer bought nothing — a pin beats the global, so touching one element
+# silently cut it off from the control meant to drive it — so the whole block
+# went and `overlays.controller.*` is the only layer.
+
+async def test_the_app_wide_display_block_is_removed(isolate_user_data):
+    _write_settings(isolate_user_data, {
+        "controller_overlay": {
+            "port": 8069,
+            "display": {"labels": True, "keyline": False, "idle_fill_opacity": 0.4},
+        },
+    })
+    await Settings.Load()
+    co = Settings.settings["controller_overlay"]
+    assert "display" not in co
+    # The reader's own settings, which this block sat beside, are untouched.
+    assert co["port"] == 8069
+
+
+async def test_the_intermediate_boolean_goes_with_it(isolate_user_data):
+    _write_settings(isolate_user_data, {
+        "controller_overlay": {"display": {"idle_fill": True}},
+    })
+    await Settings.Load()
+    assert "display" not in Settings.settings["controller_overlay"]
+
+
+async def test_dead_idle_fill_pin_is_dropped(isolate_user_data):
+    """`overlays.controller.idleFill` was the select the slider replaced.
+
+    Nothing reads it, and a dead key in a namespace the producer can see is one
+    they will eventually try to use.
+    """
+    _write_settings(isolate_user_data, {
+        "overlays": {"controller": {"idleFill": "shown", "labels": "hidden"}},
+    })
+    await Settings.Load()
+    pins = Settings.settings["overlays"]["controller"]
+    assert "idleFill" not in pins
+    # Its neighbour is migrated in the same pass, not left as a string.
+    assert pins["labels"] is False
+
+
+async def test_out_of_range_opacity_pin_is_clamped(isolate_user_data):
+    """A percentage typed into what used to be a 0..1 number field.
+
+    Clamped, not reinterpreted: the mount already clamps, so storing what is
+    actually drawn is the reading that changes nothing on air.
+    """
+    _write_settings(isolate_user_data, {
+        "overlays": {"controller": {"idleFillOpacity": 10}},
+    })
+    await Settings.Load()
+    assert Settings.settings["overlays"]["controller"]["idleFillOpacity"] == 1.0
+
+
+async def test_in_range_opacity_pin_is_left_alone(isolate_user_data):
+    _write_settings(isolate_user_data, {
+        "overlays": {"controller": {"idleFillOpacity": 0.35}},
+    })
+    await Settings.Load()
+    assert Settings.settings["overlays"]["controller"]["idleFillOpacity"] == 0.35
+
+
+async def test_an_unpinned_controller_stays_unpinned(isolate_user_data):
+    """No pin is the state the global depends on, so it must survive Load.
+
+    A migration that wrote a number here would pin every element at boot and the
+    Connections slider would stop reaching anything.
+    """
+    _write_settings(isolate_user_data, {"overlays": {"controller": {}}})
+    await Settings.Load()
+    assert "idleFillOpacity" not in Settings.settings["overlays"]["controller"]
+
+
+async def test_three_state_strings_become_booleans(isolate_user_data):
+    """'shown'/'hidden' were selects while an app-wide layer existed to inherit.
+
+    Every one of those strings is truthy, so leaving them would be silent AND
+    backwards: a producer who had switched the letters off would find them back
+    on, with the switch reading On.
+    """
+    _write_settings(isolate_user_data, {
+        "overlays": {"controller": {"labels": "hidden", "keyline": "shown"}},
+    })
+    await Settings.Load()
+    pins = Settings.settings["overlays"]["controller"]
+    assert pins["labels"] is False
+    assert pins["keyline"] is True
+
+
+async def test_inherit_becomes_no_pin_at_all(isolate_user_data):
+    """'inherit' pointed at a layer that no longer exists, so it must not
+    survive as a value — the key goes and the registry default applies."""
+    _write_settings(isolate_user_data, {
+        "overlays": {"controller": {"labels": "inherit"}},
+    })
+    await Settings.Load()
+    assert "labels" not in Settings.settings["overlays"]["controller"]
+
+
+async def test_real_booleans_are_left_alone(isolate_user_data):
+    _write_settings(isolate_user_data, {
+        "overlays": {"controller": {"labels": False, "keyline": True}},
+    })
+    await Settings.Load()
+    pins = Settings.settings["overlays"]["controller"]
+    assert pins["labels"] is False
+    assert pins["keyline"] is True

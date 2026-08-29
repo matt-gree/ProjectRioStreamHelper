@@ -15,7 +15,7 @@ import ControllerStage from './controller';
  * duplication the move existed to end.
  */
 
-const element = { id: 'controller', name: 'Controller', url: '/layout/controller/controller.html', width: 512, height: 256 };
+const element = { id: 'controller', name: 'Controller', url: '/layout/controller/controller.html', width: 512, height: 180 };
 
 const mockFetch = (status) => vi.fn((url) => {
     if (url === '/api/v1/controller/status') return Promise.resolve({ json: () => Promise.resolve(status) });

@@ -86,10 +86,28 @@ function PortPreview({ gcPort, baseUrl, owner }) {
                     backgroundPosition: '0 0, 8px 8px',
                 }}
             >
+                {/* Gear and port label OFF. Each frame is already captioned
+                    "Port N" by the row above it, and the gear's first control
+                    switches port — one click and the preview is no longer
+                    showing the port it is labelled with, which is the exact
+                    confusion these four frames exist to resolve.
+
+                    The status text stays ON: "Waiting for controller data..."
+                    means the reader is up but Dolphin isn't hooked, and telling
+                    those two apart is the whole job of this card. A broadcast
+                    source hides it; a diagnostic must not.
+
+                    Nothing here carries the producer's STYLE. These frames
+                    answer "is the pad reaching PRSH", and the most legible
+                    drawing is the right one for that — a keyline switched off
+                    for a bright gameplay background is a worse diagnostic, and
+                    a preview that needs the style to be right before it can
+                    tell you the reader is wrong has two jobs. Style is the
+                    element's, on its Production panel. */}
                 <ScaledIframe
-                    src={`${baseUrl}/?port=${gcPort}&bg=transparent`}
+                    src={`${baseUrl}/?port=${gcPort}&bg=transparent&gear=0&portlabel=0`}
                     nativeWidth={512}
-                    nativeHeight={256}
+                    nativeHeight={180}
                     minHeight={90}
                     maxHeight={200}
                     title={`Controller port ${gcPort} preview`}
@@ -316,6 +334,7 @@ export default function ControllerConnection() {
                                 />
                             ))}
                         </div>
+
                     </div>
                 ) : status.available && (
                     <Text size="xs" dimmed className="italic">

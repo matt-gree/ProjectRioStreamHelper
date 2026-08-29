@@ -115,7 +115,7 @@ export default function Connections() {
                 something that genuinely needs the width: the asset census (five
                 counted categories beside the path, then a line of missing
                 filenames per category) and the controller previews (four
-                512×256 frames). Everything else reads better narrow.
+                512×180 frames). Everything else reads better narrow.
 
                 `lg:` rather than `md:`: below ~1024px two columns would squeeze
                 the OBS host/port row and the census into each other. */}

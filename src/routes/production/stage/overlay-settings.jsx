@@ -14,7 +14,7 @@ import { Button } from '../../../components/ui/button';
 import { Popover, PopoverTrigger, PopoverContent } from '../../../components/ui/popover';
 import { Plus, X } from 'lucide-react';
 import {
-    SegmentedRow, ToggleRow, ToggleChip, ToggleChips, TextRow, NumberRow, ColorRow,
+    SegmentedRow, ToggleRow, ToggleChip, ToggleChips, TextRow, NumberRow, FractionRow, ColorRow,
     FieldRow, KIT_LABEL,
 } from '../kit';
 import { cn } from '../../../lib/utils';
@@ -40,7 +40,7 @@ import { stageSettingsSet } from '../controls';
  * section so nothing is stage-unreachable (production-console-v2 phase 7).
  */
 
-export const RENDERABLE = new Set(['switch', 'select', 'text', 'number-override', 'color-override']);
+export const RENDERABLE = new Set(['switch', 'select', 'text', 'number-override', 'fraction-override', 'color-override']);
 
 export const settingKey = (ns, key) => `overlays.${ns}.${key}`;
 
@@ -171,6 +171,14 @@ export const OverlaySettingRow = memo(function OverlaySettingRow({ os, def }) {
                 label={def.label} value={value} staged={!!pending}
                 min={def.min} max={def.max} step={def.step} suffix={def.suffix}
                 onChange={(v) => os.set(def, v ?? def.defaultValue)}
+            />
+        );
+    }
+    if (def.type === 'fraction-override') {
+        return (
+            <FractionRow
+                label={def.label} value={value} staged={!!pending} step={def.step}
+                onChange={(v) => os.set(def, v)}
             />
         );
     }

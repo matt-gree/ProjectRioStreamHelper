@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { create } from 'zustand';
 import OBSWebSocket from 'obs-websocket-js';
 import { useSettingsStore } from './store';
+import { renderedSize, sizeMatchTransform } from '../lib/obs-transform';
 
 /*
  * OBS WebSocket layer — the substrate of the Production page.
@@ -201,6 +202,44 @@ export const useObsStore = create((set) => ({
     removeSceneItem: async (sceneName, sceneItemId) => {
         if (!obs) throw new Error('Not connected to OBS');
         await obs.call('RemoveSceneItem', { sceneName, sceneItemId });
+    },
+
+    /*
+     * Resize one scene item to exactly the drawn size of another — the verb
+     * behind the stage's "Match the other side" row.
+     *
+     * TRANSFORMS ARE NOT MIRRORED into the store and this does not start. The
+     * mirror carries what the console MONITORS (what is in a scene, and whether
+     * it is visible); a transform is something the producer edits in OBS, on a
+     * surface that already shows them the numbers, and mirroring every
+     * SceneItemTransformChanged would put a drag's worth of events per frame
+     * through the store to feed nothing that reads it. So both sides are read
+     * on demand, at the moment the producer asks.
+     *
+     * Read at RUN time, not at click time, which is what a staged copy under
+     * confirm mode should mean: the producer stages "make these two match",
+     * keeps nudging the model, and Go Live matches whatever it has become. A
+     * snapshot taken at click time would commit a size that is no longer on
+     * screen anywhere.
+     *
+     * Returns the size it landed on, so the caller can say what happened.
+     */
+    matchSceneItemSize: async ({ scene, itemId, modelScene, modelItemId }) => {
+        if (!obs) throw new Error('Not connected to OBS');
+        const [model, target] = await Promise.all([
+            obs.call('GetSceneItemTransform', {
+                sceneName: modelScene, sceneItemId: modelItemId,
+            }),
+            obs.call('GetSceneItemTransform', { sceneName: scene, sceneItemId: itemId }),
+        ]);
+        const patch = sizeMatchTransform(model?.sceneItemTransform, target?.sceneItemTransform);
+        if (!patch) {
+            throw new Error('OBS reports no size for one of these sources yet');
+        }
+        await obs.call('SetSceneItemTransform', {
+            sceneName: scene, sceneItemId: itemId, sceneItemTransform: patch,
+        });
+        return renderedSize(model.sceneItemTransform);
     },
 
     // Pull a scene's items into the mirror and keep them live from then on.

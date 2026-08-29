@@ -558,7 +558,7 @@ export const ELEMENTS = [
         flavor: 'direct',
         url: '/layout/controller/controller.html',
         width: 512,
-        height: 256,
+        height: 180,
         perSide: true,
         match: (url) => /\/layout\/controller\//i.test(url),
         // Container-scoped for the same reason the roster is: it has no content

@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import { TooltipProvider } from '../../../components/ui/tooltip';
 import { Eye, EyeOff } from 'lucide-react';
-import { chipFor, StateChip, ListRow, QuickCard, IconToggle, NumberRow, TextRow } from './index';
+import { chipFor, StateChip, ListRow, QuickCard, IconToggle, NumberRow, FractionRow, TextRow } from './index';
 
 afterEach(cleanup);
 
@@ -212,6 +212,48 @@ describe('NumberRow', () => {
         fireEvent.change(input, { target: { value: '' } });
         expect(onChange).toHaveBeenLastCalledWith(null);
     });
+});
+
+/*
+ * FractionRow exists because NumberRow was the wrong control for an opacity.
+ *
+ * Asked for a 0..1 fraction, a producer read "Idle Fill Opacity" and typed 10 —
+ * ten percent — which is off the scale by a factor of a hundred and drew as
+ * fully solid. Nothing rejected it, because 10 is a perfectly good number. So
+ * these pin the two properties that make that impossible rather than merely
+ * unlikely: the control cannot express an out-of-range value, and it says what
+ * unit it is in.
+ */
+describe('FractionRow', () => {
+    it('speaks percent to the eye and fractions to the caller', () => {
+        const onChange = vi.fn();
+        ui(<FractionRow label="Idle Fill" value={0.4} onChange={onChange} />);
+        const slider = screen.getByRole('slider');
+        expect(slider).toHaveValue('40');
+        expect(screen.getByText('40%')).toBeInTheDocument();
+        fireEvent.change(slider, { target: { value: '75' } });
+        // The caller and storage only ever see the fraction.
+        expect(onChange).toHaveBeenCalledWith(0.75);
+    });
+
+    it('cannot report a value outside 0..1', () => {
+        const onChange = vi.fn();
+        ui(<FractionRow label="Idle Fill" value={0.5} onChange={onChange} />);
+        const slider = screen.getByRole('slider');
+        expect(slider).toHaveAttribute('min', '0');
+        expect(slider).toHaveAttribute('max', '100');
+        fireEvent.change(slider, { target: { value: '100' } });
+        expect(onChange).toHaveBeenLastCalledWith(1);
+        fireEvent.change(slider, { target: { value: '0' } });
+        expect(onChange).toHaveBeenLastCalledWith(0);
+    });
+
+    it('renders a legacy out-of-range value as what is actually drawn', () => {
+        ui(<FractionRow label="Idle Fill" value={10} onChange={vi.fn()} />);
+        expect(screen.getByText('100%')).toBeInTheDocument();
+        expect(screen.queryByText('1000%')).not.toBeInTheDocument();
+    });
+
 });
 
 /*

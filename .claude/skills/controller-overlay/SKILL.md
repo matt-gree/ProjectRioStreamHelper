@@ -65,6 +65,92 @@ gc-overlay owns its own version; update it with:
 git submodule update --remote gc-overlay
 ```
 
+## The URL is the whole integration — and it is silent when wrong
+
+PRSH and gc-overlay are two programs on two ports, and everything PRSH asks of
+the reader it asks in a query string. Nothing fails, logs, or previews
+differently when a param is dropped; it just goes out on air wrong. So the
+broadcast string lives in ONE constant, `GC_CHROME` in `lib/controller-mount.js`,
+and is pinned by `src/routes/layouts/controller-mount.test.js`.
+
+| Param | Broadcast source | Connections preview | Why |
+|---|---|---|---|
+| `port` | `hudPort + 1` | `1`–`4` literal | The off-by-one above |
+| `bg` | `transparent` | `transparent` | Else an opaque `#1a1a2e` box in OBS |
+| `gear` | `0` | `0` | Its first control switches port, contradicting the caption |
+| `portlabel` | `0` | `0` | PRSH captions the side / the port itself |
+| `status` | `0` | **on** | "Waiting for controller data..." is chrome on air and the *point* of a diagnostic |
+| `labels` · `keyline` · `idlefill` | producer's | producer's (global only) | Appearance — see below |
+
+**Static params, never `POST /api/settings`.** gc-overlay also exposes a settings
+API, but it moves the reader's *server-wide* defaults and pushes to every
+connected client. Two sides are two browser sources on one reader, so anything
+app-wide has them fighting over one knob — and a per-element override could not
+exist at all. Per-source URL params are the model that matches PRSH's.
+
+## Appearance: `overlays.controller.*`, one layer
+
+Three of gc-overlay's settings are the producer's, and they live where every
+other element's look lives — `overlays.controller.{key}`, authored on the
+element's Production stage panel.
+
+| Setting | gc-overlay param | Settings key | Default |
+|---|---|---|---|
+| Letters | `labels` | `labels` (bool) | `true` |
+| Keyline | `keyline` | `keyline` (bool) | `true` |
+| Idle fill | `idlefill` | `idleFillOpacity` (0–1) | `0` |
+
+Defaults are gc-overlay's own, so an untouched element draws exactly what the
+reader draws standalone.
+
+**There was briefly a second layer and it should not come back.** An app-wide
+copy lived on the Connections tab (`controller_overlay.display.*`) with these as
+three-state pins over it. A pin beats a global, so the moment a producer touched
+one element the app-wide control stopped reaching it — invisibly, from a tab
+that could not show why. And `overlays.controller.*` is shared by both `?team=`
+sources already (they are one element), so a single layer is app-wide for every
+controller source anyway. `Settings.Load` drops the old block.
+
+**The opacity's control is a SLIDER (`FractionRow`), not a number field**, and
+that is a correctness fix rather than a nicety. Asked for a 0–1 opacity in a
+number box, a producer reads "Idle Fill Opacity" and types `10` meaning ten
+percent — off the scale by a factor of a hundred, and it drew as fully solid. A
+slider cannot express an out-of-range value (the range *is* the scale) and its
+percent readout removes the ambiguity that invited one. It is stored in
+gc-overlay's own 0–1 **end to end**; the percentage is applied and undone inside
+the control that shows it, so nothing in between has a second unit to get wrong.
+`displayParams` clamps anyway: gc-overlay *rejects* an out-of-range opacity, and
+a rejected key on a query string is skipped, so a bad value would silently draw
+the reader's default.
+
+Adding a fourth appearance setting is three rows: `DISPLAY_KEYS`
+(`lib/controller-mount.js`), `LAYOUT_SETTINGS.controller`, and the
+`<meta name="overlay-settings">` whitelist.
+
+**The Connections previews carry no style.** They iframe the reader at its own
+look (chrome off, status text on) because they answer "is the pad reaching
+PRSH" — and the most legible drawing is the right one for that. A keyline
+switched off for bright gameplay is a worse diagnostic, and a preview that needs
+the style to be right before it can tell you the reader is wrong has two jobs.
+
+## Native size: 512×180, and it lives in four PRSH runtimes
+
+gc-overlay 1.2.0 redrew the overlay at **512×180** (was 512×256). Its page is one
+SVG with `preserveAspectRatio="xMidYMid meet"`, so 512×180 is a *ratio* — any
+size at 128:45 works and anything else letterboxes rather than distorting.
+
+That number is written down in four places, and a miss is dead space in every
+scene rather than an error:
+
+1. `public/layout/controller/controller.html` — `body { width/height }` (which
+   the layouts API reads back as the catalog's size hint)
+2. `public/layout/lib/container-members.js` — `size: [512, 180]`, the container slot
+3. `src/routes/production/elements.js` — what `addBrowserSource` gives OBS
+4. `src/routes/connections/controller.jsx` — `nativeWidth`/`nativeHeight` on the previews
+
+**An OBS source added before the resize keeps its old 512×256 box** and draws
+the controller letterboxed inside it. Nothing breaks; the producer resizes it.
+
 ## Runtime + settings
 
 Runs on its own port (default **8069**), separate from PRSH's 5260.

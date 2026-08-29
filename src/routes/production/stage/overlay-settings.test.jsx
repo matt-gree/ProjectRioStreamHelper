@@ -49,8 +49,33 @@ afterEach(() => {
 // row and write to the element's namespace — the whole point of the phase is
 // that no element setting is stranded on the Setup tab.
 describe('ElementStyleSettings — every setting type is stage-renderable (phase 7)', () => {
-    it('covers all five element-settings control types', () => {
-        expect(RENDERABLE).toEqual(new Set(['switch', 'select', 'text', 'number-override', 'color-override']));
+    it('covers all six element-settings control types', () => {
+        expect(RENDERABLE).toEqual(new Set([
+            'switch', 'select', 'text', 'number-override', 'fraction-override', 'color-override',
+        ]));
+    });
+
+    /*
+     * The controller's idle fill is a 0..1 opacity, and it is a SLIDER because a
+     * number field accepted `10` — ten percent, off the scale by a hundred — and
+     * drew as fully solid. The console speaks percent; storage stays in
+     * gc-overlay's own unit, because the query string this ends up on rejects
+     * anything outside 0..1 and skips the key rather than complaining.
+     */
+    it('writes a fraction override as a fraction, not a percentage', () => {
+        render(<ElementStyleSettings type="controller" label="Controller" />);
+        fireEvent.change(screen.getByLabelText('Idle Fill'), { target: { value: '65' } });
+        expect(useSettingsStore.getState()?.overlays?.controller?.idleFillOpacity).toBe(0.65);
+    });
+
+    it('renders the controller settings as one layer, with no inherit state', () => {
+        render(<ElementStyleSettings type="controller" label="Controller" />);
+        // Two plain switches and a slider — nothing offering "use Connections",
+        // which was a second layer that a pin silently beat.
+        expect(screen.getByText('Letters')).toBeInTheDocument();
+        expect(screen.getByText('Keyline')).toBeInTheDocument();
+        expect(screen.getByLabelText('Idle Fill')).toHaveAttribute('type', 'range');
+        expect(screen.queryByText(/use connections/i)).not.toBeInTheDocument();
     });
 
     it('renders the colour + number rows the old cap dropped', () => {

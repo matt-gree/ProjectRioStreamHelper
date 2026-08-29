@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     instanceId, parseInstanceId, slotInstanceId, variantLabel, variantOf,
+    flipSideVariant, sideOfVariant,
 } from './instances';
 import { boardDeskId, boardOfDeskId } from './boards';
 import { ELEMENTS } from './elements';
@@ -123,5 +124,33 @@ describe('variants', () => {
         // A mode nobody defined is the default, not a crash: this value is
         // persisted settings, and settings.json gets hand-edited.
         expect(variantLabel('t2', 'sideways')).toBe('Side 2');
+    });
+});
+
+/*
+ * "The other half of this pair" — a question about the variant tag and nothing
+ * else, which is what makes matching a per-side pair's OBS size a lookup rather
+ * than a URL scan.
+ */
+describe('the side a variant names', () => {
+    it('reads the side off the tag, and answers null when there is none', () => {
+        expect(sideOfVariant('t1')).toBe(1);
+        expect(sideOfVariant('t2.zs')).toBe(2);
+        expect(sideOfVariant('zs')).toBeNull();
+        expect(sideOfVariant('')).toBeNull();
+    });
+
+    /*
+     * EVERY OTHER AXIS SURVIVES THE FLIP. A source at `t2.zs` has a side AND a
+     * size, and its other half is the small one — flipping to a bare `t1` would
+     * answer with a differently-sized overlay, which for the caller that exists
+     * (matching a pair's size in OBS) is exactly the wrong source.
+     */
+    it('flips the side and leaves every other axis where it was', () => {
+        expect(flipSideVariant('t1')).toBe('t2');
+        expect(flipSideVariant('t2')).toBe('t1');
+        expect(flipSideVariant('t2.zs')).toBe('t1.zs');
+        expect(flipSideVariant('zs')).toBeNull();
+        expect(flipSideVariant('')).toBeNull();
     });
 });
