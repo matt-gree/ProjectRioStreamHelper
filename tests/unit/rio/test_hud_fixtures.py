@@ -3,9 +3,16 @@ real HUD pipeline (HudObj → HudWatcher flat dict → provider.parse_game_data)
 
 These fixtures are what scripts/replay-hud.py feeds an isolated server, so a
 fixture that stops parsing would silently break the agent replay harness. The
-sequence encodes: game1 start → game1 late frame → game2 start (sides swapped,
-new GameID) — the inning drop between frames 2 and 3 is what new-game
+sequence encodes: game1 start → game1's LAST frame → game2 start (sides
+swapped, new GameID) — the inning drop between frames 2 and 3 is what new-game
 detection keys on.
+
+`game1_mid` keeps its name but is not a mid-game frame: top of the 9th, two out
+with one more recorded on the play, home ahead 14-6. The bottom half is
+unnecessary, so that frame IS the end of the game — which makes it the fixture
+that exercises `game_over` end to end, and the reason a "late live frame" is not
+a thing the HUD can express (there is no end-of-game event; the last frame of a
+game just stops being followed by another).
 """
 import orjson
 from pathlib import Path
@@ -94,3 +101,74 @@ def test_hud_file_is_read_as_bytes_so_the_locale_cannot_decode_it(tmp_path, monk
 
     assert modes and all("b" in m for m in modes), f"HUD read used text mode: {modes}"
     assert game["away_player"] == "Ryū・さくら"
+
+
+# --- game over ------------------------------------------------------------
+#
+# The HUD writes no end-of-game event, so `game_over` is a predicate over one
+# frame (pyrio's HudObj.game_over). These pin the two ends of that: it reaches
+# State through the real pipeline, and it does not fire on a game in progress.
+
+
+@pytest.mark.parametrize("name,expected", [
+    ("game1_start", False),   # inning 1, 0-0
+    ("game1_mid", True),      # top of the 9th, third out, home up 14-6
+    ("game2_start", False),
+])
+def test_game_over_rides_the_flat_dict(name, expected):
+    raw = orjson.loads((FIXTURE_DIR / f"{name}.json").read_bytes())
+    assert HudWatcher._convert_hud_data_format(HudObj(raw))["game_over"] is expected
+
+
+@pytest.mark.asyncio
+async def test_the_last_frame_of_a_game_marks_the_board_over(mock_socket):
+    from server.rio.provider import apply_parsed_game_to_state
+    from server.state import State
+    from server.utils.deep_dict import deep_get
+
+    await apply_parsed_game_to_state(_parse("game1_mid"), 1)
+    assert deep_get(State.state, "score.1.game_over") is True
+    # It says the game ended; it must NOT say the board holds a completed-game
+    # record, which is what overlays branch on to draw final framing. Marking a
+    # game over changes nothing on air — that is the producer's call.
+    assert deep_get(State.state, "score.1.game_completed") is False
+
+
+@pytest.mark.asyncio
+async def test_a_game_in_progress_leaves_the_board_live(mock_socket):
+    from server.rio.provider import apply_parsed_game_to_state
+    from server.state import State
+    from server.utils.deep_dict import deep_get
+
+    await apply_parsed_game_to_state(_parse("game1_start"), 1)
+    assert deep_get(State.state, "score.1.game_over") is False
+
+
+@pytest.mark.asyncio
+async def test_a_new_game_clears_the_previous_ones_over_flag(mock_socket):
+    """The flag is re-derived per frame, never latched — otherwise a board that
+    had finished a game would come up 'over' for the next one."""
+    from server.rio.provider import apply_parsed_game_to_state
+    from server.state import State
+    from server.utils.deep_dict import deep_get
+
+    await apply_parsed_game_to_state(_parse("game1_mid"), 1)
+    await apply_parsed_game_to_state(_parse("game2_start"), 1)
+    assert deep_get(State.state, "score.1.game_over") is False
+
+
+@pytest.mark.asyncio
+async def test_an_ongoing_api_game_is_never_marked_over_by_this_key(mock_socket):
+    """The ongoing API pool shares this writer and has no HUD frame to read. It
+    reports a finished game through `live_following` / `game_completed`
+    instead, so the absent field must default to False rather than carrying the
+    previous frame's answer."""
+    from server.rio.provider import apply_parsed_game_to_state
+    from server.state import State
+    from server.utils.deep_dict import deep_get
+
+    await apply_parsed_game_to_state(_parse("game1_mid"), 1)
+    api_frame = _parse("game1_mid")
+    api_frame.pop("game_over", None)
+    await apply_parsed_game_to_state(api_frame, 1)
+    assert deep_get(State.state, "score.1.game_over") is False

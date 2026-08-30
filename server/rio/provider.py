@@ -223,6 +223,21 @@ async def apply_parsed_game_to_state(parsed: dict, scoreboard_number: int, home_
         (f"{sb}.side_reason", side_reason),
         # Live game — clear any completed-game framing left over on this slot.
         (f"{sb}.game_completed", False),
+        # Has the game on this board REACHED ITS END? Distinct from
+        # `game_completed`, and deliberately not folded into it: that key means
+        # "this slot holds a completed-game record from the API", and overlays
+        # branch on it to draw final framing (scoreboard, scorecard, lower
+        # third). Setting it at the last out would strip a live-looking board
+        # the instant the third out lands — which is exactly the auto-clear the
+        # console is built NOT to do. This key says the game is over and changes
+        # nothing on air; what to do about it is the producer's call.
+        #
+        # Written by the HUD path only. An ongoing API game reaches this
+        # function too and has no such frame to read, which is right: an ongoing
+        # game that ends either drops out of the ongoing feed
+        # (`live_following`) or reappears as a completed record
+        # (`game_completed`). Hence the False default rather than a carry-over.
+        (f"{sb}.game_over", bool(parsed.get("game_over", False))),
 
         # Per-inning runs for the box score. Reuses the same keys the completed
         # game linescore renders from, so overlays render live + final the same.
@@ -827,6 +842,13 @@ class RioGameDataProvider:
             data["stadium_id"] = game_json.get("stadium_id")
             data["innings_selected"] = game_json.get("innings_selected")
             data["first_batting_team"] = game_json.get("first_batting_team")
+            # Whether the source frame was the last of its game. HUD-only: the
+            # ongoing API feed has no frame to read it off, and says a game
+            # ended by dropping it (`live_following`) or re-reporting it
+            # completed. Defaulting False rather than omitting keeps the
+            # downstream write unconditional, so the flag can never latch on
+            # from a previous frame. See HudWatcher._game_over.
+            data["game_over"] = bool(game_json.get("game_over", False))
             data["tag_set"] = game_json.get("tag_set")
             data["game_mode"] = game_json.get("tag_set", -1)
             # Carry the GameID forward so score.{N}.game_id is populated on the

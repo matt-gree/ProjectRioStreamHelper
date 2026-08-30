@@ -113,6 +113,35 @@ class HudWatcher:
         return self._convert_hud_data_format(hud)
 
     @staticmethod
+    def _game_over(hud_data: HudObj) -> bool:
+        """Whether this frame is the last one of the game (pyrio's rule).
+
+        MSB's HUD has no end-of-game event — the frame recording the final out
+        or the winning run is simply the last one written — so this is a
+        predicate over ONE frame with no history. That is what makes it survive
+        a restart: PRSH's initial read (``RioGameDataProvider.Start``) re-derives
+        it from whatever is on disk, which is the only way to know that a board
+        coming up on a fresh boot is holding last night's finished game. Every
+        file-watching signal we have misses that case by construction, because
+        nothing changes.
+
+        Two guards, both resolving to False, because the wrong answer in the
+        other direction goes out on air as a live game called Final:
+
+        * an older pinned pyrio has no ``game_over``, and a submodule pin that
+          lags the code is a normal state mid-change, not a crash;
+        * a malformed frame must not take the HUD path down with it.
+        """
+        fn = getattr(hud_data, "game_over", None)
+        if fn is None:
+            return False
+        try:
+            return bool(fn())
+        except Exception:
+            logger.exception("[HUD] game_over check failed; treating as not over")
+            return False
+
+    @staticmethod
     def _extract_contact(hud_json: dict) -> dict | None:
         """Pull the last completed contact (inputs + measured outputs).
 
@@ -213,6 +242,8 @@ class HudWatcher:
             "event_num": hud_data.event_number,
             # Last completed contact (for the hit visualizer), or None.
             "contact": HudWatcher._extract_contact(hud_data.hud_json),
+            # Whether this frame is the last one of the game. See _game_over.
+            "game_over": HudWatcher._game_over(hud_data),
         }
 
         # Roster data using pyrio's RosterObj

@@ -243,6 +243,7 @@ def apply_reset(sb: int):
         f"{base}.pitcher_roster_index": -1,
         f"{base}.star_chance": False,
         f"{base}.game_completed": False,
+        f"{base}.game_over": False,
         f"{base}.game_id": None,
         f"{base}.home_team": 2,
         f"{base}.innings_selected": None,
