@@ -118,6 +118,20 @@ score.{N}.*                    per-board live game + projected fixture (N ≥ 1,
   side_reason      ← which cascade layer decided orientation: manual|match|pin|back_to_back|""
                      (read by the board desk — desks/board.jsx sideReasonLine)
   game_completed   ← False for a live game, True for a completed one
+  game_over        ← has the game on this board REACHED ITS END? HUD path only,
+                     re-derived per frame from pyrio's `HudObj.game_over` (MSB's
+                     regulation/mercy/walk-off rule over one frame). Distinct
+                     from `game_completed`, which says this slot holds a
+                     completed-game RECORD and which four overlays branch on to
+                     draw final framing — setting THAT at the last out would
+                     strip a live-looking board the instant the third out lands.
+                     This one changes nothing on air; clearing stays the
+                     producer's (desks/board.jsx StaleGameRow).
+                     The ONLY staleness signal that survives a restart: it is
+                     recomputed from the frame on disk, so a board booting on
+                     last night's finished game says so, where `postgame.{N}`
+                     (watcher fires on file CHANGES) and `live_following` (never
+                     written by the HUD path) are both silent.
   live_following   ← is this board's live game still being POLLED for?
                      Not the same question as `game_completed`: when a followed
                      game leaves the ongoing feed the server stops polling it
@@ -129,6 +143,12 @@ score.{N}.*                    per-board live game + projected fixture (N ≥ 1,
                      that is what boards did before the key existed. The board
                      desk's live-refresh countdown renders on it — same instinct
                      as side_reason: the server knows, so the server says.
+                     `boardLifecycle` (src/routes/production/boards.js) is the
+                     one client statement of what game_over + game_completed +
+                     live_following mean together: empty | live | final |
+                     stranded. `final` = the game ended; `stranded` = the feed
+                     lost it (quit/crash/dropped). Ask `isStaleBoard`, don't
+                     compare.
   hit.*            ← hit-visualizer payload (id bumps per contact)
   player.{T}.*     (T ∈ {1,2}: 1=left, 2=right — never "away/home")
     rioName, rioName_override (producer pin, cleared each new HUD game),
@@ -138,7 +158,7 @@ score.{N}.*                    per-board live game + projected fixture (N ≥ 1,
 
 match.{M}.*                    fixture (see match-binding-lifecycle skill)
 commentary.slots + commentary.{0..3}.*   desk: authored list + projected slots
-playerplates.mode + playerplates.{1,2}.* plates band (projected: name/subLabel/subValue/subVisible/location/active)
+playerplates.config + playerplates.{1,2}.* plates band (projected: name/subLabel/subValue/subVisible/location/active)
 matchup.*                      head-to-head band (singleton, incl. matchId)
 postgame.{N}.*                 captured post-game (present, gameId, meta, player.{T}.totals)
 lowerthird.slots.{1..5}.*      lower-third band
