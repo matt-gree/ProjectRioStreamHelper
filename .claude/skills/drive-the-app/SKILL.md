@@ -31,6 +31,20 @@ never touches the developer's real `user_data/`.
 ./venv/bin/python scripts/prsh-agent.py down
 ```
 
+- **`down` is synchronous, so RESTART-AND-READ-BACK is a move you can make.** It
+  waits until the process group is gone *and* the port has stopped answering
+  before returning, then exits non-zero if it could not confirm either. That is
+  what makes `down` → `up` → `state` trustworthy — and it is the only way to
+  test anything about BOOT, which is a real class of bug (a board coming up on a
+  stale HUD file looks nothing like one that has been running). It used to
+  return the moment it had sent SIGTERM, so the next `up` probed the dying
+  server, printed "already up" and started nothing, and every read after that
+  came from the instance you thought you had replaced.
+- **`up` names three outcomes, not two.** Ours already running (fine), a FOREIGN
+  server on the port (error — reading its state as though it were yours is the
+  failure this prevents), and our pid alive but not answering (error, run
+  `down`). `up --fresh` on a running instance stops it first, so the one flag
+  whose job is to refresh cannot silently no-op.
 - **`doctor` first, always.** It prints boards (names, teams, score, inning),
   each board's `match` / `side_reason` / `match_conflict`, every match with its
   stage and series, the running orders, and what each container is carrying with

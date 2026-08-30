@@ -39,12 +39,26 @@ FIXTURE_DIR = REPO_ROOT / "tests" / "data" / "hud"
 DEFAULT_ROOT = Path("/tmp/prsh-agent")
 DEFAULT_PORT = 5299
 BOOT_TIMEOUT = 60.0
+# How long `down` waits for a SIGTERM to land before escalating, and for the
+# SIGKILL after it. Generous enough for a save-on-exit, short enough that a
+# wedged instance does not stall an agent for a minute.
+TERM_GRACE = 10.0
+KILL_GRACE = 5.0
+# Liveness probes run inside those budgets, so they cannot use the default read
+# timeout — see api().
+PROBE_TIMEOUT = 2.0
 
 
 # ── plumbing ────────────────────────────────────────────────────────────────
 
-def api(port: int, path: str, method: str = "GET", body=None, params=None):
-    """One API call. Returns parsed JSON, or a {'_status': n} dict on HTTP error."""
+def api(port: int, path: str, method: str = "GET", body=None, params=None,
+        timeout: float = 15.0):
+    """One API call. Returns parsed JSON, or a {'_status': n} dict on HTTP error.
+
+    ``timeout`` is short for liveness probes: a server on its way down can hold
+    a connection open, and a shutdown-wait polling on the default would spend
+    its whole budget inside one read.
+    """
     url = f"http://127.0.0.1:{port}/api/v1/{path.lstrip('/')}"
     if params:
         url += "?" + urllib.parse.urlencode(params)
@@ -53,7 +67,7 @@ def api(port: int, path: str, method: str = "GET", body=None, params=None):
     if data:
         req.add_header("Content-Type", "application/json")
     try:
-        with urllib.request.urlopen(req, timeout=15) as r:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
             raw = r.read()
             return json.loads(raw) if raw else None
     except urllib.error.HTTPError as e:
@@ -71,9 +85,108 @@ def paths(root: Path) -> dict:
     }
 
 
-def is_up(port: int) -> bool:
-    r = api(port, "state")
+def is_up(port: int, timeout: float = 15.0) -> bool:
+    """Is SOMETHING serving PRSH's API on this port?
+
+    Deliberately not "is OUR server up" — it cannot tell. That distinction needs
+    the pid file (see `cmd_up`), and conflating the two is what made a `down`
+    followed by an `up` a silent no-op: the dying server still answered, so `up`
+    reported "already up" and returned without starting anything.
+    """
+    r = api(port, "state", timeout=timeout)
     return isinstance(r, dict) and "_status" not in r
+
+
+def read_pid(pid_file: Path) -> int | None:
+    """The pid this harness last started, or None if there isn't a readable one."""
+    try:
+        return int(pid_file.read_text().strip())
+    except (OSError, ValueError):
+        return None
+
+
+def pid_alive(pid: int) -> bool:
+    """Signal 0 asks the kernel whether the process group still exists.
+
+    `getpgid` is the check that matters: the server is started with
+    `start_new_session=True`, so it is the leader of its own group and that is
+    what `down` signals. A PermissionError means it exists and is not ours,
+    which is still "alive" for the purpose of not booting a second one.
+    """
+    try:
+        os.killpg(os.getpgid(pid), 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+
+
+def wait_until(predicate, timeout: float, interval: float = 0.2) -> bool:
+    """Poll ``predicate`` until it is true or ``timeout`` elapses."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if predicate():
+            return True
+        time.sleep(interval)
+    return predicate()
+
+
+def stop_server(root: Path, port: int) -> tuple[bool, str]:
+    """Stop this harness's server and WAIT for it to actually be gone.
+
+    Returns ``(stopped, message)``.
+
+    The waiting is the whole point. `down` used to send SIGTERM and return
+    immediately, so an agent doing `down` then `up` raced its own shutdown: the
+    server was still answering, `up` said "already up on :5299" and started
+    nothing, and every read after that came from the instance the agent thought
+    it had replaced — which silently breaks the boot/persistence checks this
+    harness exists to run.
+
+    Gone means BOTH the process group is dead and the port has stopped
+    answering. The port is what `up` tests, so waiting on the process alone
+    would leave the same race in a narrower window.
+
+    SIGTERM first so the server can save state, then SIGKILL. The pid file is
+    unlinked only once something has actually stopped — removing it up front
+    threw away the one piece of evidence that says whose process holds the port.
+    """
+    p = paths(root)
+    pid = read_pid(p["pid"])
+
+    if pid is None:
+        if is_up(port, timeout=PROBE_TIMEOUT):
+            return False, (f"no pid file in {p['pid']}, but something is still "
+                           f"answering on :{port} — not ours to stop")
+        return True, "no pid file; nothing to stop"
+
+    gone = lambda: not pid_alive(pid) and not is_up(port, timeout=PROBE_TIMEOUT)
+
+    if gone():
+        p["pid"].unlink(missing_ok=True)
+        return True, f"pid {pid} already gone"
+
+    for sig, grace, label in ((signal.SIGTERM, TERM_GRACE, "stopped"),
+                              (signal.SIGKILL, KILL_GRACE, "killed")):
+        try:
+            os.killpg(os.getpgid(pid), sig)
+        except ProcessLookupError:
+            # It exited between the check above and the signal. Still wait on
+            # the PORT — that is the half `up` tests, and a socket outliving its
+            # process by a moment is the whole race.
+            if wait_until(lambda: not is_up(port, timeout=PROBE_TIMEOUT), grace):
+                p["pid"].unlink(missing_ok=True)
+                return True, f"pid {pid} exited"
+            break
+        except PermissionError:
+            return False, f"pid {pid} is not ours to signal"
+        if wait_until(gone, grace):
+            p["pid"].unlink(missing_ok=True)
+            return True, f"{label} pid {pid}"
+
+    return False, (f"pid {pid} still running (or :{port} still answering) after "
+                   f"{TERM_GRACE + KILL_GRACE:.0f}s")
 
 
 def flatten(obj, prefix=""):
@@ -100,10 +213,43 @@ def short(v, width=72):
 # ── commands ────────────────────────────────────────────────────────────────
 
 def cmd_up(args) -> int:
+    """Boot the isolated server, or report why it did not.
+
+    THE PORT ANSWERING IS NOT THE SAME FACT AS OUR SERVER RUNNING, and this used
+    to treat them as one — `is_up` alone, so anything on the port produced
+    "already up" and a zero exit. Two ways that lied to an agent: a server on its
+    way down still answers (the `down`-then-`up` race), and a FOREIGN process on
+    the port would have handed over somebody else's state as though it were the
+    instance the harness had just booted.
+
+    The pid file is what separates them, so all three outcomes can be named.
+    """
     root, p = Path(args.root), paths(Path(args.root))
-    if is_up(args.port):
-        print(f"already up on :{args.port}")
+    pid = read_pid(p["pid"])
+    ours = pid is not None and pid_alive(pid)
+    serving = is_up(args.port)
+
+    if serving and not ours:
+        print(f"port {args.port} is answering, but no live pid in {p['pid']} — "
+              f"that server is not this harness's. Stop it, or use --port.",
+              file=sys.stderr)
+        return 1
+    if ours and not serving:
+        print(f"pid {pid} is running but not answering on :{args.port} "
+              f"(still booting, or wedged) — run `down` first. See {p['log']}.",
+              file=sys.stderr)
+        return 1
+    if serving and ours and not args.fresh:
+        print(f"already up on :{args.port} (pid {pid})")
         return 0
+    if serving and ours:
+        # --fresh means "wipe and restart". Returning "already up" here would
+        # make the one flag whose entire job is to refresh silently do nothing.
+        stopped, msg = stop_server(root, args.port)
+        print(msg)
+        if not stopped:
+            return 1
+
     if args.fresh and root.exists():
         subprocess.run(["rm", "-rf", str(root)], check=False)
     root.mkdir(parents=True, exist_ok=True)
@@ -139,18 +285,15 @@ def cmd_up(args) -> int:
 
 
 def cmd_down(args) -> int:
-    p = paths(Path(args.root))
-    if not p["pid"].exists():
-        print("no pid file; nothing to stop")
-        return 0
-    pid = int(p["pid"].read_text().strip())
-    try:
-        os.killpg(os.getpgid(pid), signal.SIGTERM)
-        print(f"stopped pid {pid}")
-    except ProcessLookupError:
-        print(f"pid {pid} already gone")
-    p["pid"].unlink(missing_ok=True)
-    return 0
+    """Stop the isolated server, synchronously — see stop_server.
+
+    Returning before the process is gone is what made `down && up` a no-op, so
+    this exits non-zero when it could not confirm the stop rather than reporting
+    a success the next command will contradict.
+    """
+    stopped, msg = stop_server(Path(args.root), args.port)
+    print(msg, file=sys.stdout if stopped else sys.stderr)
+    return 0 if stopped else 1
 
 
 def cmd_state(args) -> int:
