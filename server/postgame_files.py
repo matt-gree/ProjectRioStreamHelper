@@ -120,6 +120,49 @@ def find_file(game_id: str) -> tuple[Path | None, str | None]:
     return None, f"No usable stat file matched game {gid}."
 
 
+def resolve_pick(name: str) -> tuple[Path | None, str | None]:
+    """Resolve a producer's hand-picked stat file to a path inside ``stat_dir``.
+
+    The override for when the automatic match cannot work: a game whose id never
+    reached the board, a crash that left the board on the wrong game, a file that
+    landed under an id nobody expected. It deliberately does NOT check the GameID
+    against the board — overriding that check is the entire point.
+
+    What it does check is that the file is one of ours. ``name`` comes off an
+    HTTP query string, so it is untrusted: the basename is taken first (a
+    traversal sequence cannot survive it), and the resolved parent is compared to
+    the resolved stat directory afterwards, which is what catches a symlink
+    pointing out of the folder. The HUD-replay gate stays — such a file has no
+    recorded stats to read, so accepting one would trade a clear refusal for an
+    empty box score.
+    """
+    if not name or not str(name).strip():
+        return None, "No stat file chosen."
+
+    d = stat_dir()
+    path = d / os.path.basename(str(name).strip())
+
+    try:
+        resolved = path.resolve()
+        if resolved.parent != d.resolve():
+            return None, "That file is not in Project Rio's stat folder."
+    except OSError:
+        return None, "That file could not be read."
+
+    if not resolved.is_file():
+        return None, f"No stat file named {path.name} in {d}."
+
+    data = load_json(resolved)
+    if data is None:
+        return None, f"Could not read stat file {path.name}."
+    if data.get("Loaded from HUD", 0) != 0:
+        return None, (
+            f"{path.name} was loaded from a HUD replay "
+            "(Loaded from HUD != 0) and has no usable stats."
+        )
+    return resolved, None
+
+
 def list_files(limit: int = 25) -> list[dict]:
     """Recent usable (``Loaded from HUD == 0``) stat files for a manual pick.
 

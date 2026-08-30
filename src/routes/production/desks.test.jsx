@@ -1138,3 +1138,94 @@ describe('board lifecycle', () => {
         expect(screen.getByText('Bot 4')).toBeInTheDocument();
     });
 });
+
+
+/*
+ * THE STAT FILE A CAPTURE READS — and the producer's way past the automatic
+ * match when something went wrong in the game.
+ */
+describe('post-game stat file', () => {
+    const board = (score, postgame) => {
+        useSettingsStore.setState({
+            project_rio: { hud_enabled: true },
+            production: {},
+            scoreboards: { active: [1], aliases: {}, binding: { 1: { playback: { mode: 'single' } } } },
+        });
+        useStateStore.setState({ score, postgame, match: {} });
+    };
+
+    it('says when the box score is a different game from the one on the board', () => {
+        // Nothing clears postgame.{N} on a new game, so after game 1 of a Bo3
+        // the region kept reporting game 1 while game 2 played — and could not
+        // have known better, because it never read the capture's own gameId.
+        board(
+            { 1: { game_id: 'G2', player: { 1: { rioName: 'rjb' } } } },
+            { 1: { present: true, gameId: 'G1', sourceFile: 'decoded.Game_G1.json' } },
+        );
+        ui(<BoardDesk board={1} />);
+        expect(screen.getByText(/from game G1; the board is on G2/)).toBeInTheDocument();
+    });
+
+    it('stays quiet when the capture is the board’s own game', () => {
+        board(
+            { 1: { game_id: 'G1', player: { 1: { rioName: 'rjb' } } } },
+            { 1: { present: true, gameId: 'G1', sourceFile: 'decoded.Game_G1.json' } },
+        );
+        ui(<BoardDesk board={1} />);
+        expect(screen.queryByText(/the board is on/)).not.toBeInTheDocument();
+    });
+
+    it('reads the stat folder only when the picker is opened', async () => {
+        // A recovery path that stats and parses a directory on every mount
+        // charges every producer for the one who needs it.
+        board({ 1: { game_id: 'G1', player: { 1: { rioName: 'rjb' } } } }, {});
+        ui(<BoardDesk board={1} />);
+
+        const calls = () => global.fetch.mock.calls.filter(
+            ([u]) => String(u).includes('/postgame/files'));
+        expect(calls()).toHaveLength(0);
+
+        fireEvent.click(screen.getByRole('button', { name: /Pick a file/ }));
+        await waitFor(() => expect(calls()).toHaveLength(1));
+    });
+
+    it('captures the chosen file by name, past the game-id match', async () => {
+        board({ 1: { game_id: 'G1', player: { 1: { rioName: 'rjb' } } } }, {});
+        global.fetch.mockImplementation((url) => Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve(
+                String(url).includes('/postgame/files')
+                    ? { files: [{ file: 'decoded.Game_999.json', awayPlayer: 'rjb', homePlayer: 'MattGree', awayScore: 6, homeScore: 14, gameId: '999' }] }
+                    : { success: true, sourceFile: 'decoded.Game_999.json' },
+            ),
+        }));
+        ui(<BoardDesk board={1} />);
+
+        fireEvent.click(screen.getByRole('button', { name: /Pick a file/ }));
+        // The row names who played and the score — a filename is a GameID, and
+        // no producer knows which game that is.
+        const row = await screen.findByText('MattGree');
+        fireEvent.click(row.closest('button'));
+
+        await waitFor(() => {
+            const posted = global.fetch.mock.calls.find(
+                ([u, o]) => o?.method === 'POST' && String(u).includes('/postgame/capture'));
+            expect(posted).toBeTruthy();
+            expect(String(posted[0])).toContain('file=decoded.Game_999.json');
+        });
+    });
+
+    it('does not send a file when the plain Capture button is pressed', async () => {
+        // The click event would otherwise arrive as the filename.
+        board({ 1: { game_id: 'G1', player: { 1: { rioName: 'rjb' } } } }, {});
+        ui(<BoardDesk board={1} />);
+
+        fireEvent.click(screen.getByRole('button', { name: /Capture finished game/ }));
+        await waitFor(() => {
+            const posted = global.fetch.mock.calls.find(
+                ([u, o]) => o?.method === 'POST' && String(u).includes('/postgame/capture'));
+            expect(posted).toBeTruthy();
+            expect(String(posted[0])).not.toContain('file=');
+        });
+    });
+});

@@ -183,3 +183,134 @@ def test_list_files_respects_limit(stat_dir):
     for i in range(5):
         write_stat(stat_dir, i, name=f"decoded.g_{i}.json", age=i)
     assert len(pgf.list_files(limit=2)) == 2
+
+
+# --- resolve_pick: the producer's override ---------------------------------
+#
+# The escape hatch for a game the automatic match cannot find. It takes a
+# filename off a query string, so it is the one place in this module handling
+# untrusted input.
+
+
+def test_a_picked_file_is_captured_without_the_game_id_match(stat_dir):
+    """The whole point of the override. `find_file` refuses a file whose GameID
+    is not the board's — which is exactly the situation a producer reaches for
+    this in."""
+    picked = write_stat(stat_dir, 42)
+    path, reason = pgf.resolve_pick(picked.name)
+    assert (path, reason) == (picked.resolve(), None)
+
+
+def test_a_pick_still_refuses_a_hud_replay(stat_dir):
+    """Not a policy gate — such a file has no recorded stats in it, so accepting
+    one trades a clear refusal for an empty box score."""
+    replay = write_stat(stat_dir, 42, loaded_from_hud=1)
+    path, reason = pgf.resolve_pick(replay.name)
+    assert path is None
+    assert "HUD replay" in reason
+
+
+@pytest.mark.parametrize("attempt", [
+    "../../../../etc/passwd",
+    "..\\..\\secrets.json",
+    "/etc/passwd",
+    "subdir/../../escape.json",
+])
+def test_a_pick_cannot_escape_the_stat_directory(stat_dir, attempt):
+    """Traversal cannot survive the basename, so these land as a missing file
+    inside the folder rather than as a read outside it."""
+    path, reason = pgf.resolve_pick(attempt)
+    assert path is None
+    assert reason
+
+
+def test_a_pick_cannot_follow_a_symlink_out_of_the_folder(stat_dir, tmp_path):
+    """The basename defeats traversal; this is what the resolved-parent check is
+    for. A name with no separators in it can still point anywhere."""
+    outside = tmp_path / "elsewhere.json"
+    outside.write_bytes(orjson.dumps({"GameID": "42", "Loaded from HUD": 0}))
+    link = stat_dir / "decoded.Game_42.json"
+    try:
+        link.symlink_to(outside)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks unavailable")
+    path, reason = pgf.resolve_pick(link.name)
+    assert path is None
+    assert "not in Project Rio" in reason
+
+
+@pytest.mark.parametrize("empty", ["", "   ", None])
+def test_an_empty_pick_is_refused_rather_than_falling_back(stat_dir, empty):
+    """A blank name must not resolve to the directory itself, or to whatever the
+    automatic match would have picked — a silent fallback would make the
+    override's failure indistinguishable from its success."""
+    path, reason = pgf.resolve_pick(empty)
+    assert path is None
+    assert reason
+
+
+def test_a_pick_that_is_not_there_says_so(stat_dir):
+    path, reason = pgf.resolve_pick("decoded.Game_999.json")
+    assert path is None
+    assert "999" in reason
+
+
+# --- which selector a capture runs -----------------------------------------
+#
+# The branch itself, without standing up a parseable stat file: a capture with
+# no `file` must go through the game-id match, and one WITH a file must not —
+# re-applying that check would lock the escape hatch from the inside.
+
+
+@pytest.mark.asyncio
+async def test_capture_matches_by_game_id_when_no_file_is_picked(monkeypatch):
+    from server.postgame import PostGame
+    from server.state import State
+
+    State.state["score"] = {"1": {"game_id": "42"}}
+    seen = {}
+    monkeypatch.setattr(pgf, "find_file",
+                        lambda gid: (seen.update(find=gid), (None, "stop"))[1])
+    monkeypatch.setattr(pgf, "resolve_pick",
+                        lambda name: (seen.update(pick=name), (None, "stop"))[1])
+
+    await PostGame.capture(1)
+
+    assert seen == {"find": "42"}
+
+
+@pytest.mark.asyncio
+async def test_a_picked_file_bypasses_the_game_id_match_entirely(monkeypatch):
+    from server.postgame import PostGame
+    from server.state import State
+
+    # A board on a DIFFERENT game — the mismatch is the situation the override
+    # exists for, so the game id must not reach the selector at all.
+    State.state["score"] = {"1": {"game_id": "42"}}
+    seen = {}
+    monkeypatch.setattr(pgf, "find_file",
+                        lambda gid: (seen.update(find=gid), (None, "stop"))[1])
+    monkeypatch.setattr(pgf, "resolve_pick",
+                        lambda name: (seen.update(pick=name), (None, "stop"))[1])
+
+    await PostGame.capture(1, file="decoded.Game_999.json")
+
+    assert seen == {"pick": "decoded.Game_999.json"}
+
+
+@pytest.mark.asyncio
+async def test_a_refused_pick_reports_its_reason_rather_than_falling_back(monkeypatch):
+    """A failed override must not quietly capture the automatically-matched game
+    instead — that would make its failure indistinguishable from its success."""
+    from server.postgame import PostGame
+    from server.state import State
+
+    State.state["score"] = {"1": {"game_id": "42"}}
+    monkeypatch.setattr(pgf, "find_file", lambda gid: (_ for _ in ()).throw(
+        AssertionError("fell back to the automatic match")))
+    monkeypatch.setattr(pgf, "resolve_pick", lambda name: (None, "nope"))
+
+    result = await PostGame.capture(1, file="decoded.Game_999.json")
+
+    assert result["success"] is False
+    assert result["reason"] == "nope"

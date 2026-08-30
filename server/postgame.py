@@ -189,12 +189,21 @@ class PostGame:
     # ----- public API ------------------------------------------------------
 
     @classmethod
-    async def capture(cls, sb: int, by: str = "manual") -> dict:
+    async def capture(cls, sb: int, by: str = "manual", file: str | None = None) -> dict:
         """Capture the finished game for board ``sb`` from its stat file.
 
         Matches by ``score.{sb}.game_id`` + the Loaded-from-HUD gate, projects the
         box score into State, caches the full payload (incl. events), and promotes
         a bound match draft/live → ``post``.
+
+        ``file`` is the producer's override — a filename from
+        ``GET /postgame/files``, resolved inside the stat directory and captured
+        WITHOUT the game-id match. That check is what fails in exactly the cases
+        the override exists for (a crash, a game whose id never reached the board,
+        a file under an unexpected id), so re-applying it here would leave the
+        escape hatch locked from the inside. The captured payload records the
+        FILE's own GameID, so a board can then say plainly that what it is showing
+        is not the game it thought it had.
 
         ``by`` is mirrored to ``postgame.{sb}.capturedBy`` (``auto`` when the stat
         watcher fired it, ``manual`` when the producer did) — the same "say which
@@ -209,7 +218,10 @@ class PostGame:
             sc = score.get(str(sb)) or score.get(sb) or {}
             game_id = sc.get("game_id") if isinstance(sc, dict) else None
 
-            path, reason = postgame_files.find_file(game_id)
+            if file:
+                path, reason = postgame_files.resolve_pick(file)
+            else:
+                path, reason = postgame_files.find_file(game_id)
             if path is None:
                 logger.warning("[PostGame] sb{} capture failed: {}", sb, reason)
                 return {"success": False, "scoreboard": sb, "reason": reason}

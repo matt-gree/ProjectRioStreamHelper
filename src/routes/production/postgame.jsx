@@ -1,9 +1,11 @@
 import { memo, useCallback, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import { Trash2, Trophy } from 'lucide-react';
+import { FolderSearch, Trash2, Trophy } from 'lucide-react';
 import { useStateStore } from '../../context/store';
-import { Text } from '../../components/ui/primitives';
+import { Text, Loader } from '../../components/ui/primitives';
 import { Badge } from '../../components/ui/badge';
+import { Button } from '../../components/ui/button';
+import { Popover, PopoverTrigger, PopoverContent } from '../../components/ui/popover';
 import { notifications } from '../../lib/notify';
 import { cn } from '../../lib/utils';
 import { ActionRow } from './kit';
@@ -34,6 +36,7 @@ export function usePostGame(sb) {
         const p = s?.postgame?.[sb];
         return {
             present: p?.present,
+            gameId: p?.gameId,
             sourceFile: p?.sourceFile,
             capturedBy: p?.capturedBy,
             winnerSide: p?.meta?.winnerSide,
@@ -43,10 +46,35 @@ export function usePostGame(sb) {
     }));
     const gameId = useStateStore(s => s?.score?.[sb]?.game_id);
 
-    const capture = useCallback(async () => {
+    /*
+     * IS THIS CAPTURE ABOUT THE GAME ON THE BOARD?
+     *
+     * Nothing clears `postgame.{N}` when a new game starts — only the Clear
+     * route, board removal and /scoreboards/reset do — so after game 1 of a Bo3
+     * the region kept reporting game 1's box score while game 2 played, and it
+     * could not have known better: it never read the capture's own gameId, so
+     * it had nothing to compare. Which is the same disease as a board showing a
+     * finished game, one surface over.
+     *
+     * Stale, not wrong: the capture IS that game's, and the Game Summary may
+     * still be legitimately on air showing it. So this is said, never acted on.
+     */
+    const stale = !!(pg.present && pg.gameId && gameId
+        && String(pg.gameId) !== String(gameId));
+
+    /*
+     * `file` is the producer's override — a name from GET /postgame/files,
+     * captured WITHOUT the game-id match. That match is precisely what fails in
+     * the cases this exists for (a crash, a game whose id never reached the
+     * board, a file under an id nobody expected), so the hatch cannot re-apply
+     * it. The server resolves the name inside the stat folder.
+     */
+    const capture = useCallback(async (file = null) => {
         setBusy(true);
         try {
-            const r = await fetch(`/api/v1/postgame/capture?scoreboard=${sb}`, { method: 'POST' });
+            const url = `/api/v1/postgame/capture?scoreboard=${sb}`
+                + (file ? `&file=${encodeURIComponent(file)}` : '');
+            const r = await fetch(url, { method: 'POST' });
             const data = await r.json().catch(() => ({}));
             if (data?.success) {
                 notifications.show({ message: `Captured ${data.sourceFile} — match advanced to post-game.`, color: 'green' });
@@ -65,7 +93,7 @@ export function usePostGame(sb) {
         finally { setBusy(false); }
     }, [sb]);
 
-    return { busy, pg, gameId, capture, clear };
+    return { busy, pg, gameId, stale, capture, clear };
 }
 
 /*
@@ -91,6 +119,84 @@ export const PostGameSubject = memo(function PostGameSubject({ pg }) {
     );
 });
 
+/*
+ * PICK THE FILE BY HAND.
+ *
+ * The automatic capture matches the stat file whose GameID is the board's. That
+ * is right almost always and useless exactly when something went wrong — a
+ * crash, a game whose id never reached the board, a file that landed under an
+ * id nobody expected. This is the way out, and it captures WITHOUT the game-id
+ * match, because re-applying it would lock the hatch from the inside.
+ *
+ * The list is fetched when the popover OPENS, not on mount: it stats and parses
+ * a directory, and the overwhelmingly common case is a producer who never needs
+ * it. Recovery paths should cost nothing until used.
+ *
+ * Each row says who played and what the score was, because a filename is a
+ * GameID and no producer knows which game that is. Date last — it is the
+ * tiebreak between two games between the same two people, not the identifier.
+ */
+const StatFilePicker = memo(function StatFilePicker({ onPick, disabled }) {
+    const [open, setOpen] = useState(false);
+    const [files, setFiles] = useState(null);   // null = not fetched yet
+
+    const load = useCallback(async (next) => {
+        setOpen(next);
+        if (!next) return;
+        setFiles(null);
+        try {
+            const r = await fetch('/api/v1/postgame/files?limit=25');
+            const data = await r.json().catch(() => ({}));
+            setFiles(Array.isArray(data?.files) ? data.files : []);
+        } catch {
+            setFiles([]);
+        }
+    }, []);
+
+    return (
+        <Popover open={open} onOpenChange={load}>
+            <PopoverTrigger asChild>
+                <Button variant="ghost" size="xs" disabled={disabled}>
+                    <FolderSearch size={13} className="mr-1" />
+                    Pick a file
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[22rem] p-1" align="end">
+                {files === null && (
+                    <div className="flex items-center gap-2 px-2 py-3">
+                        <Loader size="xs" />
+                        <Text size="xs" dimmed>Reading Project Rio&rsquo;s stat folder&hellip;</Text>
+                    </div>
+                )}
+                {files?.length === 0 && (
+                    <Text size="xs" dimmed className="block px-2 py-3">
+                        No stat files found. Project Rio writes one per finished game.
+                    </Text>
+                )}
+                {files?.map(f => (
+                    <button
+                        key={f.file}
+                        type="button"
+                        onClick={() => { setOpen(false); onPick(f.file); }}
+                        className="flex w-full min-w-0 flex-col items-start gap-0.5 rounded px-2 py-1.5 text-left hover:bg-secondary"
+                    >
+                        <span className="flex w-full min-w-0 items-center gap-1.5 text-xs text-foreground">
+                            <span className="min-w-0 flex-1 truncate">{f.awayPlayer || 'Away'}</span>
+                            <span className="shrink-0 tabular-nums text-muted-foreground">
+                                {f.awayScore ?? 0}&ndash;{f.homeScore ?? 0}
+                            </span>
+                            <span className="min-w-0 flex-1 truncate text-right">{f.homePlayer || 'Home'}</span>
+                        </span>
+                        <span className="w-full truncate text-[10px] text-muted-foreground">
+                            {f.endDate || f.file}
+                        </span>
+                    </button>
+                ))}
+            </PopoverContent>
+        </Popover>
+    );
+});
+
 export default function PostGameSection({ desk }) {
     const d = desk;
     return (
@@ -101,7 +207,7 @@ export default function PostGameSection({ desk }) {
                         ? 'Capturing…'
                         : (d.pg.present ? 'Re-capture' : 'Capture finished game'),
                     icon: Trophy,
-                    onClick: d.capture,
+                    onClick: () => d.capture(),
                     disabled: d.busy,
                     variant: d.pg.present ? 'ghost' : 'default',
                     title: 'Read the finished game’s box score from Project Rio’s stat file',
@@ -110,15 +216,27 @@ export default function PostGameSection({ desk }) {
                     ? [{ label: 'Clear', icon: Trash2, onClick: d.clear, disabled: d.busy, variant: 'ghost' }]
                     : []),
             ]} />
-            <Text size="xs" truncate className="text-muted-foreground" title={d.pg.sourceFile || undefined}>
-                {d.pg.present
-                    ? (d.pg.capturedBy === 'auto'
-                        ? `Captured on its own when the game ended — ${d.pg.sourceFile}`
-                        : d.pg.sourceFile)
-                    : (d.gameId
-                        ? `Waiting on the stat file for game ${d.gameId}.`
-                        : 'No game id on this board yet — finish a game first.')}
-            </Text>
+            <div className="flex min-w-0 items-center gap-2">
+                <Text size="xs" truncate className="min-w-0 flex-1 text-muted-foreground" title={d.pg.sourceFile || undefined}>
+                    {d.pg.present
+                        ? (d.pg.capturedBy === 'auto'
+                            ? `Captured on its own when the game ended — ${d.pg.sourceFile}`
+                            : d.pg.sourceFile)
+                        : (d.gameId
+                            ? `Waiting on the stat file for game ${d.gameId}.`
+                            : 'No game id on this board yet — finish a game first.')}
+                </Text>
+                <StatFilePicker onPick={d.capture} disabled={d.busy} />
+            </div>
+            {/* The capture is a different game from the one on the board — after
+                game 1 of a Bo3, say. Stale, not wrong: it is genuinely that
+                game's box score and the Game Summary may still be on air with
+                it, so this is said and never acted on. */}
+            {d.stale && (
+                <Text size="xs" className="text-amber-500/90">
+                    This box score is from game {d.pg.gameId}; the board is on {d.gameId}.
+                </Text>
+            )}
         </>
     );
 }
