@@ -1,4 +1,4 @@
-import { useSettingsStore } from '../../context/store';
+import { useSettingsStore, useStateStore } from '../../context/store';
 import { DESK_PREFIX } from './instances';
 
 /*
@@ -100,4 +100,60 @@ export function useBoardLabel() {
 export function useBoardTag() {
     const aliases = useSettingsStore(s => s?.scoreboards?.aliases);
     return (n) => aliases?.[n] || aliases?.[String(n)] || `B${n}`;
+}
+
+/*
+ * WHAT STAGE IS THE GAME ON THIS BOARD AT — derived, never stored.
+ *
+ * The console had every input to this and read none of them as a lifecycle, so
+ * a board showing a game that had already finished was indistinguishable from
+ * one mid-inning. That is the state a producer is in every time they bind the
+ * next fixture, and the app knowing it is what lets the bind say something
+ * useful instead of nothing.
+ *
+ * Three sources, because no single one covers both transports:
+ *
+ *   game_over        the HUD path, per frame, from pyrio's end-of-game rule.
+ *                    The ONLY signal that survives a restart — it is recomputed
+ *                    from the frame on disk, so a board that boots holding last
+ *                    night's game says so. Everything else here is a change, and
+ *                    a change is exactly what a restart has already missed.
+ *   game_completed   the API path: this slot holds a completed-game record.
+ *   live_following   the API path again, and a different fact: the server
+ *                    stopped polling a game that never finished cleanly, so the
+ *                    board holds a game that will never update again.
+ *
+ * STRANDED is kept apart from FINAL because they are different things to say. A
+ * final game ended; a stranded one was abandoned, crashed, or dropped out of the
+ * feed. Both mean "what is on air is not going to change", which is why callers
+ * asking about staleness get `isStaleBoard` rather than a comparison.
+ *
+ * Nothing here changes what is ON AIR. Marking a board final is a readout; the
+ * clearing is the producer's, deliberately — a game ending must not strip the
+ * elements drawing it the instant the last out lands.
+ */
+export function boardLifecycle({ gameId, gameOver, gameCompleted, liveFollowing }) {
+    if (!gameId) return 'empty';
+    if (gameOver === true || gameCompleted === true) return 'final';
+    // Absent reads as "yes, still following": state written before the flag
+    // existed should behave the way the board already was.
+    if (liveFollowing === false) return 'stranded';
+    return 'live';
+}
+
+/* Whether what a board is showing has stopped being a game in progress. */
+export const isStaleBoard = (lifecycle) => lifecycle === 'final' || lifecycle === 'stranded';
+
+export function useBoardLifecycle(sb) {
+    // Returns a string, so no useShallow — zustand's Object.is comparison is
+    // exactly right for a primitive (same reasoning as useBoardDeskRow's idle).
+    return useStateStore((s) => {
+        const b = s?.score?.[sb];
+        return boardLifecycle({
+            gameId: b?.game_id,
+            gameOver: b?.game_over,
+            gameCompleted: b?.game_completed,
+            liveFollowing: b?.live_following,
+        });
+    });
 }

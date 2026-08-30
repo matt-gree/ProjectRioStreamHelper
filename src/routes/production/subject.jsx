@@ -10,6 +10,7 @@ import { isFedPlacement } from './placements';
 import { memberName, useFeedReason } from './automations';
 import { bandLine, useBands, useFieldValues } from './eventheader';
 import { useSideLabels } from './sides';
+import { boardLifecycle, isStaleBoard } from './boards';
 
 /*
  * THE SUBJECT — what an element is currently drawing.
@@ -83,6 +84,12 @@ export const BoardGameSubject = memo(function BoardGameSubject({ board }) {
             n2: b?.player?.[2]?.rioName || '',
             l: b?.score_left, r: b?.score_right,
             inning: b?.inning, half: b?.half_inning,
+            lifecycle: boardLifecycle({
+                gameId: b?.game_id,
+                gameOver: b?.game_over,
+                gameCompleted: b?.game_completed,
+                liveFollowing: b?.live_following,
+            }),
         };
     }));
     if (!g.n1 && !g.n2) {
@@ -91,9 +98,21 @@ export const BoardGameSubject = memo(function BoardGameSubject({ board }) {
         // with nothing to draw.
         return <SubjectRow text="No game on this board yet" />;
     }
-    const inning = g.inning != null
-        ? `${(g.half || 'Top') === 'Top' ? 'Top' : 'Bot'} ${g.inning}`
-        : null;
+    /*
+     * THE META IS WHERE THE GAME IS UP TO, and "over" is a place a game gets to.
+     * A finished game kept reading `Top 9` — true of the last frame and useless
+     * as an answer to "is this still going", which is the question a producer
+     * actually has when they are about to put the next fixture up.
+     *
+     * Wording splits the two ways a game stops. `Final` is the game reaching its
+     * end; `Ended` is the feed losing it (a quit, a crash, an ongoing game that
+     * dropped out) — we know it is not coming back, not that it finished.
+     */
+    const inning = isStaleBoard(g.lifecycle)
+        ? (g.lifecycle === 'final' ? 'Final' : 'Ended')
+        : g.inning != null
+            ? `${(g.half || 'Top') === 'Top' ? 'Top' : 'Bot'} ${g.inning}`
+            : null;
     return (
         <SubjectRow
             text={`${g.n1 || label(1)} ${g.l ?? 0}–${g.r ?? 0} ${g.n2 || label(2)}`}
@@ -322,15 +341,20 @@ const CommentarySubject = memo(function CommentarySubject() {
     return <SubjectRow text={`${c.on} on air`} meta={c.total > c.on ? `of ${c.total}` : null} />;
 });
 
+/*
+ * Counts `active`, not names: `active` is the projector's own verdict (the
+ * side's eye AND a resolved name), so the row can't claim a plate the band
+ * isn't drawing. It read the band-wide `mode` while the eyes decided the
+ * picture, and so said "Alice · Bob" over a band showing only Alice.
+ */
 const PlatesSubject = memo(function PlatesSubject() {
     const p = useStateStore(useShallow(s => ({
-        n1: s?.playerplates?.[1]?.name || '', n2: s?.playerplates?.[2]?.name || '',
-        mode: s?.playerplates?.config?.mode || 'both',
+        n1: s?.playerplates?.[1]?.active ? (s?.playerplates?.[1]?.name || '') : '',
+        n2: s?.playerplates?.[2]?.active ? (s?.playerplates?.[2]?.name || '') : '',
     })));
-    const names = p.mode === 'p2' ? [p.n2] : p.mode === 'p1' ? [p.n1] : [p.n1, p.n2];
-    const shown = names.filter(Boolean);
-    if (!shown.length) return <SubjectRow text="No plate names set" />;
-    return <SubjectRow text={shown.join(' · ')} meta={p.mode === 'both' ? null : 'single'} />;
+    const shown = [p.n1, p.n2].filter(Boolean);
+    if (!shown.length) return <SubjectRow text="No plates on air" />;
+    return <SubjectRow text={shown.join(' · ')} meta={shown.length === 1 ? 'single' : null} />;
 });
 
 const ScheduleSubject = memo(function ScheduleSubject() {

@@ -6,6 +6,7 @@ import { SocketContext } from '../../context/socket';
 import { useStagingStore } from '../../context/staging';
 import MatchDesk from './desks/match';
 import BoardDesk, { boardTypeTag, playbackLine, sideReasonLine } from './desks/board';
+import { boardLifecycle } from './boards';
 
 // Desks are content workflows, not OBS ones: they must be fully usable with
 // OBS disconnected. Both fetch on mount (game modes / nothing), so stub it.
@@ -1055,5 +1056,85 @@ describe('Board desk — post-game', () => {
             '/api/v1/postgame/capture?scoreboard=1', { method: 'POST' },
         );
         expect(useStagingStore.getState().order).toEqual([]);
+    });
+});
+
+
+/*
+ * THE BOARD'S GAME LIFECYCLE — derived from state that already existed, and the
+ * reason a stale board used to be indistinguishable from a live one.
+ */
+describe('board lifecycle', () => {
+    const board = (score) => {
+        useSettingsStore.setState({
+            project_rio: { hud_enabled: true },
+            production: {},
+            scoreboards: { active: [1], aliases: {}, binding: { 1: { playback: { mode: 'single' } } } },
+        });
+        useStateStore.setState({ score, match: {} });
+    };
+
+    it('reads empty, live, final and stranded off the keys each transport writes', () => {
+        expect(boardLifecycle({})).toBe('empty');
+        expect(boardLifecycle({ gameId: 'G1' })).toBe('live');
+        // HUD: pyrio's end-of-game rule, per frame.
+        expect(boardLifecycle({ gameId: 'G1', gameOver: true })).toBe('final');
+        // API: a completed-game record.
+        expect(boardLifecycle({ gameId: 'G1', gameCompleted: true })).toBe('final');
+        // API: the server stopped polling a game that never finished cleanly.
+        expect(boardLifecycle({ gameId: 'G1', liveFollowing: false })).toBe('stranded');
+    });
+
+    it('treats an absent live_following as still following', () => {
+        // State written before the flag existed must behave the way the board
+        // already was, not report every old game as abandoned.
+        expect(boardLifecycle({ gameId: 'G1', liveFollowing: undefined })).toBe('live');
+    });
+
+    it('needs a game before it can call one over', () => {
+        // A latched flag on an empty board would announce a finished game that
+        // is not there.
+        expect(boardLifecycle({ gameOver: true })).toBe('empty');
+    });
+
+    it('says where the game got to, and “over” is somewhere a game gets to', () => {
+        board({ 1: { game_id: 'G1', inning: 9, half_inning: 'Top', game_over: true, score_left: 6, score_right: 14, player: { 1: { rioName: 'rjb' }, 2: { rioName: 'MattGree' } } } });
+        ui(<BoardDesk board={1} />);
+        // Not "Top 9" — true of the last frame, and useless as an answer to
+        // "is this still going".
+        expect(screen.getByText('Final')).toBeInTheDocument();
+        expect(screen.queryByText('Top 9')).not.toBeInTheDocument();
+    });
+
+    it('offers the clear rather than taking it, and says what the fixture will do', () => {
+        board({ 1: { game_id: 'G1', game_over: true, match: 4, player: { 1: { rioName: 'rjb' } } } });
+        useStateStore.setState({
+            score: useStateStore.getState().score,
+            match: { 4: { player: { 1: {}, 2: {} }, series: { 1: 0, 2: 0 }, format: { bestOf: 3 } } },
+        });
+        ui(<BoardDesk board={1} />);
+
+        expect(screen.getByText(/showing a finished game/i)).toBeInTheDocument();
+        expect(screen.getByText(/M4 takes over when the next game loads/)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Clear the board/ })).toBeInTheDocument();
+    });
+
+    it('distinguishes a game the feed LOST from one that finished', () => {
+        // A quit or a crash is not a clean finish, and it is the case where a
+        // producer may still want to capture by hand.
+        board({ 1: { game_id: 'G1', live_following: false, player: { 1: { rioName: 'rjb' } } } });
+        ui(<BoardDesk board={1} />);
+        expect(screen.getByText(/feed lost this game/i)).toBeInTheDocument();
+        // Not the finished-game wording. (Scoped to this row's sentence — the
+        // post-game region's "Capture finished game" button is a different
+        // control and legitimately says so.)
+        expect(screen.queryByText(/This board is showing a finished game/i)).not.toBeInTheDocument();
+    });
+
+    it('says nothing at all while a game is in progress', () => {
+        board({ 1: { game_id: 'G1', inning: 4, half_inning: 'Bottom', player: { 1: { rioName: 'rjb' } } } });
+        ui(<BoardDesk board={1} />);
+        expect(screen.queryByRole('button', { name: /Clear the board/ })).not.toBeInTheDocument();
+        expect(screen.getByText('Bot 4')).toBeInTheDocument();
     });
 });

@@ -24,7 +24,7 @@ import { GamesSection } from '../games';
 import PostGameSection, { PostGameSubject, usePostGame } from '../postgame';
 import { useBoardQueueId, useNextUp, useQueues } from '../queue';
 import { useGameModes, withHeldModes } from '../gamemodes';
-import { useMatchBindableBoards } from '../boards';
+import { isStaleBoard, useBoardLifecycle, useMatchBindableBoards } from '../boards';
 import { useSideLabels } from '../sides';
 import { bindScoreboard, takeNextMatch } from '../../../context/match';
 
@@ -1326,10 +1326,66 @@ const ScoreBox = memo(function ScoreBox({ side, d }) {
     );
 });
 
+/*
+ * THE BOARD IS SHOWING A GAME THAT IS OVER.
+ *
+ * The state a producer is in every time they put the next fixture up, and the
+ * one the console could not previously describe: a finished game keeps every
+ * key a live one has, so the panel, the rack and the overlays all read as a
+ * game in progress until something replaces it.
+ *
+ * It says so and OFFERS A VERB — it never acts. Clearing at the final out would
+ * strip the elements drawing the game the instant it ends, which is the whole
+ * reason detection and clearing are separate here. The producer decides when
+ * the last frame of a game stops being worth showing.
+ *
+ * Clear is the panel's existing `resetGame`, not a second clear: it blanks the
+ * live `score.{N}` keys and deliberately leaves `postgame.{N}` alone. The
+ * captured box score is a DIFFERENT broadcast surface (the Game Summary and
+ * Character Spotlight draw it), it is the thing most likely to be on air while
+ * the next fixture is being prepped, and it has its own Clear in the post-game
+ * region. Dropping it here would be the irreversible half of a verb whose
+ * reversible half is what was asked for.
+ */
+const StaleGameRow = memo(function StaleGameRow({ lifecycle, matchId, onClear, clearStaged }) {
+    if (!isStaleBoard(lifecycle)) return null;
+
+    const bound = matchId != null && matchId !== '';
+    // `final` = the game reached its end. `stranded` = the feed lost it — a
+    // quit, a crash, an ongoing game that dropped out. Different facts, and the
+    // second is the case where a producer may still want to capture by hand, so
+    // it must not be described as a clean finish.
+    const what = lifecycle === 'final'
+        ? 'This board is showing a finished game'
+        : 'The feed lost this game — it won’t update again';
+    const then = bound
+        ? `M${matchId} takes over when the next game loads.`
+        : 'Nothing has replaced it.';
+
+    return (
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+            <Text size="xs" className="min-w-0 flex-1 text-muted-foreground">
+                {what} — {then}
+            </Text>
+            <SimpleTooltip label="Blank this board’s live game. The captured box score stays — it has its own Clear below.">
+                <Button
+                    variant="ghost"
+                    size="xs"
+                    onClick={onClear}
+                    className={cn('shrink-0', clearStaged && 'text-amber-400')}
+                >
+                    {clearStaged ? 'Clear staged' : 'Clear the board'}
+                </Button>
+            </SimpleTooltip>
+        </div>
+    );
+});
+
 export default function BoardDesk({ board }) {
     const sb = Number(board);
     const d = useBoardDesk(sb);
     const { g } = d;
+    const lifecycle = useBoardLifecycle(sb);
     const sides = useSideLabels();
     const stats = useStatsDiagnostics(sb);
     const postgame = usePostGame(sb);
@@ -1363,6 +1419,12 @@ export default function BoardDesk({ board }) {
                 competing subjects. */}
             <BoardGameSubject board={sb} />
             <FixtureSlot sb={sb} matchId={g.match} match={d.boundMatch} conflict={g.conflict} />
+            <StaleGameRow
+                lifecycle={lifecycle}
+                matchId={g.match}
+                onClear={d.resetGame}
+                clearStaged={d.isStaged('reset')}
+            />
             {g.conflict && (
                 <Text size="xs" className="text-amber-500/90">
                     The live players don’t match the bound fixture — resolve it on the Match desk.
