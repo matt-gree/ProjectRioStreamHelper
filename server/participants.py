@@ -87,6 +87,16 @@ def _clean_prefs(prefs: dict) -> dict:
     return out
 
 
+def _rio_key(name) -> str:
+    """Canonical lookup form for a rioName.
+
+    One statement of the rule the two match functions used to spell inline, so
+    the index and its readers cannot drift into disagreeing about whether
+    " Alice " is Alice.
+    """
+    return (name or "").strip().casefold()
+
+
 def _new_id() -> str:
     """Stable primary key for now: ``p_`` + short random hex."""
     return "p_" + secrets.token_hex(3)
@@ -110,6 +120,65 @@ class Participants:
     participants: dict[str, dict] = {}
     _out = AsyncPath(str(user_data_dir() / "participants.json"))
     _save_lock: asyncio.Lock = asyncio.Lock()
+
+    # ----- join-key indexes ------------------------------------------------
+    #
+    # WHY THESE EXIST. `MatchByRioName` was a linear scan that lowercased every
+    # row as it went, and `PreferredSide` — the `pin` layer of the side cascade —
+    # calls it PER HUD FRAME, per side, per board. That is fine at the couple of
+    # dozen rows a producer types by hand and is a different function entirely at
+    # the thousands a community import lands, which is the scale this registry is
+    # about to be asked to hold. CLAUDE.md already states the rule ("use indexed
+    # lookups instead of O(n) scans"); this is that rule applied to the one
+    # resolver on the hot path. The same scan is also the inner loop of
+    # `ImportRows`' merge, which made a large import O(incoming x existing).
+    #
+    # FIRST WINS on a duplicate key, because that is what the scan did: it walked
+    # `participants.values()` in insertion order and returned the first match. A
+    # book can hold two rows with one rioName (nothing forbids it), so the tie
+    # break is behaviour, not an implementation detail — hence `setdefault`.
+    #
+    # They are a pure function of `participants`, so anything that mutates that
+    # dict must call `_index_row` or `_reindex`. Single-row edits take the full
+    # rebuild: they already pay `Save()` plus a `reproject_dependents()` fan-out,
+    # so an O(n) walk is lost in the noise and "rebuild it all" cannot be wrong.
+    _by_rio: dict[str, str] = {}
+    _by_startgg: dict = {}
+
+    @classmethod
+    def _index_row(cls, row: dict) -> None:
+        """Add one row's join keys. Additive only — see `_reindex` to rebuild."""
+        pid = row.get("id")
+        if not pid:
+            return
+        ids = row.get("identities") or {}
+        key = _rio_key(ids.get("rioName"))
+        if key:
+            cls._by_rio.setdefault(key, pid)
+        sg = ids.get("startgg")
+        if isinstance(sg, dict):
+            uid = sg.get("userId")
+            if uid not in (None, ""):
+                try:
+                    cls._by_startgg.setdefault(uid, pid)
+                except TypeError:
+                    # An unhashable userId is a corrupt record, not a reason to
+                    # fail the load that is rebuilding the whole index.
+                    logger.warning(
+                        "[Participants] row {} has an unusable start.gg userId", pid
+                    )
+
+    @classmethod
+    def _reindex(cls) -> None:
+        """Rebuild both indexes from `participants`.
+
+        Public to the test suite and to any fixture that writes the registry
+        directly: an index this class did not build is an index nobody updated.
+        """
+        cls._by_rio = {}
+        cls._by_startgg = {}
+        for row in cls.participants.values():
+            cls._index_row(row)
 
     # ----- persistence -----------------------------------------------------
 
@@ -142,6 +211,9 @@ class Participants:
             logger.debug("[Participants] no participants.json; starting empty")
         except Exception as e:
             logger.warning("[Participants] load failed, starting empty: {}", e)
+        # Outside the try: a partial or failed load still has to leave the
+        # indexes describing whatever `participants` actually holds.
+        cls._reindex()
 
     @classmethod
     def _normalize(cls, row: dict, pid: str) -> dict:
@@ -229,6 +301,7 @@ class Participants:
             },
         }
         cls.participants[pid] = row
+        cls._index_row(row)
         await cls.Save()
         # A NEW row matters too: the resolvers fall back to a rioName lookup
         # (`MatchByRioName`), so adding the player who is on air right now is
@@ -256,6 +329,10 @@ class Participants:
             )
             row["prefs"] = _clean_prefs(row["prefs"])
         row["meta"]["updatedAt"] = _now()
+        # An edit can MOVE a join key (a corrected rioName, a newly linked
+        # start.gg account), which is the one mutation that has to drop an old
+        # entry as well as add a new one — so this rebuilds rather than adds.
+        cls._reindex()
         await cls.Save()
         # The edit is the whole point of this call — a name or pronoun a
         # projector already copied. Re-resolve before returning so the overlay
@@ -267,6 +344,7 @@ class Participants:
     async def Delete(cls, pid: str) -> bool:
         existed = cls.participants.pop(pid, None) is not None
         if existed:
+            cls._reindex()
             await cls.Save()
             # A deleted row is still copied into every projection that resolved
             # it. Re-resolving blanks those fields (the projectors write their
@@ -308,6 +386,7 @@ class Participants:
             return {"imported": 0, "created": 0, "updated": 0}
         if replace:
             cls.participants = {}
+            cls._reindex()
 
         created = updated = 0
         for raw in rows:
@@ -341,6 +420,9 @@ class Participants:
                     if v is not None:
                         match.setdefault("prefs", dict(_PREFS_DEFAULTS))[k] = v
                 match["meta"]["updatedAt"] = _now()
+                # Identities here only FILL EMPTY, so a matched row can gain a
+                # join key it did not have. Additive, so no rebuild.
+                cls._index_row(match)
                 updated += 1
             else:
                 pid = incoming["id"]
@@ -348,6 +430,10 @@ class Participants:
                     pid = _new_id()
                 incoming["id"] = pid
                 cls.participants[pid] = incoming
+                # Indexed inside the loop, not after it: the next row's de-dupe
+                # runs `MatchByRioName` against this one, so a batch containing
+                # the same person twice has to see the first copy.
+                cls._index_row(incoming)
                 created += 1
 
         await cls.Save()
@@ -423,31 +509,36 @@ class Participants:
 
     @classmethod
     def MatchByRioName(cls, rio_name: str) -> dict | None:
-        """Case-insensitive exact match on identities.rioName. Read off the
-        in-memory dict — safe to call on the HUD hot path (no IO)."""
-        if not rio_name:
+        """Case-insensitive exact match on identities.rioName.
+
+        A dict hit off `_by_rio` — this is the resolver the side cascade's `pin`
+        layer runs per HUD frame, so it must not walk the book. Duplicate
+        rioNames resolve to the earliest row, which is what the scan this
+        replaced returned.
+        """
+        key = _rio_key(rio_name)
+        if not key:
             return None
-        needle = rio_name.strip().casefold()
-        if not needle:
-            return None
-        for row in cls.participants.values():
-            existing = (row.get("identities") or {}).get("rioName") or ""
-            if existing.strip().casefold() == needle:
-                return row
-        return None
+        pid = cls._by_rio.get(key)
+        return cls.participants.get(pid) if pid else None
 
     @classmethod
     def MatchByStartGG(cls, user_id) -> dict | None:
         """Exact match on identities.startgg.userId. The de-dupe key for
         imports — stable across name changes and re-imports. None when the
-        user_id is falsy or no row carries it."""
+        user_id is falsy or no row carries it.
+
+        A dict hit, like `MatchByRioName`: this one is the inner loop of the
+        import merge, where the scan made a large import quadratic. Dict lookup
+        agrees with the `==` the scan used for every hashable key.
+        """
         if user_id in (None, ""):
             return None
-        for row in cls.participants.values():
-            sg = (row.get("identities") or {}).get("startgg")
-            if isinstance(sg, dict) and sg.get("userId") == user_id:
-                return row
-        return None
+        try:
+            pid = cls._by_startgg.get(user_id)
+        except TypeError:
+            return None
+        return cls.participants.get(pid) if pid else None
 
     # ----- provider import (start.gg) --------------------------------------
 
@@ -494,6 +585,10 @@ class Participants:
                     display[dst] = val
             row["identities"]["startgg"] = startgg_identity
             row["meta"]["updatedAt"] = _now()
+            # A row that had no start.gg link now has one, and this runs once
+            # per entrant in an event import — additive, so index rather than
+            # rebuild.
+            cls._index_row(row)
             await cls.Save()
             return row
 

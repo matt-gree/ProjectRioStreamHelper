@@ -6,6 +6,8 @@ Locks the two matchers (casefold rioName; startgg userId), the enrich-don't-
 overwrite rule on re-import, and ImportRows' merge semantics (non-empty display
 wins, identities only fill empty, id collisions regenerate).
 """
+import pytest
+
 from server.participants import Participants
 
 
@@ -19,6 +21,9 @@ def _seed(pid, rio="", tag="", startgg_uid=None, **display):
         "display": {"tag": tag, **display},
     }, pid)
     Participants.participants[pid] = row
+    # A direct write goes around the class's own mutators, so it maintains the
+    # join-key indexes itself — the same obligation `pin_player` has in conftest.
+    Participants._index_row(row)
     return row
 
 
@@ -332,3 +337,143 @@ async def test_import_merge_refreshes_a_pin_but_no_preference_defers():
         {"identities": {"rioName": "Zoe"}, "display": {"tag": "Zoe"}},
     ])
     assert Participants.PreferredSide("Zoe") == 2
+
+
+# --- the join-key indexes ---------------------------------------------------
+#
+# `MatchByRioName` is the side cascade's `pin` resolver and runs per HUD frame;
+# `MatchByStartGG` is the inner loop of the import merge. Both were linear scans
+# and are now dict hits, so what needs pinning is that the index and the book
+# cannot disagree — every mutation path, and the tie-break the scan had.
+
+
+def _scan_by_rio(rio_name):
+    """The linear scan the index replaced, kept as the oracle."""
+    needle = (rio_name or "").strip().casefold()
+    if not needle:
+        return None
+    for row in Participants.participants.values():
+        existing = (row.get("identities") or {}).get("rioName") or ""
+        if existing.strip().casefold() == needle:
+            return row
+    return None
+
+
+def test_the_index_agrees_with_the_scan_it_replaced():
+    for i in range(50):
+        _seed(f"p{i}", rio=f"Player{i}", tag=f"Player{i}")
+    for probe in ["Player0", "player49", "  PLAYER25  ", "nobody", ""]:
+        assert Participants.MatchByRioName(probe) == _scan_by_rio(probe), probe
+
+
+def test_duplicate_rionames_resolve_to_the_earliest_row():
+    """The scan walked insertion order and returned the first match, so a book
+    holding one rioName twice has a defined answer — `setdefault`, not the last
+    write. Nothing forbids the duplicate, so the tie-break is behaviour."""
+    first = _seed("p1", rio="Alice", tag="Alice")
+    _seed("p2", rio="alice", tag="Alice Again")
+    assert Participants.MatchByRioName("ALICE") is first
+
+
+@pytest.mark.asyncio
+async def test_a_created_row_is_findable_immediately():
+    row = await Participants.Create({
+        "identities": {"rioName": "Nova"}, "display": {"tag": "Nova"},
+    })
+    assert Participants.MatchByRioName("nova") is row
+
+
+@pytest.mark.asyncio
+async def test_renaming_drops_the_old_key_and_adds_the_new_one():
+    """The one mutation that has to REMOVE an index entry. An add-only index
+    would keep answering on the old name forever."""
+    row = await Participants.Create({"identities": {"rioName": "OldName"}})
+    await Participants.Update(row["id"], {"identities": {"rioName": "NewName"}})
+
+    assert Participants.MatchByRioName("OldName") is None
+    assert Participants.MatchByRioName("NewName") is row
+
+
+@pytest.mark.asyncio
+async def test_a_deleted_row_leaves_no_index_entry():
+    row = await Participants.Create({"identities": {"rioName": "Gone"}})
+    await Participants.Delete(row["id"])
+
+    assert Participants.MatchByRioName("Gone") is None
+    assert Participants._by_rio == {}
+
+
+@pytest.mark.asyncio
+async def test_a_batch_dedupes_against_rows_created_earlier_in_itself():
+    """Why created rows are indexed INSIDE the import loop: the second copy of
+    one person has to match the first, which exists only in this batch."""
+    await Participants.ImportRows([
+        _export_row("a1", rio="Twin", tag="Twin"),
+        _export_row("a2", rio="twin", tag="Twin Refreshed"),
+    ])
+
+    assert len(Participants.participants) == 1
+    assert Participants.MatchByRioName("Twin")["display"]["tag"] == "Twin Refreshed"
+
+
+@pytest.mark.asyncio
+async def test_a_replace_import_forgets_the_book_it_wiped():
+    _seed("old", rio="Ghost", tag="Ghost")
+    await Participants.ImportRows([_export_row("new", rio="Fresh", tag="Fresh")],
+                                  replace=True)
+
+    assert Participants.MatchByRioName("Ghost") is None
+    assert Participants.MatchByRioName("Fresh") is not None
+
+
+@pytest.mark.asyncio
+async def test_a_startgg_link_added_to_an_existing_row_becomes_findable():
+    """`UpsertFromStartGG`'s matched branch stamps a join key onto a row that
+    had none — the de-dupe for every later entrant in the same import."""
+    _seed("p1", rio="Casey", tag="Casey")
+    await Participants.UpsertFromStartGG({"userId": 4242, "gamerTag": "Casey"})
+
+    assert Participants.MatchByStartGG(4242)["id"] == "p1"
+
+
+@pytest.mark.asyncio
+async def test_a_reload_rebuilds_the_index_from_disk():
+    await Participants.Create({"identities": {"rioName": "Persisted"}})
+    Participants.participants = {}
+    Participants._reindex()
+    await Participants.Load()
+
+    assert Participants.MatchByRioName("Persisted") is not None
+
+
+@pytest.mark.asyncio
+async def test_a_failed_load_leaves_the_index_agreeing_with_the_book():
+    """The reindex sits OUTSIDE the try, so whatever a failed load leaves in
+    `participants` is what the index describes.
+
+    A corrupt file does NOT empty the registry — `Load` only assigns on success,
+    so the previous book survives (the "starting empty" in its log line is
+    describing a cold start, not this path). The invariant under test is
+    therefore agreement, not emptiness: asserting the book was cleared would be
+    asserting a behaviour this class does not have.
+    """
+    _seed("stale", rio="Stale", tag="Stale")
+    async with Participants._out.open(mode="wb") as f:
+        await f.write(b"{not json")
+    await Participants.Load()
+
+    assert Participants.MatchByRioName("Stale") is _scan_by_rio("Stale")
+    assert len(Participants._by_rio) == len(Participants.participants)
+
+
+def test_an_unhashable_startgg_id_does_not_break_the_rebuild():
+    """A corrupt record is not a reason to fail the load that is indexing it."""
+    Participants.participants["bad"] = {
+        "id": "bad",
+        "identities": {"rioName": "Fine", "startgg": {"userId": ["not", "hashable"]}},
+        "display": {}, "prefs": {}, "meta": {},
+    }
+    Participants._reindex()
+
+    assert Participants.MatchByRioName("Fine") is not None
+    assert Participants.MatchByStartGG(["not", "hashable"]) is None

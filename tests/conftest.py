@@ -153,6 +153,7 @@ def reset_singletons():
     StatFileWatcher._done = set()
     Announcements._active = []
     Participants.participants = {}
+    Participants._reindex()
     OngoingGamePool.games = {}
     OngoingGamePool._follow_misses = {}
     OngoingGamePool._ended_follow = {}
@@ -195,6 +196,7 @@ def reset_singletons():
     StatFileWatcher._done = saved["autocapture_done"]
     Announcements._active = saved["announcements_active"]
     Participants.participants = saved["participants"]
+    Participants._reindex()
     OngoingGamePool.games = saved["ongoing_games"]
     OngoingGamePool._follow_misses = saved["ongoing_follow_misses"]
     OngoingGamePool._ended_follow = saved["ongoing_ended_follow"]
@@ -250,6 +252,10 @@ def pin_player():
     Writes the row straight into the in-memory registry (no IO, no await), the
     same way `set_setting` writes Settings. `reset_singletons` empties
     `Participants.participants` between tests, so nothing to restore.
+
+    A direct write bypasses the class's own mutators, so it re-indexes: the pin
+    layer resolves through `MatchByRioName`, which reads the index, so a row
+    written around it is a row the cascade cannot see.
     """
     from server.participants import Participants, _DISPLAY_DEFAULTS, _IDENTITY_DEFAULTS
 
@@ -262,6 +268,7 @@ def pin_player():
             "prefs": {"side": side},
             "meta": {"createdAt": "", "updatedAt": "", "source": "manual"},
         }
+        Participants._index_row(Participants.participants[pid])
         return Participants.participants[pid]
 
     return _pin
