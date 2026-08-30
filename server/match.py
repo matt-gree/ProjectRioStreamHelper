@@ -66,6 +66,49 @@ _FEED_SHARED_KEYS = frozenset(_PLAYER_KEYS)
 #     captain carve-out this generalises existed for exactly that reason.
 _OPTIONAL_PICK_KEYS = frozenset({"port", "rio_captainIndex", "character.0.name"})
 
+# THE OWNERSHIP TABLE — every fixture field, where it lands, and who wins.
+#
+# There are exactly TWO rules and neither is a special case of the other. Both
+# exist because a projection and a live feed write the same keys, and "the
+# projector writes its full key set" is only safe where the projector actually
+# knows better than the feed.
+#
+#   RULE A — a blank DEFERS, unless a blank is an answer.
+#       Applies to keys the projector resolved to "". An address-book field is
+#       an answer once a participant resolves (re-binding to someone with no
+#       twitter must clear it); an optional pick never is (_OPTIONAL_PICK_KEYS).
+#
+#   RULE B — a STAND-IN defers when it HAS a value.
+#       Applies to picks that substitute for feed data before a game exists.
+#       Written only over a board with no feed. Rule A cannot catch these:
+#       it reconsiders keys left empty, and a stand-in is wrong exactly when
+#       the projector has a value.
+#
+# | fixture field      | projected key                  | rule                |
+# |--------------------|--------------------------------|---------------------|
+# | participantId /    | player.{T}.rioName             | A                   |
+# |   rioName          |                                |                     |
+# | (registry display) | player.{T}.<RESURFACE_MAP>     | A (blank IS an      |
+# |                    |                                |    answer)          |
+# | captain            | player.{T}.character.0.name    | B                   |
+# |                    | player.{T}.rio_captainIndex    | B                   |
+# | port               | player.{T}.port                | B                   |
+# | seed               | — not projected                | —                   |
+# | label              | phase                          | projector owns      |
+# | series / bestOf /  | player.{T}.series_wins,        | projector owns      |
+# |   decided          | best_of, series_decided        |   (feed has none)   |
+# | gameMode           | Settings stats_tag, via        | producer's pick     |
+# |                    |   sync_stats_tag               |   wins (manual)     |
+# | stage/scheduledAt/ | — not projected                | —                   |
+# |   format/provider  |                                |                     |
+#
+# The discriminator for both rules is `_board_side_has_feed_data`, which asks
+# `score.{N}.game_id` — NOT "is the side populated", because a projection's own
+# output populates the side.
+#
+# Adding a fixture field? Decide which column it is in before writing it. Every
+# bug this table records was a field that looked like it had no column at all.
+
 # Default shape of a freshly-created match. `captain` is a character name (the
 # chosen captain), not a roster slot. provider.startgg.setId records which
 # start.gg set was loaded into this match (see the /match/{m}/startgg-set route).
@@ -217,14 +260,45 @@ class Match:
             rio_name = (row.get("identities") or {}).get("rioName") or ""
 
         vals["rioName"] = rio_name
+        has_feed = cls._board_side_has_feed_data(sb, t)
+
+        # Controller port — a STAND-IN, on the same terms as the captain below.
+        #
+        # A fixture port is what the controller overlay follows before a game
+        # exists: `score.{N}.player.{T}.port` is the key controller-mount.js
+        # iframes gc-overlay at. Once a game is on the board the HUD reports the
+        # real port every frame, and the player may simply have plugged into a
+        # different one — so an authored pick over live data put the WRONG PAD
+        # on air, reloading the iframe to do it.
+        #
+        # A completed game is the worst of it: apply_completed_game_to_state
+        # clears port to None precisely because a finished game has no live
+        # controller, and the projection wrote the pick straight back over that
+        # — bringing the overlay back for a game already over.
         port = player.get("port")
-        vals["port"] = port if port is not None else ""
+        if port is not None and not has_feed:
+            vals["port"] = port
 
         # Captain-only projection: mirror the Live-API "no roster" path — the
         # chosen captain character goes in roster slot 0 and is marked captain.
-        # A live HUD/API game later overwrites this with the real roster.
+        #
+        # ONLY over a board with no game. This is a STAND-IN for a roster, not a
+        # correction to one: over a live game the feed already knows the real
+        # nine and which of them is captain, and the fixture's draft pick is at
+        # best a duplicate of that and at worst last week's plan. Written anyway
+        # it did two things at once — put the picked character in slot 0, losing
+        # whoever really batted first, and forced rio_captainIndex to 0, so every
+        # overlay that resolves the captain by index (the scoreboard's team-logo
+        # fallback, the Game Summary hero art) drew roster slot 0 and called it
+        # the captain. A fixture picking Birdo against a game whose captain was
+        # Yoshi put Birdo in the logo spot for the whole broadcast.
+        #
+        # The deferral below could not catch this: it only reconsiders keys the
+        # projector left EMPTY, and these two are only wrong when it has a value.
+        # That is what makes them different from the rest of _OPTIONAL_PICK_KEYS
+        # — those defer when blank, these must defer when filled.
         captain = player.get("captain") or ""
-        if captain:
+        if captain and not has_feed:
             vals["character.0.name"] = captain
             vals["rio_captainIndex"] = 0
 
@@ -238,7 +312,7 @@ class Match:
         # Apply the feed-shared rule (see _FEED_SHARED_KEYS). A side with no feed
         # data behind it still takes the full deterministic blank; over live feed
         # data an empty value defers unless it is an answer.
-        if cls._board_side_has_feed_data(sb, t):
+        if has_feed:
             resolves_identity = row is not None
             for k in list(vals):
                 if k not in _FEED_SHARED_KEYS or vals[k] != "":
@@ -262,7 +336,13 @@ class Match:
         for t in (1, 2):
             entries.extend(cls._side_entries(sb, t, players.get(str(t))))
         game_mode = match.get("gameMode") or ""
-        entries.append((f"score.{sb}.tag_set", game_mode))
+        # NOT written to `score.{sb}.tag_set`. That key is the game's tag-set
+        # ID, an int, written by both feeds (`hud_data.tag_set_id()`) and
+        # cleared to None by the completed path; the resolved NAME has its own
+        # key beside it, `score.{sb}.game_mode`, and is what overlays draw. The
+        # projector was putting a name string into the id slot — clobbering the
+        # live game's id with the wrong type, and blanking it on unbind. A
+        # fixture's mode belongs in `stats_tag` (below), which is where it goes.
 
         # Bracket phase: the match's label (the start.gg round name, or a
         # producer-typed phase like "Winners R2") drives the scoreboard's phase
