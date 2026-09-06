@@ -234,13 +234,23 @@ const BandRibbon = memo(function BandRibbon({ selected, onSelect }) {
         });
     }
 
+    // The arrows move a SEGMENT, not a cursor: the producer is dragging the
+    // thing they picked along the band, so the selection travels with it and
+    // the editor below keeps showing the same content. Leaving it on the
+    // position turned one move into a swap of what is being edited.
+    const move = (to) => {
+        if (to < 1 || to > LT_SLOT_COUNT) return;
+        swap(selected, to);
+        onSelect(to);
+    };
+
     return (
         <Group gap="xs" className="flex-nowrap items-center">
             <MoveButtons
                 axis="x" label={`slot ${selected}`}
                 canUp={selected > 1} canDown={selected < LT_SLOT_COUNT}
-                onUp={() => swap(selected, selected - 1)}
-                onDown={() => swap(selected, selected + 1)}
+                onUp={() => move(selected - 1)}
+                onDown={() => move(selected + 1)}
             />
             <div
                 role="tablist" aria-label="Band preview"

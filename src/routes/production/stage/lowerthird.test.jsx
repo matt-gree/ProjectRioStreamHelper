@@ -81,6 +81,26 @@ describe('Lower third stage', () => {
         expect(screen.queryByLabelText('Move slot 1 down')).not.toBeInTheDocument();
     });
 
+    /*
+     * The arrows move a SEGMENT, not a cursor. Selection following the position
+     * instead of the content turned every move into a swap of what the editor
+     * below was showing — the producer moved their message and found themselves
+     * editing whatever it traded places with.
+     */
+    it('carries the selection with the slot it moves', async () => {
+        const user = userEvent.setup();
+        ui();
+        // Slot 1 is the message; move it right twice, past the empty slot 2 and
+        // into slot 3, and the editor should still be showing the message.
+        await user.click(screen.getByLabelText('Move slot 1 right'));
+        expect(screen.getByDisplayValue('Winners Final')).toBeInTheDocument();
+        expect(band().getByRole('tab', { name: 'Slot 2 — Message' })).toHaveAttribute('aria-selected', 'true');
+
+        await user.click(screen.getByLabelText('Move slot 2 right'));
+        expect(screen.getByDisplayValue('Winners Final')).toBeInTheDocument();
+        expect(band().getByRole('tab', { name: 'Slot 3 — Message' })).toHaveAttribute('aria-selected', 'true');
+    });
+
     // Controller ports are a live-game idea; the break band is between games.
     it('offers no per-port colour controls', () => {
         expect(LAYOUT_SETTINGS.lowerthird ?? []).toEqual([]);
