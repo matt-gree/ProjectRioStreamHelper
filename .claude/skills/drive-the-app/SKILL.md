@@ -97,6 +97,25 @@ Open the app at `http://localhost:5299/#/`.
   and they pile up over the top-right of whatever page you're on. A toast that
   won't go away is this, not a missing `duration`. Check
   `document.hasFocus()` / `visibilityState` before believing a timing bug.
+- **`requestAnimationFrame` does not fire, so THE UI DOES NOT SEE LIVE STATE.**
+  The same root cause, and far more expensive than the toasts, because it looks
+  exactly like a state bug. The socket store batches its flush in a rAF
+  (`src/context/socket.jsx` `scheduleFlush`) and GSAP drives every overlay
+  animation off one — so in this pane a socket update reaches the store's pending
+  buffer and stops there, and an overlay's tween freezes part-way (a plate stuck
+  at `opacity: 0.19` mid-entry). What you see is a panel that renders the state
+  it was mounted with, silently ignores every change after it, and **PUTs that
+  stale value back** the next time you click something — which reads as "my last
+  edit reverted itself". It is not: check the server with `prsh-agent.py state`,
+  and reload the page to see the truth. Confirm the cause in one call:
+  `requestAnimationFrame(() => …)` against a `setTimeout` race, which comes back
+  "did NOT fire".
+
+  So **drive one control per page load, and read the result from the server, not
+  the screen.** A click → click → screenshot sequence in this pane is measuring
+  the harness. Anything where the panel must react to its own write (a segmented
+  that re-selects, a row that appears once a value lands) needs a reload before
+  the screenshot, or a real browser.
 
 ### The pane does not render iframes
 
