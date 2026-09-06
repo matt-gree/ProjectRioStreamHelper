@@ -524,8 +524,8 @@ const DRAFT_STAGE_BADGE = {
  * The verdict below is the only line that speaks for this fixture.
  */
 const STAGE_MEANING = {
-    draft: 'Not started — the only stage a fixture can be offered from.',
-    live:  'A board has fed this fixture. Never offered while it sits here.',
+    draft: 'Not started — the only stage a match can be offered from.',
+    live:  'A board has fed this match. Never offered while it sits here.',
     post:  'A game finished. Never offered while it sits here.',
 };
 
@@ -704,12 +704,12 @@ const StageControl = memo(function StageControl({ m, stage, reason, queued, firs
                             </Text>
                         ) : first ? (
                             <Text size="xs" className="text-emerald-300">
-                                Waiting for a board — this is the next fixture in line.
+                                Waiting for a board — this is the next one in line.
                             </Text>
                         ) : (
                             <Text size="xs" className="text-muted-foreground">
                                 <span className="text-foreground">Waiting for a board</span> — it
-                                comes up once the fixtures ahead of it in the order have been taken.
+                                comes up once the matches ahead of it in the order have been taken.
                             </Text>
                         )}
                     </div>
@@ -1023,7 +1023,7 @@ const MatchAccordion = memo(function MatchAccordion({
                     placeholder, or a fixture kept for reference, that should not
                     show on the schedule overlay or be offered to a board. */}
                 <MembershipControl m={m} queues={queues} queueOf={queueOf} />
-                <SimpleTooltip label="Flip the fixture's sides — series wins follow the player">
+                <SimpleTooltip label="Flip the sides — series wins follow the player">
                     <button
                         type="button"
                         onClick={onFlip}
@@ -1148,7 +1148,7 @@ const MatchAccordion = memo(function MatchAccordion({
                             whole column rather than being one more field in it,
                             so it rides the column header. */}
                         <KitColumn
-                            label="Fixture"
+                            label="Match"
                             // The one rule in the body, marking the one real
                             // boundary: two regions, not two peer groups.
                             className="@2xl:border-l @2xl:border-border/60 @2xl:pl-6"
@@ -1325,7 +1325,7 @@ const QueueHeading = memo(function QueueHeading({ queue, boards, first, last, on
                     <Stack gap="xs">
                         <Text size="sm" className="text-foreground">Remove this running order?</Text>
                         <Text size="xs" className="text-muted-foreground">
-                            Its {queue.matches.length} fixture{queue.matches.length === 1 ? '' : 's'} stay,
+                            Its {queue.matches.length} match{queue.matches.length === 1 ? '' : 'es'} stay,
                             unenrolled. Boards taking from it fall back to the first order.
                         </Text>
                         <Group gap="xs" className="justify-end">

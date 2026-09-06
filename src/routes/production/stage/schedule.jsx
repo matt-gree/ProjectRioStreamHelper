@@ -99,7 +99,7 @@ export default function ScheduleStage({ element, placement }) {
                    there is exactly one place a running order can be changed. */
                 <>
                     <Text size="xs" className="text-muted-foreground/70">
-                        In the order set on the Match desk. Times are per match, so they follow a fixture when it moves.
+                        In the order set on the Match desk. Times are per match, so they follow one when it moves.
                     </Text>
                     {queue.map((id, idx) => {
                         const m = matches[id] || {};

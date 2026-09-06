@@ -674,12 +674,12 @@ describe('The Match desk states — and can change — a fixture’s lifecycle',
         ui(<MatchDesk />);
 
         openStage(1);
-        expect(screen.getByText(/this is the next fixture in line/)).toBeInTheDocument();
+        expect(screen.getByText(/this is the next one in line/)).toBeInTheDocument();
         fireEvent.keyDown(document.activeElement || document.body, { key: 'Escape' });
 
         openStage(2);
-        expect(screen.getByText(/once the fixtures ahead of it/)).toBeInTheDocument();
-        expect(screen.queryByText(/this is the next fixture in line/)).not.toBeInTheDocument();
+        expect(screen.getByText(/once the matches ahead of it/)).toBeInTheDocument();
+        expect(screen.queryByText(/this is the next one in line/)).not.toBeInTheDocument();
     });
 
     // Next is a property of the ORDER a fixture sits in, so the head of Losers is
@@ -697,7 +697,7 @@ describe('The Match desk states — and can change — a fixture’s lifecycle',
         });
         ui(<MatchDesk />);
         openStage(2);
-        expect(screen.getByText(/this is the next fixture in line/)).toBeInTheDocument();
+        expect(screen.getByText(/this is the next one in line/)).toBeInTheDocument();
     });
 });
 

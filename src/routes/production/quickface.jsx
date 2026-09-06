@@ -274,7 +274,7 @@ const BoardQuickFace = memo(function BoardQuickFace({ id }) {
         ...(next
             ? [{
                 label: 'Up next', onClick: takeNext, disabled: taking,
-                title: `Put ${next.label} on this board — the next fixture in the queue`,
+                title: `Put ${next.label} on this board — the next match in the queue`,
             }]
             : []),
         { label: 'Swap sides', onClick: d.swapSides },
