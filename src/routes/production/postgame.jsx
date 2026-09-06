@@ -199,35 +199,46 @@ const StatFilePicker = memo(function StatFilePicker({ onPick, disabled }) {
 
 export default function PostGameSection({ desk }) {
     const d = desk;
+    /*
+     * THE THREE CONTROLS ARE ONE ROW, AND THE FILE IS THE CAPTION UNDER IT.
+     *
+     * This was three stacked rows on a full-width desk: two `flex-1` buttons at
+     * ~600px each, then a caption with the file picker stranded on the far right
+     * edge, ~1000px from the two buttons that do the same kind of thing. Every
+     * verb here is "get a box score onto this board" — the ordinary capture, the
+     * hand-picked file, and the undo — so they belong beside each other at their
+     * own size, and the sentence about WHICH file is a caption, not a row with a
+     * button in it.
+     */
     return (
         <>
-            <ActionRow actions={[
-                {
-                    label: d.busy
-                        ? 'Capturing…'
-                        : (d.pg.present ? 'Re-capture' : 'Capture finished game'),
-                    icon: Trophy,
-                    onClick: () => d.capture(),
-                    disabled: d.busy,
-                    variant: d.pg.present ? 'ghost' : 'default',
-                    title: 'Read the finished game’s box score from Project Rio’s stat file',
-                },
-                ...(d.pg.present
-                    ? [{ label: 'Clear', icon: Trash2, onClick: d.clear, disabled: d.busy, variant: 'ghost' }]
-                    : []),
-            ]} />
-            <div className="flex min-w-0 items-center gap-2">
-                <Text size="xs" truncate className="min-w-0 flex-1 text-muted-foreground" title={d.pg.sourceFile || undefined}>
-                    {d.pg.present
-                        ? (d.pg.capturedBy === 'auto'
-                            ? `Captured on its own when the game ended — ${d.pg.sourceFile}`
-                            : d.pg.sourceFile)
-                        : (d.gameId
-                            ? `Waiting on the stat file for game ${d.gameId}.`
-                            : 'No game id on this board yet — finish a game first.')}
-                </Text>
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <ActionRow fit actions={[
+                    {
+                        label: d.busy
+                            ? 'Capturing…'
+                            : (d.pg.present ? 'Re-capture' : 'Capture finished game'),
+                        icon: Trophy,
+                        onClick: () => d.capture(),
+                        disabled: d.busy,
+                        variant: d.pg.present ? 'ghost' : 'default',
+                        title: 'Read the finished game’s box score from Project Rio’s stat file',
+                    },
+                    ...(d.pg.present
+                        ? [{ label: 'Clear', icon: Trash2, onClick: d.clear, disabled: d.busy, variant: 'ghost' }]
+                        : []),
+                ]} />
                 <StatFilePicker onPick={d.capture} disabled={d.busy} />
             </div>
+            <Text size="xs" truncate className="min-w-0 text-muted-foreground" title={d.pg.sourceFile || undefined}>
+                {d.pg.present
+                    ? (d.pg.capturedBy === 'auto'
+                        ? `Captured on its own when the game ended — ${d.pg.sourceFile}`
+                        : d.pg.sourceFile)
+                    : (d.gameId
+                        ? `Waiting on the stat file for game ${d.gameId}.`
+                        : 'No game id on this board yet — finish a game first.')}
+            </Text>
             {/* The capture is a different game from the one on the board — after
                 game 1 of a Bo3, say. Stale, not wrong: it is genuinely that
                 game's box score and the Game Summary may still be on air with

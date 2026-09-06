@@ -1,11 +1,11 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
-import { render, screen, cleanup, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, cleanup, waitFor, fireEvent, within } from '@testing-library/react';
 import { TooltipProvider } from '../../components/ui/tooltip';
 import { useSettingsStore, useStateStore } from '../../context/store';
 import { SocketContext } from '../../context/socket';
 import { useStagingStore } from '../../context/staging';
 import MatchDesk from './desks/match';
-import BoardDesk, { boardTypeTag, playbackLine, sideReasonLine } from './desks/board';
+import BoardDesk, { boardTypeTag, playbackLine, sideReasonPhrase } from './desks/board';
 import { boardLifecycle } from './boards';
 
 // Desks are content workflows, not OBS ones: they must be fully usable with
@@ -296,16 +296,23 @@ describe('Board desk', () => {
         useStateStore.setState({
             score: {
                 1: {
+                    game_id: 'G1',
                     player: { 1: { rioName: 'Alice' }, 2: { rioName: 'Bob' } },
                     score_left: 3, score_right: 2, inning: 5, half_inning: 'Top',
                     match: 2, side_reason: 'pin',
                 },
             },
-            match: { 2: { label: 'Winners R2', series: { 1: 1, 2: 0 } } },
+            match: {
+                2: { label: 'Winners R2', series: { 1: 1, 2: 0 }, format: { bestOf: 3 } },
+            },
         });
         ui(<BoardDesk board={1} />);
-        expect(screen.getByText('Alice 3–2 Bob')).toBeInTheDocument();
-        expect(screen.getByText('Alice on side 1 — pinned in the Address Book')).toBeInTheDocument();
+        // The game row is a SLOT now, in the fixture slot's shape — chip, side,
+        // score, side — so the three parts are their own cells.
+        expect(screen.getByText('LIVE')).toBeInTheDocument();
+        expect(screen.getByText('3–2')).toBeInTheDocument();
+        expect(screen.getByText('Top 5')).toBeInTheDocument();
+        expect(screen.getByText('Sides pinned in the Address Book')).toBeInTheDocument();
         // The fixture is a SLOT with the match in it, not a sentence about one:
         // its id, both participants, the series between them, the round after.
         expect(screen.getByText('M2')).toBeInTheDocument();
@@ -436,7 +443,7 @@ describe('Board desk', () => {
             schedule: { queue: [5] },
         });
         ui(<BoardDesk board={1} />);
-        expect(screen.getByText(/a fixture needs a single-game board/)).toBeInTheDocument();
+        expect(screen.getByText(/a match needs a single-game board/)).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /Put on board/ })).not.toBeInTheDocument();
         expect(screen.queryByText('Cara vs Dev')).not.toBeInTheDocument();
     });
@@ -464,27 +471,97 @@ describe('Board desk', () => {
         expect(screen.getByRole('button', { name: 'Take match 2 off board 1' })).toBeInTheDocument();
     });
 
+    /*
+     * `default_match()` is `{"bestOf": 1}` and a Bo1 night is what almost every
+     * night is, where the series cell reads 0–0 all match and then 1–0 once the
+     * capture lands — a number saying nothing the game row above does not, in the
+     * widest cell of the slot.
+     */
+    it('prints the series only when there is a series', () => {
+        useStateStore.setState({
+            score: { 1: { match: 2 } },
+            match: { 2: { series: { 1: 1, 2: 0 }, player: { 1: { rioName: 'Alice' }, 2: { rioName: 'Bob' } } } },
+        });
+        const { unmount } = ui(<BoardDesk board={1} />);
+        expect(screen.queryByText('1–0')).not.toBeInTheDocument();
+        expect(screen.getByText('vs')).toBeInTheDocument();
+        unmount();
+
+        useStateStore.setState({
+            score: { 1: { match: 2 } },
+            match: {
+                2: {
+                    series: { 1: 1, 2: 0 }, format: { bestOf: 3 },
+                    player: { 1: { rioName: 'Alice' }, 2: { rioName: 'Bob' } },
+                },
+            },
+        });
+        ui(<BoardDesk board={1} />);
+        expect(screen.getByText('1–0')).toBeInTheDocument();
+    });
+
     it('names where fixtures come from when nothing is waiting either', () => {
         useStateStore.setState({ score: { 1: {} }, match: {}, schedule: { queue: [] } });
         ui(<BoardDesk board={1} />);
-        expect(screen.getByText('NO FIXTURE')).toBeInTheDocument();
+        expect(screen.getByText('NO MATCH')).toBeInTheDocument();
         expect(screen.getByText(/add one on the Match desk/)).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /Put on board/ })).not.toBeInTheDocument();
     });
 
-    it('has a sentence for every layer of the cascade, and none for raw feed order', () => {
-        expect(sideReasonLine('manual', 'Alice')).toBe('Alice on side 1 — set by hand for this game');
-        expect(sideReasonLine('match', 'Alice')).toBe('Alice on side 1 — from the bound match');
-        expect(sideReasonLine('pin', 'Alice')).toBe('Alice on side 1 — pinned in the Address Book');
-        expect(sideReasonLine('back_to_back', 'Alice')).toBe('Alice on side 1 — where they were last game');
+    it('has a phrase for every layer of the cascade, and none for raw feed order', () => {
+        expect(sideReasonPhrase('manual')).toBe('set by hand');
+        expect(sideReasonPhrase('match')).toBe('from the bound match');
+        expect(sideReasonPhrase('pin')).toBe('pinned in the Address Book');
+        expect(sideReasonPhrase('back_to_back')).toBe('as they were last game');
         // Raw feed order is not a decision, so there is nothing to explain.
-        expect(sideReasonLine('', 'Alice')).toBeNull();
-        expect(sideReasonLine(undefined, 'Alice')).toBeNull();
-        // The side is named by the CALLER, in the producer's vocabulary — the
-        // sentence explaining a side assignment is the last place that should
-        // hard-code one arrangement of one scene (../sides).
-        expect(sideReasonLine('pin', 'Alice', 'the left side'))
-            .toBe('Alice on the left side — pinned in the Address Book');
+        expect(sideReasonPhrase('')).toBeNull();
+        expect(sideReasonPhrase(undefined)).toBeNull();
+    });
+
+    /*
+     * `manual` is the top layer of the cascade and was the only one with no way
+     * out — it cleared on a new game, or if a second swap happened to land on
+     * what the pin already wanted. Neither is something a producer can ASK for,
+     * so a swap made before a fixture was bound outranked that fixture all game.
+     */
+    it('offers the way out of a hand-set orientation, and only then', () => {
+        const auto = { name: 'Use auto' };
+        useSettingsStore.setState({
+            project_rio: { hud_enabled: true },
+            scoreboards: { active: [1], aliases: {}, binding: {} },
+        });
+        useStateStore.setState({
+            score: { 1: { player: {}, side_reason: 'pin' } }, match: {},
+        });
+        const { unmount } = ui(<BoardDesk board={1} />);
+        expect(screen.queryByRole('button', auto)).not.toBeInTheDocument();
+        unmount();
+
+        useStateStore.setState({
+            score: { 1: { player: {}, side_reason: 'manual' } }, match: {},
+        });
+        ui(<BoardDesk board={1} />);
+        expect(screen.getByText('Sides set by hand')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', auto));
+        expect(fetch).toHaveBeenCalledWith('/api/v1/rio/swap/release', { method: 'POST' });
+    });
+
+    /*
+     * The override is a server flag over the HUD feed. An API board's swap is a
+     * plain state write that never sets it, so there is nothing there to release
+     * — and a button that posts to a board the route cannot reach is worse than
+     * no button.
+     */
+    it('does not offer the release on an API board', () => {
+        useSettingsStore.setState({
+            project_rio: { hud_enabled: false },
+            scoreboards: { active: [1], aliases: {}, binding: {} },
+        });
+        useStateStore.setState({
+            score: { 1: { player: {}, side_reason: 'manual' } }, match: {},
+        });
+        ui(<BoardDesk board={1} />);
+        expect(screen.queryByRole('button', { name: 'Use auto' })).not.toBeInTheDocument();
     });
 
     /*
@@ -630,7 +707,7 @@ describe('Board desk', () => {
         ui(<BoardDesk board={1} />);
         expect(screen.getByRole('button', { name: 'the top side bats last' })).toBeInTheDocument();
         expect(screen.getByLabelText('Score — Bottom')).toBeInTheDocument();
-        expect(screen.getByText('Side 1 on the top side — pinned in the Address Book')).toBeInTheDocument();
+        expect(screen.getByText('Sides pinned in the Address Book')).toBeInTheDocument();
     });
 
     it('warns when the live players do not match the bound fixture', () => {
@@ -639,7 +716,7 @@ describe('Board desk', () => {
             match: { 2: {} },
         });
         ui(<BoardDesk board={1} />);
-        expect(screen.getByText(/don’t match the bound fixture/)).toBeInTheDocument();
+        expect(screen.getByText(/don’t match the bound match/)).toBeInTheDocument();
     });
 
     /*
@@ -650,7 +727,7 @@ describe('Board desk', () => {
     it('reads transport out rather than offering it, and offers the HUD re-read', () => {
         ui(<BoardDesk board={1} />);
         expect(screen.getByText('HUD')).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /Re-read HUD file/ })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Re-read HUD/ })).toBeInTheDocument();
     });
 
     /*
@@ -774,15 +851,28 @@ describe('Board desk', () => {
 
     // A HUD board's game is whatever Project Rio is playing, so it has no pool
     // and no playback choice — controls with nothing to act on.
-    it('offers no playback controls on a HUD board', () => {
+    /*
+     * THE POOL IS WHAT EARNS A REGION. A HUD board has one possible game, from
+     * one file — so "Games" carried a badge, a sentence, a re-read and the mode
+     * across four lines and a divider, and its body (../games) was empty. All of
+     * it is on the Game-state rule now and the region is gone.
+     */
+    it('has no Games region on a HUD board — the feed is on the game-state rule', () => {
         useSettingsStore.setState({
             project_rio: { hud_enabled: true },
             production: {},
             scoreboards: { active: [1], aliases: {}, binding: {} },
         });
         ui(<BoardDesk board={1} />);
-        expect(screen.getByText('HUD')).toBeInTheDocument();
-        expect(screen.getByText(/Turn off Follow local HUD on Connections to rebind/)).toBeInTheDocument();
+        expect(screen.queryByText('Games')).not.toBeInTheDocument();
+        expect(screen.queryByText('One game — the local HUD feed.')).not.toBeInTheDocument();
+        // What survived, on the Game state header.
+        const header = screen.getByText('Game state').parentElement;
+        expect(header).toHaveTextContent('HUD');
+        expect(within(header).getByRole('button', { name: /Re-read HUD/ })).toBeInTheDocument();
+        expect(within(header).getByLabelText('Game mode')).toBeInTheDocument();
+        // How to rebind is a tooltip on the badge, not a sentence on the panel.
+        expect(screen.queryByText(/Turn off Follow local HUD/)).not.toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /Find a game/ })).not.toBeInTheDocument();
         expect(screen.queryByRole('radio', { name: 'Rotating' })).not.toBeInTheDocument();
     });
@@ -793,7 +883,7 @@ describe('Board desk', () => {
      * IS that header (GamesSection renders nothing), which is why the badge and
      * the sentence have to live on the desk rather than inside it.
      */
-    it('states the transport and the playback on the Games header rule', () => {
+    it('states the playback on the Games header rule, and the transport above it', () => {
         useSettingsStore.setState({
             project_rio: { hud_enabled: false },
             production: {},
@@ -808,9 +898,12 @@ describe('Board desk', () => {
             match: {},
         });
         ui(<BoardDesk board={1} />);
-        const header = screen.getByText('Games').parentElement;
-        expect(header).toHaveTextContent('API');
-        expect(header).toHaveTextContent('Rotating — 2 in pool.');
+        const games = screen.getByText('Games').parentElement;
+        expect(games).toHaveTextContent('Rotating — 2 in pool.');
+        // The transport is a fact about the GAME, so it rides the game's rule —
+        // an API board keeps its Games region because a pool is a real surface.
+        expect(games).not.toHaveTextContent('API');
+        expect(screen.getByText('Game state').parentElement).toHaveTextContent('API');
     });
 
     // Corrections are broadcast-visible, so they go through the staging gateway;
@@ -837,7 +930,7 @@ describe('Board desk', () => {
             scoreboards: { active: [1], aliases: {}, binding: {} },
         });
         ui(<BoardDesk board={1} />);
-        fireEvent.click(screen.getByRole('button', { name: /Re-read HUD file/ }));
+        fireEvent.click(screen.getByRole('button', { name: /Re-read HUD/ }));
         expect(fetch).toHaveBeenCalledWith('/api/v1/rio/refresh', { method: 'POST' });
         expect(useStagingStore.getState().order).toEqual([]);
     });
@@ -923,8 +1016,12 @@ describe('Board desk', () => {
         expect(hand_back).toHaveAttribute(
             'title', expect.stringContaining('SLICE 2026 Superstars Off'),
         );
-        // Named once: in the callout. The button says the verb, not the mode.
-        expect(screen.getAllByText('SLICE 2026 Superstars Off')).toHaveLength(1);
+        // NOT NAMED ON THE PANEL AT ALL. The amber ring says a hand is on the
+        // picker and the button says how to hand it back; the live mode's name is
+        // long enough to wrap a header on its own and did no work there that the
+        // button's tooltip does not.
+        expect(screen.queryByText('SLICE 2026 Superstars Off')).not.toBeInTheDocument();
+        expect(screen.queryByText(/Overriding/)).not.toBeInTheDocument();
     });
 
     /*
@@ -1065,13 +1162,16 @@ describe('Board desk — post-game', () => {
  * reason a stale board used to be indistinguishable from a live one.
  */
 describe('board lifecycle', () => {
-    const board = (score) => {
+    // `postgame` is named explicitly because zustand's setState MERGES at the top
+    // level: a capture left by an earlier test survives into the next one, and a
+    // capture for this board's game id now decides the lifecycle (../boards).
+    const board = (score, postgame = {}) => {
         useSettingsStore.setState({
             project_rio: { hud_enabled: true },
             production: {},
             scoreboards: { active: [1], aliases: {}, binding: { 1: { playback: { mode: 'single' } } } },
         });
-        useStateStore.setState({ score, match: {} });
+        useStateStore.setState({ score, postgame, match: {} });
     };
 
     it('reads empty, live, final and stranded off the keys each transport writes', () => {
@@ -1083,6 +1183,50 @@ describe('board lifecycle', () => {
         expect(boardLifecycle({ gameId: 'G1', gameCompleted: true })).toBe('final');
         // API: the server stopped polling a game that never finished cleanly.
         expect(boardLifecycle({ gameId: 'G1', liveFollowing: false })).toBe('stranded');
+    });
+
+    /*
+     * THE HUD FEED HAS NO FINAL FRAME. Project Rio stops writing and its last
+     * frame stands, so `game_over` never arrives and a finished local game read
+     * `live` forever — the board sat on "8–8, Bot 6" with the real result
+     * captured directly underneath, saying LIVE, and the turnover bar that exists
+     * for that exact moment never appeared.
+     *
+     * The stat file IS the end-of-game signal for a local board; the server
+     * already builds auto-capture on it (server/postgame_watch.py).
+     */
+    it('takes a capture for this game as the game being over', () => {
+        expect(boardLifecycle({ gameId: 'G1', captured: true })).toBe('final');
+        // It outranks `stranded` too: a parsed final box score is stronger
+        // evidence than the server having stopped polling.
+        expect(boardLifecycle({ gameId: 'G1', captured: true, liveFollowing: false })).toBe('final');
+        expect(boardLifecycle({ gameId: 'G1', captured: false })).toBe('live');
+    });
+
+    it('reads a finished HUD game as final off its capture alone', () => {
+        board(
+            { 1: { game_id: 'G1', inning: 6, half_inning: 'Bottom', player: { 1: { rioName: 'rjb' } } } },
+            { 1: { present: true, gameId: 'G1', capturedBy: 'auto', player: {} } },
+        );
+        ui(<BoardDesk board={1} />);
+        expect(screen.getByText('FINAL')).toBeInTheDocument();
+        expect(screen.queryByText('LIVE')).not.toBeInTheDocument();
+        // ...which is what raises the bar the moment actually calls for.
+        expect(screen.getByRole('button', { name: /Clear game state/ })).toBeInTheDocument();
+    });
+
+    /*
+     * The capture has to be THIS game's. Nothing clears `postgame.{N}` when a new
+     * game starts, so a bare `present` would mark game 2 of a Bo3 final the
+     * instant it kicked off, on game 1's box score.
+     */
+    it('does not let a previous game’s capture end the one on the board', () => {
+        board(
+            { 1: { game_id: 'G2', inning: 2, player: { 1: { rioName: 'rjb' } } } },
+            { 1: { present: true, gameId: 'G1', capturedBy: 'auto', player: {} } },
+        );
+        ui(<BoardDesk board={1} />);
+        expect(screen.getByText('LIVE')).toBeInTheDocument();
     });
 
     it('treats an absent live_following as still following', () => {
@@ -1100,10 +1244,12 @@ describe('board lifecycle', () => {
     it('says where the game got to, and “over” is somewhere a game gets to', () => {
         board({ 1: { game_id: 'G1', inning: 9, half_inning: 'Top', game_over: true, score_left: 6, score_right: 14, player: { 1: { rioName: 'rjb' }, 2: { rioName: 'MattGree' } } } });
         ui(<BoardDesk board={1} />);
-        // Not "Top 9" — true of the last frame, and useless as an answer to
-        // "is this still going".
-        expect(screen.getByText('Final')).toBeInTheDocument();
-        expect(screen.queryByText('Top 9')).not.toBeInTheDocument();
+        // "Top 9" alone was useless as an answer to "is this still going", so it
+        // used to be REPLACED by the word Final — which cost the finished game
+        // the inning it finished in. The chip answers the question; the meta goes
+        // back to being the meta.
+        expect(screen.getByText('FINAL')).toBeInTheDocument();
+        expect(screen.getByText('Top 9')).toBeInTheDocument();
     });
 
     it('offers the clear rather than taking it, and says what the fixture will do', () => {
@@ -1114,9 +1260,12 @@ describe('board lifecycle', () => {
         });
         ui(<BoardDesk board={1} />);
 
-        expect(screen.getByText(/showing a finished game/i)).toBeInTheDocument();
-        expect(screen.getByText(/M4 takes over when the next game loads/)).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /Clear the board/ })).toBeInTheDocument();
+        // The sentence describing the state is gone — the chip on the game row
+        // says it, and the bar spends its width on the three presses instead.
+        expect(screen.getByText('FINAL')).toBeInTheDocument();
+        expect(screen.getByText(/Nothing captured for M4 yet/)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Capture' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Clear game state/ })).toBeInTheDocument();
     });
 
     it('distinguishes a game the feed LOST from one that finished', () => {
@@ -1124,18 +1273,113 @@ describe('board lifecycle', () => {
         // producer may still want to capture by hand.
         board({ 1: { game_id: 'G1', live_following: false, player: { 1: { rioName: 'rjb' } } } });
         ui(<BoardDesk board={1} />);
-        expect(screen.getByText(/feed lost this game/i)).toBeInTheDocument();
-        // Not the finished-game wording. (Scoped to this row's sentence — the
-        // post-game region's "Capture finished game" button is a different
-        // control and legitimately says so.)
-        expect(screen.queryByText(/This board is showing a finished game/i)).not.toBeInTheDocument();
+        // A quit is ENDED, a clean finish is FINAL — we know it is not coming
+        // back, not that it finished. Both still raise the turnover bar, because
+        // a stranded game is exactly where a hand capture is wanted.
+        expect(screen.getByText('ENDED')).toBeInTheDocument();
+        expect(screen.queryByText('FINAL')).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Clear game state/ })).toBeInTheDocument();
+    });
+
+    /*
+     * ONE VERB, ONE NAME, ONE BUTTON. The region's hatch and the bar's press are
+     * the same `resetGame`; naming them the same thing showed that both were on
+     * screen at the end of every game. The bar owns the press while it is part of
+     * a sequence.
+     */
+    it('keeps one clear on the panel when the turnover bar takes it over', () => {
+        board({ 1: { game_id: 'G1', game_over: true, player: { 1: { rioName: 'rjb' } } } });
+        ui(<BoardDesk board={1} />);
+        const clears = screen.getAllByRole('button', { name: /Clear game state/ });
+        expect(clears).toHaveLength(1);
+        // It is the bar's — the Capture beside it is the giveaway.
+        expect(screen.getByRole('button', { name: 'Capture' })).toBeInTheDocument();
+    });
+
+    /*
+     * THE BO1 GAP. The take lived in the fixture slot behind `decided`, which is
+     * the right gate for a Bo3 and the wrong one for the night almost every night
+     * is: the game ends, the match is over in every sense that matters, and the
+     * producer's next press was hidden behind a condition not yet met BECAUSE the
+     * capture that decides the series had not been made.
+     */
+    it('offers the next fixture on a finished game the match has not caught up with', () => {
+        board({ 1: { game_id: 'G1', game_over: true, match: 4, player: { 1: { rioName: 'rjb' } } } });
+        useStateStore.setState({
+            score: useStateStore.getState().score,
+            match: {
+                4: { stage: 'live', player: { 1: {}, 2: {} }, format: { bestOf: 1 } },
+                5: { stage: 'draft', player: { 1: { rioName: 'Cara' }, 2: { rioName: 'Dev' } } },
+            },
+            schedule: { queue: [4, 5] },
+        });
+        ui(<BoardDesk board={1} />);
+        expect(screen.getByRole('button', { name: /Put on board/ })).toBeInTheDocument();
+    });
+
+    /*
+     * ...and exactly one take on the panel. A decided fixture offers its own, in
+     * the slot it is finishing in, and keeps offering it after the board is
+     * cleared — so the bar stands down rather than printing a second.
+     */
+    it('does not print a second take when the fixture is already offering one', () => {
+        board({ 1: { game_id: 'G1', game_over: true, match: 4, player: { 1: { rioName: 'rjb' } } } });
+        useStateStore.setState({
+            score: useStateStore.getState().score,
+            match: {
+                4: { stage: 'post', decided: 1, player: { 1: {}, 2: {} } },
+                5: { stage: 'draft', player: { 1: { rioName: 'Cara' }, 2: { rioName: 'Dev' } } },
+            },
+            schedule: { queue: [4, 5] },
+        });
+        ui(<BoardDesk board={1} />);
+        expect(screen.getAllByRole('button', { name: /Put on board/ })).toHaveLength(1);
+    });
+
+    /*
+     * Capture is what ADVANCES the match and credits the series, so it is the
+     * first of the three presses. Once it has happened the bar shows the receipt
+     * and offers nothing — the stat file usually fires it on its own.
+     */
+    it('shows the capture receipt in place of the capture', () => {
+        board(
+            { 1: { game_id: 'G1', game_over: true, player: { 1: { rioName: 'rjb' } } } },
+            {
+                1: {
+                    present: true, gameId: 'G1', capturedBy: 'auto',
+                    player: { 1: { rioName: 'rjb', score: 6 }, 2: { rioName: 'MattGree', score: 14 } },
+                },
+            },
+        );
+        ui(<BoardDesk board={1} />);
+        expect(screen.getByText('Captured automatically.')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Capture' })).not.toBeInTheDocument();
+        // The box score itself is printed once, by the post-game region below.
+        expect(screen.getAllByText('AUTO')).toHaveLength(1);
+    });
+
+    // A capture from an EARLIER game is not this game's receipt, so the press
+    // stays on offer (../postgame reads the capture's own gameId to tell them
+    // apart).
+    it('still offers the capture when the box score is a previous game’s', () => {
+        board(
+            { 1: { game_id: 'G2', game_over: true, player: { 1: { rioName: 'rjb' } } } },
+            { 1: { present: true, gameId: 'G1', capturedBy: 'auto', player: {} } },
+        );
+        ui(<BoardDesk board={1} />);
+        expect(screen.getByRole('button', { name: 'Capture' })).toBeInTheDocument();
     });
 
     it('says nothing at all while a game is in progress', () => {
         board({ 1: { game_id: 'G1', inning: 4, half_inning: 'Bottom', player: { 1: { rioName: 'rjb' } } } });
         ui(<BoardDesk board={1} />);
-        expect(screen.queryByRole('button', { name: /Clear the board/ })).not.toBeInTheDocument();
+        expect(screen.getByText('LIVE')).toBeInTheDocument();
         expect(screen.getByText('Bot 4')).toBeInTheDocument();
+        // No turnover bar: nothing to capture, nothing to hand over.
+        expect(screen.queryByRole('button', { name: 'Capture' })).not.toBeInTheDocument();
+        // And exactly ONE clear on the panel — the region's own hatch, which is
+        // what the bar stands in for once the game is over.
+        expect(screen.getAllByRole('button', { name: /Clear game state/ })).toHaveLength(1);
     });
 });
 

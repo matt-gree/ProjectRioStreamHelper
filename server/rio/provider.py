@@ -1310,6 +1310,79 @@ class RioGameDataProvider:
                 await StatsTracker.push_stats_to_state(sb, cls._sides_swapped)
 
     @classmethod
+    async def release_sides_override(cls):
+        """Hand the sides back to the cascade — the way out of `manual`.
+
+        Manual outranks every other layer and nothing a producer could press
+        cleared it. `_preserve_player_sides` releases the override on a NEW GAME,
+        or mid-game if a second swap happens to land on exactly what the pin
+        wanted — neither of which is something a producer can ASK for. So a swap
+        made to fix one frame, or made before a fixture was bound, outranked that
+        fixture for the rest of the game with `side_reason` reading `manual`, and
+        the only control on offer was a second swap, which lands on the other
+        wrong answer half the time.
+
+        Serialized with the HUD update path by `_update_lock`, like the toggle it
+        reverses.
+        """
+        async with cls._lock():
+            await cls._release_sides_override_impl()
+
+    @classmethod
+    async def _release_sides_override_impl(cls):
+        if not cls._user_overridden:
+            return
+
+        live = (
+            cls.hud_watcher.latest_game_data
+            if cls.hud_watcher and not cls._feed_released
+            else None
+        )
+        if not live:
+            # No frame to re-orient from — between games, a paused feed, or a
+            # board the producer has cleared by hand. Drop the flag so the next
+            # frame follows the cascade and leave what is on air alone: handing
+            # the sides back is not a request to bring a reset game with it (the
+            # same call `reorient_board` declines to make on a released feed).
+            cls._user_overridden = False
+            logger.info("[RIO] Sides handed back to the cascade (no live frame to re-orient)")
+            return
+
+        parsed = cls.parse_game_data(live)
+        entrants = parsed.get("entrants") or [[{}], [{}]]
+        left = entrants[0][0].get("rioName", "") if entrants[0] else ""
+        right = entrants[1][0].get("rioName", "") if entrants[1] else ""
+
+        # A RELEASE IS NOT A FLIP. The toggle knows every board moves — manual
+        # decides them all the same way — so it carries display identity across
+        # all of them blindly. Here a match-bound board can move while the pinned
+        # board beside it stays exactly where it is, so ask each board what it is
+        # showing now and what the cascade wants instead, and only carry the ones
+        # that actually change.
+        before = {sb: cls._decide(left, right, sb=sb)[0] for sb in cls._hud_targets}
+
+        cls._user_overridden = False
+        # Reseed the manual BASE from the cascade, so the next swap flips from
+        # what is now on air rather than from the orientation just abandoned —
+        # the same reseed `_preserve_player_sides` does on a new game.
+        cls._sides_swapped, _ = cls._decide(left, right, sb=None, allow_manual=False)
+        after = {sb: cls._decide(left, right, sb=sb)[0] for sb in cls._hud_targets}
+        logger.info(
+            f"[RIO] Sides handed back to the cascade, sides_swapped={cls._sides_swapped}"
+        )
+
+        # Carry a manually-typed name for an UNREGISTERED player with its side,
+        # before the re-apply rewrites the game-derived fields around it.
+        for sb in cls._hud_targets:
+            if before.get(sb) != after.get(sb):
+                await cls._swap_display_identity(sb)
+
+        parsed = cls._preserve_player_sides(parsed)
+        swaps = await cls._apply_game_to_state(parsed)
+        for sb in cls._hud_targets:
+            await StatsTracker.push_stats_to_state(sb, swaps.get(sb, cls._sides_swapped))
+
+    @classmethod
     async def _swap_display_identity(cls, sb: int) -> None:
         """Swap only the display-identity fields (name/team/full_name/pronoun/
         country/state/twitter/youtube) between the two sides of a board.

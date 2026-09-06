@@ -427,13 +427,23 @@ export const ColorRow = memo(function ColorRow({
     );
 });
 
-// 1–3 equal-width buttons — push, replay/spotlight/split, capture.
-// Each action: { label, icon?, onClick, disabled?, variant?, title?, className? }.
-// `className` tints ONE action without promoting it to a different button size
-// or layout — the destructive-outline reset beside a plain sibling.
-export const ActionRow = memo(function ActionRow({ actions = [], className }) {
+/*
+ * 1–3 equal-width buttons — push, replay/spotlight/split, capture.
+ * Each action: { label, icon?, onClick, disabled?, variant?, title?, className? }.
+ * `className` tints ONE action without promoting it to a different button size
+ * or layout — the destructive-outline clear beside a plain sibling.
+ *
+ * `fit` sizes the buttons to their LABELS instead, left-aligned. Equal widths
+ * are right on a rail card or a narrow stage panel, where three buttons filling
+ * the row read as one segmented control. They stop being right the moment the
+ * surface is wide: on the board desk a lone Clear stretched the full ~1200px of
+ * the panel and the two post-game buttons took 600px each, so the region that
+ * ends a game read as a stack of banners rather than a few controls. Reach for
+ * `fit` on a full-width region, and leave it off in a column.
+ */
+export const ActionRow = memo(function ActionRow({ actions = [], fit, className }) {
     return (
-        <div className={cn(ROW, className)}>
+        <div className={cn(ROW, fit && 'flex-wrap', className)}>
             {actions.slice(0, 3).map(({
                 label, icon: Icon, onClick, disabled, variant = 'secondary', title,
                 className: actionClassName,
@@ -441,7 +451,7 @@ export const ActionRow = memo(function ActionRow({ actions = [], className }) {
                 <Button
                     key={label} size="xs" variant={variant} disabled={disabled}
                     onClick={onClick} title={title}
-                    className={cn('h-7 min-w-0 flex-1', actionClassName)}
+                    className={cn('h-7 min-w-0', fit ? 'shrink-0' : 'flex-1', actionClassName)}
                 >
                     {Icon && <Icon />}
                     <span className="truncate">{label}</span>
@@ -493,7 +503,7 @@ export const FieldRow = memo(function FieldRow({ label, staged, stacked, childre
  * label · segmented control — plates mode and friends.
  *
  * `fill` (default) stretches the control across the row, for a segmented that is
- * the SUBJECT of what follows it: the plates mode, a lower-third slot's type.
+ * the SUBJECT of what follows it: the plates source, a lower-third slot's type.
  * `fill={false}` sizes it to its options, for one value among a list of them —
  * an overlay style setting, where a stretched control is the widest and loudest
  * thing on a panel of set-once knobs, and the chosen segment ends up an inch
@@ -657,7 +667,12 @@ export function KitColumn({ label, subject, action, children, className }) {
     return (
         <div className={cn('flex min-w-0 flex-col gap-1.5', className)}>
             {(label != null || subject || action) && (
-                <div className="flex min-h-6 items-center gap-2">
+                // WRAPS. A region's rule can carry a real control group now (the
+                // board's feed — badge, mode picker, re-read — beside its sides),
+                // and on a narrow panel a nowrap row truncated the subject to
+                // "Sides from the bo…" rather than taking a second line. Wrapping
+                // costs nothing on a rule with room.
+                <div className="flex min-h-6 flex-wrap items-center gap-x-2 gap-y-1">
                     {label != null && (
                         <Text size="xs" className="label-display shrink-0 text-muted-foreground">{label}</Text>
                     )}

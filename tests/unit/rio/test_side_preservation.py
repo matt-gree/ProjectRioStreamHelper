@@ -193,6 +193,114 @@ async def test_toggle_sets_swap_and_override_flags():
     assert P._user_overridden is True   # override stays set on every manual swap
 
 
+# --- Handing the sides back (the way out of `manual`) ---
+#
+# Manual outranks every other layer and had no exit a producer could reach: it
+# cleared on a new game, or mid-game if a SECOND swap happened to land on what
+# the pin already wanted. So a swap made before a fixture was bound outranked
+# that fixture for the rest of the game.
+
+async def _release_with(monkeypatch, parsed, watcher=True):
+    """Run a release against `parsed` as the cached frame; return applied frames."""
+    applied = []
+    # Mid-game: a frame the state machine reads as a NEW one clears the override
+    # on its own (and reseeds the base), which is not what is under test here.
+    P._prev_inning = parsed.get("inning", 1)
+    P.hud_watcher = _FakeWatcher(_hud_frame()) if watcher else None
+    monkeypatch.setattr(P, "parse_game_data", classmethod(lambda cls, raw: dict(parsed)))
+    monkeypatch.setattr(P, "_apply_game_to_state", classmethod(
+        lambda cls, frame: _record(applied, frame)))
+    await P.release_sides_override()
+    return applied
+
+
+async def test_release_hands_the_sides_back_to_the_cascade(monkeypatch, pin_player):
+    pin_player("A", 1)                       # the pin wants no swap
+    P._hud_targets = [1]
+    P._prev_inning = 3                       # mid-game (see _release_with)
+    P.hud_watcher = _FakeWatcher(_hud_frame())
+    monkeypatch.setattr(P, "parse_game_data",
+                        classmethod(lambda cls, raw: make_parsed("A", "B", inning=3)))
+    monkeypatch.setattr(P, "_apply_game_to_state", classmethod(lambda cls, f: _dict()))
+
+    await P.toggle_sides_swapped()
+    assert P._decide("A", "B") == (True, "manual")
+
+    await P.release_sides_override()
+    assert P._user_overridden is False
+    assert P._decide("A", "B") == (False, "pin")
+
+
+async def test_release_reseeds_the_manual_base_from_the_cascade(monkeypatch, pin_player):
+    """The next swap has to flip from what is ON AIR, not from the orientation
+    just abandoned — otherwise the first press after a release does nothing."""
+    pin_player("A", 1)                       # cascade says False
+    P._hud_targets = [1]
+    P._user_overridden = True
+    P._sides_swapped = True                  # manual said True
+    applied = await _release_with(monkeypatch, make_parsed("A", "B", inning=3))
+
+    assert P._sides_swapped is False
+    assert len(applied) == 1                 # and the frame was re-seated
+
+
+async def test_release_is_a_no_op_when_nothing_is_overridden(monkeypatch):
+    applied = await _release_with(monkeypatch, make_parsed("A", "B", inning=3))
+    assert applied == []
+    assert P._user_overridden is False
+
+
+async def test_release_without_a_frame_drops_the_flag_and_leaves_the_board(monkeypatch):
+    P._hud_targets = [1]
+    P._user_overridden = True
+    P._sides_swapped = True
+    applied = await _release_with(monkeypatch, make_parsed("A", "B"), watcher=False)
+
+    assert P._user_overridden is False
+    assert applied == []
+    # Nothing to decide against, so the base is left where the producer put it.
+    assert P._sides_swapped is True
+
+
+async def test_release_on_a_released_feed_does_not_bring_the_game_back(monkeypatch):
+    """Same rule the swap learned in 2026-08: the cached frame outlives a hand
+    reset for the re-read's sake, and no other path may re-seat it."""
+    P._hud_targets = [1]
+    P._user_overridden = True
+    P.release_feed()
+    applied = await _release_with(monkeypatch, make_parsed("A", "B", inning=3))
+
+    assert P._user_overridden is False
+    assert applied == []
+
+
+async def test_release_carries_display_identity_only_on_the_boards_that_move(
+    monkeypatch, pin_player,
+):
+    """A release is not a flip. Manual decides every board the same way, so the
+    toggle carries identity across all of them; the cascade underneath can hand
+    one board to a match and leave the board beside it exactly where it was."""
+    pin_player("A", 1)                       # unbound boards: no swap
+    # Board 2 is match-bound and the fixture wants the other order.
+    monkeypatch.setattr(Match, "orientation_for_sides",
+                        classmethod(lambda cls, sb, l, r: True if sb == 2 else None))
+    P._hud_targets = [1, 2]
+    P._user_overridden = True
+    P._sides_swapped = True                  # both boards currently swapped
+
+    carried = []
+    monkeypatch.setattr(P, "_swap_display_identity",
+                        classmethod(lambda cls, sb: _note(carried, sb)))
+    await _release_with(monkeypatch, make_parsed("A", "B", inning=3))
+
+    # Board 1 goes True → False (the pin). Board 2 stays True (the match).
+    assert carried == [1]
+
+
+async def _note(sink, sb):
+    sink.append(sb)
+
+
 # --- Released feed (hand reset vs the cached frame) ---
 #
 # `hud_watcher.latest_game_data` outlives a hand reset on purpose — the re-read

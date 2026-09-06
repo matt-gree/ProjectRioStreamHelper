@@ -19,7 +19,6 @@ import { useAssetUrls } from '../../../lib/assets';
 import { HALF_INNINGS, ROSTER_SIZE } from '../../../data/msb';
 import { STADIUM_OPTIONS } from '../../../data/stadiums';
 import { ActionRow, FieldRow, KitColumn, KitColumns, TextRow, ToggleChip } from '../kit';
-import { BoardGameSubject } from '../subject';
 import { GamesSection } from '../games';
 import PostGameSection, { PostGameSubject, usePostGame } from '../postgame';
 import { useBoardQueueId, useNextUp, useQueues } from '../queue';
@@ -123,27 +122,25 @@ const poolSize = (ids) => (Array.isArray(ids) ? ids.length : 0);
  * explaining at all.
  */
 const SIDE_REASON = {
-    manual: 'set by hand for this game',
+    manual: 'set by hand',
     match: 'from the bound match',
     pin: 'pinned in the Address Book',
-    back_to_back: 'where they were last game',
+    back_to_back: 'as they were last game',
 };
 
 /*
- * Why side 1 is where it is. `where` is side 1's label in the producer's chosen
- * vocabulary (../sides), passed in rather than looked up so this stays a pure
- * function the test can call directly.
+ * WHICH LAYER SEATED THE SIDES — three words on the region’s own eyebrow.
  *
- * The sentence used to be "Alice on the left — pinned in Settings", which
- * hard-coded an arrangement into the one line whose whole job is explaining a
- * side assignment. It now names the side the same way the column above it does
- * — and the pin it points at is a person's own, not the app's (../../player_list).
+ * It was a sentence one tier under the subject: "Alice on the left — pinned in
+ * Settings", later "Alice on side 1 — pinned in the Address Book". Two of its
+ * three parts were already drawn larger a few pixels below, in the mirror: which
+ * player is on which side is the whole point of that graphic, and repeating it
+ * in prose is how a panel gets read as wordy. What the mirror CANNOT show is the
+ * only part worth keeping — why the order is what it is — so that is all that is
+ * left, and it rides the header rule beside the controls that change it.
  */
-export function sideReasonLine(reason, name1, where = 'side 1') {
-    const why = SIDE_REASON[reason];
-    if (!why) return null;
-    const who = name1 || 'Side 1';
-    return `${who} on ${where} — ${why}`;
+export function sideReasonPhrase(reason) {
+    return SIDE_REASON[reason] || null;
 }
 
 /*
@@ -211,7 +208,7 @@ const TakeNextButton = memo(function TakeNextButton({ sb, label }) {
         <Button
             size="xs" variant="secondary" className="h-7 shrink-0"
             onClick={take} disabled={taking}
-            title={`Put ${label} on this board — the next fixture in the queue`}
+            title={`Put ${label} on this board — the next match in the queue`}
         >
             <SkipForward size={12} className="mr-1 shrink-0" />
             Put on board
@@ -220,6 +217,22 @@ const TakeNextButton = memo(function TakeNextButton({ sb, label }) {
 });
 
 /*
+ * THE FEED — where this board's game comes from and what mode it is being
+ * fetched as. Rides the Game-state header rule, beside the sides.
+ *
+ * IT WAS A REGION OF ITS OWN AND ON A HUD BOARD THAT REGION HAD NOTHING IN IT.
+ * "Games" carried a transport badge, a sentence, a re-read button and a mode
+ * picker across four lines, and ../games returns nothing for a HUD board — so a
+ * board with exactly one possible game, from exactly one file, spent a labelled
+ * region and a divider saying so. The pool surface (playback, filters, the game
+ * table) is what earns a region; a transport with no choice in it does not.
+ *
+ * The mode moved with it because it is not a board property either. It is the
+ * binding (`scoreboards.binding.{N}.stats_tag`) and it decides the tag every
+ * stats fetch for this board goes out under, which qualifies the game the mirror
+ * below is drawing — so it belongs on that region's rule, not floating above a
+ * header of its own.
+ *
  * GAME MODE, with the override called out.
  *
  * A picked mode is an OVERRIDE and behaves like `rioName_override`: it wins, it
@@ -247,42 +260,184 @@ const TakeNextButton = memo(function TakeNextButton({ sb, label }) {
  * can always say what it holds even when neither list has caught up with the
  * feed.
  */
-const ModeRow = memo(function ModeRow({ d, gameModes, stats }) {
+const ModeRow = memo(function ModeRow({ d, gameModes, stats, refreshHud, refreshing }) {
     const diverged = d.statsTagManual && !!d.liveMode && d.liveMode !== d.statsTag;
     const options = useMemo(
         () => withHeldModes(gameModes, d.statsTag, d.liveMode),
         [gameModes, d.statsTag, d.liveMode],
     );
     return (
-        <div className="flex min-w-0 flex-col gap-1">
-            <FieldRow label="Game mode">
-                <Combobox
-                    placeholder="Select game mode"
-                    data={options}
-                    value={d.statsTag || null}
-                    onChange={d.setStatsTag}
-                    clearable
-                    className={cn(
-                        'h-7 min-w-0 flex-1 text-xs',
-                        d.statsTagManual && 'border-amber-400 ring-1 ring-amber-400/40',
-                    )}
-                />
-                <StatsDiagnostics stats={stats} />
-            </FieldRow>
+        <>
+            {/* WHERE THE GAME COMES FROM, beside the game. The badge is the
+                DERIVED transport — board 1 carries the local HUD iff the global
+                toggle is on, every other board is API, no picker ever — and how
+                to change that is a tooltip on it rather than a clause appended to
+                a sentence, because it is wanted about once and read forever. */}
+            <SimpleTooltip
+                label={d.transport === 'hud'
+                    ? 'One game, from Project Rio’s local HUD file. Board 1 carries it while Follow local HUD is on — turn that off on Connections to rebind this board.'
+                    : 'Games come from the Project Rio API. Only board 1 can carry the local HUD.'}
+            >
+                <Badge className={cn(
+                    'shrink-0 text-[11px] font-semibold uppercase tracking-wider',
+                    d.transport === 'hud'
+                        ? 'bg-[#22c55e]/15 text-[#4ade80]'
+                        : 'bg-[#3b82f6]/15 text-[#60a5fa]',
+                )}>
+                    {d.transport === 'hud' ? 'HUD' : 'API'}
+                </Badge>
+            </SimpleTooltip>
+            <Combobox
+                aria-label="Game mode"
+                placeholder="Select game mode"
+                data={options}
+                value={d.statsTag || null}
+                onChange={d.setStatsTag}
+                clearable
+                className={cn(
+                    // Wide enough for the longest season name PRSH has seen
+                    // ("SLICE 2026 Superstars Off") and no wider.
+                    'h-7 w-64 min-w-0 shrink text-xs',
+                    d.statsTagManual && 'border-amber-400 ring-1 ring-amber-400/40',
+                )}
+            />
+            <StatsDiagnostics stats={stats} />
+            {/* THE OVERRIDE IS A RING AND ONE BUTTON, not a second line under the
+                picker saying "Overriding X". The amber ring already says a hand is
+                on it and the button says how to hand it back — the mode's name
+                lives in that button's tooltip, which is the only place it was
+                doing any work. Same shape as the sides' Use auto. */}
             {diverged && (
-                <div className="flex min-w-0 items-center gap-x-2 pl-16 @lg:pl-32">
-                    <Text size="xs" span truncate className="min-w-0 flex-1 text-amber-500/90">
-                        Overriding <span className="font-medium">{d.liveMode}</span>
-                    </Text>
-                    <Button
-                        size="xs" variant="ghost" className="h-6 shrink-0"
-                        onClick={d.useLiveMode}
-                        title={`Use ${d.liveMode} — the mode this game is being played in`}
-                    >
-                        Use live
-                    </Button>
-                </div>
+                <Button
+                    size="xs" variant="ghost" className="h-6 shrink-0"
+                    onClick={d.useLiveMode}
+                    title={`Use ${d.liveMode} — the mode this game is being played in`}
+                >
+                    Use live
+                </Button>
             )}
+            {/* THE RECOVERY PATH AFTER A CLEAR OR A HAND EDIT — the only way to
+                put Project Rio's game back on a board the producer has blanked, so
+                it says what it does. It was a bare ↻ beside a badge, which reads
+                as "refresh this readout". */}
+            {d.transport === 'hud' && (
+                <Button
+                    variant="ghost" size="xs"
+                    className="h-6 shrink-0 gap-1.5"
+                    onClick={refreshHud} disabled={refreshing}
+                    title="Read decoded.hud.json again and put what Project Rio is showing back on this board"
+                >
+                    {refreshing ? <Loader size={12} /> : <RotateCw size={13} />}
+                    Re-read HUD
+                </Button>
+            )}
+        </>
+    );
+});
+
+/*
+ * THE GAME SLOT — the board's first clock, in the same shape as its second.
+ *
+ * A board runs TWO clocks and the panel drew them as different kinds of thing.
+ * The game (score.{N}: empty → live → final/stranded, feed-owned, watched) was a
+ * bare line of text; the match (match.{M}: draft → live → post, producer-owned,
+ * driven) was a bordered slot with an id chip, both players and the round. Same
+ * subject, two registers, so the pair never read as the two halves of one
+ * question — which is most of why the game state was described as "hidden".
+ *
+ * One shape now, twice: chip · side · score · side · where it is up to.
+ *
+ * WHERE THE GAME IS UP TO MOVES TO THE CHIP, and the meta goes back to being the
+ * inning. It used to be the other way round — `Final` and `Ended` were printed
+ * IN the meta slot, replacing the inning — so the one row that answers "is this
+ * still going" answered it in the same dimmed type as "Top 5", and a finished
+ * game lost the inning it finished in. LIVE is not on the console's status
+ * palette (emerald AIR · sky PVW · rio DESK · amber staged, see ../kit/chip):
+ * this is a neutral pill, the same one the fixture slot spends on `M2`, because
+ * a sixth meaning in a spoken-for hue costs more than it buys.
+ */
+/*
+ * THE CHIP CARRIES THE STATE IN COLOUR, and this is the one place on the console
+ * that is allowed to. The status palette (emerald AIR · sky PVW · rio DESK ·
+ * amber staged, ../kit/chip) describes what a SOURCE contributes to the
+ * broadcast; a game's lifecycle is a different axis entirely, it is never drawn
+ * beside a `StateChip`, and the words do not overlap — nobody reads "LIVE" in
+ * front of a score as "enabled in the program scene". It keeps the flat label
+ * shape rather than borrowing `StateChip`'s bordered, glowing, fixed-width pill,
+ * so the two are still told apart at a glance.
+ *
+ * Amber on ENDED is deliberate reuse, not a collision: amber means "you'd want
+ * to know before this is on air" everywhere else in the console, and a feed that
+ * lost its game is exactly that. FINAL is the calm one — a game ending is the
+ * expected outcome, not an alert — but it reads at full strength, because it is
+ * the state the producer acts on.
+ */
+const GAME_STAGE = {
+    live: {
+        label: 'LIVE', title: 'A feed is writing this board',
+        className: 'bg-emerald-500/15 text-emerald-300',
+    },
+    final: {
+        label: 'FINAL', title: 'The game reached its end',
+        className: 'bg-foreground/10 text-foreground',
+    },
+    stranded: {
+        label: 'ENDED', title: 'The feed lost this game — it won’t update again',
+        className: 'bg-amber-500/15 text-amber-300',
+    },
+};
+
+const SlotChip = ({ children, title, className }) => (
+    <span
+        title={title || undefined}
+        className={cn(
+            'label-display shrink-0 rounded px-1 text-[10px] tracking-wider',
+            className || 'bg-secondary text-muted-foreground',
+        )}
+    >
+        {children}
+    </span>
+);
+
+const GameSlot = memo(function GameSlot({ d, lifecycle }) {
+    const { label } = useSideLabels();
+    const { g } = d;
+    const shell = 'flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-2 py-1.5';
+
+    if (!g.name1 && !g.name2) {
+        return (
+            <div className={cn(shell, 'border-dashed border-border/50')}>
+                <SlotChip title="Nothing has loaded onto this board">NO GAME</SlotChip>
+                <Text size="xs" dimmed className="min-w-0 flex-1 truncate">
+                    {d.transport === 'hud'
+                        ? 'Waiting for Project Rio to write a game.'
+                        : 'Waiting for a game from this board’s pool.'}
+                </Text>
+            </div>
+        );
+    }
+
+    /*
+     * NO CHIP, NO INNING. `lifecycle` is `empty` exactly when the board carries
+     * no `game_id`, and a fixture projected onto a board with no game populates
+     * both names while `inning` defaults to 1 — so an unstarted match would have
+     * read "Top 1", which is a frame that has not happened.
+     */
+    const stage = GAME_STAGE[lifecycle];
+    const where = stage
+        ? `${(g.halfInning || 'Top') === 'Top' ? 'Top' : 'Bot'} ${g.inning}`
+        : null;
+    return (
+        <div className={cn(shell, 'border-border/60 bg-secondary/30')}>
+            {stage && (
+                <SlotChip title={stage.title} className={stage.className}>{stage.label}</SlotChip>
+            )}
+            <span className="min-w-0 flex-1 truncate text-sm">{g.name1 || label(1)}</span>
+            <span className="shrink-0 text-sm tabular-nums text-muted-foreground">
+                {g.scoreLeft ?? 0}–{g.scoreRight ?? 0}
+            </span>
+            <span className="min-w-0 flex-1 truncate text-right text-sm">{g.name2 || label(2)}</span>
+            {where && <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{where}</span>}
         </div>
     );
 });
@@ -344,6 +499,15 @@ const FixtureSlot = memo(function FixtureSlot({ sb, matchId, match, conflict }) 
     if (bound) {
         const w1 = num(match?.series?.[1] ?? match?.series?.['1'], 0);
         const w2 = num(match?.series?.[2] ?? match?.series?.['2'], 0);
+        /*
+         * THE SERIES IS ONLY NEWS IN A SERIES. `default_match()` is
+         * `{"bestOf": 1}` and a Bo1 night is what almost every night is, where
+         * this cell reads 0–0 for the whole match and then 1–0 once the capture
+         * lands — a number that says nothing the row above it does not, in the
+         * middle of the two names, which is the widest thing a Bo1 slot prints.
+         * A Bo3 needs it and keeps it.
+         */
+        const series = num(match?.bestOf, 1) > 1;
         const round = [match?.label, match?.phase].filter(Boolean).join(' · ');
         /*
          * WHEN IS A FIXTURE DONE? `decided`, never `stage` — the server only ever
@@ -388,9 +552,13 @@ const FixtureSlot = memo(function FixtureSlot({ sb, matchId, match, conflict }) 
                 )}>
                     {match?.name1 || 'Side 1'}
                 </span>
-                <span className="shrink-0 text-sm tabular-nums text-muted-foreground">
-                    {w1}–{w2}
-                </span>
+                {series ? (
+                    <span className="shrink-0 text-sm tabular-nums text-muted-foreground">
+                        {w1}–{w2}
+                    </span>
+                ) : (
+                    <span className="shrink-0 text-xs text-muted-foreground/60">vs</span>
+                )}
                 <span className={cn(
                     'min-w-0 flex-1 truncate text-right text-sm',
                     done && match.decided !== 2 ? 'text-muted-foreground' : 'text-foreground',
@@ -429,7 +597,7 @@ const FixtureSlot = memo(function FixtureSlot({ sb, matchId, match, conflict }) 
                 <SimpleTooltip
                     label={stagedOff
                         ? 'Staged: this board hands back to its own feed on the next confirm'
-                        : `Take Match ${matchId} off this board — the fixture keeps its series`}
+                        : `Take Match ${matchId} off this board — it keeps its series`}
                 >
                     <button
                         type="button"
@@ -453,9 +621,16 @@ const FixtureSlot = memo(function FixtureSlot({ sb, matchId, match, conflict }) 
                 * A decided fixture stays bound — deliberately, since only a new
                 * game between different players auto-retires one — so the board
                 * sat on a finished match with the take hidden behind an unbind the
-                * producer had to know to press first. Both moves live here now,
-                * and taking the next fixture needs no unbind: `bind_board`
-                * overwrites `score.{N}.match`, so Put on board IS the handover.
+                * producer had to know to press first. Taking the next fixture
+                * needs no unbind: `bind_board` overwrites `score.{N}.match`, so
+                * Put on board IS the handover.
+                *
+                * THERE IS EXACTLY ONE TAKE ON THE PANEL AT A TIME. This is the
+                * FIXTURE's end of life and holds while the board is empty; the
+                * turnover bar's is the GAME's, for the Bo1 whose match is not
+                * decided yet because the capture that decides it has not been
+                * made — so the bar stands its take down whenever this one is up
+                * (see TurnoverBar `fixtureDone`).
                 */}
               {done && (
                 <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 border-t border-border/50 pt-1.5">
@@ -490,10 +665,10 @@ const FixtureSlot = memo(function FixtureSlot({ sb, matchId, match, conflict }) 
         return (
             <div className={shell('border-dashed border-border/50')}>
                 <span className="label-display shrink-0 text-[10px] tracking-wider text-muted-foreground/70">
-                    NO FIXTURE
+                    NO MATCH
                 </span>
                 <Text size="xs" dimmed className="min-w-0 flex-1 truncate">
-                    This board rotates a pool — a fixture needs a single-game board.
+                    This board rotates a pool — a match needs a single-game board.
                 </Text>
             </div>
         );
@@ -517,7 +692,7 @@ const FixtureSlot = memo(function FixtureSlot({ sb, matchId, match, conflict }) 
     return (
         <div className={shell('border-dashed border-border/50')}>
             <span className="label-display shrink-0 text-[10px] tracking-wider text-muted-foreground/70">
-                NO FIXTURE
+                NO MATCH
             </span>
             <Text size="xs" dimmed className="min-w-0 flex-1 truncate">
                 Nothing waiting in the running order — add one on the Match desk.
@@ -544,7 +719,7 @@ const BoardQueueRow = memo(function BoardQueueRow({ sb }) {
     const setItem = useSettingsStore(s => s.setItem);
     if (queues.length <= 1) return null;
     return (
-        <FieldRow label="Fixtures from">
+        <FieldRow label="Matches from">
             <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                 {queues.map(q => (
                     <Button
@@ -555,7 +730,7 @@ const BoardQueueRow = memo(function BoardQueueRow({ sb }) {
                         aria-checked={q.id === current}
                         onClick={() => stageOrRun({
                             key: `board:${sb}:match_queue`,
-                            label: `Board ${sb}: take fixtures from ${q.title || q.id}`,
+                            label: `Board ${sb}: take matches from ${q.title || q.id}`,
                             value: q.id,
                             liveValue: current,
                             run: () => setItem(`scoreboards.match_queue.${sb}`, q.id),
@@ -699,6 +874,28 @@ export function useBoardDesk(sb) {
 
     const hudEnabled = useSettingsStore(s => s?.project_rio?.hud_enabled);
     const transport = (Number(sb) === 1 && hudEnabled !== false) ? 'hud' : 'api';
+    /*
+     * IS A FEED WRITING THIS BOARD RIGHT NOW.
+     *
+     * Every cell of the mirror below — the runs, the inning, the count, the
+     * stadium — is in the per-frame `SetBatch` (`apply_parsed_game_to_state`), so
+     * over a live game a typed correction survives until the next frame and no
+     * longer. The panel offered eight editable numbers that could not be edited,
+     * and a producer found out by watching one snap back.
+     *
+     * INERT, NOT GREYED (`FEED_OWNED`). The first cut let the disabled styling
+     * through and it dulled the count dots, which are the one part of this panel
+     * that carries meaning in colour — three coloured counts is how a producer
+     * reads the at-bat at a glance, and fading them to say "the feed owns these"
+     * spends the signal to make a footnote. Nothing announces the state at all:
+     * the controls simply don't take input, which is the whole of what there is
+     * to know.
+     *
+     * Overrides are the exception and stay live in both states — a name
+     * (`rioName_override`), which side is home, and the swap all outrank the feed
+     * by design.
+     */
+    const feedLive = useBoardLifecycle(sb) === 'live';
     const statsTag = useSettingsStore(
         s => s?.scoreboards?.binding?.[sb]?.stats_tag
             ?? s?.scoreboards?.binding?.[String(sb)]?.stats_tag
@@ -774,6 +971,7 @@ export function useBoardDesk(sb) {
             label: rec.label,
             phase: rec.phase,
             series: rec.series,
+            bestOf: num(rec?.format?.bestOf, 1),
             // `decided` is the FIXTURE's finished test, never `stage` — a Bo3 sits
             // at stage `post` between games and is still the current fixture. Both
             // travel, because the slot says something different about each.
@@ -851,6 +1049,27 @@ export function useBoardDesk(sb) {
     });
 
     /*
+     * Hand the sides back to the cascade — the "clear the override" half of the
+     * swap, the same shape as `useLiveMode` under the game mode.
+     *
+     * `manual` is the top layer of the side cascade and was the only one with no
+     * way out: the server cleared it on a NEW GAME, or mid-game if a second swap
+     * happened to land on exactly what the pin already wanted. So a swap made to
+     * fix one frame — or made before a fixture was bound — outranked that fixture
+     * for the rest of the game, and the only control on offer was another swap,
+     * which lands on the other wrong answer half the time.
+     *
+     * HUD-only, like the swap it reverses: the override is a server flag over the
+     * HUD feed, and an API board's swap is a plain state write that never sets it.
+     */
+    const releaseSides = () => stageOrRun({
+        key: `board:${sb}:sides_release`,
+        label: `Board ${sb}: sides back to auto`,
+        value: true,
+        run: () => fetch('/api/v1/rio/swap/release', { method: 'POST' }).catch(() => {}),
+    });
+
+    /*
      * Blank the board back to a resting game. The key list here is the contract
      * `tests/unit/rio/test_state_completeness.py` pins: every key a live game
      * writes has to appear, or a reset leaves stale data on air.
@@ -862,8 +1081,11 @@ export function useBoardDesk(sb) {
      * feed back on the board on its own.
      */
     const resetGame = () => stageOrRun({
+        // The staging KEY stays `reset` — it is an id, and the Match desk and the
+        // quick face stage against it — but what a producer reads in the confirm
+        // buffer is the verb printed on the button they pressed.
         key: `board:${sb}:reset`,
-        label: `Board ${sb}: reset game state`,
+        label: `Board ${sb}: clear game state`,
         value: true,
         run: () => {
             if (transport === 'hud') {
@@ -950,16 +1172,83 @@ export function useBoardDesk(sb) {
     };
 
     return {
-        sb, base, transport, statsTag, statsTagManual, liveMode, playback, poolCount,
+        sb, base, transport, feedLive, statsTag, statsTagManual, liveMode, playback, poolCount,
         g, boundMatch, clearAtBatState,
-        val, isStaged, setField, swapSides, resetGame, setNameOverride, setStatsTag,
-        useLiveMode,
+        val, isStaged, setField, swapSides, releaseSides, resetGame, setNameOverride,
+        setStatsTag, useLiveMode,
     };
 }
 
+/*
+ * THE SIDES, ON THE GAME-STATE EYEBROW — which layer seated them, and the two
+ * controls that change it.
+ *
+ * Sides were spread across three places: a prose line above the mirror naming
+ * the layer, a "Swap sides" button at the bottom of the region beside Reset, and
+ * nothing at all for getting out of a manual swap. The layer, the flip and the
+ * release are one subject, so they read as one row on the rule of the region
+ * they govern — and the mirror underneath is what actually SHOWS the result, so
+ * nothing here repeats a player name.
+ *
+ * The override pair is the same idiom as the game mode's (see ModeRow): amber
+ * says a hand is on it, and one ghost button hands it back.
+ */
+const SidesControl = memo(function SidesControl({ d, reason, transport }) {
+    const manual = reason === 'manual';
+    const phrase = sideReasonPhrase(reason);
+    // Only the HUD feed carries the server-side override, so only a HUD board
+    // can be handed back (see releaseSides).
+    const releasable = manual && transport === 'hud';
+    return (
+        <>
+            {phrase && (
+                <Text
+                    size="xs" span truncate
+                    className={cn('min-w-0', manual ? 'text-amber-500/90' : 'text-muted-foreground')}
+                >
+                    Sides {phrase}
+                </Text>
+            )}
+            {releasable && (
+                <Button
+                    size="xs" variant="ghost"
+                    className={cn('h-6 shrink-0', d.isStaged('sides_release') && 'text-amber-400')}
+                    onClick={d.releaseSides}
+                    title="Let the bound match, an Address Book pin or the last game decide"
+                >
+                    Use auto
+                </Button>
+            )}
+            <Button
+                size="xs" variant="outline"
+                className={cn('h-6 shrink-0', d.isStaged('swap') && 'border-amber-400/60 text-amber-400')}
+                onClick={d.swapSides}
+            >
+                Swap sides
+            </Button>
+        </>
+    );
+});
+
+/*
+ * A control the feed owns: it takes no input and looks no different. The shared
+ * primitives all carry `disabled:opacity-50` (and a not-allowed cursor), which is
+ * right for a control that is unavailable and wrong for one that is simply not
+ * yours to type in — see `feedLive`.
+ */
+const FEED_OWNED = 'disabled:opacity-100 disabled:cursor-default';
+
 // The count dots. Clicking the last filled dot clears it, so B/S/O never needs
 // a separate decrement.
-const CountDots = memo(function CountDots({ label, count, max, hex, onChange }) {
+//
+// THE TERMINAL VALUE OF A COUNT IS NEVER DRAWN — three balls, two strikes, two
+// outs. A fourth ball is a walk, a third strike and a third out are the end of
+// something: each resets the count rather than lighting a dot, so a dot for it
+// is a state the board can never be in. The overlay has always been 3/2/2
+// (`scoreboard-mount.js`, and the theme SVGs carry only `ball-0..2`,
+// `strike-0..1`, `out-0..1`); the desk drew 4/3/3, so a producer correcting a
+// count here was offered a value the card could not show.
+const CountDots = memo(function CountDots({ label, count, max, hex, onChange, disabled }) {
     return (
         <div className="flex items-center gap-1">
             <span className="w-3 text-center text-[11px] font-bold leading-none text-muted-foreground">{label}</span>
@@ -969,9 +1258,12 @@ const CountDots = memo(function CountDots({ label, count, max, hex, onChange }) 
                     <button
                         key={i}
                         type="button"
+                        disabled={disabled}
                         aria-label={`${label} ${i + 1}`}
                         onClick={() => onChange(filled && i === count - 1 ? count - 1 : i + 1)}
-                        className="size-3 shrink-0 rounded-full transition-all"
+                        // The dots draw their own colour inline, so there is
+                        // nothing to undo here — only the cursor.
+                        className="size-3 shrink-0 rounded-full transition-all disabled:cursor-default"
                         style={{
                             backgroundColor: filled ? hex : 'transparent',
                             border: `2px solid ${hex}`,
@@ -1317,27 +1609,41 @@ const ScoreBox = memo(function ScoreBox({ side, d }) {
             aria-label={`Score — ${label(side)}`}
             value={d.val(field, live)}
             onChange={v => d.setField(field, v === '' ? 0 : Number(v))}
+            disabled={d.feedLive}
             min={0}
             className={cn(
-                'h-9 w-14 px-1 text-center text-xl font-bold tabular-nums',
+                'h-9 w-14 px-1 text-center text-xl font-bold tabular-nums', FEED_OWNED,
                 d.isStaged(field) && 'border-amber-400/60 text-amber-400',
             )}
         />
     );
 });
-
 /*
- * THE BOARD IS SHOWING A GAME THAT IS OVER.
+ * THE TURNOVER BAR — the three presses at the end of a game, in press order.
  *
  * The state a producer is in every time they put the next fixture up, and the
- * one the console could not previously describe: a finished game keeps every
- * key a live one has, so the panel, the rack and the overlays all read as a
- * game in progress until something replaces it.
+ * one the console could not previously describe: a finished game keeps every key
+ * a live one has, so the panel, the rack and the overlays all read as a game in
+ * progress until something replaces it.
  *
- * It says so and OFFERS A VERB — it never acts. Clearing at the final out would
- * strip the elements drawing the game the instant it ends, which is the whole
- * reason detection and clearing are separate here. The producer decides when
- * the last frame of a game stops being worth showing.
+ * IT FIRES AT EXACTLY THE RIGHT MOMENT AND USED TO CARRY ONE THIRD OF THE MOVE.
+ * The real sequence is capture → clear → take next, and the panel had those three
+ * in three places, in the wrong order: the take was buried inside the fixture slot
+ * ABOVE, the capture was a region at the bottom, and only the clear was here. The
+ * ordering was causally backwards too — capture is what advances the match to
+ * `post` and credits the series (server/postgame.py), so the fixture slot printed
+ * the consequence a screen above its cause.
+ *
+ * It never acts on its own. Clearing at the final out would strip the elements
+ * drawing the game the instant it ends, which is the whole reason detection and
+ * clearing are separate.
+ *
+ * The capture here is the ORDINARY one — the same call the post-game region makes
+ * with no file. The file-picker hatch stays down there with the rest of the
+ * recovery surface; this is the press a producer makes when nothing went wrong,
+ * and it usually will not be needed at all, because the stat file fires the
+ * capture on its own (postgame.auto_capture). When it has already happened this
+ * says so and offers nothing — a receipt, not a second button.
  *
  * Clear is the panel's existing `resetGame`, not a second clear: it blanks the
  * live `score.{N}` keys and deliberately leaves `postgame.{N}` alone. The
@@ -1346,27 +1652,60 @@ const ScoreBox = memo(function ScoreBox({ side, d }) {
  * the next fixture is being prepped, and it has its own Clear in the post-game
  * region. Dropping it here would be the irreversible half of a verb whose
  * reversible half is what was asked for.
+ *
+ * THE TAKE IS NOT GATED ON A DECIDED FIXTURE. It only ever lived in the fixture
+ * slot behind `done`, which is the right gate for a Bo3 — you do not take the
+ * next fixture between games of a series — and the wrong one for the Bo1 that
+ * `default_match()` makes and almost every night is: the game ends, the match is
+ * over in every sense that matters, and the producer's next press was hidden
+ * behind a condition not yet met BECAUSE the capture that decides the series had
+ * not been made. Here the gate is the game being over, which is the moment this
+ * bar exists for.
+ *
+ * `fixtureDone` keeps there being exactly ONE take on the panel: a decided
+ * fixture offers its own, in the slot it is finishing in, and holds it after the
+ * board is cleared — so this one stands down rather than printing a second.
  */
-const StaleGameRow = memo(function StaleGameRow({ lifecycle, matchId, onClear, clearStaged }) {
+const TurnoverBar = memo(function TurnoverBar({
+    sb, lifecycle, matchId, fixtureDone, onClear, clearStaged, postgame,
+}) {
+    const next = useNextUp(sb);
+    const canBind = useMatchBindableBoards()(sb);
     if (!isStaleBoard(lifecycle)) return null;
 
+    const { pg, stale, busy, capture } = postgame;
+    // A capture from an EARLIER game is not this game's receipt (../postgame
+    // reads the capture's own gameId to tell them apart), so the bar still
+    // offers the press.
+    const captured = pg.present && !stale;
     const bound = matchId != null && matchId !== '';
-    // `final` = the game reached its end. `stranded` = the feed lost it — a
-    // quit, a crash, an ongoing game that dropped out. Different facts, and the
-    // second is the case where a producer may still want to capture by hand, so
-    // it must not be described as a clean finish.
-    const what = lifecycle === 'final'
-        ? 'This board is showing a finished game'
-        : 'The feed lost this game — it won’t update again';
-    const then = bound
-        ? `M${matchId} takes over when the next game loads.`
-        : 'Nothing has replaced it.';
 
     return (
-        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-            <Text size="xs" className="min-w-0 flex-1 text-muted-foreground">
-                {what} — {then}
-            </Text>
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-border/60 bg-secondary/20 px-2 py-1.5">
+            {captured ? (
+                // THE RECEIPT IS THREE WORDS, NOT THE BOX SCORE. The post-game
+                // region below prints that, badge and all, and a panel that says
+                // the same thing twice is the wordiness this rework is about.
+                // What the bar owes the producer is only whether press one
+                // happened.
+                <Text size="xs" truncate dimmed className="min-w-0 flex-1">
+                    {pg.capturedBy === 'auto' ? 'Captured automatically.' : 'Captured.'}
+                </Text>
+            ) : (
+                <>
+                    <Text size="xs" truncate dimmed className="min-w-0 flex-1">
+                        {bound ? `Nothing captured for M${matchId} yet.` : 'Nothing captured.'}
+                    </Text>
+                    <SimpleTooltip label="Read this game’s stat file — it advances the match to post-game and credits the series">
+                        <Button
+                            variant="ghost" size="xs" className="shrink-0"
+                            onClick={() => capture()} disabled={busy}
+                        >
+                            Capture
+                        </Button>
+                    </SimpleTooltip>
+                </>
+            )}
             <SimpleTooltip label="Blank this board’s live game. The captured box score stays — it has its own Clear below.">
                 <Button
                     variant="ghost"
@@ -1374,9 +1713,10 @@ const StaleGameRow = memo(function StaleGameRow({ lifecycle, matchId, onClear, c
                     onClick={onClear}
                     className={cn('shrink-0', clearStaged && 'text-amber-400')}
                 >
-                    {clearStaged ? 'Clear staged' : 'Clear the board'}
+                    {clearStaged ? 'Clear staged' : 'Clear game state'}
                 </Button>
             </SimpleTooltip>
+            {next && canBind && !fixtureDone && <TakeNextButton sb={sb} label={next.label} />}
         </div>
     );
 });
@@ -1384,9 +1724,8 @@ const StaleGameRow = memo(function StaleGameRow({ lifecycle, matchId, onClear, c
 export default function BoardDesk({ board }) {
     const sb = Number(board);
     const d = useBoardDesk(sb);
-    const { g } = d;
+    const { g, transport } = d;
     const lifecycle = useBoardLifecycle(sb);
-    const sides = useSideLabels();
     const stats = useStatsDiagnostics(sb);
     const postgame = usePostGame(sb);
     const { options: gameModes } = useGameModes();
@@ -1409,31 +1748,28 @@ export default function BoardDesk({ board }) {
             .catch(e => notifications.show({ message: `Rename: ${e?.message || e}`, color: 'red' }));
     }, [sb, storedAlias]);
 
-    const reasonLine = sideReasonLine(g.sideReason, g.name1, sides.phrase(1));
-
     return (
         <>
             {/* WHAT this board is carrying, before what you can do to it. The
                 live game is the subject; the bind and the side ordering are
                 qualifiers on it, so they read a tier down rather than as three
                 competing subjects. */}
-            <BoardGameSubject board={sb} />
+            <GameSlot d={d} lifecycle={lifecycle} />
             <FixtureSlot sb={sb} matchId={g.match} match={d.boundMatch} conflict={g.conflict} />
-            <StaleGameRow
+            <TurnoverBar
+                sb={sb}
                 lifecycle={lifecycle}
                 matchId={g.match}
+                fixtureDone={d.boundMatch?.decided === 1 || d.boundMatch?.decided === 2}
                 onClear={d.resetGame}
                 clearStaged={d.isStaged('reset')}
+                postgame={postgame}
             />
             {g.conflict && (
                 <Text size="xs" className="text-amber-500/90">
-                    The live players don’t match the bound fixture — resolve it on the Match desk.
+                    The live players don’t match the bound match — resolve it on the Match desk.
                 </Text>
             )}
-            {reasonLine && (
-                <Text size="xs" truncate className="text-muted-foreground">{reasonLine}</Text>
-            )}
-
             {/* THE MIRROR TAKES THE WHOLE PANEL. Beside a wiring column it was
                 two thirds of the width, and a lineup does not compress: nine
                 character names in a third of a stage truncate to "Dry Bon…",
@@ -1441,7 +1777,16 @@ export default function BoardDesk({ board }) {
                 wiring is four one-line settings and reads fine below. */}
             <div className="flex flex-col gap-1.5 pt-1">
                 {/* score.{N}.*: what is on air this game. */}
-                <KitColumn label="Game state">
+                <KitColumn
+                    label="Game state"
+                    subject={(
+                        <ModeRow
+                            d={d} gameModes={gameModes} stats={stats}
+                            refreshHud={refreshHud} refreshing={refreshingHud}
+                        />
+                    )}
+                    action={<SidesControl d={d} reason={g.sideReason} transport={transport} />}
+                >
                     <div className={BOARD_GRID}>
                         <SidePanel side={1} d={d} />
 
@@ -1459,13 +1804,14 @@ export default function BoardDesk({ board }) {
                                 <SimpleSelect
                                     aria-label="Half inning"
                                     data={halfInningOptions}
+                                    disabled={d.feedLive}
                                     value={d.val('half_inning', g.halfInning)}
                                     onChange={v => {
                                         d.setField('half_inning', v ?? 'Top');
                                         d.clearAtBatState();
                                     }}
                                     triggerClassName={cn(
-                                        '!h-7 w-[4.75rem] text-xs',
+                                        '!h-7 w-[4.75rem] text-xs', FEED_OWNED,
                                         d.isStaged('half_inning') && 'border-amber-400/60 text-amber-400',
                                     )}
                                 />
@@ -1473,28 +1819,32 @@ export default function BoardDesk({ board }) {
                                     aria-label="Inning"
                                     value={d.val('inning', g.inning)}
                                     onChange={v => d.setField('inning', v === '' ? 1 : Number(v))}
+                                    disabled={d.feedLive}
                                     min={1} max={99}
                                     className={cn(
-                                        'h-7 w-11 px-1 text-center tabular-nums',
+                                        'h-7 w-11 px-1 text-center tabular-nums', FEED_OWNED,
                                         d.isStaged('inning') && 'border-amber-400/60 text-amber-400',
                                     )}
                                 />
                             </div>
                             <div className="flex flex-col gap-1 pt-0.5">
                                 <CountDots
-                                    label="B" max={4} hex="#22c55e"
+                                    label="B" max={3} hex="#22c55e"
                                     count={d.val('balls', g.balls)}
                                     onChange={v => d.setField('balls', v)}
+                                    disabled={d.feedLive}
                                 />
                                 <CountDots
-                                    label="S" max={3} hex="#f5bb00"
+                                    label="S" max={2} hex="#f5bb00"
                                     count={d.val('strikes', g.strikes)}
                                     onChange={v => d.setField('strikes', v)}
+                                    disabled={d.feedLive}
                                 />
                                 <CountDots
-                                    label="O" max={3} hex="#e60012"
+                                    label="O" max={2} hex="#e60012"
                                     count={d.val('outs', g.outs)}
                                     onChange={v => d.setField('outs', v)}
+                                    disabled={d.feedLive}
                                 />
                             </div>
                         </div>
@@ -1503,16 +1853,23 @@ export default function BoardDesk({ board }) {
                     </div>
 
                     {/* Belongs to the game, not to either side, so it sits under
-                        the mirror rather than in one of its halves. */}
+                        the mirror rather than in one of its halves.
+
+                        SIZED TO ITS CONTENT, not to the panel. There are ten
+                        stadiums and the longest is "Bowser Castle"; a selector
+                        stretched across the full width of the desk reads as the
+                        most important control in the region, which on a board
+                        whose feed names the stadium every frame it is not. */}
                     <FieldRow label="Stadium" staged={d.isStaged('stadium')} className="pt-1">
                         <Combobox
                             placeholder="Select stadium"
                             data={STADIUM_OPTIONS}
+                            disabled={d.feedLive}
                             value={d.val('stadium', g.stadium) || null}
                             onChange={v => d.setField('stadium', v ?? '')}
                             clearable
                             className={cn(
-                                'h-7 min-w-0 flex-1 text-xs',
+                                'h-7 w-56 min-w-0 shrink-0 text-xs', FEED_OWNED,
                                 d.isStaged('stadium') && 'border-amber-400/60 text-amber-400',
                             )}
                         />
@@ -1525,21 +1882,90 @@ export default function BoardDesk({ board }) {
                         </Text>
                     )}
 
-                    {/* The two escape hatches, at the bottom of the thing they
-                        escape from. Reset is destructive, so it reads that way. */}
-                    <ActionRow
-                        className="pt-0.5"
-                        actions={[
-                            { label: 'Swap sides', onClick: d.swapSides, variant: 'outline' },
-                            {
-                                label: 'Reset game state', onClick: d.resetGame, variant: 'outline',
-                                className: 'border-destructive/40 text-destructive hover:bg-destructive/10',
-                            },
-                        ]}
-                    />
+                    {/* The escape hatch, at the bottom of the thing it escapes
+                        from, and ALONE: Swap sat beside it and the pair read as
+                        two equal buttons, when one flips an orientation and the
+                        other blanks the board. Swap belongs with the layer that
+                        decides it, on the region's own rule (see SidesControl).
+
+                        ONE VERB, ONE NAME, ONE BUTTON. This and the turnover bar's
+                        are the same `resetGame`, and were called "Reset game
+                        state" and "Clear the board" — two names on one panel for
+                        one press, with "reset" additionally suggesting a return to
+                        defaults rather than what it does, which is empty the
+                        board. Naming them the same thing then showed the real
+                        problem: both were on screen at once at the end of a game.
+                        The bar owns the press at the moment it is part of a
+                        sequence; this is the hatch for every other time — a live
+                        game to blank, a hand-built board to start over — so it
+                        stands down while the bar is up. `fit` because a lone
+                        button given `flex-1` was a ~1200px banner. */}
+                    {!isStaleBoard(lifecycle) && (
+                        <ActionRow
+                            fit
+                            className="pt-0.5"
+                            actions={[
+                                {
+                                    label: 'Clear game state', onClick: d.resetGame, variant: 'outline',
+                                    className: 'border-destructive/40 text-destructive hover:bg-destructive/10',
+                                },
+                            ]}
+                        />
+                    )}
                 </KitColumn>
 
                 <Divider className="my-1.5" />
+{/* THE POOL IS WHAT EARNS A REGION, not the transport. This was
+                      "Games" on every board, carrying a badge, a playback
+                      sentence, a re-read and the mode across four lines — and on
+                      a HUD board ../games returns nothing, so a board with one
+                      possible game from one file spent a whole labelled region
+                      and a divider saying so. The badge, the mode and the re-read
+                      moved up onto the Game-state rule (see ModeRow); what is
+                      left is the pool surface, which only an API board has.
+
+                      The playback sentence stays down here with it, because on an
+                      API board it IS the region's subject — a live game table or a
+                      filter with a running transport is what it describes. */}
+                  {d.transport === 'api' && (
+                  <KitColumn
+                    label="Games"
+                    subject={(
+                        <>
+                            <Text size="xs" truncate dimmed className="min-w-0">
+                                {playbackLine({
+                                    transport: d.transport,
+                                    mode: d.playback.mode,
+                                    running: d.playback.running,
+                                    gameId: d.playback.gameId,
+                                    poolCount: d.poolCount,
+                                    live: d.g.gameLive,
+                                })}
+                            </Text>
+                            {/* Exactly the condition the server polls under: a
+                                single-mode board with a pinned game still being
+                                played (game_pool._live_consumers_exist). */}
+                            <LiveRefreshCountdown
+                                active={d.playback.mode !== 'rotate'
+                                    && d.playback.gameId != null
+                                    && d.g.gameLive}
+                            />
+                        </>
+                    )}
+                  >
+                    <GamesSection sb={sb} transport={d.transport} gameModes={gameModes} />
+                  </KitColumn>
+                  )}
+
+                  {/* The board's captured box score. Last because it is the END
+                      of a game — and a readout first: the stat file fires the
+                      capture on its own, so the subject usually fills itself in
+                      and the controls below are the recovery path. Was a desk of
+                      its own until its board picker gave it away (see
+                      ../postgame). */}
+                  <KitColumn label="Post-game" subject={<PostGameSubject pg={postgame.pg} />}>
+                    <PostGameSection desk={postgame} />
+                  </KitColumn>
 
                 {/* How the board is WIRED — settings, which outlive this game, so
                     they read below what is on air rather than beside it.
@@ -1559,15 +1985,31 @@ export default function BoardDesk({ board }) {
                     put its pool and its transport side by side (../games) and the
                     game table show a mode name without truncating it.
 
-                    The two properties that are left go ABOVE it, as one row.
-                    There is no region eyebrow over them on purpose: the rows
-                    already say "Game mode" and "Name", so a THIS BOARD label was
-                    a third label line stating nothing they don't. */}
-                <KitColumns>
-                    {/* Which mode's stats to fetch, with the pipeline's own
-                        diagnostics one click away beside it. */}
-                    <ModeRow d={d} gameModes={gameModes} stats={stats} />
+                    THE GAME MODE IS NOT A BOARD PROPERTY. It lived up here as a
+                    field beside the board's Name, with the Games region that
+                    actually owns it directly underneath and nothing tying the two
+                    together — a mode floating above a header that had its own
+                    badge and sentence, so it read as one more setting rather than
+                    part of what this board is fetching. It IS the binding
+                    (`scoreboards.binding.{N}.stats_tag`), it decides which tag
+                    every stats fetch for this board goes out under, and on a HUD
+                    board it was the only thing in this half of the panel a
+                    producer ever changes. It is the Games region's first row now.
 
+                    WHAT IS LEFT IS THE LEAST URGENT THING ON THE PANEL, so it goes
+                    last. Sat above Games it was a bare labelled field wedged
+                    between two regions with eyebrows, which is what made the
+                    bottom half read as a pile rather than as three regions: a
+                    board's name is set once and its running order once a night,
+                    while everything above changes every game. Ordered by how often
+                    a producer touches it, the panel now reads game state → where
+                    the games come from → what the last one ended as → what this
+                    board is called.
+
+                    No region eyebrow on purpose: the rows already say "Matches
+                    from" and "Name", so a THIS BOARD label would be a third label
+                    line stating nothing they don't. */}
+                <KitColumns>
                     {/* Which running order Up next walks for THIS board. Only
                         once there is more than one to choose between: on a
                         single-order rig the answer is "the only one", and a
@@ -1585,74 +2027,12 @@ export default function BoardDesk({ board }) {
                         label="Name" value={storedAlias} placeholder={`Scoreboard ${sb}`}
                         onChange={commitAlias}
                     />
+                    {/* A third, empty cell. `KitColumns` is a 2-up grid and the
+                        running order only appears on a rig with more than one, so
+                        without this the Name spread across the whole panel on the
+                        single-order rig that is almost every rig. */}
+                    <span aria-hidden />
                 </KitColumns>
-
-                  {/* THE TWO AXES RIDE THE REGION'S HEADER RULE, not a row of
-                      their own: the badge is the DERIVED transport (board 1
-                      carries the local HUD iff the global toggle is on, every
-                      other board is API — no picker, ever), the sentence is the
-                      CHOSEN playback. One line of state next to the eyebrow that
-                      names it, which is what a `KitColumn subject` is for. On a
-                      HUD board it is the whole region — ../games returns nothing,
-                      because a pool and a transport would have nothing to act
-                      on. */}
-                  <KitColumn
-                    label="Games"
-                    subject={(
-                        <>
-                            <Badge className={cn(
-                                'shrink-0 text-[11px] font-semibold uppercase tracking-wider',
-                                d.transport === 'hud'
-                                    ? 'bg-[#22c55e]/15 text-[#4ade80]'
-                                    : 'bg-[#3b82f6]/15 text-[#60a5fa]',
-                            )}>
-                                {d.transport === 'hud' ? 'HUD' : 'API'}
-                            </Badge>
-                            <Text size="xs" truncate dimmed className="min-w-0">
-                                {playbackLine({
-                                    transport: d.transport,
-                                    mode: d.playback.mode,
-                                    running: d.playback.running,
-                                    gameId: d.playback.gameId,
-                                    poolCount: d.poolCount,
-                                    live: d.g.gameLive,
-                                })}
-                                {d.transport === 'hud' && ' Turn off Follow local HUD on Connections to rebind.'}
-                            </Text>
-                            {/* Exactly the condition the server polls under: a
-                                single-mode board with a pinned game still being
-                                played (game_pool._live_consumers_exist). */}
-                            <LiveRefreshCountdown
-                                active={d.transport === 'api'
-                                    && d.playback.mode !== 'rotate'
-                                    && d.playback.gameId != null
-                                    && d.g.gameLive}
-                            />
-                            {d.transport === 'hud' && (
-                                <Button
-                                    variant="ghost" size="icon-sm" className="shrink-0"
-                                    onClick={refreshHud} disabled={refreshingHud}
-                                    aria-label="Re-read HUD file"
-                                    title="Re-read HUD file and restore scoreboard to match it"
-                                >
-                                    {refreshingHud ? <Loader size={12} /> : <RotateCw size={14} />}
-                                </Button>
-                            )}
-                        </>
-                    )}
-                  >
-                    <GamesSection sb={sb} transport={d.transport} gameModes={gameModes} />
-                  </KitColumn>
-
-                  {/* The board's captured box score. Last because it is the END
-                      of a game — and a readout first: the stat file fires the
-                      capture on its own, so the subject usually fills itself in
-                      and the controls below are the recovery path. Was a desk of
-                      its own until its board picker gave it away (see
-                      ../postgame). */}
-                  <KitColumn label="Post-game" subject={<PostGameSubject pg={postgame.pg} />}>
-                    <PostGameSection desk={postgame} />
-                  </KitColumn>
             </div>
         </>
     );

@@ -132,8 +132,27 @@ export function useBoardTag() {
  * clearing is the producer's, deliberately — a game ending must not strip the
  * elements drawing it the instant the last out lands.
  */
-export function boardLifecycle({ gameId, gameOver, gameCompleted, liveFollowing }) {
+export function boardLifecycle({ gameId, gameOver, gameCompleted, liveFollowing, captured }) {
     if (!gameId) return 'empty';
+    /*
+     * A CAPTURE FOR THIS GAME MEANS THIS GAME IS OVER.
+     *
+     * The HUD feed has no final frame — Project Rio stops writing and the last
+     * frame it wrote stands, so `game_over` never arrives and a finished local
+     * game read `live` forever. The board sat on "8–8, Bot 6" with the real
+     * result (9–8) captured directly underneath it, saying LIVE, and the turnover
+     * bar that exists for exactly that moment never appeared.
+     *
+     * The server already knows: the stat file Project Rio writes IS the
+     * end-of-game signal for a local board, which is why auto-capture is built on
+     * it (server/postgame_watch.py). `captured` is that same signal read back —
+     * a `postgame.{N}` whose `gameId` is this board's — so the two runtimes agree
+     * about when a game ended instead of the console holding a weaker opinion.
+     *
+     * FIRST, above `gameOver`: it is the strongest evidence there is (a parsed
+     * final box score), and on an API board it can only agree with the flags.
+     */
+    if (captured) return 'final';
     if (gameOver === true || gameCompleted === true) return 'final';
     // Absent reads as "yes, still following": state written before the flag
     // existed should behave the way the board already was.
@@ -149,11 +168,18 @@ export function useBoardLifecycle(sb) {
     // exactly right for a primitive (same reasoning as useBoardDeskRow's idle).
     return useStateStore((s) => {
         const b = s?.score?.[sb];
+        const pg = s?.postgame?.[sb];
         return boardLifecycle({
             gameId: b?.game_id,
             gameOver: b?.game_over,
             gameCompleted: b?.game_completed,
             liveFollowing: b?.live_following,
+            // The capture has to be THIS game's. Nothing clears `postgame.{N}`
+            // when a new game starts, so a bare `present` would mark game 2 of a
+            // Bo3 final the moment it kicked off, using game 1's box score as the
+            // evidence (../postgame draws the same distinction for `stale`).
+            captured: !!(pg?.present && pg?.gameId != null
+                && String(pg.gameId) === String(b?.game_id)),
         });
     });
 }
