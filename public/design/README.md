@@ -27,7 +27,7 @@ still applies verbatim when authoring by hand.
 ├── lowerthird.svg       # the Break-phase broadcast band, 1920×320
 ├── matchup.svg          # the head-to-head band, 1920×480 (series + 5 game cards)
 ├── callout.svg          # the post-game Stat Callout backdrop, 1920×1080
-├── scorecard.svg        # the vertical Scorecard, 1920×1080 (stacked sections)
+├── scorecard.svg        # the vertical Scorecard, 496×766 (stacked sections)
 ├── scoreboard-s.svg     # horizontal scoreboard, 388×156
 ├── scoreboard-l.svg     # horizontal scoreboard, 800×460
 ├── ticker.svg           # the Results Ticker marquee bar, 1920×80
@@ -387,6 +387,13 @@ The vertical Scorecard (`public/layout/lib/scorecard-mount.js`): eight
 independently toggleable sections melded into one continuous card. The full
 stack + slot contract is documented in the comment block at the top of
 `default/scorecard.svg` — copy that file as the working reference.
+
+The canvas is the CARD (496×766 — a 480-wide column inside an 8-unit gutter, by
+the tallest the stack gets), not the stream frame, and the card top-anchors so
+the slack below it as sections come and go is transparent. The mount reads the
+card's box back off `card-bg`/`card-rail`, so a package still authored on the
+old full 1920×1080 canvas is cropped to its own column rather than shrunk to a
+quarter — but that is a rescue for old packages, not a way to author a new one.
 
 ### `scoreboard-{s,l}.svg`
 

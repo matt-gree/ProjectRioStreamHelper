@@ -251,6 +251,10 @@ CONTRACTS: dict[str, Contract] = {
     "commentary": Contract((1920, 240), "xMidYMax meet", alt_canvases=((1920, 1080),)),
     "playerplates": Contract((1920, 240), "xMidYMax meet", alt_canvases=((1920, 1080),)),
     "lowerthird": Contract((1920, 320), "xMidYMax meet", alt_canvases=((1920, 1080),)),
-    "scorecard": Contract((1920, 1080), "xMidYMid meet"),
+    # The card is the source: 480-wide column inside an 8-unit gutter, by the
+    # tallest the melded stack gets. The old full 1920x1080 frame is an alt
+    # canvas — the mount crops a theme authored that way to its own card box
+    # (ensureCardBox/reframeLegacyCanvas), so it lands at full size here.
+    "scorecard": Contract((496, 766), "xMidYMid meet", alt_canvases=((1920, 1080),)),
     "statscard": Contract((380, 240), "xMidYMid meet"),
 }

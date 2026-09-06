@@ -70,12 +70,16 @@ don't):
 | Container stat card | 380×240 |
 | Results ticker | 1920×80 |
 | Bands (commentary · player plates · lower third · matchup) | 1920×240 · 240 · 320 · 480 |
-| Everything full-screen (scorecard, callout, …) | 1920×1080 |
+| Vertical scorecard | 496×766 |
+| Everything full-screen (callout, …) | 1920×1080 |
 
 The bands may also be drawn on the full 1920×1080 stream canvas — put the
 artwork where it sits on the stream (they all hug the bottom) and the mount
-pins it to the bottom of the source and crops the empty canvas above it. Either
-way, copy the built-in's frame.
+pins it to the bottom of the source and crops the empty canvas above it. The
+scorecard takes the same rescue on its own axis: draw its column anywhere on a
+full canvas and the mount crops the viewBox to the card's own box. Either way,
+copy the built-in's frame — the alt canvas is there so an old package keeps
+working, not as a second place to author.
 
 ---
 

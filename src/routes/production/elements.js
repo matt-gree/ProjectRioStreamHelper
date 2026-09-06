@@ -139,13 +139,17 @@ export const ELEMENTS = [
         // (header, phase, game mode, score block, rosters, bases, at-bat, box
         // score, stadium) that the producer flips live; the mount animates each
         // group in/out. Config is per board (overlays.scorecard.{N}.*), so two
-        // scorecard sources can be driven independently. Native 1920×1080; the
-        // SVG scales to whatever the OBS source is.
+        // scorecard sources can be driven independently. Native 496×766 — the
+        // size of the CARD, not the stream frame: where the column sits is a
+        // scene decision made once in OBS, and a full-canvas source made the
+        // producer make it inside a box whose other three quarters were empty.
+        // 766 is the tallest the stack gets; the card top-anchors, so the
+        // slack below it as bands come and go is transparent.
         flavor: 'direct',
         scope: 'board',
         url: '/layout/scorecard/scorecard.html',
-        width: 1920,
-        height: 1080,
+        width: 496,
+        height: 766,
         // Deliberately narrow so 'scorecard' is not swallowed by the Scoreboard
         // matcher (which also answers to a bare *.html stem).
         match: (url) => /scorecard\/scorecard/i.test(url) || /scorecard\.html/i.test(url),

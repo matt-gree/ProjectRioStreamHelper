@@ -201,7 +201,7 @@ export const MEMBERS = {
         sample: { file: 'scoreboard', content: { scoreboard: 1 } },
     },
     scorecard: {
-        size: [1920, 1080],
+        size: [496, 766],
         mount: boardScoped('scorecard-mount', 'mountScorecard'),
         identity: boardIdentity('scorecard'),
         // Its standalone bundle seeds SETTINGS as well as state — the phase and

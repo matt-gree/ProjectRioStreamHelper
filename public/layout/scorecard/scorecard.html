@@ -10,7 +10,11 @@
   Thin shell: the look lives in the active DESIGN PACKAGE's theme SVG
   (/design/{package}/scorecard.svg), the binding/animation in
   scorecard-mount.js, the live data in score.{N}.*. Drop into OBS as a
-  full-canvas (1920×1080) browser source; the card column sits on the left.
+  496×766 browser source — the size of the CARD, placed wherever the scene
+  wants it, rather than a full 1920×1080 canvas whose other three quarters
+  were empty. 766 is the tallest the melded stack gets (every band plus the
+  full score block); the card top-anchors, so the slack below it as bands come
+  and go is transparent and the OBS placement holds.
 -->
 <head>
   <meta charset="utf-8" />
@@ -21,8 +25,9 @@
   <link rel="stylesheet" href="/layout/lib/rio-theme/tokens.css" />
   <style>
     html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
-    /* Native full-canvas size hint; the SVG scales to whatever the OBS source is. */
-    body { width: 1920px; height: 1080px; }
+    /* Native size hint — the card's own box; the SVG scales to whatever the
+       OBS source actually is. */
+    body { width: 496px; height: 766px; }
     #host { position: fixed; inset: 0; }
   </style>
 </head>

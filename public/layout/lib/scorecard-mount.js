@@ -1,6 +1,9 @@
 // scorecard-mount.js — the re-themable vertical Scorecard element.
 //
-// A scoreboard-bound element (its own OBS full-canvas source, ?scoreboard=N).
+// A scoreboard-bound element (its own OBS source, ?scoreboard=N). The source is
+// the SIZE OF THE CARD (496x766), not the stream frame: where the column sits is
+// a scene decision a producer makes once in OBS, and a full-canvas source made
+// them make it inside a 1920x1080 box whose other three quarters were empty.
 // The look lives in the active DESIGN PACKAGE's theme SVG
 // (/design/{package}/scorecard.svg, element-by-element fallback to `default`).
 //
@@ -28,8 +31,15 @@ const SETTINGS_TYPE = 'scorecard';
 const DEFAULT_PACKAGE = 'default';
 const MAX_INN = 9;
 
-const CARD_TOP = 40;        // top y of the melded card in the 1080 canvas
-const CARD_CENTER_X = 304;  // horizontal centre of the card column
+// The source is the size of the CARD, not the stream frame. 496 x 766 is the
+// card's 480-wide column inside an 8-unit gutter, by the tallest the melded
+// stack gets (every band plus the full score block). The card TOP-anchors, so
+// the slack below it as bands come and go is transparent and a producer's OBS
+// placement holds. Themes still authored on the retired 1920x1080 canvas are
+// re-framed onto this one — see ensureCardBox.
+const NATIVE_W = 496;
+const NATIVE_H = 766;
+const CARD_GUTTER = 8;
 
 // Count-dot fill when active (matches the classic scoreboard convention).
 const BALL_ON = '#22c55e', STRIKE_ON = '#eab308', OUT_ON = '#ef4444';
@@ -47,14 +57,14 @@ const STACK = [
 ];
 
 const FALLBACK_SVG = `
-<svg viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
-  <rect data-slot="card-rail" x="64" y="40" width="6" height="180" rx="3" style="fill:var(--accent)"/>
-  <rect data-slot="card-bg" x="70" y="40" width="474" height="180" rx="16" style="fill:var(--band);stroke:var(--border)"/>
+<svg viewBox="0 0 496 766" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+  <rect data-slot="card-rail" x="8" y="8" width="6" height="180" rx="3" style="fill:var(--accent)"/>
+  <rect data-slot="card-bg" x="14" y="8" width="474" height="180" rx="16" style="fill:var(--band);stroke:var(--border)"/>
   <g data-slot="el-main" data-h="180">
-    <text data-slot="s1-name" data-maxw="300" x="90" y="100" style="fill:var(--ink);font-family:var(--font-display)" font-size="30" font-weight="700">Player One</text>
-    <text data-slot="s1-score" x="516" y="100" text-anchor="end" style="fill:var(--ink);font-family:var(--font-mono)" font-size="40" font-weight="700">0</text>
-    <text data-slot="s2-name" data-maxw="300" x="90" y="160" style="fill:var(--ink);font-family:var(--font-display)" font-size="30" font-weight="700">Player Two</text>
-    <text data-slot="s2-score" x="516" y="160" text-anchor="end" style="fill:var(--ink);font-family:var(--font-mono)" font-size="40" font-weight="700">0</text>
+    <text data-slot="s1-name" data-maxw="300" x="34" y="60" style="fill:var(--ink);font-family:var(--font-display)" font-size="30" font-weight="700">Player One</text>
+    <text data-slot="s1-score" x="460" y="60" text-anchor="end" style="fill:var(--ink);font-family:var(--font-mono)" font-size="40" font-weight="700">0</text>
+    <text data-slot="s2-name" data-maxw="300" x="34" y="120" style="fill:var(--ink);font-family:var(--font-display)" font-size="30" font-weight="700">Player Two</text>
+    <text data-slot="s2-score" x="460" y="120" text-anchor="end" style="fill:var(--ink);font-family:var(--font-mono)" font-size="40" font-weight="700">0</text>
   </g>
 </svg>`;
 
@@ -90,6 +100,7 @@ export function mountScorecard({ host, sb }) {
   let laidOut = {};           // el-* -> bool (has been positioned once; gates animate-vs-snap)
   let baseState = [false, false, false];
   let boxBaseX = null;        // theme-authored x of each box column (captured once per theme)
+  let cardBox = null;         // theme-authored card box (captured once per theme)
   let disposed = false;
 
   const g = OverlayBase.deepGet;
@@ -145,6 +156,54 @@ export function mountScorecard({ host, sb }) {
     if (c2) host.style.setProperty('--side2', c2); else host.style.removeProperty('--side2');
   }
 
+  // ── the card's own box, read off the THEME ──────────────────────────────────
+  // Two things depend on where the theme parks its column: where the melded
+  // stack starts (card-bg's authored y) and what "centred" means for the header
+  // (the rail+bg span). Both were constants pinned to the default package's old
+  // full-frame canvas, in the same file that already reads the box score's
+  // column x's back off the SVG — so a theme that placed its card anywhere else
+  // stacked from the wrong y and drew its header off-centre.
+  //
+  // Captured once per theme, BEFORE sizeCard overwrites card-bg/card-rail's
+  // y and height, and reset on a theme swap alongside boxBaseX.
+  function ensureCardBox() {
+    if (cardBox) return cardBox;
+    const bg = engine.slots['card-bg'];
+    const rail = engine.slots['card-rail'];
+    const num = (el, a, d) => {
+      const v = el ? parseFloat(el.getAttribute(a)) : NaN;
+      return isNaN(v) ? d : v;
+    };
+    const bgX = num(bg, 'x', CARD_GUTTER);
+    const bgW = num(bg, 'width', NATIVE_W - 2 * CARD_GUTTER);
+    const x0 = Math.min(bgX, num(rail, 'x', bgX));
+    const top = num(bg, 'y', num(rail, 'y', CARD_GUTTER));
+    cardBox = { top, left: x0, right: bgX + bgW, centerX: (x0 + bgX + bgW) / 2 };
+    reframeLegacyCanvas(cardBox);
+    return cardBox;
+  }
+
+  // A theme still authored on the retired 1920x1080 canvas parks a 480-wide card
+  // in a stream frame. The source is now the size of the card, so letting
+  // preserveAspectRatio fit that frame into it would draw the card at a quarter
+  // scale. Cropping the viewBox to the card's own box (plus the gutter) lands it
+  // at full size instead — the same rescue the bottom-anchored band elements
+  // make for their alt canvas, done here on the theme's declared geometry rather
+  // than in CSS because the scorecard's card differs from the frame on BOTH axes.
+  // A theme already authored at the native canvas keeps its own framing: it may
+  // deliberately draw outside the card, and cropping it would be the bug.
+  function reframeLegacyCanvas(box) {
+    const svg = host.querySelector('svg');
+    const vb = svg && svg.getAttribute('viewBox');
+    if (!vb) return;
+    const n = vb.replace(/,/g, ' ').trim().split(/\s+/).map(Number);
+    if (n.length !== 4 || n.some(v => !isFinite(v))) return;
+    if (Math.round(n[2]) === NATIVE_W && Math.round(n[3]) === NATIVE_H) return;
+    const w = (box.right - box.left) + 2 * CARD_GUTTER;
+    const h = w * NATIVE_H / NATIVE_W;
+    svg.setAttribute('viewBox', `${box.left - CARD_GUTTER} ${box.top - CARD_GUTTER} ${w} ${h}`);
+  }
+
   // ── stack layout (the meld) ─────────────────────────────────────────────────
   function moveGroup(el, name, y, show, fresh) {
     if (!gsap) {
@@ -161,11 +220,12 @@ export function mountScorecard({ host, sb }) {
   function sizeCard(total, fresh) {
     const bg = engine.slots['card-bg'];
     const rail = engine.slots['card-rail'];
+    const top = ensureCardBox().top;
     const h = Math.max(total, 1);
     const vis = total > 0 ? '1' : '0';
     for (const el of [bg, rail]) {
       if (!el) continue;
-      el.setAttribute('y', CARD_TOP);
+      el.setAttribute('y', top);
       el.setAttribute('opacity', vis);
       if (!gsap || fresh || laidOut['__card'] === undefined) el.setAttribute('height', h);
       else gsap.to(el, { attr: { height: h }, duration: 0.45, ease: 'power3.out' });
@@ -174,6 +234,7 @@ export function mountScorecard({ host, sb }) {
   }
 
   function relayout(vis, fresh) {
+    const top = ensureCardBox().top;
     let off = 0, activeCount = 0;
     for (const [name, want] of STACK) {
       const el = engine.slots[name];
@@ -181,12 +242,12 @@ export function mountScorecard({ host, sb }) {
       const show = !!want(vis);
       const div = el.querySelector('.sc-div');
       if (show) {
-        moveGroup(el, name, CARD_TOP + off, true, fresh);
+        moveGroup(el, name, top + off, true, fresh);
         if (div) div.setAttribute('opacity', activeCount === 0 ? '0' : '1');
         off += parseFloat(el.getAttribute('data-h')) || 0;
         activeCount++;
       } else {
-        moveGroup(el, name, CARD_TOP + off, false, fresh);
+        moveGroup(el, name, top + off, false, fresh);
       }
     }
     sizeCard(off, fresh);
@@ -202,7 +263,7 @@ export function mountScorecard({ host, sb }) {
     if (hasTitle) { try { tW = titleEl.getComputedTextLength(); } catch { tW = 0; } }
     const logoW = 40, gap = hasTitle ? 14 : 0;
     const totalW = logoW + gap + tW;
-    const startX = CARD_CENTER_X - totalW / 2;
+    const startX = ensureCardBox().centerX - totalW / 2;
     logoG.setAttribute('transform', `translate(${startX},0)`);
     titleEl.setAttribute('x', startX + logoW + gap);
   }
@@ -370,7 +431,7 @@ export function mountScorecard({ host, sb }) {
     // The package's port palette rides along with its SVG: applyColours reads
     // it synchronously, so it has to have landed by the time this returns.
     const [themeChanged] = await Promise.all([engine.ensureTheme(theme), ensurePortPalette(theme)]);
-    if (themeChanged) { revealKey = ''; laidOut = {}; baseState = [false, false, false]; boxBaseX = null; }
+    if (themeChanged) { revealKey = ''; laidOut = {}; baseState = [false, false, false]; boxBaseX = null; cardBox = null; }
     if (disposed) return;
 
     if (engine.usesAppVars) OverlayBase.applyDesignSettings(SETTINGS_TYPE, NS);

@@ -138,3 +138,63 @@ def test_designer_guide_scoreboard_row_matches_contracts():
     assert dims == [_canvas(s) for s in SIZES], (
         "DESIGNER-GUIDE scoreboard canvases drifted from the contracts"
     )
+
+
+# ── the vertical Scorecard ──────────────────────────────────────────────────
+# It stopped being a full-canvas source on 2026-09-06: the source is now the
+# size of the CARD (496x766 — a 480-wide column inside an 8-unit gutter, by the
+# tallest the melded stack gets). That move minted FIVE copies of one number —
+# the mount's own constants, the layout's body size hint, the console registry,
+# the container-member table and the built-in theme's viewBox — none of which
+# can import the contract, and every one of which fails silently and plausibly.
+# Same shape as the scoreboard pins above; same reason.
+
+
+def _scorecard() -> tuple[int, int]:
+    return CONTRACTS["scorecard"].canvas
+
+
+def test_scorecard_mount_native_size_matches_contract():
+    src = (REPO / "public/layout/lib/scorecard-mount.js").read_text()
+    w = re.search(r"const NATIVE_W = (\d+);", src)
+    h = re.search(r"const NATIVE_H = (\d+);", src)
+    assert w and h, "NATIVE_W/NATIVE_H not found in scorecard-mount.js"
+    assert (int(w.group(1)), int(h.group(1))) == _scorecard()
+
+
+def test_scorecard_layout_body_size_matches_contract():
+    """The `body { width/height }` hint is what the layouts API reports as the
+    source's native size, so it is the number a producer's OBS source gets."""
+    src = (REPO / "public/layout/scorecard/scorecard.html").read_text()
+    m = re.search(r"body\s*\{\s*width:\s*(\d+)px;\s*height:\s*(\d+)px", src)
+    assert m, "body size hint not found in scorecard.html"
+    assert (int(m.group(1)), int(m.group(2))) == _scorecard()
+
+
+def test_scorecard_production_element_dims_match_contract():
+    src = (REPO / "src/routes/production/elements.js").read_text()
+    m = re.search(
+        r"id:\s*'scorecard'.*?width:\s*(\d+),\s*height:\s*(\d+)", src, re.DOTALL
+    )
+    assert m, "scorecard element entry not found in elements.js"
+    assert (int(m.group(1)), int(m.group(2))) == _scorecard()
+
+
+def test_scorecard_container_member_size_matches_contract():
+    """A member has to FIT its container, so this number gates which containers
+    can host the card at all."""
+    src = (REPO / "public/layout/lib/container-members.js").read_text()
+    m = re.search(r"scorecard:\s*\{\s*size:\s*\[(\d+),\s*(\d+)\]", src)
+    assert m, "scorecard entry not found in container-members.js MEMBERS"
+    assert (int(m.group(1)), int(m.group(2))) == _scorecard()
+
+
+def test_builtin_scorecard_theme_viewbox_matches_contract():
+    for svg in sorted((REPO / "public/design").glob("*/scorecard.svg")):
+        m = re.search(r'viewBox="0 0 (\d+) (\d+)"', svg.read_text())
+        assert m, f"{svg}: viewBox not found"
+        assert (int(m.group(1)), int(m.group(2))) == _scorecard(), (
+            f"{svg.relative_to(REPO)} viewBox drifted from the scorecard canvas. "
+            "The old 1920x1080 frame is an alt canvas for packages already in "
+            "the wild, not a canvas to ship a built-in on."
+        )
