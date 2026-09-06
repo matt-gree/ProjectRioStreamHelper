@@ -263,8 +263,8 @@ A Design-Package swap resets to first-paint state, so the new theme cascades in.
 Rendered by `public/layout/lib/playerplates-mount.js`. A sibling of Commentary —
 the same plate + sub-plate convention — but a fixed **two-player** band. It shows
 one or both single-player plates and moves each to a named anchor
-(`left` | `center` | `right`); the producer's MODE (both / one player) is fully
-resolved server-side, so a theme only defines the plate look and the anchor
+(`left` | `center` | `right`); which plates are up and where each one sits is
+fully resolved server-side, so a theme only defines the plate look and the anchor
 offsets.
 
 Two position groups, `<g data-slot="side1">` and `<g data-slot="side2">`, are
@@ -292,9 +292,9 @@ position — the mount tweens the whole plate group's transform to it:
 { "anchors": { "left": 0, "center": 582, "right": 1164 } }
 ```
 
-In `both` mode the mount puts side 1 at `left` and side 2 at `right`; single
-modes place the shown plate at the producer-chosen anchor. Enter/exit (rise /
-drop) and the on-air group reveal reuse the Commentary motion + OBS-visibility
+With both plates up the mount puts side 1 at `left` and side 2 at `right`; a
+plate on air alone goes to the producer-chosen anchor. Enter/exit (rise / drop)
+and the on-air group reveal reuse the Commentary motion + OBS-visibility
 debounce.
 
 ### `matchup.svg`

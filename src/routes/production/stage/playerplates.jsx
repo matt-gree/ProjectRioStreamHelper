@@ -5,20 +5,46 @@ import { useStateStore } from '../../../context/store';
 import { stageOrRun, usePending } from '../../../context/staging';
 import {
     setPlayerPlatesConfig, normalizeConfig as normalizePlatesConfig,
-    PP_MODE_OPTIONS, PP_SOURCE_OPTIONS, PP_LOCATION_OPTIONS, PP_SUBFIELD_OPTIONS,
+    PP_SOURCE_OPTIONS, PP_LOCATION_OPTIONS, PP_SUBFIELD_OPTIONS, pairAnchor,
 } from '../../../context/playerplates';
+import ParticipantPicker from '../../../components/ParticipantPicker';
 import { Group, Text } from '../../../components/ui/primitives';
 import { cn } from '../../../lib/utils';
 import { IconToggle, KIT_INPUT, ListRow, SegmentedRow, SelectRow } from '../kit';
 import { StagedDot } from '../controls';
 import { matchDisplayLabel, matchIds } from '../matches';
+import { useSideLabels } from '../sides';
 import { DirectStage } from './generic';
 
 /*
  * Player Plates stage — a sibling of Commentary: the two-player name/sub-plate
- * band. The producer picks a MODE (both L/R, or one player at a togglable
- * location) and each plate's content (fed from a match, or typed manually);
- * the whole config stages+PUTs as ONE key ('playerplates'), and the server
+ * band. Both plates are always authorable here and EACH PLATE'S EYE is the only
+ * thing that puts it on air, exactly as a caster slot works. A band-wide "Show"
+ * segment (Both / Player 1 / Player 2) used to sit above them saying the same
+ * thing a second time — and worse, it hid the excluded side's whole block, so
+ * an eye switched off under "Both" was invisible and unreachable under "Player
+ * 2", where it silently kept the band dark. Whether a plate can choose WHERE it
+ * sits is the one thing that genuinely follows from the pair: two plates are
+ * pinned left/right (they would collide otherwise), a lone plate is placed.
+ *
+ * Either SOURCE names a person out of the address book — a bound fixture's side,
+ * or (manual) the producer's own pick through the same ParticipantPicker a
+ * caster slot uses. Manual used to be a bare text box, which bought a typed name
+ * at the cost of everything the registry gives: no sub-plate field to resolve,
+ * and no re-flow when a name or pronoun is fixed mid-broadcast. The picker's
+ * "use without saving" keeps the typed name reachable for a guest who isn't in
+ * the book — and that is the one plate with nothing to resolve, so it is the one
+ * plate that still types its own sub label/value. THE SUB-PLATE OFFERS WHAT THE
+ * NAME CAN RESOLVE.
+ *
+ * PLACEMENT is exactly one control, and which one depends on how many plates are
+ * up: a PAIR gets a band-level Order (the two anchors are opposite by
+ * construction, so one bit describes both plates and a mirrored control on each
+ * block would be the same fact twice), a LONE plate gets its own Where with the
+ * middle anchor a pair has no room for. Both write the same `location` — side 1's
+ * choice is the order and side 2 follows — so there is no swap flag to drift.
+ *
+ * The whole config stages+PUTs as ONE key ('playerplates'), and the server
  * projector resolves it to playerplates.* for the overlay. Same plate +
  * sub-plate convention as the caster strip, reusing the shared address-book
  * sub-field vocabulary.
@@ -44,18 +70,31 @@ function usePlayerPlates() {
     });
     // Server-resolved display name per side (used to preview the match-fed name).
     const resolvedName = (t) => live?.[t]?.name ?? live?.[String(t)]?.name ?? '';
-    return { config, staged: !!pending, matches, patch, patchSide, resolvedName };
+    // What to SHOW in a manual side's picker. A pick carries `_name` (a
+    // client-only display tag the server drops on the PUT) because a staged pick
+    // hasn't been projected yet, so the resolved name still reads as the person
+    // it is replacing. A raw typed name is its own display.
+    const pickedName = (t) => {
+        const side = config.sides?.[t] || {};
+        if (side.participantId) return side._name || resolvedName(t) || '';
+        return side.name || '';
+    };
+    return { config, staged: !!pending, matches, patch, patchSide, resolvedName, pickedName };
 }
 
-// One player's block: eye · name (typed, or resolved read-only when match-fed)
-// · sub-plate field/value · sub toggle · (single-mode) location.
-const PlayerPlateSide = memo(function PlayerPlateSide({ t, pp }) {
+// One player's block: eye · name (picked from the address book, or resolved
+// read-only when match-fed) · sub-plate field or typed label/value · sub toggle
+// · (when it's the only plate up) location.
+const PlayerPlateSide = memo(function PlayerPlateSide({ t, pp, alone }) {
     const { config } = pp;
     const side = config.sides?.[t] || {};
     const isMatch = config.source === 'match';
+    // Bound to an address-book row (from the fixture, or picked here) — the one
+    // state in which there is a field to resolve.
+    const bound = isMatch || !!side.participantId;
     const visible = side.visible !== false;
     const subVisible = side.subVisible !== false;
-    const hasSub = isMatch ? !!side.subField : !!(side.subValue || side.subLabel);
+    const hasSub = bound ? !!side.subField : !!(side.subValue || side.subLabel);
 
     return (
         <div className={cn('rounded-md border border-border/60 bg-background/40 px-2', !visible && 'opacity-60')}>
@@ -72,20 +111,29 @@ const PlayerPlateSide = memo(function PlayerPlateSide({ t, pp }) {
                         </Text>
                     </>
                 }
-                // Match-fed plates resolve their name server-side, so the name
-                // slot is read-only text there and an input when typed.
+                // A match-fed plate takes its person from the fixture, so the
+                // name slot is read-only text there and a picker when manual.
                 name={isMatch ? (
                     <Text size="xs" truncate className="min-w-0 flex-1 text-foreground">
                         {pp.resolvedName(t) || <span className="text-muted-foreground">No name from match</span>}
                     </Text>
                 ) : (
-                    <input
-                        value={side.name || ''}
-                        onChange={(e) => pp.patchSide(t, { name: e.target.value })}
-                        placeholder={`Player ${t} name…`}
-                        aria-label={`Player ${t} name`}
-                        className={cn(KIT_INPUT, 'min-w-0 flex-1')}
-                    />
+                    <div className="min-w-0 flex-1">
+                        <ParticipantPicker
+                            value={pp.pickedName(t)}
+                            selectedId={side.participantId || null}
+                            onResolve={(picked) => pp.patchSide(t, {
+                                participantId: picked.id,
+                                name: '',
+                                _name: picked.display?.tag || picked.identities?.rioName || '',
+                            })}
+                            // The guest who isn't in the book: keep the typed
+                            // name, drop the pick, and the typed sub-plate below
+                            // takes over — there is no row to read a field off.
+                            onRawValue={(text) => pp.patchSide(t, { participantId: null, name: text, _name: '' })}
+                            placeholder={`Pick player ${t}…`}
+                        />
+                    </div>
                 )}
                 controls={
                     <IconToggle
@@ -96,7 +144,7 @@ const PlayerPlateSide = memo(function PlayerPlateSide({ t, pp }) {
                 }
             />
 
-            {isMatch ? (
+            {bound ? (
                 <SelectRow
                     label={null} value={side.subField || ''} placeholder="No sub-plate"
                     onChange={(v) => pp.patchSide(t, { subField: v })}
@@ -118,7 +166,9 @@ const PlayerPlateSide = memo(function PlayerPlateSide({ t, pp }) {
                     />
                 </div>
             )}
-            {config.mode !== 'both' && (
+            {/* Only a plate on air ALONE is placed from its own block: a pair's two
+                anchors are opposite, and that one bit is the Order row above. */}
+            {alone && (
                 <SegmentedRow
                     label="Where"
                     value={side.location || (t === 1 ? 'left' : 'right')}
@@ -130,12 +180,45 @@ const PlayerPlateSide = memo(function PlayerPlateSide({ t, pp }) {
     );
 });
 
+// The pair's left-to-right order, as one choice. The options NAME the two sides,
+// so they go through the producer's own side vocabulary (sides.js) rather than
+// hard-coding "1"/"2" — but the anchors either side of the dot are geometry and
+// keep their literal meaning: the left-hand name is the plate on the left.
+function OrderRow({ pp }) {
+    const { label: sideLabel } = useSideLabels();
+    const loc1 = pp.config.sides?.[1]?.location;
+    const data = useMemo(() => [
+        { value: 'left', label: `${sideLabel(1)} · ${sideLabel(2)}` },
+        { value: 'right', label: `${sideLabel(2)} · ${sideLabel(1)}` },
+    ], [sideLabel]);
+    return (
+        <SegmentedRow
+            label="Order"
+            value={loc1 === 'right' ? 'right' : 'left'}
+            data={data}
+            // Write BOTH anchors even though the server derives side 2's from
+            // side 1's — the panel must not show a stored location it is about
+            // to ignore, or the next lone-plate Where opens on a stale value.
+            onChange={(v) => {
+                const anchors = pairAnchor(v);
+                pp.patch({
+                    sides: {
+                        ...pp.config.sides,
+                        1: { ...(pp.config.sides?.[1] || {}), location: anchors[1] },
+                        2: { ...(pp.config.sides?.[2] || {}), location: anchors[2] },
+                    },
+                });
+            }}
+        />
+    );
+}
+
 export default function PlayerPlatesStage({ element, placement }) {
     const pp = usePlayerPlates();
     const { config } = pp;
     const ids = useMemo(() => matchIds(pp.matches), [pp.matches]);
-    const showSide = (t) => config.mode === 'both'
-        || (config.mode === 'p1' && t === 1) || (config.mode === 'p2' && t === 2);
+    const shown = [1, 2].filter(t => config.sides?.[t]?.visible !== false);
+    const alone = (t) => shown.length === 1 && shown[0] === t;
 
     return (
         <>
@@ -147,10 +230,6 @@ export default function PlayerPlatesStage({ element, placement }) {
                 </Group>
             )}
 
-            <SegmentedRow
-                label="Show" value={config.mode} data={PP_MODE_OPTIONS}
-                onChange={(v) => pp.patch({ mode: v })}
-            />
             <SegmentedRow
                 label="From" value={config.source} data={PP_SOURCE_OPTIONS}
                 onChange={(v) => pp.patch({ source: v })}
@@ -165,8 +244,10 @@ export default function PlayerPlatesStage({ element, placement }) {
                 />
             )}
 
-            {showSide(1) && <PlayerPlateSide t={1} pp={pp} />}
-            {showSide(2) && <PlayerPlateSide t={2} pp={pp} />}
+            {shown.length === 2 && <OrderRow pp={pp} />}
+
+            <PlayerPlateSide t={1} pp={pp} alone={alone(1)} />
+            <PlayerPlateSide t={2} pp={pp} alone={alone(2)} />
 
         </>
     );

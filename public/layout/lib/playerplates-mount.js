@@ -3,20 +3,19 @@
 // A DIRECT element (its own OBS source). A sibling of commentary-mount.js: the
 // same plate + sub-plate convention, built on the shared svg-theme-engine.js,
 // but a fixed TWO-player band instead of a variable-count caster row. The
-// producer (Production page) picks a MODE and each plate's content; the server
+// producer (Production page) shows each plate and picks its content; the server
 // projector (server/playerplates.py) resolves everything and writes:
 //
-//   playerplates.mode                       "both" | "p1" | "p2"  (display only)
 //   playerplates.{1,2}.name                 resolved player name (main plate)
 //   playerplates.{1,2}.subLabel / .subValue sub-plate label + value
 //   playerplates.{1,2}.subVisible           show the sub plate
 //   playerplates.{1,2}.location             "left" | "center" | "right"
-//   playerplates.{1,2}.active               whether this plate is on this mode
+//   playerplates.{1,2}.active               whether this plate is on air
 //
-// The mode is fully resolved server-side: each side's `location` and `active`
-// already fold it in (both → side1 LEFT / side2 RIGHT; single modes → the shown
-// side at its own location). So this mount positions purely from `location` and
-// shows purely from `active`; it never reads the mode.
+// Placement is fully resolved server-side: a PAIR of shown plates is pinned
+// side1 LEFT / side2 RIGHT, a lone plate takes its own location. So this mount
+// positions purely from `location` and shows purely from `active` — it is told
+// where each plate goes and never works it out from the other side.
 //
 // The theme comes from the active DESIGN PACKAGE (overlays.global.designPackage):
 // /design/{package}/playerplates.svg, falling back to the built-in `default`.
