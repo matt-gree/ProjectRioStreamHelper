@@ -73,7 +73,18 @@ const VARIANT_PARAMS = [
      * artwork points, so it keeps its literal words.
      */
     ['team', 't', (v, mode) => sideLabel(v, mode)],
-    ['size', 'z', (v) => ({ s: 'Small', m: 'Medium', l: 'Large' }[v] ?? String(v).toUpperCase())],
+    /*
+     * A RETIRED code keeps a label, and the label leads with what is on screen.
+     * The mount resolves an unknown ?size= to `l` (SIZE_DIMS in
+     * scoreboard-mount.js), so a producer's leftover ?size=m source draws the
+     * Large board — and a row that just said "Medium" would be the console
+     * disagreeing with the broadcast about a source the producer is looking at.
+     * Naming it plain "Large" is the other half of the same trap: two Large
+     * rows, one of them at the wrong canvas, with nothing to say which.
+     */
+    ['size', 'z', (v) => ({
+        s: 'Small', l: 'Large', m: 'Large (was Medium)',
+    }[v] ?? String(v).toUpperCase())],
     // `dir` outlives the only layout that ever offered it (the 4-cam scorecard,
     // deleted with the full-scene group). Kept because it costs nothing and it
     // is what keeps a producer's leftover ?dir=left / ?dir=right sources two

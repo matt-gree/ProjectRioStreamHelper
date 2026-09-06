@@ -29,7 +29,6 @@ still applies verbatim when authoring by hand.
 ├── callout.svg          # the post-game Stat Callout backdrop, 1920×1080
 ├── scorecard.svg        # the vertical Scorecard, 1920×1080 (stacked sections)
 ├── scoreboard-s.svg     # horizontal scoreboard, 388×156
-├── scoreboard-m.svg     # horizontal scoreboard, 600×200
 ├── scoreboard-l.svg     # horizontal scoreboard, 800×460
 ├── ticker.svg           # the Results Ticker marquee bar, 1920×80
 ├── statsbar.svg         # the per-team batter/pitcher stat bar, 452×118
@@ -389,10 +388,11 @@ independently toggleable sections melded into one continuous card. The full
 stack + slot contract is documented in the comment block at the top of
 `default/scorecard.svg` — copy that file as the working reference.
 
-### `scoreboard-{s,m,l}.svg`
+### `scoreboard-{s,l}.svg`
 
 The horizontal Scoreboard (`public/layout/lib/scoreboard-mount.js`), one file
-per size variant at its native canvas (388×156, 600×200, 800×460).
+per size variant at its native canvas (388×156, 800×460). A retired size (`m`,
+`xs`, `xl`) has no file — the mount resolves it to `l`.
 Each is a row-stack: groups `row-top` / `row-inning` / `row-live` /
 `row-final` / `row-roster` / `row-box` / `row-mode`, authored at a local y
 origin of 0 with `data-h`, melded by the mount into a card sized via

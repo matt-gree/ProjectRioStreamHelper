@@ -70,6 +70,12 @@ _MODIFIERS = {
     "botclosed": "bot-closed", "bot-closed": "bot-closed",
     # Lower third: a logo's caption-less box, "x y w h".
     "full": "full",
+    # The scoreboard's linescore: the BAND the inning columns divide into equal
+    # cells, however many innings the game ran (scoreboard-mount layoutBox).
+    # A pair, like the meld metadata above — a band with only one of its two
+    # numbers is not a band, and the mount falls back to fixed positions.
+    "spanx": "span-x", "span-x": "span-x",
+    "spanw": "span-w", "span-w": "span-w",
     # Scoreboard S's game-mode band: a slot whose x tracks the MELDING card's
     # centre rather than sitting at a fixed one (scoreboard-mount centerToCard).
     "center": "center",

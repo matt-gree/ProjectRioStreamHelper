@@ -80,10 +80,12 @@ def test_layouts_variant_matrix(client):
     for entry in layouts:
         by_type.setdefault(entry["type"], []).append(entry)
 
-    # Scoreboard expands into the size variants (xs/xl retired with the SVG
-    # conversion; the mount maps unknown/legacy sizes to "l").
-    assert len(by_type["scoreboard"]) == 3
-    assert {e["sizeVariant"] for e in by_type["scoreboard"]} == {"s", "m", "l"}
+    # Scoreboard expands into the size variants. A RETIRED size is not offered
+    # (xs/xl went with the SVG conversion, m on 2026-08-29) — the mount maps
+    # every unknown or legacy size to "l", which is what lets one be dropped
+    # without stranding the OBS sources that still name it.
+    assert len(by_type["scoreboard"]) == 2
+    assert {e["sizeVariant"] for e in by_type["scoreboard"]} == {"s", "l"}
     assert all("?size=" in e["url"] for e in by_type["scoreboard"])
 
     # Team-variant layouts expand into ?team=1 / ?team=2. `controller` is in

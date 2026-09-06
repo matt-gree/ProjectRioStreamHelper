@@ -60,29 +60,38 @@ export const LAYOUT_SETTINGS = {
     // the control's own affordance once per line and pushes the word that
     // distinguishes it rightwards, which is most of why a settings column reads
     // as a wall. The description still carries the sentence.
+    /*
+     * PER-SIZE, and in each size's OWN order. The scoreboard's sizes are one
+     * HTML file with one `<meta>` whitelist but genuinely different cards, so
+     * the switch list is not shared — it is filtered by `sizes`
+     * (settingReachesSize below), and what is left reads top-of-card to
+     * bottom-of-card for whichever size the source is on:
+     *
+     *   s   Team Logos · Inning · Live Cluster · Game Mode
+     *       A horizontal meld: the core pill extends to reveal the inning
+     *       segment and then the live cluster, with the mode band under it.
+     *   l   Team Logos · Live Cluster · Rosters · Box Score
+     *       A row stack: header, live cluster, both nines, the linescore.
+     *
+     * They flow as a row, so registry order IS reading order — a producer
+     * hunting for the band they can see at the bottom of the overlay should
+     * find its switch at the end of the list, not in the middle. One array
+     * ordered s-first-then-l-only satisfies both filters at once.
+     *
+     * A switch a size cannot honour is never offered: Small has no roster or
+     * linescore band, and Large draws its inning inside row-top and its game
+     * mode inline in the linescore's meta pane, where neither costs height and
+     * so neither has anything to toggle. An option that silently does nothing
+     * costs more than a missing one.
+     */
     scoreboard: [
-        // Default OFF: a one-game rating swing is a season-play number, and at a
-        // tournament or in a league it was taking the widest thirds of the
-        // completed-game row to say something nobody in the room was watching.
-        // sizes: the SMALL board has no completed-game cluster at all — no
-        // elo slots, no meta line, no final row (it is a compact live card that
-        // swaps its inning for a FINAL badge), so neither shipped package draws
-        // a rating there and the switch was a control that could not change the
-        // picture. The VALUE is per board, not per size, so hiding the row on an
-        // S source leaves the same board's M/L sources holding what they had.
-        { key: 'showElo', type: 'switch', sizes: ['m', 'l'], label: 'ELO', description: 'Rating change on completed games. Off unless you’re running ranked ladder play.', defaultValue: false },
         { key: 'showTeamLogos', type: 'switch', label: 'Team Logos', description: 'Display MSB team logos' },
-        // Both feeds write score.{N}.game_mode now, so this is standing context
-        // rather than a completed-game detail.
-        { key: 'showGameMode', type: 'switch', label: 'Game Mode', description: 'The game mode / tag set, during a game and after it', defaultValue: true },
-        // Segment toggles honoured by melded themes (e.g. Small Scoreboard); a
-        // theme without those segments ignores them.
-        //
-        // INNING FIRST, and the order is the card's: on a melded theme the live
-        // segment sits OUTBOARD of the inning, so a column of switches that ran
-        // live-then-inning read right-to-left against the thing it described.
+        // INNING BEFORE THE LIVE CLUSTER, and the order is the card's: on the
+        // melded Small board the live segment sits OUTBOARD of the inning, so a
+        // list that ran live-then-inning read right-to-left against the thing it
+        // described.
         {
-            key: 'showInning', type: 'switch', label: 'Inning',
+            key: 'showInning', type: 'switch', label: 'Inning', sizes: ['s'],
             description: 'The inning number segment during a live game. The live cluster needs it, so turning that on shows the inning too.',
             forcedBy: { key: 'showLive', note: 'Held on by the Live Cluster — the count reads as a count within an inning, and on a melded theme the live segment sits outboard of this one. Turn the Live Cluster off to get this switch back.' },
             defaultValue: true,
@@ -93,6 +102,38 @@ export const LAYOUT_SETTINGS = {
         // doesn't have is the producer's next bug report. The console shows it
         // held on instead.
         { key: 'showLive', type: 'switch', label: 'Live Cluster', description: 'The live count + base diamond. Off keeps it hidden even during a live game (the card stays compact).', defaultValue: true },
+        /*
+         * The Large board's own three, in the order they sit on the card: the
+         * stats inside the live row, then the two BANDS below it. Between them
+         * they are what lets one board be two graphics — everything off is a
+         * header strip you can leave up over live play, everything on is the
+         * full between-innings card. That range is why there is no middle size
+         * any more.
+         */
+        {
+            key: 'showStats', type: 'switch', label: 'Stats', sizes: ['l'],
+            description: 'Four headline stats beside each portrait in the live row — AB / AVG / SLG / SO% for the batter, IP / ERA / K% / AVG for the pitcher. Off blanks them; the portraits and the count stay where they are.',
+            defaultValue: true,
+        },
+        {
+            key: 'showRoster', type: 'switch', label: 'Rosters', sizes: ['l'],
+            description: 'Both nines under the header. Off drops ~88 units of card height.',
+            defaultValue: true,
+        },
+        {
+            key: 'showBox', type: 'switch', label: 'Box Score', sizes: ['l'],
+            description: 'The per-inning linescore, and the pane beside it carrying the game mode, stadium and date. Off drops ~112 units.',
+            defaultValue: true,
+        },
+        // Small's mode BAND (row-mode), a vertical meld that grows the card —
+        // which is what there is to switch off. Large's mode is a line inside
+        // the linescore's meta pane and costs nothing, so it has no switch and
+        // this default is what it reads.
+        {
+            key: 'showGameMode', type: 'switch', label: 'Game Mode', sizes: ['s'],
+            description: 'The game-mode band under the card, during a game and after it. Self-hides when the mode is unknown.',
+            defaultValue: true,
+        },
     ],
     roster: [
         { key: 'showSuperstars', type: 'switch', label: 'Superstar Icons', description: 'Display superstar badge on starred characters' },
@@ -296,7 +337,7 @@ export const THEME_ELEMENT = {
 // Size codes the scoreboard ships (server/theme_contracts.py CONTRACTS is the
 // source of truth; the mount resolves anything unknown to `l`, so this does
 // too rather than inventing a stem no package can have shipped).
-const SCOREBOARD_SIZES = new Set(['s', 'm', 'l']);
+const SCOREBOARD_SIZES = new Set(['s', 'l']);
 
 /**
  * The theme stem for `type`, given the source's size variant where that matters.

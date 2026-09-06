@@ -80,9 +80,10 @@ def _parse_html_meta(path: Path) -> tuple[int | None, int | None, list[str] | No
 # canvas (viewBox) — the recommended OBS browser-source size — and come from
 # theme_contracts.CONTRACTS, the single Python source of truth (the JS copies
 # in scoreboard-mount.js / layouts.jsx / elements.js are pinned to it by
-# tests/unit/test_size_dims_parity.py). The xl variant was retired with the
-# SVG conversion; the mount treats unknown/legacy sizes (including ?size=xl
-# sources that still exist in OBS) as "l".
+# tests/unit/test_size_dims_parity.py). RETIRED variants are not listed here
+# and the mount treats every unknown/legacy size as "l", so a source that still
+# carries one keeps rendering: xl went with the SVG conversion, m (600x200) on
+# 2026-08-29 for sitting between the compact board and the full one.
 def _scoreboard_canvas(size: str) -> tuple[int, int]:
     from server.theme_contracts import CONTRACTS
 
@@ -92,7 +93,6 @@ def _scoreboard_canvas(size: str) -> tuple[int, int]:
 _SIZE_VARIANTS = {
     "scoreboard": [
         ("s",  "Small",  *_scoreboard_canvas("s")),
-        ("m",  "Medium", *_scoreboard_canvas("m")),
         ("l",  "Large",  *_scoreboard_canvas("l")),
     ],
 }

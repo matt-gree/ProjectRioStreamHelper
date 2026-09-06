@@ -512,7 +512,7 @@ describe('catalogPlacements — what PRSH can configure with no OBS', () => {
      */
     it('lists an element’s sizes in declared order, default included', () => {
         const ids = idsOf(all()).filter(i => i.startsWith('scoreboard:1'));
-        expect(ids).toEqual(['scoreboard:1~zs', 'scoreboard:1~zm', 'scoreboard:1']);
+        expect(ids).toEqual(['scoreboard:1~zs', 'scoreboard:1']);
     });
 
     // …and a bare pin still answers with the default size rather than with

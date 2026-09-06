@@ -108,6 +108,19 @@ describe('variants', () => {
     });
 
     /*
+     * A retired size is still a real thing to find in a producer's OBS: the
+     * Medium board was retired 2026-08-29 and the mount resolves anything
+     * unknown to `l`, so that source draws the LARGE card at the wrong canvas.
+     * The row has to lead with what is on screen — "Medium" alone would be the
+     * console disagreeing with the broadcast about a source the producer is
+     * looking at, and a plain "Large" would give them two Large rows with
+     * nothing to say which one is the mis-sized one.
+     */
+    it('names a retired size by what it actually draws', () => {
+        expect(variantLabel('zm')).toBe('Large (was Medium)');
+    });
+
+    /*
      * `?team=` is the ONE variant whose label is a producer preference — the
      * rack row and the stage panel name the same source, so the row has to be
      * able to say what the panel says.

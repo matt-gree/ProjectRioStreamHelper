@@ -225,25 +225,84 @@ describe('ElementStyleSettings — a detail follows its master', () => {
 });
 
 /*
+ * THE PER-SIZE GATE (settingReachesSize). The scoreboard's three-sizes-one-HTML
+ * shape is exactly what the `<meta>` whitelist cannot express: it is per layout
+ * TYPE, so a setting only some sizes draw passes it everywhere. Rosters are the
+ * case — only the Large board has the band — and a switch offered on a source
+ * that has nothing to move is worse than a missing one, because the producer
+ * flips it and concludes the overlay is broken.
+ *
+ * Bare = Large: the mount resolves an absent or retired ?size= to `l`, and this
+ * gate has to agree with it or the row disappears on the very sources that have
+ * the band.
+ */
+describe('ElementStyleSettings — a setting only one size draws', () => {
+    const at = (size) => render(
+        <ElementStyleSettings type="scoreboard" label="Scoreboard 1" size={size} />,
+    );
+    beforeEach(() => useSettingsStore.setState({ overlays: {}, production: {} }));
+
+    it('offers the band switches on the size that has the bands', () => {
+        at('l');
+        expect(screen.getByRole('button', { name: 'Rosters' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Box Score' })).toBeInTheDocument();
+    });
+
+    it('drops them on a size with neither band', () => {
+        at('s');
+        expect(screen.queryByRole('button', { name: 'Rosters' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Box Score' })).not.toBeInTheDocument();
+        // Not the whole panel — the ungated switches beside them still render.
+        expect(screen.getByRole('button', { name: 'Live Cluster' })).toBeInTheDocument();
+    });
+
+    it('treats a source with no size as the one it actually renders at', () => {
+        at(undefined);
+        expect(screen.getByRole('button', { name: 'Rosters' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Box Score' })).toBeInTheDocument();
+    });
+
+    /*
+     * EACH SIZE GETS ITS OWN LIST, in its own order. One registry array is
+     * filtered by `sizes` and what survives has to read top-of-card to
+     * bottom-of-card for the size the source is actually on — Small melds
+     * outward (inning segment, then the live cluster, then the mode band under
+     * the card), Large stacks downward (live cluster, both nines, linescore).
+     *
+     * The two lists are nearly disjoint, which is the point: Small has no
+     * roster or linescore band, and Large draws its inning inside row-top and
+     * its game mode inline in the linescore's meta pane, where neither costs
+     * height and so neither has anything to toggle.
+     */
+    const switchesAt = (size) => {
+        at(size);
+        const known = ['Team Logos', 'Inning', 'Live Cluster', 'Stats', 'Rosters', 'Box Score', 'Game Mode'];
+        return screen.getAllByRole('button')
+            .map(b => b.textContent).filter(t => known.includes(t));
+    };
+
+    it('gives the Large board its stack, top to bottom', () => {
+        expect(switchesAt('l')).toEqual(['Team Logos', 'Live Cluster', 'Stats', 'Rosters', 'Box Score']);
+    });
+
+    it('gives the Small board its meld, inboard to outboard', () => {
+        expect(switchesAt('s')).toEqual(['Team Logos', 'Inning', 'Live Cluster', 'Game Mode']);
+    });
+});
+
+/*
  * The scoreboard's Inning is ORed with the Live Cluster in the mount
  * (showInningSeg), so with the cluster up the switch cannot say no. The console
  * has to say that: a control still offering a choice it does not have is
  * indistinguishable from a broken setting.
  */
 describe('ElementStyleSettings — a switch its master holds on', () => {
-    const board = () => render(<ElementStyleSettings type="scoreboard" label="Scoreboard 1" />);
+    // At the SMALL size: Inning is the melded board's own segment switch, and
+    // `sizes: ['s']` means the Large panel does not carry it at all.
+    const board = () => render(
+        <ElementStyleSettings type="scoreboard" label="Scoreboard 1" size="s" />,
+    );
     const inning = () => screen.getByRole('button', { name: 'Inning' });
-
-    /* The pair is ordered like the CARD, inning inboard of the live cluster —
-     * not like the dependency, which runs the other way. Registry order is what
-     * the panel follows, so it is worth one assertion. */
-    it('lists Inning before the Live Cluster', () => {
-        useSettingsStore.setState({ overlays: {}, production: {} });
-        board();
-        const labels = screen.getAllByRole('button')
-            .map(b => b.textContent).filter(t => t === 'Inning' || t === 'Live Cluster');
-        expect(labels).toEqual(['Inning', 'Live Cluster']);
-    });
 
     it('leaves the switch alone while the master is off', () => {
         // Confirm mode on, so a click is observable as a staged write rather
@@ -338,52 +397,6 @@ describe('ElementStyleSettings — app-palette settings under a full-art theme',
         useSettingsStore.setState({ overlays: { global: { designPackage: 'default' } }, production: {} });
         render(<ElementStyleSettings type="statscard" label="Stat Card" />);
         expect(screen.getByText('Stat Value Color')).toBeInTheDocument();
-    });
-});
-
-/*
- * A setting whose PART only exists at some sizes. The scoreboard's three size
- * variants are one HTML file with one `<meta>`, so the whitelist cannot draw
- * this distinction — the registry does, and the stage reads the source's own
- * ?size= to apply it. ELO is a completed-game number and the Small board has no
- * completed-game cluster at all.
- */
-describe('ElementStyleSettings — a setting the source’s size doesn’t draw', () => {
-    const board = (size) => render(
-        <ElementStyleSettings type="scoreboard" board={1} label="Scoreboard 1" size={size} />,
-    );
-
-    it('drops ELO on the Small board', () => {
-        board('s');
-        expect(screen.queryByText('ELO')).not.toBeInTheDocument();
-        // ...and the rest of the panel is untouched: this is one row, not a mode.
-        expect(screen.getByText('Team Logos')).toBeInTheDocument();
-        expect(screen.getByText('Live Cluster')).toBeInTheDocument();
-    });
-
-    it('keeps ELO on the sizes that draw it', () => {
-        board('m');
-        expect(screen.getByText('ELO')).toBeInTheDocument();
-        cleanup();
-        board('l');
-        expect(screen.getByText('ELO')).toBeInTheDocument();
-    });
-
-    /* A bare source carries no ?size= and the mount resolves that to `l`, so the
-     * console must not read "no size" as "no sizes drawn". */
-    it('treats an absent size as the default the mount falls back to', () => {
-        board(undefined);
-        expect(screen.getByText('ELO')).toBeInTheDocument();
-    });
-
-    /* The value is stored per BOARD, not per size — hiding the row on an S
-     * source must not disturb what the same board's L source is showing. */
-    it('leaves the stored value alone', () => {
-        useSettingsStore.setState({
-            overlays: { scoreboard: { 1: { showElo: true } } }, production: {},
-        });
-        board('s');
-        expect(useSettingsStore.getState().overlays.scoreboard[1].showElo).toBe(true);
     });
 });
 

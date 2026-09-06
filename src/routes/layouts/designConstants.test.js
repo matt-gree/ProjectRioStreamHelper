@@ -173,7 +173,7 @@ describe('OVERRIDE_CAPABLE_TYPES', () => {
 
     it('resolves the scoreboard’s stem from the source’s size', () => {
         expect(themeElementFor('scoreboard', 's')).toBe('scoreboard-s');
-        expect(themeElementFor('scoreboard', 'm')).toBe('scoreboard-m');
+        expect(themeElementFor('scoreboard', 'm')).toBe('scoreboard-l');
         // The mount resolves an unknown or absent size to `l`, so this must too
         // — a stem no package can have shipped would answer "not themed" and
         // wrongly leave the controls live.

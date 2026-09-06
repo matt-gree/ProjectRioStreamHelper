@@ -554,13 +554,11 @@ class Settings:
             },
             "presets": {},
             "scoreboard": {
-                # ELO off: a one-game rating swing is a season-play number, and
-                # it was taking the two widest thirds of the completed-game row
-                # at every tournament and league broadcast to say it. Producers
-                # running ranked ladder play turn it on.
-                "showElo": False,
                 "showTeamLogos": True,
                 "showGameMode": True,
+                "showStats": True,
+                "showRoster": True,
+                "showBox": True,
             },
             "roster": {
                 "showSuperstars": True,

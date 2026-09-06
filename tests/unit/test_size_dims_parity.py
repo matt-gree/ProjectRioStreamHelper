@@ -14,7 +14,7 @@ from server.theme_contracts import CONTRACTS
 
 REPO = Path(__file__).resolve().parents[2]
 
-SIZES = ("s", "m", "l")
+SIZES = ("s", "l")
 
 
 def _canvas(size: str) -> tuple[int, int]:
@@ -76,7 +76,7 @@ def test_production_elements_scoreboard_size_table_matches_contracts():
         )
     }
     # The offered sizes are the ones the layouts API expands (xs is retired).
-    assert set(entries) == {"s", "m", "l"}
+    assert set(entries) == {"s", "l"}
     for size, dims in entries.items():
         assert dims == _canvas(size), f"elements.js sizes.{size} drifted"
 

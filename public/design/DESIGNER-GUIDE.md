@@ -65,7 +65,7 @@ don't):
 
 | Overlay | Canvas |
 |---|---|
-| Scoreboard (s / m / l) | 388×156 · 600×200 · 800×460 |
+| Scoreboard (s / l) | 388×156 · 800×460 |
 | Stat card | 452×118 |
 | Container stat card | 380×240 |
 | Results ticker | 1920×80 |

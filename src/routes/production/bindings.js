@@ -45,7 +45,7 @@ export function instanceUrl(element, board, variant = '') {
 /*
  * The native size of one placement — the element's, unless the row is a VARIANT
  * that has its own canvas. The scoreboard's three sizes are three different
- * browser sources (388×156 / 600×200 / 800×460), so a strip offering to copy
+ * browser sources (388×156 / 800×460), so a strip offering to copy
  * "Scoreboard — Small" has to quote Small's dimensions, not the element's
  * default. Every other element answers with exactly what it did before.
  */

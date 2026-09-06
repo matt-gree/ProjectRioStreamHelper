@@ -51,13 +51,24 @@ describe('instanceUrl', () => {
 
 describe('placementDims', () => {
     // The dimensions a producer sizes their browser source from. A variant row
-    // quotes its OWN canvas: three sizes are three different sources, and a
-    // strip offering Small at 800×460 would be worse than offering nothing.
+    // quotes its OWN canvas: the sizes are different sources, and a strip
+    // offering Small at 800×460 would be worse than offering nothing.
     it('reports the variant’s canvas, not the element default', () => {
         expect(placementDims({ element: el('scoreboard'), variant: 'zs' }))
             .toEqual({ width: 388, height: 156 });
+        expect(placementDims({ element: el('scoreboard'), variant: '' }))
+            .toEqual({ width: 800, height: 460 });
+    });
+
+    /* A RETIRED size quotes the canvas it actually draws at. `zm` is a real
+       thing to find in a producer's OBS — the Medium board was retired
+       2026-08-29 and the mount resolves anything unknown to `l` — so the strip
+       has to answer with 800×460, which is both the truth and the number they
+       need to resize that source to. Answering 600×200 (or nothing) would send
+       them to re-create a source at the canvas that no longer exists. */
+    it('quotes the large canvas for a retired size still in a URL', () => {
         expect(placementDims({ element: el('scoreboard'), variant: 'zm' }))
-            .toEqual({ width: 600, height: 200 });
+            .toEqual({ width: 800, height: 460 });
     });
 
     it('falls back to the element for a bare or unknown variant', () => {

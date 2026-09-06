@@ -376,3 +376,61 @@ def test_theme_hosting_shells_link_the_token_layer(shell: Path):
         "/layout/lib/rio-theme/tokens.css. Every var() in those files will "
         "compute to black, silently."
     )
+
+
+SCOREBOARD_SVGS = [p for p in PACKAGE_SVGS if p.name.startswith("scoreboard-")]
+
+
+def test_scoreboard_sizes_are_transcribed():
+    # Guard against the filter below going quiet if the files are ever renamed.
+    assert SCOREBOARD_SVGS, "no scoreboard theme SVGs found"
+
+
+@pytest.mark.parametrize("svg", SCOREBOARD_SVGS, ids=lambda p: f"{p.parent.name}/{p.name}")
+def test_a_scoreboard_with_a_date_slot_also_has_the_slot_that_names_the_game(svg: Path):
+    """``meta-date`` is the OPTIONAL half of the completed-game meta.
+
+    The mount writes both slots with ``optional``, so a theme may omit either
+    and the engine will not complain — and omitting both is a real choice
+    Scoreboard S makes, having no completed-game meta at all.
+
+    The combination that is never a choice is a date with no ``meta-main``: the
+    board would draw a bare date and silently lose the stadium and the innings,
+    which are the two facts that say WHICH game just ended. A date alone is the
+    one thing on that pane nobody reads a scoreboard for.
+    """
+    text = svg.read_text(encoding="utf-8")
+    if 'data-slot="meta-date"' not in text:
+        return
+    assert 'data-slot="meta-main"' in text, (
+        f"{svg.parent.name}/{svg.name} declares meta-date without meta-main, so a "
+        "completed game draws a date with no stadium or innings beside it"
+    )
+
+
+@pytest.mark.parametrize("svg", SCOREBOARD_SVGS, ids=lambda p: f"{p.parent.name}/{p.name}")
+def test_a_live_stat_slot_is_declared_as_a_label_and_a_value(svg: Path):
+    """The live row's stat cells are PAIRS, and half a pair renders as noise.
+
+    ``s{T}-stat-{i}-label`` / ``-value`` are what the mount fills from
+    ``RioData.getStatsLine`` — the same four headline stats the Stat Bar and
+    Stat Card draw, for whoever side T has on the field. Both halves are
+    optional, so a theme may leave the stats out entirely and the mount simply
+    writes nothing.
+
+    What it may not do is declare one half. A value with no label is four bare
+    numbers a viewer cannot read; a label with no value is a column heading over
+    empty space. Neither errors, and both look deliberate — the failure is a
+    theme that ships looking finished.
+    """
+    text = svg.read_text(encoding="utf-8")
+    for prefix in ("s1", "s2"):
+        for i in range(4):
+            has = {
+                part: f'data-slot="{prefix}-stat-{i}-{part}"' in text
+                for part in ("label", "value")
+            }
+            assert has["label"] == has["value"], (
+                f"{svg.parent.name}/{svg.name}: {prefix}-stat-{i} declares "
+                f"{'a value with no label' if has['value'] else 'a label with no value'}"
+            )

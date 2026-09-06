@@ -122,7 +122,6 @@ export const ELEMENTS = [
          */
         sizes: [
             { value: 's', label: 'Small',  width: 388, height: 156 },
-            { value: 'm', label: 'Medium', width: 600, height: 200 },
             { value: 'l', label: 'Large',  width: 800, height: 460, default: true },
         ],
         match: (url) => /\/layout\/scoreboard\d*\/scoreboard/i.test(url) || /scoreboard\.html/i.test(url),

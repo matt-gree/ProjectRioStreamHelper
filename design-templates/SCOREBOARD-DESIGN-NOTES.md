@@ -1,24 +1,30 @@
 # Scoreboard design notes (for the Figma round trip)
 
-Companion to `scoreboard-s.template.svg`, `scoreboard-m.template.svg` and
-`scoreboard-l.template.svg`. The scoreboard is the most data-dense element in
-PRSH, so read this before restyling.
+Companion to `scoreboard-s.template.svg` and `scoreboard-l.template.svg`. The
+scoreboard is the most data-dense element in PRSH, so read this before
+restyling.
 
-## The three sizes and what fits
+## The two sizes and what fits
 
 | Size | Canvas | Layout | Rows it uses |
 |---|---|---|---|
 | s | 388×156 | **absolute** (melds) | `row-top`, `row-bottom`, `row-inning`, `row-live`, `row-mode` |
-| m | 600×200 | **stack** | `row-top` + `row-live` / `row-final` |
 | l | 800×460 | **stack** | all rows (+ rosters, box score) |
 
 Each size is its own file and its own frame — there is no responsive
 relationship between them, and nothing is ever scaled. A size implements
 whatever subset of the slot vocabulary fits it. **Don't resize the outer
-frame**: place inside it freely, but keep it locked to the native size. (Legacy
-`xs` and `xl` sources are retired — the app resolves them to `l`.)
+frame**: place inside it freely, but keep it locked to the native size.
 
-The three canvases are pinned across the app, the server and the mount by
+The two are far apart on purpose: `s` is a compact pill that says who is
+playing and what the count is, `l` is the full card with rosters and a
+linescore. A middle size existed (`m`, 600×200) and was retired on 2026-08-29 —
+it had no content of its own, only `l`'s at a smaller scale, so every
+improvement to either end pulled it back toward `l` until the two were the same
+card 200 units apart. (Retired sizes — `m`, `xs`, `xl` — have no file; the app
+resolves them to `l`, so a source that still names one keeps rendering.)
+
+Both canvases are pinned across the app, the server and the mount by
 `tests/unit/test_size_dims_parity.py`, so a size quoted anywhere else is a
 guess. These are the real ones.
 
@@ -38,7 +44,7 @@ To declare absolute mode from a tool that can't edit the root `<svg>`, drop an
 invisible layer named **`layout=absolute`** anywhere — the compiler lifts it to
 the root and deletes the helper.
 
-### Stack — the app assembles the card (Scoreboard M and L)
+### Stack — the app assembles the card (Scoreboard L)
 
 Each `row-*` group is a self-contained horizontal **band**, authored at a local
 y origin of 0 and declaring its height with `h=N` in its layer name. At runtime
@@ -120,8 +126,12 @@ at a time. Toggle them in the layers panel.
 **Live game (`row-live`):**
 - `slot=bat-icon` / `slot=pit-icon` — batter/pitcher character (image)
 - `slot=bat-name` / `slot=pit-name` — their names
-- `slot=ball-0..3`, `slot=strike-0..2`, `slot=out-0..2` — count dots (app fills
-  the active ones; style the empty state, the app sets the lit colour)
+- `slot=ball-0..2`, `slot=strike-0..1`, `slot=out-0..1` — count dots (app fills
+  the active ones; style the empty state, the app sets the lit colour). One
+  short of each terminal value on purpose: the fourth ball, third strike and
+  third out all end the plate appearance or the half-inning, so the game has
+  already reset the count by the time we could draw them — a full row IS the
+  event. A fourth ball dot would never light.
 - `slot=balls` / `slot=strikes` — the count as **numbers** instead of dots, for
   a theme that would rather print "2-1" than light pips
 - `slot=base-1..3` — the diamond bases (app lights occupied ones)

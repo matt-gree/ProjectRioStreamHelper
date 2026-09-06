@@ -144,13 +144,26 @@ def _scoreboard_slots() -> dict[str, Slot]:
         "pit-icon": Slot("image"),
         "bat-name": Slot("text"),
         "pit-name": Slot("text"),
+        # The live cluster PER SIDE: whoever side T has on the field, the role
+        # they are in (AB / P), and their four headline stats. The bat-/pit-
+        # slots above are the same content pinned to fixed left/right positions
+        # — a theme takes one arrangement or the other.
+        **{f"s{t}-live-icon": Slot("image") for t in (1, 2)},
+        **{f"s{t}-role": Slot("text") for t in (1, 2)},
+        **{f"s{t}-stat-{i}-{part}": Slot("text")
+           for t in (1, 2) for i in range(4) for part in ("label", "value")},
         "meta-main": Slot("text"),
         "meta-date": Slot("text"),
         # Unlike the two above (completed-game only), this one is bound in both
         # states — every size may place it.
         "meta-game-mode": Slot("text"),
-        "elo1-group": Slot("group"),
-        "elo2-group": Slot("group"),
+        # The linescore's two layout groups. box-total (the R cluster) nests
+        # inside box-grid (the whole table); the mount slides the first left by
+        # the unused innings' width and the second back right by half of it, so
+        # a five-inning game closes the canyon a nine-column grid leaves. Both
+        # optional — without them a theme keeps its authored fixed positions.
+        "box-grid": Slot("group"),
+        "box-total": Slot("group"),
         "box-away-r": Slot("text"),
         "box-home-r": Slot("text"),
         "box-away-name": Slot("text"),
@@ -161,14 +174,15 @@ def _scoreboard_slots() -> dict[str, Slot]:
         s[f"s{t}-name"] = Slot("text")
         s[f"s{t}-score"] = Slot("text")
         s[f"s{t}-cap-ring"] = Slot("any")
-        s[f"elo{t}-in"] = Slot("text")
-        s[f"elo{t}-out"] = Slot("text")
-        s[f"elo{t}-delta"] = Slot("text")
         for i in range(9):
             s[f"s{t}-char-{i}"] = Slot("image")
-    for i in range(4):
-        s[f"ball-{i}"] = Slot("any")
+    # One short of each terminal value: the game never sits at four balls,
+    # three strikes or three outs (walk / strikeout / side retired all reset the
+    # count before the next frame), so the mount only ever lights 3/2/2 and a
+    # theme drawing the extra dot would be drawing one that can never come on.
     for i in range(3):
+        s[f"ball-{i}"] = Slot("any")
+    for i in range(2):
         s[f"strike-{i}"] = Slot("any")
         s[f"out-{i}"] = Slot("any")
     for b in (1, 2, 3):
@@ -217,10 +231,15 @@ CONTRACTS: dict[str, Contract] = {
         (1920, 1080), "xMidYMid slice", slots={},
         note="callout is a pure backdrop — it recolors via CSS vars, data slots are ignored",
     ),
-    # scoreboards share one slot vocabulary; each size uses a subset (all optional)
+    # scoreboards share one slot vocabulary; each size uses a subset (all optional).
+    # TWO sizes: the compact pill and the full card. The 600x200 Medium was
+    # retired 2026-08-29 — it had no content of its own, only L's at a smaller
+    # scale, so it converged on L every time either was improved. Retiring a
+    # size is a supported move, not a breaking one: the mount, the layouts API
+    # and designConstants all resolve an unknown or retired ?size= to `l`, so a
+    # producer's ?size=m source keeps rendering (at L's 800x460 canvas, so its
+    # OBS placement needs redoing once).
     "scoreboard-s": Contract((388, 156), "xMidYMid meet", slots=_scoreboard_slots(),
-                             parts={"div": Slot("any")}),
-    "scoreboard-m": Contract((600, 200), "xMidYMid meet", slots=_scoreboard_slots(),
                              parts={"div": Slot("any")}),
     "scoreboard-l": Contract((800, 460), "xMidYMid meet", slots=_scoreboard_slots(),
                              parts={"div": Slot("any")}),

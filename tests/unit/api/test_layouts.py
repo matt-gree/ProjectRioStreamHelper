@@ -48,7 +48,7 @@ def _write(tmp_path, body):
 def test_parse_html_meta_extracts_dims_and_settings(tmp_path):
     html = """
     <html><head>
-    <meta name="overlay-settings" content="accentColor, showElo ,">
+    <meta name="overlay-settings" content="accentColor, showTeamLogos ,">
     <style>body { width: 600px; height: 200px; }</style>
     </head><body></body></html>
     """
@@ -56,7 +56,7 @@ def test_parse_html_meta_extracts_dims_and_settings(tmp_path):
     w, h, supported = _parse_html_meta(p)
     assert (w, h) == (600, 200)
     # Whitespace trimmed, empty trailing token dropped.
-    assert supported == ["accentColor", "showElo"]
+    assert supported == ["accentColor", "showTeamLogos"]
 
 
 def test_parse_html_meta_missing_meta_returns_none_supported(tmp_path):

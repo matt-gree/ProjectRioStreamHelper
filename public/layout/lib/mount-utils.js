@@ -14,6 +14,34 @@ export function dot(engine, name, on, color) {
   if (el) el.style.fill = on ? color : DOT_OFF;
 }
 
+// Stadium values reach state as slugs (server/rio/provider.py:_stadium_slug),
+// which is right for lookups and wrong on air — "peach_garden" is not a name
+// anyone writes. Title-casing the slug gets six of the seven right and "DK
+// Jungle" wrong ("Dk"), so the names are SPELLED here rather than derived; the
+// set is closed and has been for the life of the game. Mirrors
+// _STADIUM_SLUGS in server/rio/provider.py and STADIUM_OPTIONS in
+// src/data/stadiums.js — the same seven, inverted.
+const STADIUM_NAMES = {
+  mario_stadium: 'Mario Stadium',
+  bowser_castle: 'Bowser Castle',
+  wario_palace: 'Wario Palace',
+  yoshi_park: 'Yoshi Park',
+  peach_garden: 'Peach Garden',
+  dk_jungle: 'DK Jungle',
+  toy_field: 'Toy Field',
+};
+
+// Slug -> display name. Anything already reading as a display name is left
+// alone (the HUD and completed-game feeds both send real names through here),
+// and an unknown slug still title-cases rather than reaching air as a slug.
+export function prettyStadium(slug) {
+  if (!slug) return '';
+  const key = String(slug);
+  if (STADIUM_NAMES[key]) return STADIUM_NAMES[key];
+  if (/[a-z].*[A-Z ]/.test(key) || key.includes(' ')) return key;
+  return key.replace(/[_-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
 // Probe-load an image URL before committing it to a theme engine slot, so a
 // 404 (missing asset pack file) never leaves a broken-image icon on air —
 // it falls back to an optional sibling slot (e.g. a default mark) instead.
@@ -39,4 +67,22 @@ export function bindImageProbe(engine, isDisposed, slotName, url, fallbackSlot) 
     if (fallbackSlot && engine.slots[fallbackSlot]) engine.slots[fallbackSlot].setAttribute('opacity', '1');
   };
   img.src = url;
+}
+
+// How many innings a linescore covers — UNCAPPED, so the caller can both size
+// its grid and work out which window of innings to show when a game runs past
+// it (the last N, not the first).
+//
+// The feeds only ever hand over the innings that have HAPPENED, so counting
+// those made a live game grow its own table: four innings into a nine-inning
+// game the board drew four columns — and since the columns divide their band,
+// those four stretched across the full width. A scoreboard's linescore is a
+// fixed frame you fill in, not a frame that tracks the filling.
+//
+// Regulation or what was played, whichever is greater: the max is what keeps
+// EXTRA innings visible once a game runs past its own length. A record with no
+// innings_selected falls back to what it played.
+export function linescoreColumns(played, inningsSelected) {
+  if (!(played > 0)) return 0;
+  return Math.max(played, inningsSelected || 0);
 }

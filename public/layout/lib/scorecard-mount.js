@@ -20,7 +20,7 @@
 import { createThemeEngine } from './svg-theme-engine.js';
 import { createRevealGate, clearAnimClassOnEnd } from './reveal-gate.js';
 import { ensureGsap } from './gsap-loader.js';
-import { DOT_OFF, dot, bindImageProbe } from './mount-utils.js';
+import { DOT_OFF, dot, bindImageProbe, prettyStadium } from './mount-utils.js';
 import { ensurePortPalette, portColor as portPaletteColor } from './port-colors.js';
 
 const ELEMENT = 'scorecard';
@@ -75,12 +75,6 @@ function injectCss() {
   s.textContent = CSS;
   document.head.appendChild(s);
   _cssInjected = true;
-}
-
-function prettyStadium(slug) {
-  if (!slug) return '';
-  if (/[a-z].*[A-Z ]/.test(slug) || slug.includes(' ')) return slug; // already a display name
-  return String(slug).replace(/[_-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
 export function mountScorecard({ host, sb }) {

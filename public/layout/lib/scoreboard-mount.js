@@ -14,7 +14,7 @@
 //   row-top     always (names · logos · score · inning)
 //   row-inning  the inning number segment (arrows / final-badge swap)
 //   row-live    live game cluster (batter/pitcher · count · diamond)
-//   row-final   completed cluster (ELO swing · stadium/innings/date meta)
+//   row-final   completed cluster (stadium/innings/date meta)
 //   row-roster  both 9-character rosters
 //   row-box     per-inning linescore
 // A theme implements whatever subset fits its size. row-inning/row-live are
@@ -53,10 +53,15 @@
 // DATA SLOTS (all optional; the engine skips what a theme omits):
 //   sT-logo(image) sT-name(text,maxw) sT-score(text)          T ∈ {1,2}
 //   inn-half(text TOP/BOT) inn-num(text) inn-arrow-up/down(g) final-badge(g)
-//   bat-icon(image) bat-name(text) pit-icon(image) pit-name(text)
-//   ball-0..3 strike-0..2 out-0..2      (mount sets fill on active)
+//   bat-icon(image) bat-name(text) pit-icon(image) pit-name(text) — the batter
+//     and the pitcher at FIXED positions, whichever side they are on.
+//   sT-live-icon(image) sT-role(text AB/P)                    T ∈ {1,2}
+//   sT-stat-0..3-label / sT-stat-0..3-value(text) — the same thing per SIDE:
+//     the character side T has on the field, the role they are in, and their
+//     four headline stats from RioData.getStatsLine (as the Stat Bar and Stat
+//     Card draw them). A theme takes one arrangement or the other.
+//   ball-0..2 strike-0..1 out-0..1      (mount sets fill on active)
 //   base-1..3(polygon fill) runner-1..3(image)
-//   elo1-group/elo2-group(g)  eloT-in eloT-out eloT-delta(text)
 //   meta-main(text stadium · innings) meta-date(text)
 //   meta-game-mode(text) — BOTH states, unlike the meta-* pair above, which are
 //     completed-game only. Place it wherever the size has room for standing
@@ -71,7 +76,8 @@
 //
 // COLOUR SEAMS: the mount sets --side1/--side2 on the host from each player's
 // controller port (P1/P2 fallback), plus --accent when the producer pinned
-// overlays.scoreboard.accentColor. ELO deltas get var(--elo-gain)/var(--elo-loss).
+// overlays.scoreboard.accentColor, which also marks an extra inning's column
+// number in the linescore.
 //
 //   const sb = mountScoreboard({ host, sb: 1, size: 'l' });
 //   sb.update(OverlayBase.state, OverlayBase.settings);
@@ -82,16 +88,21 @@
 import { createThemeEngine } from './svg-theme-engine.js';
 import { createRevealGate, clearAnimClassOnEnd } from './reveal-gate.js';
 import { ensureGsap } from './gsap-loader.js';
-import { DOT_OFF, dot, bindImageProbe } from './mount-utils.js';
-import { ensurePortPalette, portColor as portPaletteColor } from './port-colors.js';
+import { DOT_OFF, dot, bindImageProbe, prettyStadium, linescoreColumns } from './mount-utils.js';
+import { ensurePortPalette, inkOn, portColor as portPaletteColor } from './port-colors.js';
 
 const SETTINGS_TYPE = 'scoreboard';
 const DEFAULT_PACKAGE = 'default';
 const MAX_INN = 9;
 
+// Two sizes, and the gap between them is the point: S is a compact pill (names,
+// score, count) and L is the full card (rosters + linescore in BOTH states).
+// M (600x200) was retired 2026-08-29 — it sat between them and had to keep
+// choosing, so every improvement to either end pulled it toward L until the two
+// were the same card 200 units apart. A retired code resolves to `l` below, so
+// a producer's leftover ?size=m source keeps rendering.
 export const SIZE_DIMS = {
   s:  { w: 388, h: 156 },
-  m:  { w: 600, h: 200 },
   l:  { w: 800, h: 460 },
 };
 
@@ -103,20 +114,10 @@ const STACK = [
   ['row-inning', v => v.showInningSeg],
   ['row-live',   v => v.showLiveSeg],
   ['row-final',  v => v.showFinal],
-  ['row-roster', v => v.showRoster],
-  ['row-box',    v => v.showBox],
+  ['row-roster', v => v.showRosterRow],
+  ['row-box',    v => v.showBoxRow],
   ['row-mode',   v => v.showGameModeSeg],
 ];
-
-// Stadium values reach state as slugs (server/rio/provider.py:_stadium_slug),
-// which is right for lookups and wrong on air — "peach_garden" is not a name
-// anyone writes. Same rule as the Scorecard's prettyStadium: leave anything
-// that already reads as a display name alone.
-function prettyStadium(slug) {
-  if (!slug) return '';
-  if (/[a-z].*[A-Z ]/.test(slug) || slug.includes(' ')) return slug;
-  return String(slug).replace(/[_-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-}
 
 function fallbackSvg({ w, h }) {
   const nameFs = Math.max(12, Math.round(h * 0.24));
@@ -204,11 +205,6 @@ export function mountScoreboard({ host, sb, size }) {
       ? perSbLogo !== false
       : OverlayBase.readSetting(SETTINGS_TYPE, 'showLogo', true) !== false;
     return {
-      // ELO is OFF by default. It is a season-play number: at a tournament or in
-      // a league the rating swing on one game isn't what the room is watching,
-      // and it was taking the widest, most-legible thirds of the completed-game
-      // row to say it. A producer running ranked ladder play turns it on.
-      showElo:      sbGet(settings, 'showElo', false) === true,
       showTeamLogos: sbGet(settings, 'showTeamLogos', true) !== false,
       showGameMode: sbGet(settings, 'showGameMode', true) !== false,
       showLogo,
@@ -218,6 +214,17 @@ export function mountScoreboard({ host, sb, size }) {
       // without those segments ignore both.
       showLive:     sbGet(settings, 'showLive', true) !== false,
       showInning:   sbGet(settings, 'showInning', true) !== false,
+      // The batter's / pitcher's headline stats beside their portraits (Large
+      // only — no other size declares the slots).
+      showStats:    sbGet(settings, 'showStats', true) !== false,
+      // The two BANDS the Large board can drop (no other size has either), each
+      // a producer switch on top of its own content gate. They are choices about
+      // the SCENE, not about the data: with both off the card is a header strip
+      // a producer can leave up over live play, with both on it is the full
+      // between-innings graphic, and that range is the whole reason there is no
+      // middle size any more.
+      showRoster:   sbGet(settings, 'showRoster', true) !== false,
+      showBox:      sbGet(settings, 'showBox', true) !== false,
     };
   }
 
@@ -236,6 +243,12 @@ export function mountScoreboard({ host, sb, size }) {
     const c2 = portColor(p2Port, 1);
     if (c1) host.style.setProperty('--side1', c1); else host.style.removeProperty('--side1');
     if (c2) host.style.setProperty('--side2', c2); else host.style.removeProperty('--side2');
+    // Readable ink ON each side's colour, for a shape the theme fills with it
+    // and then puts text inside — the live row's AB / P tag. Port 3 is a bright
+    // yellow, so this cannot be a fixed white (see inkOn).
+    for (const [v, c] of [['--side1-ink', c1], ['--side2-ink', c2]]) {
+      if (c) host.style.setProperty(v, inkOn(c)); else host.style.removeProperty(v);
+    }
   }
 
   // ── row-stack meld (see scorecard-mount for the full pattern) ───────────────
@@ -693,15 +706,67 @@ export function mountScoreboard({ host, sb, size }) {
     setOpacity('final-badge', d.isFinal);
   }
 
-  function bindLive(d) {
+  /*
+   * EACH SIDE'S live cluster: the character that side has on the field right
+   * now, the role they are in, and their four headline stats.
+   *
+   * Per SIDE, not per role — which is the whole point. The batter and the
+   * pitcher were fixed to the left and right ends of the row, so the portrait
+   * under a producer's name in the header belonged to the other player half the
+   * time. Side 1's cluster now always describes side 1, and what changes every
+   * half-inning is which role it is showing; the AB / P tag is the thing that
+   * says which, so it is a slot the mount writes rather than a word in the SVG.
+   *
+   * Through RioData: `getTeamRole` answers which role a side is in, and
+   * `getStatsLine` is the SAME resolver the Stat Bar and the Stat Card use — so
+   * the four numbers beside a character here and the four on that character's
+   * own card are the same four, formatted the same way, and a change to what
+   * "headline stats" means lands in one place.
+   *
+   * Every slot is optional and blanked when there is nothing to say, so a theme
+   * that doesn't draw this (classic's Large board, every Small board) is
+   * unaffected, and a board whose record has no per-character stats shows a
+   * portrait with nothing beside it rather than four zeroes. The producer's
+   * Stats switch takes the same road: off is "no line", which blanks the eight
+   * cells and moves nothing, since this row has no reflow.
+   */
+  function bindSideLive(state, d, vis) {
+    for (const T of [1, 2]) {
+      const role = window.RioData ? RioData.getTeamRole(state, SB, T) : null;
+      const batting = role === 'batting';
+      // The character, off the board's own batter/pitcher keys rather than the
+      // stats line — a side with no per-character stats still has someone on
+      // the field, and the portrait is the half of this that always works.
+      const who = batting ? d.batter : d.pitcher;
+      engine.setImage(`s${T}-live-icon`, who ? charIconUrl(who) : '');
+      engine.setText(`s${T}-role`, who && role ? (batting ? 'AB' : 'P') : '', { optional: true });
+
+      const line = (vis.showStats && window.RioData)
+        ? RioData.getStatsLine(state, SB, T) : null;
+      for (let i = 0; i < 4; i++) {
+        const st = line && line.stats ? line.stats[i] : null;
+        engine.setText(`s${T}-stat-${i}-label`, st ? st.label : '', { optional: true });
+        engine.setText(`s${T}-stat-${i}-value`, st ? String(st.value) : '', { optional: true });
+      }
+    }
+  }
+
+  function bindLive(d, state, vis) {
     engine.setImage('bat-icon', charIconUrl(d.batter));
     engine.setText('bat-name', d.batter || '');
     engine.setImage('pit-icon', charIconUrl(d.pitcher));
     engine.setText('pit-name', d.pitcher || '');
+    bindSideLive(state, d, vis);
 
-    for (let i = 0; i < 4; i++) dot(engine, `ball-${i}`, i < d.balls, BALL_ON);
-    for (let i = 0; i < 3; i++) dot(engine, `strike-${i}`, i < d.strikes, STRIKE_ON);
-    for (let i = 0; i < 3; i++) dot(engine, `out-${i}`, i < d.outs, OUT_ON);
+    // Three balls, two strikes, two outs — the TERMINAL value of each count is
+    // never a state the game sits in: the fourth ball is a walk, the third
+    // strike a strikeout, the third out the side retired, and Rio has already
+    // reset the count (or flipped the half) by the frame we read. A dot for a
+    // number that can only ever be dark is a dot that reads as "not yet", so
+    // the rows stop one short and a full row is what the event looks like.
+    for (let i = 0; i < 3; i++) dot(engine, `ball-${i}`, i < d.balls, BALL_ON);
+    for (let i = 0; i < 2; i++) dot(engine, `strike-${i}`, i < d.strikes, STRIKE_ON);
+    for (let i = 0; i < 2; i++) dot(engine, `out-${i}`, i < d.outs, OUT_ON);
     // Text-count themes (e.g. Scoreboard S) show the count as numbers rather than
     // dots; no-ops where those slots are absent.
     engine.setText('balls', d.balls);
@@ -720,45 +785,30 @@ export function mountScoreboard({ host, sb, size }) {
     }
   }
 
-  // Completed-game cluster: ELO swings + stadium/innings/date meta line.
-  function bindFinal(state, d, vis) {
-    const winnerUser = g(state, `score.${SB}.winner_user`, '');
-    const wIn = g(state, `score.${SB}.winner_incoming_elo`, null);
-    const wOut = g(state, `score.${SB}.winner_result_elo`, null);
-    const lIn = g(state, `score.${SB}.loser_incoming_elo`, null);
-    const lOut = g(state, `score.${SB}.loser_result_elo`, null);
-    const p1Won = d.p1 === winnerUser;
-    const elo = [
-      { inn: p1Won ? wIn : lIn, out: p1Won ? wOut : lOut },
-      { inn: p1Won ? lIn : wIn, out: p1Won ? lOut : wOut },
-    ];
-    const hasElo = vis.showElo && elo[0].inn != null && elo[0].out != null;
-
-    for (let t = 1; t <= 2; t++) {
-      setOpacity(`elo${t}-group`, hasElo);
-      if (!hasElo) continue;
-      const e = elo[t - 1];
-      const delta = Math.round(e.out - e.inn);
-      engine.setText(`elo${t}-in`, Math.round(e.inn));
-      engine.setText(`elo${t}-out`, Math.round(e.out));
-      engine.setText(`elo${t}-delta`, `${delta >= 0 ? '+' : ''}${delta}`);
-      const dEl = engine.slots[`elo${t}-delta`];
-      if (dEl) dEl.style.fill = delta >= 0 ? 'var(--elo-gain, #22c55e)' : 'var(--elo-loss, #ef4444)';
-    }
-
-    const metaParts = [];
-    if (d.stadium) metaParts.push(prettyStadium(d.stadium));
-    if (d.inningsPlayed) metaParts.push(`${d.inningsPlayed} inn`);
-    engine.setText('meta-main', metaParts.join(' · '), { optional: true });
+  /*
+   * Completed-game meta: stadium / innings / date.
+   *
+   * The ELO swing used to lead this cluster and is GONE — a one-game rating
+   * change reset every season, so it was spending the two widest thirds of the
+   * band on a number most viewers could not place. The board still carries the
+   * ratings in state (score.N.{winner,loser}_{incoming,result}_elo, written by
+   * the provider off the Rio record); nothing draws them now.
+   */
+  function bindFinal(state, d) {
     let dateStr = '';
     const end = g(state, `score.${SB}.date_time_end`, '');
     if (end) {
       const dt = new Date(end);
       if (!isNaN(dt.getTime())) dateStr = dt.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
     }
+
+    const metaParts = [];
+    if (d.stadium) metaParts.push(prettyStadium(d.stadium));
+    if (d.inningsPlayed) metaParts.push(`${d.inningsPlayed} inn`);
+    engine.setText('meta-main', metaParts.join(' \u00b7 '), { optional: true });
     engine.setText('meta-date', dateStr, { optional: true });
 
-    return hasElo || metaParts.length > 0 || !!dateStr;
+    return metaParts.length > 0 || !!dateStr;
   }
 
   /*
@@ -773,6 +823,10 @@ export function mountScoreboard({ host, sb, size }) {
    * outside any tag set.
    */
   function bindGameMode(d, vis) {
+    // The TEXT follows the band's switch, so a producer who collapses Scoreboard
+    // S's mode band does not get the label back inside it. The Large board has
+    // no band and no switch, so `showGameMode` sits at its default there and
+    // this is just the mode.
     engine.setText('meta-game-mode', vis.showGameMode ? d.gameMode : '', { optional: true });
   }
 
@@ -815,24 +869,135 @@ export function mountScoreboard({ host, sb, size }) {
 
   // Linescore. More than MAX_INN innings binds a sliding window of the last 9
   // with renumbered column headers (box-h-i).
+  /*
+   * The linescore runs to REGULATION, not to whatever has been played.
+   *
+   * The two feeds only ever hand over the innings that have happened, so keying
+   * the column count off the array length meant a live game grew its own table:
+   * four innings into a nine-inning game the board drew four columns, and since
+   * the columns divide their band (layoutBox) those four were stretched across
+   * the full width — enormous cells, and no way to see that five more innings
+   * were still to come. A scoreboard's linescore is a fixed frame you fill in.
+   *
+   * So the count is regulation (innings_selected) or the innings actually
+   * played, whichever is greater — the max is what keeps EXTRA innings visible
+   * once a game runs past its own length. An unplayed column draws its number
+   * and a dash. A record with no innings_selected (an older one, or a shape
+   * change upstream) falls back to what it played, which is the old behaviour.
+   */
   function bindBox(d) {
-    const nInn = Math.max(d.away.length, d.home.length);
-    const start = Math.max(0, nInn - MAX_INN);
+    const played = Math.max(d.away.length, d.home.length);
+    const total = linescoreColumns(played, d.inningsSelected);
+    // Past MAX_INN the grid shows the LAST nine innings, not the first.
+    const shown = Math.min(total, MAX_INN);
+    const start = total - shown;
     for (let i = 1; i <= MAX_INN; i++) {
       const src = start + i - 1;
-      const active = src < nInn;
+      const active = i <= shown;
       setOpacity(`box-col-${i}`, active);
       engine.setText(`box-h-${i}`, active ? String(src + 1) : '');
       const a = d.away[src];
       const h = d.home[src];
       engine.setText(`box-away-${i}`, active ? (a != null ? a : '-') : '');
       engine.setText(`box-home-${i}`, active ? (h != null ? h : '-') : '');
+      // Extra innings: a column past the length the game was SET to. Rio
+      // reports both (innings_selected / innings_played), and a 5-inning game
+      // that went 6 otherwise reads as an ordinary 6-inning game — the one fact
+      // about the linescore you cannot recover from the numbers in it. Accent
+      // on the column number; '' hands the fill back to the theme's own class.
+      const hEl = engine.slots[`box-h-${i}`];
+      if (hEl) {
+        const extra = active && d.inningsSelected > 0 && (src + 1) > d.inningsSelected;
+        hEl.style.fill = extra ? 'var(--accent)' : '';
+      }
     }
     engine.setText('box-away-r', d.sL);
     engine.setText('box-home-r', d.sR);
     engine.setText('box-away-name', d.p1 || 'Away');
     engine.setText('box-home-name', d.p2 || 'Home');
-    return nInn > 0;
+    layoutBox(shown);
+    return total > 0;
+  }
+
+  /*
+   * Close the gap the unused inning columns leave, and re-centre what is left.
+   *
+   * A theme composes the linescore for the full nine, but MSB games are mostly
+   * five or six — so hiding the tail left the numbers huddled at one end with a
+   * canyon between them and the R column, which is the widest, emptiest thing
+   * on the card. Two transforms fix it, and they need no measurement:
+   *
+   *   box-total  (the R cluster) slides LEFT by the unused columns' width, so it
+   *              sits one pitch past the last real inning, exactly the gap the
+   *              theme authored after column nine.
+   *   box-grid   (the whole table) slides back RIGHT by half of that, so the
+   *              block keeps the centre the theme composed it on.
+   *
+   * box-total nests inside box-grid, so it nets half a slack leftward while the
+   * columns net half a slack rightward — the table closes on its own middle.
+   * The pitch is READ OFF the theme rather than declared: a theme that lays its
+   * columns out on an even pitch has already stated it twice, and a third
+   * statement in a data-* attribute is one that can disagree. A theme without
+   * these two groups simply keeps its authored fixed positions.
+   */
+  function layoutBox(shown) {
+    const grid = engine.slots['box-grid'];
+    const total = engine.slots['box-total'];
+    if (!grid && !total) return;
+    const h1 = engine.slots['box-h-1'];
+    const h2 = engine.slots['box-h-2'];
+    const x1 = h1 ? parseFloat(h1.getAttribute('x')) : NaN;
+    const pitch = h2 && Number.isFinite(x1)
+      ? (parseFloat(h2.getAttribute('x')) || 0) - x1 : 0;
+    if (!(pitch > 0)) return;
+
+    /*
+     * SPREAD. box-grid names a BAND (data-span-x + data-span-w) and however many
+     * innings there are divide it into equal CELLS, each column centred in its
+     * own — so the columns always fill their pane and everything downstream (an
+     * R column, a pane rule, a caption) can be authored at a fixed x that no
+     * game length can collide with — which is what a RULED table needs: under
+     * the sliding layout below, the numbers drift inside a fixed frame and the
+     * R column walks away from its own rule. This is the default package's
+     * Large board.
+     *
+     * CELLS, not endpoints. Pinning the first and last column to the band's
+     * edges is the obvious reading and it is wrong: at five innings the outer
+     * numbers hug the walls while the inner gaps stretch to take up the slack,
+     * so the run reads as four gaps rather than five columns — and under a ruled
+     * table it would put the outer cells half outside the box. Dividing the band
+     * and centring each column in its share is what a table does.
+     *
+     * The cost is honest and bounded: a five-inning game's cells are wider than
+     * a nine's by exactly 9/5, and nothing else changes.
+     */
+    const spanX = grid ? parseFloat(grid.getAttribute('data-span-x')) : NaN;
+    const spanW = grid ? parseFloat(grid.getAttribute('data-span-w')) : NaN;
+    if (Number.isFinite(spanX) && Number.isFinite(spanW)) {
+      const n = Math.max(shown, 1);
+      const cell = spanW / n;
+      for (let i = 1; i <= MAX_INN; i++) {
+        // Only the active columns move; a hidden one keeps its authored x, which
+        // is where it will be wanted again the moment a longer game arrives.
+        const dx = i <= n ? (spanX + cell * (i - 0.5)) - (x1 + (i - 1) * pitch) : 0;
+        // box-h-{i} rides inside box-col-{i}; translating both would move it twice.
+        for (const nm of [`box-col-${i}`, `box-away-${i}`, `box-home-${i}`]) {
+          const el = engine.slots[nm];
+          if (el) el.setAttribute('transform', `translate(${dx},0)`);
+        }
+      }
+      return;
+    }
+
+    /*
+     * SLIDE (the Large board). box-total closes onto the last real inning, and
+     * box-grid pushes back half of what was closed so the block keeps the centre
+     * the theme composed it on. A theme with only box-total gets a left-anchored
+     * table whose R column simply follows the innings in.
+     */
+    const slack = (MAX_INN - Math.max(shown, 1)) * pitch;
+    if (total) total.setAttribute('transform', `translate(${-slack},0)`);
+    if (grid) grid.setAttribute('transform', `translate(${slack / 2},0)`);
   }
 
   /*
@@ -913,6 +1078,9 @@ export function mountScoreboard({ host, sb, size }) {
       home: g(state, `score.${SB}.home_linescore`, []) || [],
       stadium: g(state, `score.${SB}.stadium`, ''),
       inningsPlayed: g(state, `score.${SB}.innings_played`, ''),
+      // What the game was SET to, as against what it played — the pair is what
+      // makes an extra inning visible in the linescore (bindBox).
+      inningsSelected: parseInt(g(state, `score.${SB}.innings_selected`, 0)) || 0,
       // Written by BOTH feeds now, so it is read outside the completed cluster —
       // through RioData, which is where a producer's mode OVERRIDE outranks the
       // game record (rio-data.js gameMode). Reading the state key directly is how
@@ -923,9 +1091,9 @@ export function mountScoreboard({ host, sb, size }) {
     applyColours(settings, g(state, `score.${SB}.player.1.port`, null), g(state, `score.${SB}.player.2.port`, null));
 
     bindTop(d, vis, themeChanged);
-    bindLive(d);
+    bindLive(d, state, vis);
     bindGameMode(d, vis);
-    const hasFinalContent = bindFinal(state, d, vis);
+    const hasFinalContent = bindFinal(state, d);
     const rosterCount = bindRoster(state);
     const hasBox = bindBox(d);
     bindImageProbe(engine, () => disposed, 'logo', vis.showLogo ? OverlayBase.brandingLogoUrl() : '', 'logo-default');
@@ -937,6 +1105,8 @@ export function mountScoreboard({ host, sb, size }) {
     vis.showLiveSeg = !isFinal && vis.showLive;
     // Inning segment: the inning number during play (producer toggle), swapping
     // to the final-badge on a completed game (bindTop drives which child shows).
+    // Scoreboard S only — the Large board draws its inning inside row-top, which
+    // is why the switch is gated to `s` in designConstants.js.
     //
     // The live cluster IMPLIES it. In a melding theme the live segment sits
     // outboard of the inning (row-live's data-cardw is the wider one), so live-on
@@ -948,14 +1118,20 @@ export function mountScoreboard({ host, sb, size }) {
     vis.showFinal = isFinal && isCompleted && hasFinalContent;
     // A band, not a captain portrait: two or more characters on a side is the
     // bar. Completed games now carry the real roster (away_roster/home_roster),
-    // so this is only ever false for a record that genuinely has none.
-    vis.showRoster = rosterCount >= 2;
-    // The game-mode band, for a theme that gives it its own segment (S). Gated
-    // on the CONTENT as well as the toggle: an unknown mode is a cold cache or a
-    // game outside any tag set, and a band that grew the card to say nothing is
-    // worse than no band. Themes that place the slot inline (M, L) ignore this.
+    // so the CONTENT half is only ever false for a record that genuinely has
+    // none. ANDed with the producer switch, and under a NEW key — vis.showRoster
+    // is the raw toggle other callers may read, the same split showLiveSeg makes
+    // against showLive.
+    vis.showRosterRow = vis.showRoster && rosterCount >= 2;
+    // The game-mode BAND, which only Scoreboard S has (row-mode, a vertical meld
+    // that grows the card) — hence the switch's `sizes: ['s']`. Gated on the
+    // CONTENT as well as the toggle: an unknown mode is a cold cache or a game
+    // outside any tag set, and a band that grew the card to say nothing is worse
+    // than no band. The Large board places the slot INLINE, in the linescore's
+    // meta pane, where it costs no height and so has nothing to toggle.
     vis.showGameModeSeg = vis.showGameMode && !!d.gameMode;
-    vis.showBox = hasBox;
+    // Same shape as showRosterRow: producer switch AND content, under a new key.
+    vis.showBoxRow = vis.showBox && hasBox;
 
     engine.refitText();
     relayout(vis, themeChanged);

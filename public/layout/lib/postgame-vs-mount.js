@@ -29,6 +29,7 @@
 import { ensureGsap } from './gsap-loader.js';
 import { captainFrame } from './captain-framing.js';
 import { ensurePortPalette, portColor as portPaletteColor } from './port-colors.js';
+import { prettyStadium } from './mount-utils.js';
 
 const REF_W = 1920, REF_H = 1080;
 const NEUTRAL_ACCENT = '#f59e0b';
@@ -829,9 +830,6 @@ function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => (
     { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
   ));
-}
-function prettyStadium(slug) {
-  return String(slug || '').replace(/[_-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 function hexToRgbStr(hex, fallback) {
   const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || '').trim());

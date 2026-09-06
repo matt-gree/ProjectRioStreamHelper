@@ -269,9 +269,10 @@ def row_transforms(svg: str) -> dict:
     # card-bg y + the running sum of data-h. row-live and row-final are
     # ALTERNATES (a live game or a completed one), so they share one offset and
     # the taller of the two sets what comes after.
-    ("scoreboard-m", {"row-top": 6, "row-live": 84, "row-final": 84}),
-    ("scoreboard-l", {"row-top": 8, "row-live": 100, "row-final": 100,
-                      "row-roster": 220, "row-box": 308}),
+    # No row-final: the default Large board's completed-game meta moved into the
+    # linescore's right-hand pane, so row-live has the offset to itself.
+    ("scoreboard-l", {"row-top": 8, "row-live": 90,
+                      "row-roster": 210, "row-box": 298}),
 ])
 def test_stack_rows_are_previewed_where_the_mount_stacks_them(element, expected, tokens):
     """Authored at a local origin of 0, every row of a stack theme draws on top
@@ -303,14 +304,16 @@ def test_a_design_tool_that_bakes_the_offset_is_corrected_on_an_inner_wrapper(to
     contents. The correction cannot go back on the ROW group either way: the
     mount rewrites that transform on every relayout, so a fix parked there
     survives until the first one and the row then jumps a band down on air."""
-    src = PACKAGES / "default" / "scoreboard-m.svg"
-    template, _ = build_template(src.read_text(), "scoreboard-m", tokens)
+    src = PACKAGES / "default" / "scoreboard-l.svg"
+    template, _ = build_template(src.read_text(), "scoreboard-l", tokens)
     flattened = re.sub(r'<g transform="translate\(0,[\d.]+\)" (id="slot=row-)', r"<g \1", template)
 
-    back, report = compile_svg(flattened, "scoreboard-m")
-    assert row_transforms(back) == {"row-top": None, "row-live": None, "row-final": None}
+    back, report = compile_svg(flattened, "scoreboard-l")
+    assert row_transforms(back) == {
+        "row-top": None, "row-live": None, "row-roster": None, "row-box": None,
+    }
     assert re.search(
-        r'data-slot="row-live"[^>]*>\s*<g transform="translate\(0,-84\)"', back
+        r'data-slot="row-live"[^>]*>\s*<g transform="translate\(0,-90\)"', back
     ), "row-live's baked offset was not taken back off its contents"
     assert any("baked into their contents" in f.message for f in report.findings), (
         "a silent correction is the one thing worse than the bug"
@@ -319,13 +322,13 @@ def test_a_design_tool_that_bakes_the_offset_is_corrected_on_an_inner_wrapper(to
 
 def test_a_nudge_the_designer_made_on_top_of_the_placement_survives(tokens):
     """Only the template's own K comes out. What the designer moved is theirs."""
-    src = PACKAGES / "default" / "scoreboard-m.svg"
-    template, _ = build_template(src.read_text(), "scoreboard-m", tokens)
+    src = PACKAGES / "default" / "scoreboard-l.svg"
+    template, _ = build_template(src.read_text(), "scoreboard-l", tokens)
     nudged = template.replace(
-        '<g transform="translate(0,84)" id="slot=row-live',
-        '<g transform="translate(4,96)" id="slot=row-live',
+        '<g transform="translate(0,90)" id="slot=row-live',
+        '<g transform="translate(4,102)" id="slot=row-live',
     )
-    back, _ = compile_svg(nudged, "scoreboard-m")
+    back, _ = compile_svg(nudged, "scoreboard-l")
     assert re.search(r'data-slot="row-live"[^>]*>\s*<g transform="translate\(4,12\)"', back)
 
 

@@ -709,9 +709,9 @@ describe('Rack without OBS', () => {
     });
 
     /*
-     * The scoreboard's sizes are three different canvases and three different
-     * browser sources, and with OBS closed there is no source to read a size off
-     * — so the catalog has to OFFER them or a producer building their scenes from
+     * The scoreboard's sizes are different canvases and different browser
+     * sources, and with OBS closed there is no source to read a size off — so
+     * the catalog has to OFFER them or a producer building their scenes from
      * copied URLs can only ever get the Large board.
      *
      * The default size keeps the bare row: a source with no ?size= IS large, so
@@ -721,12 +721,11 @@ describe('Rack without OBS', () => {
     it('offers the scoreboard’s sizes, with the default as the bare row', () => {
         ui(<Rack />);
         const scoreboards = [...document.querySelectorAll('[data-rack-row="Scoreboard"]')];
-        expect(scoreboards.length).toBe(3);
+        expect(scoreboards.length).toBe(2);
         const details = scoreboards.map(r => r.textContent);
         expect(details.some(t => t.includes('Small'))).toBe(true);
-        expect(details.some(t => t.includes('Medium'))).toBe(true);
         // The Large row carries no size detail — it is the canonical instance.
-        expect(details.some(t => !t.includes('Small') && !t.includes('Medium'))).toBe(true);
+        expect(details.some(t => !t.includes('Small'))).toBe(true);
     });
 
     // The producer's containers are definitions in Settings, so they are just as
