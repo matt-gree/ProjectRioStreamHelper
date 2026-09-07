@@ -14,10 +14,12 @@
   up. On its own source there is nothing to push — the pick IS the content and
   the source's eye is what puts it on air.
 
-  WHICH CHARACTER: the element's standing intent, production.feed.last.
-  postgamecallout — the same pick the Production panel's content row arms and
-  the same one Push would send to a container. One answer, so the panel, the
-  preview and this source can never disagree about who is being spotlighted.
+  WHICH CHARACTER: the element's standing intent — the producer's own pick at
+  production.feed.last.postgamecallout while it still names a character in the
+  CURRENT capture, and this board's best line when it doesn't. Resolved through
+  lib/spotlight-intent.js, which is the same function the Production panel's
+  content row resolves through, so the panel, the preview and this source cannot
+  disagree about who is being spotlighted.
   `?scoreboard=` overrides the board the pick names, so a second source can
   spotlight a second board's capture.
 
@@ -61,6 +63,7 @@
   <script src="/layout/lib/gsap/gsap.min.js"></script>
   <script type="module">
     import { mountPostgameCallout } from '/layout/lib/postgame-callout-mount.js';
+    import { resolveSpotlight } from '/layout/lib/spotlight-intent.js';
 
     const params = new URLSearchParams(window.location.search);
     const host = document.getElementById('host');
@@ -75,15 +78,28 @@
      * The pick, as a selection for the mount. `null` charIndex is a real state
      * (nothing picked yet) and the mount says so in its own blank reason rather
      * than drawing an empty stage.
+     *
+     * RESOLVED, never read raw. `production.feed.last.postgamecallout` holds a
+     * `charIndex` — an index into ONE game's captured roster — so the moment the
+     * next game was captured, reading it straight drew whoever now sat in that
+     * slot: the panel said "Suggested — Yoshi" and this source drew the previous
+     * game's pick by position. `resolveSpotlight` is the same function the
+     * console's picker resolves through, so the promise three paragraphs up —
+     * one answer, panel and source can never disagree — is now structural rather
+     * than a comment.
      */
     function selection() {
       const last = OverlayBase.deepGet(
         OverlayBase.state, 'production.feed.last.postgamecallout', null,
-      ) || {};
+      );
+      // The board first: it decides WHICH capture the pick is validated against,
+      // so a per-board source resolves against its own board's game.
+      const board = Number.isFinite(urlBoard) ? urlBoard : (Number(last?.scoreboard) || 1);
+      const pick = resolveSpotlight(OverlayBase.state, board, last) || {};
       return {
-        scoreboard: Number.isFinite(urlBoard) ? urlBoard : (Number(last.scoreboard) || 1),
-        team: Number(last.team) || 1,
-        charIndex: last.charIndex,
+        scoreboard: board,
+        team: Number(pick.team) || 1,
+        charIndex: pick.charIndex,
       };
     }
 
@@ -97,8 +113,13 @@
       sample: {
         file: 'postgame',
         state: {
+          /* `name` is not decoration: a pick is validated by the name at its
+             index (spotlight-intent.js), so a nameless sample payload would be
+             discarded as stale and the sample would silently demo the
+             SUGGESTION instead of the pick it states. */
           'production.feed.last.postgamecallout':
-            { element: 'postgamecallout', scoreboard: 1, team: 1, charIndex: 0 },
+            { element: 'postgamecallout', scoreboard: 1, team: 1, charIndex: 0,
+              name: 'Toadsworth' },
         },
       },
       shouldRender: (key) => key.startsWith('production.feed.last.postgamecallout')

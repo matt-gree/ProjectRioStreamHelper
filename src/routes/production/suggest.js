@@ -22,110 +22,39 @@
  * different character. Each payload carries the character's `name` and the
  * validator re-reads it from live state; a mismatch discards the memory and
  * falls back to the suggestion. This is why memory can outlive a game safely.
- */
-
-// ── total bases ─────────────────────────────────────────────────────────────
-
-const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
-
-/**
- * Total bases from a captured batting block (postgame_stats.batting_block).
  *
- * Prefers the singles form. Falls back to the algebraically identical
- * `hits + 2B + 2·3B + 3·HR` (hits = 1B+2B+3B+HR) so a capture written before
- * `singles` existed still ranks correctly instead of scoring everyone 0.
+ * THE SPOTLIGHT'S OWN RULES LIVE IN THE OVERLAY RUNTIME
+ * (`public/layout/lib/spotlight-intent.js`) and are imported here, the same way
+ * the console imports `container-members.js`. They are not console rules: the
+ * element's dedicated OBS source has to answer "which character" identically,
+ * and when it had its own answer — the raw memory, unvalidated — the panel and
+ * the broadcast named different characters on every game after the first. One
+ * implementation, not two kept in step by a parity test.
  */
-export function totalBases(batting) {
-    if (!batting) return 0;
-    const d = num(batting.doubles), t = num(batting.triples), hr = num(batting.homeruns);
-    return batting.singles == null
-        ? num(batting.hits) + d + 2 * t + 3 * hr
-        : num(batting.singles) + 2 * d + 3 * t + 4 * hr;
-}
 
-/**
- * Which side won a captured game: the capture's own verdict first, then the
- * per-side flag, then the score. Returns 1 | 2 | null.
- */
-export function winningSide(pg) {
-    const meta = Number(pg?.meta?.winnerSide);
-    if (meta === 1 || meta === 2) return meta;
-    if (pg?.player?.[1]?.isWinner) return 1;
-    if (pg?.player?.[2]?.isWinner) return 2;
-    const s1 = pg?.player?.[1]?.score, s2 = pg?.player?.[2]?.score;
-    if (Number.isFinite(s1) && Number.isFinite(s2) && s1 !== s2) return s1 > s2 ? 1 : 2;
-    return null;
-}
+import {
+    resolveSpotlight, spotlightSuggestion, spotlightValid, totalBases, winningSide,
+} from '../../../public/layout/lib/spotlight-intent.js';
+
+// Re-exported: this module is the console's door to the intent rules, and its
+// callers should not each have to know which side of the runtime split a given
+// one lives on.
+export { resolveSpotlight, spotlightSuggestion, spotlightValid, totalBases, winningSide };
 
 /*
- * The opening suggestion: the winning side's biggest bat.
+ * Per-feed intent rules — ONE resolver per feed kind, or none.
  *
- * Total bases rather than hits or average because it is the one counting stat
- * that separates a three-single game from a three-homer one, which is the
- * difference between a spotlight worth cutting to and a dull one. Ties break on
- * homeruns, then RBI, then roster order — deterministic, so the same capture
- * always suggests the same character.
+ * A feed with no entry replays its remembered payload as-is, which is right for
+ * a whole-game push like the Game Summary: nothing in it can go stale.
  *
- * Scoped to the WINNER because a losing player's big day is a story the
- * producer chooses, not one to volunteer. Sides are only pooled when the
- * capture can't say who won (a tie, or a malformed capture) — better to suggest
- * the game's best line than nothing.
- *
- * Deliberately the floor, not the ceiling: pitching gems, star-chance heroics
- * and series context all deserve a say. Add them as further rankers here so
- * every surface keeps reading one answer.
- */
-export function spotlightSuggestion(state, scoreboard = 1) {
-    const pg = state?.postgame?.[scoreboard];
-    if (!pg?.present) return null;
-
-    const side = winningSide(pg);
-    const sides = side ? [side] : [1, 2];
-
-    let best = null;
-    for (const team of sides) {
-        const chars = pg?.player?.[team]?.characters;
-        if (!Array.isArray(chars)) continue;
-        chars.forEach((c, charIndex) => {
-            if (!c?.name) return;
-            const b = c.batting;
-            const cand = {
-                team, charIndex, name: c.name,
-                tb: totalBases(b), hr: num(b?.homeruns), rbi: num(b?.rbi),
-            };
-            if (!best
-                || cand.tb > best.tb
-                || (cand.tb === best.tb && cand.hr > best.hr)
-                || (cand.tb === best.tb && cand.hr === best.hr && cand.rbi > best.rbi)) {
-                best = cand;
-            }
-        });
-    }
-    if (!best) return null;
-    return {
-        element: 'postgamecallout', scoreboard,
-        team: best.team, charIndex: best.charIndex, name: best.name,
-        // Marks the payload as proposed rather than chosen, so a surface can
-        // say "suggested" instead of implying the producer picked it.
-        suggested: true,
-    };
-}
-
-// ── memory validation ───────────────────────────────────────────────────────
-
-// A remembered pick still names the same character in the CURRENT capture.
-function spotlightValid(state, p) {
-    const chars = state?.postgame?.[p?.scoreboard ?? 1]?.player?.[p?.team]?.characters;
-    return !!p?.name && Array.isArray(chars) && chars[p?.charIndex]?.name === p.name;
-}
-
-/*
- * Per-feed intent rules. A feed with no entry has no memory validation and no
- * suggestion — its remembered payload is replayed as-is, which is right for a
- * whole-game push like the Game Summary (nothing in it can go stale).
+ * One function rather than the `valid` + `suggest` pair this replaced. That
+ * pair spelled the fallback order HERE, which meant the overlay runtime could
+ * only share the rules by re-spelling it — and the composition (validate, then
+ * fall back) is the half that was actually wrong on the broadcast, not either
+ * piece. Whatever a feed's resolver decides is what every surface shows.
  */
 export const FEED_INTENT = {
-    postgamecallout: { valid: spotlightValid, suggest: spotlightSuggestion },
+    postgamecallout: { resolve: resolveSpotlight },
 };
 
 /**
@@ -137,8 +66,7 @@ export const FEED_INTENT = {
  */
 export function resolveIntent(state, element, scoreboard = 1) {
     if (!element) return null;
-    const spec = FEED_INTENT[element.feed];
-    const last = state?.production?.feed?.last?.[element.id];
-    if (last && (!spec?.valid || spec.valid(state, last))) return last;
-    return spec?.suggest ? spec.suggest(state, scoreboard) : null;
+    const last = state?.production?.feed?.last?.[element.id] ?? null;
+    const resolve = FEED_INTENT[element.feed]?.resolve;
+    return resolve ? resolve(state, scoreboard, last) : last;
 }

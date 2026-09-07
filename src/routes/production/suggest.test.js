@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { ELEMENTS } from './elements';
-import { FEED_INTENT, resolveIntent, spotlightSuggestion, totalBases, winningSide } from './suggest';
+import {
+    FEED_INTENT, resolveIntent, resolveSpotlight, spotlightSuggestion, totalBases, winningSide,
+} from './suggest';
 
 const el = (id) => ELEMENTS.find(e => e.id === id);
 
@@ -150,5 +152,47 @@ describe('resolveIntent', () => {
     it('has no intent for an element that has never fed', () => {
         expect(resolveIntent({}, spotlight, 1)).toBeNull();
         expect(resolveIntent({}, null, 1)).toBeNull();
+    });
+
+    /*
+     * THE BUG THIS RESOLVER EXISTS FOR, stated as a rule rather than as a
+     * console behaviour: a `charIndex` indexes ONE game's roster. The console
+     * validated it and the element's own OBS source did not, so on every game
+     * after the first the panel named one character and the broadcast drew
+     * whoever now sat in that slot. `resolveSpotlight` is what both call.
+     */
+    it('discards a pick whose slot now holds someone else', () => {
+        const s = {
+            ...capture({ side1: [ch('Mario', { homeruns: 1 }), ch('Yoshi', { homeruns: 3 })] }),
+            production: { feed: { last: { postgamecallout: {
+                element: 'postgamecallout', scoreboard: 1, team: 1, charIndex: 0, name: 'Peach',
+            } } } },
+        };
+        // Peach is not in this capture at all, let alone at slot 0.
+        expect(resolveSpotlight(s, 1, s.production.feed.last.postgamecallout))
+            .toMatchObject({ name: 'Yoshi', charIndex: 1, suggested: true });
+    });
+
+    // ...and keeps one that still names its character, which is what lets a
+    // producer's choice survive a Bo3 where both sides keep their rosters.
+    it('keeps a pick the new capture still agrees with', () => {
+        const last = {
+            element: 'postgamecallout', scoreboard: 1, team: 1, charIndex: 0, name: 'Mario',
+        };
+        const s = capture({ side1: [ch('Mario'), ch('Yoshi', { homeruns: 3 })] });
+        expect(resolveSpotlight(s, 1, last)).toBe(last);
+    });
+
+    /*
+     * A memory made on ANOTHER BOARD is not this board's answer. One spotlight
+     * memory app-wide, a capture per board — so validating board 1's pick
+     * against board 2's roster is the same slot confusion one axis over.
+     */
+    it('will not answer for one board with another board’s pick', () => {
+        const last = {
+            element: 'postgamecallout', scoreboard: 2, team: 1, charIndex: 0, name: 'Mario',
+        };
+        const s = capture({ side1: [ch('Mario'), ch('Yoshi', { homeruns: 3 })] });
+        expect(resolveSpotlight(s, 1, last)).toMatchObject({ name: 'Yoshi', suggested: true });
     });
 });

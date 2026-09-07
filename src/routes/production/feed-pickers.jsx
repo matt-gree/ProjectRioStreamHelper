@@ -72,6 +72,49 @@ const GroupedFeedSelect = memo(function GroupedFeedSelect({ o, allowNone = true 
     );
 });
 
+/*
+ * WHAT THIS CHARACTER DID AT THE PLATE, in one line, on the option itself.
+ *
+ * The list used to be nine bare names per side, which asks a producer to
+ * remember a box score they are standing next to — the whole reason to
+ * spotlight someone is what they did, and the dropdown said nothing about it.
+ *
+ * BATTING, FOR EVERYONE, PITCHERS INCLUDED. The callout is a batting graphic:
+ * its AB Theater replays every plate appearance and holds on the spray chart,
+ * and the pitching box beside it is a static panel at final numbers ("the
+ * walkthrough narrates the batting story, not these" — postgame-callout-mount).
+ * So a pitcher's ERA answers a question this picker is not asking. Describing
+ * the one pitcher by their outing also broke the LIST: nine rows measured the
+ * same way can be scanned for the best day at the plate, and eight-plus-one
+ * cannot — and total bases, the metric behind the suggestion this dropdown
+ * opens on, ranks pitchers as batters too. `(P)` still marks them, which is
+ * context for a short line rather than a different kind of line.
+ *
+ * `batting.line` IS THE WHOLE LINE. `format_batting_line`
+ * (server/rio/pyrio/stat_formatters.py) already appends every non-zero count
+ * stat in a fixed order — HR, 3B, 2B, BB, HBP, RBI, SB — with the count elided
+ * at one, so Bowser's line is "1-for-3, HR, 3 RBI" and not "1-for-3". Appending
+ * HR and RBI to it printed both twice ("1-for-3, HR, 3 RBI, 1 HR, 3 RBI"), and
+ * the reason it was not obvious is worth keeping: the sample capture's first
+ * character is a 4-for-5 with no extras, so the bare form is the only one that
+ * shows up in a fixture — and the unit test asserted a hand-written `line`
+ * beside separate `homeruns`/`rbi` fields, a combination the server cannot
+ * produce. The test encoded the bug.
+ *
+ * So this reads and does not rewrite. It also gets a better convention for
+ * free: "HR" rather than "1 HR", and the doubles, walks and steals a hand-rolled
+ * summary was dropping.
+ */
+export function characterSummary(c) {
+    const b = c?.batting;
+    if (!b) return '';
+    // The one fallback, and deliberately only the H-for-AB stem: it is a
+    // compatibility floor for a capture written before `line` existed, not a
+    // second formatter that can drift from the server's.
+    if (b.line) return b.line;
+    return b.at_bats != null ? `${Number(b.hits) || 0}-for-${b.at_bats}` : '';
+}
+
 // Content picker for the 'postgamecallout' fed element: choose WHICH
 // finished-game roster character gets the full-screen stat callout. Reads the
 // capture at postgame.{N}.player.{T}.characters[].
@@ -98,7 +141,10 @@ export function usePostgameCalloutOptions(element, scoreboard = 1) {
             const p = players?.[team];
             const chars = Array.isArray(p?.characters) ? p.characters : [];
             const opts = chars
-                .map((c, i) => ({ charIndex: i, name: c?.name, isPitcher: c?.wasPitcher }))
+                .map((c, i) => ({
+                    charIndex: i, name: c?.name, isPitcher: c?.wasPitcher,
+                    summary: characterSummary(c),
+                }))
                 .filter(c => c.name);
             if (opts.length) out.push({ team, label: p?.rioName || `Side ${team}`, chars: opts });
         }
@@ -132,7 +178,12 @@ export function usePostgameCalloutOptions(element, scoreboard = 1) {
             label: t.label,
             options: t.chars.map(c => ({
                 value: `${t.team}:${c.charIndex}`,
-                label: `${c.name}${c.isPitcher ? ' (P)' : ''}`,
+                // The name leads, always, because that is what the producer is
+                // scanning for; the line follows behind a separator so a
+                // character with no captured stats still reads as a plain name
+                // rather than as a name with a dangling dash.
+                label: `${c.name}${c.isPitcher ? ' (P)' : ''}`
+                    + (c.summary ? ` · ${c.summary}` : ''),
             })),
         })),
         value: selValue, choose, staged,

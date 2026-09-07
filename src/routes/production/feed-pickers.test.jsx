@@ -3,7 +3,7 @@ import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import { useSettingsStore, useStateStore } from '../../context/store';
 import { useStagingStore } from '../../context/staging';
 import { ELEMENTS } from './elements';
-import { PostgameCalloutPicker } from './feed-pickers';
+import { PostgameCalloutPicker, characterSummary } from './feed-pickers';
 import { withContainers } from '../../test/containers';
 
 beforeEach(() => {
@@ -20,7 +20,17 @@ afterEach(() => {
 });
 
 const spotlight = ELEMENTS.find(e => e.id === 'postgamecallout');
-const ch = (name, b = {}) => ({ name, batting: { singles: 0, doubles: 0, triples: 0, homeruns: 0, rbi: 0, ...b } });
+/*
+ * A captured character. `line` is written the way the SERVER writes it
+ * (format_batting_line: H-for-AB plus every non-zero count stat, count elided
+ * at one) — a fixture that pairs a bare "2-for-4" with separate homeruns/rbi
+ * fields is a shape the server cannot produce, and asserting against it is how
+ * the duplicated-stats bug got a passing test.
+ */
+const ch = (name, b = {}, line = null) => {
+    const bat = { singles: 0, doubles: 0, triples: 0, homeruns: 0, rbi: 0, ...b };
+    return { name, batting: { ...bat, ...(line ? { line } : {}) } };
+};
 
 // A finished game: side 1 won, Daisy had the biggest day on it.
 const captureLoaded = () => useStateStore.setState({
@@ -29,8 +39,14 @@ const captureLoaded = () => useStateStore.setState({
             present: true,
             meta: { winnerSide: 1 },
             player: {
-                1: { rioName: 'left', characters: [ch('Peach', { singles: 2 }), ch('Daisy', { homeruns: 2 })] },
-                2: { rioName: 'right', characters: [ch('Wario', { homeruns: 3 })] },
+                1: {
+                    rioName: 'left',
+                    characters: [
+                        ch('Peach', { singles: 2 }, '2-for-4'),
+                        ch('Daisy', { homeruns: 2 }, '2-for-4, 2 HR, 4 RBI'),
+                    ],
+                },
+                2: { rioName: 'right', characters: [ch('Wario', { homeruns: 3 }, '3-for-4, 3 HR, 5 RBI')] },
             },
         },
     },
@@ -110,6 +126,67 @@ describe('spotlight pick is decoupled from air', () => {
  * With nothing remembered the picker proposes rather than sitting empty, so a
  * producer who just captured a game can go straight to Push.
  */
+/*
+ * The formatter behind the line each option carries, over the shapes a real
+ * capture produces.
+ */
+describe('characterSummary', () => {
+    /*
+     * A PITCHER IS DESCRIBED BY THEIR BATTING, like everyone else. The callout
+     * is a batting graphic — its AB Theater replays plate appearances and holds
+     * on the spray chart — so an ERA answers a question this picker is not
+     * asking, and one row measured differently makes the list unscannable for
+     * the very thing it is scanned for.
+     */
+    /*
+     * THE SERVER'S LINE, VERBATIM. `format_batting_line` already appends every
+     * non-zero count stat — HR, 3B, 2B, BB, HBP, RBI, SB, count elided at one —
+     * so appending HR and RBI to it printed both twice: Bowser read
+     * "1-for-3, HR, 3 RBI, 1 HR, 3 RBI". These are real server outputs.
+     */
+    it('does not re-append the stats the line already carries', () => {
+        expect(characterSummary({ batting: {
+            line: '1-for-3, HR, 3 RBI', at_bats: 3, hits: 1, homeruns: 1, rbi: 3,
+        } })).toBe('1-for-3, HR, 3 RBI');
+        expect(characterSummary({ batting: {
+            line: '4-for-5, 2 2B', at_bats: 5, hits: 4, doubles: 2, homeruns: 0, rbi: 0,
+        } })).toBe('4-for-5, 2 2B');
+        expect(characterSummary({ batting: { line: '0-for-3', at_bats: 3, hits: 0 } }))
+            .toBe('0-for-3');
+    });
+
+    /*
+     * A PITCHER IS DESCRIBED BY THEIR BATTING, like everyone else. The callout
+     * is a batting graphic — its AB Theater replays plate appearances and holds
+     * on the spray chart — so an ERA answers a question this picker is not
+     * asking, and one row measured differently makes the list unscannable for
+     * the very thing it is scanned for.
+     */
+    it('describes a PITCHER by their batting, ignoring the pitching block', () => {
+        const bat = { line: '1-for-3, HR', at_bats: 3, hits: 1, homeruns: 1 };
+        expect(characterSummary({
+            name: 'Boo', wasPitcher: true, batting: bat,
+            pitching: { ip: '8.1', strikeouts_pitched: 4, earned_runs: 4 },
+        })).toBe('1-for-3, HR');
+        // ...which is exactly what a non-pitcher with the same day reads.
+        expect(characterSummary({ wasPitcher: true, batting: bat, pitching: { ip: '9.0' } }))
+            .toBe(characterSummary({ wasPitcher: false, batting: bat }));
+    });
+
+    /*
+     * The fallback is a compatibility floor for a capture written before `line`
+     * existed — the H-for-AB stem and nothing else. Rebuilding the count stats
+     * here would be the second formatter this whole function exists to avoid.
+     */
+    it('falls back to the H-for-AB stem alone, and says nothing when it cannot', () => {
+        expect(characterSummary({ batting: { hits: 3, at_bats: 4, homeruns: 2 } }))
+            .toBe('3-for-4');
+        expect(characterSummary({ batting: {} })).toBe('');
+        expect(characterSummary({})).toBe('');
+        expect(characterSummary(null)).toBe('');
+    });
+});
+
 describe('spotlight suggestion', () => {
     it('opens on the winning side\'s leader in total bases, labelled as a suggestion', () => {
         captureLoaded();
@@ -123,7 +200,24 @@ describe('spotlight suggestion', () => {
         ui();
         const labels = [...screen.getByRole('combobox').options].map(o => o.textContent);
         expect(labels).not.toContain('Nothing fed');
-        expect(labels).toContain('Daisy');
+        expect(labels.some(l => l.startsWith('Daisy'))).toBe(true);
+    });
+
+    /*
+     * WHAT THEY DID, on the option. Nine bare names per side asks a producer to
+     * remember a box score they are standing next to, when the whole reason to
+     * spotlight someone is what they did.
+     */
+    it('carries each character’s line on the option', () => {
+        captureLoaded();
+        ui();
+        const labels = [...screen.getByRole('combobox').options].map(o => o.textContent);
+        // The server's line, VERBATIM — not the server's line plus a second
+        // helping of the stats already in it.
+        expect(labels).toContain('Daisy · 2-for-4, 2 HR, 4 RBI');
+        expect(labels).toContain('Peach · 2-for-4');
+        // Per LABEL, not across the list: two characters may each have a HR.
+        for (const l of labels) expect((l.match(/HR/g) || []).length).toBeLessThan(2);
     });
 
     it('offers "Nothing fed" once the element holds the stage', () => {
