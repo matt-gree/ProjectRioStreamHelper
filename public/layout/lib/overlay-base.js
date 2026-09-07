@@ -624,6 +624,13 @@
       activeColor:    { prop: '--active-color',    dedicated: true },
     },
     playername: { textColor: { prop: '--text-primary' } },
+    // The band background is a CARD SURFACE — the same plate every other
+    // overlay draws behind text — so it takes the palette's card colour rather
+    // than a hard-coded black of its own, and a pin here repaints it for this
+    // element alone. Only cardBg: the bands have no border, and their corner is
+    // a function of the type size (eventheader-mount.js), so the other three
+    // CARD_OVERRIDE_VARS would be knobs that move nothing.
+    eventheader: { cardBg: { prop: '--card-bg' } },
   };
 
   // `nsKey` optionally overrides the settings sub-namespace the per-layout

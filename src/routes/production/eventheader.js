@@ -22,9 +22,12 @@ import { stageSettingsSet } from './controls';
  * pinned against each other in eventheader.test.jsx.
  */
 
+// No `offset` here: a band's position is not a property of its field list. Both
+// offsets are ordinary registry settings grouped under "Both bands", which is
+// what puts the top and bottom insets beside each other.
 export const BANDS = [
-    { band: 'header', label: 'Top band', master: 'showHeader', offset: 'headerOffsetY' },
-    { band: 'footer', label: 'Bottom band', master: 'showFooter', offset: 'footerOffsetY' },
+    { band: 'header', label: 'Top band', master: 'showHeader' },
+    { band: 'footer', label: 'Bottom band', master: 'showFooter' },
 ];
 
 /*

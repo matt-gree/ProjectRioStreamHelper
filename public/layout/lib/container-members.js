@@ -135,13 +135,15 @@ export const MEMBERS = {
         },
         sample: { file: 'scoreboard', content: { scoreboard: 1, team: 1 } },
     },
-    // The themed 2x2 stat card, as a container member. The dedicated per-side
-    // Stats SOURCE renders the same data in the wide `stats.svg`; this is the
-    // 2x2 art, under its own settings namespace, so a container's card and a
-    // standalone Stats source are configured independently. Two
-    // members rather than a mode on one because a container's roster is a list of
-    // things that can be on screen, and these two are different pictures at
-    // different sizes; a container holds whichever one its look calls for.
+    // The themed 2x2 stat card, as a container member — and it owns a dedicated
+    // ?team= source too (/layout/scoreboard1/statscard.html), which passes this
+    // same settingsType/svgElement pair, so the card is one element configured
+    // once wherever the producer puts it. The Stat Bar renders the same data in
+    // the wide `statsbar.svg` under its own namespace, so the two cards are
+    // configured independently. Two elements rather than a mode on one because a
+    // container's roster is a list of things that can be on screen, and these are
+    // different pictures at different sizes; a container holds whichever one its
+    // look calls for.
     statscard: {
         size: [380, 240],
         // Binds its side at MOUNT time (mountStatsCard closes over sb/team and

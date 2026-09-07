@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<!--
+  Stat Card — a re-themable SVG stat card for the character currently batting /
+  pitching on one side (?team=1|2) of a scoreboard (?scoreboard=N, default 1).
+  The compact 2x2 one; the wide Stat Bar is the same data and the same mount,
+  wearing statsbar.svg.
+
+  THE SAME ELEMENT, TWO PLACES. This is the Stat Card's own dedicated source;
+  it is also a container MEMBER (container-members.js), and both paths run this
+  mount with the same `settingsType`/`svgElement`, so a card in a container and
+  a card in its own browser source are one element configured once — the shape
+  the Roster has had all along. It was a member and nothing else until now,
+  which meant the 2x2 art could only reach a broadcast through a container even
+  when a producer wanted nothing but the card.
+
+  Thin shell: the look lives in the active DESIGN PACKAGE's theme SVG
+  (/design/{package}/statscard.svg), the binding/transitions in
+  stats-card-mount.js, the data resolution in RioData.getStatsLine. Drop into
+  OBS as a 380x240 browser source — the canvas `body` declares below, and the
+  one `theme_contracts.CONTRACTS['statscard']` pins.
+-->
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Element knobs + the app-design knobs honored when the active package's
+       theme opts into them (e.g. Classic). `topLine`/`topLineText` are the pair
+       the bar does NOT declare: the header caption is a band in statscard.svg,
+       and statsbar.svg has no room for one. -->
+  <meta name="overlay-settings" content="transitionType, subLine, subLineText, topLine, topLineText, statValueColor, subtextColor, accentColor, cardBg, borderColor, borderWidth, fontFamily, cardShadow, textShadow" />
+  <link rel="stylesheet" href="/layout/lib/rio-theme/tokens.css" />
+  <style>
+    html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+    body { width: 380px; height: 240px; }
+    #host { position: fixed; inset: 0; }
+  </style>
+</head>
+<body>
+  <div id="host"></div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="/layout/lib/overlay-base.js"></script>
+  <script src="/layout/lib/rio-data.js"></script>
+  <script type="module">
+    import { mountStatsCard } from '/layout/lib/stats-card-mount.js';
+
+    const params = new URLSearchParams(window.location.search);
+    const SB = parseInt(params.get('scoreboard')) || 1;
+    const TEAM = parseInt(params.get('team')) || 1;
+
+    document.body.dataset.refW = 380;
+    document.body.dataset.refH = 240;
+
+    const host = document.getElementById('host');
+    // settingsType + svgElement are the two the container member passes too —
+    // one namespace and one theme file for both paths, or the same card would
+    // be configured twice depending on where the producer put it.
+    const card = mountStatsCard({
+      host, sb: SB, team: TEAM,
+      settingsType: 'statscard',
+      svgElement: 'statscard',
+    });
+
+    OverlayBase.init({
+      render: () => card.update(OverlayBase.state, OverlayBase.settings),
+      sample: 'scoreboard',
+      shouldRender: (key) => key.startsWith(`score.${SB}.`),
+      shouldRenderSettings: (key) =>
+        key.startsWith('overlays.statscard.') || key.startsWith('overlays.global.') ||
+        key.startsWith('scoreboards.'),
+      fetchSettings: true,
+    });
+  </script>
+</body>
+</html>

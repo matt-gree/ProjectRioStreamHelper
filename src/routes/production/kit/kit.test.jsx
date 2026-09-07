@@ -2,7 +2,24 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import { TooltipProvider } from '../../../components/ui/tooltip';
 import { Eye, EyeOff } from 'lucide-react';
-import { chipFor, StateChip, ListRow, QuickCard, IconToggle, NumberRow, FractionRow, TextRow } from './index';
+import { chipFor, StateChip, ListRow, QuickCard, IconToggle, NumberRow, FractionRow, TextRow, ColorRow } from './index';
+
+/*
+ * The picker stands in for react-colorful so the drag is DETERMINISTIC: one
+ * button per emission, firing the same stream of values a real drag across the
+ * saturation area produces. Nothing here tests the library — what is under test
+ * is what ColorRow does with a stream it cannot slow down.
+ */
+vi.mock('react-colorful', () => ({
+    RgbaStringColorPicker: ({ onChange }) => (
+        <button type="button" onClick={() => {
+            for (let i = 1; i <= 20; i++) onChange(`rgba(${i}, 0, 0, 0.4)`);
+        }}>drag-rgba</button>
+    ),
+    HexColorPicker: ({ onChange }) => (
+        <button type="button" onClick={() => onChange('#123456')}>drag-hex</button>
+    ),
+}));
 
 afterEach(cleanup);
 
@@ -331,5 +348,80 @@ describe('QuickCard two-row cap', () => {
         expect(screen.getByText('row one')).toBeInTheDocument();
         expect(screen.getByText('row two')).toBeInTheDocument();
         expect(screen.queryByText('row three')).not.toBeInTheDocument();
+    });
+});
+
+
+/*
+ * A colour row writes to Settings, and Settings broadcasts to every overlay in
+ * the rig — so a drag across the picker, which fires continuously, must not
+ * land as a write per pointer sample. This app runs alongside the game; the
+ * budget is the point (see the performance rules in CLAUDE.md).
+ */
+describe('ColorRow — a drag is one write, not a hundred', () => {
+    it('collapses the picker’s stream to its last value', async () => {
+        vi.useFakeTimers();
+        try {
+            const onChange = vi.fn();
+            render(
+                <ColorRow label="Card Background" alpha value="rgba(118, 36, 92, 0.4)" onChange={onChange} />,
+            );
+            fireEvent.click(screen.getByLabelText('Pick Card Background'));
+            fireEvent.click(screen.getByText('drag-rgba'));
+            // Twenty emissions, nothing written yet.
+            expect(onChange).not.toHaveBeenCalled();
+            vi.advanceTimersByTime(200);
+            expect(onChange).toHaveBeenCalledTimes(1);
+            // …and the one write is the LAST value, in our own format rather
+            // than however the library spelled it.
+            expect(onChange).toHaveBeenCalledWith('rgba(20, 0, 0, 0.4)');
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    /*
+     * The field speaks HEX whatever is stored — `rgba(125, 47, 47, 0.55)` is
+     * twice the width of the hex on the row below it, and a panel whose rows
+     * disagree about what a colour looks like reads as unfinished.
+     */
+    it('shows hex, not the stored rgba', () => {
+        render(<ColorRow label="Card Background" alpha value="rgba(118, 36, 92, 0.4)" onChange={() => {}} />);
+        expect(screen.getByLabelText('Card Background')).toHaveValue('#76245c');
+    });
+
+    /*
+     * With the percent box gone, typing is the only way to name an exact
+     * opacity — so the field has to be able to carry one.
+     */
+    it.each([
+        ['a bare hex keeps the row’s opacity', '#00ff00', 'rgba(0, 255, 0, 0.4)'],
+        ['an 8-digit hex names its own', '#00ff0080', 'rgba(0, 255, 0, 0.5)'],
+        ['a pasted rgba() names its own', 'rgba(0, 255, 0, 0.25)', 'rgba(0, 255, 0, 0.25)'],
+    ])('%s', (_label, typed, stored) => {
+        const onChange = vi.fn();
+        render(<ColorRow label="Card Background" alpha value="rgba(118, 36, 92, 0.4)" onChange={onChange} />);
+        const field = screen.getByLabelText('Card Background');
+        fireEvent.change(field, { target: { value: typed } });
+        fireEvent.blur(field);
+        expect(onChange).toHaveBeenCalledWith(stored);
+    });
+
+    /*
+     * `#7d2` is a VALID colour, so a field that wrote every keystroke would put
+     * it on the broadcast on the way to `#7d2f2f`.
+     */
+    it('does not write a colour that is still being typed', () => {
+        const onChange = vi.fn();
+        render(<ColorRow label="Card Background" alpha value="rgba(118, 36, 92, 0.4)" onChange={onChange} />);
+        fireEvent.change(screen.getByLabelText('Card Background'), { target: { value: '#7d2f' } });
+        fireEvent.blur(screen.getByLabelText('Card Background'));
+        expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('gives an opaque colour no alpha picker', () => {
+        render(<ColorRow label="Accent Color" value="#abcdef" onChange={() => {}} />);
+        fireEvent.click(screen.getByLabelText('Pick Accent Color'));
+        expect(screen.getByText('drag-hex')).toBeInTheDocument();
     });
 });

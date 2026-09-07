@@ -101,6 +101,7 @@ _SIZE_VARIANTS = {
 # Each: (team_num, label)
 _TEAM_VARIANTS = {
     "statsbar":    [(1, "Team 1"), (2, "Team 2")],
+    "statscard":   [(1, "Team 1"), (2, "Team 2")],
     "roster":      [(1, "Team 1"), (2, "Team 2")],
     "teamlogo":    [(1, "Team 1"), (2, "Team 2")],
     "controller":  [(1, "Team 1"), (2, "Team 2")],
@@ -113,6 +114,9 @@ _DISPLAY_NAMES = {
     # is the same data in the other canvas. Kept in step with the registry by
     # tests/unit/test_catalog_names_parity.py.
     "statsbar":    "Stat Bar",
+    # The 2x2 card, against the wide bar above it. Also a container member —
+    # same element, same settings namespace, two places it can be drawn.
+    "statscard":   "Stat Card",
     "roster":      "Roster",
     "teamlogo":    "Team Logo",
     "controller":  "Controller",

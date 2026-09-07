@@ -272,20 +272,66 @@ describe('Event Header stage — the field editor', () => {
  * not settings any more, so no `show*` switch survives.
  */
 describe('Event Header stage — what stays a setting', () => {
-    it('keeps each band’s own master and offset on that band’s heading', () => {
+    it('keeps each band’s own master on that band’s heading', () => {
         ui();
-        for (const [master, offset] of [['Header Band', 'Top Offset'], ['Footer Band', 'Bottom Offset']]) {
+        for (const master of ['Header Band', 'Footer Band']) {
             expect(screen.getByRole('button', { name: master, pressed: true })).toBeInTheDocument();
-            expect(screen.getByLabelText(offset)).toBeInTheDocument();
+        }
+    });
+
+    /*
+     * The two offsets place the bands RELATIVE TO EACH OTHER — how far in from
+     * each edge is one question asked twice — so they sit together beside the
+     * width rather than one under each band's switch.
+     */
+    it('groups both band offsets with the shared geometry', () => {
+        ui();
+        const both = document.querySelector('[data-setting-group="Both bands"]');
+        for (const offset of ['Top Offset', 'Bottom Offset']) {
+            expect(within(both).getAllByText(offset).length, offset).toBeGreaterThan(0);
+        }
+        // …exactly once each: this panel hand-places the band masters and
+        // renders the rest from the registry group, so a key in both places
+        // draws twice rather than moving.
+        for (const offset of ['Top Offset', 'Bottom Offset']) {
+            expect(screen.getAllByText(offset).length, offset).toBe(1);
         }
     });
 
     it('keeps the shared look, and leaves nothing for the Style catch-all', () => {
         ui();
-        for (const label of ['Band Background', 'Band Width', 'Font Scale', 'Field Separator']) {
+        for (const label of ['Band Background', 'Band Width', 'Font Size', 'Field Separator']) {
             expect(screen.getByText(label), label).toBeInTheDocument();
         }
         expect(screen.queryByText('Style')).not.toBeInTheDocument();
+    });
+
+    /*
+     * The plate's colour is a STYLE OVERRIDE of the global card surface, not a
+     * setting of its own — the bands are the same plate every other overlay
+     * draws behind text, and hard-coded blacks made this the one surface that
+     * ignored the Design tab. Three gates, and the registry half is pinned in
+     * designConstants.test.js; these are the two that live here.
+     */
+    it('declares the card surface, and binds both plate styles to it', () => {
+        const html = readFileSync('public/layout/eventheader/eventheader.html', 'utf8');
+        expect(html.match(/<meta name="overlay-settings" content="([^"]*)"/)[1]).toContain('cardBg');
+        const mount = readFileSync('public/layout/lib/eventheader-mount.js', 'utf8');
+        for (const style of ['.eh-band.eh-scrim', '.eh-band.eh-bar']) {
+            const rule = mount.split(style)[1].split('\n')[0];
+            expect(rule, style).toContain('var(--card-bg');
+        }
+    });
+
+    /*
+     * PX, not a percentage of a base the producer never sees. Pinned as the
+     * pair — the key AND its unit — because a `%` suffix left on a px value is
+     * exactly the mislabel this replaced.
+     */
+    it('states the type size in pixels', () => {
+        const def = LAYOUT_SETTINGS.eventheader.find(d => d.key === 'fontSize');
+        expect(def).toMatchObject({ suffix: 'px', defaultValue: 34 });
+        expect(LAYOUT_SETTINGS.eventheader.some(d => d.key === 'fontScale')).toBe(false);
     });
 
     it('has no per-field switch left in the registry', () => {

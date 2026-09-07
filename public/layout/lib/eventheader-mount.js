@@ -25,6 +25,24 @@
 
 const REF_W = 1920, REF_H = 1080;
 
+/*
+ * The type size the band was composed at, and the multiple of it every other
+ * length here is. `Font Size` is stated in px on the panel and divided by this
+ * to get `--font-scale`, so the setting a producer reads is the number of
+ * pixels the type actually is, and one knob still drives the band, the gap and
+ * the corner. Mirrored by EVENTHEADER_BASE_FONT_PX in server/settings.py, which
+ * is what the one-time migration off the old percentage converts against.
+ */
+const BASE_FONT_PX = 34;
+const LINE_HEIGHT = 1.2;
+const BAND_EM = 45 / BASE_FONT_PX;
+// Half the air the band has around its line box. The optical correction is
+// clamped to it so the plate always CONTAINS the type: centring the ink is
+// worth a couple of pixels, never worth hanging a descender off the bar. No
+// face we have measured comes close (Bebas Neue, the worst, wants 0.058 of the
+// 0.062 available), so this binds only on something pathological.
+const SLACK_EM = (BAND_EM - LINE_HEIGHT) / 2;
+
 const CSS = `
 .eh-root { position: absolute; inset: 0; overflow: hidden; }
 .eh-stage {
@@ -38,33 +56,57 @@ const CSS = `
   color: var(--text-primary, #ffffff);
 }
 .eh-stage, .eh-stage * { box-sizing: border-box; margin: 0; padding: 0; }
-/* Two thin single-row bands, each 45px of vertical space. Text is bottom-
-   aligned so its baseline sits on the band's bottom edge:
-     header band bottom → y = 45     (top 45px to work with)
-     footer band bottom → y = 1078   (bottom 45px to work with) */
+/* Two thin single-row bands, 45px of vertical space at 100% font scale:
+     header band hangs from y = 0 + Top Offset
+     footer band hangs from y = 1080 - 2 - Bottom Offset
+ *
+ * THE BAND IS THE PLATE, so its height is a function of --font-scale and NOT a
+ * constant. It was a flat 45px with the row seated on its bottom edge, which is
+ * indistinguishable from correct at 100% and wrong at every other setting: the
+ * type grew out of the top of its own background, so a Bar became a stripe
+ * through the lower half of the words and an offset appeared to move the text
+ * without moving the plate — the plate was moving, it just no longer contained
+ * what it was drawn for. The row is CENTRED in the band for the same reason:
+ * seating it on one edge means the padding the plate shows is on one side only,
+ * and which side depends on which band you are looking at. */
 .eh-band {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  height: 45px;
+  height: calc(45px * var(--font-scale, 1));
   display: flex;
-  align-items: flex-end;   /* seat the row on the band's bottom edge */
+  align-items: center;
   justify-content: center;
 }
-.eh-header { top: 0px; }    /* band bottom at y = 45   */
-.eh-footer { bottom: 2px; } /* band bottom at y = 1078 */
+.eh-header { top: 0px; }
+.eh-footer { bottom: 2px; }
 .eh-band[hidden] { display: none; }
-/* Optional readability plate (off by default). */
-.eh-band.eh-scrim { background: radial-gradient(ellipse at center, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0) 72%); }
-.eh-band.eh-bar   { background: rgba(0,0,0,0.72); border-radius: 8px; }
+/* Optional readability plate (off by default). The bar's corner is part of the
+   plate, so it scales with it — a fixed 8px reads as a sharper corner the
+   larger the band gets.
+ *
+ * BOTH STYLES TAKE THE PALETTE'S CARD COLOUR, and differ only in SHAPE: a bar
+ * is the plate, a scrim is the same plate faded out at the edges. They were two
+ * hard-coded blacks at two alphas (0.72 and 0.55), which made this the one
+ * surface on the broadcast that ignored the Design tab — a producer who tuned
+ * Card Background repainted every card except the two strips framing them. The
+ * colour carries its own alpha, so opacity is part of the answer rather than a
+ * second knob.
+ *
+ * The literal is the fallback for a cleared palette, not the default: a
+ * full-art package's mount calls clearDesignSettings, and inside a CONTAINER
+ * that mount may belong to a different member sharing this shell. */
+.eh-band.eh-scrim { background: radial-gradient(ellipse at center, var(--card-bg, rgba(0,0,0,0.55)) 0%, transparent 72%); }
+.eh-band.eh-bar   { background: var(--card-bg, rgba(0,0,0,0.72)); border-radius: calc(8px * var(--font-scale, 1)); }
 .eh-row {
   display: flex;
   align-items: baseline;
   justify-content: center;
   gap: calc(16px * var(--font-scale, 1));
   white-space: nowrap;
-  /* Line box must fully contain ascenders + descenders so nothing is
-     clipped at the band edge (34 * 1.2 ≈ 41px, inside the 45px band). */
+  /* Line box must fully contain ascenders + descenders so nothing is clipped at
+     the band edge (34 * 1.2 ≈ 41px, inside the 45px band). Both numbers scale
+     off --font-scale, so that 4px of air is 4px of air at every setting. */
   line-height: 1.2;
   /* Same size top and bottom. */
   font-size: calc(34px * var(--font-scale, 1));
@@ -80,6 +122,70 @@ const CSS = `
   opacity: 0.9;
 }
 `;
+
+/*
+ * OPTICAL CENTRING — type centres on its CAP BAND, not on its line box.
+ *
+ * `align-items: center` centres the ROW, and a row's height is its line box:
+ * the ascent and descent the font reserves, most of which is empty above the
+ * caps and below the baseline of a string that has no descenders. Whether that
+ * empty space is symmetric is a fact about the FACE, not about the layout —
+ * ink sits centred only where (ascent − capHeight) happens to equal descent.
+ *
+ * Inter's are 0.2425em and 0.24em, which is why the plate looked right for as
+ * long as nobody changed the font: the error was 0.3px. It is 2px on Bebas Neue
+ * at 34px and grows with Font Size, and at that point the bar reads as sitting
+ * low under type that floats above it.
+ *
+ * So the correction is MEASURED, per resolved font — a producer picks the face
+ * on the Design tab (overlays.global.fontFamily) and it arrives from Google
+ * Fonts whenever it arrives, so there is no constant to bake here the way
+ * scoreboard-l.svg bakes Inter's 0.3523 into geometry authored against Inter.
+ *
+ * It is also CONTENT-AGNOSTIC — the cap band, never this string's ink — because
+ * a plate that re-centred on whether the current fields happen to contain a `g`
+ * would twitch every time the round name changed.
+ */
+const PROBE_PX = 200;
+const capOffsets = new Map();
+let probeCtx = null;
+
+/**
+ * How far the type must move DOWN, as a fraction of the font size, for its cap
+ * band to sit on the line box's centre. Negative moves it up; 0 when the font
+ * can't be measured, which leaves today's line-box centring.
+ *
+ * @param fontSpec a resolved CSS font-family list, e.g. `"Bebas Neue", Inter, sans-serif`
+ */
+function capCentreOffset(fontSpec) {
+    if (capOffsets.has(fontSpec)) return capOffsets.get(fontSpec);
+    let out = 0;
+    try {
+        if (!probeCtx) probeCtx = document.createElement('canvas').getContext('2d');
+        // Reset first: an unparseable assignment is a NO-OP that silently keeps
+        // the previous value, which would cache one font's metrics under
+        // another's name. Falling back to sans-serif is merely wrong; falling
+        // back to whichever font was measured last is wrong and unrepeatable.
+        probeCtx.font = `700 ${PROBE_PX}px sans-serif`;
+        probeCtx.font = `700 ${PROBE_PX}px ${fontSpec}`;
+        const m = probeCtx.measureText('H');
+        const asc = m.fontBoundingBoxAscent;
+        const desc = m.fontBoundingBoxDescent;
+        const cap = m.actualBoundingBoxAscent;   // 'H' has no descender: this IS cap height
+        if (asc > 0 && cap > 0) {
+            const line = PROBE_PX * LINE_HEIGHT;
+            // Half-leading distributes the line box's slack above and below the
+            // font's own content area — the same arithmetic the browser does.
+            const baseline = (line - (asc + desc)) / 2 + asc;
+            const dy = (line / 2 - (baseline - cap / 2)) / PROBE_PX;
+            out = Math.max(-SLACK_EM, Math.min(SLACK_EM, dy));
+        }
+    } catch {
+        out = 0;
+    }
+    capOffsets.set(fontSpec, out);
+    return out;
+}
 
 let cssInjected = false;
 function injectCss() {
@@ -207,6 +313,27 @@ export function mountEventHeader({ host, sb = 1 }) {
     window.addEventListener('resize', autoScale);
     autoScale();
 
+    /*
+     * Seat the type on the plate's centre (see capCentreOffset). Kept apart from
+     * update() so a webfont that lands after the first render re-centres without
+     * one: the metrics measured before the face arrived are the FALLBACK's, and
+     * a `loadingdone` is the only notice we get that they are now wrong.
+     */
+    let typeSize = BASE_FONT_PX;
+
+    function alignRows() {
+        const dy = capCentreOffset(getComputedStyle(stage).fontFamily) * typeSize;
+        const t = Math.abs(dy) > 0.05 ? `translateY(${dy.toFixed(2)}px)` : '';
+        hdrRow.style.transform = t;
+        ftrRow.style.transform = t;
+    }
+
+    const onFontsDone = () => { capOffsets.clear(); alignRows(); };
+    if (document.fonts) {
+        document.fonts.addEventListener('loadingdone', onFontsDone);
+        document.fonts.ready.then(onFontsDone).catch(() => {});
+    }
+
     function update(state, settings) {
         OverlayBase.applyDesignSettings('eventheader');
 
@@ -216,13 +343,17 @@ export function mountEventHeader({ host, sb = 1 }) {
 
         // ── layout knobs ────────────────────────────────────────────────
         const sep = s('separator', '◆');
-        const scale = (Number(s('fontScale', 100)) || 100) / 100;
+        // Font Size is px on the panel; --font-scale is the multiple of the
+        // composed 34px that every other length in the CSS is stated in.
+        const size = Number(s('fontSize', BASE_FONT_PX)) || BASE_FONT_PX;
+        const scale = size / BASE_FONT_PX;
         const width = Number(s('bandWidth', 1263)) || 1263;
         const hOff = Number(s('headerOffsetY', 0));
         const fOff = Number(s('footerOffsetY', 2));
         const bg = s('bgStyle', 'none');
 
         stage.style.setProperty('--font-scale', scale);
+        typeSize = size;
 
         for (const band of [header, footer]) {
             band.style.width = width + 'px';
@@ -243,10 +374,13 @@ export function mountEventHeader({ host, sb = 1 }) {
         const footerCount = showFooter
             ? renderRow(ftrRow, bandValues('footer', state, settings, SCOREBOARD), sep) : 0;
         footer.hidden = !showFooter || footerCount === 0;
+
+        alignRows();
     }
 
     function dispose() {
         window.removeEventListener('resize', autoScale);
+        if (document.fonts) document.fonts.removeEventListener('loadingdone', onFontsDone);
         root.remove();
     }
 

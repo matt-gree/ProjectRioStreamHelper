@@ -4,6 +4,7 @@ import { Label } from '../../components/ui/label';
 import { ColorInput } from '../../components/ui/color-input';
 import { NumberInput } from '../../components/ui/number-input';
 import { cn } from '../../lib/utils';
+import { parseRgba, toRgba } from '../../lib/colors';
 
 // Selected-row tint helper (replaces the per-item Mantine theme callbacks).
 const itemClass = (active, accent = 'primary') => cn(
@@ -23,22 +24,6 @@ const COLOR_SWATCHES = [
     '#6366f1', '#64748b',
     '#0f0f19', '#ffffff', '#000000',
 ];
-
-function parseRgba(val) {
-    const m = val.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+))?\s*\)/);
-    if (m) {
-        const hex = '#' + [m[1], m[2], m[3]].map(n => parseInt(n).toString(16).padStart(2, '0')).join('');
-        return { hex, opacity: m[4] != null ? parseFloat(m[4]) : 1 };
-    }
-    return { hex: val.startsWith('#') ? val : '#000000', opacity: 1 };
-}
-
-function toRgba(hex, opacity) {
-    const r = parseInt(hex.slice(1, 3), 16) || 0;
-    const g = parseInt(hex.slice(3, 5), 16) || 0;
-    const b = parseInt(hex.slice(5, 7), 16) || 0;
-    return `rgba(${r}, ${g}, ${b}, ${opacity})`;
-}
 
 // ── Debounced color input — updates local display immediately, saves after idle ──
 const DebouncedColorInput = memo(function DebouncedColorInput({ value, onChange, ...props }) {
@@ -122,4 +107,4 @@ const ColorWithOpacity = memo(function ColorWithOpacity({ label, description, va
     );
 });
 
-export { itemClass, COLOR_SWATCHES, parseRgba, toRgba, ColorWithOpacity, LabeledColor, DebouncedColorInput };
+export { itemClass, COLOR_SWATCHES, ColorWithOpacity, LabeledColor, DebouncedColorInput };

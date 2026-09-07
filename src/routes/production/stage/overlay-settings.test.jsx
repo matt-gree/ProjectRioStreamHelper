@@ -87,7 +87,11 @@ describe('ElementStyleSettings — every setting type is stage-renderable (phase
 
     it('writes a colour override to overlays.{type}.{key}', () => {
         render(<ElementStyleSettings type="bracket" label="Bracket" />);
+        // A colour field commits on blur, not per keystroke: typing `#123456`
+        // passes through `#123`, which is a valid colour and would otherwise be
+        // written to the rig on the way.
         fireEvent.change(screen.getByLabelText('Connector Line Color'), { target: { value: '#123456' } });
+        fireEvent.blur(screen.getByLabelText('Connector Line Color'));
         expect(useSettingsStore.getState()?.overlays?.bracket?.connectorColor).toBe('#123456');
     });
 
@@ -96,6 +100,7 @@ describe('ElementStyleSettings — every setting type is stage-renderable (phase
         // arg here to prove the {type}.{board} path lands correctly.
         render(<ElementStyleSettings type="bracket" board={2} label="Bracket 2" />);
         fireEvent.change(screen.getByLabelText('Connector Line Color'), { target: { value: '#00ff00' } });
+        fireEvent.blur(screen.getByLabelText('Connector Line Color'));
         expect(useSettingsStore.getState()?.overlays?.bracket?.[2]?.connectorColor).toBe('#00ff00');
     });
 
@@ -410,7 +415,9 @@ describe('ElementStyleSettings — app-palette settings under a full-art theme',
 describe('ElementStyleOverrides', () => {
     const EVENTHEADER = {
         type: 'eventheader',
-        supportedSettings: ['showHeader', 'textColor', 'accentColor', 'fontFamily'],
+        // cardBg is here because eventheader.html declares it: the bands are a
+        // card surface, and it is the type's one alpha-carrying override.
+        supportedSettings: ['showHeader', 'textColor', 'accentColor', 'cardBg', 'fontFamily'],
     };
     const SPOTLIGHT = { type: 'postgamecallout', supportedSettings: ['accentColor', 'fontFamily'] };
     const STATSBAR = {
@@ -464,8 +471,11 @@ describe('ElementStyleOverrides', () => {
         await show({ type: 'eventheader' });
         const options = offered();
         expect(options).toContain('Font Family');
-        // Not declared by this layout at all.
-        expect(options).not.toContain('Card Background');
+        // Declared AND reached: the bands are a card surface, so the plate's
+        // colour is a pin of the global rather than a setting of its own.
+        expect(options).toContain('Card Background');
+        // Not declared by this layout at all — the bands have no border.
+        expect(options).not.toContain('Border Color');
     });
 
     /*
@@ -569,6 +579,67 @@ describe('ElementStyleOverrides', () => {
     });
 
     /*
+     * THE BUG THIS EXISTS FOR: `<input type="color">` is RGB-only by
+     * specification — on macOS it opens a system panel with no alpha channel at
+     * all — and its value is always `#rrggbb`. So on a key whose value carries
+     * an alpha, the swatch wrote the alpha away: a card background pinned at
+     * 0.4 went fully opaque the moment a producer nudged its hue, live, with no
+     * warning. The fix is that the picker HAS an alpha channel, so this pins
+     * which picker each kind of key opens.
+     */
+    it('opens a picker with an alpha channel for a colour that carries one', async () => {
+        layouts([EVENTHEADER]);
+        pin({ eventheader: { cardBg: 'rgba(118, 36, 92, 0.4)' } });
+        await show({ type: 'eventheader' });
+        fireEvent.click(screen.getByLabelText('Pick Card Background'));
+        await waitFor(() => expect(document.querySelector('.react-colorful')).toBeInTheDocument());
+        expect(document.querySelector('.react-colorful__alpha')).toBeInTheDocument();
+    });
+
+    it('opens a picker with no alpha channel for one that does not', async () => {
+        layouts([EVENTHEADER]);
+        pin({ eventheader: { accentColor: '#abcdef' } });
+        await show({ type: 'eventheader' });
+        fireEvent.click(screen.getByLabelText('Pick Accent Color'));
+        await waitFor(() => expect(document.querySelector('.react-colorful')).toBeInTheDocument());
+        expect(document.querySelector('.react-colorful__alpha')).not.toBeInTheDocument();
+    });
+
+    /*
+     * The row's LABEL is on the text field, not the swatch. Pasting an exact
+     * rgba() is the one thing no picker does, so that field is the value
+     * control and the swatch is a way to open a picker — which is also what
+     * keeps a colour row drivable without simulating a drag.
+     */
+    it('labels the value field, and writes what is typed into it', async () => {
+        layouts([EVENTHEADER]);
+        pin({ eventheader: { cardBg: 'rgba(118, 36, 92, 0.4)' } });
+        await show({ type: 'eventheader' });
+        const field = screen.getByLabelText('Card Background');
+        fireEvent.change(field, { target: { value: 'rgba(0, 255, 0, 0.25)' } });
+        fireEvent.blur(field);
+        expect(useSettingsStore.getState()?.overlays?.eventheader?.cardBg)
+            .toBe('rgba(0, 255, 0, 0.25)');
+    });
+
+    /*
+     * ONE value field per colour row, on every key. The opacity had a percent
+     * box of its own beside it and the picker already carries that slider, so
+     * the row asked the same question twice and was the widest thing in the
+     * section for it.
+     */
+    it('gives a colour row one field, whether or not it carries an alpha', async () => {
+        layouts([EVENTHEADER]);
+        pin({ eventheader: { cardBg: 'rgba(118, 36, 92, 0.4)', accentColor: '#abcdef' } });
+        await show({ type: 'eventheader' });
+        expect(screen.queryByLabelText('Card Background opacity')).not.toBeInTheDocument();
+        expect(screen.queryByLabelText('Accent Color opacity')).not.toBeInTheDocument();
+        // …and both read the same way, in hex.
+        expect(screen.getByLabelText('Card Background')).toHaveValue('#76245c');
+        expect(screen.getByLabelText('Accent Color')).toHaveValue('#abcdef');
+    });
+
+    /*
      * ONE removal per row. ColorRow ships its own reset and the font row had a
      * Reset button, and once a cleared value means "off this element" both said
      * the same thing in different words, side by side — two × on one row.
@@ -627,6 +698,7 @@ describe('ElementStyleOverrides', () => {
         pin({ eventheader: { accentColor: '#abcdef' } });
         await show({ type: 'eventheader' });
         fireEvent.change(screen.getByLabelText('Accent Color'), { target: { value: '#123456' } });
+        fireEvent.blur(screen.getByLabelText('Accent Color'));
         expect(useSettingsStore.getState()?.overlays?.eventheader?.accentColor).toBe('#123456');
     });
 
@@ -637,6 +709,7 @@ describe('ElementStyleOverrides', () => {
         pin({ scoreboard: { 2: { accentColor: '#abcdef' } } });
         await show({ type: 'scoreboard', board: 2 });
         fireEvent.change(screen.getByLabelText('Accent Color'), { target: { value: '#00ff00' } });
+        fireEvent.blur(screen.getByLabelText('Accent Color'));
         expect(useSettingsStore.getState()?.overlays?.scoreboard?.[2]?.accentColor).toBe('#00ff00');
     });
 

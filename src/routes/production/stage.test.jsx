@@ -75,11 +75,12 @@ describe('stageBodyComponent', () => {
 
     it('falls back by flavor for elements without a dedicated body', () => {
         const scoreboard = ELEMENTS.find(e => e.id === 'scoreboard');
-        const statscard = ELEMENTS.find(e => e.id === 'statscard');
         expect(stageBodyComponent(scoreboard)).toBe(DirectStage);
-        // The Stat Card has no source of its own, so it is fed wherever it is
-        // asked about — there is no other answer for it.
-        expect(stageBodyComponent(statscard)).toBe(FedStage);
+        // A hypothetical fed-only element — the registry has none since the Stat
+        // Card got its own ?team= source, and the floor still has to answer for
+        // one, because `flavor` is what a placement falls back to when it names
+        // no slot (see placementFlavor).
+        expect(stageBodyComponent({ id: 'nosource', flavor: 'fed' })).toBe(FedStage);
     });
 
     /*

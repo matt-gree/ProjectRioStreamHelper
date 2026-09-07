@@ -359,12 +359,19 @@ export const OverlaySettingRows = memo(function OverlaySettingRows({ os, type, k
  * screen, top to bottom.
  *
  * A group is a VISIBLE PART OF THE ELEMENT, never a kind of control: "Top band",
- * not "Switches" or "Geometry". Sorted by kind, an event header's band offset
- * ended up five rows from the switch that turns that band on, and a producer
- * whose top strip sits too high had to know which of three sections to look in.
- * Grouped by region there is one place to look, and the panel reads as a scale
- * model of the thing it configures — the same rule the Lower Third stage's five
- * always-open columns already follow.
+ * not "Switches" or "Geometry". Sorted by kind, the switch that draws an event
+ * header's top strip ended up in a section of switches, five rows from the
+ * strip's own settings, and a producer had to know which of three sections to
+ * look in. Grouped by region there is one place to look, and the panel reads as
+ * a scale model of the thing it configures — the same rule the Lower Third
+ * stage's five always-open columns already follow.
+ *
+ * A group is a region, NOT a partition: a control that places two regions
+ * RELATIVE TO EACH OTHER belongs with the pair, which is why the Event Header's
+ * two band offsets sit together under "Both bands" rather than one under each
+ * band. Region-grouping asks where a producer will look for a control, and they
+ * look where the answer is comparable — nothing is gained by splitting a top
+ * inset from the bottom inset it is being balanced against.
  *
  * First appearance rather than a sort, so the registry array stays the single
  * statement of order; and a def with no `group` keeps its place in an ungrouped
@@ -640,14 +647,16 @@ const OverrideRow = memo(function OverrideRow({
             </FieldRow>
         );
     }
-    // 'color' and 'color-opacity' alike. ColorRow's text field takes the value
-    // verbatim, so an rgba() from the opacity-carrying keys round-trips; only
-    // the swatch beside it can't render one, and it falls back to black rather
-    // than lying about the colour.
+    // 'color' and 'color-opacity' alike, and the type is what decides whether
+    // the row gets an opacity field. The swatch RENDERS an rgba() fine — the
+    // browser parses it and shows the right colour — so the old note here that
+    // it "falls back to black" was wrong; what it cannot do is give the alpha
+    // BACK, because a native colour input returns `#rrggbb` and nothing else.
+    // Reading the row was never the problem. Editing it was.
     return (
         <ColorRow
             label={def.label} value={value ?? null} staged={staged} disabled={disabled}
-            placeholder={hint} hideReset
+            placeholder={hint} hideReset alpha={def.type === 'color-opacity'}
             onChange={(v) => set(v)}
         />
     );

@@ -6,6 +6,9 @@ import { SegmentedControl } from '../../../components/ui/segmented-control';
 import { Text } from '../../../components/ui/primitives';
 import { SimpleTooltip } from '../../../components/ui/simple-tooltip';
 import { cn } from '../../../lib/utils';
+import { HexColorPicker, RgbaStringColorPicker } from 'react-colorful';
+import { Popover, PopoverContent, PopoverTrigger } from '../../../components/ui/popover';
+import { parseRgba, toRgba, isCompleteColor } from '../../../lib/colors';
 import { KIT_INPUT, KIT_LABEL } from './tokens';
 
 /*
@@ -393,25 +396,125 @@ export const TextRow = memo(function TextRow({
  * rows, where taking the value away means taking the whole row off the element,
  * and a second reset beside that one does the same thing under a different
  * word. Every other caller keeps the built-in reset.
+ *
+ * `alpha` is for a key whose value CARRIES ONE (the `color-opacity` defs —
+ * cardBg, borderColor, textStrokeColor), and it picks which PICKER opens.
+ *
+ * THE SWATCH IS NOT A NATIVE COLOUR INPUT. `<input type="color">` is RGB-only
+ * by specification: it renders no alpha channel — on macOS it hands you the
+ * system colour panel with nothing to set one — and its value is always
+ * `#rrggbb`, so on an alpha-carrying key it DESTROYED the alpha every time it
+ * was touched. A card background pinned at rgba(…, 0.4) went fully opaque on
+ * air the moment a producer nudged its hue. react-colorful's picker has the
+ * alpha slider the platform control lacks, opens in the app instead of a system
+ * panel, and is what the Design tab already uses for the very globals these
+ * rows pin (routes/layouts/shared.jsx) — so the console and the Design tab now
+ * ask for a colour the same way.
+ *
+ * THE FIELD SPEAKS HEX, whatever is stored. `rgba(125, 47, 47, 0.55)` is the
+ * storage format, not a thing to read at a glance: it is twice the width of the
+ * hex beside it on the next row, and the two rows of one panel then disagree
+ * about what a colour even looks like. So an alpha-carrying key shows the same
+ * `#7d2f2f` its opaque siblings do, and its opacity is read off the swatch —
+ * which is checkered exactly so it can be — and set on the slider.
+ *
+ * TYPING still reaches the alpha, because otherwise dragging would be the only
+ * way to set one: a typed `rgba()` or 8-digit `#rrggbbaa` names its own, while a
+ * bare hex means "this colour, same opacity" and keeps the row's (`explicit`,
+ * ../../../lib/colors). And it commits only COMPLETE colours — a field writing
+ * every keystroke stores `#7d2` on the way to `#7d2f2f`, and `#7d2` is a valid
+ * colour, so it would land on the broadcast as one.
+ *
+ * The field carries the row's label and the swatch is labelled as what it is, a
+ * way to open a picker. That is the honest reading — and it keeps a colour row
+ * drivable in a test without simulating a drag.
  */
+const NO_ALPHA = { hex: '', opacity: 1 };
+
+// Transparency has to be VISIBLE in a 32px chip or the swatch lies about every
+// value the alpha slider exists to set: a card background at 0.1 and one at 1.0
+// are the same flat rectangle over an opaque ground. It sits BEHIND the colour
+// with nothing inset, so an opaque swatch is pure colour — a padding ring let
+// the checks show around every chip on the panel, including the ones with no
+// transparency to report.
+const CHECKER = {
+    backgroundImage: 'conic-gradient(#6b7280 0 25%, transparent 0 50%, #6b7280 0 75%, transparent 0)',
+    backgroundSize: '8px 8px',
+};
+
 export const ColorRow = memo(function ColorRow({
     label, value, onChange, disabled, staged, placeholder = 'Default', className,
-    hideReset,
+    hideReset, alpha,
 }) {
     const has = value != null && value !== '';
+    // Only split when the key actually carries an alpha — an opaque row would
+    // pay a regex per render to answer a question it never asks.
+    const { hex, opacity } = alpha ? parseRgba(has ? value : '#000000') : NO_ALPHA;
+
+    /*
+     * A drag across the picker fires continuously, and every one of these is a
+     * settings write that broadcasts to the whole rig — so the picker's stream
+     * is collapsed to its last value. Safe to hold the prop back: react-colorful
+     * only re-seeds itself when `color` CHANGES, and it does not change while
+     * the trailing edge is pending, so the picker never fights the drag.
+     */
+    const commit = useRef(null);
+    useEffect(() => () => clearTimeout(commit.current), []);
+    const pick = useCallback((next) => {
+        clearTimeout(commit.current);
+        commit.current = setTimeout(() => onChange?.(next), 120);
+    }, [onChange]);
+    // Normalised through our own formatter rather than stored as the library
+    // spells it, so one shape reaches settings no matter who wrote it.
+    const pickRgba = useCallback((s) => {
+        const p = parseRgba(s);
+        pick(toRgba(p.hex, p.opacity));
+    }, [pick]);
+
+    // What the field shows: hex on an alpha key, the stored value otherwise.
+    const shown = has ? (alpha ? hex : value) : '';
+    const commitText = useCallback((typed) => {
+        const t = String(typed ?? '').trim();
+        if (!t) return onChange?.(null);
+        if (!isCompleteColor(t)) return;          // still being typed
+        if (!alpha) return onChange?.(t);
+        const p = parseRgba(t);
+        onChange?.(toRgba(p.hex, p.explicit ? p.opacity : opacity));
+    }, [alpha, onChange, opacity]);
+    const [draft, type, commitDraft] = useDebouncedText(shown, commitText, 300);
+
     return (
         <div className={cn(ROW, className)}>
             <RowLabel label={label} staged={staged} />
+            <Popover>
+                <PopoverTrigger asChild disabled={disabled}>
+                    <button
+                        type="button" disabled={disabled} aria-label={`Pick ${label}`}
+                        style={CHECKER}
+                        className="h-7 w-8 shrink-0 overflow-hidden rounded-md border border-border disabled:opacity-50"
+                    >
+                        <span
+                            className="block h-full w-full"
+                            style={{ background: has ? value : 'transparent' }}
+                        />
+                    </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-3">
+                    {alpha ? (
+                        <RgbaStringColorPicker
+                            color={has ? value : 'rgba(0, 0, 0, 1)'}
+                            onChange={pickRgba}
+                        />
+                    ) : (
+                        <HexColorPicker color={has ? value : '#000000'} onChange={pick} />
+                    )}
+                </PopoverContent>
+            </Popover>
             <input
-                type="color" disabled={disabled} aria-label={label}
-                value={has ? value : '#000000'}
-                onChange={(e) => onChange?.(e.target.value)}
-                className="h-7 w-8 shrink-0 rounded-md border border-border bg-card p-0.5"
-            />
-            <input
-                type="text" disabled={disabled} placeholder={placeholder}
-                value={has ? value : ''}
-                onChange={(e) => onChange?.(e.target.value || null)}
+                type="text" disabled={disabled} placeholder={placeholder} aria-label={label}
+                value={draft}
+                onChange={(e) => type(e.target.value)}
+                onBlur={commitDraft}
                 className={cn(KIT_INPUT, 'min-w-0 flex-1', staged && 'border-amber-400/60 text-amber-400')}
             />
             {has && !hideReset && (

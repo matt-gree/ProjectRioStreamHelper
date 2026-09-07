@@ -6,14 +6,18 @@
  *                      listed on the Production page under the OBS scene its
  *                      source lives in.
  *   - Direct element : owns a DEDICATED source; fire = show/hide it.
- *   - Fed element    : has no source of its own AT ALL — the Stat Card is a
- *                      container member and nothing else, so a container is the
+ *   - Fed element    : has no source of its own AT ALL, so a container is the
  *                      only place its content can go. An element on no roster
- *                      has nowhere to be pushed, which is a real state every
- *                      surface reports rather than defaulting around. A `feed`
- *                      kind additionally names a content picker
+ *                      then has nowhere to be pushed, which is a real state
+ *                      every surface reports rather than defaulting around. A
+ *                      `feed` kind additionally names a content picker
  *                      ('postgamecallout' = which player's spotlight), and the
  *                      pick is written to `production.feed.container.{id}`.
+ *                      THE REGISTRY HAS NONE TODAY — the Stat Card was the last
+ *                      one and now owns a ?team= source like the Roster — and
+ *                      the floor stays anyway, because being fed is a property
+ *                      of the PLACEMENT (see below): every member's slot row is
+ *                      fed whatever its element's flavor says.
  *
  * FLAVOR IS THE FLOOR, AND THE PLACEMENT IS THE ANSWER. Being fed is a property
  * of WHERE a source is, not of what an element is: a member sitting on a
@@ -206,31 +210,55 @@ export const ELEMENTS = [
     {
         id: 'statscard',
         name: 'Stat Card',
-        // The same stat line as Stats, wearing the design package's `statscard`
-        // element — the compact 2x2 card, 380x240. It is a CONTAINER MEMBER and
-        // nothing else: it has no standalone layout, which is why its canonical
-        // url is the generic container shell.
-        //
-        // 380x240 rather than the original 380x220 since the card grew its two
-        // optional caption bands (a header naming the stat set, a footer carrying
-        // the live game line): both open is 236 units of card. A container has to
-        // be at least this tall to hold it — the seeded "Roster + Stats" pair is
-        // 452x240, which is where the height comes from.
-        //
-        // Not pickable, deliberately. It resolves the side's current batter or
-        // pitcher itself (RioData.getStatsLine, the same resolution the engine's
-        // `statscard` resolver mirrors), so there is nothing to choose — the only
-        // question is whose side, and that is the CONTAINER's scope.
-        flavor: 'fed',
-        feed: 'statscard',
-        url: '/layout/shared/container.html',
+        /*
+         * The same stat line as the Stat Bar, wearing the design package's
+         * `statscard` element — the compact 2x2 card, 380x240, with the header
+         * band the wide bar has no room for.
+         *
+         * A TOP-LEVEL ELEMENT WITH ITS OWN SOURCE, and a container member too —
+         * the Roster's shape exactly. It was a member and NOTHING else, which
+         * made the 2x2 art reachable only through a container: a producer who
+         * wanted the card alone in a corner of the scene had to build a
+         * container to hold one thing, and the card had no whitelist of its own
+         * (its `<meta>` is where per-element style overrides are read back
+         * from), so the one element with two caption bands was the one element
+         * whose style could not be pinned. Both paths run stats-card-mount with
+         * the same settingsType and svgElement, so it is one element configured
+         * once wherever the producer puts it.
+         *
+         * 380x240 rather than the original 380x220 since the card grew its two
+         * optional caption bands (a header naming the stat set, a footer carrying
+         * the live game line): both open is 236 units of card. A container has to
+         * be at least this tall to hold it — the seeded "Roster + Stats" pair is
+         * 452x240, which is where the height comes from.
+         *
+         * No `scope: 'board'` — settings are global (`overlays.statscard.*`) and
+         * its two sources differ by ?team=, which the instance grammar reads off
+         * the URL as a variant. Same shape as the Stat Bar, Roster, Player Name
+         * and Team Logo.
+         *
+         * No `feed` kind, and that is not an omission: a `feed` names a CONTENT
+         * PICKER, and this card resolves the side's current batter or pitcher
+         * itself (RioData.getStatsLine, the same resolution the automation
+         * engine's `statscard` resolver mirrors). There is nothing to choose —
+         * the only question is whose side, which its own source answers with
+         * ?team= and a container answers with its scope.
+         */
+        flavor: 'direct',
+        url: '/layout/scoreboard1/statscard.html',
         width: 380,
         height: 240,
-        match: (url) => /shared\/container/i.test(url),
-        // Its frame of reference is the container's, not a board picker's: a
-        // manual Push takes scoreboard AND team from the container definition,
-        // the same pair the automation engine feeds it. Without this a push into
-        // a right-side container would silently show the left side.
+        // Anchored to the full path, like the bar's and the roster's — a bare
+        // /statscard/i would also answer to `container.html?container=statscard`,
+        // i.e. a CONTAINER claiming to be one of its own occupants.
+        match: (url) => /\/layout\/scoreboard\d*\/statscard\.html/i.test(url),
+        // One source per side (?team=1|2) — see `perSide` in the header note.
+        perSide: true,
+        // On a container's roster its frame of reference is the CONTAINER's, not
+        // its own URL's: a manual Push takes scoreboard AND team from the
+        // definition, the same pair the automation engine feeds it. Gated on the
+        // row being a member's slot (see subject.jsx), so its own ?team= source
+        // still draws the side that source names.
         containerScoped: true,
     },
     {

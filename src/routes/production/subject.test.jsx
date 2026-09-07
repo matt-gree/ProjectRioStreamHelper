@@ -248,7 +248,14 @@ describe('what does and does not get a subject', () => {
             // A scoped member on no roster has no frame of reference to draw
             // from, which is why the predicate that used to live here couldn't
             // be right: it cannot read the store.
-            ['stat card with no container', placementFor('statscard'), false],
+            ['stat card slot with no container',
+                placementFor('statscard', { slot: 'gone' }), false],
+            // …but the SAME element's own ?team= source names its side in its
+            // URL, so it draws off that — the gate on `containerScoped` is the
+            // slot, not the element (see Subject). Both halves of the Stat Card
+            // are here because it is now the pair: a member AND a source.
+            ['stat card source (team variant)',
+                placementFor('statscard', { variant: 't1' }), true],
         ];
         for (const [what, placement, expected] of cases) {
             const { container, unmount } = render(<Subject placement={placement} />);

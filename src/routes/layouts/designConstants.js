@@ -11,10 +11,12 @@
 // for any of those via the "+ Add style override" UI.
 // Supported control types: 'switch', 'color-override', 'number-override', 'select', 'text'.
 
-// The re-themable stat card's element-only settings. Shared verbatim by the
-// standalone Stats source and the Stat Card container member, which each read
-// them under their own namespace (overlays.stats.* vs overlays.statscard.*) so
-// the two cards are configured independently.
+// The re-themable stat card's element-only settings. Shared verbatim by the two
+// stat elements — the wide Stat Bar and the 2x2 Stat Card — which each read them
+// under their own namespace (overlays.statsbar.* vs overlays.statscard.*) so the
+// two cards are configured independently. BOTH now own a dedicated ?team=
+// source; the card is additionally a container member, and its two paths share
+// one namespace, so it is one element wherever it is drawn.
 const STAT_CARD_SETTINGS = [
     { key: 'transitionType', type: 'select', label: 'Batter Transition', description: 'Animation when switching to a new batter', options: [{ value: 'fade', label: 'Fade' }, { value: 'none', label: 'None' }], defaultValue: 'fade' },
     { key: 'subLine', type: 'select', label: 'Bottom Line', description: 'What the bottom row shows: the live game line, your own text, or nothing (the card shrinks)', options: [{ value: 'gameLine', label: 'Game Line' }, { value: 'custom', label: 'Custom Text' }, { value: 'off', label: 'Off' }], defaultValue: 'gameLine' },
@@ -34,10 +36,11 @@ const STAT_CARD_SETTINGS = [
 // the four numbers are while the bottom line carries what just happened.
 //
 // Not part of STAT_CARD_SETTINGS, because it is not part of every card: the
-// header is a band in `statscard.svg`, and the standalone Stats source renders
-// the wide `statsbar.svg`, which has no room for one. Offering the knob there would
-// put a control on the stage that cannot change anything. The Stat Card
-// container member, which DOES render the 2x2 card, takes it below.
+// header is a band in `statscard.svg`, and the Stat Bar renders the wide
+// `statsbar.svg`, which has no room for one. Offering the knob there would put a
+// control on the stage that cannot change anything. The Stat Card takes it
+// below, and declares the pair in its own layout's `<meta>` — which is the half
+// that was unreachable while the card had no layout file of its own.
 const TOP_LINE_SETTINGS = [
     { key: 'topLine', type: 'select', label: 'Top Line', description: 'A caption above the stats: your own text, the game mode ("Stars On Showdown XXI Stats"), or nothing (the card shrinks)', options: [{ value: 'off', label: 'Off' }, { value: 'custom', label: 'Custom Text' }, { value: 'auto', label: 'Game Mode' }], defaultValue: 'off' },
     { key: 'topLineText', type: 'text', showWhen: { key: 'topLine', is: 'custom' }, label: 'Custom Top Text', description: 'Shown when Top Line is set to Custom Text', placeholder: 'e.g. Tournament Stats' },
@@ -140,15 +143,15 @@ export const LAYOUT_SETTINGS = {
         { key: 'showRoleIcon', type: 'switch', label: 'Batting / Fielding Icon', description: 'Display the bat or glove icon indicating the team role' },
         { key: 'showTeamLogo', type: 'switch', label: 'Team Logo', description: 'Display the team logo next to the roster' },
     ],
-    // Stats — the per-side stat card as its OWN source (?scoreboard=N&team=T),
-    // drawing whoever that side has on the field. One namespace for both sides,
-    // same as the roster's.
+    // Stat Bar — the wide per-side stat card as its OWN source
+    // (?scoreboard=N&team=T), drawing whoever that side has on the field. One
+    // namespace for both sides, same as the roster's.
     statsbar: [...STAT_CARD_SETTINGS],
-    // Stat Card — the compact 2x2 card as a CONTAINER MEMBER (no standalone
-    // layout of its own). Same knobs as the standalone Stats source under its
-    // own namespace, so a container's card and a dedicated stats source are
-    // configured independently; the Production stage reaches these from the Stat
-    // Card row nested under its container.
+    // Stat Card — the compact 2x2 card, with its own ?team= source AND a place
+    // on any container's roster. Same knobs as the Stat Bar under its own
+    // namespace, so the two cards are configured independently; the Production
+    // stage reaches these from the card's own rack row or from its row nested
+    // under a container, which are the same panel writing the same keys.
     statscard: [...STAT_CARD_SETTINGS, ...TOP_LINE_SETTINGS],
     /*
      * Player Name — one side's name as its own source.
@@ -275,22 +278,36 @@ export const LAYOUT_SETTINGS = {
         // What stays here is what is genuinely a setting: whether each BAND is
         // drawn at all, where it sits, and how both of them look.
         { key: 'showHeader',    group: 'Top band', type: 'switch', label: 'Header Band',  description: 'The top row of fields', defaultValue: true },
-        { key: 'headerOffsetY', group: 'Top band', type: 'number-override', label: 'Top Offset', description: 'Nudge the header band down from the top (baseline default y=45)', defaultValue: 0, min: 0, max: 480, step: 1, suffix: 'px' },
 
         { key: 'showFooter',    group: 'Bottom band', type: 'switch', label: 'Footer Band',  description: 'The bottom row of fields', defaultValue: true },
-        { key: 'footerOffsetY', group: 'Bottom band', type: 'number-override', label: 'Bottom Offset', description: 'Nudge the footer band up from the bottom (baseline default y=1078)', defaultValue: 2, min: 0, max: 480, step: 1, suffix: 'px' },
+
+        // The two offsets sit HERE rather than each under its own band's
+        // switch. They are geometry, and the producer setting one is placing
+        // both — a top strip and a bottom strip are framing the same canvas, so
+        // the question being answered is how far in from each edge, which is
+        // one question asked twice and wants the two answers side by side (and
+        // beside the width, which is the third).
 
         // Last, and that is the ranking: these are set once for an event, where
-        // everything above is flipped during one.
+        // the two band switches above are flipped during one.
         // A segment label is ONE word. A segmented control divides its row
         // between its options, so it has whatever a column's width leaves after
         // the label gutter divided by three — ~82px at two columns. "None
         // (transparent)" and "Soft Scrim" both wrapped to a second line there
         // and broke the panel's 28px rhythm. The adjectives were describing, and
         // `description` is where describing goes.
-        { key: 'bgStyle',       group: 'Both bands', type: 'select', label: 'Band Background', description: 'Optional readability plate behind each row: none (transparent), a soft scrim, or a solid bar', options: [{ value: 'none', label: 'None' }, { value: 'scrim', label: 'Scrim' }, { value: 'bar', label: 'Bar' }], defaultValue: 'none' },
+        { key: 'headerOffsetY', group: 'Both bands', type: 'number-override', label: 'Top Offset', description: 'Nudge the header band down from the top edge', defaultValue: 0, min: 0, max: 480, step: 1, suffix: 'px' },
+        { key: 'footerOffsetY', group: 'Both bands', type: 'number-override', label: 'Bottom Offset', description: 'Nudge the footer band up from the bottom edge', defaultValue: 2, min: 0, max: 480, step: 1, suffix: 'px' },
         { key: 'bandWidth',     group: 'Both bands', type: 'number-override', label: 'Band Width', description: 'Centered content width for both rows', defaultValue: 1263, min: 600, max: 1920, step: 1, suffix: 'px' },
-        { key: 'fontScale',     group: 'Both bands', type: 'number-override', label: 'Font Scale', description: 'Scales all text up or down', defaultValue: 100, min: 50, max: 200, step: 5, suffix: '%' },
+        // PX, NOT A PERCENTAGE. It was `fontScale`, 50–200% of a 34px base the
+        // producer never sees — so the one thing this knob is reached for
+        // ("make it about as tall as the scoreboard's names") could only be
+        // found by trial, and two elements set to the same size said 100 and
+        // 34. The band, the gap between fields and the bar's corner still
+        // derive from it, so only the unit moved. Migrated by
+        // _eventheader_font_px in server/settings.py against the same 34.
+        { key: 'fontSize',      group: 'Both bands', type: 'number-override', label: 'Font Size', description: 'Type size for both rows; the band grows with it', defaultValue: 34, min: 16, max: 72, step: 1, suffix: 'px' },
+        { key: 'bgStyle',       group: 'Both bands', type: 'select', label: 'Band Background', description: 'Optional readability plate behind each row: none (transparent), a soft scrim, or a solid bar', options: [{ value: 'none', label: 'None' }, { value: 'scrim', label: 'Scrim' }, { value: 'bar', label: 'Bar' }], defaultValue: 'none' },
         // `short`: the whole value is one glyph, so the field says so rather
         // than stretching the width of its column.
         { key: 'separator',     group: 'Both bands', type: 'text',   label: 'Field Separator', description: 'Character drawn between fields in a row', defaultValue: '◆', placeholder: '◆', short: true },
@@ -489,7 +506,7 @@ const OVERRIDE_READ_TYPES = {
     // Header likewise never declares.
     textStrokeWidth: null,
     textStrokeColor: null,
-    cardBg: ['scoreboard'],
+    cardBg: ['scoreboard', 'eventheader'],
     borderColor: ['scoreboard'],
     borderRadius: ['scoreboard'],
     borderWidth: ['scoreboard'],

@@ -27,9 +27,12 @@ import { OverlaySettingChip, OverlaySettingRows, useOverlaySettings } from './ov
  * to its source — and a field can move along its band or across to the other,
  * which is the same edit either way (see ../eventheader).
  *
- * The band's own on/off and its offset ride the region's heading rule: the
- * eyebrow names the band, so a chip repeating that name in the rows below it was
- * the label said twice, and the offset belongs to the strip it nudges.
+ * The band's own on/off rides the region's heading rule: the eyebrow names the
+ * band, so a chip repeating that name in the rows below it was the label said
+ * twice. Its OFFSET does not — the two offsets place the bands relative to each
+ * other, so they sit together under "Both bands" beside the width. A top inset
+ * split from the bottom inset it is being balanced against is two halves of one
+ * answer in two places.
  */
 
 const BOTH_KEYS = LAYOUT_SETTINGS.eventheader
@@ -59,7 +62,7 @@ export const EventHeaderBandRows = memo(function EventHeaderBandRows({ os }) {
  * these are text fields separated by a glyph, so their widths ARE their content,
  * and faking a proportion would be a promise the overlay doesn't keep.
  */
-const BandRibbon = memo(function BandRibbon({ band, label, master, offset, os, values, selected, onSelect }) {
+const BandRibbon = memo(function BandRibbon({ band, label, master, os, values, selected, onSelect }) {
     const { bands, set, staged } = useBands();
     const entries = bands[band];
 
@@ -87,9 +90,6 @@ const BandRibbon = memo(function BandRibbon({ band, label, master, offset, os, v
                     two arrays and confirming half of it would leave the field
                     in both bands or in neither. */}
                 <StagedDot show={staged} />
-                <div className="ml-auto flex min-w-0 items-center">
-                    <OverlaySettingRows os={os} type="eventheader" keys={[offset]} />
-                </div>
             </div>
 
             <div className="flex min-w-0 items-center gap-2">
@@ -256,7 +256,11 @@ export default function EventHeaderStage({ element, placement }) {
                 <FieldEditor selected={selected} onSelect={setSelected} values={values} />
             </div>
 
-            <div className="mt-1 flex flex-col gap-1.5 border-t border-border/60 pt-2">
+            {/* Tagged the way SettingGroups tags a generated section, so this
+                hand-built one is addressable as the same thing — this panel is
+                a bespoke arrangement of the registry, not a different model of
+                it. */}
+            <div data-setting-group="Both bands" className="mt-1 flex flex-col gap-1.5 border-t border-border/60 pt-2">
                 <Text size="xs" className="label-display text-muted-foreground">Both bands</Text>
                 {/* The shared look, in the same column budget SettingGroups uses
                     — a settings row is ~240px, so a stage panel fits three. */}

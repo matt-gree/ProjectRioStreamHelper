@@ -40,6 +40,41 @@ EVENTHEADER_FIELDS = {
 }
 
 
+# The type size the Event Header's bands were composed at, mirrored by
+# BASE_FONT_PX in public/layout/lib/eventheader-mount.js. Only the migration
+# below reads it: the mount divides the stored px by the same number to get the
+# `--font-scale` its band height, field gap and bar corner are stated in.
+EVENTHEADER_BASE_FONT_PX = 34
+
+
+def _eventheader_font_px(ns: dict) -> bool:
+    """``fontScale`` (% of a 34px base) became ``fontSize`` (px). True if changed.
+
+    A percentage of a number the producer never sees is a knob that can only be
+    calibrated by eye — "as tall as the scoreboard's names" was reachable only
+    by trial, and two elements set to the same size read 100 and 34. Everything
+    still derives from the type size; only the unit the setting is stated in
+    moved, so the conversion is exact and one-time.
+
+    One-time because the legacy key is POPPED: its absence is the flag. A
+    `fontSize` already present wins — a producer who set one after upgrading is
+    not overwritten by a stale percentage left beside it.
+    """
+    if "fontScale" not in ns:
+        return False
+    raw = ns.pop("fontScale")
+    if "fontSize" in ns:
+        return True
+    try:
+        pct = float(raw)
+    except (TypeError, ValueError):
+        return True  # unreadable: dropped, and the 34px default stands
+    px = round(EVENTHEADER_BASE_FONT_PX * pct / 100)
+    # The panel's own range, so a migrated value is one the control can show.
+    ns["fontSize"] = max(16, min(72, px))
+    return True
+
+
 def _eventheader_bands(ns: dict) -> bool:
     """Bring ``overlays.eventheader`` up to the ordered-field model. True if changed.
 
@@ -821,9 +856,12 @@ class Settings:
         # The Event Header's bands became ordered field lists (see
         # EVENTHEADER_FIELDS above). Migrates off the switches once, and heals a
         # missing field on every boot after that.
-        if _eventheader_bands(
-            cls.settings.setdefault("overlays", {}).setdefault("eventheader", {})
-        ):
+        _eh_ns = cls.settings.setdefault("overlays", {}).setdefault("eventheader", {})
+        # Two migrations over one namespace, deliberately not short-circuited:
+        # `or` would skip the second whenever the first reported a change.
+        _eh_changed = _eventheader_bands(_eh_ns)
+        _eh_changed = _eventheader_font_px(_eh_ns) or _eh_changed
+        if _eh_changed:
             await cls.Save()
 
         # One-time binding migration: unify the per-scoreboard source-type enum

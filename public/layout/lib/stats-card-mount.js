@@ -1,9 +1,11 @@
 // stats-card-mount.js — the shared stat-line mount, worn two ways.
 //
-// ONE mount, two elements: the wide Stat Bar (`statsbar`, 452x118, its own
-// ?team= source) and the 2x2 Stat Card (`statscard`, 380x240, a container
-// member). The caller picks which by passing `settingsType` + `svgElement`;
-// the defaults below are the bar's.
+// ONE mount, two elements: the wide Stat Bar (`statsbar`, 452x118) and the 2x2
+// Stat Card (`statscard`, 380x240). Each owns a dedicated ?team= source; the
+// card is ALSO a container member, and both of its paths pass the same pair, so
+// it is one element configured once wherever it is drawn. The caller picks
+// which card by passing `settingsType` + `svgElement`; the defaults below are
+// the bar's.
 //
 // The scoreboard-bound stats element: shows the character currently batting /
 // pitching for one side, with their headline stats and (HUD games) the
@@ -93,14 +95,15 @@ export function mountStatsCard({ host, sb, team, settingsType = 'statsbar',
   const SB = sb || 1;
   const TEAM = team === 2 ? 2 : 1;
   // Which settings namespace this card reads (overlays.{SETTINGS_TYPE}.*). The
-  // standalone Stats source uses 'stats' and the container MEMBER passes
-  // 'statscard', so each card is configured independently.
+  // Stat Bar uses 'statsbar' and the Stat Card 'statscard' — from its own layout
+  // and from a container's roster alike — so the two cards are configured
+  // independently and the card is configured once.
   const SETTINGS_TYPE = settingsType || 'statsbar';
 
-  // Which design-package SVG this card renders. The standalone Stats source uses
-  // the wide 4-across 'stats' card; the Stat Card container member passes
-  // 'statscard' for the compact 2x2 card, so the two are themed independently
-  // even though they share this mount and the same RioData resolution.
+  // Which design-package SVG this card renders. The Stat Bar uses the wide
+  // 4-across 'statsbar'; the Stat Card passes 'statscard' for the compact 2x2
+  // card, so the two are themed independently even though they share this mount
+  // and the same RioData resolution.
   const engine = createThemeEngine({ host, element: svgElement, fallbackSvg });
 
   let disposed = false;

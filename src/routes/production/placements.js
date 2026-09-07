@@ -118,7 +118,10 @@ const OFFERED_FED = FED_ELEMENTS.filter(el => !el.hidden);
  * An element with no source of its own (`flavor: 'fed'`) has one possible
  * answer, so it keeps reporting fed even with no roster claiming it: there is
  * genuinely nowhere else for its content to go, and the panel says so rather
- * than offering to bind a source it doesn't have.
+ * than offering to bind a source it doesn't have. The registry has no such
+ * element today (the Stat Card was the last, and now owns a source), which is
+ * exactly why the rule is stated over the placement and not the element: every
+ * member's slot row is still fed.
  *
  * `slot` — the container this row is a MEMBER of — is what says which kind of
  * row this is. Not `container`, which a container's OWN row also carries, and

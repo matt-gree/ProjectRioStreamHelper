@@ -274,6 +274,20 @@ describe('overrideReaches', () => {
         expect(overrideReaches('cardBg', 'statsbar')).toBe(false);
     });
 
+    /*
+     * The Event Header's bands ARE a card surface, so the colour pin reaches
+     * them — and only the colour. Those bands have no border and take their
+     * corner from the type size, so offering the other three surface keys would
+     * be offering knobs that move nothing, which costs more than omitting them.
+     */
+    it('offers the Event Header the card colour, and none of the other surface keys', () => {
+        expect(varMap).toContain('eventheader: { cardBg:');
+        expect(overrideReaches('cardBg', 'eventheader')).toBe(true);
+        for (const key of ['borderColor', 'borderRadius', 'borderWidth']) {
+            expect(overrideReaches(key, 'eventheader'), key).toBe(false);
+        }
+    });
+
     it('offers textColor only where a var map binds it', () => {
         expect(varMap).toContain("playername: { textColor:");
         expect(overrideReaches('textColor', 'playername')).toBe(true);
