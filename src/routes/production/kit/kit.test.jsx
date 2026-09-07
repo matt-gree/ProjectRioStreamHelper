@@ -219,15 +219,76 @@ describe('IconToggle', () => {
     });
 });
 
-describe('NumberRow', () => {
-    it('reports numbers, and null when cleared', () => {
+describe('NumberRow — keystrokes are local, and a cleared field is not an answer yet', () => {
+    const field = () => screen.getByRole('spinbutton');
+
+    it('reports the number once it settles', () => {
+        vi.useFakeTimers();
+        try {
+            const onChange = vi.fn();
+            ui(<NumberRow label="Hold" value={1500} suffix="ms" onChange={onChange} />);
+            fireEvent.change(field(), { target: { value: '2000' } });
+            expect(onChange).not.toHaveBeenCalled();
+            vi.advanceTimersByTime(400);
+            expect(onChange).toHaveBeenCalledExactlyOnceWith(2000);
+        } finally { vi.useRealTimers(); }
+    });
+
+    /*
+     * Typing 2000 passes through 2, 20 and 200, and each of those is a settings
+     * write that reaches the whole rig — and draws, on the broadcast, on the way.
+     */
+    it('does not write every value passed through on the way', () => {
+        vi.useFakeTimers();
+        try {
+            const onChange = vi.fn();
+            ui(<NumberRow label="Hold" value={1500} onChange={onChange} />);
+            for (const v of ['2', '20', '200', '2000']) fireEvent.change(field(), { target: { value: v } });
+            vi.advanceTimersByTime(400);
+            expect(onChange).toHaveBeenCalledExactlyOnceWith(2000);
+        } finally { vi.useRealTimers(); }
+    });
+
+    /*
+     * THE BUG THIS EXISTS FOR. Blank means "back to the default" at the
+     * style-override call site, so committing an empty field on a timer refilled
+     * the box under the cursor a third of a second after it was cleared — the
+     * Event Header's Font Size snapped back to 34 before a replacement could be
+     * typed, which made the field impossible to retype rather than merely noisy.
+     */
+    it('lets a producer clear the field and type a replacement', () => {
+        vi.useFakeTimers();
+        try {
+            const onChange = vi.fn();
+            ui(<NumberRow label="Font Size" value={34} suffix="px" onChange={onChange} />);
+            fireEvent.change(field(), { target: { value: '' } });
+            vi.advanceTimersByTime(1000);          // …thinking.
+            expect(onChange).not.toHaveBeenCalled();
+            expect(field()).toHaveValue(null);      // still empty, not refilled
+            fireEvent.change(field(), { target: { value: '50' } });
+            vi.advanceTimersByTime(400);
+            expect(onChange).toHaveBeenCalledExactlyOnceWith(50);
+        } finally { vi.useRealTimers(); }
+    });
+
+    /*
+     * Clearing is still an answer — just not until the producer has left. That
+     * is what keeps "blank returns this to the default" reachable.
+     */
+    it('writes the cleared field once it is left', () => {
         const onChange = vi.fn();
-        ui(<NumberRow label="Hold" value={1500} suffix="ms" onChange={onChange} />);
-        const input = screen.getByRole('spinbutton');
-        fireEvent.change(input, { target: { value: '2000' } });
-        expect(onChange).toHaveBeenCalledWith(2000);
-        fireEvent.change(input, { target: { value: '' } });
-        expect(onChange).toHaveBeenLastCalledWith(null);
+        ui(<NumberRow label="Font Size" value={34} onChange={onChange} />);
+        fireEvent.change(field(), { target: { value: '' } });
+        fireEvent.blur(field());
+        expect(onChange).toHaveBeenCalledExactlyOnceWith(null);
+    });
+
+    it('commits on Enter without waiting', () => {
+        const onChange = vi.fn();
+        ui(<NumberRow label="Font Size" value={34} onChange={onChange} />);
+        fireEvent.change(field(), { target: { value: '50' } });
+        fireEvent.keyDown(field(), { key: 'Enter' });
+        expect(onChange).toHaveBeenCalledExactlyOnceWith(50);
     });
 });
 

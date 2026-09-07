@@ -324,6 +324,23 @@ describe('Event Header stage — what stays a setting', () => {
     });
 
     /*
+     * DECLARED BECAUSE DRAWN. The whitelist is where a layout says its CSS reads
+     * a var, so these two must be checked against the mount rather than against
+     * the registry — a name in the meta whose var nothing binds is precisely the
+     * control that is offered and does nothing.
+     */
+    it('declares the text effects its own CSS binds', () => {
+        const html = readFileSync('public/layout/eventheader/eventheader.html', 'utf8');
+        const meta = html.match(/<meta name="overlay-settings" content="([^"]*)"/)[1];
+        const mount = readFileSync('public/layout/lib/eventheader-mount.js', 'utf8');
+        expect(meta).toContain('textShadow');
+        expect(mount).toContain('var(--text-shadow');
+        expect(meta).toContain('textStroke');
+        expect(mount).toContain('var(--text-stroke-width');
+        expect(mount).toContain('var(--text-stroke-color');
+    });
+
+    /*
      * PX, not a percentage of a base the producer never sees. Pinned as the
      * pair — the key AND its unit — because a `%` suffix left on a px value is
      * exactly the mislabel this replaced.

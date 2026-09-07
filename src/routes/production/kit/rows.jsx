@@ -228,7 +228,65 @@ export const SelectRow = memo(function SelectRow({
 // callers that need debouncing own it.
 export const NumberRow = memo(function NumberRow({
     label, value, onChange, min, max, step, suffix, disabled, staged, placeholder, className,
+    debounceMs = 300,
 }) {
+    /*
+     * KEYSTROKES ARE LOCAL, and an EMPTY FIELD IS NEVER COMMITTED ON A TIMER.
+     *
+     * Writing per keystroke put every value passed through on the way onto the
+     * broadcast — typing 120 draws a 1-px band, then 12 — and each one is a
+     * settings write that reaches the whole rig. That much this shares with
+     * TextRow.
+     *
+     * The empty rule is the one a number needs on its own, and it is the
+     * difference between a field a producer can retype and one they cannot.
+     * Blank means "back to the default" here (`v ?? def.defaultValue` at the
+     * style-override call site), so on a timer, clearing the field to type a
+     * new number wrote the DEFAULT into it a third of a second later and
+     * refilled the box under the cursor — the Event Header's Font Size snapped
+     * back to 34 before a replacement could be typed. Clearing is only an
+     * answer once the producer has left the field, so an empty draft commits on
+     * BLUR alone; a typed number still settles by itself.
+     */
+    const shown = value == null ? '' : String(value);
+    const [draft, setDraft] = useState(shown);
+    const draftRef = useRef(shown);
+    const editing = useRef(false);
+    const timer = useRef(null);
+    const cb = useRef(onChange);
+    cb.current = onChange;
+
+    // An outside change reaches the field only while it is NOT being edited, or
+    // it would yank the cursor's value out from under whoever is typing.
+    useEffect(() => {
+        if (editing.current) return;
+        draftRef.current = shown;
+        setDraft(shown);
+    }, [shown]);
+
+    const commit = useCallback(() => {
+        if (timer.current) { clearTimeout(timer.current); timer.current = null; }
+        if (!editing.current) return;
+        editing.current = false;
+        const t = draftRef.current;
+        if (t === '') return cb.current?.(null);
+        const n = Number(t);
+        // A number input reports '' for anything it cannot parse, so this is
+        // belt and braces — but a NaN here would be stored and drawn.
+        if (!Number.isNaN(n)) cb.current?.(n);
+    }, []);
+
+    // A stage that swaps out from under a typed number should keep it.
+    useEffect(() => commit, [commit]);
+
+    const type = useCallback((v) => {
+        draftRef.current = v;
+        setDraft(v);
+        editing.current = true;
+        if (timer.current) clearTimeout(timer.current);
+        if (v !== '') timer.current = setTimeout(commit, debounceMs);
+    }, [commit, debounceMs]);
+
     return (
         <div className={cn(ROW, className)}>
             <RowLabel label={label} staged={staged} />
@@ -240,8 +298,10 @@ export const NumberRow = memo(function NumberRow({
                 // shows through. Every other caller passes none and gets today's
                 // empty field.
                 placeholder={placeholder}
-                value={value ?? ''}
-                onChange={(e) => onChange?.(e.target.value === '' ? null : Number(e.target.value))}
+                value={draft}
+                onChange={(e) => type(e.target.value)}
+                onBlur={commit}
+                onKeyDown={(e) => { if (e.key === 'Enter') commit(); }}
                 className={cn(KIT_INPUT, 'w-20', staged && 'border-amber-400/60 text-amber-400')}
             />
             {suffix && <Text size="xs" span dimmed className="shrink-0">{suffix}</Text>}

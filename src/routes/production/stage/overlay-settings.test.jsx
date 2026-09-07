@@ -417,7 +417,11 @@ describe('ElementStyleOverrides', () => {
         type: 'eventheader',
         // cardBg is here because eventheader.html declares it: the bands are a
         // card surface, and it is the type's one alpha-carrying override.
-        supportedSettings: ['showHeader', 'textColor', 'accentColor', 'cardBg', 'fontFamily'],
+        // textShadow/textStroke likewise — the mount binds both.
+        supportedSettings: [
+            'showHeader', 'textColor', 'accentColor', 'cardBg',
+            'textShadow', 'textStroke', 'fontFamily',
+        ],
     };
     const SPOTLIGHT = { type: 'postgamecallout', supportedSettings: ['accentColor', 'fontFamily'] };
     const STATSBAR = {
@@ -476,6 +480,22 @@ describe('ElementStyleOverrides', () => {
         expect(options).toContain('Card Background');
         // Not declared by this layout at all — the bands have no border.
         expect(options).not.toContain('Border Color');
+    });
+
+    /*
+     * The type's own effects, offered because the MOUNT BINDS THEM — the
+     * whitelist is the layout's statement that its CSS reads these vars, which
+     * is the only thing standing between "offered" and "a control that does
+     * nothing". One meta name (`textStroke`) carries the width and the colour,
+     * because 0 is off and the width IS the switch.
+     */
+    it('offers the text shadow and the font border', async () => {
+        layouts([EVENTHEADER]);
+        await show({ type: 'eventheader' });
+        const options = offered();
+        for (const label of ['Text Shadow Blur', 'Font Border', 'Font Border Color']) {
+            expect(options, label).toContain(label);
+        }
     });
 
     /*

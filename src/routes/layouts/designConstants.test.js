@@ -223,28 +223,40 @@ describe('overrideReaches', () => {
     /*
      * The font border is a THIRD gate away from being offered: the reads above
      * are universal, so what decides which elements get the row is the layout's
-     * own <meta> declaration. Player Name is the only mount whose CSS binds
-     * --text-stroke-*, and it is the only layout that declares it — a second
-     * layout claiming the key without painting it would be a row that stores,
-     * broadcasts and changes nothing.
+     * own <meta> declaration. DECLARED MUST MEAN PAINTED — a layout claiming the
+     * key without binding the vars is a row that stores, broadcasts and changes
+     * nothing, which is the one thing this section must never contain.
+     *
+     * So this is a census, not a whitelist of one: it fails both ways round, on
+     * a layout that declares without painting AND on a mount that paints without
+     * declaring (where the producer has no way to reach it).
      */
-    it('is declared only by the layout that actually paints a font border', () => {
+    const PAINTS_STROKE = {
+        'scoreboard1/playername.html': 'playername-mount.js',
+        'eventheader/eventheader.html': 'eventheader-mount.js',
+    };
+
+    it('declares a font border exactly where a mount paints one', () => {
         const declaring = readdirSync('public/layout', { recursive: true })
             .filter(f => String(f).endsWith('.html'))
             .filter(f => readFileSync(`public/layout/${f}`, 'utf8')
                 .match(/<meta name="overlay-settings" content="([^"]*)"/)?.[1]
                 ?.split(',').map(x => x.trim()).includes('textStroke'));
-        expect(declaring).toEqual(['scoreboard1/playername.html']);
-        // Matched on the two vars rather than a literal declaration: the mount
-        // scales its own type, so the WIDTH is a calc() off --pn-scale (and
-        // half of it again on the prefix). What has to hold is that both halves
-        // of the setting reach a -webkit-text-stroke at all.
-        const strokes = readFileSync('public/layout/lib/playername-mount.js', 'utf8')
-            .match(/-webkit-text-stroke:[^;]*;/g) ?? [];
-        expect(strokes.length).toBeGreaterThan(0);
-        for (const decl of strokes) {
-            expect(decl).toContain('var(--text-stroke-width, 0px)');
-            expect(decl).toContain('var(--text-stroke-color, transparent)');
+        expect(declaring.sort()).toEqual(Object.keys(PAINTS_STROKE).sort());
+
+        // Matched on the two vars rather than a literal declaration: Player Name
+        // scales its own type, so the WIDTH there is a calc() off --pn-scale
+        // (and half of it again on the prefix), while the Event Header takes the
+        // global's pixels as they come. What has to hold is that both halves of
+        // the setting reach a -webkit-text-stroke at all.
+        for (const mount of Object.values(PAINTS_STROKE)) {
+            const strokes = readFileSync(`public/layout/lib/${mount}`, 'utf8')
+                .match(/-webkit-text-stroke:[^;]*;/g) ?? [];
+            expect(strokes.length, mount).toBeGreaterThan(0);
+            for (const decl of strokes) {
+                expect(decl, mount).toContain('var(--text-stroke-width, 0px)');
+                expect(decl, mount).toContain('var(--text-stroke-color, transparent)');
+            }
         }
     });
 

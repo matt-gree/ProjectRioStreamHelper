@@ -500,10 +500,10 @@ const OVERRIDE_READ_TYPES = {
     textShadowBlur: null,
     // Read off `overrideNs` like the blurs, so the pin reaches wherever
     // applyDesignSettings runs. Which elements DRAW it is the layout's own
-    // question, answered by its <meta> whitelist: today only playername.html
-    // declares `textStroke`, because its mount is the only CSS that binds
-    // --text-stroke-* to anything. Same shape as textShadow, which the Event
-    // Header likewise never declares.
+    // question, answered by its <meta> whitelist — a layout declares
+    // `textStroke` / `textShadow` exactly when its CSS binds --text-stroke-* /
+    // --text-shadow to something. Player Name and the Event Header do; an
+    // element painted by a theme SVG gets its outline from the artwork.
     textStrokeWidth: null,
     textStrokeColor: null,
     cardBg: ['scoreboard', 'eventheader'],

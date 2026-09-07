@@ -112,6 +112,27 @@ const CSS = `
   font-size: calc(34px * var(--font-scale, 1));
   font-weight: 700;
   letter-spacing: 0.01em;
+  /*
+   * The text shadow and the font border, both pinnable per element from this
+   * element's Style Overrides section. On the ROW so the separators between
+   * fields are drawn like the fields they separate — a diamond left flat
+   * between two outlined words is the one thing on a band that looks unfinished.
+   *
+   * ABSOLUTE, not scaled by --font-scale. The stroke width is a global whose
+   * value is a number of pixels, so an element that quietly doubled it at 68px
+   * type would mean something different by the same number than every other
+   * overlay reading it. (Player Name scales its own because its whole geometry
+   * is one derived scale — there the type size is a consequence, not a setting.)
+   *
+   * paint-order puts the stroke behind the glyph so an outline grows outward
+   * instead of eating into the letterform; a browser source too old to honour
+   * it still draws the border, centred, which is thinner but never wrong.
+   *
+   * NOTE no backticks in this block: it is inside a template literal.
+   */
+  text-shadow: var(--text-shadow, none);
+  -webkit-text-stroke: var(--text-stroke-width, 0px) var(--text-stroke-color, transparent);
+  paint-order: stroke fill;
 }
 /* No overflow clip here — that was cropping glyph descenders. */
 .eh-field { flex: 0 0 auto; }
