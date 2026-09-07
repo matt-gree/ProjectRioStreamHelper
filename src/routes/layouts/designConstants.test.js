@@ -235,8 +235,17 @@ describe('overrideReaches', () => {
                 .match(/<meta name="overlay-settings" content="([^"]*)"/)?.[1]
                 ?.split(',').map(x => x.trim()).includes('textStroke'));
         expect(declaring).toEqual(['scoreboard1/playername.html']);
-        expect(readFileSync('public/layout/lib/playername-mount.js', 'utf8'))
-            .toContain('var(--text-stroke-width, 0px) var(--text-stroke-color, transparent)');
+        // Matched on the two vars rather than a literal declaration: the mount
+        // scales its own type, so the WIDTH is a calc() off --pn-scale (and
+        // half of it again on the prefix). What has to hold is that both halves
+        // of the setting reach a -webkit-text-stroke at all.
+        const strokes = readFileSync('public/layout/lib/playername-mount.js', 'utf8')
+            .match(/-webkit-text-stroke:[^;]*;/g) ?? [];
+        expect(strokes.length).toBeGreaterThan(0);
+        for (const decl of strokes) {
+            expect(decl).toContain('var(--text-stroke-width, 0px)');
+            expect(decl).toContain('var(--text-stroke-color, transparent)');
+        }
     });
 
     /*

@@ -15,9 +15,12 @@
   <!-- Inter is bundled locally and injected by overlay-base.js. -->
   <style>
     html, body { margin: 0; overflow: hidden; }
+    /* The declared native size — the catalog's, the preview's and the Add
+       picker's idea of this source's shape. It is a STARTING size, not a
+       canvas: the mount draws the name against whatever box the source really
+       is, taking its type size from the height and letting the name run the
+       width. See the header of lib/playername-mount.js. */
     body { width: 400px; height: 100px; background: transparent; }
-    /* The mount scales its native card to this box, so a bigger or smaller OBS
-       source resizes the name rather than cropping it. */
     #host { position: fixed; inset: 0; }
   </style>
 </head>

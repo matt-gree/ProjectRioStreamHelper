@@ -707,6 +707,14 @@
       showShadow ? `0 4px ${effCardBlur}px ${cardShadowColor}` : 'none');
     root.setProperty('--text-shadow',
       textShadowEnabled ? `0px 0px ${effTextBlur}px ${textShadowColor}` : 'none');
+    // The same shadow, in PARTS. A mount that scales its own type has to scale
+    // the blur with it, and a composed string cannot be multiplied — so the two
+    // halves are published beside the whole rather than left to each caller to
+    // re-derive `effTextBlur` from the global and its per-element override.
+    // Disabled is published as a transparent zero blur, so a `0 0 var() var()`
+    // shadow composes to nothing without a second switch to read.
+    root.setProperty('--text-shadow-blur', textShadowEnabled ? `${effTextBlur}px` : '0px');
+    root.setProperty('--text-shadow-color', textShadowEnabled ? textShadowColor : 'transparent');
 
     // ── Font border (text stroke), with per-layout overrides on BOTH halves ──
     // No enable switch: a width of 0 IS no border, and a second flag would be a
@@ -744,6 +752,7 @@
     '--accent', '--accent-rgb', '--card-bg', '--text-primary', '--border-radius',
     '--border-width', '--border-color', '--font-family', '--final-badge-color',
     '--card-shadow-filter', '--card-box-shadow', '--text-shadow',
+    '--text-shadow-blur', '--text-shadow-color',
     '--text-stroke-width', '--text-stroke-color',
     ...Object.values(LAYOUT_VAR_MAP).flatMap((m) => Object.values(m).map((s) => s.prop)),
   ])];

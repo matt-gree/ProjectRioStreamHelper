@@ -191,6 +191,19 @@ Rules the runtime encodes:
   The since-deleted fed stats bar read the window in its autoScale and would have
   blown a 325×120 card up ~6× inside a 1920×1080 container, out of the box it is
   centered in.
+- **A CARD min-fits its native canvas into the source; TEXT takes its size from
+  the source's HEIGHT.** Both measure the host, and there the resemblance stops.
+  A drawn card (roster, stat card, scoreboard) has an aspect its artwork depends
+  on, so `Math.min(w / REF_W, h / REF_H)` is right. The Player Name has no
+  canvas — it is one or two runs of type — and min-fitting one aspect-locked it
+  to 4:1 and scaled its own empty margin along with the glyphs, so an 800×100
+  source drew a 36px name and 636px of nothing (`playername-mount.js`). Height
+  alone sets its scale; width only sets how far the name runs, and it shrinks
+  only on overflow. Two consequences that are easy to undo by accident: the
+  padding is a FRACTION of the height, which is what keeps a half-size preview
+  half-size; and the scale reads the prefix-position SETTING, never whether this
+  participant has a prefix, because two sources framing a scoreboard have to
+  draw at one type size. `src/routes/layouts/playername-mount.test.js`.
 - **Scope is applied LAST and beats the payload.** A scoped source carries its own
   frame of reference on its URL (`?scoreboard=N&team=T`, via `scopeFromParams`),
   and every source of one definition shares ONE feed key — so the feed says WHAT
