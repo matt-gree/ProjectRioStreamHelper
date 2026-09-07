@@ -346,11 +346,63 @@ describe('AddSourceDialog', () => {
     });
 
     /*
-     * THE RULE. Browsing the catalog is what a producer does most in here, and
-     * it must not quietly build a batch they then have to undo. The row body is
-     * the big target and it is the cheap, reversible act.
+     * THE TWO ADDS. Hidden is the answer that is never wrong mid-broadcast, so
+     * it keeps the filled button and the ⌘⏎ reflex; visible is for the other
+     * half of the job, laying a scene out before a stream, where the producer
+     * has to see what they just placed.
+     *
+     * `enabled` is the whole of the difference, and it is easy to get backwards:
+     * a click handler is called with the EVENT, so a bare `onClick={add}` on a
+     * defaulted flag adds visible every time.
      */
-    it('previews on a row click and selects nothing', async () => {
+    it('adds hidden from the filled button', async () => {
+        ui('Break');
+        await screen.findByText('Lower Third');
+        select('Lower Third');
+        fireEvent.click(screen.getByRole('button', { name: /add hidden/i }));
+
+        await waitFor(() => expect(addBrowserSource).toHaveBeenCalledTimes(1));
+        expect(addBrowserSource.mock.calls[0][0].enabled).toBe(false);
+    });
+
+    it('adds VISIBLE from the outline one', async () => {
+        ui('Break');
+        await screen.findByText('Lower Third');
+        select('Lower Third');
+        fireEvent.click(screen.getByRole('button', { name: /add visible/i }));
+
+        await waitFor(() => expect(addBrowserSource).toHaveBeenCalledTimes(1));
+        expect(addBrowserSource.mock.calls[0][0].enabled).toBe(true);
+    });
+
+    // The reflex commit stays the safe one.
+    it('adds HIDDEN on the ⌘⏎ shortcut', async () => {
+        ui('Break');
+        await screen.findByText('Lower Third');
+        select('Lower Third');
+        fireEvent.keyDown(screen.getByPlaceholderText(/search overlays/i),
+            { key: 'Enter', metaKey: true });
+
+        await waitFor(() => expect(addBrowserSource).toHaveBeenCalledTimes(1));
+        expect(addBrowserSource.mock.calls[0][0].enabled).toBe(false);
+    });
+
+    // Both are blocked by the same thing, so both say the same thing about it.
+    it('greys both Adds until something is selected', async () => {
+        ui('Break');
+        await screen.findByText('Lower Third');
+        preview('Lower Third');
+
+        expect(screen.getByRole('button', { name: /add hidden/i })).toBeDisabled();
+        expect(screen.getByRole('button', { name: /add visible/i })).toBeDisabled();
+    });
+
+    /*
+     * LOOK, THEN CHOOSE. Browsing the catalog is what a producer does most in
+     * here, and it must not quietly build a batch they then have to undo — so
+     * the FIRST click on a row is the cheap, reversible act and selects nothing.
+     */
+    it('previews on the first row click and selects nothing', async () => {
         ui('Break');
         await screen.findByText('Lower Third');
         preview('Lower Third');
@@ -358,6 +410,95 @@ describe('AddSourceDialog', () => {
         expect(screen.getByTitle('Lower Third preview')).toBeInTheDocument();
         expect(screen.getByText(/^Nothing selected yet/)).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /add hidden/i })).toBeDisabled();
+    });
+
+    /*
+     * ...and the second click on the row ALREADY being previewed selects it. By
+     * then the producer has seen the thing, so the click is a deliberate repeat
+     * rather than a browse — the same two beats the keyboard has (↑↓ look, ⏎
+     * choose), on the target the mouse is already over.
+     */
+    it('selects on the second click of the row it is previewing', async () => {
+        ui('Break');
+        await screen.findByText('Lower Third');
+        preview('Lower Third');
+        fireEvent.click(screen.getByRole('button', { name: 'Select Lower Third' }));
+
+        expect(screen.getByRole('checkbox', { name: 'Select Lower Third' }))
+            .toHaveAttribute('aria-checked', 'true');
+        expect(screen.getByText(/^1 selected/)).toBeInTheDocument();
+    });
+
+    // Deselect is the same click again, and it KEEPS the preview: focus and
+    // check stay different questions, so unchecking never takes the frame away.
+    it('deselects on a third click without dropping the preview', async () => {
+        ui('Break');
+        await screen.findByText('Lower Third');
+        preview('Lower Third');
+        fireEvent.click(screen.getByRole('button', { name: 'Select Lower Third' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Deselect Lower Third' }));
+
+        expect(screen.getByText(/^Nothing selected yet/)).toBeInTheDocument();
+        expect(screen.getByTitle('Lower Third preview')).toBeInTheDocument();
+    });
+
+    /*
+     * The count is per ROW, not per click: moving to another row and coming back
+     * previews each time. Otherwise a producer who browsed a list and returned
+     * would select whatever they looked at twice.
+     */
+    it('does not carry a row’s first click over to another row', async () => {
+        ui('Break');
+        await screen.findByText('Lower Third');
+        preview('Lower Third');
+        preview('Scoreboard — Large');
+        preview('Lower Third');
+
+        expect(screen.getByText(/^Nothing selected yet/)).toBeInTheDocument();
+    });
+
+    /*
+     * ...and having selected nothing, Add is grey — so the grey has to say what
+     * would ungrey it, IN VIEW. A producer who previewed a row sees a filled
+     * frame, a named scene and a dead button with nothing joining them up, and
+     * the one channel that explained it was a tooltip on the control they had
+     * already read as dead.
+     */
+    it('names the act that would ungrey Add', async () => {
+        ui('Break');
+        await screen.findByText('Lower Third');
+        preview('Lower Third');
+
+        expect(screen.getByRole('button', { name: /add hidden/i })).toBeDisabled();
+        expect(screen.getByText(/^Nothing selected yet — tick a box/)).toBeInTheDocument();
+    });
+
+    /*
+     * On a multi-board rig it names the BOARD STRIP, not the box in the list — a
+     * board-scoped row can be ticked from either, and only one of them is where
+     * the producer is looking.
+     */
+    it('points a board-scoped row at the board strip it is previewing', async () => {
+        useSettingsStore.setState({ scoreboards: { active: [1, 2] } });
+        ui('Break');
+        await screen.findByText('Scoreboard — Large');
+        preview('Scoreboard — Large');
+
+        expect(screen.getByRole('button', { name: /add hidden/i })).toBeDisabled();
+        expect(screen.getByText(/^Nothing selected yet — tick a board above/))
+            .toBeInTheDocument();
+    });
+
+    // And once a board IS ticked the line is the count again, with Add live.
+    it('drops the prompt the moment a board is ticked', async () => {
+        useSettingsStore.setState({ scoreboards: { active: [1, 2] } });
+        ui('Break');
+        await screen.findByText('Scoreboard — Large');
+        preview('Scoreboard — Large');
+        fireEvent.click(screen.getByRole('checkbox', { name: 'Scoreboard 2' }));
+
+        expect(screen.getByText(/^1 selected/)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /add hidden/i })).toBeEnabled();
     });
 
     // The other half: the checkbox is the whole of "this goes in" — and it

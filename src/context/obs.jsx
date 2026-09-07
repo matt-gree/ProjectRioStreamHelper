@@ -273,11 +273,14 @@ export const useObsStore = create((set) => ({
     // we suffix on collision rather than fail. The resulting SceneItemCreated
     // event refreshes the scene mirror, so binding badges update on their own.
     //
-    // Every console add path passes `enabled: false` — adding a source
-    // mid-broadcast must never put it on air, so the panel's Air switch stays
-    // the single deliberate act that does (production-console-contract skill).
-    // The `true` default is a legacy of the deleted Setup layout browser, which
-    // added visible; no live caller relies on it.
+    // Console adds pass `enabled: false` — adding a source mid-broadcast must
+    // never put it on air, so the panel's Air switch stays the single
+    // deliberate act that does (production-console-contract skill). The one
+    // exception is the Add picker's **Add visible**, which passes true on
+    // purpose: laying a scene out before a stream, the producer has to see
+    // what they placed, and there is no broadcast to protect.
+    // The `true` default is a legacy of the deleted Setup layout browser; every
+    // live caller states `enabled` rather than relying on it.
     addBrowserSource: async ({ inputName, url, width, height, sceneName, enabled = true }) => {
         if (!obs) throw new Error('Not connected to OBS');
         const scene = sceneName || useObsStore.getState().programScene;

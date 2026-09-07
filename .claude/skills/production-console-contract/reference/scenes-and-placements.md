@@ -294,17 +294,41 @@ catalog left, live preview right.
   header — and one catalog row picked on two boards is two sources with their
   own air state, settings and instance id. Keying on url alone collapses them,
   which is the bug board-aware binding fixed one axis over.
-- **The board control is therefore ON THE ROW, not in the footer** — a
-  board-scoped row on a multi-board rig renders one chip per board, and the
-  chips ARE its check state (no checkbox beside them: a third reading of the
-  same fact goes ambiguous the moment only board 2 is picked). A single-board
-  rig gets no chips at all; the pick still carries board 1. A chipped row drops
-  its dimensions column — five chips and a size both squeezed leaves
-  "Scoreboard —…" three times over, and the size is stated authoritatively in
-  the preview header anyway.
-- **A row click checks AND focuses the preview**, so the one-element case is
-  still one click. Clicking a checked row unchecks it but keeps it previewed:
-  focus and check are different questions.
+- **Every row carries the same checkbox; the BOARD is asked beside the
+  preview.** The board strip ("Add on") sits under the preview header, one
+  toggle per board, and it is only rendered on a multi-board rig — on a
+  single-board rig the row's box carries board 1 and there is nothing to ask.
+  The list's own box is the whole of "this goes in": it ticks the primary board,
+  and unticking clears **every** board the row was picked on, which is the only
+  reading of an unchecked box that isn't a lie. The boards a row is going in on
+  are then *stated* back on the row (`boardsNote`) rather than controlled from
+  it, so a producer scanning the list still sees the scoreboard going in twice
+  without the row growing a control per board.
+  On a multi-board rig the strip is **always present**, even for a row with no
+  board to ask about (it says so) — appearing and disappearing as the producer
+  stepped between a scoreboard and a lower third moved the preview under the
+  cursor by its own height.
+- **Look, then choose: the FIRST click on a row previews it, the SECOND selects
+  it.** Browsing the catalog is what a producer does most in here and it must
+  not quietly build a batch, so one click is always the cheap, reversible act —
+  but a second click on the row *already being previewed* is a deliberate repeat
+  rather than a browse, and by then the producer has seen the thing. It is the
+  same two beats the keyboard has (↑↓ look, ⏎ choose), which is what makes it
+  learnable. The count is per ROW, not per click: leaving a row and coming back
+  previews again, or a producer who browsed a list and returned would select
+  whatever they happened to look at twice. Deselect is that same click again and
+  it KEEPS the preview — focus and check stay different questions, so unchecking
+  never also takes the frame away. The checkbox is unchanged and still selects
+  in one click from anywhere in the list.
+- **A disabled Add has to say what would enable it, IN VIEW.** Those two rules
+  together mean a producer can reach a full preview, a named scene and a dead
+  Add with nothing on screen joining them up. One `addBlocker` value answers
+  "what is in the way" and both the footer line and the Add tooltip are phrased
+  off it — two ternaries would be two answers — and on a multi-board rig it
+  names the **board strip**, not the box in the list, because a board-scoped row
+  can be ticked from either and only one of them is where the eye is. The
+  visible footer line is the primary channel: a tooltip on the greyed control is
+  reachable only by hovering the thing already read as dead.
 - **The preview is `?preview=1&sample=1`** through `ScaledIframe` — the real
   overlay, drawn against its own sample bundle, because a producer building a
   scene has no game running. (The STAGE preview deliberately omits `sample`;
@@ -348,8 +372,17 @@ catalog left, live preview right.
   than carried.
   Variants (size / team / direction) are separate catalog rows, so picking
   "Scoreboard — Small" is choosing a row, not filling in a form.
-- **Adds HIDDEN**, like every Bind path in the console. Adding a source is
-  setup; the rack row's eye is the one deliberate act that puts it on air.
+- **Adds HIDDEN by default**, like every Bind path in the console. Adding a
+  source is setup; the rack row's eye is the one deliberate act that puts it on
+  air, and ⌘⏎ stays bound to the hidden add so the reflex commit is the safe
+  one. **Add visible** sits beside it as a second button for the other half of
+  the job: before a stream there is no broadcast to protect, and a producer
+  laying out a scene has to SEE what they placed rather than add five sources
+  and then hunt five eyes in the rack to find where they landed. Two buttons and
+  not a default, because the only thing that tells the two cases apart is
+  whether the show is live — which the console cannot ask, so the producer
+  answers by pressing one or the other. Hidden keeps the filled button; visible
+  is the outline.
 - **The OBS input is named what the producer clicked** (`rowLabel`, variant and
   all) — the catalog's raw `name` for a variant row is the filename stem, so
   naming from it would create "scoreboard 2" for a row reading "Scoreboard —

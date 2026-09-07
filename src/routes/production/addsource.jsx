@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, Search, Copy, Check, X } from 'lucide-react';
+import { Plus, Search, Copy, Check, X, Eye } from 'lucide-react';
 import { useMirrorScene, useObsStore } from '../../context/obs';
 import { urlsMatch } from '../../lib/obs-binding';
 import { CopyButton } from '../../components/ui/copy-button';
@@ -39,9 +39,18 @@ import {
  * instead of the ELEMENTS registry: the registry knows the ~14 things the
  * console can CONTROL, and the catalog knows the ~25 things OBS can SHOW.
  *
- * Added HIDDEN, like every other Bind path in the console: adding a source is
- * setup, and setup must never be the thing that puts something on the
- * broadcast. The rack row's eye is the one deliberate act that does.
+ * Added HIDDEN by default, like every other Bind path in the console: adding a
+ * source is setup, and setup must never be the thing that puts something on the
+ * broadcast. The rack row's eye is the one deliberate act that does — and ⌘⏎
+ * stays bound to the hidden add, so the reflex commit is always the safe one.
+ *
+ * **Add visible** sits beside it for the other half of the job. Before a stream
+ * there is nothing to protect: a producer laying out a scene has to SEE what
+ * they placed, and the alternative was adding five sources and then hunting
+ * five eyes in the rack to find out where they landed. It is a second button
+ * rather than a default because the two cases are told apart by exactly one
+ * thing — whether the broadcast is live — which the console cannot ask, so the
+ * producer says which one they are in by pressing one or the other.
  *
  * ── Building a scene is a batch, not a series of transactions ──
  *
@@ -51,9 +60,13 @@ import {
  * rather than url: Scoreboard on board 1 and on board 2 are two different
  * sources from one catalog row.
  *
- * ── Looking is not choosing ──
+ * ── Looking is not choosing, but a second look is ──
  *
- * Row click PREVIEWS. The checkbox SELECTS. Nothing else does either.
+ * The first click on a row PREVIEWS it and selects nothing. A second click on
+ * the row already being previewed SELECTS it — by then the producer has seen
+ * the thing, so the click is a deliberate repeat rather than a browse. Same two
+ * beats as the keyboard (↑↓ look, ⏎ choose), on the target the mouse is over.
+ * The checkbox still selects in one click, from anywhere in the list.
  *
  * They used to be the same gesture, which made browsing the catalog — the thing
  * a producer does most in here — silently build a batch they then had to undo.
@@ -338,8 +351,13 @@ const PickerPreview = memo(function PickerPreview({
                 moved the frame under the cursor by its own height. When there
                 is nothing to ask it says so, which is worth a line anyway. */}
             {boards.length > 1 && (
-                <div className="flex h-10 items-center gap-2 overflow-x-auto rounded-md border border-border/60 bg-secondary/30 px-2">
-                    <Text size="xs" span dimmed className="shrink-0">Add on</Text>
+                <div className="flex h-11 items-center gap-2 overflow-x-auto rounded-md border border-border/60 bg-secondary/30 px-2">
+                    {/* Accent, not dimmed: this label is what the footer's
+                        "tick a board above" points AT, and a grey word over
+                        grey pills is not something an eye lands on. */}
+                    <Text size="xs" span fw={500} className="shrink-0 text-primary/80">
+                        Add for
+                    </Text>
                     {!askBoards && (
                         <Text size="xs" span dimmed className="truncate">
                             {layout
@@ -363,24 +381,27 @@ const PickerPreview = memo(function PickerPreview({
                                     aria-label={boardLabel(b)}
                                     onClick={() => onToggleBoard(layout, b)}
                                     className={cn(
-                                        'flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2.5 transition-colors',
+                                        'flex h-8 shrink-0 items-center gap-2 rounded-md border px-2.5 transition-colors',
                                         on
-                                            ? 'border-primary bg-primary/15 text-foreground'
-                                            : 'border-border text-muted-foreground hover:text-foreground',
+                                            ? 'border-primary bg-primary/20 text-foreground'
+                                            : 'border-input bg-background/60 text-muted-foreground hover:border-primary/50 hover:text-foreground',
                                     )}
                                 >
                                     <span
                                         aria-hidden="true"
                                         className={cn(
-                                            'grid size-3.5 place-content-center rounded-[4px] border',
+                                            'grid size-4 place-content-center rounded-[4px] border transition-colors',
                                             on
                                                 ? 'border-primary bg-primary text-primary-foreground'
-                                                : 'border-input',
+                                                : 'border-muted-foreground/70',
                                         )}
                                     >
-                                        {on && <Check size={10} strokeWidth={3} />}
+                                        {on && <Check size={11} strokeWidth={3} />}
                                     </span>
-                                    <Text size="xs" span className="whitespace-nowrap">
+                                    <Text
+                                        size="xs" span
+                                        className={cn('whitespace-nowrap', on && 'font-medium')}
+                                    >
                                         {boardLabel(b)}
                                     </Text>
                                     {/* Already in the scene — a dot, not a
@@ -596,7 +617,7 @@ const CatalogRow = memo(function CatalogRow({
         <div
             data-row={layout.url}
             className={cn(
-                'flex h-8 items-center rounded-md pr-1 transition-colors',
+                'group/row flex h-8 items-center rounded-md pr-1 transition-colors',
                 focused ? 'bg-secondary/70' : 'hover:bg-secondary/40',
             )}
         >
@@ -608,23 +629,49 @@ const CatalogRow = memo(function CatalogRow({
                 onClick={() => onToggle(layout)}
                 className="grid h-8 w-7 shrink-0 place-content-center rounded-md"
             >
+                {/* The SAME box the board strip draws, at the same size — one
+                    question ("does this go in") asked in two places.
+
+                    MEASURED, not eyeballed: `border-input` is rgb(26,26,46) on
+                    this dialog's rgb(7,7,11), which is 1.18:1 — a boundary WCAG
+                    wants at 3:1, and the reason an unticked box read as ruling
+                    rather than as a control. `muted-foreground/70` lands ~3.6:1
+                    and still sits well under a ticked one. Making the box bigger
+                    would not have touched the actual cause. */}
                 <span
                     aria-hidden="true"
                     className={cn(
-                        'grid size-3.5 place-content-center rounded-[4px] border transition-colors',
+                        'grid size-4 place-content-center rounded-[4px] border transition-colors',
                         picked
                             ? 'border-primary bg-primary text-primary-foreground'
-                            : 'border-input',
+                            : 'border-muted-foreground/70 group-hover/row:border-primary',
                     )}
                 >
-                    {picked && <Check size={10} strokeWidth={3} />}
+                    {picked && <Check size={11} strokeWidth={3} />}
                 </span>
             </button>
 
+            {/* LOOK, THEN CHOOSE — on one target.
+
+                The first click on a row previews it and selects nothing:
+                browsing the catalog is what a producer does most in here and it
+                must not quietly build a batch. The SECOND click on the row
+                already being previewed selects it, because by then the producer
+                has seen the thing and the click is a deliberate repeat, not a
+                browse. It is the same two beats the keyboard has (↑↓ look, ⏎
+                choose), which is what makes it learnable: the row does what the
+                arrows do, on the target the mouse is already over.
+
+                Deselect is the same second click, and it keeps the preview —
+                focus and check stay different questions, so unchecking never
+                also takes the frame away. The checkbox is unchanged and remains
+                the one-click select for a row you have not previewed. */}
             <button
                 type="button"
-                onClick={() => onFocus(layout)}
-                aria-label={`Preview ${label}`}
+                onClick={() => (focused ? onToggle(layout) : onFocus(layout))}
+                aria-label={focused
+                    ? `${picked ? 'Deselect' : 'Select'} ${label}`
+                    : `Preview ${label}`}
                 className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md pr-1 text-left"
             >
                 <Text size="xs" span truncate className="min-w-0 flex-1 text-foreground">
@@ -847,6 +894,30 @@ export const AddSourceDialog = memo(function AddSourceDialog({ scene, open: open
     }, [picks, focus, previewBoard]);
 
     /*
+     * WHY ADD IS GREY, in the one place a producer looks when a button is.
+     *
+     * It had one label for three states, and the two it did not describe are
+     * the two that need describing: previewing a row is not selecting it, so a
+     * producer can arrive at a full preview, a named scene and a dead Add with
+     * nothing on screen connecting them. The empty case therefore names the
+     * control to reach for, and on a multi-board rig that control is the board
+     * strip beside the preview rather than the box in the list — a board-scoped
+     * row can be ticked from either, and only one of them is where the eye is.
+     */
+    const focusAsksBoards = !!focus && isBoardScoped(focus) && boards.length > 1;
+    // ONE answer to "what is in the way", in two voices: the footer states it,
+    // the tooltip phrases it as the act. Two ternaries would be two answers.
+    const addBlocker = picks.length ? null : (focusAsksBoards ? 'board' : 'box');
+    const count = picks.length > 1 ? `${picks.length} ` : '';
+    const addHint = !scene
+        ? 'OBS isn’t connected — copy the URL instead'
+        : addBlocker === 'board'
+            ? 'Nothing selected yet — tick a board above the preview'
+            : addBlocker === 'box'
+                ? 'Nothing selected yet — tick a box in the list'
+                : `Add to “${scene}”, hidden (${MOD}⏎)`;
+
+    /*
      * Sequential, never parallel: the OBS mirror reconciles one event at a time
      * and a burst of CreateInput races it (and races its own uniqueness check —
      * two "Stat Bar — Team 1" in flight both see the name free).
@@ -856,9 +927,9 @@ export const AddSourceDialog = memo(function AddSourceDialog({ scene, open: open
      * successes stay, drop out of the selection, and the dialog stays open on
      * what's left to retry.
      */
-    const add = async () => {
+    const add = async (visible = false) => {
         if (!picks.length) return;
-        setAdding(true);
+        setAdding(visible ? 'visible' : 'hidden');
         const done = [];
         const failed = [];
         for (const p of picks) {
@@ -869,7 +940,7 @@ export const AddSourceDialog = memo(function AddSourceDialog({ scene, open: open
                     width: p.layout.width,
                     height: p.layout.height,
                     sceneName: scene,
-                    enabled: false,
+                    enabled: visible,
                 });
                 done.push({ pick: p, name: res.inputName });
             } catch (e) {
@@ -879,10 +950,15 @@ export const AddSourceDialog = memo(function AddSourceDialog({ scene, open: open
         setAdding(false);
 
         if (!failed.length) {
+            const one = done.length === 1;
             notifications.show({
-                message: done.length === 1
-                    ? `Added “${done[0].name}” to ${scene} — hidden. Flip it on when you're ready.`
-                    : `Added ${done.length} sources to ${scene} — all hidden. Flip them on when you're ready.`,
+                message: visible
+                    ? (one
+                        ? `Added “${done[0].name}” to ${scene}, showing.`
+                        : `Added ${done.length} sources to ${scene}, all showing.`)
+                    : (one
+                        ? `Added “${done[0].name}” to ${scene} — hidden. Flip it on when you're ready.`
+                        : `Added ${done.length} sources to ${scene} — all hidden. Flip them on when you're ready.`),
                 color: 'green',
             });
             onClose();
@@ -938,7 +1014,7 @@ export const AddSourceDialog = memo(function AddSourceDialog({ scene, open: open
         }
         if (tag === 'BUTTON') return;
         if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-            if (scene && picks.length && !adding) { e.preventDefault(); add(); }
+            if (scene && picks.length && !adding) { e.preventDefault(); add(false); }
             return;
         }
         if ((e.key === 'Enter' || (e.key === ' ' && !typing)) && focus) {
@@ -963,9 +1039,8 @@ export const AddSourceDialog = memo(function AddSourceDialog({ scene, open: open
                         instructions and content is a line that moves. */}
                     <DialogDescription>
                         {scene
-                            ? 'Click an overlay to preview it; tick its box to add it — or '
-                              + `↑↓ to preview, ⏎ to select, ${MOD}⏎ to add. Everything goes in `
-                              + 'hidden, and you turn it on from the rack.'
+                            ? 'Click an overlay to preview it, again to select it — or '
+                              + `↑↓ to preview, ⏎ to select, ${MOD}⏎ to add hidden.`
                             : 'OBS isn’t connected, so there’s no scene to add to. You can still '
                               + 'preview anything here, copy its source URL, and build a container.'}
                     </DialogDescription>
@@ -1093,7 +1168,11 @@ export const AddSourceDialog = memo(function AddSourceDialog({ scene, open: open
                     <Group gap="sm" className="min-w-0 items-center justify-between border-t border-border/60 pt-2">
                         <div className="flex h-6 min-w-0 flex-1 items-center gap-2">
                             <Text size="xs" dimmed className="shrink-0">
-                                {picks.length ? `${picks.length} selected` : 'Nothing selected yet.'}
+                                {addBlocker === 'board'
+                                    ? 'Nothing selected yet — tick a board above.'
+                                    : addBlocker === 'box'
+                                        ? 'Nothing selected yet — tick a box to add it.'
+                                        : `${picks.length} selected`}
                             </Text>
                             {/* The scrollbar is hidden, not absent: a 6px-tall
                                 track inside a 24px strip lands on top of the
@@ -1155,22 +1234,46 @@ export const AddSourceDialog = memo(function AddSourceDialog({ scene, open: open
                                     </Button>
                                 )}
                             </CopyButton>
-                            {/* Add is the one slot that needs OBS: it creates a
-                                browser source in a scene. It holds its place and
-                                goes honestly grey rather than vanishing — same
-                                rule as the source strip's Push slot. */}
-                            <SimpleTooltip label={scene
-                                ? `Add to “${scene}”, hidden (${MOD}⏎)`
-                                : 'OBS isn’t connected — copy the URL instead'}>
+                            {/* The two Adds are the one slot that needs OBS:
+                                they create a browser source in a scene. Both
+                                hold their place and go honestly grey rather
+                                than vanishing — same rule as the source strip's
+                                Push slot — and both carry the same `addHint`,
+                                because what stands in the way of one stands in
+                                the way of the other.
+
+                                Visible is the OUTLINE half and hidden keeps the
+                                filled one: hidden is the answer that is never
+                                wrong, so it stays the default weight and the
+                                one ⌘⏎ commits. `() => add(...)` and not a bare
+                                handler — a click handler is called with the
+                                EVENT, and an event is truthy, so `onClick={add}`
+                                on a defaulted flag adds visible every time. */}
+                            <SimpleTooltip label={addHint}>
                                 <span>
                                     <Button
-                                        size="sm" disabled={!scene || !picks.length || adding}
-                                        onClick={add}
+                                        size="sm" variant="outline"
+                                        disabled={!scene || !picks.length || !!adding}
+                                        onClick={() => add(true)}
+                                    >
+                                        <Eye size={13} className="mr-1" />
+                                        {adding === 'visible'
+                                            ? 'Adding…'
+                                            : `Add ${count}visible`}
+                                    </Button>
+                                </span>
+                            </SimpleTooltip>
+                            <SimpleTooltip label={addHint}>
+                                <span>
+                                    <Button
+                                        size="sm"
+                                        disabled={!scene || !picks.length || !!adding}
+                                        onClick={() => add(false)}
                                     >
                                         <Plus size={13} className="mr-1" />
-                                        {adding
+                                        {adding === 'hidden'
                                             ? 'Adding…'
-                                            : `Add ${picks.length > 1 ? `${picks.length} ` : ''}hidden`}
+                                            : `Add ${count}hidden`}
                                     </Button>
                                 </span>
                             </SimpleTooltip>
