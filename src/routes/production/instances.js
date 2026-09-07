@@ -193,13 +193,47 @@ export function sideOfVariant(variant) {
     return null;
 }
 
-// The same variant with its side swapped, or null when it names no side.
+/*
+ * The same variant with its side swapped, reduced to the PAIR KEY — null when
+ * it names no side. Compare it against `sidePairVariant` of a candidate, never
+ * against a raw variant, or a per-half axis is back in the comparison.
+ */
 export function flipSideVariant(variant) {
     const side = sideOfVariant(variant);
     if (!side) return null;
     const mine = variantTagFor('team', side);
     const theirs = variantTagFor('team', side === 1 ? 2 : 1);
-    return String(variant).split('.').map(p => (p === mine ? theirs : p)).join('.');
+    return sidePairVariant(variant).split('.').map(p => (p === mine ? theirs : p)).join('.');
+}
+
+/*
+ * Variant axes that DIFFER between the two halves of a side pair, and so are
+ * not part of what makes them a pair.
+ *
+ * Everything else survives a flip because both halves share it: a `zs`
+ * scoreboard's other half is the other SMALL one, and answering with the large
+ * one would be the wrong source. `?port=` is the opposite — it names which
+ * physical pad this source reads, and the two halves of a controller pair are
+ * on different pads BY DEFINITION. Requiring it to match therefore asked a pair
+ * to be something a pair can never be: a producer who pins their ports
+ * (`?team=1&port=1` beside `?team=2&port=3`, the documented override in
+ * controller.html) had two sources PRSH could not see as two halves of
+ * anything, so the Controller was the one per-side element whose panel offered
+ * no "Match the other side" — the axis it alone has was the axis that broke it.
+ */
+const PER_HALF_PARAMS = new Set(['port']);
+
+/*
+ * A variant reduced to what its PAIR shares — the key two halves are matched on.
+ */
+export function sidePairVariant(variant) {
+    if (!variant) return '';
+    const drop = new Set(
+        [...PER_HALF_PARAMS].map(p => VARIANT_PARAMS.find(([n]) => n === p)?.[1]).filter(Boolean),
+    );
+    return String(variant).split('.')
+        .filter(part => !drop.has(part[0]))
+        .join('.');
 }
 
 /*

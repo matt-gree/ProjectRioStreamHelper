@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     instanceId, parseInstanceId, slotInstanceId, variantLabel, variantOf,
-    flipSideVariant, sideOfVariant,
+    flipSideVariant, sideOfVariant, sidePairVariant,
 } from './instances';
 import { boardDeskId, boardOfDeskId } from './boards';
 import { ELEMENTS } from './elements';
@@ -159,11 +159,36 @@ describe('the side a variant names', () => {
      * answer with a differently-sized overlay, which for the caller that exists
      * (matching a pair's size in OBS) is exactly the wrong source.
      */
-    it('flips the side and leaves every other axis where it was', () => {
+    it('flips the side and leaves every SHARED axis where it was', () => {
         expect(flipSideVariant('t1')).toBe('t2');
         expect(flipSideVariant('t2')).toBe('t1');
         expect(flipSideVariant('t2.zs')).toBe('t1.zs');
         expect(flipSideVariant('zs')).toBeNull();
         expect(flipSideVariant('')).toBeNull();
+    });
+
+    /*
+     * ...EXCEPT the axes a pair cannot share. `?port=` names which physical pad
+     * a controller source reads, and the two halves of a controller pair are on
+     * different pads by definition — so carrying it through the flip asked a
+     * pair to be something no pair can be, and left the Controller as the one
+     * per-side element whose panel offered no "Match the other side".
+     */
+    it('drops a PER-HALF axis, so a pinned-port pair is still a pair', () => {
+        expect(sidePairVariant('t2.p3')).toBe('t2');
+        expect(sidePairVariant('t1.zs')).toBe('t1.zs');
+        expect(sidePairVariant('')).toBe('');
+
+        expect(flipSideVariant('t1.p1')).toBe('t2');
+        expect(flipSideVariant('t2.p3')).toBe('t1');
+        // Both ends of the comparison are reduced, which is the whole point:
+        // `t1.p1`'s answer has to equal what `t2.p3` reduces to.
+        expect(flipSideVariant('t1.p1')).toBe(sidePairVariant('t2.p3'));
+    });
+
+    // A port with no side names no side. There is nothing to call "the other
+    // one" of, and guessing between four pads is not something to guess at.
+    it('still refuses a variant that names no side at all', () => {
+        expect(flipSideVariant('p1')).toBeNull();
     });
 });

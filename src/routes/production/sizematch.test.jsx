@@ -19,6 +19,7 @@ const item = (id, sourceName, url, enabled = false) =>
 
 const ROSTER = 'http://x/layout/scoreboard1/roster.html';
 const LOGO = 'http://x/layout/scoreboard1/teamlogo.html';
+const CTRL = 'http://x/layout/controller/controller.html';
 
 const obs = (sceneItems, extra = {}) => useObsStore.setState({
     status: 'connected',
@@ -110,6 +111,51 @@ describe('matching a pair’s size', () => {
     it('renders nothing for an element with no side', () => {
         obs({ Game: [item(1, 'Lower Third', 'http://x/layout/lowerthird/lowerthird.html')] });
         ui(<Stage selection="lowerthird@Game" />);
+        expect(screen.queryByRole('button', { name: /Match/ })).not.toBeInTheDocument();
+    });
+
+    /*
+     * THE CONTROLLER, which is a per-side pair like any other and gets the row
+     * like any other — its ?team=1|2 follow sources are exactly the shape the
+     * roster's are.
+     */
+    it('offers it to a controller pair', () => {
+        obs({ Game: [item(1, 'Ctrl 1', `${CTRL}?team=1`), item(2, 'Ctrl 2', `${CTRL}?team=2`)] });
+        ui(<Stage selection="controller~t1@Game" />);
+        fireEvent.click(screen.getByRole('button', { name: /Match Side 2/ }));
+        expect(match).toHaveBeenCalledWith({
+            scene: 'Game', itemId: 1, modelScene: 'Game', modelItemId: 2,
+        });
+    });
+
+    /*
+     * ...INCLUDING a pair that pins its ports, which is the case the controller
+     * alone can be in. `?port=` names which physical pad a source reads
+     * (the documented override in controller.html), and the two halves of a pair
+     * are on different pads BY DEFINITION — so a flip that carried the port
+     * through asked this pair to be something no pair can be, and the Controller
+     * was the one per-side element whose panel offered nothing.
+     */
+    it('offers it to a pair that has pinned DIFFERENT ports', () => {
+        obs({ Game: [
+            item(1, 'Ctrl 1', `${CTRL}?team=1&port=1`),
+            item(2, 'Ctrl 2', `${CTRL}?team=2&port=3`),
+        ] });
+        ui(<Stage selection="controller~t1.p1@Game" />);
+        fireEvent.click(screen.getByRole('button', { name: /Match Side 2/ }));
+        expect(match).toHaveBeenCalledWith({
+            scene: 'Game', itemId: 1, modelScene: 'Game', modelItemId: 2,
+        });
+    });
+
+    /*
+     * But a port with NO side names no side. Two port-addressed sources are not
+     * a pair the console can identify — a rig could have all four on screen —
+     * and this row is never worth a guess about which one the producer meant.
+     */
+    it('renders nothing for port-only sources, which name no side', () => {
+        obs({ Game: [item(1, 'Ctrl A', `${CTRL}?port=1`), item(2, 'Ctrl B', `${CTRL}?port=3`)] });
+        ui(<Stage selection="controller~p1@Game" />);
         expect(screen.queryByRole('button', { name: /Match/ })).not.toBeInTheDocument();
     });
 

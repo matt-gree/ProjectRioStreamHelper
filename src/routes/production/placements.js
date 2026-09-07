@@ -8,7 +8,8 @@ import {
     CONTAINER_MEMBERS, containerOfSource, fedTargets, useContainerDefs,
 } from './containers';
 import {
-    flipSideVariant, instanceId, parseInstanceId, slotInstanceId, variantLabelFor, variantOf,
+    flipSideVariant, instanceId, parseInstanceId, sidePairVariant, slotInstanceId,
+    variantLabelFor, variantOf,
     variantTagFor, withVariant,
 } from './instances';
 import { useActiveBoards, useBoardTag } from './boards';
@@ -575,7 +576,7 @@ export function sideSibling(placement, placements = []) {
     if (!other) return null;
     return placements.find(p => (
         p.scene === placement.scene
-        && p.variant === other
+        && sidePairVariant(p.variant) === other
         && p.board === placement.board
         && p.element?.id === placement.element?.id
         && p.item
