@@ -32,11 +32,17 @@ from server.utils.deep_dict import deep_set, deep_unset, deep_get
 # same edit as moving it along. The pairs below are the DEFAULT arrangement and
 # the legacy switch each field's `on` migrates from; they are also the census of
 # known fields, which is what `_eventheader_bands` heals against.
+# The socials pair has no legacy switch behind it — it is newer than the
+# switches — so it reads the default and starts on. That is safe rather than
+# intrusive: a field with no source draws only its own text, and a band drops a
+# field that resolves to nothing, so an unfilled handle is absent from the
+# broadcast until a producer types one in.
 EVENTHEADER_FIELDS = {
     "header": [("competition", "showCompetition"), ("location", "showLocation"),
                ("dates", "showDates")],
     "footer": [("message", "showMessage"), ("event", "showEvent"),
-               ("phase", "showPhase"), ("round", "showRound")],
+               ("phase", "showPhase"), ("round", "showRound"),
+               ("twitter", "showTwitter"), ("youtube", "showYoutube")],
 }
 
 

@@ -343,9 +343,17 @@ def _eh(band):
 async def test_a_fresh_install_gets_both_bands_in_their_default_order(isolate_user_data):
     await Settings.Load()
     assert _eh("header") == ["competition", "location", "dates"]
-    assert _eh("footer") == ["message", "event", "phase", "round"]
+    assert _eh("footer") == ["message", "event", "phase", "round", "twitter", "youtube"]
+    # Every field starts ON, socials included — which is safe rather than
+    # intrusive, because a field with no source draws only its own text and a
+    # band drops what resolves to nothing. An unfilled handle is absent from the
+    # broadcast until someone types one.
     assert all(e["on"] for band in Settings.settings["overlays"]["eventheader"]["bands"].values()
                for e in band)
+    for fid in ("twitter", "youtube"):
+        entry = [e for band in Settings.settings["overlays"]["eventheader"]["bands"].values()
+                 for e in band if e["id"] == fid][0]
+        assert entry["text"] == ""
 
 
 async def test_legacy_switches_become_each_field_s_own_eye(isolate_user_data):
@@ -390,8 +398,24 @@ async def test_an_arrangement_survives_a_later_boot(isolate_user_data):
     # Stored ids keep their places; the fields neither band listed are appended
     # to their defaults, because a field in no band is a field with no way back.
     assert _eh("header") == ["dates", "competition", "location"]
-    assert _eh("footer") == ["round", "message", "event", "phase"]
+    assert _eh("footer") == ["round", "message", "event", "phase", "twitter", "youtube"]
     assert eh["bands"]["header"][1] == {"id": "competition", "on": False, "text": "SLICE"}
+
+
+async def test_a_field_added_by_a_release_lands_without_disturbing_the_order(isolate_user_data):
+    """The heal is not only for a hand-edited file — it is how a RELEASE ships a
+    new field. The socials pair was added to EVENTHEADER_FIELDS and nothing else
+    had to happen: an install whose bands predate them keeps its arrangement and
+    finds them appended to their default band."""
+    _write_settings(isolate_user_data, {
+        "overlays": {"eventheader": {"bands": {
+            "header": [{"id": "dates"}, {"id": "competition"}, {"id": "location"}],
+            "footer": [{"id": "round"}, {"id": "message"}, {"id": "event"}, {"id": "phase"}],
+        }}},
+    })
+    await Settings.Load()
+    assert _eh("header") == ["dates", "competition", "location"]        # untouched
+    assert _eh("footer") == ["round", "message", "event", "phase", "twitter", "youtube"]
 
 
 async def test_a_field_the_producer_moved_across_is_not_moved_back(isolate_user_data):

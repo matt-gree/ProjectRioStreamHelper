@@ -44,11 +44,19 @@ export const FIELDS = {
     phase: { label: 'Phase', where: 'the bound match, else Competition' },
     round: { label: 'Round', where: 'the bound match' },
     message: { label: 'Message', where: null },
+    // A handle is TYPED, like the message — the account belongs to the stream,
+    // not to the loaded event, and no other overlay reads it. What these two
+    // add over typing one into Message is the platform MARK: "@NNL_MSB" cannot
+    // say which platform it is on, and the mark is the only part of the field
+    // that can (the same reasoning lib/sub-glyph.js records for the commentary
+    // drawer).
+    twitter: { label: 'Twitter / X', where: null },
+    youtube: { label: 'YouTube', where: null },
 };
 
 export const DEFAULT_BANDS = {
     header: ['competition', 'location', 'dates'],
-    footer: ['message', 'event', 'phase', 'round'],
+    footer: ['message', 'event', 'phase', 'round', 'twitter', 'youtube'],
 };
 
 const SETTING_KEY = 'overlays.eventheader.bands';

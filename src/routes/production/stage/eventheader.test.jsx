@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fieldSource } from '../../../../public/layout/lib/eventheader-mount.js';
+import { socialMark, SOCIAL_MARKS } from '../../../../public/layout/lib/social-marks.js';
 import { render, screen, cleanup, fireEvent, within } from '@testing-library/react';
 import { TooltipProvider } from '../../../components/ui/tooltip';
 import { useSettingsStore, useStateStore } from '../../../context/store';
@@ -113,7 +114,10 @@ describe('the field census agrees across runtimes', () => {
     };
     // `message` is the entry whose whole content is its own text — it has no
     // source on purpose, which is what makes it the banner line.
-    const NO_SOURCE = new Set(['message']);
+    // Fields whose whole content is the producer's own text. The socials are
+    // here for the same reason `message` is: the account belongs to the stream,
+    // not to the loaded event, so there is nothing in state to resolve.
+    const NO_SOURCE = new Set(['message', 'twitter', 'youtube']);
 
     beforeEach(() => {
         globalThis.OverlayBase = {
@@ -131,6 +135,25 @@ describe('the field census agrees across runtimes', () => {
             const drawn = fieldSource(id, STATE, 1);
             if (NO_SOURCE.has(id)) expect(drawn, id).toBe('');
             else expect(drawn, `"${id}" draws nothing`).toBeTruthy();
+        }
+    });
+
+    /*
+     * THE MARK IS THE FEATURE. Without it these two are `message` under another
+     * name — a producer can already type a handle there. "@NNL_MSB" cannot say
+     * which platform it belongs to, and the mark is the only part of the field
+     * that can.
+     */
+    it('draws a platform mark for a socials field, and none for the rest', () => {
+        expect(Object.keys(SOCIAL_MARKS).sort()).toEqual(['twitter', 'youtube']);
+        for (const id of Object.keys(FIELDS)) {
+            const mark = socialMark(id);
+            if (id === 'twitter' || id === 'youtube') {
+                expect(mark, id).toBeTruthy();
+                expect(mark.querySelector('path').getAttribute('fill'), id).toBe('currentColor');
+            } else {
+                expect(mark, id).toBeNull();
+            }
         }
     });
 

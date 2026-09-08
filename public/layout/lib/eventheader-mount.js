@@ -23,6 +23,8 @@
  * Requires overlay-base.js (OverlayBase).
  */
 
+import { socialMark, SOCIAL_MARKS } from './social-marks.js';
+
 const REF_W = 1920, REF_H = 1080;
 
 /*
@@ -146,6 +148,37 @@ const CSS = `
 }
 /* No overflow clip here — that was cropping glyph descenders. */
 .eh-field { flex: 0 0 auto; }
+/*
+ * The platform mark, sized off the TYPE rather than the band: it is a character
+ * of the handle it belongs to, so it has to grow with the handle and not with
+ * the plate around it. 0.82em is the mark's own box against a cap height of
+ * roughly 0.72 — the brand artwork is drawn to the edges of its 24x24 viewBox
+ * where a capital is not, so matching the em box makes it read SMALLER than the
+ * letters beside it.
+ *
+ * Seated on the baseline by eye, not by vertical-align: baseline: an inline
+ * SVG's baseline is its bottom edge, which would hang the whole mark above the
+ * text. The row is align-items: baseline, so this is nudged instead.
+ */
+.eh-mark {
+  width: 0.82em;
+  height: 0.82em;
+  display: inline-block;
+  vertical-align: baseline;
+  margin-right: 0.3em;
+  /*
+   * Seated on the CAP BAND, derived rather than nudged by eye. An inline box
+   * with vertical-align: baseline sits with its BOTTOM on the baseline, so a
+   * 0.82em mark overhangs a 0.727em cap band (Inter) by 0.093em — all of it
+   * below the letters. Half of that pushed back down centres it on them.
+   *
+   * An approximation on purpose: cap height is a fact about the face, and the
+   * face is the producer's. Getting this wrong costs a decorative glyph a pixel
+   * of seat, where the ROW's optical centring moves the whole band and is
+   * measured per font (capCentreOffset above).
+   */
+  transform: translateY(0.046em);
+}
 .eh-sep {
   color: var(--accent, #f59f00);
   font-size: 0.5em;
@@ -290,7 +323,10 @@ export function fieldSource(id, state, sb) {
         // Round = the match label (start.gg round name), projected onto the
         // board as score.{N}.phase so it tracks the live board.
         case 'round': return g(state, `score.${sb}.phase`, '');
-        case 'message': return '';
+        // Typed, not sourced — the account belongs to the stream rather than to
+        // the loaded event, so like `message` the field's whole content is its
+        // own text. What it adds over `message` is the platform mark.
+        case 'message': case 'twitter': case 'youtube': return '';
         default: return '';
     }
 }
@@ -303,15 +339,20 @@ function bandValues(band, state, settings, sb) {
     if (!Array.isArray(entries)) return [];
     return entries
         .filter((e) => e && e.on !== false)
-        .map((e) => String(e.text || '').trim() || fieldSource(e.id, state, sb))
-        .filter((v) => v != null && String(v).trim() !== '');
+        // The ID travels with the value: a field's mark is a fact about WHICH
+        // field it is, and by the time this is a list of strings that is gone.
+        .map((e) => ({
+            id: e.id,
+            value: String(e.text || '').trim() || fieldSource(e.id, state, sb),
+        }))
+        .filter((f) => f.value != null && String(f.value).trim() !== '');
 }
 
 // Render one row: drop blank fields, join the rest with accent separators so
 // the surviving fields stay centered (spec: "skip blank fields, re-center").
-function renderRow(el, values, sep) {
+function renderRow(el, fields, sep) {
     el.innerHTML = '';
-    values.forEach((v, i) => {
+    fields.forEach((f, i) => {
         if (i > 0 && sep) {
             const d = document.createElement('span');
             d.className = 'eh-sep';
@@ -320,10 +361,15 @@ function renderRow(el, values, sep) {
         }
         const span = document.createElement('span');
         span.className = 'eh-field';
-        span.textContent = v;
+        // The mark rides INSIDE the field's own span, so it travels with the
+        // handle when the producer reorders the band and is never separated
+        // from it by a separator.
+        const mark = socialMark(f.id);
+        if (mark) span.appendChild(mark);
+        span.appendChild(document.createTextNode(f.value));
         el.appendChild(span);
     });
-    return values.length;
+    return fields.length;
 }
 
 export function mountEventHeader({ host, sb = 1 }) {
