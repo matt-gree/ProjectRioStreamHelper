@@ -554,12 +554,12 @@ describe('ElementStyleOverrides', () => {
         expect(pn()?.textStrokeWidth).toBe(0);
         // …and the colour with it, or the × would take the size off and leave a
         // colour pinned that nothing draws and nothing can reach.
-        expect(pn()?.textStrokeColor).toBe('rgba(0, 0, 0, 0.9)');
+        expect(pn()?.textStrokeColor).toBe('rgba(0, 0, 0, 1)');
     });
 
     it('renders the pair on ONE row — a colour, and the size beside it', async () => {
         layouts([{ type: 'playername', supportedSettings: ['textStroke'] }]);
-        pin({ playername: { textStrokeWidth: 3, textStrokeColor: 'rgba(0, 0, 0, 0.9)' } });
+        pin({ playername: { textStrokeWidth: 3, textStrokeColor: 'rgba(0, 0, 0, 1)' } });
         await show({ type: 'playername' });
         expect(screen.getByLabelText('Font Border')).toHaveValue('#000000');
         expect(screen.getByLabelText('Font Border size')).toHaveValue(3);
@@ -577,7 +577,7 @@ describe('ElementStyleOverrides', () => {
      */
     it('surfaces the row when only the legacy colour half is pinned', async () => {
         layouts([{ type: 'playername', supportedSettings: ['textStroke'] }]);
-        pin({ playername: { textStrokeColor: 'rgba(0, 0, 0, 0.9)' } });
+        pin({ playername: { textStrokeColor: 'rgba(0, 0, 0, 1)' } });
         await show({ type: 'playername' });
         expect(screen.getByLabelText('Font Border')).toBeInTheDocument();
         expect(offered()).not.toContain('Font Border');

@@ -39,6 +39,55 @@ async def test_no_host_key_leaves_allow_lan_default(isolate_user_data):
     assert Settings.settings["server"]["port"] == 5300
 
 
+"""The font border's colour: 90% opacity was never a decision.
+
+Changing the shipped default reaches new installs only — `_deep_merge` persists
+the whole settings dict, so every existing install has the old value stored and
+would keep drawing it. These pin the half that actually reaches an upgrade.
+"""
+
+
+async def test_legacy_stroke_opacity_is_adopted_forward(isolate_user_data):
+    _write_settings(isolate_user_data, {
+        "overlays": {"global": {"textStrokeColor": "rgba(0, 0, 0, 0.9)"}},
+    })
+    await Settings.Load()
+    assert Settings.settings["overlays"]["global"]["textStrokeColor"] == "rgba(0, 0, 0, 1)"
+
+
+async def test_legacy_stroke_opacity_is_adopted_in_every_namespace(isolate_user_data):
+    """A per-element pin is SEEDED FROM THE GLOBAL, so it holds the old default
+    for the same reason — and left behind it would be the one place still
+    drawing 90% after the bump. Per-board pins nest one level deeper again."""
+    _write_settings(isolate_user_data, {
+        "overlays": {
+            "global": {"textStrokeColor": "rgba(0, 0, 0, 0.9)"},
+            "eventheader": {"textStrokeColor": "rgba(0, 0, 0, 0.9)"},
+            "scoreboard": {"2": {"textStrokeColor": "rgba(0, 0, 0, 0.9)"}},
+        },
+    })
+    await Settings.Load()
+    overlays = Settings.settings["overlays"]
+    assert overlays["global"]["textStrokeColor"] == "rgba(0, 0, 0, 1)"
+    assert overlays["eventheader"]["textStrokeColor"] == "rgba(0, 0, 0, 1)"
+    assert overlays["scoreboard"]["2"]["textStrokeColor"] == "rgba(0, 0, 0, 1)"
+
+
+async def test_a_chosen_stroke_colour_is_left_alone(isolate_user_data):
+    """EXACT MATCH ONLY. The bump adopts the old default forward; it is not a
+    licence to normalise every outline colour a producer has set."""
+    _write_settings(isolate_user_data, {
+        "overlays": {"global": {"textStrokeColor": "rgba(255, 0, 0, 0.5)"}},
+    })
+    await Settings.Load()
+    assert Settings.settings["overlays"]["global"]["textStrokeColor"] == "rgba(255, 0, 0, 0.5)"
+
+
+async def test_a_fresh_install_ships_an_opaque_outline(isolate_user_data):
+    await Settings.Load()
+    assert Settings.settings["overlays"]["global"]["textStrokeColor"] == "rgba(0, 0, 0, 1)"
+
+
 async def test_overlay_schema_v1_strips_promoted_globals(isolate_user_data):
     _write_settings(isolate_user_data, {
         "overlays": {

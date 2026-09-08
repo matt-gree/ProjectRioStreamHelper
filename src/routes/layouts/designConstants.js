@@ -463,7 +463,7 @@ export const OVERRIDABLE_GLOBAL_KEYS = [
     // than global-shaped — pinning a width on one element gives that element an
     // outline and leaves every other overlay exactly as it was.
     { key: 'textStrokeWidth', meta: ['textStroke'], colorKey: 'textStrokeColor', type: 'number', label: 'Font Border', defaultValue: 0,  min: 0, max: 12, step: 0.5, suffix: 'px' },
-    { key: 'textStrokeColor', meta: ['textStroke'], partner: true, type: 'color-opacity', label: 'Font Border Color',  defaultValue: 'rgba(0, 0, 0, 0.9)' },
+    { key: 'textStrokeColor', meta: ['textStroke'], partner: true, type: 'color-opacity', label: 'Font Border Color',  defaultValue: 'rgba(0, 0, 0, 1)' },
     { key: 'showCaptains',     meta: ['showCaptains'],     type: 'switch', label: 'Show Captains' },
     { key: 'showLogo',         meta: ['showLogo'],         type: 'switch', label: 'Show Overlay Logo' },
     { key: 'showShadow',       meta: ['showShadow'],       type: 'switch', label: 'Card Shadow' },
@@ -610,7 +610,7 @@ export const GLOBAL_DESIGN_DEFAULTS = {
     textShadowColor:   'rgba(0, 0, 0, 0.8)',
     // 0 = no border anywhere until something pins one.
     textStrokeWidth:   0,
-    textStrokeColor:   'rgba(0, 0, 0, 0.9)',
+    textStrokeColor:   'rgba(0, 0, 0, 1)',
     showCaptains:      true,
     showLogo:          true,
     finalBadgeColor:   null,

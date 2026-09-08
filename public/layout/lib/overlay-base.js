@@ -739,7 +739,7 @@
     // usually pinned to sit on ONE background; the global underneath answers
     // for everyone else.
     const strokeWidth = g('overlays.global.textStrokeWidth', 0);
-    const strokeColor = g('overlays.global.textStrokeColor', 'rgba(0, 0, 0, 0.9)');
+    const strokeColor = g('overlays.global.textStrokeColor', 'rgba(0, 0, 0, 1)');
     const perStrokeWidth = overrideNs ? g(`overlays.${overrideNs}.textStrokeWidth`, null) : null;
     const perStrokeColor = overrideNs ? g(`overlays.${overrideNs}.textStrokeColor`, null) : null;
     const effStrokeWidth = perStrokeWidth != null ? perStrokeWidth : strokeWidth;

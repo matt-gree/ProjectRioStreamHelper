@@ -357,7 +357,7 @@ const GlobalDesignSection = memo(function GlobalDesignSection() {
     const textShadowBlur    = globalDesign.textShadowBlur    ?? 4;
     const textShadowColor   = globalDesign.textShadowColor   ?? 'rgba(0, 0, 0, 0.8)';
     const textStrokeWidth   = globalDesign.textStrokeWidth   ?? 0;
-    const textStrokeColor   = globalDesign.textStrokeColor   ?? 'rgba(0, 0, 0, 0.9)';
+    const textStrokeColor   = globalDesign.textStrokeColor   ?? 'rgba(0, 0, 0, 1)';
     const showCaptains      = globalDesign.showCaptains      !== false;
     const showLogo          = globalDesign.showLogo          !== false;
     const finalBadgeColor   = globalDesign.finalBadgeColor   ?? '';

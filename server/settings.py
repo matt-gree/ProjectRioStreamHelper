@@ -47,6 +47,49 @@ EVENTHEADER_FIELDS = {
 EVENTHEADER_BASE_FONT_PX = 34
 
 
+# The font border's colour shipped at 90% opacity, which was never a decision.
+# An outline is either drawn or it is not, and a tenth of the background bleeding
+# through a stroke that is often 1px reads as a soft edge rather than a lighter
+# one — the alpha is there to be turned DOWN deliberately, not to start turned
+# down. Fully opaque now.
+_LEGACY_STROKE_COLOR = "rgba(0, 0, 0, 0.9)"
+_OPAQUE_STROKE_COLOR = "rgba(0, 0, 0, 1)"
+
+
+def _adopt_opaque_stroke(overlays: dict) -> bool:
+    """Carry a stored font-border colour still at the old default forward.
+
+    Changing the default alone would reach NEW INSTALLS ONLY. `_deep_merge`
+    writes the whole settings dict back, so a default is persisted the moment
+    anything else is saved and from then on is indistinguishable from a value
+    the producer chose (the same trap `loaded_display` is captured for) — every
+    existing install would keep 90% and the new default would be invisible.
+
+    Exact match only, and every namespace under `overlays`: the global, each
+    element's pin, each per-board pin. A per-element pin is SEEDED FROM THE
+    GLOBAL, so those hold the old default for the same reason the global does,
+    and leaving them behind would make a pinned element the one place still
+    drawing 90% after the bump.
+
+    The cost is a producer who deliberately chose exactly 0.9, which the stored
+    value cannot distinguish from the shipped one. They set it again.
+    """
+    changed = False
+
+    def walk(node):
+        nonlocal changed
+        if not isinstance(node, dict):
+            return
+        if node.get("textStrokeColor") == _LEGACY_STROKE_COLOR:
+            node["textStrokeColor"] = _OPAQUE_STROKE_COLOR
+            changed = True
+        for value in node.values():
+            walk(value)
+
+    walk(overlays)
+    return changed
+
+
 def _eventheader_font_px(ns: dict) -> bool:
     """``fontScale`` (% of a 34px base) became ``fontSize`` (px). True if changed.
 
@@ -572,7 +615,7 @@ class Settings:
                 # (overlays.{type}.textStrokeWidth), which is the shape this
                 # feature is usually wanted in.
                 "textStrokeWidth": 0,
-                "textStrokeColor": "rgba(0, 0, 0, 0.9)",
+                "textStrokeColor": "rgba(0, 0, 0, 1)",
                 "showCaptains": True,
                 "showLogo": True,
                 "finalBadgeColor": None,
@@ -861,6 +904,8 @@ class Settings:
         # `or` would skip the second whenever the first reported a change.
         _eh_changed = _eventheader_bands(_eh_ns)
         _eh_changed = _eventheader_font_px(_eh_ns) or _eh_changed
+        # Every overlay namespace, not just the Event Header's — see the docstring.
+        _eh_changed = _adopt_opaque_stroke(cls.settings.get("overlays", {})) or _eh_changed
         if _eh_changed:
             await cls.Save()
 
