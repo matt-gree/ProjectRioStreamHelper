@@ -314,6 +314,33 @@ export const LAYOUT_SETTINGS = {
     ],
 };
 
+/**
+ * A stored boolean setting, resolved the way BOTH runtimes must resolve it.
+ *
+ * Three rules were in use for four keys: `applyDesignSettings` read truthiness,
+ * while the Design tab read `!== false` for the default-on switches and
+ * `=== true` for the default-off one. That only diverges on a value that is not
+ * a boolean — but settings.json is hand-editable and `PUT /api/v1/settings`
+ * takes its value as a STRING, so `"true"` is a shape that really occurs, and
+ * on it the Design tab drew its switch OFF while every overlay drew the shadow.
+ * A producer looking at the control that is supposed to explain the broadcast
+ * was told the opposite of what the broadcast was doing.
+ *
+ * The two string spellings are honoured rather than rejected, so the value a
+ * hand edit or the REST API writes means what it says. Anything else is not an
+ * answer, and the default stands.
+ *
+ * Mirrored in public/layout/lib/overlay-base.js — overlay-base is a classic
+ * script and cannot import a module, so the two are pinned against one truth
+ * table in designConstants.test.js.
+ */
+export function settingOn(value, fallback) {
+    if (typeof value === 'boolean') return value;
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+    return fallback;
+}
+
 // ── Which design-package file draws a layout type ──
 // Layout type → the theme SVG's file stem, which is what a package's `elements`
 // / `appVarElements` are named after. The map answers one question for two

@@ -11,6 +11,7 @@ import {
     THEME_ELEMENT,
     themeElementFor,
     overrideReaches,
+    settingOn,
 } from './designConstants';
 
 describe('global design keys', () => {
@@ -202,6 +203,63 @@ describe('OVERRIDE_CAPABLE_TYPES', () => {
  * it reads back on the panel, and the overlay ignores it. overlay-base.js is
  * the only authority on which reads exist, so it is what this checks.
  */
+/*
+ * ONE RULE FOR A STORED BOOLEAN, in two runtimes that cannot share a module.
+ *
+ * The Design tab's switch and the overlay that obeys it must agree about what
+ * the stored value MEANS, or the control that explains the broadcast contradicts
+ * it. They did not: three rules covered four keys, and on a non-boolean —
+ * which settings.json invites, being hand-editable, and which
+ * `PUT /api/v1/settings` produces, taking its value as a string — the tab drew
+ * its Text Shadow switch OFF while every overlay drew the shadow.
+ *
+ * This runs the SAME table through both implementations rather than checking
+ * that the source strings look alike: a mirrored rule is only mirrored if it
+ * answers the same, and a copy that has drifted still reads plausibly.
+ */
+describe('settingOn — the Design tab and the overlays agree what a stored boolean means', () => {
+    // overlay-base is a classic script (it assigns window.OverlayBase and cannot
+    // export), so its copy is lifted out of the source and run directly.
+    const overlaySettingOn = (() => {
+        const src = readFileSync('public/layout/lib/overlay-base.js', 'utf8');
+        const m = src.match(/function settingOn\(value, fallback\) \{[\s\S]*?\n  \}/);
+        if (!m) throw new Error('overlay-base.js no longer defines settingOn');
+        return new Function(`${m[0]}; return settingOn;`)();
+    })();
+
+    const TABLE = [
+        // [stored, fallback, expected]
+        [true, false, true],
+        [false, true, false],
+        ['true', false, true],     // what the REST API and a hand edit write
+        ['false', true, false],
+        [undefined, true, true],   // absent: the default stands
+        [undefined, false, false],
+        [null, true, true],
+        ['yes', false, false],     // not an answer: the default stands
+        [1, false, false],
+        ['', true, true],
+    ];
+
+    it.each(TABLE)('stored %p with default %p resolves to %p in both', (stored, fallback, expected) => {
+        expect(settingOn(stored, fallback), 'app').toBe(expected);
+        expect(overlaySettingOn(stored, fallback), 'overlay').toBe(expected);
+    });
+
+    /*
+     * And the two keys that actually diverged, at their real defaults — the
+     * regression this closes, not a synthetic one.
+     */
+    it('resolves the shipped switches identically', () => {
+        for (const [key, dflt] of [['textShadowEnabled', false], ['showShadow', true]]) {
+            for (const stored of [true, false, 'true', 'false', undefined]) {
+                expect(settingOn(stored, dflt), `${key} <- ${String(stored)}`)
+                    .toBe(overlaySettingOn(stored, dflt));
+            }
+        }
+    });
+});
+
 describe('overrideReaches', () => {
     const base = readFileSync('public/layout/lib/overlay-base.js', 'utf8');
     // The map body — `const LAYOUT_VAR_MAP = { … };` up to the closing brace at

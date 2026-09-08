@@ -633,6 +633,29 @@
     eventheader: { cardBg: { prop: '--card-bg' } },
   };
 
+  /*
+   * A stored boolean setting, resolved the way BOTH runtimes must resolve it.
+   *
+   * Three rules were in use for four keys: this function read truthiness, while
+   * the Design tab read `!== false` for the default-on switches and `=== true`
+   * for the default-off one. That only diverges on a value that is not a
+   * boolean — but settings.json is hand-editable and `PUT /api/v1/settings`
+   * takes its value as a STRING, so `"true"` is a shape that really occurs, and
+   * on it the Design tab drew its switch OFF while every overlay drew the
+   * shadow: the control that is supposed to explain the broadcast said the
+   * opposite of what the broadcast was doing.
+   *
+   * Mirrored by `settingOn` in src/routes/layouts/designConstants.js. This file
+   * is a classic script and cannot import a module, so the two are pinned
+   * against one truth table in designConstants.test.js.
+   */
+  function settingOn(value, fallback) {
+    if (typeof value === 'boolean') return value;
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+    return fallback;
+  }
+
   // `nsKey` optionally overrides the settings sub-namespace the per-layout
   // override reads use (defaults to layoutType). The Scorecard passes
   // `scorecard.{N}` so each scoreboard's card keeps an independent set of
@@ -696,10 +719,10 @@
     }
 
     // ── Shadow CSS vars (computed once, with per-layout blur override) ──
-    const showShadow        = g('overlays.global.showShadow',        true);
+    const showShadow        = settingOn(g('overlays.global.showShadow', null),        true);
     const cardShadowBlur    = g('overlays.global.cardShadowBlur',    16);
     const cardShadowColor   = g('overlays.global.cardShadowColor',   'rgba(0, 0, 0, 0.5)');
-    const textShadowEnabled = g('overlays.global.textShadowEnabled', false);
+    const textShadowEnabled = settingOn(g('overlays.global.textShadowEnabled', null), false);
     const textShadowBlur    = g('overlays.global.textShadowBlur',    4);
     const textShadowColor   = g('overlays.global.textShadowColor',   'rgba(0, 0, 0, 0.8)');
 

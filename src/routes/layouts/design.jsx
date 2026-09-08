@@ -18,7 +18,7 @@ import { useShallow } from 'zustand/react/shallow';
 import ScaledIframe from '../../components/ScaledIframe';
 import { COLOR_SWATCHES, ColorWithOpacity, LabeledColor, DebouncedColorInput } from './shared';
 import { invalidateDesignPackages, usePortColors, useDesignPackages, useAppPaletteThemesAnything } from './designPackage';
-import { PORT_COLOR_KEYS } from './designConstants';
+import { PORT_COLOR_KEYS, settingOn } from './designConstants';
 import { PresetsPanel } from './presets';
 
 // ── Live preview grid for the Design tab ──
@@ -350,16 +350,16 @@ const GlobalDesignSection = memo(function GlobalDesignSection() {
     const borderWidth       = globalDesign.borderWidth       ?? 1;
     const borderColor       = globalDesign.borderColor       ?? 'rgba(255, 255, 255, 0.08)';
     const fontFamily        = globalDesign.fontFamily        ?? 'Inter';
-    const showShadow        = globalDesign.showShadow        !== false;
+    const showShadow        = settingOn(globalDesign.showShadow, true);
     const cardShadowBlur    = globalDesign.cardShadowBlur    ?? 16;
     const cardShadowColor   = globalDesign.cardShadowColor   ?? 'rgba(0, 0, 0, 0.5)';
-    const textShadowEnabled = globalDesign.textShadowEnabled === true;
+    const textShadowEnabled = settingOn(globalDesign.textShadowEnabled, false);
     const textShadowBlur    = globalDesign.textShadowBlur    ?? 4;
     const textShadowColor   = globalDesign.textShadowColor   ?? 'rgba(0, 0, 0, 0.8)';
     const textStrokeWidth   = globalDesign.textStrokeWidth   ?? 0;
     const textStrokeColor   = globalDesign.textStrokeColor   ?? 'rgba(0, 0, 0, 1)';
-    const showCaptains      = globalDesign.showCaptains      !== false;
-    const showLogo          = globalDesign.showLogo          !== false;
+    const showCaptains      = settingOn(globalDesign.showCaptains, true);
+    const showLogo          = settingOn(globalDesign.showLogo, true);
     const finalBadgeColor   = globalDesign.finalBadgeColor   ?? '';
 
     return (
