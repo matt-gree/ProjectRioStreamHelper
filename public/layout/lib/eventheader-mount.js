@@ -214,8 +214,35 @@ function capCentreOffset(fontSpec) {
     } catch {
         out = 0;
     }
-    capOffsets.set(fontSpec, out);
+    /*
+     * ONLY CACHE A MEASUREMENT THE REAL FACE PRODUCED. A webfont arrives
+     * whenever the network says so, and until it does the canvas answers with
+     * the FALLBACK's metrics — cached under the real font's name, that is a
+     * wrong offset with nothing left to invalidate it but a page reload, which
+     * is exactly the shape of "it sits too high until I refresh the source".
+     * Measuring again next time is cheap; being wrong until a producer notices
+     * is not.
+     */
+    if (faceReady(fontSpec)) capOffsets.set(fontSpec, out);
     return out;
+}
+
+/*
+ * Is the FIRST family in a resolved font stack actually available?
+ *
+ * The first is the only one worth asking about: the rest of the stack is
+ * Inter and sans-serif, which are always there, so `check()` on the whole list
+ * answers true the moment the fallback exists — which is precisely when the
+ * measurement is wrong.
+ */
+function faceReady(fontSpec) {
+    try {
+        const first = String(fontSpec).split(',')[0].trim();
+        if (!first) return true;
+        return document.fonts ? document.fonts.check(`700 ${PROBE_PX}px ${first}`) : true;
+    } catch {
+        return true;   // no FontFaceSet to ask: take the measurement as final
+    }
 }
 
 let cssInjected = false;
@@ -341,6 +368,23 @@ export function mountEventHeader({ host, sb = 1 }) {
         const scale = Math.min(w / REF_W, h / REF_H) || 1;
         stage.style.transform = Math.abs(scale - 1) > 0.002 ? `scale(${scale})` : '';
     }
+    /*
+     * A ResizeObserver on the HOST, not just a window resize listener.
+     *
+     * `window.resize` never fires for a box that changed under a page whose
+     * window did not — a container re-laying out its member, or a browser
+     * source whose element is measured as 0 while it is hidden and has its real
+     * size only once it is shown. Either leaves a stage scaled for a box that
+     * is no longer there, and nothing recomputes it until the page reloads,
+     * which is what makes a wrong layout look like it needs a manual refresh.
+     * Both listeners are kept: the window one costs nothing and covers the
+     * plain case.
+     */
+    let ro = null;
+    if (typeof ResizeObserver === 'function') {
+        ro = new ResizeObserver(() => { autoScale(); alignRows(); });
+        ro.observe(root);
+    }
     window.addEventListener('resize', autoScale);
     autoScale();
 
@@ -350,13 +394,16 @@ export function mountEventHeader({ host, sb = 1 }) {
      * one: the metrics measured before the face arrived are the FALLBACK's, and
      * a `loadingdone` is the only notice we get that they are now wrong.
      */
-    let typeSize = BASE_FONT_PX;
+    // Per BAND, because the two sizes are independent — the optical correction
+    // is a fraction of the type size, so each row is shifted by its own.
+    let typeSize = { header: BASE_FONT_PX, footer: BASE_FONT_PX };
 
     function alignRows() {
-        const dy = capCentreOffset(getComputedStyle(stage).fontFamily) * typeSize;
-        const t = Math.abs(dy) > 0.05 ? `translateY(${dy.toFixed(2)}px)` : '';
-        hdrRow.style.transform = t;
-        ftrRow.style.transform = t;
+        const em = capCentreOffset(getComputedStyle(stage).fontFamily);
+        for (const [band, row] of [['header', hdrRow], ['footer', ftrRow]]) {
+            const dy = em * typeSize[band];
+            row.style.transform = Math.abs(dy) > 0.05 ? `translateY(${dy.toFixed(2)}px)` : '';
+        }
     }
 
     const onFontsDone = () => { capOffsets.clear(); alignRows(); };
@@ -374,16 +421,27 @@ export function mountEventHeader({ host, sb = 1 }) {
 
         // ── layout knobs ────────────────────────────────────────────────
         const sep = s('separator', '◆');
-        // Font Size is px on the panel; --font-scale is the multiple of the
-        // composed 34px that every other length in the CSS is stated in.
-        const size = Number(s('fontSize', BASE_FONT_PX)) || BASE_FONT_PX;
-        const scale = size / BASE_FONT_PX;
+        /*
+         * ONE SIZE PER BAND. They were a single `fontSize` for both, which is
+         * the wrong default for the thing this element is: the top strip names
+         * the competition and the bottom one carries round and phase, and a
+         * producer sizing the heading has no reason to be resizing the footnote
+         * with it.
+         *
+         * `--font-scale` therefore lives on each BAND rather than on the stage.
+         * Every length that derives from it — the band's own height, the bar's
+         * corner, the gap between fields, the type — is inside one band or the
+         * other, so each resolves against its own.
+         */
+        const sizeOf = (key) => Number(s(key, BASE_FONT_PX)) || BASE_FONT_PX;
+        const size = { header: sizeOf('headerFontSize'), footer: sizeOf('footerFontSize') };
         const width = Number(s('bandWidth', 1263)) || 1263;
         const hOff = Number(s('headerOffsetY', 0));
         const fOff = Number(s('footerOffsetY', 2));
         const bg = s('bgStyle', 'none');
 
-        stage.style.setProperty('--font-scale', scale);
+        header.style.setProperty('--font-scale', size.header / BASE_FONT_PX);
+        footer.style.setProperty('--font-scale', size.footer / BASE_FONT_PX);
         typeSize = size;
 
         for (const band of [header, footer]) {
@@ -411,6 +469,7 @@ export function mountEventHeader({ host, sb = 1 }) {
 
     function dispose() {
         window.removeEventListener('resize', autoScale);
+        if (ro) ro.disconnect();
         if (document.fonts) document.fonts.removeEventListener('loadingdone', onFontsDone);
         root.remove();
     }

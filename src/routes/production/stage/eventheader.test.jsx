@@ -300,7 +300,7 @@ describe('Event Header stage — what stays a setting', () => {
 
     it('keeps the shared look, and leaves nothing for the Style catch-all', () => {
         ui();
-        for (const label of ['Band Background', 'Band Width', 'Font Size', 'Field Separator']) {
+        for (const label of ['Band Background', 'Band Width', 'Top Font Size', 'Bottom Font Size', 'Field Separator']) {
             expect(screen.getByText(label), label).toBeInTheDocument();
         }
         expect(screen.queryByText('Style')).not.toBeInTheDocument();
@@ -345,10 +345,56 @@ describe('Event Header stage — what stays a setting', () => {
      * pair — the key AND its unit — because a `%` suffix left on a px value is
      * exactly the mislabel this replaced.
      */
-    it('states the type size in pixels', () => {
-        const def = LAYOUT_SETTINGS.eventheader.find(d => d.key === 'fontSize');
-        expect(def).toMatchObject({ suffix: 'px', defaultValue: 34 });
-        expect(LAYOUT_SETTINGS.eventheader.some(d => d.key === 'fontScale')).toBe(false);
+    /*
+     * PX, and ONE PER BAND. The pair is pinned together with the unit because
+     * both were the same mistake in different dimensions: a percentage of a base
+     * nobody sees, and one number standing in for two bands that carry different
+     * things.
+     */
+    it('states a type size in pixels, per band', () => {
+        for (const key of ['headerFontSize', 'footerFontSize']) {
+            expect(LAYOUT_SETTINGS.eventheader.find(d => d.key === key), key)
+                .toMatchObject({ suffix: 'px', defaultValue: 34 });
+        }
+        for (const gone of ['fontScale', 'fontSize']) {
+            expect(LAYOUT_SETTINGS.eventheader.some(d => d.key === gone), gone).toBe(false);
+        }
+    });
+
+    /*
+     * TWO WAYS THIS ELEMENT COULD BE WRONG UNTIL THE SOURCE IS RELOADED, which
+     * is the shape a producer reports as "it renders too high until I hit
+     * refresh". Both leave a correct page drawing a stale layout with nothing
+     * scheduled to recompute it, and both are silent.
+     *
+     * A webfont arrives whenever the network says so, and until it does the
+     * canvas answers the optical measurement with the FALLBACK's metrics —
+     * cached under the real font's name, that is a wrong offset forever.
+     *
+     * And `window.resize` never fires for a box that changed under a window
+     * that did not: a container re-laying out its member, or a browser source
+     * measured at zero while hidden and given its real size only when shown.
+     */
+    it('recomputes rather than waiting for a reload', () => {
+        const mount = readFileSync('public/layout/lib/eventheader-mount.js', 'utf8');
+        // Only a measurement the real face produced is cached.
+        expect(mount).toContain('if (faceReady(fontSpec)) capOffsets.set');
+        // …and the host is watched, not just the window.
+        expect(mount).toContain('new ResizeObserver');
+        expect(mount).toContain('ro.observe(root)');
+    });
+
+    /*
+     * The two sizes drive their own band and nothing else — `--font-scale` is
+     * set on each BAND rather than on the shared stage, which is what makes the
+     * band height, the bar's corner and the field gap follow the row they
+     * belong to instead of whichever size was written last.
+     */
+    it('scopes the type scale to each band', () => {
+        const mount = readFileSync('public/layout/lib/eventheader-mount.js', 'utf8');
+        expect(mount).toContain("header.style.setProperty('--font-scale'");
+        expect(mount).toContain("footer.style.setProperty('--font-scale'");
+        expect(mount).not.toContain("stage.style.setProperty('--font-scale'");
     });
 
     it('has no per-field switch left in the registry', () => {

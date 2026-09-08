@@ -91,7 +91,12 @@ def _adopt_opaque_stroke(overlays: dict) -> bool:
 
 
 def _eventheader_font_px(ns: dict) -> bool:
-    """``fontScale`` (% of a 34px base) became ``fontSize`` (px). True if changed.
+    """The band type size, through both of its moves. True if changed.
+
+    ``fontScale`` (% of a 34px base) became ``fontSize`` (px), and ``fontSize``
+    then became ``headerFontSize`` + ``footerFontSize`` — the bands size
+    independently, because the top strip names the competition and the bottom
+    carries round and phase.
 
     A percentage of a number the producer never sees is a knob that can only be
     calibrated by eye — "as tall as the scoreboard's names" was reachable only
@@ -103,19 +108,35 @@ def _eventheader_font_px(ns: dict) -> bool:
     `fontSize` already present wins — a producer who set one after upgrading is
     not overwritten by a stale percentage left beside it.
     """
-    if "fontScale" not in ns:
-        return False
-    raw = ns.pop("fontScale")
+    changed = False
+
+    # Step one: the percentage became a px size.
+    if "fontScale" in ns:
+        raw = ns.pop("fontScale")
+        changed = True
+        if "fontSize" not in ns:
+            try:
+                pct = float(raw)
+            except (TypeError, ValueError):
+                pct = None  # unreadable: dropped, and the 34px default stands
+            if pct is not None:
+                px = round(EVENTHEADER_BASE_FONT_PX * pct / 100)
+                # The panel's own range, so a migrated value is one the control
+                # can show.
+                ns["fontSize"] = max(16, min(72, px))
+
+    # Step two: the one size became one per band. Chained rather than branched,
+    # so an install still on `fontScale` lands on the pair in a single boot
+    # instead of needing two releases to get there.
     if "fontSize" in ns:
-        return True
-    try:
-        pct = float(raw)
-    except (TypeError, ValueError):
-        return True  # unreadable: dropped, and the 34px default stands
-    px = round(EVENTHEADER_BASE_FONT_PX * pct / 100)
-    # The panel's own range, so a migrated value is one the control can show.
-    ns["fontSize"] = max(16, min(72, px))
-    return True
+        size = ns.pop("fontSize")
+        changed = True
+        for key in ("headerFontSize", "footerFontSize"):
+            # A size already set for a band wins: it is the newer statement.
+            if key not in ns:
+                ns[key] = size
+
+    return changed
 
 
 def _eventheader_bands(ns: dict) -> bool:
