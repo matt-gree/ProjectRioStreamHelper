@@ -712,8 +712,14 @@
       showShadow ? `drop-shadow(0 4px ${effCardBlur}px ${cardShadowColor})` : 'none');
     root.setProperty('--card-box-shadow',
       showShadow ? `0 4px ${effCardBlur}px ${cardShadowColor}` : 'none');
+    // The shadow's COLOUR takes a per-element override too, the same shape as
+    // its blur and as both halves of the font border below — a colour and the
+    // size of what it paints are one setting, and the console pins them as one
+    // row (OVERRIDABLE_GLOBAL_KEYS `colorKey`).
+    const perShadowColor = overrideNs ? g(`overlays.${overrideNs}.textShadowColor`, null) : null;
+    const effShadowColor = perShadowColor || textShadowColor;
     root.setProperty('--text-shadow',
-      textShadowEnabled ? `0px 0px ${effTextBlur}px ${textShadowColor}` : 'none');
+      textShadowEnabled ? `0px 0px ${effTextBlur}px ${effShadowColor}` : 'none');
     // The same shadow, in PARTS. A mount that scales its own type has to scale
     // the blur with it, and a composed string cannot be multiplied — so the two
     // halves are published beside the whole rather than left to each caller to
@@ -721,7 +727,7 @@
     // Disabled is published as a transparent zero blur, so a `0 0 var() var()`
     // shadow composes to nothing without a second switch to read.
     root.setProperty('--text-shadow-blur', textShadowEnabled ? `${effTextBlur}px` : '0px');
-    root.setProperty('--text-shadow-color', textShadowEnabled ? textShadowColor : 'transparent');
+    root.setProperty('--text-shadow-color', textShadowEnabled ? effShadowColor : 'transparent');
 
     // ── Font border (text stroke), with per-layout overrides on BOTH halves ──
     // No enable switch: a width of 0 IS no border, and a second flag would be a

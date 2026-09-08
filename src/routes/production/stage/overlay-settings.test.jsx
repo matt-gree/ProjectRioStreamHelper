@@ -489,12 +489,15 @@ describe('ElementStyleOverrides', () => {
      * nothing". One meta name (`textStroke`) carries the width and the colour,
      * because 0 is off and the width IS the switch.
      */
-    it('offers the text shadow and the font border', async () => {
+    it('offers the text shadow and the font border, one option each', async () => {
         layouts([EVENTHEADER]);
         await show({ type: 'eventheader' });
         const options = offered();
-        for (const label of ['Text Shadow Blur', 'Font Border', 'Font Border Color']) {
+        for (const label of ['Text Shadow', 'Font Border']) {
             expect(options, label).toContain(label);
+        }
+        for (const half of ['Text Shadow Color', 'Font Border Color']) {
+            expect(options, half).not.toContain(half);
         }
     });
 
@@ -525,26 +528,59 @@ describe('ElementStyleOverrides', () => {
     /*
      * The font border is the pair this section was most obviously missing: the
      * global default is 0, so the ONLY way to have one is to pin it on the
-     * element that needs it. Both halves are offered together — a border pinned
-     * on one element is pinned to sit on one background, so its colour has to
-     * be pinnable there too.
+     * element that needs it. Its colour has to be pinnable there too — a border
+     * pinned on one element is pinned to sit on one background.
+     *
+     * ONE OPTION, not two. Nothing reads either half alone: at width 0 the
+     * colour paints nothing, and a colour left at the global is not an opinion.
+     * Offering them separately let a producer add half an outline.
      */
-    it('offers both halves of the font border where the layout declares it', async () => {
+    it('offers the font border as one option, not two', async () => {
         layouts([{ type: 'playername', supportedSettings: ['textStroke'] }]);
         await show({ type: 'playername' });
         const options = offered();
         expect(options).toContain('Font Border');
-        expect(options).toContain('Font Border Color');
+        expect(options).not.toContain('Font Border Color');
     });
 
-    it('pins the font border without changing what is on air', async () => {
+    it('pins BOTH halves without changing what is on air', async () => {
         layouts([{ type: 'playername', supportedSettings: ['textStroke'] }]);
         await show({ type: 'playername' });
         openAdd();
         fireEvent.click(screen.getByRole('button', { name: 'Font Border' }));
+        const pn = () => useSettingsStore.getState()?.overlays?.playername;
         // Seeded at the global — 0, which is no border. The row is now there to
         // turn up; adding it drew nothing.
-        expect(useSettingsStore.getState()?.overlays?.playername?.textStrokeWidth).toBe(0);
+        expect(pn()?.textStrokeWidth).toBe(0);
+        // …and the colour with it, or the × would take the size off and leave a
+        // colour pinned that nothing draws and nothing can reach.
+        expect(pn()?.textStrokeColor).toBe('rgba(0, 0, 0, 0.9)');
+    });
+
+    it('renders the pair on ONE row — a colour, and the size beside it', async () => {
+        layouts([{ type: 'playername', supportedSettings: ['textStroke'] }]);
+        pin({ playername: { textStrokeWidth: 3, textStrokeColor: 'rgba(0, 0, 0, 0.9)' } });
+        await show({ type: 'playername' });
+        expect(screen.getByLabelText('Font Border')).toHaveValue('#000000');
+        expect(screen.getByLabelText('Font Border size')).toHaveValue(3);
+        // One removal for the pair, and it takes both keys off.
+        fireEvent.click(screen.getByLabelText('Remove Font Border override'));
+        const pn = useSettingsStore.getState()?.overlays?.playername;
+        expect(pn?.textStrokeWidth).toBe(null);
+        expect(pn?.textStrokeColor).toBe(null);
+    });
+
+    /*
+     * Settings written before the halves became one row can hold a colour with
+     * no size beside it. A row that only looked at its primary would leave that
+     * colour stored, undrawn, and with no × to reach it.
+     */
+    it('surfaces the row when only the legacy colour half is pinned', async () => {
+        layouts([{ type: 'playername', supportedSettings: ['textStroke'] }]);
+        pin({ playername: { textStrokeColor: 'rgba(0, 0, 0, 0.9)' } });
+        await show({ type: 'playername' });
+        expect(screen.getByLabelText('Font Border')).toBeInTheDocument();
+        expect(offered()).not.toContain('Font Border');
     });
 
     it('stops offering a key once it is on the element', async () => {

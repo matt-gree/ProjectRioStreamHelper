@@ -441,14 +441,29 @@ export const OVERRIDABLE_GLOBAL_KEYS = [
     { key: 'borderRadius',   meta: ['borderRadius'],   type: 'number',        label: 'Border Radius',      defaultValue: 16, min: 0, max: 48, step: 2, suffix: 'px' },
     { key: 'borderWidth',    meta: ['borderWidth'],    type: 'number',        label: 'Border Thickness',   defaultValue: 1,  min: 0, max: 16, step: 1, suffix: 'px' },
     { key: 'cardShadowBlur', meta: ['cardShadow'],     type: 'number',        label: 'Card Shadow Blur',   defaultValue: 16, min: 0, max: 80, step: 2, suffix: 'px' },
-    { key: 'textShadowBlur', meta: ['textShadow'],     type: 'number',        label: 'Text Shadow Blur',   defaultValue: 4,  min: 0, max: 40, step: 1, suffix: 'px' },
+
+    /*
+     * A COLOUR AND THE SIZE OF WHAT IT PAINTS ARE ONE SETTING, so they are one
+     * ROW: `colorKey` names the partner, and the partner carries `partner: true`
+     * so it is never offered or drawn on its own. Adding the row pins both,
+     * removing it unpins both, and the × belongs to the pair.
+     *
+     * They were separate entries, which put "Font Border" and "Font Border
+     * Color" on two rows of a section that is an exception list — so a producer
+     * adding an outline added half of one, and the panel said the colour of a
+     * border was a different decision from whether there is a border. Nothing
+     * reads either alone: at width 0 the colour paints nothing, and a colour
+     * left at the global is not an opinion, it is the absence of one.
+     */
+    { key: 'textShadowBlur', meta: ['textShadow'], colorKey: 'textShadowColor', type: 'number', label: 'Text Shadow',   defaultValue: 4,  min: 0, max: 40, step: 1, suffix: 'px' },
+    { key: 'textShadowColor', meta: ['textShadow'], partner: true, type: 'color-opacity', label: 'Text Shadow Color', defaultValue: 'rgba(0, 0, 0, 0.8)' },
     // Font border (text stroke). Two keys, one meta name, and no enable switch:
     // 0 is off, so the width IS the switch and nothing can disagree with it.
     // The global default is 0, which is what makes this override-shaped rather
     // than global-shaped — pinning a width on one element gives that element an
     // outline and leaves every other overlay exactly as it was.
-    { key: 'textStrokeWidth', meta: ['textStroke'],   type: 'number',        label: 'Font Border',        defaultValue: 0,  min: 0, max: 12, step: 0.5, suffix: 'px' },
-    { key: 'textStrokeColor', meta: ['textStroke'],   type: 'color-opacity', label: 'Font Border Color',  defaultValue: 'rgba(0, 0, 0, 0.9)' },
+    { key: 'textStrokeWidth', meta: ['textStroke'], colorKey: 'textStrokeColor', type: 'number', label: 'Font Border', defaultValue: 0,  min: 0, max: 12, step: 0.5, suffix: 'px' },
+    { key: 'textStrokeColor', meta: ['textStroke'], partner: true, type: 'color-opacity', label: 'Font Border Color',  defaultValue: 'rgba(0, 0, 0, 0.9)' },
     { key: 'showCaptains',     meta: ['showCaptains'],     type: 'switch', label: 'Show Captains' },
     { key: 'showLogo',         meta: ['showLogo'],         type: 'switch', label: 'Show Overlay Logo' },
     { key: 'showShadow',       meta: ['showShadow'],       type: 'switch', label: 'Card Shadow' },
@@ -506,6 +521,7 @@ const OVERRIDE_READ_TYPES = {
     // element painted by a theme SVG gets its outline from the artwork.
     textStrokeWidth: null,
     textStrokeColor: null,
+    textShadowColor: null,
     cardBg: ['scoreboard', 'eventheader'],
     borderColor: ['scoreboard'],
     borderRadius: ['scoreboard'],

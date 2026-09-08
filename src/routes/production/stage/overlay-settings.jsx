@@ -14,7 +14,7 @@ import { Button } from '../../../components/ui/button';
 import { Popover, PopoverTrigger, PopoverContent } from '../../../components/ui/popover';
 import { Plus, X } from 'lucide-react';
 import {
-    SegmentedRow, ToggleRow, ToggleChip, ToggleChips, TextRow, NumberRow, FractionRow, ColorRow,
+    SegmentedRow, ToggleRow, ToggleChip, ToggleChips, TextRow, NumberRow, NumberField, FractionRow, ColorRow,
     FieldRow, KIT_LABEL,
 } from '../kit';
 import { cn } from '../../../lib/utils';
@@ -534,7 +534,10 @@ export function useOverrideDefs(type) {
             // Declared by the layout AND actually read back on this type. The
             // second half is not redundant: scoreboard.html whitelists
             // `showShadow`, and no mount anywhere reads a per-element one.
-            def => declaresAny(whitelists, type, def.meta) && overrideReaches(def.key, type),
+            // A `partner` is the colour half of a colour-and-size row and is
+            // reached THROUGH its primary, never offered beside it.
+            def => !def.partner
+                && declaresAny(whitelists, type, def.meta) && overrideReaches(def.key, type),
         );
         return defs.length ? defs : NO_DEFS;
     }, [type, whitelists]);
@@ -594,6 +597,16 @@ const SWITCH_OPTIONS = [
  * "unpinned" and the row would not appear at all; `designConstants.test.js`
  * pins that for the whole table.
  */
+/*
+ * The colour half of a paired def, as a def in its own right — `os.set` needs a
+ * `key` for the write and a `label` for the staged-change line, and the partner
+ * carries both. Looked up rather than synthesised so the staging list says
+ * "Font Border Color" and not something this file made up.
+ */
+export function partnerOf(def) {
+    return OVERRIDABLE_GLOBAL_KEYS.find(d => d.key === def.colorKey) ?? null;
+}
+
 export function seedValue(def, globals) {
     return globals[def.key]
         ?? (def.seedFrom ? globals[def.seedFrom] : null)
@@ -602,12 +615,20 @@ export function seedValue(def, globals) {
 }
 
 const OverrideRow = memo(function OverrideRow({
-    os, def, pinned, globalValue, disabled, note, onRemove,
+    os, def, pinned, pinnedColor, globalValue, disabled, note, onRemove,
 }) {
     const pending = usePending(`settings:${settingKey(os.ns, def.key)}`);
     const value = pending ? pending.value : pinned;
     const staged = !!pending;
     const set = (v) => os.set(def, v);
+    // The colour half of a paired row. Hooks are unconditional, so a def with
+    // no partner watches a harmless undefined key.
+    const colorPending = usePending(
+        def.colorKey ? `settings:${settingKey(os.ns, def.colorKey)}` : undefined,
+    );
+    const colorValue = colorPending ? colorPending.value : pinnedColor;
+    const colorStaged = !!colorPending;
+    const setColor = (v) => os.set(partnerOf(def), v);
     // A placeholder can't render an object or a boolean, and a long rgba() eats
     // the field — so the hint is the value for the shapes that fit and the word
     // for the rest.
@@ -627,6 +648,38 @@ const OverrideRow = memo(function OverrideRow({
         );
     }
     if (def.type === 'number') {
+        /*
+         * A size with a COLOUR is one row: the swatch and hex read like every
+         * other colour row on the panel, and the size sits where the opacity
+         * box used to. Which control carries the row's LABEL follows what the
+         * pair is called — "Font Border" is a border, and its width is the half
+         * that decides whether there is one at all (0 is off), so the colour
+         * takes the label position and the number rides beside it.
+         */
+        if (def.colorKey) {
+            return (
+                <ColorRow
+                    label={def.label} value={colorValue ?? null}
+                    staged={staged || colorStaged} disabled={disabled}
+                    placeholder="Global" hideReset alpha
+                    onChange={(v) => setColor(v)}
+                    trailing={
+                        <>
+                            <NumberField
+                                value={value ?? null} staged={staged} disabled={disabled}
+                                min={def.min} max={def.max} step={def.step}
+                                ariaLabel={`${def.label} size`}
+                                placeholder={globalValue == null ? '' : String(globalValue)}
+                                onChange={(v) => set(v)}
+                            />
+                            {def.suffix && (
+                                <Text size="xs" span dimmed className="shrink-0">{def.suffix}</Text>
+                            )}
+                        </>
+                    }
+                />
+            );
+        }
         return (
             <NumberRow
                 label={def.label} value={value ?? null} staged={staged} disabled={disabled}
@@ -779,6 +832,26 @@ const AddOverride = memo(function AddOverride({ defs, onAdd, disabled, title }) 
  * @param board board id for the URL-scoped elements, else null
  * @param size  the source's ?size= code, for the scoreboard's three theme files
  */
+/*
+ * ADDING AND REMOVING ARE PAIR OPERATIONS. A row that draws two keys has to own
+ * both, or the × takes the size off and leaves the colour pinned — invisible,
+ * unremovable, and revived the next time the row is added.
+ *
+ * Both writes go through `os.set`, so under confirm mode they stage as two
+ * entries of one gesture and land together.
+ */
+function addPair(os, def, globals) {
+    os.set(def, seedValue(def, globals));
+    const partner = partnerOf(def);
+    if (partner) os.set(partner, seedValue(partner, globals));
+}
+
+function removePair(os, def) {
+    os.set(def, null);
+    const partner = partnerOf(def);
+    if (partner) os.set(partner, null);
+}
+
 export const ElementStyleOverrides = memo(function ElementStyleOverrides({
     type, board, label, size,
 }) {
@@ -794,10 +867,14 @@ export const ElementStyleOverrides = memo(function ElementStyleOverrides({
     const activeId = useSettingsStore(s => s?.overlays?.global?.designPackage) ?? 'default';
     const added = useAddedKeys(ns, pinned);
 
-    const { on, off } = useMemo(() => ({
-        on: defs.filter(d => added.has(d.key)),
-        off: defs.filter(d => !added.has(d.key)),
-    }), [defs, added]);
+    // A paired row counts as ON if EITHER half is pinned. Settings written
+    // before the two became one row can hold a colour with no size beside it,
+    // and a row that only looked at its primary would leave that colour stored,
+    // undrawn and with no × to reach it.
+    const { on, off } = useMemo(() => {
+        const isOn = d => added.has(d.key) || (d.colorKey && added.has(d.colorKey));
+        return { on: defs.filter(isOn), off: defs.filter(d => !isOn(d)) };
+    }, [defs, added]);
 
     if (defs.length === 0) return null;
     const pkgName = packages?.find(p => p.id === activeId)?.name || activeId;
@@ -820,9 +897,10 @@ export const ElementStyleOverrides = memo(function ElementStyleOverrides({
                 <OverrideRow
                     key={def.key} os={os} def={def}
                     pinned={pinned[def.key] ?? null}
+                    pinnedColor={def.colorKey ? (pinned[def.colorKey] ?? null) : null}
                     globalValue={globals[def.key]}
                     disabled={!painted} note={paintedNote}
-                    onRemove={() => os.set(def, null)}
+                    onRemove={() => removePair(os, def)}
                 />
             ))}
             <AddOverride
@@ -833,7 +911,7 @@ export const ElementStyleOverrides = memo(function ElementStyleOverrides({
                         : off.length === 0 ? 'Every override this element reads is already on it'
                             : undefined
                 }
-                onAdd={(def) => os.set(def, seedValue(def, globals))}
+                onAdd={(def) => addPair(os, def, globals)}
             />
         </div>
     );

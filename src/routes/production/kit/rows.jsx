@@ -226,28 +226,12 @@ export const SelectRow = memo(function SelectRow({
 // label · number input — spotlight hold, and other bounded numeric knobs the
 // producer sets while working. Commits on change like every other kit row;
 // callers that need debouncing own it.
-export const NumberRow = memo(function NumberRow({
-    label, value, onChange, min, max, step, suffix, disabled, staged, placeholder, className,
-    debounceMs = 300,
-}) {
-    /*
-     * KEYSTROKES ARE LOCAL, and an EMPTY FIELD IS NEVER COMMITTED ON A TIMER.
-     *
-     * Writing per keystroke put every value passed through on the way onto the
-     * broadcast — typing 120 draws a 1-px band, then 12 — and each one is a
-     * settings write that reaches the whole rig. That much this shares with
-     * TextRow.
-     *
-     * The empty rule is the one a number needs on its own, and it is the
-     * difference between a field a producer can retype and one they cannot.
-     * Blank means "back to the default" here (`v ?? def.defaultValue` at the
-     * style-override call site), so on a timer, clearing the field to type a
-     * new number wrote the DEFAULT into it a third of a second later and
-     * refilled the box under the cursor — the Event Header's Font Size snapped
-     * back to 34 before a replacement could be typed. Clearing is only an
-     * answer once the producer has left the field, so an empty draft commits on
-     * BLUR alone; a typed number still settles by itself.
-     */
+/*
+ * The typing contract for a number, extracted because two rows now need it: the
+ * plain NumberRow and the size half of a colour-and-size row. See NumberField
+ * below for the input it drives; the rules live here.
+ */
+function useNumberDraft(value, onChange, debounceMs) {
     const shown = value == null ? '' : String(value);
     const [draft, setDraft] = useState(shown);
     const draftRef = useRef(shown);
@@ -286,6 +270,60 @@ export const NumberRow = memo(function NumberRow({
         if (timer.current) clearTimeout(timer.current);
         if (v !== '') timer.current = setTimeout(commit, debounceMs);
     }, [commit, debounceMs]);
+
+    return { draft, type, commit };
+}
+
+/*
+ * The bare number input — no row, no label. For a row that already has both and
+ * needs a number in it (the colour-and-size override rows).
+ */
+export const NumberField = memo(function NumberField({
+    value, onChange, min, max, step, disabled, staged, placeholder, ariaLabel,
+    className, debounceMs = 300,
+}) {
+    const { draft, type, commit } = useNumberDraft(value, onChange, debounceMs);
+    return (
+        <input
+            type="number" min={min} max={max} step={step} disabled={disabled}
+            aria-label={ariaLabel}
+            placeholder={placeholder}
+            value={draft}
+            onChange={(e) => type(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => { if (e.key === 'Enter') commit(); }}
+            className={cn(
+                KIT_INPUT, 'w-14 shrink-0 text-center',
+                staged && 'border-amber-400/60 text-amber-400',
+                className,
+            )}
+        />
+    );
+});
+
+export const NumberRow = memo(function NumberRow({
+    label, value, onChange, min, max, step, suffix, disabled, staged, placeholder, className,
+    debounceMs = 300,
+}) {
+    /*
+     * KEYSTROKES ARE LOCAL, and an EMPTY FIELD IS NEVER COMMITTED ON A TIMER.
+     *
+     * Writing per keystroke put every value passed through on the way onto the
+     * broadcast — typing 120 draws a 1-px band, then 12 — and each one is a
+     * settings write that reaches the whole rig. That much this shares with
+     * TextRow.
+     *
+     * The empty rule is the one a number needs on its own, and it is the
+     * difference between a field a producer can retype and one they cannot.
+     * Blank means "back to the default" here (`v ?? def.defaultValue` at the
+     * style-override call site), so on a timer, clearing the field to type a
+     * new number wrote the DEFAULT into it a third of a second later and
+     * refilled the box under the cursor — the Event Header's Font Size snapped
+     * back to 34 before a replacement could be typed. Clearing is only an
+     * answer once the producer has left the field, so an empty draft commits on
+     * BLUR alone; a typed number still settles by itself.
+     */
+    const { draft, type, commit } = useNumberDraft(value, onChange, debounceMs);
 
     return (
         <div className={cn(ROW, className)}>
@@ -504,7 +542,7 @@ const CHECKER = {
 
 export const ColorRow = memo(function ColorRow({
     label, value, onChange, disabled, staged, placeholder = 'Default', className,
-    hideReset, alpha,
+    hideReset, alpha, trailing,
 }) {
     const has = value != null && value !== '';
     // Only split when the key actually carries an alpha — an opaque row would
@@ -577,6 +615,10 @@ export const ColorRow = memo(function ColorRow({
                 onBlur={commitDraft}
                 className={cn(KIT_INPUT, 'min-w-0 flex-1', staged && 'border-amber-400/60 text-amber-400')}
             />
+            {/* A colour and the SIZE of the thing it paints are one control:
+                a font border is a width and a colour, and asking for them on two
+                rows made the panel claim they were two settings. */}
+            {trailing}
             {has && !hideReset && (
                 <button
                     type="button" onClick={() => onChange?.(null)} disabled={disabled}
