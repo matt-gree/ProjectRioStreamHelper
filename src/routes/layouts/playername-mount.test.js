@@ -18,7 +18,11 @@ import {
  * air beside the other side's.
  */
 
-const NATIVE_H = 100;
+// The declared native height (playername.html), which is 200 because the
+// starting size is biased to the top of the range — down-scaling a browser
+// source is lossless, dragging one up is not. Every assertion below is a
+// RATIO, so the number only has to match what ships, not carry the proof.
+const NATIVE_H = 200;
 
 describe('stackHeight — a function of the SETTING, never the content', () => {
     it('reserves the prefix row for above and below', () => {

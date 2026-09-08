@@ -299,8 +299,28 @@ export const ELEMENTS = [
         // Roster and the Controller.
         flavor: 'direct',
         url: '/layout/scoreboard1/playername.html',
-        width: 400,
-        height: 100,
+        // 800x200, DELIBERATELY THE TOP OF THE RANGE rather than the middle.
+        // Scaling a browser source DOWN in OBS is lossless — the page is
+        // rendered at this resolution and the compositor shrinks it — while
+        // dragging one UP stretches a finished texture and softens it. So the
+        // starting size is as large as a name is ever plausibly shown, and a
+        // producer who wants a smaller one drags the corner in the direction
+        // that costs nothing.
+        //
+        // Free here in a way it would not be everywhere: this is 160k pixels
+        // against 40k, on an element with no artwork to re-raster. It is also
+        // exactly the element that invites the drag, because the type size
+        // follows the frame HEIGHT (lib/playername-mount.js) — so a bigger
+        // source is a bigger name rather than the same name at higher DPI.
+        //
+        // THE COST, stated: this is also the member box and the picker's fit
+        // test (one element, one size, three readers — containers.test.jsx), so
+        // a Player Name no longer fits a container narrower than 800 or shorter
+        // than 200 — the shipped 452x240 side pair among them. No shipped
+        // roster carries one, so nothing breaks on boot; what is lost is the
+        // option of adding one there.
+        width: 800,
+        height: 200,
         perSide: true,
         // Anchored to the full path, like the roster's — a sibling in the same
         // folder whose stem merely starts with "playername" must not bind here.

@@ -274,7 +274,14 @@ export const MEMBERS = {
     // and the stat card — they bind `score.{N}.player.{T}.*` at mount time, so a
     // scope change is a new layer rather than an update.
     playername: {
-        size: [400, 100],
+        // Moves with the element registry — one element, one size, three
+        // readers (see containers.test.jsx). Splitting it so the standalone
+        // source could start larger than the member box was tried and is wrong:
+        // `fitsContainer` and `addBrowserSource` both read the registry's
+        // number, so a member drawn at one size and filtered at another is the
+        // same class of bug as the `stats` census that seeded a container its
+        // only member did not fit.
+        size: [800, 200],
         mount: async (box, ctx, sel) => {
             const { mountPlayerName } = await load('playername-mount');
             const pn = mountPlayerName({

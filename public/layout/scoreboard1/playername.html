@@ -20,7 +20,7 @@
        canvas: the mount draws the name against whatever box the source really
        is, taking its type size from the height and letting the name run the
        width. See the header of lib/playername-mount.js. */
-    body { width: 400px; height: 100px; background: transparent; }
+    body { width: 800px; height: 200px; background: transparent; }
     #host { position: fixed; inset: 0; }
   </style>
 </head>
@@ -36,8 +36,8 @@
     const SB = parseInt(params.get('scoreboard')) || 1;
     const TEAM = parseInt(params.get('team')) || 1;
 
-    document.body.dataset.refW = 400;
-    document.body.dataset.refH = 100;
+    document.body.dataset.refW = 800;
+    document.body.dataset.refH = 200;
 
     const pn = mountPlayerName({ host: document.getElementById('host'), sb: SB, team: TEAM });
 
