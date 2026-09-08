@@ -130,7 +130,17 @@ const CSS = `
    *
    * NOTE no backticks in this block: it is inside a template literal.
    */
-  text-shadow: var(--text-shadow, none);
+  /*
+   * A FILTER, not a text-shadow, because a font border is painted beside it.
+   * Whether -webkit-text-stroke feeds text-shadow is undefined: Chrome casts
+   * the halo from the stroked glyph, OBS's CEF does not, so one setting drew a
+   * huge cloud in the preview and almost nothing on air. drop-shadow is defined
+   * over the RENDERED alpha, which includes the stroke, so both agree. From the
+   * PARTS because the composed var is the literal none when the shadow is off,
+   * and drop-shadow(none) is invalid. See playername-mount.js for the long
+   * version. No backticks in this block: it is inside a template literal.
+   */
+  filter: drop-shadow(0 0 var(--text-shadow-blur, 0px) var(--text-shadow-color, transparent));
   -webkit-text-stroke: var(--text-stroke-width, 0px) var(--text-stroke-color, transparent);
   paint-order: stroke fill;
 }

@@ -292,6 +292,32 @@ describe('overrideReaches', () => {
      * corner from the type size, so offering the other three surface keys would
      * be offering knobs that move nothing, which costs more than omitting them.
      */
+    /*
+     * WHERE A STROKE AND A SHADOW MEET, THE SHADOW IS A FILTER.
+     *
+     * `-webkit-text-stroke` is non-standard and nothing defines whether it
+     * participates in `text-shadow`. Chrome casts the halo from the STROKED
+     * glyph — a border fattens the shape it is generated from and makes it
+     * dramatically denser — and OBS's CEF does not. So one setting drew two
+     * different overlays: a huge soft cloud in the console preview and almost
+     * nothing on the broadcast, which presents as "the shadow is broken in OBS"
+     * and sends you looking at blur radii, backdrops and upscaling for it.
+     *
+     * `filter: drop-shadow()` is defined over the element's RENDERED alpha, and
+     * the stroke is part of what was rendered, so no renderer is left to
+     * interpret it. Pinned against the same census as the border because it is
+     * the same two files, for the same reason: a theme SVG keeps plain
+     * `text-shadow`, having no stroke beside it to disagree about.
+     */
+    it('casts the shadow as a filter wherever a font border is painted', () => {
+        for (const mount of Object.values(PAINTS_STROKE)) {
+            const src = readFileSync(`public/layout/lib/${mount}`, 'utf8');
+            expect(src, mount).toMatch(/filter:\s*drop-shadow\(/);
+            // …and nowhere still declares the ambiguous pairing.
+            expect(src, mount).not.toMatch(/^\s*text-shadow:/m);
+        }
+    });
+
     it('offers the Event Header the card colour, and none of the other surface keys', () => {
         expect(varMap).toContain('eventheader: { cardBg:');
         expect(overrideReaches('cardBg', 'eventheader')).toBe(true);

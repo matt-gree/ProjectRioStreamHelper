@@ -128,7 +128,31 @@ const CSS = `
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--tag-color, var(--accent, #f59f00));
-  text-shadow: 0px 0px calc(var(--text-shadow-blur, 0px) * var(--pn-scale, 1)) var(--text-shadow-color, transparent);
+  /*
+   * THE SHADOW IS A FILTER, not a text-shadow, and only because a FONT BORDER
+   * is painted beside it.
+   *
+   * -webkit-text-stroke is non-standard and nothing defines whether it
+   * participates in text-shadow. Chrome casts the shadow from the STROKED
+   * glyph, so a border fattens the shape the halo is generated from and makes
+   * it dramatically denser; OBS's CEF does not. One setting therefore drew two
+   * different overlays — the console preview showed a huge soft cloud and the
+   * broadcast showed almost nothing, which reads as "the shadow is broken in
+   * OBS" and sent us looking at blur radii, backdrops and upscaling for it.
+   *
+   * filter: drop-shadow() is defined over the element's RENDERED alpha, and
+   * the stroke is part of what was rendered. There is nothing left for a
+   * renderer to interpret, so the preview and the broadcast agree.
+   *
+   * Taken from the PARTS rather than the composed --text-shadow: that var is
+   * the literal none when the shadow is off, and drop-shadow(none) is
+   * invalid. The parts are published as a transparent zero blur for exactly
+   * this — they compose to nothing without a second switch to read.
+   *
+   * A theme SVG keeps plain text-shadow: var(--text-shadow). No stroke is
+   * painted beside it there, so there is nothing to disagree about.
+   */
+  filter: drop-shadow(0px 0px calc(var(--text-shadow-blur, 0px) * var(--pn-scale, 1)) var(--text-shadow-color, transparent));
   /* HALF the border, because this run is half the type size (18px against the
      name's 36px). One width across two sizes is not one border: 3px around the
      name is a rim, and the same 3px around the prefix closed over the counters
@@ -148,7 +172,7 @@ const CSS = `
   font-weight: 700;
   line-height: ${NAME_LINE};
   color: var(--text-primary, #ffffff);
-  text-shadow: 0px 0px calc(var(--text-shadow-blur, 0px) * var(--pn-scale, 1)) var(--text-shadow-color, transparent);
+  filter: drop-shadow(0px 0px calc(var(--text-shadow-blur, 0px) * var(--pn-scale, 1)) var(--text-shadow-color, transparent));
   -webkit-text-stroke: calc(var(--text-stroke-width, 0px) * var(--pn-scale, 1)) var(--text-stroke-color, transparent);
   paint-order: stroke fill;
   white-space: nowrap;
