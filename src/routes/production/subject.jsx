@@ -1,6 +1,7 @@
 import { memo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useStateStore } from '../../context/store';
+import { isOnStrip } from '../../context/commentary';
 import { boardOfUrl } from '../../lib/obs-binding';
 import { SubjectRow } from './kit';
 import { resolveIntent } from './suggest';
@@ -335,7 +336,14 @@ const BracketSubject = memo(function BracketSubject() {
 const CommentarySubject = memo(function CommentarySubject() {
     const c = useStateStore(useShallow(s => {
         const slots = Array.isArray(s?.commentary?.slots) ? s.commentary.slots : [];
-        return { total: slots.length, on: slots.filter(x => x?.visible !== false).length };
+        // `isOnStrip`, not the eye alone: a shown seat with nobody picked is
+        // not a plate, and this line and the stage's plate numerals count alike.
+        // `total` is seats with somebody in them: the desk always shows four,
+        // so the stored list's length is not a count of casters.
+        return {
+            total: slots.filter(x => x?.participantId).length,
+            on: slots.filter(isOnStrip).length,
+        };
     }));
     if (!c.total) return <SubjectRow text="No commentators" />;
     return <SubjectRow text={`${c.on} on air`} meta={c.total > c.on ? `of ${c.total}` : null} />;

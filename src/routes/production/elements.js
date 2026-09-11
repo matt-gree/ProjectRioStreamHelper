@@ -347,12 +347,13 @@ export const ELEMENTS = [
         name: 'Commentary',
         // Registry-bound caster desk.
         flavor: 'direct',
-        // The whole desk is on the STAGE — per-caster on-air toggles, sub-field
-        // switch and sub-plate toggle (there is no Commentary tab; it duplicated
-        // the stage and was removed), and the casters' identity fields live on
-        // Address Book. No quick face of its own: it takes the direct default
-        // (subject + visibility), because six per-caster controls cannot fit the
-        // rail's two-row cap.
+        // The whole desk is on the STAGE — four fixed seats, each an on-air
+        // switch, a person and a sub-plate picker whose "No sub-plate" turns it
+        // off (there is no Commentary tab; it duplicated the stage and was
+        // removed), and the casters' identity fields live on Address Book. No
+        // quick face of its own: it takes the direct default (subject +
+        // visibility), because four seats of controls cannot fit the rail's
+        // two-row cap.
         // Its own dedicated source: the caster strip. Slots are projected to
         // commentary.{i}.* server-side from the authored commentary.slots.
         // Native 1920×240 — full stream width (the row's spacing is measured
