@@ -30,8 +30,11 @@
 //   char-icon(image)   the active character
 //   stat-{i}-value / stat-{i}-label (text, i = 0..5; RioData emits 4 today)
 //   line-group(g)      bottom row wrapper (divider + texts), hidden when empty
-//   line-label(text)   "Game" / "Season Stats" prefix (empty when no prefix)
-//   line-text(text,maxw) the game line itself
+//   line-label(text)   "Game" prefix, bound only for a HUD game's line
+//   line-text(text,maxw) the game line itself. A theme that LEFT-ALIGNS it beside
+//                      that label declares data-x-labelled / data-x-bare (its two
+//                      left edges) and data-maxr (its one right bound), and the
+//                      mount picks — see placeLine.
 //
 // Settings: overlays.{type}.transitionType ('fade' | 'none') gates the batter-
 // change dissolve; subLine / subLineText choose the footer's content and
@@ -48,6 +51,7 @@
 
 import { createThemeEngine } from './svg-theme-engine.js';
 import { ensureGsap } from './gsap-loader.js';
+import { lineTextBox, layoutStatCells } from './mount-utils.js';
 
 const ELEMENT = 'statsbar';
 const DEFAULT_PACKAGE = 'default';
@@ -167,6 +171,22 @@ export function mountStatsCard({ host, sb, team, settingsType = 'statsbar',
     return { show: false, text: '' };
   }
 
+  // Place the bottom line, which is left-aligned beside its label on themes
+  // that say where — see lineTextBox in mount-utils.js for why the label being
+  // conditional is what makes this two authored positions rather than one.
+  function placeLine(hasLabel) {
+    const el = engine.slots['line-text'];
+    const box = lineTextBox(el, hasLabel);
+    if (!box) return;                       // centred theme: leave it alone
+    if (parseFloat(el.getAttribute('x')) === box.x &&
+        parseFloat(el.getAttribute('data-maxw')) === box.maxw) return;
+    el.setAttribute('x', String(box.x));
+    el.setAttribute('data-maxw', String(box.maxw));
+    // refitText skips a slot whose TEXT hasn't changed, so a bound that moved
+    // under unchanged copy has to say so or the line keeps the old fit.
+    engine.invalidateFit(el);
+  }
+
   function flash(el) {
     if (!el) return;
     el.style.transition = 'fill 0s';
@@ -271,6 +291,10 @@ export function mountStatsCard({ host, sb, team, settingsType = 'statsbar',
     prevValues = {};
     for (const st of info.stats) prevValues[st.label] = String(st.value);
 
+    // Cells sized by what each CATEGORY needs, on themes that declare the band.
+    // Runs before refitText because it is what sets each value's fit bound.
+    layoutStatCells(engine, info.stats);
+
     // The two caption bands, both producer-controlled. Text goes in only while a
     // band is (or is becoming) visible — on the way out it keeps its last words
     // so the fade has something to fade. It is invisible afterwards, and the
@@ -278,6 +302,7 @@ export function mountStatsCard({ host, sb, team, settingsType = 'statsbar',
     if (line.show) {
       engine.setText('line-label', line.label);
       engine.setText('line-text', line.text);
+      placeLine(!!line.label);
     }
     if (head.show) engine.setText('head-text', head.text, { optional: true });
     setBands(head.show, line.show);
@@ -301,7 +326,7 @@ export function mountStatsCard({ host, sb, team, settingsType = 'statsbar',
     }
 
     if (engine.usesAppVars) OverlayBase.applyDesignSettings(SETTINGS_TYPE);
-    else OverlayBase.clearDesignSettings();
+    else OverlayBase.clearDesignSettings(SETTINGS_TYPE);
 
     const info = window.RioData ? RioData.getStatsLine(state, SB, TEAM) : null;
     host.style.display = info ? '' : 'none';
@@ -314,7 +339,11 @@ export function mountStatsCard({ host, sb, team, settingsType = 'statsbar',
     );
     if (!info) { prevCharKey = ''; prevValues = {}; return; }
 
-    const charKey = `${theme}|${info.charName}`;
+    // The ROLE is part of the identity, not just the character: batting and
+    // pitching are different stat sets with different column budgets, so a flip
+    // between them re-lays-out the row and wants the same dissolve a new batter
+    // gets. Without it, a player who bats and pitches kept one key across both.
+    const charKey = `${theme}|${info.role}|${info.charName}`;
     const charChanged = charKey !== prevCharKey;
     const wasShowing = prevCharKey !== '';
     prevCharKey = charKey;

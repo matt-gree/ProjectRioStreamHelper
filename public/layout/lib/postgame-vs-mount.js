@@ -27,6 +27,7 @@
 // live controller-port colours, so the element works on every package.
 
 import { ensureGsap } from './gsap-loader.js';
+import { createRevealGate } from './reveal-gate.js';
 import { captainFrame } from './captain-framing.js';
 import { ensurePortPalette, portColor as portPaletteColor } from './port-colors.js';
 import { prettyStadium } from './mount-utils.js';
@@ -55,7 +56,20 @@ function teamLogoUrl(teamName) { return teamName && window.RioData ? RioData.tea
 // for the shared numbers, port-glass identity plates with solid outer rails,
 // white-glass micro-wells, Inter display + mono tabular numerals.
 const CSS = `
-.pv-root { position: absolute; inset: 0; overflow: hidden; font-family: var(--pv-font, 'Inter', sans-serif); }
+/* THE ROLE SYSTEM, half-adopted on purpose.
+   The root is the BODY role and every tabular value below is the NUMERAL role,
+   both producer-settable from the Design tab's Typography section. What is
+   deliberately NOT converted is the headline type - the character name, the
+   side names, the splash tag - which draws at weight 800/900 here while the
+   display role's own face (Rajdhani) is fetched at 500/600/700. Re-facing those
+   is a redesign of a shipped graphic with a real weight ladder behind it, not a
+   rename, so it is left as the one place in the show still choosing its own
+   register. */
+.pv-root { position: absolute; inset: 0; overflow: hidden;
+  font-family: var(--font-body, 'Inter', system-ui, sans-serif); }
+/* Gated dark: no frame OBS composites can show the finished summary
+   before the timeline's from-state lands. See lib/reveal-gate.js. */
+.pv-root.pv-off { opacity: 0 !important; }
 .pv-stage {
   position: absolute; top: 0; left: 0; width: ${REF_W}px; height: ${REF_H}px;
   transform-origin: top left; color: var(--ink);
@@ -66,7 +80,7 @@ const CSS = `
      see the backdrop-filter note in postgame-callout-css.js. */
   --well: rgba(13, 13, 21, 0.82);
   --accent: #ff3d4e; --accent-rgb: 255, 61, 78;
-  --mono: 'Chivo Mono', ui-monospace, 'SF Mono', monospace;
+  --mono: var(--font-mono, 'Chivo Mono', ui-monospace, 'SF Mono', monospace);
   /* Neutral vocabulary — the Rio night/fog scale (lib/rio-theme/tokens.css),
      NOT white. Every card edge, chip, track and caption keys to these. A
      white neutral sitting between two saturated side colours is what made
@@ -401,7 +415,10 @@ export function mountPostgameVs({ host }) {
   injectCss();
 
   const root = document.createElement('div');
-  root.className = 'pv-root';
+  // Gated dark from the first frame: buildDom leaves a fully-drawn summary in
+  // the DOM and the timeline's from-state only lands a frame later, so the
+  // class comes on with the element and the gate takes it off.
+  root.className = 'pv-root pv-off';
   const stage = document.createElement('div');
   stage.className = 'pv-stage';
   root.appendChild(stage);
@@ -411,6 +428,7 @@ export function mountPostgameVs({ host }) {
   let tl = null;
   let prevKey = '';
   let themeCache = {}; // pkg -> svg string
+  let built = false;   // buildDom has run for the current capture
 
   function autoScale() {
     if (OverlayBase.PREVIEW_MODE) { stage.style.transform = `scale(${Math.min(host.clientWidth / REF_W, host.clientHeight / REF_H) || 1})`; return; }
@@ -624,8 +642,12 @@ export function mountPostgameVs({ host }) {
       ${linescoreBand(ctx)}`;
     resolvePalette(ctx);
 
-    const font = OverlayBase.deepGet(OverlayBase.settings, 'overlays.global.fontFamily', 'Inter');
-    root.style.setProperty('--pv-font', `'${font}', sans-serif`);
+    // These two never run applyDesignSettings (they resolve their own
+    // palette), so the type roles are applied on their own. Passing the
+    // namespace is what makes a per-element font pin on this callout
+    // actually reach it - it used to read the global directly, so a pin
+    // stored, broadcast, and was ignored.
+    OverlayBase.applyTypeRoles('postgamevs');
     fitPlateNames();
   }
 
@@ -766,6 +788,7 @@ export function mountPostgameVs({ host }) {
       root.style.display = 'none';
       if (tl) { tl.kill(); tl = null; }
       prevKey = '';
+      built = false;
       // Blank until a game is captured and both sides resolve — say which, or
       // the empty source reads as broken in the preview.
       OverlayBase.setBlank(
@@ -807,22 +830,39 @@ export function mountPostgameVs({ host }) {
     root.style.display = '';
     buildDom(ctx);
     autoScale();
-    const gsap = await ensureGsap();
-    runTimeline(gsap);
+    built = true;
+    // The timeline is NOT started here. It runs from the gate, on the paint
+    // clock, with the element still gated dark until that frame — otherwise the
+    // freshly built (and fully drawn) summary is what OBS composites first.
+    gate.requestReveal();
   }
 
-  function replay() {
-    if (root.style.display === 'none' || !prevKey) return;
+  function play() {
+    if (!built) return;
     ensureGsap().then(runTimeline);
   }
 
+  // OBS made this source visible again (or the app cued it back). The gate
+  // decides WHEN — one reveal, on a frame that is actually painted.
+  function replay() { gate.requestReveal(); }
+  function setShown(shown) { gate.setShown(shown); }
+
+  // Snap dark on hide, one clean run per show — the same sequencing the band
+  // elements get. `restingIsShown: false`: the resting DOM is zeroed counters
+  // and collapsed bars, so `?intro=0` here would be a broken graphic, not a
+  // still one (see reveal-gate.js).
+  const gate = createRevealGate({
+    host: root, offClass: 'pv-off', play, restingIsShown: false,
+  });
+
   function dispose() {
     window.removeEventListener('resize', autoScale);
+    gate.dispose();
     if (tl) { tl.kill(); tl = null; }
     if (root.parentNode) root.parentNode.removeChild(root);
   }
 
-  return { update, dispose, replay };
+  return { update, dispose, replay, setShown };
 }
 
 // ── small helpers ───────────────────────────────────────────────────────────

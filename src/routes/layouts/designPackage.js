@@ -90,6 +90,38 @@ export function paintedByApp(packages, activeId, themeElement) {
 }
 
 /**
+ * Which type roles (`display` · `body` · `mono`) the theme drawing `themeElement`
+ * sets text in under `activeId` — or null when that is not known.
+ *
+ * The question a per-element font override asks before it is offered: a pin on
+ * a role the element never draws stores, broadcasts and changes nothing. It is
+ * answered per FILE by the server (`typeRoles`, server/design_packages.py),
+ * because it varies by package — default's Commentary draws no numerals,
+ * classic's is body type throughout.
+ *
+ * NOT gated on the palette tier. Type is not palette: the roles survive
+ * `clearDesignSettings`, so a font pin reaches a full-art element exactly as
+ * well as a token-skin one.
+ *
+ * Same resolution and the same unknown rule as paintedByApp: null means "don't
+ * filter", which the caller must read as every role.
+ */
+export function drawnTypeRoles(packages, activeId, themeElement) {
+    if (!packages || !themeElement) return null;
+    const byId = id => packages.find(p => p.id === id);
+    const owner = [byId(activeId), byId(FALLBACK_PACKAGE)]
+        .find(p => p?.elements?.includes(themeElement));
+    const roles = owner?.typeRoles?.[themeElement];
+    return Array.isArray(roles) ? roles : null;
+}
+
+/** drawnTypeRoles() against the live settings store, for a component. */
+export function useDrawnTypeRoles(themeElement) {
+    const active = useSettingsStore(s => s?.overlays?.global?.designPackage) ?? FALLBACK_PACKAGE;
+    return drawnTypeRoles(useDesignPackages(), active, themeElement);
+}
+
+/**
  * Does the app's palette still paint ANY themed element under `activeId`?
  *
  * The per-element answer above is what gates one element's own settings. This

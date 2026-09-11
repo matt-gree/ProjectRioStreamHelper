@@ -13,8 +13,10 @@ import { SourceStrip } from '../sourcestrip';
 import { Subject } from '../subject';
 import { DirectStage, FedStage } from './generic';
 import { ElementStyleSettings, ElementStyleOverrides } from './overlay-settings';
-import { IntroRow } from './intro';
+import { IntroRow, introTypeFor } from './intro';
 import SizeMatchRow from './sizematch';
+import RedrawRow from './resolution';
+import { PlayerNameStage } from './playername';
 import StagePreview from './preview';
 import HitVisualizerStage from './hitvisualizer';
 import MatchupStage from './matchup';
@@ -53,6 +55,7 @@ export const STAGE_BODIES = {
     eventheader: EventHeaderStage,
     bracket: BracketStage,
     controller: ControllerStage,
+    playername: PlayerNameStage,
 };
 
 /*
@@ -125,6 +128,7 @@ const ElementStage = memo(function ElementStage({
     return (
         <PanelShell
             state={chipFor(placement)} title={title}
+            subject={<Subject placement={placement} />}
             meta={placement.item?.sourceName}
             primaryAction={<SourceStrip element={element} board={board} placement={placement} />}
             pinnable={isPinnable(element)} pinned={pinned} onPinToggle={onPinToggle}
@@ -135,11 +139,6 @@ const ElementStage = memo(function ElementStage({
                 the stage's own column is the widest space on the page. Width is
                 what a preview is worth; a side-by-side split spends it. */}
             <div className="flex min-w-0 flex-col gap-1.5">
-                {/* WHAT this is drawing, before WHAT you can do to it. Every
-                    other row on the panel is a control and the header strip is
-                    transport; without this the stage could describe a source
-                    fully and never once say what was on it (../subject). */}
-                <Subject placement={placement} />
                 <Body element={element} board={board} placement={placement} />
                 {/* An OBS ACTION on this source, so it sits with the body's
                     controls rather than under two sections of settings — and
@@ -148,6 +147,12 @@ const ElementStage = memo(function ElementStage({
                     unless this element comes in sides and both are in this
                     scene (see sizematch.jsx). */}
                 <SizeMatchRow placement={placement} placements={placements} />
+                {/* ...and the other geometry fact the console can see and OBS
+                    never mentions: this source is being STRETCHED rather than
+                    redrawn. Renders nothing unless it is (see resolution.jsx),
+                    so it sits with the size match rather than below the
+                    settings — both are about the source's own shape. */}
+                <RedrawRow placement={placement} />
                 {/* The body surfaces the settings a producer reaches for live;
                     this is the catch-all so every remaining element setting is
                     still reachable on the stage (phase 7). A body names what it
@@ -164,16 +169,24 @@ const ElementStage = memo(function ElementStage({
                     pin is a different kind of decision: an element setting is
                     what this overlay does, an override is this overlay
                     disagreeing with the Design tab. */}
+                {/* `leading` is the intro control, riding this section's footer
+                    row rather than taking a near-empty row of its own above it
+                    (intro.jsx, and the footer's own note). It is a GUEST, not a
+                    style override: the two are unrelated, and what they have in
+                    common is only that each is one panel-level, set-once
+                    control. Renders nothing for an overlay with no intro. */}
                 <ElementStyleOverrides
                     type={settingsType}
                     board={settingsBoard}
                     label={settingsLabel}
                     size={size}
+                    /* `introTypeFor`, not the component: IntroRow renders
+                       null for an overlay with no intro, but the ELEMENT is
+                       always truthy, so passing it unconditionally would put a
+                       spacer — and a right-aligned Add button — on every panel
+                       whose guest draws nothing. */
+                    leading={introTypeFor(element) ? <IntroRow element={element} /> : null}
                 />
-                {/* Reveal behaviour for animated overlays — renders nothing for
-                    the rest (see intro.jsx). A source-level toggle, so it sits
-                    below the element's own style knobs. */}
-                <IntroRow element={element} />
             </div>
             {/* A generic placement is a PRSH source the registry has never
                 heard of, so we don't know its native size — and a preview at a

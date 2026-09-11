@@ -33,15 +33,17 @@ describe('Stage without OBS', () => {
     });
 
     /*
-     * An unbound panel explains itself rather than showing dead controls — and
-     * with OBS closed it explains the RIGHT thing. "Isn't in any scene we can
-     * see" is true then but useless, and both ways out it used to name (the
-     * header's Bind, a scene's +) exist only with a connection.
+     * WITH OBS CLOSED THE PANEL SAYS NOTHING ABOUT ITS BINDING. Every panel is
+     * unbound then — that is what disconnected means — so a per-panel notice is
+     * one fact repeated once per panel, and the app already carries it at the
+     * page's top left. What is left is the affordance itself: Copy URL in the
+     * header strip, which is a control, not a caption about a control.
      */
-    it('points at Copy URL rather than at a Bind it cannot offer', () => {
+    it('offers Copy URL and no notice about the connection', () => {
         ui(<Stage selection="scoreboard" />);
-        expect(screen.getByText(/OBS isn’t connected/)).toBeInTheDocument();
-        expect(screen.getByText(/Copy URL in the header/)).toBeInTheDocument();
+        expect(screen.queryByText('NO OBS')).not.toBeInTheDocument();
+        expect(screen.queryByText('NO SOURCE')).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Copy URL/ })).toBeInTheDocument();
     });
 
     it('renders a desk body with a DESK chip and honours pinnable:false', () => {

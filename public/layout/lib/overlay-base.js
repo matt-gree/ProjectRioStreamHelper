@@ -593,7 +593,7 @@
    * Fallback chain for colors: per-layout → global → hardcoded default.
    *
    * Sets: --accent, --accent-rgb, --card-bg, --text-primary, --border-radius,
-   *       --border-color, --font-family, --text-stroke-*, and per-overlay
+   *       --border-color, --font-display/--font-body/--font-mono, --text-stroke-*, and per-overlay
    *       specific vars.
    */
   // ── Per-layout element overrides: overlays.{type}.{key} → CSS var ──
@@ -661,6 +661,85 @@
   // `scorecard.{N}` so each scoreboard's card keeps an independent set of
   // style-override pins; the type-specific branches below still key on the
   // plain layoutType (none of them is the scorecard).
+  /*
+   * THE THREE TYPE ROLES.
+   *
+   * `rio-theme/tokens.css` splits broadcast type three ways and every theme SVG
+   * paints from those vars; these are the producer's end of the same three.
+   * Each role resolves per-element-pin -> global -> the token layer's own face,
+   * and the fallback stack after the chosen name is what the role means when
+   * the face has not loaded (or the name is a typo), so a display role never
+   * degrades into a monospace and vice versa.
+   *
+   * THIS RUNS ON EVERY PACKAGE, INCLUDING FIXED-PALETTE ONES. That is the one
+   * place type deliberately parts company with colour: a package that brings
+   * its own palette is making a decision about the SHOW's look, while the face
+   * a name is set in is a decision about the ORGANISATION running it — and a
+   * producer with a house font wants it on the lower third whether or not the
+   * lower third's artwork is theirs. It is also what the old single-font knob
+   * could not do: `clearDesignSettings` stripped it on every default-package
+   * element, so it reached four layouts out of eighteen and setting it split
+   * the broadcast in half.
+   */
+  const TYPE_ROLES = [
+    { key: 'displayFont', prop: '--font-display', face: 'Rajdhani',   stack: `'Arial Narrow', sans-serif` },
+    { key: 'bodyFont',    prop: '--font-body',    face: 'Inter',      stack: `system-ui, -apple-system, sans-serif` },
+    { key: 'monoFont',    prop: '--font-mono',    face: 'Chivo Mono', stack: `ui-monospace, 'SF Mono', monospace` },
+  ];
+
+  /*
+   * Faces already on the page without a fetch: Inter is bundled locally and
+   * injected at startup, and Rajdhani + Chivo Mono arrive with
+   * rio-theme/tokens.css, which every element shell links. Anything else the
+   * producer names has to be fetched — including on the shells that DON'T host
+   * a theme SVG, which is why they link the token layer too.
+   */
+  const RESIDENT_FACES = new Set(['Inter', 'Rajdhani', 'Chivo Mono']);
+
+  function applyTypeRoles(overrideNs) {
+    const root = document.documentElement.style;
+    const g = (key, def) => deepGet(settings, key, def);
+    const fetchNames = [];
+    for (const role of TYPE_ROLES) {
+      const pinned = overrideNs ? g(`overlays.${overrideNs}.${role.key}`, null) : null;
+      const chosen = pinned || g(`overlays.global.${role.key}`, null) || role.face;
+      root.setProperty(role.prop, `'${chosen}', ${role.stack}`);
+      if (!RESIDENT_FACES.has(chosen)) fetchNames.push(chosen);
+    }
+    loadFonts(fetchNames);
+  }
+
+  /*
+   * One <link> for every producer-chosen face, rebuilt as a set rather than
+   * appended to: three roles can name three fonts, and a role changed back to a
+   * default has to stop being fetched or the link grows monotonically across a
+   * session of trying things out.
+   *
+   * `wght@400;700` and not a wider ladder: css2 rejects the WHOLE request with a
+   * 400 if any listed weight is missing from any listed family, so asking for
+   * the 500/600/800 the themes actually draw would break every family that has
+   * only the two. The browser synthesises the rest, which is the same bargain
+   * this made when it loaded one font.
+   */
+  function loadFonts(names) {
+    const unique = [...new Set(names.filter(Boolean))].sort();
+    let link = document.getElementById('dynamic-font-link');
+    if (!unique.length) {
+      if (link) link.remove();
+      return;
+    }
+    const href = 'https://fonts.googleapis.com/css2?'
+      + unique.map((n) => `family=${n.replace(/ /g, '+')}:wght@400;700`).join('&')
+      + '&display=swap';
+    if (!link) {
+      link = document.createElement('link');
+      link.id = 'dynamic-font-link';
+      link.rel = 'stylesheet';
+      document.head.appendChild(link);
+    }
+    if (link.href !== href) link.href = href;
+  }
+
   function applyDesignSettings(layoutType, nsKey) {
     const root = document.documentElement.style;
     // In globals-only preview mode, suppress per-layout reads so the iframe
@@ -675,7 +754,6 @@
     const globalText = g('overlays.global.textColor', '#ffffff');
     const globalRadius = g('overlays.global.borderRadius', 16);
     const globalBorder = g('overlays.global.borderColor', 'rgba(255, 255, 255, 0.08)');
-    const globalFont = g('overlays.global.fontFamily', 'Inter');
 
     // ── Per-layout accent override (kept for advanced "Add override" feature) ──
     const perAccent = overrideNs ? g(`overlays.${overrideNs}.accentColor`, null) : null;
@@ -689,13 +767,7 @@
     root.setProperty('--border-radius', globalRadius + 'px');
     root.setProperty('--border-width', globalBorderWidth + 'px');
     root.setProperty('--border-color', globalBorder);
-    // Per-layout font override (e.g. Event Header pinning a system font) wins
-    // over the global Design-tab choice.
-    const perFont = overrideNs ? g(`overlays.${overrideNs}.fontFamily`, null) : null;
-    const effFont = perFont || globalFont;
-    // Inter (bundled locally, injected above) is the guaranteed fallback when the
-    // chosen font isn't available/loaded; system sans-serif is the last resort.
-    root.setProperty('--font-family', `'${effFont}', 'Inter', sans-serif`);
+    applyTypeRoles(overrideNs);
 
     // ── Promoted-to-global "final badge" color, with optional per-layout override ──
     const globalBadge = g('overlays.global.finalBadgeColor', null);
@@ -703,20 +775,6 @@
     const effBadge = perBadge || globalBadge;
     if (effBadge) root.setProperty('--final-badge-color', effBadge);
     else root.removeProperty('--final-badge-color');
-
-    // Dynamically load the selected font from Google Fonts (Inter ships bundled
-    // locally — injected at startup above — so it never needs a Google fetch).
-    if (effFont && effFont !== 'Inter') {
-      const href = `https://fonts.googleapis.com/css2?family=${effFont.replace(/ /g, '+')}:wght@400;700&display=swap`;
-      let link = document.getElementById('dynamic-font-link');
-      if (!link) {
-        link = document.createElement('link');
-        link.id = 'dynamic-font-link';
-        link.rel = 'stylesheet';
-        document.head.appendChild(link);
-      }
-      if (link.href !== href) link.href = href;
-    }
 
     // ── Shadow CSS vars (computed once, with per-layout blur override) ──
     const showShadow        = settingOn(g('overlays.global.showShadow', null),        true);
@@ -786,7 +844,7 @@
   // always writes, plus every per-layout var derived from LAYOUT_VAR_MAP.
   const DESIGN_SETTING_PROPS = [...new Set([
     '--accent', '--accent-rgb', '--card-bg', '--text-primary', '--border-radius',
-    '--border-width', '--border-color', '--font-family', '--final-badge-color',
+    '--border-width', '--border-color', '--final-badge-color',
     '--card-shadow-filter', '--card-box-shadow', '--text-shadow',
     '--text-shadow-blur', '--text-shadow-color',
     '--text-stroke-width', '--text-stroke-color',
@@ -800,9 +858,16 @@
    * active theme can never repaint them — stylesheet values (e.g. the Rio
    * tokens.css brand vars) resolve again.
    */
-  function clearDesignSettings() {
+  function clearDesignSettings(layoutType, nsKey) {
     const root = document.documentElement.style;
     for (const p of DESIGN_SETTING_PROPS) root.removeProperty(p);
+    // TYPE IS NOT PALETTE, so it survives the clear — see applyTypeRoles. The
+    // three role vars are therefore absent from DESIGN_SETTING_PROPS: they are
+    // re-applied here rather than removed, so a fixed-palette theme keeps its
+    // authored colours and takes the producer's faces. Honouring the per-element
+    // pin needs the namespace, which is why this takes the same two arguments
+    // applyDesignSettings does.
+    applyTypeRoles(PREVIEW_GLOBALS_ONLY ? null : (nsKey || layoutType || null));
   }
 
   // ── Backward-compatible alias ──
@@ -951,6 +1016,67 @@
     blankNote.textContent = reason;
   }
 
+  /*
+   * ── Why is this overlay drawing something other than what was asked? ──────
+   *
+   * The sibling of `setBlank`, and a different situation: the overlay is not
+   * blank and nothing is broken — it is drawing correctly, at a size the source
+   * cannot hold. The Player Name's type is an absolute number of pixels and its
+   * frame is a ceiling on that number, so a source too short for 48px draws 33,
+   * and every surface in OBS reports that all is well.
+   *
+   * Same three channels as setBlank, and the same absolute rule: NEVER on air.
+   * A note composited into a live stream is worse than the problem it reports.
+   *   - `data-prsh-note` on <html>, for anything inspecting the document,
+   *   - `console.info` on CHANGE only (mounts call this every render, and a HUD
+   *     feed at 30fps would bury the console),
+   *   - a small corner badge, in the two contexts that are not a broadcast.
+   *
+   * DEMO MODE IS THE SECOND CONTEXT, and it is the one that matters here.
+   * setBlank draws in PREVIEW_MODE alone, which is the console's own iframe —
+   * but that iframe is a scale model at the element's DECLARED aspect, so it
+   * cannot reproduce a clamp caused by the shape a producer dragged the real
+   * source into. The place this has to be visible is the real OBS source while
+   * a scene is being built, which is exactly what `production.sample` is for:
+   * app-wide, never self-enabling, guarded by an unmissable banner. It also
+   * adds no risk that mode does not already carry — if demo mode is on during a
+   * broadcast then canned fixture data is going out, and a diagnostic badge is
+   * the least of the problem.
+   */
+  let lastNoteReason = null;
+  let noteEl = null;
+
+  function setNote(reason, label) {
+    const changed = reason !== lastNoteReason;
+    lastNoteReason = reason;
+
+    if (reason) document.documentElement.setAttribute('data-prsh-note', reason);
+    else document.documentElement.removeAttribute('data-prsh-note');
+
+    if (changed && reason) console.info(`${label ? `[${label}] ` : ''}${reason}`);
+
+    // Re-checked on every call rather than captured once: demo mode is a switch
+    // a producer flips mid-session, and the badge has to leave with it.
+    if (!reason || !(PREVIEW_MODE || demoOn)) {
+      if (noteEl) { noteEl.remove(); noteEl = null; }
+      return;
+    }
+    if (!noteEl) {
+      noteEl = document.createElement('div');
+      noteEl.setAttribute('data-prsh-note-badge', '');
+      noteEl.style.cssText = [
+        'position:fixed', 'left:0', 'top:0', 'max-width:100%',
+        'padding:3px 7px', 'box-sizing:border-box',
+        'font:600 11px/1.35 Inter,system-ui,sans-serif',
+        'color:#fcd34d', 'background:rgba(10,10,16,0.82)',
+        'border:1px solid rgba(252,211,77,0.45)', 'border-radius:0 0 6px 0',
+        'z-index:2147483647', 'pointer-events:none',
+      ].join(';');
+      document.body.appendChild(noteEl);
+    }
+    noteEl.textContent = reason;
+  }
+
   // ── Export ──
   // `state` and `settings` are GETTERS, not objects: they hand back the live
   // bundle or the sample one depending on whether demo mode is in force. Every
@@ -971,11 +1097,13 @@
     logoImg,
     applyAccentColor,
     applyDesignSettings,
+    applyTypeRoles,
     clearDesignSettings,
     brandingLogoUrl,
     onObsShown,
     readSetting,
     setBlank,
+    setNote,
     PREVIEW_MODE,
     SAMPLE_MODE,
     PREVIEW_GLOBALS_ONLY,

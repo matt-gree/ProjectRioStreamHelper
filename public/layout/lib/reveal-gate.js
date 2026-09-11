@@ -1,5 +1,8 @@
-// reveal-gate.js — shared show/hide + reveal sequencing for CSS-reveal
-// elements (Lower Third, Vertical Scorecard, Scoreboard, Matchup History).
+// reveal-gate.js — shared show/hide + reveal sequencing for elements that
+// animate on show: the CSS-reveal band elements (Lower Third, Vertical
+// Scorecard, Scoreboard, Matchup History) and the GSAP-timeline post-game
+// callouts (Character Spotlight, Game Summary). What varies is what `play()`
+// does; the show/hide sequencing around it is the same problem either way.
 //
 // These mounts reveal by restarting a CSS animation on the host (remove class,
 // reflow, add class). Left ungated, OBS stutters them. The forensics, from
@@ -71,7 +74,15 @@ export function clearAnimClassOnEnd(host, className) {
   });
 }
 
-export function createRevealGate({ host, offClass, play, settleMs = 120 }) {
+// `restingIsShown` is the PREMISE the `?intro=0` opt-out rests on, made
+// explicit: for a CSS-reveal element the host's resting CSS already IS its
+// shown state, so skipping the reveal leaves correct, complete content on
+// screen. Pass `false` for an element whose reveal IS its content — the
+// post-game callouts play a walkthrough (a counted-up box score, an AB-by-AB
+// replay), and their resting DOM is a page of zeros and collapsed bars. There
+// `?intro=0` would not be "no animation", it would be a broken graphic, so the
+// gate ignores the param rather than honouring it into a blank source.
+export function createRevealGate({ host, offClass, play, settleMs = 120, restingIsShown = true }) {
   // Per-source opt-out: `?intro=0` on the browser-source URL disables the reveal
   // animation entirely. With no animation there is nothing to stutter — a
   // retained full-alpha OBS texture on re-show is just the (correct) resting
@@ -80,7 +91,7 @@ export function createRevealGate({ host, offClass, play, settleMs = 120 }) {
   // the source stays resident instead of reloading, which is what a persistent
   // overlay (e.g. an always-on scoreboard) wants. Content stays visible because
   // the host's resting CSS is its shown state; the reveal only animates INTO it.
-  if (new URLSearchParams(window.location.search).get('intro') === '0') {
+  if (restingIsShown && new URLSearchParams(window.location.search).get('intro') === '0') {
     host.classList.remove(offClass);
     return { requestReveal() {}, setShown() {}, dispose() { host.classList.remove(offClass); } };
   }

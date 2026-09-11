@@ -161,19 +161,27 @@ describe('Rail', () => {
     /*
      * The alternative is a card silently vanishing from the rail mid-event
      * because someone deleted a source. The pin is the producer's, so it degrades
-     * to a sourceless card that states only what we actually know — and WHICH
-     * unknown it is, since a rail card has no room to say it twice.
+     * to a sourceless card that states what we actually know.
      */
     it('keeps a card for a pin with no source rather than dropping it', () => {
         // OBS connected, so the source really is nowhere we can see.
         obs({ Game: [] });
         ui(<Rail pins={['scoreboard:9@Nowhere']} onReorder={noop} onUnpin={noop} onOpen={noop} />);
         expect(document.querySelectorAll('header').length).toBe(1);
-        expect(screen.getByText(/Not in any scene we can see/)).toBeInTheDocument();
+        expect(screen.getByText('NO SOURCE')).toBeInTheDocument();
+        expect(screen.getByTitle(/Not in any scene we can see/)).toBeInTheDocument();
     });
 
-    it('names the real reason when OBS is what is missing', () => {
+    /*
+     * WITH OBS CLOSED THE CARD SAYS NOTHING. Every card is sourceless then, so
+     * the old line was printed once per pin down a column whose whole job is to
+     * be scanned — restating what the app's own banner says once, at the top of
+     * the page. The card itself, its chip and its subject are what remain.
+     */
+    it('says nothing about the connection when OBS is what is missing', () => {
         ui(<Rail pins={['scoreboard:9@Nowhere']} onReorder={noop} onUnpin={noop} onOpen={noop} />);
-        expect(screen.getByText(/OBS not connected/)).toBeInTheDocument();
+        expect(document.querySelectorAll('header').length).toBe(1);
+        expect(screen.queryByText(/OBS not connected/)).not.toBeInTheDocument();
+        expect(screen.queryByText('NO SOURCE')).not.toBeInTheDocument();
     });
 });

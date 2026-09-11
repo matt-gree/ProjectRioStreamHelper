@@ -34,7 +34,7 @@
     the mount honours (the whitelist is what the Production stage's Style
     section filters against; see designConstants.js).
   -->
-  <meta name="overlay-settings" content="accentColor, cardBg, borderRadius, borderColor, borderWidth, fontFamily, cardShadow, textShadow, statValueColor, subtextColor, transitionType, subLine, subLineText, topLine, topLineText, showSuperstars, showRoleIcon, showTeamLogo" />
+  <meta name="overlay-settings" content="accentColor, cardBg, borderRadius, borderColor, borderWidth, displayFont, bodyFont, monoFont, cardShadow, textShadow, statValueColor, subtextColor, transitionType, subLine, subLineText, topLine, topLineText, showSuperstars, showRoleIcon, showTeamLogo" />
   <!--
     The Rio token layer, same as every standalone themed layout links. A member
     that renders a DESIGN PACKAGE SVG (Stat Card) paints with --band / --border /
@@ -56,9 +56,6 @@
   }
   </script>
   <style>
-    /* Inter is bundled locally (injected by overlay-base.js); only Chivo Mono is
-       fetched from Google Fonts here, for the callout occupants. */
-    @import url('https://fonts.googleapis.com/css2?family=Chivo+Mono:wght@600;700;800&display=swap');
     html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
     /* No `body { width/height }` size hint: this shell has no native size of its
        own. Each container's is its definition's, applied by fed-container.js,

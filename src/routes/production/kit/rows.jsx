@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { createContext, memo, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, RotateCcw } from 'lucide-react';
 import { Switch } from '../../../components/ui/switch';
 import { Button } from '../../../components/ui/button';
@@ -66,23 +66,58 @@ const RowLabel = ({ label, staged, tone }) => (label == null ? null : (
  * same thing amber means in the bodies — something is off and you'd want to
  * know before it's on air.
  */
-export const SubjectRow = memo(function SubjectRow({ text, meta, tone, title, className }) {
+/*
+ * WHERE a subject is rendered decides how it draws, and the place is what knows
+ * that — not the ~25 resolvers in ../subject, which answer what an element is
+ * showing and have no business knowing which surface asked.
+ *
+ * In a PANEL HEADER a subject sits beside the title: one statement of what this
+ * panel is and what it is showing, on a row that already exists. As the body's
+ * first row it was the third stacked grey line of an opening that is one
+ * thought. It takes a type step there (13px medium against the body's 12px
+ * regular) because in the header it is second only to the title — and stays at
+ * body size stacked in a rail card, where the card IS its context.
+ */
+const InlineSubject = createContext(false);
+export const InlineSubjects = ({ children }) => (
+    <InlineSubject.Provider value>{children}</InlineSubject.Provider>
+);
+
+export const SubjectRow = memo(function SubjectRow({ text, badge, meta, tone, title, inline, className }) {
+    const ambient = useContext(InlineSubject);
+    const flat = inline ?? ambient;
     if (!text) return null;
+    const Wrap = flat ? 'span' : 'div';
     return (
-        <div className={cn(ROW, 'gap-1.5', className)} title={title || undefined}>
+        <Wrap
+            className={cn('flex min-w-0 items-center gap-1.5', !flat && 'min-h-7', className)}
+            title={title || undefined}
+        >
+            {/* `badge` leads, because a state you can see in one glance should
+                not be read. It is a NODE, not a string the row styles: the one
+                thing that belongs here is a lifecycle a caller already has a
+                palette for (../kit GameChip), and inventing a second colour
+                vocabulary in the row that renders it is how the console's hues
+                stop meaning anything. `meta` stays what it always was — the
+                dimmed qualifier, in words. */}
+            {badge}
             {/* tabular-nums: a subject is the one row that changes UNDER the
                 producer — a score, a count, an inning — and proportional digits
                 reflow the whole line every time one ticks over. */}
             <Text
                 size="xs" span truncate
-                className={cn('tabular-nums min-w-0', tone === 'warn' ? 'text-amber-500/90' : 'text-foreground')}
+                className={cn(
+                    'tabular-nums min-w-0',
+                    flat && 'text-[0.8125rem] font-medium',
+                    tone === 'warn' ? 'text-amber-500/90' : 'text-foreground',
+                )}
             >
                 {text}
             </Text>
             {meta != null && meta !== '' && (
                 <Text size="xs" span truncate dimmed className="min-w-0 shrink-0">{meta}</Text>
             )}
-        </div>
+        </Wrap>
     );
 });
 
@@ -633,6 +668,83 @@ export const ColorRow = memo(function ColorRow({
                 >
                     <RotateCcw size={12} />
                 </button>
+            )}
+        </div>
+    );
+});
+
+/*
+ * A FACT, NOT A SENTENCE — the console's one way of stating where something
+ * stands, and the reason a stage panel is no longer three paragraphs of grey.
+ *
+ * The shape is `[EYEBROW] value`: the eyebrow NAMES the state in the same
+ * uppercase register the chips use, the value is the only part that varies
+ * (a source name, a filename, a scene), and the WHY — the clause that used to
+ * sit on the panel in 11px grey — is the eyebrow's tooltip. Nothing is lost;
+ * it stops competing with the controls for the eye.
+ *
+ * This is the idiom `CHIP_META` already used and nothing else did: every chip
+ * pairs `AIR` with "On air — enabled in the program scene", and no producer has
+ * ever needed that sentence printed beside the chip. A panel that explains
+ * itself in prose is a panel whose state has nowhere to live.
+ *
+ * THE DOTTED UNDERLINE IS THE AFFORDANCE. A tooltip nobody can see is worse
+ * than the prose it replaced, so an eyebrow that carries one says so — and one
+ * that doesn't stays flat, which is what keeps the mark meaningful.
+ *
+ * `value` is optional on purpose. "NO SOURCE" with nothing beside it is the
+ * whole fact; the old line spent thirteen words pointing at a button that was
+ * already on screen in the header.
+ */
+export const Eyebrow = memo(function Eyebrow({ children, title, className }) {
+    /*
+     * A NATIVE `title`, not the console's SimpleTooltip, and the difference is
+     * not cosmetic. Radix's trigger renders `asChild` onto this span, which
+     * takes no focus — so the styled tooltip is mouse-only, and the explanation
+     * would be unreachable by keyboard and unreadable by a screen reader at the
+     * exact moment it became the ONLY place that knowledge lives. `title` is
+     * the accessible description on any element, needs no provider on surfaces
+     * the rack renders outside one, and is queryable, so a test can still pin
+     * the sentence a panel no longer prints. `<abbr>` is the same idea one
+     * layer up: a short form with its expansion attached.
+     */
+    return (
+        <abbr
+            title={title || undefined}
+            className={cn(
+                'label-display shrink-0 text-[10px] leading-none tracking-wider text-muted-foreground/70',
+                title
+                    ? 'cursor-help underline decoration-dotted decoration-muted-foreground/40 underline-offset-4'
+                    : 'no-underline',
+                className,
+            )}
+        >
+            {children}
+        </abbr>
+    );
+});
+
+/*
+ * `[EYEBROW] value` on one kit row. Children are the value — omit them and the
+ * eyebrow is the whole statement.
+ *
+ * `tone="warn"` means what amber means everywhere else in the console: you'd
+ * want to know before this is on air. It colours the EYEBROW and leaves the
+ * value alone, because the alarming part is the state, not the number — and a
+ * whole row in amber is how a producer learns to stop reading amber.
+ */
+export const StatusLine = memo(function StatusLine({ label, title, tone, children, className }) {
+    const has = children !== null && children !== undefined && children !== false && children !== '';
+    return (
+        <div className={cn(ROW, 'min-w-0', className)}>
+            <Eyebrow
+                title={title}
+                className={cn(tone === 'warn' && 'text-amber-400/90 decoration-amber-400/40')}
+            >
+                {label}
+            </Eyebrow>
+            {has && (
+                <Text size="xs" dimmed truncate className="min-w-0 flex-1">{children}</Text>
             )}
         </div>
     );

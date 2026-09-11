@@ -28,7 +28,10 @@ const h = vi.hoisted(() => {
             h.instances.push(this);
         }
         on(e, fn) { (this.handlers[e] ||= []).push(fn); }
-        async connect(url, password) { return this.connectImpl(url, password); }
+        async connect(url, password, options) {
+            this.connectOptions = options;
+            return this.connectImpl(url, password, options);
+        }
         async disconnect() {}
         async call(type, payload) {
             this.calls.push([type, payload]);
@@ -42,7 +45,17 @@ const h = vi.hoisted(() => {
     return { instances: [], nextConnectImpl: null, FakeOBS };
 });
 
-vi.mock('obs-websocket-js', () => ({ default: h.FakeOBS }));
+/*
+ * The real module's flags, because the store reads them to build its
+ * subscription mask and a stub of zero would look like a passing test for a
+ * connection subscribing to nothing. `All` is 4095 and deliberately does NOT
+ * include the high-volume events above it — which is the whole point of the
+ * SceneItemTransformChanged tests below.
+ */
+vi.mock('obs-websocket-js', () => ({
+    default: h.FakeOBS,
+    EventSubscription: { All: 4095, SceneItemTransformChanged: 524288 },
+}));
 
 import { useObsStore } from './obs';
 
@@ -185,6 +198,24 @@ describe('shutdown-property reconciliation (do not regress)', () => {
         });
         expect(fake.callsOf('SetInputSettings')[0][1].inputSettings)
             .toEqual({ shutdown: false });
+    });
+
+    /*
+     * The post-game callouts animate on show like the band elements do, and
+     * they were left out of the animated set — so their sources stayed
+     * resident and OBS composited the retained full-alpha frame of the
+     * FINISHED graphic for a beat before the intro started. Their in-page
+     * reveal gate can't cover this one: the OBS-native eye stops the source's
+     * frames before any snap-dark is painted, so a fresh load per show is the
+     * cure. Both files, because they are two separate sources.
+     */
+    it('post-game callouts are animated overlays (shutdown:true)', async () => {
+        const fake = await connectWith({
+            Spot: { url: 'http://localhost:5260/layout/postgame/spotlight.html?scoreboard=1' },
+            Summary: { url: 'http://localhost:5260/layout/postgame/summary.html' },
+        });
+        expect(fake.callsOf('SetInputSettings').map(c => [c[1].inputName, c[1].inputSettings]))
+            .toEqual([['Spot', { shutdown: true }], ['Summary', { shutdown: true }]]);
     });
 
     it('static PRSH overlays (nothing animates) are never touched', async () => {
@@ -649,5 +680,76 @@ describe('events + reconnect', () => {
         await first;
         expect(useObsStore.getState().obsVersion).toBe('5.3.0');   // not 'stale'
         expect(useObsStore.getState().status).toBe('connected');
+    });
+});
+
+/*
+ * ── "ALL" IS NOT ALL ────────────────────────────────────────────────────────
+ *
+ * obs-websocket sorts a few events it considers high-volume outside the default
+ * subscription mask, and SceneItemTransformChanged is one of them — so a client
+ * asking for "everything" is not told when a source's geometry moves.
+ *
+ * That is what broke the scaled-source badge, and it broke the way an
+ * unsubscribed event always does: silently and asymmetrically. The verdict on
+ * each item was computed correctly whenever a scene was mirrored, and then
+ * frozen — so the badge appeared on a source the producer had dragged, and
+ * would not clear when they fixed it.
+ */
+describe('scene item transforms', () => {
+    // A scene item's geometry as OBS states it: an 800x200 browser source drawn
+    // at 1:1, no crop, no bounding box.
+    const transform = (over = {}) => ({
+        sourceWidth: 800, sourceHeight: 200,
+        scaleX: 1, scaleY: 1,
+        cropLeft: 0, cropRight: 0, cropTop: 0, cropBottom: 0,
+        boundsType: 'OBS_BOUNDS_NONE', boundsWidth: 0, boundsHeight: 0,
+        ...over,
+    });
+
+    const connectOnce = () => connectMulti({
+        Main: { 'Player Name 1': { url: 'http://x/layout/scoreboard1/playername.html' } },
+    });
+
+    it('subscribes to the high-volume transform event, not just All', async () => {
+        const fake = await connectOnce();
+        const mask = fake.connectOptions?.eventSubscriptions;
+        expect(mask & 524288).toBeTruthy();
+        expect(mask & 4095).toBeTruthy();
+    });
+
+    it('raises and CLEARS the scaled verdict as a producer drags', async () => {
+        const fake = await connectOnce();
+        const stretch = () => useObsStore.getState().sceneItems.Main?.[0]?.stretch;
+        expect(stretch()).toBeNull();
+
+        fake.fire('SceneItemTransformChanged', {
+            sceneName: 'Main', sceneItemId: 1, sceneItemTransform: transform({ scaleX: 2, scaleY: 2 }),
+        });
+        expect(stretch()).toBe(2);
+
+        // The half that was missing: putting it back has to put the badge back.
+        fake.fire('SceneItemTransformChanged', {
+            sceneName: 'Main', sceneItemId: 1, sceneItemTransform: transform(),
+        });
+        expect(stretch()).toBeNull();
+    });
+
+    /*
+     * A drag emits one of these per frame. The verdict is what the rack draws,
+     * so only a change in the verdict may reach the store — otherwise every
+     * frame of a ten-second drag re-renders the console.
+     */
+    it('ignores a transform event that does not change the verdict', async () => {
+        const fake = await connectOnce();
+        fake.fire('SceneItemTransformChanged', {
+            sceneName: 'Main', sceneItemId: 1, sceneItemTransform: transform({ scaleX: 2, scaleY: 2 }),
+        });
+        const before = useObsStore.getState().sceneItems.Main;
+        fake.fire('SceneItemTransformChanged', {
+            sceneName: 'Main', sceneItemId: 1,
+            sceneItemTransform: transform({ scaleX: 2.001, scaleY: 2.001 }),
+        });
+        expect(useObsStore.getState().sceneItems.Main).toBe(before);
     });
 });

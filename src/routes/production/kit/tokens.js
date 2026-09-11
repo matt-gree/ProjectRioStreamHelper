@@ -20,3 +20,17 @@ export const KIT_INPUT = 'h-7 w-full rounded-md border border-border bg-card px-
 export const KIT_LABEL = 'w-16 shrink-0 @lg:w-32';
 export const KIT_INPUT_FLOW = 'w-full rounded-md border border-border bg-card px-2 py-1 text-sm text-foreground';
 export const KIT_FIELD = 'h-8 rounded-md border border-border bg-card px-2 text-sm text-foreground';
+
+/*
+ * A STAGE-PANEL SECTION. Seven files had this string typed out, which is how a
+ * body ends up with six sections ruled one way and a seventh ruled another.
+ *
+ * The `first:` resets are the rule the copies all got wrong: a divider
+ * SEPARATES SIBLINGS, and the first section has nothing above it to be
+ * separated from — so its rule landed a few pixels under the panel header's
+ * own, with a dead strip between the two that reads as an empty section. It
+ * only became visible once the body stopped opening with a subject row, which
+ * is the giveaway that the rule was never the section's to draw.
+ */
+export const KIT_SECTION = 'mt-1 flex flex-col gap-1.5 border-t border-border/60 pt-2 '
+    + 'first:mt-0 first:border-t-0 first:pt-0';

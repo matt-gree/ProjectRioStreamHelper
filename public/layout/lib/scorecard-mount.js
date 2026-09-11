@@ -23,7 +23,7 @@
 import { createThemeEngine } from './svg-theme-engine.js';
 import { createRevealGate, clearAnimClassOnEnd } from './reveal-gate.js';
 import { ensureGsap } from './gsap-loader.js';
-import { DOT_OFF, dot, bindImageProbe, prettyStadium } from './mount-utils.js';
+import { DOT_OFF, dot, bindImageProbe, prettyStadium, layoutBox } from './mount-utils.js';
 import { ensurePortPalette, portColor as portPaletteColor } from './port-colors.js';
 
 const ELEMENT = 'scorecard';
@@ -99,7 +99,6 @@ export function mountScorecard({ host, sb }) {
   let revealKey = '';
   let laidOut = {};           // el-* -> bool (has been positioned once; gates animate-vs-snap)
   let baseState = [false, false, false];
-  let boxBaseX = null;        // theme-authored x of each box column (captured once per theme)
   let cardBox = null;         // theme-authored card box (captured once per theme)
   let disposed = false;
 
@@ -165,7 +164,7 @@ export function mountScorecard({ host, sb }) {
   // stacked from the wrong y and drew its header off-centre.
   //
   // Captured once per theme, BEFORE sizeCard overwrites card-bg/card-rail's
-  // y and height, and reset on a theme swap alongside boxBaseX.
+  // y and height, and reset on a theme swap.
   function ensureCardBox() {
     if (cardBox) return cardBox;
     const bg = engine.slots['card-bg'];
@@ -365,24 +364,7 @@ export function mountScorecard({ host, sb }) {
     engine.setText('pit-line', pit.line || '—');
   }
 
-  // The theme authors nine inning columns at fixed x's, sized for a full game.
-  // Snapshot those pristine x's once per theme so we can redistribute the ones
-  // we actually show — themes space their columns differently (default 112..432,
-  // slice26 140..460), so the span endpoints must come from the SVG, not a const.
-  function ensureBoxBaseX() {
-    if (boxBaseX) return boxBaseX;
-    boxBaseX = {};
-    for (let i = 1; i <= MAX_INN; i++) {
-      const el = engine.slots[`box-h-${i}`] || engine.slots[`box-away-${i}`];
-      if (!el) continue;
-      const v = parseFloat(el.getAttribute('x'));
-      if (!isNaN(v)) boxBaseX[i] = v;
-    }
-    return boxBaseX;
-  }
-
   function bindBox(d) {
-    const base = ensureBoxBaseX();
     // How many inning columns this game warrants: its configured length (so a
     // live game holds a stable width) but never fewer than have been played
     // (extra innings), capped at nine.
@@ -390,25 +372,10 @@ export function mountScorecard({ host, sb }) {
     const sel = parseInt(d.inningsSelected, 10) || 0;
     const shown = Math.min(Math.max(sel, played, 1), MAX_INN);
 
-    // Span the shown columns evenly across the theme's authored first→last x so
-    // a short game fills the width instead of leaving the unplayed innings blank.
-    const firstX = base[1];
-    let lastX = firstX;
-    for (let i = MAX_INN; i >= 1; i--) { if (base[i] != null) { lastX = base[i]; break; } }
-    const canReflow = firstX != null && lastX != null;
-    const step = shown > 1 ? (lastX - firstX) / (shown - 1) : 0;
-
     for (let i = 1; i <= MAX_INN; i++) {
       const col = engine.slots[`box-col-${i}`];
       const active = i <= shown;
       if (col) col.setAttribute('opacity', active ? '1' : '0');
-      if (active && canReflow) {
-        const x = shown > 1 ? firstX + step * (i - 1) : (firstX + lastX) / 2;
-        for (const s of [`box-h-${i}`, `box-away-${i}`, `box-home-${i}`]) {
-          const el = engine.slots[s];
-          if (el) el.setAttribute('x', x);
-        }
-      }
       const a = d.away[i - 1];
       const h = d.home[i - 1];
       engine.setText(`box-away-${i}`, active ? (a != null ? a : '-') : '');
@@ -416,6 +383,21 @@ export function mountScorecard({ host, sb }) {
     }
     engine.setText('box-away-r', d.sL);
     engine.setText('box-home-r', d.sR);
+
+    /*
+     * THE PITCH IS FIXED AND THE BLOCK MOVES — the SLIDE policy, shared with the
+     * Scoreboard (layoutBox, mount-utils.js). This table is UNRULED: one
+     * vertical before R and nothing else, so there is no frame for the columns
+     * to fill and stretching them would make every gap in the row a function of
+     * how long the game is. A five-inning card would draw an 80 pitch beside a
+     * dot column and an R column still sized for 40, which is the complaint
+     * this row was just fixed for, arriving by a different route.
+     *
+     * It replaces a first->last span that rewrote each column's `x`: that both
+     * stretched the gaps AND left the dot and the R column where they were, so
+     * the two ends of the table drifted out of step with its middle.
+     */
+    layoutBox(engine, shown, MAX_INN);
   }
 
   function bindHeader(vis) {
@@ -431,11 +413,11 @@ export function mountScorecard({ host, sb }) {
     // The package's port palette rides along with its SVG: applyColours reads
     // it synchronously, so it has to have landed by the time this returns.
     const [themeChanged] = await Promise.all([engine.ensureTheme(theme), ensurePortPalette(theme)]);
-    if (themeChanged) { revealKey = ''; laidOut = {}; baseState = [false, false, false]; boxBaseX = null; cardBox = null; }
+    if (themeChanged) { revealKey = ''; laidOut = {}; baseState = [false, false, false]; cardBox = null; }
     if (disposed) return;
 
     if (engine.usesAppVars) OverlayBase.applyDesignSettings(SETTINGS_TYPE, NS);
-    else OverlayBase.clearDesignSettings();
+    else OverlayBase.clearDesignSettings(SETTINGS_TYPE, NS);
 
     const p1 = g(state, `score.${SB}.player.1.rioName`, '');
     const p2 = g(state, `score.${SB}.player.2.rioName`, '');

@@ -53,6 +53,7 @@
 import { injectCss, REF_W, REF_H } from './postgame-callout-css.js';
 import { escapeHtml } from './postgame-callout-chips.js';
 import { createTheater } from './postgame-callout-theater.js';
+import { createRevealGate } from './reveal-gate.js';
 import { ensurePortPalette, portColor as portPaletteColor } from './port-colors.js';
 
 const NEUTRAL_ACCENT = '#f59e0b';
@@ -104,7 +105,10 @@ export function mountPostgameCallout({ host }) {
   injectCss();
 
   const root = document.createElement('div');
-  root.className = 'cs-root';
+  // Gated dark from the first frame: buildDom leaves a fully-drawn spotlight in
+  // the DOM and the intro timeline's from-state only lands a frame later, so
+  // the class comes on with the element and the gate takes it off.
+  root.className = 'cs-root cs-off';
   const stage = document.createElement('div');
   stage.className = 'cs-stage';
   root.appendChild(stage);
@@ -394,8 +398,12 @@ export function mountPostgameCallout({ host }) {
     fitPlateText();
     alignHeroGlow();
 
-    const font = OverlayBase.deepGet(OverlayBase.settings, 'overlays.global.fontFamily', 'Inter');
-    root.style.setProperty('--cs-font', `'${font}', sans-serif`);
+    // These two never run applyDesignSettings (they resolve their own
+    // palette), so the type roles are applied on their own. Passing the
+    // namespace is what makes a per-element font pin on this callout
+    // actually reach it - it used to read the global directly, so a pin
+    // stored, broadcast, and was ignored.
+    OverlayBase.applyTypeRoles('postgamecallout');
   }
 
   // Shrink the two identity lines to fit the plate instead of overflowing it
@@ -555,6 +563,7 @@ export function mountPostgameCallout({ host }) {
       root.style.display = 'none';
       theater.stopShow();
       prevKey = '';
+      showCtx = null;
       // A spotlight with nothing pushed is a blank source — say so, or it reads
       // as broken in the preview. `present` gates on a captured post-game; the
       // rest gate on a character actually being picked to push.
@@ -631,28 +640,44 @@ export function mountPostgameCallout({ host }) {
     if (prevKey !== key) return;
 
     root.style.display = '';
-    buildDom(ctx);
-    autoScale();
-    theater.ensureRenderer();
     showCtx = ctx;
-    theater.startShow(ctx);
+    // The show is NOT started here. It runs from the gate, on the paint clock,
+    // with the element still gated dark until that frame — otherwise the
+    // freshly built (and fully drawn) spotlight is what OBS composites first.
+    gate.requestReveal();
   }
 
-  function replay() {
-    if (root.style.display === 'none' || !showCtx) return;
-    // rebuild the DOM so odometers/chips reset, then run the whole show again
+  // One play path for both a new capture and an OBS re-show: rebuild the DOM so
+  // odometers/chips/the AB ticker reset, then run the whole walkthrough.
+  function play() {
+    if (!showCtx) return;
     buildDom(showCtx);
+    autoScale();
     theater.ensureRenderer();
     theater.startShow(showCtx);
   }
 
+  // OBS made this source visible again (or the app cued it back). The gate
+  // decides WHEN — one show, on a frame that is actually painted.
+  function replay() { gate.requestReveal(); }
+  function setShown(shown) { gate.setShown(shown); }
+
+  // Snap dark on hide, one clean show per reveal — the same sequencing the band
+  // elements get. `restingIsShown: false`: the walkthrough IS the graphic, so
+  // `?intro=0` here would leave a spotlight that never plays (see
+  // reveal-gate.js).
+  const gate = createRevealGate({
+    host: root, offClass: 'cs-off', play, restingIsShown: false,
+  });
+
   function dispose() {
     window.removeEventListener('resize', autoScale);
+    gate.dispose();
     theater.dispose();
     if (root.parentNode) root.parentNode.removeChild(root);
   }
 
-  return { update, dispose, replay };
+  return { update, dispose, replay, setShown };
 }
 
 // ── small helpers ───────────────────────────────────────────────────────────

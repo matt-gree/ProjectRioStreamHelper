@@ -127,6 +127,36 @@ def _uses_app_vars(svg: Path) -> bool:
     return bool(tag and _APP_VARS_RE.search(tag.group(0)))
 
 
+# The three broadcast type roles (rio-theme/tokens.css), in the order the
+# console lists them. A theme NAMES a role (`font-family:var(--font-mono)`),
+# never a face, so the var reference is the whole contract.
+TYPE_ROLES = ("display", "body", "mono")
+_ROLE_RE = re.compile(r"var\(\s*--font-(display|body|mono)\b")
+
+
+def _type_roles(svg: Path) -> list[str]:
+    """Which type roles this theme file sets any text in, in TYPE_ROLES order.
+
+    What the console asks before offering a per-element font override: a pin on
+    a role the element never draws stores, broadcasts and changes nothing. The
+    answer is per FILE because it varies by package — default's Commentary sets
+    names in display and captions in body, classic's is body throughout, and a
+    full-art package may name no role at all and bring its own faces.
+
+    Unlike the palette tier, this holds under full-art too: type is not palette,
+    so the roles survive ``clearDesignSettings`` and reach every theme.
+
+    The whole file, not a bounded head: a role can be named in an inline
+    ``style`` anywhere in the drawing, and theme files are tens of KB.
+    """
+    try:
+        text = svg.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    found = set(_ROLE_RE.findall(text))
+    return [r for r in TYPE_ROLES if r in found]
+
+
 def _package_info(folder: Path, builtin: bool) -> dict:
     manifest = _read_manifest(folder)
     svgs = sorted(folder.glob("*.svg"))
@@ -144,6 +174,9 @@ def _package_info(folder: Path, builtin: bool) -> dict:
         # still ships a full-art callout.svg and no statscard at all, and an
         # element a package omits falls back to `default`, which is full-art.
         "appVarElements": [p.stem for p in svgs if _uses_app_vars(p)],
+        # ...and which type roles each one sets text in (see _type_roles) —
+        # the console offers a font override only for a role that is drawn.
+        "typeRoles": {p.stem: _type_roles(p) for p in svgs},
         # The package's controller-port palette (package-wide, see _port_colors).
         # Read from the MANIFEST, not from a file: no element owns it.
         "portColors": _port_colors(manifest),

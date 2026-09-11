@@ -729,7 +729,7 @@ export function mountLowerThird({ host }) {
     // Classic package) is painted with the user's Design-tab variables; a
     // fixed-palette theme (the Rio default, Slice26) must never inherit them.
     if (engine.usesAppVars) OverlayBase.applyDesignSettings(SETTINGS_TYPE);
-    else OverlayBase.clearDesignSettings();
+    else OverlayBase.clearDesignSettings(SETTINGS_TYPE);
 
     const slots = readSlots(state);
     const active = slots.filter((s) => s.enabled && s.type);

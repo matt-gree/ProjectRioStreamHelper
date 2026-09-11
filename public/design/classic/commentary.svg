@@ -12,40 +12,40 @@
   <g data-slot="slot0" opacity="0">
     <rect data-part="main-rect" x="16" y="896" width="460" height="168" rx="16" style="fill:var(--card-bg);stroke:var(--border-color);stroke-width:var(--border-width);filter:var(--card-shadow-filter)" />
     <rect data-part="rail" x="32" y="940" width="4" height="80" rx="2" style="fill:var(--accent)" />
-    <text data-slot="slot0-name" data-maxw="408" x="48" y="972" style="fill:var(--text-primary);font-family:var(--font-family);text-shadow:var(--text-shadow)" font-size="30" font-weight="800"></text>
+    <text data-slot="slot0-name" data-maxw="408" x="48" y="972" style="fill:var(--text-primary);font-family:var(--font-body);text-shadow:var(--text-shadow)" font-size="30" font-weight="800"></text>
     <g data-slot="slot0-sub" style="opacity:0">
-      <text data-slot="slot0-sub-label" x="48" y="1002" style="fill:var(--accent);font-family:var(--font-family)" font-size="13" font-weight="700" letter-spacing="1"></text>
-      <text data-slot="slot0-sub-value" data-maxw="332" x="124" y="1002" style="fill:var(--text-primary);font-family:var(--font-family);text-shadow:var(--text-shadow)" font-size="18" font-weight="600" opacity="0.92"></text>
+      <text data-slot="slot0-sub-label" x="48" y="1002" style="fill:var(--accent);font-family:var(--font-body)" font-size="13" font-weight="700" letter-spacing="1"></text>
+      <text data-slot="slot0-sub-value" data-maxw="332" x="124" y="1002" style="fill:var(--text-primary);font-family:var(--font-body);text-shadow:var(--text-shadow)" font-size="18" font-weight="600" opacity="0.92"></text>
     </g>
   </g>
 
   <g data-slot="slot1" opacity="0">
     <rect data-part="main-rect" x="492" y="896" width="460" height="168" rx="16" style="fill:var(--card-bg);stroke:var(--border-color);stroke-width:var(--border-width);filter:var(--card-shadow-filter)" />
     <rect data-part="rail" x="508" y="940" width="4" height="80" rx="2" style="fill:var(--accent)" />
-    <text data-slot="slot1-name" data-maxw="408" x="524" y="972" style="fill:var(--text-primary);font-family:var(--font-family);text-shadow:var(--text-shadow)" font-size="30" font-weight="800"></text>
+    <text data-slot="slot1-name" data-maxw="408" x="524" y="972" style="fill:var(--text-primary);font-family:var(--font-body);text-shadow:var(--text-shadow)" font-size="30" font-weight="800"></text>
     <g data-slot="slot1-sub" style="opacity:0">
-      <text data-slot="slot1-sub-label" x="524" y="1002" style="fill:var(--accent);font-family:var(--font-family)" font-size="13" font-weight="700" letter-spacing="1"></text>
-      <text data-slot="slot1-sub-value" data-maxw="332" x="600" y="1002" style="fill:var(--text-primary);font-family:var(--font-family);text-shadow:var(--text-shadow)" font-size="18" font-weight="600" opacity="0.92"></text>
+      <text data-slot="slot1-sub-label" x="524" y="1002" style="fill:var(--accent);font-family:var(--font-body)" font-size="13" font-weight="700" letter-spacing="1"></text>
+      <text data-slot="slot1-sub-value" data-maxw="332" x="600" y="1002" style="fill:var(--text-primary);font-family:var(--font-body);text-shadow:var(--text-shadow)" font-size="18" font-weight="600" opacity="0.92"></text>
     </g>
   </g>
 
   <g data-slot="slot2" opacity="0">
     <rect data-part="main-rect" x="968" y="896" width="460" height="168" rx="16" style="fill:var(--card-bg);stroke:var(--border-color);stroke-width:var(--border-width);filter:var(--card-shadow-filter)" />
     <rect data-part="rail" x="984" y="940" width="4" height="80" rx="2" style="fill:var(--accent)" />
-    <text data-slot="slot2-name" data-maxw="408" x="1000" y="972" style="fill:var(--text-primary);font-family:var(--font-family);text-shadow:var(--text-shadow)" font-size="30" font-weight="800"></text>
+    <text data-slot="slot2-name" data-maxw="408" x="1000" y="972" style="fill:var(--text-primary);font-family:var(--font-body);text-shadow:var(--text-shadow)" font-size="30" font-weight="800"></text>
     <g data-slot="slot2-sub" style="opacity:0">
-      <text data-slot="slot2-sub-label" x="1000" y="1002" style="fill:var(--accent);font-family:var(--font-family)" font-size="13" font-weight="700" letter-spacing="1"></text>
-      <text data-slot="slot2-sub-value" data-maxw="332" x="1076" y="1002" style="fill:var(--text-primary);font-family:var(--font-family);text-shadow:var(--text-shadow)" font-size="18" font-weight="600" opacity="0.92"></text>
+      <text data-slot="slot2-sub-label" x="1000" y="1002" style="fill:var(--accent);font-family:var(--font-body)" font-size="13" font-weight="700" letter-spacing="1"></text>
+      <text data-slot="slot2-sub-value" data-maxw="332" x="1076" y="1002" style="fill:var(--text-primary);font-family:var(--font-body);text-shadow:var(--text-shadow)" font-size="18" font-weight="600" opacity="0.92"></text>
     </g>
   </g>
 
   <g data-slot="slot3" opacity="0">
     <rect data-part="main-rect" x="1444" y="896" width="460" height="168" rx="16" style="fill:var(--card-bg);stroke:var(--border-color);stroke-width:var(--border-width);filter:var(--card-shadow-filter)" />
     <rect data-part="rail" x="1460" y="940" width="4" height="80" rx="2" style="fill:var(--accent)" />
-    <text data-slot="slot3-name" data-maxw="408" x="1476" y="972" style="fill:var(--text-primary);font-family:var(--font-family);text-shadow:var(--text-shadow)" font-size="30" font-weight="800"></text>
+    <text data-slot="slot3-name" data-maxw="408" x="1476" y="972" style="fill:var(--text-primary);font-family:var(--font-body);text-shadow:var(--text-shadow)" font-size="30" font-weight="800"></text>
     <g data-slot="slot3-sub" style="opacity:0">
-      <text data-slot="slot3-sub-label" x="1476" y="1002" style="fill:var(--accent);font-family:var(--font-family)" font-size="13" font-weight="700" letter-spacing="1"></text>
-      <text data-slot="slot3-sub-value" data-maxw="332" x="1552" y="1002" style="fill:var(--text-primary);font-family:var(--font-family);text-shadow:var(--text-shadow)" font-size="18" font-weight="600" opacity="0.92"></text>
+      <text data-slot="slot3-sub-label" x="1476" y="1002" style="fill:var(--accent);font-family:var(--font-body)" font-size="13" font-weight="700" letter-spacing="1"></text>
+      <text data-slot="slot3-sub-value" data-maxw="332" x="1552" y="1002" style="fill:var(--text-primary);font-family:var(--font-body);text-shadow:var(--text-shadow)" font-size="18" font-weight="600" opacity="0.92"></text>
     </g>
   </g>
 

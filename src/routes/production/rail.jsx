@@ -140,9 +140,40 @@ export const Rail = memo(function Rail({ pins, onReorder, onUnpin, onOpen }) {
         if (target) moveToId(entries[i].id, target.id);
     };
 
+    /*
+     * A SIDE COLUMN IS THE VIEWPORT'S, NOT THE ROW'S.
+     *
+     * The rack and the rail are both a fixed-height scroll box, and the height they
+     * were given — `100vh - 13rem` — was reaching for a column that is always as
+     * tall as the screen. Nothing ever pinned it there, so it was a viewport-sized
+     * box anchored to the TOP OF THE DOCUMENT, inside a `h-full` panel stretched to
+     * the grid ROW. Two different wrongs at once, and a tall stage shows both: the
+     * panel's box ran the full 1397px of the row while its list stopped at 492,
+     * leaving ~900px of empty card under it, and the whole column scrolled away
+     * while the producer worked in the stage — so the rack, which is how you get to
+     * anything, was off screen exactly when the panel you scrolled to see was on it.
+     *
+     * `sticky` is the missing half. The column now holds the viewport (less a
+     * margin), its list fills it (`flex-1` over the panel's own height, never a
+     * second copy of that arithmetic), and it stays put while the middle column
+     * scrolls under it. `items-start` on the grid is what leaves it free to.
+     *
+     * ONLY WHILE IT IS ACTUALLY A SIDE COLUMN. Below the breakpoint that gives it
+     * one, the grid is a single column and these are stacked blocks — a sticky
+     * viewport-tall block there would pin one section over the whole screen and let
+     * the rest slide under it. So the rack takes this at `lg` (where it first earns
+     * a column) and the rail at `xl` (where it does), each matching the track it
+     * appears in; stacked, both keep the old fixed box.
+     */
     return (
-        <Panel title="Quick rail" className="h-full">
-            <ScrollArea className="h-[calc(100vh-13rem)]">
+        <Panel
+            title="Quick rail"
+            className={cn(
+                'flex flex-col h-[calc(100vh-13rem)]',
+                'xl:sticky xl:top-4 xl:h-[calc(100vh-2rem)]',
+            )}
+        >
+            <ScrollArea className="min-h-0 flex-1">
                 <div className="flex flex-col gap-2 p-2">
                     {entries.length === 0 ? (
                         <div className="rounded-lg border border-dashed border-border p-3">

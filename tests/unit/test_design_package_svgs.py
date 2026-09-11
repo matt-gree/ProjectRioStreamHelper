@@ -351,6 +351,16 @@ def test_inlined_rio_mark_matches_the_shipped_asset(svg: Path):
 TOKEN_HOSTS = [
     REPO / "public" / "layout" / "shared" / "container.html",
     REPO / "public" / "layout" / "scoreboard1" / "statsbar.html",
+    # These four host no theme SVG at all — they are here for the FACES. The
+    # token layer's @import is the only place Rajdhani and Chivo Mono are
+    # fetched, and `applyTypeRoles` skips fetching them precisely because every
+    # shell links this file. Drop the link and the role var still resolves, so
+    # the page renders — in the fallback stack, silently, one element out of
+    # step with the rest of the show.
+    REPO / "public" / "layout" / "scoreboard1" / "playername.html",
+    REPO / "public" / "layout" / "eventheader" / "eventheader.html",
+    REPO / "public" / "layout" / "postgame" / "spotlight.html",
+    REPO / "public" / "layout" / "postgame" / "summary.html",
 ]
 
 
@@ -433,4 +443,215 @@ def test_a_live_stat_slot_is_declared_as_a_label_and_a_value(svg: Path):
             assert has["label"] == has["value"], (
                 f"{svg.parent.name}/{svg.name}: {prefix}-stat-{i} declares "
                 f"{'a value with no label' if has['value'] else 'a label with no value'}"
+            )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TYPE ROLES
+#
+# `rio-theme/tokens.css` defines three type roles, and a producer can now point
+# each at a font of their own (`overlays.global.displayFont` / `bodyFont` /
+# `monoFont`). That makes the roles a CONTRACT rather than a convention: a node
+# that reaches for a literal face, or for the wrong role, is a node the
+# producer's Typography section silently cannot reach.
+#
+# Class names carry the role so a reviewer can read a theme's type off its
+# markup. The suffix is the role:
+#
+#     -ink   primary text          --font-display
+#     -lab   small caps labels     --font-display
+#     -dim   secondary / meta      --font-body
+#     -cap   a SENTENCE            --font-body
+#     -num   a tabular VALUE       --font-mono   (+ tabular figures)
+#
+# `-cap` and `-num` are the pair worth understanding, because the cards carry
+# both and the difference is not "does it contain digits". A VALUE is a number
+# in a fixed cell; a SENTENCE is prose that happens to contain numbers, and the
+# arithmetic runs the other way on it. Measured at weight 700, Chivo Mono's
+# digit is 0.600em against Inter's 0.6465em WITH tabular figures (which a value
+# has to set either way, so Inter never gets to spend its narrow `1`), and its
+# `%` is 0.600 against Inter's 1.0156 — so the numeral face is NARROWER on
+# every value these themes draw except a decimal, where one 0.33em period is
+# the whole of its loss. On a sentence that inverts, because a sentence is
+# mostly letters: the Scorecard's pitcher line is 305 units in body and 403 in
+# mono at 16px in a 352 box, so mono auto-fit it to 14px for years.
+# ─────────────────────────────────────────────────────────────────────────────
+
+ROLE_FOR_SUFFIX = {
+    "ink": "--font-display",
+    "lab": "--font-display",
+    "dim": "--font-body",
+    "cap": "--font-body",
+    "num": "--font-mono",
+}
+TYPE_ROLES = ("--font-display", "--font-body", "--font-mono")
+
+
+def _uncommented(svg_text: str) -> str:
+    """Markup with XML comments removed.
+
+    Every theme documents its own slot contract in a comment, and those name
+    the tags they describe (`side1-name <text>`), so a scan for text nodes that
+    does not strip comments finds the documentation.
+    """
+    return re.sub(r"<!--.*?-->", "", svg_text, flags=re.S)
+
+
+def _type_classes(svg_text: str) -> dict[str, str]:
+    """`{class name: declaration body}` for every rule that sets a font."""
+    out = {}
+    for block in re.findall(r"<style[^>]*>(.*?)</style>", svg_text, re.S):
+        for rule in re.finditer(r"\.([\w-]+)\s*\{([^}]*)\}", block):
+            if "font-family" in rule.group(2):
+                out[rule.group(1)] = rule.group(2)
+    return out
+
+
+@pytest.mark.parametrize("svg", PACKAGE_SVGS, ids=lambda p: f"{p.parent.name}/{p.name}")
+def test_a_type_class_binds_the_role_its_name_promises(svg: Path):
+    for name, body in _type_classes(svg.read_text()).items():
+        suffix = name.rsplit("-", 1)[-1]
+        want = ROLE_FOR_SUFFIX.get(suffix)
+        if want is None:
+            continue  # outside the role vocabulary; nothing promised
+        assert want in body, (
+            f"{svg.parent.name}/{svg.name}: .{name} ends in -{suffix}, which "
+            f"promises {want}, but binds: {body.strip()}\n"
+            f"Either bind the role or rename the class — a name that lies about "
+            f"its role is how the Stat Card ended up drawing its numbers in the "
+            f"body face while the Stat Bar drew the same numbers in the numeral "
+            f"face."
+        )
+
+
+@pytest.mark.parametrize("svg", PACKAGE_SVGS, ids=lambda p: f"{p.parent.name}/{p.name}")
+def test_every_text_node_paints_from_a_role(svg: Path):
+    """No literal face, and no orphaned `--font-family`.
+
+    A literal (`font-family="Inter"`) is what the Scoreboard-S export shipped
+    with, which drew one package in two typefaces depending on which file you
+    were looking at. `--font-family` is the retired single-font var: it now
+    resolves to nothing, so a node still asking for it computes to the initial
+    value and draws in the browser's default serif.
+    """
+    text = _uncommented(svg.read_text())
+    classes = set(_type_classes(text))
+    for node in re.findall(r"<text\b[^>]*>", text):
+        fam = re.search(r'font-family\s*[:=]\s*"?\s*([^;"]*)', node)
+        if fam:
+            spec = fam.group(1)
+            assert "--font-family" not in spec, (
+                f"{svg.parent.name}/{svg.name}: a text node still binds the "
+                f"retired --font-family. Pick a role: {', '.join(TYPE_ROLES)}."
+            )
+            assert any(r in spec for r in TYPE_ROLES), (
+                f"{svg.parent.name}/{svg.name}: a text node names a literal "
+                f"face ({spec.strip()}) instead of a role. The producer's "
+                f"Typography settings cannot reach it."
+            )
+            continue
+        # No inline family: it must be painted by one of this file's classes,
+        # or by an ancestor that is. Only the former is checkable here, and a
+        # node with neither is the silent case worth failing on.
+        cls = re.search(r'class="([^"]*)"', node)
+        assert cls and (set(cls.group(1).split()) & classes), (
+            f"{svg.parent.name}/{svg.name}: a text node names neither a "
+            f"font-family nor a class that sets one:\n  {node}"
+        )
+
+
+@pytest.mark.parametrize("svg", PACKAGE_SVGS, ids=lambda p: f"{p.parent.name}/{p.name}")
+def test_a_numeral_class_declares_tabular_figures(svg: Path):
+    """A value that changes must not shove the thing beside it.
+
+    This was free while the numeral role was guaranteed monospaced. It is not
+    free any more: `monoFont` is a producer setting, and the moment it points
+    at a proportional face an untagged score starts jittering as it ticks.
+    """
+    for name, body in _type_classes(svg.read_text()).items():
+        if name.rsplit("-", 1)[-1] != "num":
+            continue
+        assert "tabular-nums" in body, (
+            f"{svg.parent.name}/{svg.name}: .{name} is the numeral role but "
+            f"does not declare `font-variant-numeric: tabular-nums`."
+        )
+
+
+LINE_BOX_ATTRS = ("data-x-labelled", "data-x-bare", "data-maxr")
+
+
+@pytest.mark.parametrize("svg", PACKAGE_SVGS, ids=lambda p: f"{p.parent.name}/{p.name}")
+def test_a_left_aligned_caption_line_declares_all_three_edges(svg: Path):
+    """Half of this rule is worse than none of it.
+
+    A `line-text` that left-aligns beside its "Game" label authors BOTH left
+    edges (with and without the label) against one right bound, because the
+    label is bound only for a HUD game's line — see `lineTextBox` in
+    mount-utils.js. Drop one through a design tool and the mount falls back to
+    the theme's authored, centred geometry for the state that lost its edge
+    only: the line would sit left-aligned while a game was on and jump back to
+    centred the moment it ended. `lineTextBox` refuses a partial set for that
+    reason; this is the other half of the same statement, said where a theme
+    can be looked at.
+    """
+    for node in re.findall(r"<text[^>]*>", svg.read_text()):
+        if 'data-slot="line-text"' not in node:
+            continue
+        present = [a for a in LINE_BOX_ATTRS if f"{a}=" in node]
+        assert not present or len(present) == len(LINE_BOX_ATTRS), (
+            f"{svg.parent.name}/{svg.name}: line-text declares "
+            f"{', '.join(present)} but not "
+            f"{', '.join(a for a in LINE_BOX_ATTRS if a not in present)}. "
+            f"The mount honours all three or none."
+        )
+
+
+def test_no_two_packages_disagree_about_a_class_name():
+    """One document can hold several themes at once, and CSS does not care.
+
+    A container retains one LAYER per member it has stood up
+    (`container-layers.js`), each holding an injected theme SVG — and an inline
+    SVG's `<style>` is document-scoped. So two themes on one container's roster
+    that use the same class name for different type are resolved by whichever
+    mounted last. The Scorecard and the Stat Card shipped exactly that: both
+    declared `.sc-num`, one mono and one body, and both are container members.
+    """
+    seen: dict[str, tuple[str, str]] = {}
+    for svg in PACKAGE_SVGS:
+        for name, body in _type_classes(svg.read_text()).items():
+            role = next((r for r in TYPE_ROLES if r in body), None)
+            where = f"{svg.parent.name}/{svg.name}"
+            if name in seen and seen[name][1] != role:
+                prior, prior_role = seen[name]
+                pytest.fail(
+                    f".{name} binds {prior_role} in {prior} and {role} in "
+                    f"{where}. Whichever theme a container mounts LAST wins for "
+                    f"both. Give one of them its own prefix."
+                )
+            seen.setdefault(name, (where, role))
+
+
+@pytest.mark.parametrize("svg", PACKAGE_SVGS, ids=lambda p: f"{p.parent.name}/{p.name}")
+def test_display_type_stays_within_the_weights_the_token_layer_loads(svg: Path):
+    """Rajdhani is fetched at 500/600/700 — an 800 is synthesised, not loaded.
+
+    A faux-bolded weight is a smeared outline at broadcast sizes, and it fails
+    the way a missing weight always does: it renders, so nobody notices.
+    """
+    text = _uncommented(svg.read_text())
+    display = {n for n, b in _type_classes(text).items() if "--font-display" in b}
+    for node in re.findall(r"<text\b[^>]*>", text):
+        spec = re.search(r'font-family\s*[:=]\s*"?\s*([^;"]*)', node)
+        cls = re.search(r'class="([^"]*)"', node)
+        is_display = (spec and "--font-display" in spec.group(1)) or (
+            cls and (set(cls.group(1).split()) & display)
+        )
+        if not is_display:
+            continue
+        weight = re.search(r'font-weight\s*[:=]\s*"?\s*(\d+)', node)
+        if weight and int(weight.group(1)) > 700:
+            pytest.fail(
+                f"{svg.parent.name}/{svg.name}: display type at weight "
+                f"{weight.group(1)}, but the token layer loads Rajdhani at "
+                f"500/600/700 only:\n  {node}"
             )

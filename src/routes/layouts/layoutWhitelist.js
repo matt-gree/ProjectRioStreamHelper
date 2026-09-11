@@ -9,7 +9,7 @@
 // THE WHITELIST IS NECESSARY BUT NOT SUFFICIENT, because it answers a different
 // question than an override needs. It says which GLOBAL keys a layout honours;
 // an override asks whether a pin on ONE element can reach it. Both post-game
-// callouts declare `accentColor, fontFamily` and honour them for real — reading
+// callouts declare `accentColor, bodyFont, monoFont` and honour them for real — reading
 // `overlays.global.*` straight out of settings — but neither calls
 // `applyDesignSettings`, which is the only code that ever consults
 // `overlays.{type}.{key}`. So a key is offered as an override only where the

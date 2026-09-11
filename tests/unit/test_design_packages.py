@@ -67,6 +67,44 @@ def test_a_hand_dropped_package_is_read_from_its_files_not_its_manifest(tmp_path
     assert info["appVarElements"] == ["ticker"]
 
 
+# --- the type roles each theme sets text in ------------------------------
+#
+# What the console asks before offering a per-element font override. A role an
+# element never draws is a pin that stores and changes nothing, and which roles
+# are drawn is a fact about the FILE — the same element answers differently in
+# different packages.
+
+def test_type_roles_are_read_per_file_and_differ_by_package():
+    default, classic = _pkg("default"), _pkg("classic")
+    # Default's Commentary: names in display, captions in body, no numbers.
+    assert default["typeRoles"]["commentary"] == ["display", "body"]
+    # Classic's is body throughout.
+    assert classic["typeRoles"]["commentary"] == ["body"]
+    # The scoreboard draws all three — names, captions, scores.
+    assert default["typeRoles"]["scoreboard-l"] == ["display", "body", "mono"]
+    # Every themed element has an entry, even one naming no role.
+    assert set(default["typeRoles"]) == set(default["elements"])
+
+
+def test_a_theme_naming_no_role_offers_no_font(tmp_path, monkeypatch):
+    """A full-art package that sets its own faces draws nothing a role pin could
+    reach — the entry is present and empty, which is not the same as unknown."""
+    root = tmp_path / "design_packages"
+    folder = root / "faces"
+    folder.mkdir(parents=True)
+    monkeypatch.setattr(design_packages, "user_packages_dir", lambda: root)
+    folder.joinpath("commentary.svg").write_text(
+        '<svg viewBox="0 0 10 10"><text style="font-family:\'Bebas Neue\'">A</text></svg>'
+    )
+    # A role named deep in the drawing, with odd spacing, still counts.
+    folder.joinpath("ticker.svg").write_text(
+        '<svg viewBox="0 0 10 10">' + "<g/>" * 5000
+        + '<text style="font-family: var( --font-mono, monospace)">0</text></svg>'
+    )
+    info = _pkg("faces")
+    assert info["typeRoles"] == {"commentary": [], "ticker": ["mono"]}
+
+
 # --- the controller-port palette -----------------------------------------
 #
 # `portColors` is the one thing a package declares in its MANIFEST rather than

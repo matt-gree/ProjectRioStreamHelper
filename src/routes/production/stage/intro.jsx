@@ -1,6 +1,6 @@
 import { memo, useCallback } from 'react';
 import { Text } from '../../../components/ui/primitives';
-import { ToggleRow } from '../kit';
+import { SegmentedControl } from '../../../components/ui/segmented-control';
 import { useSettingsStore } from '../../../context/store';
 import { useObsStore } from '../../../context/obs';
 import { notifications } from '../../../lib/notify';
@@ -38,6 +38,12 @@ export const ANIMATED_ELEMENT_TYPES = {
     matchuphistory: 'matchup',
 };
 
+/* Both halves of what the deleted "On show" heading carried: WHEN the
+ * setting applies, and — the part no heading ever said — that it reaches the
+ * OBS SOURCE, not the preview sitting under it. */
+const INTRO_TITLE = 'On: OBS reloads this source each time it is shown, so the intro plays. '
+    + 'Off: the source stays loaded and nothing animates.';
+
 export const introTypeFor = (element) => ANIMATED_ELEMENT_TYPES[element?.id] ?? null;
 
 export const IntroRow = memo(function IntroRow({ element }) {
@@ -62,14 +68,46 @@ export const IntroRow = memo(function IntroRow({ element }) {
     }, [type, element?.url, setItem]);
 
     if (!type) return null;
+    /*
+     * A TIGHT INLINE PAIR — the label against its own control, and no row of
+     * its own. Three things were wrong with what this was, and they compound:
+     *
+     * THE SECTION. A `KIT_SECTION` headed "On show" wrapping one control: a
+     * section heads a GROUP, and with one member the heading is a second name
+     * for the row under it.
+     *
+     * THE CONTROL. A `ToggleRow`'s switch marks ON with `bg-primary`, so the
+     * loudest thing on a panel of set-once knobs, in the colour the console
+     * keeps for on-air and destructive, was a preference. A lone `ToggleChip`
+     * was tried in between and is worse: a chip says its state by its FILL, and
+     * an unfilled chip alone is a 1px `border-border` outline (measured
+     * `rgb(26,26,46)` here) around muted text, indistinguishable from a caption.
+     * Fill-as-state needs a STRIP — the filled siblings are what make the empty
+     * ones read as empty. A segmented pair NAMES both states, so it is legible
+     * with nothing beside it and spends no colour to do it.
+     *
+     * THE LABEL COLUMN. Every kit row puts its label in `KIT_LABEL`, which on a
+     * panel-width `@container` is 128px — right when there is a COLUMN of rows
+     * to line up, and wrong for a lone row, where "Intro animation" ends around
+     * 85px and its control starts at 128 with dead space between them. Nothing
+     * here is in a column, so the label just sits against what it names.
+     *
+     * The row this ends up on is the overrides section's footer (see
+     * ../stage/index.jsx): two panel-level set-once controls that each had a
+     * near-empty row to themselves now share one.
+     */
     return (
-        <div className="mt-1 flex flex-col gap-1.5 border-t border-border/60 pt-2">
-            <Text size="xs" className="label-display text-muted-foreground">On show</Text>
-            {/* The switch says it. The caption under it described the MECHANISM
-                (reload on show vs stay resident), which is how PRSH delivers a
-                clean reveal, not a decision the producer makes — and it sat on
-                every animated element's panel, permanently. */}
-            <ToggleRow label="Intro animation" checked={!disabled} onChange={onChange} />
+        <div className="flex min-w-0 items-center gap-2" title={INTRO_TITLE}>
+            <Text size="xs" span truncate className="min-w-0 text-muted-foreground">
+                Intro animation
+            </Text>
+            <SegmentedControl
+                size="xs"
+                className="shrink-0"
+                value={disabled ? 'off' : 'on'}
+                onChange={(v) => onChange(v === 'on')}
+                data={[{ label: 'On', value: 'on' }, { label: 'Off', value: 'off' }]}
+            />
         </div>
     );
 });

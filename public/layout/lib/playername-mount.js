@@ -2,9 +2,11 @@
  * playername-mount.js — one side's player name, as its own OBS source.
  *
  * Draws `score.{N}.player.{T}.rioName`, with the address-book prefix
- * (`…player.{T}.team` — the sponsor/tag) beside it. Two producer settings shape
- * it, both under `overlays.playername.*` and therefore SHARED by both sides:
+ * (`…player.{T}.team` — the sponsor/tag) beside it. Three producer settings
+ * shape it, all under `overlays.playername.*` and therefore SHARED by both
+ * sides:
  *
+ *   nameSize        px — the type size, full stop (see below)
  *   align           auto | left | center | right
  *   prefixPosition  above | below | inline | off
  *
@@ -16,31 +18,56 @@
  * and defaulting to it is what keeps every source already in a producer's scene
  * looking the way it does today.
  *
- * ── THE FRAME'S HEIGHT SETS THE TYPE SIZE; ITS WIDTH ONLY SETS THE RUN ──
+ * ── THE SIZE IS A NUMBER THE PRODUCER TYPES; THE FRAME IS ONLY A CEILING ──
  *
- * This element has no card — it is text — so it does NOT min-fit a fixed
- * 400x100 canvas into the source the way the roster or the stat card do. That
- * shape is right for a drawn card and wrong here twice over: it aspect-locks a
- * name to 4:1, so an 800x100 source drew the same 36px name and 636px of
- * nothing beside it; and it scales the empty margin along with the glyphs, so
- * growing the source to make the name bigger always brought its border with it.
+ * `nameSize` IS the type size, in px. The box the source happens to be does not
+ * set it and neither does the length of the name: 48 means 48, on every Player
+ * Name source in the show.
  *
- * Height alone drives `--pn-scale` (`typeScale`), and every length on the card
- * is a `calc()` off it — type, gaps, padding, and the font border, which has to
- * track the type size for the same reason the prefix takes half of it. Width is
- * left to the name: it runs as far as it wants and only shrinks when it would
- * otherwise overflow (`fitToWidth`), the same shrink-on-overflow the Game
- * Summary's plate names use.
+ * That last clause is the whole point, and it comes from the NAMESPACE. These
+ * settings are global — one `overlays.playername.*` for both sides and every
+ * board — so an absolute size makes every name identical BY CONSTRUCTION. The
+ * rule this replaced derived the size from the source's own height, which made
+ * sameness something a producer had to maintain by hand: two names framing a
+ * scoreboard matched only while their OBS dimensions matched, and the stage's
+ * "make this the same size as the other one" row existed to repair one pair at
+ * a time. There is nothing left to repair, because there is no longer any
+ * per-source input to the size.
  *
- * The scale is deliberately CONTENT-AGNOSTIC — it reads the prefix POSITION
- * (a global setting) and never whether this particular participant has a
- * prefix. Two sources framing a scoreboard have to draw at one type size, and
- * measuring the ink would put `rjb` and `MattGree` about 2x apart.
+ * THE FRAME ONLY EVER CLAMPS DOWN. `fitToHeight` and `fitToWidth` shrink a
+ * requested size that will not fit the box, and neither one can grow it. So the
+ * rule reads in full as "48, unless this frame physically cannot hold 48" — the
+ * name can never be clipped by `.pn-root`'s `overflow: hidden`, and the
+ * long-name fallback is the same mechanism on the other axis rather than a
+ * special case bolted beside it.
  *
- * Because padding is a fraction of the height rather than a fixed number of
- * pixels, the whole card is scale-invariant: a preview iframe sized to 50% of
- * native draws exactly half-size type, and a 4K source draws the same
- * proportions as a 1080p one.
+ * Two things that were bugs under the old rule simply stop existing: the prefix
+ * POSITION no longer resizes anything (it moved the type by 1.53x, on every
+ * source at once, from a setting about where a tag sits), and the declared
+ * 800x200 goes back to being pure render headroom instead of a covert
+ * instruction to draw a 110px name.
+ *
+ * ── PADDING IS A FRACTION OF THE TYPE, NOT OF THE FRAME ──
+ *
+ * It is there to hold the font border and the text shadow, and both of those
+ * scale with `--pn-scale` — so a tall frame must not hand a small name a huge
+ * margin, nor a short frame hand it none. Measuring it against the type is also
+ * what keeps the height ceiling solvable in one step rather than circular; see
+ * `heightCeiling`.
+ *
+ * ── A PREVIEW IS A SCALE MODEL, AND HAS TO BE TOLD ──
+ *
+ * ScaledIframe renders this page into a smaller iframe and lets the overlay lay
+ * itself out against that viewport (it does not zoom a native render — see the
+ * component's header). An absolute size would therefore draw a full 48px name
+ * in a half-size box: proportionally double, on the one screen a producer
+ * checks fit against. `previewScale` divides it back out, in PREVIEW_MODE only.
+ *
+ * Inside a CONTAINER the factor is 1, and must be: fed-container.js already
+ * scales the whole host with a single transform there and hands every member
+ * its native box (`fitHostForPreview`). Same branch, made once, in one place —
+ * which is why this one reads the page's own declared native height and finds
+ * none on the container shell.
  *
  * The font border (`overlays.global.textStrokeWidth` / `…Color`, pinnable per
  * element from this element's Production stage panel — the Style Overrides
@@ -60,26 +87,65 @@
  * Requires overlay-base.js (OverlayBase).
  */
 
-// The card as authored, at scale 1. Every length below is a multiple of these.
+// The card as authored, at scale 1. Every length below is a multiple of these,
+// and `--pn-scale` is the one number the whole card is drawn from — so the type
+// size the producer asks for reaches the CSS as `nameSize / NAME_SIZE` and
+// nothing else in this block has to know the setting exists.
 const NAME_SIZE = 36;
 const NAME_LINE = 1.05;
-const TAG_SIZE = 18;
 const STACK_GAP = 2;
 const INLINE_GAP = 10;
 
 /*
  * Room kept around the type for the font border and the text shadow to bleed
- * into, as a FRACTION of the frame height — 6% is 6px on a 100px-tall source,
- * against the flat 16px this replaced.
+ * into, as a FRACTION of the DRAWN NAME SIZE — a tenth, so a 48px name keeps
+ * 4.8px on every side.
  *
- * A fraction rather than a number of pixels is what makes the card
- * scale-invariant (see the header). 16px was never a worst-case allowance
- * anyway: `-webkit-text-stroke` at its 12px maximum bleeds 6px outward, and
- * `textShadowBlur` goes to 40px, which `.pn-root`'s `overflow: hidden` clips at
- * any padding. It covers the settings a producer actually runs and nothing
- * pretends to cover the rest.
+ * Measured against the type rather than the frame because that is what it is
+ * for: both things it makes room for are multiples of `--pn-scale`, and once
+ * the frame stopped setting the type, a frame-relative padding would have given
+ * a small name in a tall box a huge margin and the same name in a short box
+ * none at all. It also lands within a pixel of what the old 6%-of-height drew
+ * at the shipped size, so nothing visibly moved on the way across.
+ *
+ * It is not a worst-case allowance and does not pretend to be:
+ * `-webkit-text-stroke` at its 12px maximum bleeds 6px outward and
+ * `textShadowBlur` goes to 40px, either of which `.pn-root`'s `overflow:
+ * hidden` will clip at any padding. It covers the settings a producer runs.
  */
-const PAD_RATIO = 0.06;
+const PAD_RATIO = 0.1;
+
+/*
+ * The type size in px when nobody has said otherwise, and the range the setting
+ * accepts. 48 is a name read at a glance on a 1080p canvas; the ceiling is well
+ * past anything a lower third wants and exists so a typo cannot black out a
+ * frame with one glyph.
+ */
+export const DEFAULT_NAME_SIZE = 48;
+export const MIN_NAME_SIZE = 12;
+export const MAX_NAME_SIZE = 200;
+
+/*
+ * The prefix's own size, in px, and independent of the name's.
+ *
+ * It was locked at half the name (TAG_SIZE 18 against NAME_SIZE 36) — a ratio
+ * that is a reasonable default and was never a decision. A sponsor tag is a
+ * different piece of information from a player's name and how loud it should be
+ * is a producer's call, not a constant in a mount.
+ *
+ * 24 is exactly half of DEFAULT_NAME_SIZE, so an untouched pair draws precisely
+ * what shipped. Everything downstream is expressed as the RATIO between the two
+ * (`prefixRatio`) rather than as a second absolute: one `--pn-scale` still
+ * drives the whole card, both runs shrink together under a clamp, and the font
+ * border keeps tracking the type it sits on.
+ */
+export const DEFAULT_PREFIX_SIZE = 24;
+export const MIN_PREFIX_SIZE = 8;
+export const MAX_PREFIX_SIZE = 200;
+
+// The shipped proportion, and the fallback the CSS carries so a stale document
+// draws what it always did rather than an unstyled run.
+const DEFAULT_TAG_RATIO = DEFAULT_PREFIX_SIZE / DEFAULT_NAME_SIZE;
 
 const CSS = `
 .pn-root { position: absolute; inset: 0; overflow: hidden; }
@@ -101,7 +167,14 @@ const CSS = `
   position: absolute; inset: 0;
   padding: var(--pn-pad, 6px);
   display: flex; align-items: center;
-  font-family: var(--font-family, 'Inter'), 'Inter', sans-serif;
+  /* A NAME TAKES THE DISPLAY ROLE. This element is the one whose entire job is
+     a participant's name, and it was the only place in the show drawing one in
+     the body face: the scoreboard, Commentary, Player Plates, the Matchup and
+     the schedule all draw the same person's name from --font-display. The
+     sizing arithmetic is unaffected - stackHeight is derived from the declared
+     line-heights, not from font metrics - and the display face is the narrower
+     of the two, so a long name reaches fitToWidth's clamp later, never sooner. */
+  font-family: var(--font-display, 'Rajdhani', 'Arial Narrow', sans-serif);
 }
 .pn-lines { display: flex; flex-direction: column; gap: calc(${STACK_GAP}px * var(--pn-scale, 1)); }
 .pn-a-left   { justify-content: flex-start; }
@@ -122,7 +195,7 @@ const CSS = `
 .pn-p-off .pn-tag { display: none; }
 .pn-tag {
   margin: 0;
-  font-size: calc(${TAG_SIZE}px * var(--pn-scale, 1));
+  font-size: calc(${NAME_SIZE}px * var(--pn-scale, 1) * var(--pn-tag-ratio, ${DEFAULT_TAG_RATIO}));
   font-weight: 800;
   line-height: 1;
   letter-spacing: 0.06em;
@@ -153,12 +226,15 @@ const CSS = `
    * painted beside it there, so there is nothing to disagree about.
    */
   filter: drop-shadow(0px 0px calc(var(--text-shadow-blur, 0px) * var(--pn-scale, 1)) var(--text-shadow-color, transparent));
-  /* HALF the border, because this run is half the type size (18px against the
-     name's 36px). One width across two sizes is not one border: 3px around the
-     name is a rim, and the same 3px around the prefix closed over the counters
-     and swallowed the accent colour whole. The producer sets the border they
-     can see — the name — and the prefix keeps the same optical weight. */
-  -webkit-text-stroke: calc(var(--text-stroke-width, 0px) * var(--pn-scale, 1) * 0.5) var(--text-stroke-color, transparent);
+  /* THE BORDER TRACKS THE TYPE IT SITS ON, which is what the ratio is. One
+     width across two sizes is not one border: 3px around the name is a rim, and
+     the same 3px around a half-size prefix closed over the counters and
+     swallowed the accent colour whole. The producer sets the border they can
+     see — the name — and the prefix keeps the same optical weight at whatever
+     size it has been given. (It was a literal 0.5 while the ratio was a
+     constant; the moment the prefix got its own size that number was a second,
+     silently disagreeing copy of it.) */
+  -webkit-text-stroke: calc(var(--text-stroke-width, 0px) * var(--pn-scale, 1) * var(--pn-tag-ratio, ${DEFAULT_TAG_RATIO})) var(--text-stroke-color, transparent);
   paint-order: stroke fill;
   white-space: nowrap;
 }
@@ -211,48 +287,205 @@ export function resolvePrefixPosition(setting) {
 }
 
 /**
- * How tall the type stands at scale 1, for one prefix position.
+ * How tall the type stands at scale 1, for one prefix position and one
+ * name-to-prefix proportion.
  *
- * A FUNCTION OF THE SETTING, never of the text: `above`/`below` stack two runs
+ * A FUNCTION OF THE SETTINGS, never of the text: `above`/`below` stack two runs
  * and reserve room for both whether or not this participant has a prefix, while
- * `inline` and `off` are one run tall. The setting is global, so both sides of
- * a pair always answer the same — which is the whole reason the scale is not
- * measured off the ink.
+ * `off` is the name alone. Both settings are global, so both sides of a pair
+ * always answer the same — which is the whole reason the scale is not measured
+ * off the ink.
  *
- * Inline is the name's line box alone: the prefix is half the size and
- * baseline-aligned, so it sits inside the taller run.
+ * NOTHING IS RESERVED WHEN THE PREFIX IS OFF. `off` is the name's line box and
+ * only that, so turning the prefix off gives the name every pixel of the frame
+ * — at the shipped proportions a 48px name needs 87px of height with a prefix
+ * row above it and 60px without one.
+ *
+ * INLINE TAKES THE TALLER RUN. The prefix is baseline-aligned inside the name's
+ * line box, which is a safe simplification only while the prefix is the smaller
+ * of the two — and it stopped being guaranteed the moment the prefix got a size
+ * of its own. A `max` costs nothing at the shipped ratio (37.8 against 18) and
+ * is the difference between a clamp and a clipped tag at any ratio above ~1.
  */
-export function stackHeight(prefixPosition) {
+export function stackHeight(prefixPosition, ratio = DEFAULT_TAG_RATIO) {
     const nameLine = NAME_SIZE * NAME_LINE;
+    // line-height: 1 on .pn-tag, so its line box IS its type size.
+    const tagLine = NAME_SIZE * Math.max(0, Number(ratio) || 0);
     const p = resolvePrefixPosition(prefixPosition);
-    return p === 'above' || p === 'below' ? TAG_SIZE + STACK_GAP + nameLine : nameLine;
-}
-
-/** Padding on all four sides, for a frame of this height. */
-export function framePadding(frameHeight) {
-    const h = Number(frameHeight) || 0;
-    return h > 0 ? h * PAD_RATIO : 0;
+    if (p === 'above' || p === 'below') return tagLine + STACK_GAP + nameLine;
+    if (p === 'inline') return Math.max(nameLine, tagLine);
+    return nameLine;
 }
 
 /**
- * The type scale for a frame of this height — the one knob the whole card is
- * drawn from. Width is not an input: see the header.
+ * The type size the producer asked for, in px.
+ *
+ * Clamped rather than rejected: a value out of range is a typo, and a typo
+ * should give you a name you can see and correct on air rather than a blank
+ * source or a single glyph filling the frame.
  */
-export function typeScale(frameHeight, prefixPosition) {
-    const h = Number(frameHeight) || 0;
-    if (h <= 0) return 1;
-    return (h - framePadding(h) * 2) / stackHeight(prefixPosition);
+export function resolveNameSize(setting) {
+    const n = Number(setting);
+    if (!Number.isFinite(n) || n <= 0) return DEFAULT_NAME_SIZE;
+    return Math.min(Math.max(n, MIN_NAME_SIZE), MAX_NAME_SIZE);
 }
 
 /**
- * Shrink-on-overflow, and only that: a name that fits keeps the height's scale,
- * so the pair stays matched until one of them genuinely runs out of room.
+ * The prefix's type size the producer asked for, in px. Clamped for the reason
+ * the name's is: a typo should give you something you can see and correct.
+ */
+export function resolvePrefixSize(setting) {
+    const n = Number(setting);
+    if (!Number.isFinite(n) || n <= 0) return DEFAULT_PREFIX_SIZE;
+    return Math.min(Math.max(n, MIN_PREFIX_SIZE), MAX_PREFIX_SIZE);
+}
+
+/**
+ * The prefix as a PROPORTION of the name — the one number the card is drawn
+ * from once the two sizes are known.
+ *
+ * A ratio rather than a second absolute size, so `--pn-scale` stays the single
+ * knob: both runs shrink together under a clamp, the font border keeps tracking
+ * the type it sits on, and a preview's scale factor divides out of both at
+ * once. Two independent absolutes in the CSS would be two things to clamp and
+ * two chances for them to disagree.
+ */
+export function prefixRatio(nameSize, prefixSize) {
+    return resolvePrefixSize(prefixSize) / resolveNameSize(nameSize);
+}
+
+/**
+ * That size as `--pn-scale` — the multiplier over the authored card.
+ *
+ * No frame in it anywhere, which is the property the whole element now rests
+ * on: two sources of different dimensions reading one global setting compute
+ * the same number here, so they draw the same size without anything having to
+ * reconcile them.
+ */
+export function requestedScale(nameSize) {
+    return resolveNameSize(nameSize) / NAME_SIZE;
+}
+
+/** Padding on all four sides, at a given scale. */
+export function framePadding(scale) {
+    return Math.max(0, Number(scale) || 0) * NAME_SIZE * PAD_RATIO;
+}
+
+/**
+ * The largest scale a frame of this height can hold — the stack plus the
+ * padding either side of it.
+ *
+ * SOLVED, NOT ITERATED. Padding is a fraction of the type and the type is what
+ * the ceiling is trying to bound, which reads circular; it is not, because both
+ * are linear in the scale:
+ *
+ *     h >= stack*s + 2*PAD_RATIO*NAME_SIZE*s   =>   s <= h / (stack + 2*pad1)
+ *
+ * A frame that has not been laid out yet has no ceiling rather than a ceiling
+ * of zero — a mount measured mid-load must not clamp the type to nothing and
+ * then be asked to grow it back.
+ */
+export function heightCeiling(frameHeight, prefixPosition, ratio = DEFAULT_TAG_RATIO) {
+    const h = Number(frameHeight) || 0;
+    if (h <= 0) return Infinity;
+    return h / (stackHeight(prefixPosition, ratio) + 2 * NAME_SIZE * PAD_RATIO);
+}
+
+/**
+ * The frame height `nameSize` needs in order to be drawn at all — the inverse of
+ * `heightCeiling`, and the number a producer cannot possibly guess.
+ *
+ * It exists because the clamp is otherwise SILENT and its threshold is not
+ * intuitive: 48px type with a prefix row above it wants 87px of frame, so a
+ * source dragged into the natural "name bar" shape (wide and short) is clamped
+ * from the first frame, and making it WIDER never helps because it is the
+ * height that binds. The console says this out loud on the Player Name's stage
+ * panel; it is exported so the panel and the overlay cannot disagree about the
+ * threshold.
+ */
+export function heightForNameSize(nameSize, prefixPosition, prefixSize) {
+    const scale = requestedScale(nameSize);
+    const ratio = prefixRatio(nameSize, prefixSize);
+    return scale * (stackHeight(prefixPosition, ratio) + 2 * NAME_SIZE * PAD_RATIO);
+}
+
+/**
+ * Shrink-to-fit on the vertical, and only that.
+ *
+ * The twin of `fitToWidth`, and the reason the frame can be a pure ceiling: a
+ * requested size the box cannot hold comes down to what it can, so `overflow:
+ * hidden` never has a name to clip. It can only ever return something smaller —
+ * a short frame is not permission to grow the type on a tall one.
+ */
+export function fitToHeight(scale, frameHeight, prefixPosition, ratio = DEFAULT_TAG_RATIO) {
+    const s = Number(scale) || 0;
+    return Math.min(s, heightCeiling(frameHeight, prefixPosition, ratio));
+}
+
+/**
+ * Shrink-on-overflow, and only that: a name that fits keeps the size it asked
+ * for, so a pair stays matched until one of them genuinely runs out of room.
  */
 export function fitToWidth(scale, widestLine, available) {
     const w = Number(widestLine) || 0;
     const a = Number(available) || 0;
     if (w <= 0 || a <= 0 || w <= a) return scale;
     return scale * (a / w);
+}
+
+/**
+ * Why this source is not drawing the size it was told to — or null when it is.
+ *
+ * THE CLAMPS ARE CORRECT AND INVISIBLE, which is the whole problem. A frame too
+ * short for 48px draws 33 rather than clipping the name, and nothing in OBS,
+ * in the overlay, or on the broadcast says a word: the producer typed 48, the
+ * stream shows 33, and both programs report that everything is fine.
+ *
+ * It names the AXIS, because the two have opposite remedies and the wrong guess
+ * costs a producer the whole session — a height clamp is not helped by a wider
+ * source, which is the exact instinct it defeats.
+ *
+ * Everything is stated in the SOURCE's own pixels (`final / asked` is a pure
+ * ratio, so the preview factor divides out) — the numbers a producer can act on
+ * are the ones they typed and the ones OBS shows them, never this page's.
+ *
+ * Pure, and exported, so the console can pin the same sentence the overlay says.
+ */
+export function sizeNote({
+    nameSize, prefixSize, asked, capped, final, frameHeight, prefixPosition,
+}) {
+    const size = resolveNameSize(nameSize);
+    if (!(asked > 0) || !(final > 0) || final >= asked - 1e-9) return null;
+    const drawn = Math.round(size * (final / asked));
+
+    if (capped < asked - 1e-9) {
+        const needed = Math.ceil(heightForNameSize(size, prefixPosition, prefixSize) - 1e-6);
+        return `${size}px needs ${needed}px of height — this source is `
+            + `${Math.round(frameHeight)}px, so the name is drawing at ${drawn}px. `
+            + `A wider source will not help.`;
+    }
+    return `The name is too long for this source's width, so it is drawing at `
+        + `${drawn}px instead of ${size}px.`;
+}
+
+/**
+ * How much smaller than its real self this page is being drawn.
+ *
+ * 1 everywhere except a preview iframe. ScaledIframe hands the overlay a
+ * genuinely smaller viewport rather than zooming a native render, so an
+ * absolute type size drawn there is proportionally too big — a 48px name in a
+ * half-size box reads as 96, on the one screen a producer judges fit by.
+ *
+ * Answering 1 for a page that declares no native height is deliberate and is
+ * what makes a CONTAINER correct: fed-container.js scales the whole host there
+ * with one transform and hands each member its native box, so a member that
+ * divided by anything would be paying the preview toll twice.
+ */
+export function previewScale(frameHeight, nativeHeight) {
+    const h = Number(frameHeight) || 0;
+    const n = Number(nativeHeight) || 0;
+    if (h <= 0 || n <= 0) return 1;
+    return h / n;
 }
 
 export function mountPlayerName({ host, sb = 1, team = 1 }) {
@@ -280,33 +513,67 @@ export function mountPlayerName({ host, sb = 1, team = 1 }) {
     host.appendChild(root);
     root.dataset.team = TEAM;
 
-    // The scale depends on a SETTING (the prefix position), so it is recomputed
-    // from update() as well as on a resize — hence the last-seen value here.
+    // Both inputs to the scale are SETTINGS, so it is recomputed from update()
+    // as well as on a resize — hence the last-seen values here.
     let prefixPosition = 'above';
+    let nameSize = DEFAULT_NAME_SIZE;
+    let prefixSize = DEFAULT_PREFIX_SIZE;
 
     function setScale(scale) {
         root.style.setProperty('--pn-scale', String(scale));
     }
 
     /*
-     * Fit the type to the box this mount was handed — its own host, not the
-     * window, so a member centered in a container is measured against its slot.
+     * How much smaller than its real self this page is drawn — see previewScale.
+     *
+     * The declared native height is the page's own (`body.dataset.refW/refH`,
+     * the same convention ScaledIframe measures by), NOT this element's
+     * registry entry, because the page might be the container shell. That shell
+     * declares none, which is exactly the answer a member wants: its own host
+     * is already at native size inside fed-container's fit transform.
+     */
+    function previewFactor(frameHeight) {
+        if (!window.OverlayBase?.PREVIEW_MODE) return 1;
+        return previewScale(frameHeight, Number(document.body.dataset.refH));
+    }
+
+    /*
+     * Draw the type at the size the producer asked for, brought down by
+     * whichever edge of this box it does not fit inside.
      *
      * Two passes, and they are exact rather than iterative: the run widths are
      * linear in font-size, so one correction lands. The first pass has to be
      * committed before the rects are read or the measurement describes the
      * previous scale.
+     *
+     * The padding comes off the HEIGHT-capped scale and is not revisited after
+     * the width fit. A name that shrank because it was too long has not earned
+     * more room around it — the padding is the frame's allowance for the border
+     * and the shadow, and those came down with the type.
      */
     function applyScale() {
         const w = root.clientWidth;
         const h = root.clientHeight;
         if (!h) return;
-        const pad = framePadding(h);
+        const ratio = prefixRatio(nameSize, prefixSize);
+        root.style.setProperty('--pn-tag-ratio', String(ratio));
+        const asked = requestedScale(nameSize) * previewFactor(h);
+        const capped = fitToHeight(asked, h, prefixPosition, ratio);
+        const pad = framePadding(capped);
         root.style.setProperty('--pn-pad', `${pad}px`);
-        const base = typeScale(h, prefixPosition);
-        setScale(base);
+        setScale(capped);
         if (!w) return;
-        setScale(fitToWidth(base, widestLine(base), w - pad * 2));
+        const final = fitToWidth(capped, widestLine(capped), w - pad * 2);
+        setScale(final);
+        /*
+         * Say so — in the document and the console always, on screen only where
+         * a broadcast is not (see OverlayBase.setNote). This is the one report
+         * that reaches a producer looking at OBS rather than at the console.
+         */
+        window.OverlayBase?.setNote?.(
+            sizeNote({ nameSize, prefixSize, asked, capped, final, frameHeight: h, prefixPosition }),
+            `Player Name ${TEAM}`,
+        );
     }
 
     // The widest run the box has to hold. Inline puts both on one line — the
@@ -340,6 +607,8 @@ export function mountPlayerName({ host, sb = 1, team = 1 }) {
         if (tagColor) document.documentElement.style.setProperty('--tag-color', tagColor);
         else document.documentElement.style.removeProperty('--tag-color');
 
+        nameSize = resolveNameSize(g(settings, 'overlays.playername.nameSize', DEFAULT_NAME_SIZE));
+        prefixSize = resolvePrefixSize(g(settings, 'overlays.playername.prefixSize', DEFAULT_PREFIX_SIZE));
         const align = resolveAlign(g(settings, 'overlays.playername.align', 'auto'), TEAM);
         prefixPosition = resolvePrefixPosition(g(settings, 'overlays.playername.prefixPosition', 'above'));
         box.className = `pn-box pn-a-${align} pn-p-${prefixPosition}`;
@@ -347,8 +616,8 @@ export function mountPlayerName({ host, sb = 1, team = 1 }) {
         nameEl.textContent = g(state, NAME_KEY, '');
         tagEl.textContent = g(state, TAG_KEY, '');
 
-        // Both inputs to the scale — the prefix position and the run widths —
-        // can have just changed, so this is the tail of every update.
+        // Every input to the scale — the size, the prefix position, the run
+        // widths — can have just changed, so this is the tail of every update.
         applyScale();
     }
 

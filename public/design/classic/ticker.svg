@@ -6,9 +6,9 @@
     ticker-mount.js clones card-template per game and scrolls the track.
   -->
   <style>
-    .ct-name { fill: var(--text-primary, #ffffff); font-family: var(--font-family, 'Inter', sans-serif); text-shadow: var(--text-shadow, none); }
-    .ct-num  { fill: var(--accent, #f59e0b); font-family: var(--font-family, 'Inter', sans-serif); }
-    .ct-dim  { fill: rgba(255,255,255,0.4); font-family: var(--font-family, 'Inter', sans-serif); }
+    .ct-name { fill: var(--text-primary, #ffffff); font-family: var(--font-body, 'Inter', system-ui, sans-serif); text-shadow: var(--text-shadow, none); }
+    .ct-score  { fill: var(--accent, #f59e0b); font-family: var(--font-body, 'Inter', system-ui, sans-serif);  font-variant-numeric: tabular-nums;}
+    .ct-dim  { fill: rgba(255,255,255,0.4); font-family: var(--font-body, 'Inter', system-ui, sans-serif); }
   </style>
   <defs>
     <clipPath id="ctk-clip"><rect x="140" y="1" width="1770" height="78"/></clipPath>
@@ -34,7 +34,7 @@
   <rect x="0" y="0" width="140" height="80" rx="12" style="fill:var(--accent, #f59e0b)"/>
   <rect x="112" y="0" width="28" height="80" style="fill:var(--accent, #f59e0b)"/>
   <rect x="139" y="0" width="1" height="80" fill="rgba(0,0,0,0.25)"/>
-  <text x="70" y="46" text-anchor="middle" fill="#ffffff" font-family="var(--font-family, 'Inter', sans-serif)" font-size="13" font-weight="800" letter-spacing="1.8">RESULTS</text>
+  <text x="70" y="46" text-anchor="middle" fill="#ffffff" font-family="var(--font-body, 'Inter', system-ui, sans-serif)" font-size="13" font-weight="800" letter-spacing="1.8">RESULTS</text>
 
   <!-- prototype game card (hidden; cloned + bound by the mount) -->
   <g data-slot="card-template" data-w="340" opacity="0">
@@ -45,15 +45,15 @@
 
     <g data-part="score-group">
       <rect x="144" y="18" width="52" height="24" rx="6" fill="rgba(0,0,0,0.35)"/>
-      <text data-part="score-away" x="166" y="36" text-anchor="end" class="ct-num" font-size="16" font-weight="800">0</text>
-      <text x="170" y="35" text-anchor="middle" fill="rgba(255,255,255,0.3)" font-family="var(--font-family, 'Inter', sans-serif)" font-size="12" font-weight="300">&#8211;</text>
-      <text data-part="score-home" x="174" y="36" text-anchor="start" class="ct-num" font-size="16" font-weight="800">0</text>
+      <text data-part="score-away" x="166" y="36" text-anchor="end" class="ct-score" font-size="16" font-weight="800">0</text>
+      <text x="170" y="35" text-anchor="middle" fill="rgba(255,255,255,0.3)" font-family="var(--font-body, 'Inter', system-ui, sans-serif)" font-size="12" font-weight="300">&#8211;</text>
+      <text data-part="score-home" x="174" y="36" text-anchor="start" class="ct-score" font-size="16" font-weight="800">0</text>
     </g>
     <text data-part="vs" x="170" y="35" text-anchor="middle" class="ct-dim" font-size="10" font-weight="800" letter-spacing="1" opacity="0">VS</text>
 
     <text data-part="home-name" data-maxw="96" x="294" y="37" text-anchor="end" class="ct-name" font-size="14" font-weight="700">Home</text>
     <image data-part="home-cap" x="300" y="16" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
 
-    <text data-part="meta" data-maxw="310" x="170" y="61" text-anchor="middle" fill="rgba(255,255,255,0.5)" font-family="var(--font-family, 'Inter', sans-serif)" font-size="9.5" font-weight="700" letter-spacing="0.7">STADIUM &#183; DATE</text>
+    <text data-part="meta" data-maxw="310" x="170" y="61" text-anchor="middle" fill="rgba(255,255,255,0.5)" font-family="var(--font-body, 'Inter', system-ui, sans-serif)" font-size="9.5" font-weight="700" letter-spacing="0.7">STADIUM &#183; DATE</text>
   </g>
 </svg>

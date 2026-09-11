@@ -2,7 +2,7 @@ import { memo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useStateStore } from '../../../context/store';
 import { Text } from '../../../components/ui/primitives';
-import { ToggleRow } from '../kit';
+import { StatusLine, ToggleRow, KIT_SECTION } from '../kit';
 import { setSourceVisibility, useDisplayedEnabled } from '../bindings';
 import { useContainerBinding } from '../feeds';
 import { useContainerDefs, useContainerOf, useMemberScope } from '../containers';
@@ -39,38 +39,37 @@ export const BindingNote = memo(function BindingNote({ binding, what = 'This ove
     // what makes something a binding, here and in the preview column.
     if (!binding?.item) {
         /*
-         * With OBS closed, "isn't in any scene we can see" is true but useless —
-         * and the two ways out it named (the header's Bind, a scene's +) are both
-         * gone, since neither exists without a connection. Say what IS available:
-         * the panel works, and the header hands over the URL.
+         * WITH OBS CLOSED THIS ROW SAYS NOTHING, because the app already said
+         * it once, at the top left, for the whole page. Every panel is unbound
+         * then — that is what being disconnected MEANS — so a per-panel notice
+         * is the same fact repeated once per panel, and an indicator that is lit
+         * on every surface at once is not telling anyone anything.
          *
-         * Kept to ONE LINE at panel width. It ran to two, which on a note this
-         * incidental read as a paragraph to be got through rather than a caption.
-         * The two clauses it lost were both already on screen: that PRSH can't
-         * see your scenes is what the absent scene name says, and the page's own
-         * banner announces the disconnection above every panel.
+         * Connected and unbound is the opposite: it is true of THIS source and
+         * not of its neighbours, which is what makes it worth a row.
          */
+        if (offline) return null;
         return (
-            <Text size="xs" className="text-muted-foreground">
-                {offline
-                    ? `OBS isn’t connected, but this panel still works — Copy URL in the header
-                       to add the source.`.replace(/\s+/g, ' ')
-                    : `${what} isn’t in any scene we can see — add it from the header, or with
-                       the + beside a scene in the rack.`.replace(/\s+/g, ' ')}
-            </Text>
+            <StatusLine
+                label="NO SOURCE"
+                title={`${what} isn’t in any scene we can see. Add it from the header, or with the + beside a scene in the rack.`}
+            />
         );
     }
     // Name the scene rather than its role. With scenes as the grouping axis
     // "the program scene" is a fact the producer already has from the section
     // header, and the scene's own name is what they need when the same overlay
     // sits in three of them.
+    //
+    // Which scene ROLE it is — program vs studio preview — is the header
+    // strip's AIR/PVW chip and was a trailing clause here as well; the chip is
+    // the console's one status language, so this row states identity only.
     return (
-        <Text size="xs" className="text-muted-foreground">
-            Driving <span className="text-foreground">{binding.item.sourceName}</span> in{' '}
-            <span className="text-foreground">{binding.scene}</span>
-            {binding.where === 'program' ? ' — the program scene.'
-                : binding.where === 'preview' ? ' — studio preview.' : '.'}
-        </Text>
+        <StatusLine label="SOURCE" title="The OBS source this panel drives, and the scene it sits in.">
+            <span className="text-foreground">{binding.item.sourceName}</span>
+            <span className="mx-1.5 text-muted-foreground/50">·</span>
+            {binding.scene}
+        </StatusLine>
     );
 });
 
@@ -98,13 +97,22 @@ export const ReadinessNote = memo(function ReadinessNote({ element, board }) {
     }));
     if (element.scope !== 'board' || board == null) return null;
     if (players[0] || players[1]) return null;
+    /*
+     * THE EYEBROW IS THE CONSEQUENCE, THE VALUE IS THE CAUSE. What makes this
+     * worth amber is not that a state key is empty — it is that a source which
+     * looks fine in the rack is putting nothing on the broadcast. Said in that
+     * order it is legible without being read; the Rio detail behind it (why a
+     * board can carry teams and scores and still have no names) is what the
+     * expansion is for.
+     */
     return (
-        <Text size="xs" className="text-amber-500/90">
-            Nothing to draw: scoreboard {board} has no player names yet, so this
-            overlay hides itself. Project Rio fills teams and scores from the
-            roster before it knows who is playing — a stale HUD file looks
-            exactly like this.
-        </Text>
+        <StatusLine
+            tone="warn"
+            label="BLANK ON AIR"
+            title={`Project Rio fills teams and scores from the roster before it knows who is playing, so a stale HUD file looks exactly like this. The overlay hides itself rather than drawing a half-filled card.`}
+        >
+            No player names on board {board}
+        </StatusLine>
     );
 });
 
@@ -239,7 +247,7 @@ export const FedStage = memo(function FedStage({ element, placement }) {
     return (
         <>
             <FeedContentPicker element={element} scoreboard={scoreboard} />
-            <div className="mt-1 flex flex-col gap-1.5 border-t border-border/60 pt-2">
+            <div className={KIT_SECTION}>
                 <ContainerHostNote element={element} container={placement?.slot} />
             </div>
         </>

@@ -9,23 +9,13 @@
     line below it. Values/labels are bound by the mount from RioData.getStatsLine
     - batting: AB / AVG over SLG / SO%; pitching: IP / ERA over K% / AVG.
 
-    THIS CARD IS default/stats.svg AT A DIFFERENT ASPECT. Same band, same border,
-    same well and accent rail, same Rajdhani labels - it is the four-across stats
-    bar folded into two rows because it has to sit inside a container slot rather
-    than across a roster's width. A producer running the Stats source in one
-    scene and the Stat Card member in another is looking at one object, so the
-    two files stay in step: change one, look at the other. (stats.svg is still on
-    Chivo Mono numerals; see below.)
-
-    NO MONO ON THIS CARD - the numerals are Inter with tabular figures. A mono
-    face gives the decimal point a full 0.6em advance, the same width as a digit,
-    and three of the four stats on this card are decimals: ".417" spends a third
-    of its width on a dot. That is affordable on a 452-wide bar with four cells
-    in a row and expensive in a 106-unit cell. Inter's tabular figures keep the
-    property that actually matters here - digits on a fixed advance, so a value
-    ticking 8 to 12 mid-at-bat doesn't shuffle the numerals around it - while the
-    dot goes back to being punctuation. The caption lines are sentences and were
-    never candidates for mono; the labels keep the display face.
+    THIS CARD IS default/statsbar.svg AT A DIFFERENT ASPECT. Same band, same
+    border, same well and accent rail, same Rajdhani labels, same numeral face -
+    it is the four-across stats bar folded into two rows because it has to sit
+    inside a container slot rather than across a roster's width. A producer
+    running the Stat Bar source in one scene and the Stat Card member in another
+    is looking at one object, so the two files stay in step: change one, look at
+    the other.
 
     Fixed RIO palette from rio-theme/tokens.css (no data-design-vars, so the
     Design-tab knobs never repaint it). The card before this one was drawn in
@@ -71,21 +61,43 @@
     On Showdown XXI Stats") while the footer carries the live line, and a title
     that outweighs the live number is the wrong way round.
 
-    Measured at 23px Inter: an ordinary footer line ("2 for 4, HR, 3 RBI") is 185
-    units, so the common case renders at full size; a heavy one ("3 for 5, 2B,
-    HR, 4 RBI, 2 SB") is 289 and auto-fits down to about 19. line-text carries
-    data-maxw 244, not the full width: the line is centred on the card while the
-    "Game" label ends at x=55, so a caption allowed the full width grows out from
-    the centre until it runs underneath the label. 244 is the widest a centred
-    line can be and still start clear of it (190 - 244/2 = 68). The header has no
-    label beside it, so it gets the full 330.
+    THE FOOTER LINE IS LEFT-ALIGNED BESIDE ITS LABEL, and that is what makes it
+    big. Centred, it could claim only 244 of the band's 340 units: a centred
+    line grows out from the middle in BOTH directions, so it has to clear the
+    "Game" label ending at x=58 on one side and reserve the same width it will
+    never use on the other (190 - 244/2 = 68). Running left to right from x=68
+    to the band's right edge it gets 292 — and the reserve disappears entirely
+    when there is no label, where it starts at 20 and gets 340.
+
+    The label is not always there: `line-label` is bound only for a HUD game's
+    line, while an API board's "Tournament Stats" arrives as the line ITSELF. So
+    line-text authors BOTH left edges (data-x-labelled / data-x-bare) against one
+    right bound (data-maxr) and the mount picks — the same shape as the four card
+    edges above. Measured at 23px Inter 700: "1-for-5, 2B" is 119 units and a
+    heavy batting line ("3-for-5, 2B, HR, 4 RBI, 2 SB") 304, which now auto-fits
+    to 22 where centred it came down to 18.5. The header has no label beside it,
+    so it keeps the full 330, centred.
+
+    THE FOUR VALUES ARE MONO AND THE LINE BENEATH THEM IS NOT, and that is the
+    whole distinction `stc-num` and `stc-cap` exist to draw. A stat VALUE is a
+    tabular number in a fixed cell, so it takes the numeral face; the footer
+    LINE is a sentence that happens to contain numbers, so it takes the body
+    face. Measured at weight 700, Chivo Mono's digit is 0.600em against Inter's
+    0.6465em *with tabular-nums* - which these classes have to set either way,
+    so Inter never gets to spend its narrow `1` - and its `%` is 0.600 against
+    Inter's 1.0156. The decimal point is the one glyph mono loses on (+0.33em),
+    and it lands once per value against a `%` saving of 0.42: in this card's
+    106-wide cell at 34px, "25.0%" is 102 in Chivo and 110 in Inter, so the
+    numeral face is what keeps a percentage off the auto-fit. On the LINE the
+    arithmetic inverts, because a sentence is mostly letters: the heavy case
+    above is 296 units in Inter and 386 in Chivo, which auto-fits to 15px
+    instead of 19. Same reasoning, opposite answer; don't unify them.
   -->
   <style>
-    .sc-num  { fill: var(--ink, #f5f5f8); font-family: var(--font-body, 'Inter', system-ui, sans-serif); font-variant-numeric: tabular-nums; }
-    .sc-lab  { fill: var(--ink-dim, #8f8fa3); font-family: var(--font-display, 'Rajdhani', 'Arial Narrow', sans-serif); }
-    .sc-cap  { fill: var(--ink, #f5f5f8); font-family: var(--font-body, 'Inter', system-ui, sans-serif); }
-    .sc-capl { fill: var(--ink-dim, #8f8fa3); font-family: var(--font-display, 'Rajdhani', 'Arial Narrow', sans-serif); }
-    .sc-head { fill: var(--ink, #f5f5f8); font-family: var(--font-display, 'Rajdhani', 'Arial Narrow', sans-serif); }
+    .stc-ink { fill: var(--ink, #f5f5f8); font-family: var(--font-display, 'Rajdhani', 'Arial Narrow', sans-serif); }
+    .stc-lab { fill: var(--ink-dim, #8f8fa3); font-family: var(--font-display, 'Rajdhani', 'Arial Narrow', sans-serif); }
+    .stc-num { fill: var(--ink, #f5f5f8); font-family: var(--font-mono, 'Chivo Mono', ui-monospace, 'SF Mono', monospace); font-variant-numeric: tabular-nums; }
+    .stc-cap { fill: var(--ink, #f5f5f8); font-family: var(--font-body, 'Inter', system-ui, sans-serif); }
   </style>
 
   <!-- Card. Authored in its commonest state: header off, footer on. -->
@@ -99,7 +111,7 @@
     <!-- Header caption: band 2..44.25, caption centred on a 30 baseline -->
     <g data-slot="head-group" opacity="0">
       <text data-slot="head-text" data-maxw="330" x="190" y="30" text-anchor="middle"
-            class="sc-head" font-size="19" font-weight="700" letter-spacing="0.6"></text>
+            class="stc-ink" font-size="19" font-weight="700" letter-spacing="0.6"></text>
       <rect x="20" y="44.25" width="340" height="1.5" style="fill:var(--border,#1f1f30)"/>
     </g>
 
@@ -114,22 +126,23 @@
     <rect x="150" y="117.25" width="222" height="1.5" style="fill:var(--border,#1f1f30)"/>
 
     <!-- Row 1: top-left / top-right -->
-    <text data-slot="stat-0-value" data-maxw="106" x="204" y="88" text-anchor="middle" class="sc-num" font-size="34" font-weight="700">0</text>
-    <text data-slot="stat-0-label" x="204" y="106" text-anchor="middle" class="sc-lab" font-size="16" font-weight="600" letter-spacing="0.8">AB</text>
-    <text data-slot="stat-1-value" data-maxw="106" x="316" y="88" text-anchor="middle" class="sc-num" font-size="34" font-weight="700">.000</text>
-    <text data-slot="stat-1-label" x="316" y="106" text-anchor="middle" class="sc-lab" font-size="16" font-weight="600" letter-spacing="0.8">AVG</text>
+    <text data-slot="stat-0-value" data-maxw="106" x="204" y="88" text-anchor="middle" class="stc-num" font-size="34" font-weight="700">0</text>
+    <text data-slot="stat-0-label" x="204" y="106" text-anchor="middle" class="stc-lab" font-size="16" font-weight="600" letter-spacing="0.8">AB</text>
+    <text data-slot="stat-1-value" data-maxw="106" x="316" y="88" text-anchor="middle" class="stc-num" font-size="34" font-weight="700">.000</text>
+    <text data-slot="stat-1-label" x="316" y="106" text-anchor="middle" class="stc-lab" font-size="16" font-weight="600" letter-spacing="0.8">AVG</text>
 
     <!-- Row 2: bottom-left / bottom-right -->
-    <text data-slot="stat-2-value" data-maxw="106" x="204" y="158" text-anchor="middle" class="sc-num" font-size="34" font-weight="700">.000</text>
-    <text data-slot="stat-2-label" x="204" y="176" text-anchor="middle" class="sc-lab" font-size="16" font-weight="600" letter-spacing="0.8">SLG</text>
-    <text data-slot="stat-3-value" data-maxw="106" x="316" y="158" text-anchor="middle" class="sc-num" font-size="34" font-weight="700">0%</text>
-    <text data-slot="stat-3-label" x="316" y="176" text-anchor="middle" class="sc-lab" font-size="16" font-weight="600" letter-spacing="0.8">SO%</text>
+    <text data-slot="stat-2-value" data-maxw="106" x="204" y="158" text-anchor="middle" class="stc-num" font-size="34" font-weight="700">.000</text>
+    <text data-slot="stat-2-label" x="204" y="176" text-anchor="middle" class="stc-lab" font-size="16" font-weight="600" letter-spacing="0.8">SLG</text>
+    <text data-slot="stat-3-value" data-maxw="106" x="316" y="158" text-anchor="middle" class="stc-num" font-size="34" font-weight="700">0%</text>
+    <text data-slot="stat-3-label" x="316" y="176" text-anchor="middle" class="stc-lab" font-size="16" font-weight="600" letter-spacing="0.8">SO%</text>
 
-    <!-- Footer caption / game line: band 190.75..238, centred on a 222 baseline -->
+    <!-- Footer caption / game line: band 190.75..238, on a 222 baseline -->
     <g data-slot="line-group">
       <rect x="20" y="189.25" width="340" height="1.5" style="fill:var(--border,#1f1f30)"/>
-      <text data-slot="line-label" x="20" y="222" class="sc-capl" font-size="16" font-weight="700"></text>
-      <text data-slot="line-text" data-maxw="244" x="190" y="222" text-anchor="middle" class="sc-cap" font-size="23" font-weight="700"></text>
+      <text data-slot="line-label" x="20" y="222" class="stc-lab" font-size="16" font-weight="600"></text>
+      <text data-slot="line-text" data-maxw="292" data-x-labelled="68" data-x-bare="20" data-maxr="360"
+            x="68" y="222" class="stc-cap" font-size="23" font-weight="700"></text>
     </g>
   </g>
 </svg>

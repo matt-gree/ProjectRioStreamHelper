@@ -21,11 +21,12 @@ import { StagedDot } from './controls';
  * The source strip — the OBS transport contract every stage panel wears in its
  * header (production-console-contract skill).
  *
- * THREE SLOTS, ALWAYS THIS ORDER, ALWAYS THIS PLACE:
+ * THREE SLOTS, ALWAYS THIS ORDER, ALWAYS THIS PLACE — led by one that is
+ * always there (Copy URL, the OBS-independent path):
  *
- *     [ BIND ]   [ AIR ]   [ PUSH ]
- *      add to     show/     hand content to the
- *      OBS        hide      shared container (fed only)
+ *     [ COPY ]   [ BIND ]   [ AIR ]   [ PUSH ]
+ *      its URL    add to     show/     hand content to the
+ *      (always)   OBS        hide      shared container (fed only)
  *
  * It sits immediately right of the panel's state chip, and the two read the
  * SAME binding: the chip says what the source is doing, the strip is the verb
@@ -105,7 +106,50 @@ function useBindTarget(element, board, placement) {
 }
 
 /*
- * Slot 1 — Bind. Only while the element has no source we can see.
+ * The standing slot — Copy URL. Always, whatever OBS is doing.
+ *
+ * It began as what Bind turned into with OBS closed, and that tied an
+ * OBS-independent verb to the connection: a producer whose OBS is on another
+ * machine is exactly the one who is also connected to a local one, and the
+ * moment a source was bound the URL left the panel altogether. Nothing about
+ * copying a string needs OBS, so nothing about OBS decides whether it shows.
+ *
+ * WHICH URL follows the same placement as every other slot: a bound source's
+ * own URL as OBS holds it (a producer's `?intro=0` and all), else what Bind
+ * would create — same builder, so what they paste is what Add would have made.
+ *
+ * It LEADS the strip rather than joining the end: the header right-anchors the
+ * strip, so a constant slot on the leading edge leaves Bind · Air · Push
+ * exactly where they have always been.
+ */
+const CopySlot = memo(function CopySlot({ element, board, placement }) {
+    const target = useBindTarget(element, board, placement);
+    const url = placement?.item?.url || absoluteOverlayUrl(target.url);
+    return (
+        <CopyButton value={url}>
+            {({ copied, copy }) => (
+                <SimpleTooltip label={
+                    copied
+                        ? 'Copied — paste it into a browser source'
+                        : placement?.item?.url
+                            ? `Copy the URL “${placement.item.sourceName}” is loading`
+                            : `Copy this overlay’s URL (${target.width}×${target.height})`
+                }>
+                    <Button size="xs" variant="secondary" onClick={copy} className="shrink-0">
+                        {copied
+                            ? <><Check size={11} className="mr-0.5" /> Copied</>
+                            : <><Copy size={11} className="mr-0.5" /> Copy URL</>}
+                    </Button>
+                </SimpleTooltip>
+            )}
+        </CopyButton>
+    );
+});
+
+/*
+ * Slot 1 — Bind. Only while the element has no source we can see, and only
+ * with OBS connected — it is the one verb that needs the connection, and with
+ * none the Copy URL beside it is the whole answer.
  *
  * Adds HIDDEN (enabled: false). Adding a source is setup, and setup must never
  * be the thing that puts something on the broadcast — the Air switch beside it
@@ -119,35 +163,7 @@ const BindSlot = memo(function BindSlot({ element, board, placement }) {
     const target = useBindTarget(element, board, placement);
     const [adding, setAdding] = useState(false);
 
-    /*
-     * With no OBS, hand over the URL instead of saying no.
-     *
-     * The slot used to read a flat "OBS offline", which is a dead end in the one
-     * place the panel exists to act — and it was wrong about the situation: a
-     * producer whose OBS is on another machine, or who is using another app
-     * entirely, needs exactly this string and nothing else. Same builder Bind
-     * uses, so what they paste is what Add would have created. (The Add picker's
-     * Copy URL is the same escape hatch, one surface over.)
-     */
-    if (status !== 'connected') {
-        return (
-            <CopyButton value={absoluteOverlayUrl(target.url)}>
-                {({ copied, copy }) => (
-                    <SimpleTooltip label={
-                        copied
-                            ? 'Copied — paste it into a browser source'
-                            : `Copy this overlay’s URL (${target.width}×${target.height}) — OBS isn’t connected`
-                    }>
-                        <Button size="xs" variant="secondary" onClick={copy} className="shrink-0">
-                            {copied
-                                ? <><Check size={11} className="mr-0.5" /> Copied</>
-                                : <><Copy size={11} className="mr-0.5" /> Copy URL</>}
-                        </Button>
-                    </SimpleTooltip>
-                )}
-            </CopyButton>
-        );
-    }
+    if (status !== 'connected') return null;
 
     const add = async () => {
         setAdding(true);
@@ -276,6 +292,7 @@ export const SourceStrip = memo(function SourceStrip({ element, board, placement
      */
     return (
         <div className="flex shrink-0 items-center gap-1.5">
+            <CopySlot element={element} board={board} placement={placement} />
             {placement?.item
                 ? <AirSlot binding={placement} />
                 : <BindSlot element={element} board={board} placement={placement} />}

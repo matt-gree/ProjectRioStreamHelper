@@ -639,3 +639,88 @@ async def test_real_booleans_are_left_alone(isolate_user_data):
     pins = Settings.settings["overlays"]["controller"]
     assert pins["labels"] is False
     assert pins["keyline"] is True
+
+
+"""
+v5 split `fontFamily` into three TYPE ROLES — displayFont / bodyFont / monoFont.
+
+The old key named one face for the whole broadcast but reached only the four
+DOM-rendered elements: every theme SVG paints from the token layer's three roles
+and `clearDesignSettings` stripped the app font outright, so a producer who set
+it watched four elements change typeface and fourteen ignore them.
+
+A STORED VALUE GOES ONTO ALL THREE. Whatever it was, it is what those elements
+were already drawing in, so spreading it is the only reading under which nothing
+on air moves on upgrade. The producer can then pull the roles apart, which is
+the point. The seeded default is NOT carried up — it is the absence of a choice,
+and treating it as one would pin Inter over the token layer's Rajdhani and Chivo
+Mono for everyone who never opened the Design tab.
+"""
+
+
+async def test_overlay_schema_v5_spreads_a_chosen_font_across_the_roles(isolate_user_data):
+    _write_settings(isolate_user_data, {
+        "overlays": {"schema_version": 4, "global": {"fontFamily": "Bebas Neue"}},
+    })
+    await Settings.Load()
+    glob = Settings.settings["overlays"]["global"]
+    assert "fontFamily" not in glob
+    assert glob["displayFont"] == "Bebas Neue"
+    assert glob["bodyFont"] == "Bebas Neue"
+    assert glob["monoFont"] == "Bebas Neue"
+
+
+async def test_overlay_schema_v5_leaves_the_seeded_default_alone(isolate_user_data):
+    """`Inter` is what the old key shipped as, so it is not a choice.
+
+    Carrying it up would pin the body face over the display and numeral roles
+    for every install that never touched the Design tab — i.e. it would use the
+    migration to change what the default package looks like.
+    """
+    _write_settings(isolate_user_data, {
+        "overlays": {"schema_version": 4, "global": {"fontFamily": "Inter"}},
+    })
+    await Settings.Load()
+    glob = Settings.settings["overlays"]["global"]
+    assert "fontFamily" not in glob
+    assert glob["displayFont"] == "Rajdhani"
+    assert glob["monoFont"] == "Chivo Mono"
+
+
+async def test_overlay_schema_v5_migrates_a_per_element_pin(isolate_user_data):
+    """A pin nests one or two levels deep; the scorecard's nests per BOARD."""
+    _write_settings(isolate_user_data, {
+        "overlays": {
+            "schema_version": 4,
+            "eventheader": {"fontFamily": "Oswald"},
+            "scorecard": {"2": {"fontFamily": "Lalezar"}},
+        },
+    })
+    await Settings.Load()
+    overlays = Settings.settings["overlays"]
+    assert overlays["eventheader"]["displayFont"] == "Oswald"
+    assert "fontFamily" not in overlays["eventheader"]
+    assert overlays["scorecard"]["2"]["monoFont"] == "Lalezar"
+    assert "fontFamily" not in overlays["scorecard"]["2"]
+
+
+async def test_overlay_schema_v5_keeps_a_role_the_file_already_named(isolate_user_data):
+    """A hand-written role outranks the key being split.
+
+    After `_deep_merge` the three seeded faces are on `global` whether or not
+    the file named them, so the migration reads the PRE-MERGE file to tell a
+    producer's own `displayFont` from the shipped one. Without that it would
+    either do nothing (every role looks "already set") or overwrite a real
+    choice — and both failures are invisible until someone reopens the tab.
+    """
+    _write_settings(isolate_user_data, {
+        "overlays": {
+            "schema_version": 4,
+            "global": {"fontFamily": "Bebas Neue", "monoFont": "Roboto Mono"},
+        },
+    })
+    await Settings.Load()
+    glob = Settings.settings["overlays"]["global"]
+    assert glob["displayFont"] == "Bebas Neue"
+    assert glob["bodyFont"] == "Bebas Neue"
+    assert glob["monoFont"] == "Roboto Mono"

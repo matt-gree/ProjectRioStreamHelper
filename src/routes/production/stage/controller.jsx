@@ -6,6 +6,7 @@ import { Button } from '../../../components/ui/button';
 import { CopyButton } from '../../../components/ui/copy-button';
 import { DirectStage } from './generic';
 import { useSideLabels } from '../sides';
+import { KIT_SECTION } from '../kit';
 
 /*
  * Controller stage — what is true of this element ON THE BROADCAST.
@@ -100,7 +101,7 @@ const ControllerContent = memo(function ControllerContent() {
                 </Text>
             </div>
 
-            <div className="mt-1 flex flex-col gap-1.5 border-t border-border/60 pt-2">
+            <div className={KIT_SECTION}>
                 <Text size="xs" className="label-display text-muted-foreground">Per-side follow</Text>
                 {[1, 2].map(side => (
                     <UrlRow

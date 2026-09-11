@@ -147,8 +147,9 @@ score.{N}.*                    per-board live game + projected fixture (N ≥ 1,
                      one client statement of what game_over + game_completed +
                      live_following mean together: empty | live | final |
                      stranded. `final` = the game ended; `stranded` = the feed
-                     lost it (quit/crash/dropped). Ask `isStaleBoard`, don't
-                     compare.
+                     lost it (quit/crash/dropped) and is LABELLED `STALLED` on
+                     the chip, because "ended" is what the other one means. Ask
+                     `isStaleBoard`, don't compare.
   hit.*            ← hit-visualizer payload (id bumps per contact)
   player.{T}.*     (T ∈ {1,2}: 1=left, 2=right — never "away/home")
     rioName, rioName_override (producer pin, cleared each new HUD game),

@@ -3,7 +3,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useStateStore } from '../../context/store';
 import { isOnStrip } from '../../context/commentary';
 import { boardOfUrl } from '../../lib/obs-binding';
-import { SubjectRow } from './kit';
+import { GameStageChip, SubjectRow } from './kit';
 import { resolveIntent } from './suggest';
 import { isPickableFeed } from './elements';
 import { useContainerDefs, useContainerOf } from './containers';
@@ -11,7 +11,7 @@ import { isFedPlacement } from './placements';
 import { memberName, useFeedReason } from './automations';
 import { bandLine, useBands, useFieldValues } from './eventheader';
 import { useSideLabels } from './sides';
-import { boardLifecycle, isStaleBoard } from './boards';
+import { boardLifecycle } from './boards';
 
 /*
  * THE SUBJECT — what an element is currently drawing.
@@ -100,39 +100,58 @@ export const BoardGameSubject = memo(function BoardGameSubject({ board }) {
         return <SubjectRow text="No game on this board yet" />;
     }
     /*
-     * THE META IS WHERE THE GAME IS UP TO, and "over" is a place a game gets to.
-     * A finished game kept reading `Top 9` — true of the last frame and useless
-     * as an answer to "is this still going", which is the question a producer
-     * actually has when they are about to put the next fixture up.
+     * WHO AND WHETHER — not where in the game.
      *
-     * Wording splits the two ways a game stops. `Final` is the game reaching its
-     * end; `Ended` is the feed losing it (a quit, a crash, an ongoing game that
-     * dropped out) — we know it is not coming back, not that it finished.
+     * A subject sits in a panel header and on a rail card, and the question both
+     * are asked at a glance is "which game is this, and is it still going". The
+     * first is the names and the score; the second is the badge, off the same
+     * palette as the board desk's game slot (../kit GameChip), so the header and
+     * the desk below it cannot disagree about it.
+     *
+     * THE INNING IS NOT PART OF EITHER. It was the qualifier here, and it is the
+     * one number that ticks over on its own — a detail for a surface built to
+     * WATCH a game, which the board desk's `GameSlot` is and a panel header is
+     * not. Dropping it also settles what the badge is for: the lifecycle used to
+     * be a dimmed word that REPLACED the inning, so "is this still going" was
+     * answered in the same grey as "Top 9" and a finished game lost the inning
+     * it finished in. Colour answers it now, and the inning goes back to the one
+     * surface that was always the right home for it.
+     *
+     * FINAL vs ENDED is a real distinction, not two words for one thing. FINAL
+     * is the game reaching its end — there is a true result, and it is what the
+     * capture and the series credit are built on. ENDED is the FEED losing the
+     * game (a quit, a crash, an ongoing API game that dropped out of the pool):
+     * we know it will not update again, NOT that it finished, so what is on
+     * screen may be a mid-game frame. See `boardLifecycle` (./boards).
      */
-    const inning = isStaleBoard(g.lifecycle)
-        ? (g.lifecycle === 'final' ? 'Final' : 'Ended')
-        : g.inning != null
-            ? `${(g.half || 'Top') === 'Top' ? 'Top' : 'Bot'} ${g.inning}`
-            : null;
     return (
         <SubjectRow
             text={`${g.n1 || label(1)} ${g.l ?? 0}–${g.r ?? 0} ${g.n2 || label(2)}`}
-            meta={inning}
+            badge={<GameStageChip lifecycle={g.lifecycle} />}
         />
     );
 });
 
-// One side of one board: who is sitting there right now, and what they're
-// playing. The answer a `?team=` source cannot give about itself.
+/*
+ * One side of one board: who is sitting there right now, and what they're
+ * playing. The answer a `?team=` source cannot give about itself.
+ *
+ * IT DOES NOT NAME THE SIDE, because the thing it sits next to always does. A
+ * subject renders in exactly two places and both are titled with the variant —
+ * `PLAYER NAME · SIDE 1` on a panel header, the same on a rail card — so
+ * "Side 1 — MattGree" beside "PLAYER NAME · SIDE 1" spends the front of the one
+ * line that carries an IDENTITY on repeating a POSITION the reader just read.
+ * That is the whole reason this subject exists: a side is a position (Rio
+ * reassigns away/home every game), the title can only ever give the position,
+ * and the name is what the title cannot say.
+ */
 const SideSubject = memo(function SideSubject({ board, team }) {
     const p = useStateStore(useShallow(s => {
         const side = s?.score?.[board]?.player?.[team];
         return { name: side?.rioName || '', msbTeam: side?.msb_team || '' };
     }));
-    const { label } = useSideLabels();
-    const where = label(team);
-    if (!p.name) return <SubjectRow text={`${where} — nobody on this side yet`} />;
-    return <SubjectRow text={`${where} — ${p.name}`} meta={p.msbTeam || null} />;
+    if (!p.name) return <SubjectRow text="Nobody on this side yet" />;
+    return <SubjectRow text={p.name} meta={p.msbTeam || null} />;
 });
 
 /*

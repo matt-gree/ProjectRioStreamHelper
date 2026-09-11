@@ -215,7 +215,7 @@ export function mountMatchup({ host }) {
     if (disposed) return;
 
     if (engine.usesAppVars) OverlayBase.applyDesignSettings(SETTINGS_TYPE);
-    else OverlayBase.clearDesignSettings();
+    else OverlayBase.clearDesignSettings(SETTINGS_TYPE);
 
     // Prefer the Address Book display tag; fall back to the Rio name.
     const name1 = g(mu, 'side1.tag', '') || g(mu, 'side1.rioName', '');

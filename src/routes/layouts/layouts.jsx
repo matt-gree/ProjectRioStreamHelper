@@ -12,7 +12,7 @@ import { DesignTabBody } from './design';
  * one of those jobs moved into the Production console (v2 phase 8):
  *   - add a source / copy its URL → the rack's + (Add picker, with a Copy button)
  *   - layout style settings       → the stage's Style section
- *   - reveal-animation toggle      → the stage's "On show" row
+ *   - reveal-animation toggle      → the stage's Intro animation row
  *   - controller subprocess        → the controller element's stage body
  *   - preview                      → the stage's preview column
  * so the browser and its helper modules (catalog / binding / layoutSettings /

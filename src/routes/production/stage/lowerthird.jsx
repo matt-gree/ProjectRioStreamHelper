@@ -213,7 +213,7 @@ const CLOCK_MODE_SHORT = {
  * ends move the selected slot along the band, so reordering happens on the
  * picture of the band rather than in a list beside it.
  */
-const BandRibbon = memo(function BandRibbon({ selected, onSelect }) {
+const BandRibbon = memo(function BandRibbon({ selected, onSelect, title }) {
     const { matches, slot, val, isStaged, setKey, swap } = useLowerThird();
     const active = useActiveBoards();
     const boardLabel = useBoardLabel();
@@ -253,7 +253,7 @@ const BandRibbon = memo(function BandRibbon({ selected, onSelect }) {
                 onDown={() => move(selected + 1)}
             />
             <div
-                role="tablist" aria-label="Band preview"
+                role="tablist" aria-label="Band preview" title={title || undefined}
                 className="flex min-w-0 flex-1 items-stretch gap-1 rounded-md border border-border bg-card/40 p-1"
             >
                 {segs.map(({ i, type, on, live, summary, staged }) => {
@@ -459,12 +459,19 @@ export default function LowerThirdStage({ element, placement }) {
             <DirectStage element={element} placement={placement} />
 
             <Stack gap="none">
-                <BandRibbon selected={selected} onSelect={setSelected} />
-                <Text size="xs" className="pt-1 text-muted-foreground">
-                    The band, left → right. Pick a segment to edit it below; ◀ ▶ move it.
-                    Lit means on air, and widths are indicative — the design package owns
-                    the real ones.
-                </Text>
+                {/*
+                  * NO LEGEND. Three of the four things it said are learnt by
+                  * looking: the ribbon is visibly left-to-right, the ◀ ▶ are
+                  * visibly buttons, and clicking a segment visibly opens it
+                  * below. The fourth — that these widths are indicative and the
+                  * design package owns the real ones — is the only fact nobody
+                  * can see, so it rides on the ribbon it is about.
+                  */}
+                <BandRibbon
+                    selected={selected}
+                    onSelect={setSelected}
+                    title="Segment widths here are indicative — the design package owns the real ones."
+                />
             </Stack>
 
             <SlotEditor i={selected} />

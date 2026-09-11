@@ -4,13 +4,16 @@ import { Text } from '../../../components/ui/primitives';
 import { SimpleTooltip } from '../../../components/ui/simple-tooltip';
 import { cn } from '../../../lib/utils';
 import { StateChip } from './StateChip';
+import { InlineSubjects } from './rows';
 
 // Panel frame for stage panels (and desk bodies): header = chip · name ·
-// primary action · pin · close (where applicable); body; optional footer.
+// subject · primary action · pin · close (where applicable); body; optional
+// footer. `subject` is the live "what is this showing" line (../subject),
+// carried in the header rather than as the body's first row — see below.
 // `pinnable={false}` is the quickFace: null case — the pin affordance does
 // not render at all, an intentional and visible state per the contract.
 export const PanelShell = memo(function PanelShell({
-    state, title, meta, primaryAction,
+    state, title, subject, meta, primaryAction,
     pinnable = true, pinned = false, onPinToggle,
     onClose, footer, children, className,
 }) {
@@ -26,9 +29,30 @@ export const PanelShell = memo(function PanelShell({
                     contents has no entry point. One step (15px against the
                     body's 12px), not a headline: this is a dense work surface
                     and the controls are why anyone is here. */}
-                <Text truncate className="label-display min-w-0 flex-1 text-[0.9375rem] font-semibold text-foreground">
+                <Text truncate className="label-display min-w-0 text-[0.9375rem] font-semibold text-foreground">
                     {title}
                 </Text>
+                {/*
+                  * THE SUBJECT SITS BESIDE THE TITLE, not above the body.
+                  *
+                  * What this panel is, what it is currently showing, and what it
+                  * is bound to are one thought, and they were three stacked
+                  * lines — a 15px title, then a 12px subject, then a 12px
+                  * binding note, each in its own grey. The header runs 36px tall
+                  * with most of its width empty, so the two facts a producer
+                  * glances at fit on the row that already exists.
+                  *
+                  * The hairline is a SEPARATOR, not a dot: the title composes
+                  * its own coordinates with "·" (SCOREBOARD · TEST · SMALL), so
+                  * another one here would read as a fourth coordinate rather
+                  * than the seam between identity and live state.
+                  */}
+                {subject ? (
+                    <>
+                        <span aria-hidden className="h-3.5 w-px shrink-0 bg-border" />
+                        <div className="min-w-0 flex-1"><InlineSubjects>{subject}</InlineSubjects></div>
+                    </>
+                ) : <div className="min-w-0 flex-1" />}
                 {meta != null && <Text size="xs" span truncate dimmed className="min-w-0">{meta}</Text>}
                 {primaryAction}
                 {pinnable && (

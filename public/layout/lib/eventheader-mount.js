@@ -23,7 +23,7 @@
  * Requires overlay-base.js (OverlayBase).
  */
 
-import { socialMark, SOCIAL_MARKS } from './social-marks.js';
+import { socialMark } from './social-marks.js';
 
 const REF_W = 1920, REF_H = 1080;
 
@@ -51,10 +51,12 @@ const CSS = `
   position: absolute; left: 0; top: 0;
   width: ${REF_W}px; height: ${REF_H}px;
   transform-origin: top left;
-  /* The Design-tab Font Family (overlays.global.fontFamily → --font-family)
-     drives the face; Inter is the bundled fallback, then system sans-serif.
-     --font-family already resolves to Inter by default. */
-  font-family: var(--font-family, 'Inter'), 'Inter', sans-serif;
+  /* The bands carry the event's own identity - its name, phase, date, handles -
+     in short runs of caps, which is the display role, and the same role the
+     lower third's band draws in. Producer-settable per role from the Design
+     tab's Typography section (overlays.global.displayFont), and pinnable on
+     this element alone from its stage panel. */
+  font-family: var(--font-display, 'Rajdhani', 'Arial Narrow', sans-serif);
   color: var(--text-primary, #ffffff);
 }
 .eh-stage, .eh-stage * { box-sizing: border-box; margin: 0; padding: 0; }

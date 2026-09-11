@@ -21,7 +21,7 @@ this file; never work from memory of a contract.
 | Tier | Palette | How |
 |---|---|---|
 | **Full-art package** | Fixed — the SVG brings its own colors; the user's Design-tab knobs never repaint it (`default`, `slice26`, `chalk`) | Literal hexes (or Rio token vars with literal fallbacks) |
-| **Token skin** | App-vars — painted by the user's Design-tab knobs (`classic`) | `data-design-vars="app"` on the root `<svg>`, paint with `--accent`, `--card-bg`, `--text-primary`, `--border-color`, `--border-width`, `--font-family`, `--card-shadow-filter`, `--text-shadow` |
+| **Token skin** | App-vars — painted by the user's Design-tab knobs (`classic`) | `data-design-vars="app"` on the root `<svg>`, paint with `--accent`, `--card-bg`, `--text-primary`, `--border-color`, `--border-width`, `--card-shadow-filter`, `--text-shadow` (type comes from the three ROLE vars on every tier - see Type roles below) |
 
 Pick ONE per theme file and never mix: the mounts key off `engine.usesAppVars`
 to either apply or clear the app vars. Both tiers may use the **runtime color
@@ -38,6 +38,14 @@ the package selector. So a theme that forgets `data-design-vars="app"` doesn't
 just render with the wrong palette — it takes its own colour controls off the
 Production stage.
 
+**Which type roles a file sets text in is read back the same way** —
+`typeRoles` (`_type_roles`, every `var(--font-display|body|mono)` anywhere in
+the file). The stage offers a per-element font override only for a role the
+active theme draws, under either tier (type survives `clearDesignSettings`). A
+theme that hardcodes a face instead of naming a role therefore takes that
+element's font controls off the stage too — correctly, since a pin would
+change nothing.
+
 **Two questions, one per surface.** An element's own stage panel asks the
 per-element question (`paintedByApp`); the Design tab's GLOBAL knobs ask
 whether the palette still reaches *any* themed element
@@ -47,11 +55,54 @@ the card-surface colours are hidden outright. What survives every package is
 listed in `THEME_ONLY_GLOBAL_KEYS`' comment (`designConstants.js`) and is a
 fact about the OVERLAYS, not a judgement: the Event Header and Player Name
 carry no theme SVG, so their mounts call `applyDesignSettings` unconditionally
-and always read `--accent`, `--text-primary`, `--font-family` and
-`--text-shadow`; `showCaptains`/`showLogo` are `readSetting` content toggles,
+and always read `--accent`, `--text-primary` and `--text-shadow` (the three type
+roles reach every element on every package — see Type roles below); `showCaptains`/`showLogo` are `readSetting` content toggles,
 never CSS vars. Add a key to that list only after checking who reads it —
 hiding a live control is the worse failure, which is why every unknown answers
 "show it".
+
+## Type roles
+
+Broadcast type is set THREE ways, and a theme names the role rather than a face.
+The token layer (`public/layout/lib/rio-theme/tokens.css`) ships the defaults;
+the producer repoints any of them from the Design tab's **Typography** section
+(`overlays.global.displayFont` / `bodyFont` / `monoFont`), and those reach
+**every package on every tier** — a fixed palette is a decision about the show's
+look, the face a name is set in is a decision about the organisation running it.
+
+| Role | Var | Ships as | For |
+|---|---|---|---|
+| Display | `--font-display` | Rajdhani | names, titles, status labels |
+| Body | `--font-body` | Inter | meta, captions, prose lines |
+| Numeral | `--font-mono` | Chivo Mono | scores, stats, linescores, clocks |
+
+Paint through a CLASS, and let its name carry the role — `-ink` and `-lab` are
+display, `-dim` and `-cap` are body, `-num` is the numeral role and must also
+declare `font-variant-numeric: tabular-nums`. That last one was free while the
+role was guaranteed monospaced and is not free now: point `monoFont` at a
+proportional face and an untagged score shoves its neighbours as it ticks.
+
+**A VALUE AND A SENTENCE ARE DIFFERENT ROLES, and "does it contain digits" is
+not the test.** A value is a number in a fixed cell; a sentence is prose that
+happens to contain numbers ("3 for 5, 2B, HR, 4 RBI"), and it takes `-cap`.
+Measured at weight 700, Chivo Mono's digit is 0.600em against Inter's 0.6465em
+*with tabular figures* — which a value sets either way, so the body face never
+gets to spend its narrow `1` — and its `%` is 0.600 against Inter's 1.0156. So
+the numeral face is NARROWER on every value these themes draw except a decimal,
+where one 0.33em period is the whole of its loss: in the Stat Card's 106-wide
+cell at 34px, `25.0%` is 102 units in the numeral face and 110 in the body one,
+so mono is what keeps a percentage off the auto-fit. On a sentence it inverts,
+because a sentence is mostly letters — the Scorecard's pitcher line is 305 units
+in body and 403 in mono at 16px in a 352 box, so it auto-fit to 14px for years.
+
+**Weights are what the token layer loads.** Rajdhani is fetched at 500/600/700,
+so display type at 800 is synthesised — a smeared outline at broadcast sizes
+that renders fine, which is why nobody notices. Chivo Mono runs 500–800.
+
+**Class names are DOCUMENT-scoped.** A container retains one layer per member it
+has stood up and an inline SVG's `<style>` applies document-wide, so two themes
+on one roster that share a class name are resolved by whichever mounted last.
+Give each element its own prefix (`sb-` / `sc-` / `st-` / `stc-` / `tk-`).
 
 ## Package anatomy + install rules (`server/design_packages.py`)
 
@@ -150,11 +201,9 @@ package family via fixed CSS in its HTML).
      Chrome) even though CPU/headless raster looks fine. The mount applies clip
      only *during* an animation and drops it at rest — an authored theme must
      not add its own (see overlay-authoring for the full pattern).
-   - Fonts aren't embedded: use fonts the element shells load (Rio tokens'
-     `--font-display` etc.) or web-safe stacks with fallbacks. The tokens'
-     `--font-mono` is **Chivo Mono** — a display mono, sized to be read across
-     a room. Don't reach for a code face (JetBrains, SF Mono) for numerals a
-     viewer sees at 44–76px.
+   - **Type roles — never a literal face.** See "Type roles" below; a node that
+     names a font instead of a role is one the producer's Typography settings
+     cannot reach, and `tests/unit/test_design_package_svgs.py` fails it.
    - **`data-maxw` on any text slot whose content the producer or the clock
      controls**, not just the ones that look long in the mock. Authored sample
      text is the *short* case: a lower third's clock slot is drawn as "5:00"

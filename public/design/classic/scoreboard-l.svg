@@ -7,11 +7,11 @@
     contract in scoreboard-mount.js.
   -->
   <style>
-    .cl-name { fill: var(--text-primary, #ffffff); font-family: var(--font-family, 'Inter', sans-serif); text-shadow: var(--text-shadow, none); }
-    .cl-score { fill: var(--accent, #f59e0b); font-family: var(--font-family, 'Inter', sans-serif); }
-    .cl-dim  { fill: rgba(255,255,255,0.6); font-family: var(--font-family, 'Inter', sans-serif); }
-    .cl-dim2 { fill: rgba(255,255,255,0.4); font-family: var(--font-family, 'Inter', sans-serif); }
-    .cl-cell { fill: rgba(255,255,255,0.85); font-family: var(--font-family, 'Inter', sans-serif); }
+    .cl-name { fill: var(--text-primary, #ffffff); font-family: var(--font-body, 'Inter', system-ui, sans-serif); text-shadow: var(--text-shadow, none); }
+    .cl-score { fill: var(--accent, #f59e0b); font-family: var(--font-body, 'Inter', system-ui, sans-serif);  font-variant-numeric: tabular-nums;}
+    .cl-dim  { fill: rgba(255,255,255,0.6); font-family: var(--font-body, 'Inter', system-ui, sans-serif); }
+    .cl-dim2 { fill: rgba(255,255,255,0.4); font-family: var(--font-body, 'Inter', system-ui, sans-serif); }
+    .cl-cell { fill: rgba(255,255,255,0.85); font-family: var(--font-body, 'Inter', system-ui, sans-serif);  font-variant-numeric: tabular-nums;}
   </style>
 
   <rect data-slot="card-bg" x="20" y="8" width="760" height="412" rx="16"
@@ -33,7 +33,7 @@
     <text data-slot="inn-num" x="400" y="60" text-anchor="middle" class="cl-name" font-size="20" font-weight="800">1</text>
     <g data-slot="final-badge" opacity="0">
       <rect x="368" y="32" width="64" height="24" rx="4" style="fill:var(--final-badge-color, #ef4444)"/>
-      <text x="400" y="49" text-anchor="middle" fill="#ffffff" font-family="var(--font-family, 'Inter', sans-serif)" font-size="12" font-weight="800" letter-spacing="1">FINAL</text>
+      <text x="400" y="49" text-anchor="middle" fill="#ffffff" font-family="var(--font-body, 'Inter', system-ui, sans-serif)" font-size="12" font-weight="800" letter-spacing="1">FINAL</text>
     </g>
   </g>
 
@@ -42,11 +42,11 @@
     <image data-slot="bat-icon" x="36" y="28" width="36" height="36" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
     <text data-slot="bat-name" data-maxw="170" x="80" y="46" class="cl-name" font-size="14" font-weight="700">Batter</text>
     <rect x="80" y="54" width="26" height="14" rx="3" fill="#d97706"/>
-    <text x="93" y="64.5" text-anchor="middle" fill="#ffffff" font-family="var(--font-family, 'Inter', sans-serif)" font-size="9" font-weight="700" letter-spacing="0.5">AB</text>
+    <text x="93" y="64.5" text-anchor="middle" fill="#ffffff" font-family="var(--font-body, 'Inter', system-ui, sans-serif)" font-size="9" font-weight="700" letter-spacing="0.5">AB</text>
 
     <text data-slot="pit-name" data-maxw="170" x="720" y="46" text-anchor="end" class="cl-name" font-size="14" font-weight="700">Pitcher</text>
     <rect x="700" y="54" width="20" height="14" rx="3" fill="#2563eb"/>
-    <text x="710" y="64.5" text-anchor="middle" fill="#ffffff" font-family="var(--font-family, 'Inter', sans-serif)" font-size="9" font-weight="700">P</text>
+    <text x="710" y="64.5" text-anchor="middle" fill="#ffffff" font-family="var(--font-body, 'Inter', system-ui, sans-serif)" font-size="9" font-weight="700">P</text>
     <image data-slot="pit-icon" x="728" y="28" width="36" height="36" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
 
     <!-- count dots -->
@@ -120,7 +120,7 @@
       <g data-slot="box-col-7"><text data-slot="box-h-7" x="480" y="28" text-anchor="middle" class="cl-dim2" font-size="10" font-weight="700">7</text></g>
       <g data-slot="box-col-8"><text data-slot="box-h-8" x="530" y="28" text-anchor="middle" class="cl-dim2" font-size="10" font-weight="700">8</text></g>
       <g data-slot="box-col-9"><text data-slot="box-h-9" x="580" y="28" text-anchor="middle" class="cl-dim2" font-size="10" font-weight="700">9</text></g>
-      <text data-slot="box-away-name" data-maxw="110" x="40" y="56" fill="rgba(255,255,255,0.5)" font-family="var(--font-family, 'Inter', sans-serif)" font-size="11">Away</text>
+      <text data-slot="box-away-name" data-maxw="110" x="40" y="56" fill="rgba(255,255,255,0.5)" font-family="var(--font-body, 'Inter', system-ui, sans-serif)" font-size="11">Away</text>
       <text data-slot="box-away-1" x="180" y="56" text-anchor="middle" class="cl-cell" font-size="12" font-weight="600">-</text>
       <text data-slot="box-away-2" x="230" y="56" text-anchor="middle" class="cl-cell" font-size="12" font-weight="600">-</text>
       <text data-slot="box-away-3" x="280" y="56" text-anchor="middle" class="cl-cell" font-size="12" font-weight="600">-</text>
@@ -130,7 +130,7 @@
       <text data-slot="box-away-7" x="480" y="56" text-anchor="middle" class="cl-cell" font-size="12" font-weight="600">-</text>
       <text data-slot="box-away-8" x="530" y="56" text-anchor="middle" class="cl-cell" font-size="12" font-weight="600">-</text>
       <text data-slot="box-away-9" x="580" y="56" text-anchor="middle" class="cl-cell" font-size="12" font-weight="600">-</text>
-      <text data-slot="box-home-name" data-maxw="110" x="40" y="82" fill="rgba(255,255,255,0.5)" font-family="var(--font-family, 'Inter', sans-serif)" font-size="11">Home</text>
+      <text data-slot="box-home-name" data-maxw="110" x="40" y="82" fill="rgba(255,255,255,0.5)" font-family="var(--font-body, 'Inter', system-ui, sans-serif)" font-size="11">Home</text>
       <text data-slot="box-home-1" x="180" y="82" text-anchor="middle" class="cl-cell" font-size="12" font-weight="600">-</text>
       <text data-slot="box-home-2" x="230" y="82" text-anchor="middle" class="cl-cell" font-size="12" font-weight="600">-</text>
       <text data-slot="box-home-3" x="280" y="82" text-anchor="middle" class="cl-cell" font-size="12" font-weight="600">-</text>

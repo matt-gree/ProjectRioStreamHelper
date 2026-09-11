@@ -29,7 +29,11 @@ describe('ReadinessNote', () => {
     it('explains the blank when the board has no player names', () => {
         withPlayers(1, '', '');
         render(<ReadinessNote element={el('scoreboard')} board={1} />);
-        expect(screen.getByText(/no player names yet/i)).toBeInTheDocument();
+        // The consequence is the eyebrow, the cause is the value, and the Rio
+        // detail behind it is the expansion.
+        expect(screen.getByText('BLANK ON AIR')).toBeInTheDocument();
+        expect(screen.getByText(/No player names on board 1/i)).toBeInTheDocument();
+        expect(screen.getByTitle(/stale HUD file looks exactly like this/)).toBeInTheDocument();
     });
 
     it('says nothing once either side has a name', () => {
@@ -46,12 +50,13 @@ describe('ReadinessNote', () => {
             },
         }, true);
         render(<ReadinessNote element={el('scoreboard')} board={2} />);
-        expect(screen.getByText(/scoreboard 2 has no player names/i)).toBeInTheDocument();
+        expect(screen.getByText(/No player names on board 2/i)).toBeInTheDocument();
     });
 
     it('warns for a board with no state at all', () => {
         render(<ReadinessNote element={el('scoreboard')} board={9} />);
-        expect(screen.getByText(/no player names yet/i)).toBeInTheDocument();
+        expect(screen.getByText('BLANK ON AIR')).toBeInTheDocument();
+        expect(screen.getByText(/No player names on board 9/i)).toBeInTheDocument();
     });
 
     // A Lower Third has no board, so it has no board-readiness to report — the

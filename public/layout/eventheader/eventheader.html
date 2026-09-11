@@ -9,10 +9,11 @@
 -->
 <head>
   <meta charset="utf-8" />
+  <link rel="stylesheet" href="/layout/lib/rio-theme/tokens.css" />
   <!-- The whitelist must name every knob the mount reads: Setup filters
        LAYOUT_SETTINGS.eventheader down to what appears here, so an omitted key
        is a setting the mount honours but nobody can reach. -->
-  <meta name="overlay-settings" content="showHeader, headerOffsetY, showFooter, footerOffsetY, bands, bandWidth, headerFontSize, footerFontSize, bgStyle, separator, textColor, accentColor, cardBg, textShadow, textStroke, fontFamily" />
+  <meta name="overlay-settings" content="showHeader, headerOffsetY, showFooter, footerOffsetY, bands, bandWidth, headerFontSize, footerFontSize, bgStyle, separator, textColor, accentColor, cardBg, textShadow, textStroke, displayFont" />
   <style>
     html, body { margin: 0; width: 1920px; height: 1080px; background: transparent; overflow: hidden; }
     /* The mount scales its 1920×1080 stage to this box, so a smaller OBS

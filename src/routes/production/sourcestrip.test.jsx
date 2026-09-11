@@ -81,16 +81,46 @@ describe('SourceStrip slots', () => {
     });
 
     /*
-     * With OBS disconnected the slot hands over the URL rather than saying no. It
+     * With OBS disconnected the strip hands over the URL rather than saying no. It
      * used to read a flat "OBS offline", which is a dead end in the one place the
      * panel exists to act — and wrong about the situation: a producer whose OBS is
      * on another machine, or who uses another app entirely, needs exactly this
      * string. Bind is the only verb that actually requires the connection.
      */
-    it('offers the source URL instead of Bind when OBS is disconnected', () => {
+    it('offers the source URL and no Bind when OBS is disconnected', () => {
         ui(<SourceStrip element={el('scoreboard')} />);
         expect(screen.queryByRole('button', { name: /add to obs/i })).not.toBeInTheDocument();
         expect(screen.getByRole('button', { name: /copy url/i })).toBeEnabled();
+    });
+});
+
+/*
+ * COPY URL IS NOT BIND'S OFFLINE FACE. It was, which tied an OBS-independent
+ * verb to the connection: connected, the URL left the panel — and a bound
+ * source never offered it at all. It shows in every state the strip has.
+ */
+describe('SourceStrip copy slot', () => {
+    it('sits beside Bind when OBS is connected', () => {
+        connected([]);
+        ui(<SourceStrip element={el('scoreboard')} />);
+        expect(screen.getByRole('button', { name: /copy url/i })).toBeEnabled();
+        expect(screen.getByRole('button', { name: /add to obs/i })).toBeInTheDocument();
+    });
+
+    it('stays once a source is bound', () => {
+        const item = src(1, 'Scoreboard', 'http://x/layout/scoreboard1/scoreboard.html?intro=0', true);
+        connected([item]);
+        ui(<SourceStrip element={el('scoreboard')} placement={at(item)} />);
+        expect(screen.getByRole('button', { name: /copy url/i })).toBeEnabled();
+        expect(screen.getByRole('button', { name: /hide scoreboard on air/i })).toBeInTheDocument();
+    });
+
+    it('stays on a member’s slot on a container', () => {
+        const item = src(7, 'Callout Stage', 'http://x/layout/shared/callout-stage.html', false);
+        connected([item]);
+        ui(<SourceStrip element={el('postgamevs')} placement={on('callout-stage', item)} />);
+        expect(screen.getByRole('button', { name: /copy url/i })).toBeEnabled();
+        expect(screen.getByRole('button', { name: /^push$/i })).toBeInTheDocument();
     });
 });
 

@@ -1,6 +1,8 @@
 import { memo, useMemo, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import { Eye, EyeOff, ChevronDown, ChevronRight, Plus, Circle, CircleDot, Trash2 } from 'lucide-react';
+import {
+    Eye, EyeOff, ChevronDown, ChevronRight, Plus, Circle, CircleDot, Trash2, TriangleAlert,
+} from 'lucide-react';
 import { useObsStore, useMirrorScene } from '../../context/obs';
 import { useStateStore } from '../../context/store';
 import { Panel } from '../../components/ui/panel';
@@ -13,7 +15,7 @@ import { cn } from '../../lib/utils';
 import { usePersistentState } from '../../hooks/usePersistentState';
 import { ELEMENTS, isPinnable } from './elements';
 import {
-    isFedPlacement, placementTarget, togglePin as togglePinIn, useConsoleOffline,
+    isFedPlacement, placementTarget, stretchOfPlacement, togglePin as togglePinIn, useConsoleOffline,
     useConsolePlacements, useConsoleScenes, usePlacementLabel,
 } from './placements';
 import { StateChip, chipFor } from './kit';
@@ -298,11 +300,49 @@ const PlacementRemove = memo(function PlacementRemove({ placement, name }) {
     );
 });
 
+/*
+ * "OBS is scaling this source."
+ *
+ * The one fault the rack can see that OBS never mentions. A browser source
+ * renders at its own resolution and the scene item then scales that finished
+ * texture, so dragging a handle — the obvious gesture for resizing — resamples
+ * pixels instead of re-rendering the page, and nothing in either program says a
+ * word. EITHER DIRECTION counts: enlarging softens, and at any factor an
+ * element with absolute type (the Player Name) is drawing a size other than the
+ * one the producer set.
+ *
+ * AMBER, and the row's one exception to a colourless right-hand column. The tag
+ * beside it is deliberately grey because it says what a row IS; this says
+ * something is WRONG with it, which is the meaning amber carries everywhere
+ * else in the console — "you'd want to know before this is on air". It cannot
+ * be confused with the chip's air states: those are emerald and sky, and they
+ * are on the other end of the row.
+ *
+ * Not a button. It marks the row; selecting the row opens the panel that
+ * carries the fix (stage/resolution.jsx), which is the same path every other
+ * thing wrong with a source takes.
+ */
+const StretchBadge = memo(function StretchBadge({ factor, cropped }) {
+    return (
+        <span
+            title={`This source is being drawn at ${factor.toFixed(1)}× the resolution it `
+                + `renders at, so OBS is resampling it rather than showing it. `
+                + (cropped
+                    ? 'It is cropped, so the fix is its size in OBS Properties.'
+                    : 'Open this row to redraw it at true size.')}
+            className="label-display ml-auto flex shrink-0 items-center gap-1 text-[10px] tracking-wider text-amber-300"
+        >
+            <TriangleAlert size={10} className="shrink-0" />
+            {factor.toFixed(1)}×
+        </span>
+    );
+});
+
 // One rack row. Rows relocate as OBS state changes; the entry animation is
 // motion-safe so prefers-reduced-motion users get an instant move.
 const RackRow = memo(function RackRow({
     state, name, meta, tag, tagTitle, dimmed, selected, onSelect, quickAction,
-    pinnable, pinned, onPinToggle, nested, rowAction,
+    pinnable, pinned, onPinToggle, nested, rowAction, stretch, cropped,
 }) {
     return (
         <div
@@ -340,6 +380,10 @@ const RackRow = memo(function RackRow({
                         {tag}
                     </span>
                 )}
+                {/* After the tag, so a stretched row keeps its type tag AND the
+                    warning — the `ml-auto` on whichever comes first pushes the
+                    pair right together. */}
+                {stretch ? <StretchBadge factor={stretch} cropped={cropped} /> : null}
             </button>
             {quickAction}
             {pinnable && <PinToggle pinned={pinned} onToggle={onPinToggle} />}
@@ -683,6 +727,7 @@ const SceneSection = memo(function SceneSection({
                                 pinnable={isPinnable(p.element)} pinned={pinned.has(p.id)}
                                 onPinToggle={() => onPinToggle(p.id)}
                                 rowAction={<PlacementRemove placement={p} name={name} />}
+                                stretch={stretchOfPlacement(p)} cropped={p.item?.cropped}
                             />
                         );
                     })
@@ -695,6 +740,54 @@ const SceneSection = memo(function SceneSection({
 // Selection and rail pins are owned by the page when the console is assembled
 // (one copy shared with the stage and the rail); the internal hooks are the
 // standalone fallback so a Rack still works — and still persists — on its own.
+/*
+ * THE YELL.
+ *
+ * A stretched source is invisible in OBS and easy to miss on a row in a
+ * collapsed scene, so the count comes to the top of the rack where a producer
+ * cannot work around it — and it leads to the fix rather than just complaining:
+ * pressing it selects the offending row, which opens the panel with the redraw
+ * on it.
+ *
+ * NOT an app-wide banner, and that is a considered limit rather than timidity.
+ * The two banners at the app root (sample data on air, a match identity
+ * conflict) both mean the broadcast is showing THE WRONG THING — the wrong
+ * players, canned content — and a producer must not be able to change tabs away
+ * from either. A scaled source is showing the right thing at the wrong
+ * fidelity: real, worth fixing, survivable for a whole show, and visible on
+ * every surface a producer builds scenes on. Spending the loudest register on
+ * it would teach them to scroll past the register, which costs the two that
+ * matter.
+ *
+ * Counted over PLACEMENTS rather than scene items so it agrees exactly with the
+ * rows below it: only PRSH's own sources, only in mirrored scenes, fed rows
+ * folded into the container they belong to.
+ */
+const StretchNotice = memo(function StretchNotice({ placements, onSelect }) {
+    const stretched = useMemo(
+        () => placements.filter(p => stretchOfPlacement(p)),
+        [placements],
+    );
+    if (!stretched.length) return null;
+
+    const one = stretched.length === 1 ? stretched[0] : null;
+    return (
+        <button
+            type="button"
+            data-rack-stretch={stretched.length}
+            onClick={() => onSelect(stretched[0].id)}
+            className="mb-1 flex items-center gap-2 rounded-md border border-amber-500/30 bg-amber-950/40 px-2 py-1.5 text-left hover:bg-amber-950/60"
+        >
+            <TriangleAlert size={13} className="shrink-0 text-amber-400" />
+            <Text size="xs" className="min-w-0 text-amber-100/90">
+                {one
+                    ? `OBS is scaling ${one.item?.sourceName ?? 'a source'} — it is not being drawn at true size.`
+                    : `OBS is scaling ${stretched.length} sources — they are not being drawn at true size.`}
+            </Text>
+        </button>
+    );
+});
+
 export const Rack = memo(function Rack({
     selection: selectionProp, onSelect, pins: pinsProp, onPinToggle, onAdd,
 }) {
@@ -742,10 +835,42 @@ export const Rack = memo(function Rack({
             : [...(prev ?? []), tier]
     ));
 
+    /*
+     * A SIDE COLUMN IS THE VIEWPORT'S, NOT THE ROW'S.
+     *
+     * The rack and the rail are both a fixed-height scroll box, and the height they
+     * were given — `100vh - 13rem` — was reaching for a column that is always as
+     * tall as the screen. Nothing ever pinned it there, so it was a viewport-sized
+     * box anchored to the TOP OF THE DOCUMENT, inside a `h-full` panel stretched to
+     * the grid ROW. Two different wrongs at once, and a tall stage shows both: the
+     * panel's box ran the full 1397px of the row while its list stopped at 492,
+     * leaving ~900px of empty card under it, and the whole column scrolled away
+     * while the producer worked in the stage — so the rack, which is how you get to
+     * anything, was off screen exactly when the panel you scrolled to see was on it.
+     *
+     * `sticky` is the missing half. The column now holds the viewport (less a
+     * margin), its list fills it (`flex-1` over the panel's own height, never a
+     * second copy of that arithmetic), and it stays put while the middle column
+     * scrolls under it. `items-start` on the grid is what leaves it free to.
+     *
+     * ONLY WHILE IT IS ACTUALLY A SIDE COLUMN. Below the breakpoint that gives it
+     * one, the grid is a single column and these are stacked blocks — a sticky
+     * viewport-tall block there would pin one section over the whole screen and let
+     * the rest slide under it. So the rack takes this at `lg` (where it first earns
+     * a column) and the rail at `xl` (where it does), each matching the track it
+     * appears in; stacked, both keep the old fixed box.
+     */
     return (
-        <Panel title="Rack" className="h-full">
-            <ScrollArea className="h-[calc(100vh-13rem)]">
+        <Panel
+            title="Rack"
+            className={cn(
+                'flex flex-col h-[calc(100vh-13rem)]',
+                'lg:sticky lg:top-4 lg:h-[calc(100vh-2rem)]',
+            )}
+        >
+            <ScrollArea className="min-h-0 flex-1">
                 <div className="flex flex-col gap-1 p-2">
+                    <StretchNotice placements={placements} onSelect={setSelection} />
                     <RigSection
                         open={!shut.has('rig')} onToggle={() => toggleTier('rig')}
                         selection={selection} onSelect={setSelection}

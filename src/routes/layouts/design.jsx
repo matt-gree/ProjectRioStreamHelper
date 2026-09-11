@@ -349,7 +349,9 @@ const GlobalDesignSection = memo(function GlobalDesignSection() {
     const borderRadius      = globalDesign.borderRadius      ?? 16;
     const borderWidth       = globalDesign.borderWidth       ?? 1;
     const borderColor       = globalDesign.borderColor       ?? 'rgba(255, 255, 255, 0.08)';
-    const fontFamily        = globalDesign.fontFamily        ?? 'Inter';
+    const displayFont       = globalDesign.displayFont       ?? 'Rajdhani';
+    const bodyFont          = globalDesign.bodyFont          ?? 'Inter';
+    const monoFont          = globalDesign.monoFont          ?? 'Chivo Mono';
     const showShadow        = settingOn(globalDesign.showShadow, true);
     const cardShadowBlur    = globalDesign.cardShadowBlur    ?? 16;
     const cardShadowColor   = globalDesign.cardShadowColor   ?? 'rgba(0, 0, 0, 0.5)';
@@ -414,12 +416,34 @@ const GlobalDesignSection = memo(function GlobalDesignSection() {
                             </div>
                         </>
                     )}
-                    <div className="flex flex-col gap-1">
-                        <Label className="field-label">Font Family</Label>
-                        <FontCombobox
-                            value={fontFamily}
-                            onChange={(val) => setItem('overlays.global.fontFamily', val)}
-                        />
+                    {/* THREE ROLES, ONE HELP LINE. The broadcast has always set
+                        type three ways — a name, a caption and a score are not
+                        the same job — and every theme SVG paints from those three
+                        vars. The single "Font Family" knob this replaces reached
+                        only the four DOM-rendered elements, so using it split the
+                        show in half.
+
+                        The three rows carry a role DESCRIPTION rather than three
+                        copies of the same "where do these names come from"
+                        paragraph: what a producer has to learn once is how the
+                        picker works, and what they need at each row is which
+                        part of the broadcast it moves. */}
+                    <div className="flex flex-col gap-3">
+                        <Label className="field-label">Typography</Label>
+                        {[
+                            { key: 'displayFont', label: 'Display',  value: displayFont, hint: 'Names, titles and status labels' },
+                            { key: 'bodyFont',    label: 'Body',     value: bodyFont,    hint: 'Meta, captions and prose lines' },
+                            { key: 'monoFont',    label: 'Numerals', value: monoFont,    hint: 'Scores, stats, linescores and clocks' },
+                        ].map((role) => (
+                            <div key={role.key} className="flex flex-col gap-1">
+                                <Label className="field-label">{role.label}</Label>
+                                <FontCombobox
+                                    value={role.value}
+                                    onChange={(val) => setItem(`overlays.global.${role.key}`, val)}
+                                />
+                                <p className="text-xs text-muted-foreground">{role.hint}</p>
+                            </div>
+                        ))}
                         <p className="text-xs text-muted-foreground">
                             Search fonts installed on this machine, pick a bundled web font, or type
                             any font name available on the machine running the OBS browser source.

@@ -50,6 +50,7 @@ describe('overlay-settings whitelist parity', () => {
         ['scorecard', 'public/layout/scorecard/scorecard.html'],
         ['playername', 'public/layout/scoreboard1/playername.html'],
         ['statsbar', 'public/layout/scoreboard1/statsbar.html'],
+        ['roster', 'public/layout/scoreboard1/roster.html'],
         // The controller's three settings are query params on a gc-overlay
         // iframe rather than anything PRSH draws, which makes this parity
         // MORE load-bearing, not less: nothing in either codebase notices a

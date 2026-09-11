@@ -8,8 +8,8 @@
     data-h-compact when the bottom line row is hidden (stats-card-mount.js).
   -->
   <style>
-    .cst-val { fill: var(--stat-value-color, var(--text-primary, #ffffff)); font-family: var(--font-family, 'Inter', sans-serif); text-shadow: var(--text-shadow, none); }
-    .cst-sub { fill: var(--stat-subtext-color, rgb(155,155,155)); font-family: var(--font-family, 'Inter', sans-serif); text-shadow: var(--text-shadow, none); }
+    .cst-val { fill: var(--stat-value-color, var(--text-primary, #ffffff)); font-family: var(--font-body, 'Inter', system-ui, sans-serif); text-shadow: var(--text-shadow, none);  font-variant-numeric: tabular-nums;}
+    .cst-sub { fill: var(--stat-subtext-color, rgb(155,155,155)); font-family: var(--font-body, 'Inter', system-ui, sans-serif); text-shadow: var(--text-shadow, none); }
   </style>
 
   <rect data-slot="card-bg" x="1" y="1" width="450" height="114" rx="12" data-h-full="114" data-h-compact="74"

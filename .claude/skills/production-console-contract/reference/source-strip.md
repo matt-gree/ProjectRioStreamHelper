@@ -18,9 +18,14 @@ copy, and a freeform "Push game summary" button inside a picker body).
       └ state              └ BIND · AIR · PUSH
 ```
 
-- **Fixed order, fixed place: Bind · Air · Push.** The strip's value is that its
+- **Fixed order, fixed place: Bind · Air · Push**, led by **Copy URL**, which is
+  in every state (connected or not, bound or not). The strip's value is that its
   position always means the same thing; an element that rearranges or relocates
-  it has broken the contract, not customised it.
+  it has broken the contract, not customised it. Copy leads rather than trails
+  because `PanelShell` right-anchors the strip, so a constant slot on the
+  leading edge moves none of the three verbs. It copies a bound source's own
+  URL (`placement.item.url`, as OBS holds it), else what Bind would create.
+  Bind is the only slot gated on the connection — offline it renders nothing.
 - **Slots are progressive, never per-element.** What renders is decided by
   whether a source exists, not by which element it is: unbound → Bind alone
   (Air and Push would have nothing to act on); bound → Bind retires, Air

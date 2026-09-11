@@ -52,6 +52,7 @@
   function fmt3(v) { return Number(v).toFixed(3).replace(/^0\./, '.'); }
   function fmt2(v) { return Number(v).toFixed(2); }
   function fmt1(v) { return Number(v).toFixed(1); }
+  function fmt0(v) { return Number(v).toFixed(0); }
 
   // ── Transport detection ──────────────────────────────────────────────────
   /*
@@ -155,12 +156,30 @@
    *   {
    *     charName, charIndex, charIconUrl,
    *     role: 'batting' | 'pitching',
-   *     stats: [{ label, value }, ...],   // display-ready
+   *     stats: [{ label, value, width }, ...],  // display-ready; see below
    *     gameLine: string,                  // current-game batting/pitching line
    *   }
    *
    * To add/remove/reorder stats, edit the arrays below. Every overlay that
    * loops over `result.stats` picks up the change automatically.
+   *
+   * == `width` IS HOW MANY CHARACTERS THE CATEGORY NEEDS AT ITS WIDEST ========
+   * A stat is not a generic number: AB is an integer and AVG is a rate with a
+   * leading dot, so giving them the same column makes a two-digit AB float in a
+   * cell built for ".429". `width` is what lets a card divide its band in the
+   * ratio the numbers actually need (`layoutStatCells`, mount-utils.js), and
+   * these are MAXIMA rather than typical widths — a cell wide enough for the
+   * worst case never auto-fits, and a value that suddenly renders smaller than
+   * the three beside it is worse on air than a slightly roomier column.
+   *
+   * The maxima are the reason the PRECISION here is what it is. A percentage
+   * carried to a tenth is six characters at "100.0%" and an ERA to a hundredth
+   * is five at "12.00"; at those budgets the numerals have to come down to
+   * about 28px on a 452-wide bar to fit. Whole percents and one decimal of ERA
+   * hold them at 30 with nothing auto-fitting in either stat set. (Baseball
+   * writes ERA to two decimals; this is a deliberate departure, made for a
+   * broadcast card read at a glance from across a room rather than a box
+   * score.) A format change here therefore moves `width` with it.
    */
   function getStatsLine(state, sb, team) {
     const role = getTeamRole(state, sb, team);
@@ -207,20 +226,20 @@
     let stats, gameLine;
     if (role === 'batting') {
       stats = [
-        { label: 'AB',  value: b.at_bats ?? 0 },
-        { label: 'AVG', value: fmt3(b.avg    ?? 0) },
-        { label: 'SLG', value: fmt3(b.slg    ?? 0) },
-        { label: 'SO%', value: fmt1(b.so_pct ?? 0) + '%' },
+        { label: 'AB',  value: b.at_bats ?? 0,             width: 3 },  // "132"
+        { label: 'AVG', value: fmt3(b.avg    ?? 0),        width: 5 },  // "1.000"
+        { label: 'SLG', value: fmt3(b.slg    ?? 0),        width: 5 },  // "1.500"
+        { label: 'SO%', value: fmt0(b.so_pct ?? 0) + '%',  width: 4 },  // "100%"
       ];
       gameLine = isHudSource(sb)
         ? (statsObj?.current_game?.batting_line ?? '')
         : '';
     } else {
       stats = [
-        { label: 'IP',  value: p.ip           ?? '0.0' },
-        { label: 'ERA', value: fmt2(p.era     ?? 0) },
-        { label: 'K%',  value: fmt1(p.k_pct  ?? 0) + '%' },
-        { label: 'AVG', value: fmt3(p.opp_avg ?? 0) },
+        { label: 'IP',  value: p.ip           ?? '0.0',    width: 5 },  // "128.1"
+        { label: 'ERA', value: fmt1(p.era     ?? 0),       width: 4 },  // "12.0"
+        { label: 'K%',  value: fmt0(p.k_pct   ?? 0) + '%', width: 4 },  // "100%"
+        { label: 'AVG', value: fmt3(p.opp_avg ?? 0),       width: 5 },  // "1.000"
       ];
       gameLine = isHudSource(sb)
         ? (statsObj?.current_game?.pitching_line ?? '')

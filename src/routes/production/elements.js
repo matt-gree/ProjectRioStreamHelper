@@ -308,10 +308,14 @@ export const ELEMENTS = [
         // that costs nothing.
         //
         // Free here in a way it would not be everywhere: this is 160k pixels
-        // against 40k, on an element with no artwork to re-raster. It is also
-        // exactly the element that invites the drag, because the type size
-        // follows the frame HEIGHT (lib/playername-mount.js) — so a bigger
-        // source is a bigger name rather than the same name at higher DPI.
+        // against 40k, on an element with no artwork to re-raster.
+        //
+        // And it is ONLY headroom. The type size is the `nameSize` setting
+        // (lib/playername-mount.js), so this box says nothing about how big the
+        // name is drawn — it is how much room the name has to run in, and a
+        // ceiling that clamps a size too large to fit. That is what it should
+        // have been all along: while the height set the type size, this number
+        // was a covert instruction to draw a 110px name.
         //
         // THE COST, stated: this is also the member box and the picker's fit
         // test (one element, one size, three readers — containers.test.jsx), so

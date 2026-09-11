@@ -39,20 +39,29 @@ claims (top-level, because *being unreachable* is the problem its stage solves).
 
 **The three OBS-independent affordances, in the three places a producer looks:**
 
-- The **source strip's Bind slot becomes Copy URL** (`absoluteOverlayUrl`, same
-  builder Bind uses, host-qualified against the origin already serving the
-  console). It used to read a flat "OBS offline" — a dead end in the one place the
-  panel exists to act, and wrong about the situation: a producer whose OBS is on
+- The **source strip always carries Copy URL** (`CopySlot`, leading the strip;
+  a bound source's own URL as OBS holds it, else `absoluteOverlayUrl` over the
+  same builder Bind uses). Offline, Bind simply renders nothing beside it. It
+  used to read a flat "OBS offline" — a dead end in the one place the panel
+  exists to act, and wrong about the situation: a producer whose OBS is on
   another machine, or who uses another app entirely, needs exactly that string.
+  It then became *Bind's offline face*, which was the same mistake one layer
+  down: it tied an OBS-independent verb to the connection, so a connected
+  console — and every bound source — lost the URL entirely.
 - The **Add picker opens with no scene** (`open` is a prop separate from `scene`).
   Copy URL and **+ New** container are fully live; Add alone is disabled and says
   why, holding its place rather than vanishing (same rule as the Push slot).
   Gating the whole picker on a scene is what made the container builder
   unreachable for anyone whose OBS wasn't up.
-- **Messages name the real reason.** "Isn't in any scene we can see" is true
-  offline but useless, and both ways out it named (the header's Bind, a scene's +)
-  exist only with a connection — so `BindingNote` and the rail's quick faces
-  branch on `useConsoleOffline`.
+- **Offline, a per-panel binding notice says NOTHING AT ALL.** `BindingNote` and
+  the rail's quick faces branch on `useConsoleOffline` and render `null`: every
+  panel and every card is unbound with OBS closed — that is what disconnected
+  MEANS — so a notice there is one fact repeated once per surface, restating the
+  app's own banner at the top left. On the rail it was printed once per pinned
+  card down a column whose whole job is to be scanned. **An indicator lit on
+  every surface at once is telling nobody anything.** Connected and unbound is
+  the opposite (true of THIS source and not its neighbours), so it keeps its row
+  — a `NO SOURCE` eyebrow whose expansion carries the two ways out.
 
 Payoff beyond the producer: the console is now testable and browser-verifiable
 without an OBS mirror, which is why phase 3's container surfaces went unverified.

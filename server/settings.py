@@ -621,7 +621,7 @@ class Settings:
             "auto_start": False,
         },
         "overlays": {
-            "schema_version": 4,
+            "schema_version": 5,
             "global": {
                 "accentColor": "#f59e0b",
                 "cardBg": "rgba(15, 15, 25, 0.88)",
@@ -629,7 +629,18 @@ class Settings:
                 "borderRadius": 16,
                 "borderWidth": 1,
                 "borderColor": "rgba(255, 255, 255, 0.08)",
-                "fontFamily": "Inter",
+                # THREE TYPE ROLES, not one face (v5). The token layer
+                # (public/layout/lib/rio-theme/tokens.css) has always split
+                # broadcast type three ways — display for names and titles,
+                # body for prose and meta, mono for tabular values — and every
+                # theme SVG paints from those. The single `fontFamily` reached
+                # only the four DOM-rendered elements, so setting it split the
+                # show in half. These are the producer's end of the same three
+                # roles, and the defaults ARE the token layer's, so nothing
+                # moves until one is changed.
+                "displayFont": "Rajdhani",
+                "bodyFont": "Inter",
+                "monoFont": "Chivo Mono",
                 "showShadow": True,
                 "cardShadowBlur": 16,
                 "cardShadowColor": "rgba(0, 0, 0, 0.5)",
@@ -724,6 +735,11 @@ class Settings:
         # and for `idle_fill_opacity` the default IS 0.0, the value a legacy
         # `idle_fill: False` migrates to.
         loaded_display: dict = {}
+        # Same reason again, for the v5 type-role split: after `_deep_merge` the
+        # three seeded faces are present on `global` whether or not the file
+        # named them, so the only way to tell a producer's explicit `displayFont`
+        # from the shipped one is to have looked before the merge.
+        loaded_overlays: dict = {}
         file_existed = False
         try:
             async with cls._settings_file().open(mode='rb', encoding='utf-8') as f:
@@ -737,6 +753,7 @@ class Settings:
                     ((loaded.get("controller_overlay") or {}).get("display") or {})
                     if isinstance(loaded, dict) else {}
                 )
+                loaded_overlays = (loaded.get("overlays") or {}) if isinstance(loaded, dict) else {}
                 cls.settings = _deep_merge(cls.settings, loaded)
         except Exception:
             logger.debug("using default settings dict")
@@ -894,6 +911,54 @@ class Settings:
                     if value and not glob.get(key):
                         glob[key] = value
             overlays["schema_version"] = 4
+            await cls.Save()
+
+        # v5: `fontFamily` became three TYPE ROLES — displayFont / bodyFont /
+        # monoFont. The old key named one face for the whole broadcast but only
+        # ever reached the four DOM-rendered elements (Event Header, Player
+        # Name, and the two post-game callouts); every theme SVG paints from the
+        # token layer's three roles and cleared the app font outright. So a
+        # producer who set it watched four elements change typeface and the
+        # other fourteen ignore them.
+        #
+        # A STORED VALUE GOES ONTO ALL THREE, not onto the role it most
+        # resembles. Whatever it was, it is what those elements were ALREADY
+        # drawing in, and the migration's job is that nothing on air moves: a
+        # producer who set "Bebas Neue" wanted Bebas Neue, and spreading it
+        # across the roles is the only reading under which their broadcast looks
+        # tomorrow the way it looked today. They can then pull the roles apart,
+        # which is the point of the feature. The DEFAULT is not carried up — an
+        # unset `fontFamily` (or the seeded "Inter") is the absence of a choice,
+        # and treating it as one would pin Inter over the token layer's Rajdhani
+        # and Chivo Mono for everyone who never opened the Design tab.
+        #
+        # Per-element pins migrate the same way, under the same namespace, so an
+        # element carrying its own font keeps carrying it.
+        if overlays.get("schema_version", 1) < 5:
+            # Defaults are merged into `settings` BEFORE migrations run, so the
+            # global namespace already carries the three seeded faces by the time
+            # this fires and `setdefault` would silently do nothing on the one
+            # namespace that matters. `loaded_overlays` is the pre-merge file, so
+            # a role the producer actually wrote is the only one kept.
+            roles = ("displayFont", "bodyFont", "monoFont")
+
+            def _split_roles(ns: dict, was: dict) -> None:
+                chosen = ns.pop("fontFamily", None)
+                if chosen and chosen != "Inter":
+                    for role in roles:
+                        if role not in was:
+                            ns[role] = chosen
+                # A per-BOARD pin nests one level further (overlays.scorecard.
+                # {N}.fontFamily), which is the shape the scorecard stores under.
+                for key, sub in ns.items():
+                    if isinstance(sub, dict):
+                        _split_roles(sub, was.get(key) or {})
+
+            for name, ns in overlays.items():
+                if name in ("presets", "schema_version") or not isinstance(ns, dict):
+                    continue
+                _split_roles(ns, loaded_overlays.get(name) or {})
+            overlays["schema_version"] = 5
             await cls.Save()
 
         # Container membership moved ONTO the container. It used to live per

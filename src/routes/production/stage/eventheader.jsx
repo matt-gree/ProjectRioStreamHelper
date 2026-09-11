@@ -5,7 +5,7 @@ import { Button } from '../../../components/ui/button';
 import { cn } from '../../../lib/utils';
 import { boardOfUrl } from '../../../lib/obs-binding';
 import { LAYOUT_SETTINGS } from '../../layouts/designConstants';
-import { IconToggle, TextRow } from '../kit';
+import { IconToggle, TextRow, KIT_SECTION } from '../kit';
 import { MoveButtons, StagedDot } from '../controls';
 import { BANDS, FIELDS, useBands, useFieldValues, fieldValue } from '../eventheader';
 import { DirectStage } from './generic';
@@ -260,7 +260,7 @@ export default function EventHeaderStage({ element, placement }) {
                 hand-built one is addressable as the same thing — this panel is
                 a bespoke arrangement of the registry, not a different model of
                 it. */}
-            <div data-setting-group="Both bands" className="mt-1 flex flex-col gap-1.5 border-t border-border/60 pt-2">
+            <div data-setting-group="Both bands" className={KIT_SECTION}>
                 <Text size="xs" className="label-display text-muted-foreground">Both bands</Text>
                 {/* The shared look, in the same column budget SettingGroups uses
                     — a settings row is ~240px, so a stage panel fits three. */}

@@ -25,12 +25,10 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/layout/lib/rio-theme/tokens.css" />
   <!-- Knobs resolve under overlays.postgamevs.* in the mount. -->
-  <meta name="overlay-settings" content="accentColor, fontFamily" />
+  <meta name="overlay-settings" content="accentColor, bodyFont, monoFont" />
   <style>
-    /* Inter is bundled locally (injected by overlay-base.js); only Chivo Mono is
-       fetched from Google Fonts here. */
-    @import url('https://fonts.googleapis.com/css2?family=Chivo+Mono:wght@600;700;800&display=swap');
     html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
     /* Native full-canvas size hint; the mount scales its 1920×1080 stage to
        whatever size the OBS source is actually set to. */
@@ -67,14 +65,12 @@
       fetchSettings: true,
     });
 
-    // Auto-play on a real off→on transition only; OBS also dispatches the
-    // current state right after page load, and replaying on that restarts an
-    // animation that has only just played on data arrival.
-    let wasShown;
-    OverlayBase.onObsShown((shown) => {
-      if (shown && wasShown === false) vs.replay();
-      wasShown = shown;
-    });
+    // On-screen state straight through to the mount's reveal gate, which owns
+    // the sequencing: snap dark on hide (so OBS can never retain a full-alpha
+    // frame of the finished summary), hold through the on→off→on dispatch
+    // burst, then run the timeline once on the next PAINTED frame. See
+    // lib/reveal-gate.js.
+    OverlayBase.onObsShown((shown) => vs.setShown(shown));
   </script>
 </body>
 </html>

@@ -4,7 +4,7 @@ import { RotateCcw, Sparkles } from 'lucide-react';
 import { useObsStore } from '../../../context/obs';
 import { useSettingsStore, useStateStore } from '../../../context/store';
 import { notifications } from '../../../lib/notify';
-import { ActionRow, NumberRow, SelectRow, ToggleRow } from '../kit';
+import { ActionRow, NumberRow, SelectRow, ToggleRow, KIT_SECTION } from '../kit';
 import { runObs } from '../controls';
 import { BindingNote } from './generic';
 
@@ -115,7 +115,7 @@ export default function HitVisualizerStage({ board, placement, scoreboard = boar
                 },
             ]} />
 
-            <div className="mt-1 flex flex-col gap-1.5 border-t border-border/60 pt-2">
+            <div className={KIT_SECTION}>
                 <BindingNote binding={placement} />
 
                 <ToggleRow

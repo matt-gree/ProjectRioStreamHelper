@@ -1,8 +1,10 @@
 import { useEffect } from 'react';
 import { create } from 'zustand';
-import OBSWebSocket from 'obs-websocket-js';
+import OBSWebSocket, { EventSubscription } from 'obs-websocket-js';
 import { useSettingsStore } from './store';
-import { renderedSize, sizeMatchTransform } from '../lib/obs-transform';
+import {
+    renderedSize, sizeMatchTransform, redrawPlan, rescaleForSource, isCropped, stretchOf,
+} from '../lib/obs-transform';
 
 /*
  * OBS WebSocket layer — the substrate of the Production page.
@@ -83,6 +85,41 @@ const mapItem = (it) => ({
     // Filled in for browser sources via GetInputSettings.
     url: null,
     isPrsh: false,
+    /*
+     * IS OBS SCALING THIS SOURCE — the factor, or null. Either direction.
+     *
+     * The one thing this mirror keeps out of a transform, and it is kept because
+     * the console can see a fault OBS never mentions: an item drawn at anything
+     * but the resolution it rendered at is a resampled picture of an overlay
+     * rather than the overlay, and dragging a handle — the producer's natural
+     * gesture for bigger OR smaller — is exactly what causes it. A rack that
+     * shows such a source as healthy is the monitor failing at its job.
+     *
+     * BOTH DIRECTIONS, because this is not only about sharpness: an element
+     * that draws type at an absolute size (the Player Name) is drawing a 48px
+     * name at 24px on a half-scale item, so the setting and the broadcast
+     * disagree with nothing anywhere to say why.
+     *
+     * The TRANSFORM itself still isn't mirrored, deliberately (see
+     * matchSceneItemSize): a size read has to be taken at the moment it is
+     * acted on. This is a verdict derived from one — two numbers, not a
+     * geometry — and it costs nothing, because GetSceneItemList already carries
+     * every item's transform and this mapper was throwing it away.
+     */
+    stretch: stretchOf(it.sceneItemTransform),
+    cropped: isCropped(it.sceneItemTransform),
+    /*
+     * The RESOLUTION the page renders at — the input's own width/height, which
+     * OBS reports on the transform as the item's source size.
+     *
+     * Mirrored for the same reason the verdict is and under the same limit: it
+     * is two numbers off a transform already in hand, not the transform. The
+     * Player Name is drawn at an absolute size and its FRAME is what clamps
+     * that size, so a console that cannot see the frame cannot explain why a
+     * name is smaller than the number the producer typed.
+     */
+    renderWidth: it.sceneItemTransform?.sourceWidth ?? null,
+    renderHeight: it.sceneItemTransform?.sourceHeight ?? null,
 });
 
 // A browser source is "fed by PRSH" when it's one of the app's overlays:
@@ -113,7 +150,15 @@ function urlIntroDisabled(url) {
 // so we leave their source resident (OBS default shutdown=false) and never
 // touch them. Matches the scoreboard BAND specifically (scoreboardN/scoreboard),
 // not the sibling stats/roster/teamlogo files in the same folder.
-const ANIMATED_LAYOUT = /\/layout\/(?:scoreboard\d*\/scoreboard|scorecard\/|lowerthird\/|matchup\/|commentary\/|playerplates\/|hitvisualizer\/)/i;
+// The post-game callouts belong here for the same reason the hit visualizer
+// does — a GSAP walkthrough on show, and a heavy one. Their in-page gate
+// (lib/reveal-gate.js) covers the app's own hide and the container path, but
+// the OBS-NATIVE eye stops the source's frames before any snap-dark can be
+// painted, so a resident callout composites the last frame of the finished
+// graphic for a beat before the intro starts. A fresh load per show is the
+// only cure for that one, and it is the trade every animated PRSH source
+// already makes.
+const ANIMATED_LAYOUT = /\/layout\/(?:scoreboard\d*\/scoreboard|scorecard\/|lowerthird\/|matchup\/|commentary\/|playerplates\/|hitvisualizer\/|postgame\/)/i;
 function layoutAnimates(url) {
     try { return ANIMATED_LAYOUT.test(new URL(url).pathname); } catch { return false; }
 }
@@ -240,6 +285,82 @@ export const useObsStore = create((set) => ({
             sceneName: scene, sceneItemId: itemId, sceneItemTransform: patch,
         });
         return renderedSize(model.sceneItemTransform);
+    },
+
+    /*
+     * Re-render this source at the size it is actually drawn: raise the browser
+     * source's own resolution to the item's rendered size and take the stretch
+     * back out.
+     *
+     * THE INPUT IS GLOBAL, and that is the whole difficulty. Resizing it
+     * changes the picture in every scene that draws this source, so every item
+     * of it is re-solved to keep the size it has (`rescaleForSource`) and only
+     * the one the producer is looking at ends up at 1:1 — which it does by
+     * arithmetic rather than as a special case, since its rendered size IS the
+     * new resolution. A source in one scene is the common case and costs one
+     * extra list call; a source in six is exactly the case that would otherwise
+     * blow five of them up without saying so.
+     *
+     * Scenes are enumerated from `scenes` (every name OBS knows, mirrored or
+     * not) rather than from the console's tracked subset, because a scene the
+     * producer never expanded is still on air. Items nested inside GROUPS are
+     * not visited — GetSceneItemList does not descend, and a PRSH source is
+     * placed at scene level by addBrowserSource.
+     *
+     * The corrections go out together so the window in which another scene is
+     * drawing the new resolution at the old scale is a frame, not a loop.
+     */
+    redrawSourceAtSize: async ({ scene, itemId, sourceName }) => {
+        if (!obs) throw new Error('Not connected to OBS');
+        const { sceneItemTransform } = await obs.call('GetSceneItemTransform', {
+            sceneName: scene, sceneItemId: itemId,
+        });
+        const plan = redrawPlan(sceneItemTransform);
+        if (!plan) {
+            throw new Error('OBS is already rendering this source at its full size');
+        }
+
+        const names = useObsStore.getState().scenes || [];
+        const occurrences = [];
+        for (const sceneName of names) {
+            let items;
+            try {
+                ({ sceneItems: items } = await obs.call('GetSceneItemList', { sceneName }));
+            } catch {
+                continue;   // a scene that vanished between the list and here
+            }
+            for (const it of items || []) {
+                if (it.sourceName !== sourceName) continue;
+                occurrences.push({ sceneName, id: it.sceneItemId, transform: it.sceneItemTransform });
+            }
+        }
+
+        /*
+         * A CROP anywhere is a refusal, not a skip. The crop is in source pixels
+         * and the source is about to be a different size, so leaving that item
+         * alone would silently re-frame it — and having already resized the
+         * input, there would be no way back. Checked before the write.
+         */
+        if (occurrences.some(o => isCropped(o.transform))) {
+            throw new Error('This source is cropped in at least one scene — resizing its '
+                + 'render would move what the crop cuts. Set its size in OBS Properties instead.');
+        }
+
+        await obs.call('SetInputSettings', {
+            inputName: sourceName,
+            inputSettings: { width: plan.width, height: plan.height },
+            overlay: true,
+        });
+
+        await Promise.all(occurrences.map((o) => {
+            const patch = rescaleForSource(o.transform, plan);
+            if (!patch) return null;   // a bounded item's box already fixes its size
+            return obs.call('SetSceneItemTransform', {
+                sceneName: o.sceneName, sceneItemId: o.id, sceneItemTransform: patch,
+            }).catch(() => { /* one scene's correction failing must not strand the rest */ });
+        }).filter(Boolean));
+
+        return { width: plan.width, height: plan.height, scenes: occurrences.length };
     },
 
     // Pull a scene's items into the mirror and keep them live from then on.
@@ -380,6 +501,30 @@ export const useObsStore = create((set) => ({
             const { obsWebSocketVersion } = await withConnectTimeout(client.connect(
                 `ws://${host}:${port}`,
                 password || undefined,
+                /*
+                 * `All` IS NOT ALL. obs-websocket sorts a handful of events it
+                 * considers high-volume outside the default mask (4095), and
+                 * SceneItemTransformChanged (1 << 19) is one of them — so
+                 * subscribing to "everything" delivers every event in this file
+                 * except the one that says a source's geometry moved.
+                 *
+                 * It failed exactly the way an unsubscribed event does, which is
+                 * to say silently and asymmetrically: the scaled-source verdict
+                 * (`mapItem`) was correct whenever a scene was mirrored and then
+                 * frozen forever, so the badge appeared on a source the producer
+                 * had dragged and then would not clear when they fixed it.
+                 *
+                 * The volume is real — one event per frame while a handle is
+                 * being dragged — and is answered where it lands rather than by
+                 * declining to hear it: the handler writes to the store only
+                 * when the ROUNDED verdict changes, so a ten-second drag moves
+                 * the rack twice. Over a loopback socket the frames themselves
+                 * cost nothing worth measuring.
+                 */
+                {
+                    eventSubscriptions: EventSubscription.All
+                        | EventSubscription.SceneItemTransformChanged,
+                },
             ));
             if (myGen !== generation) return; // superseded while connecting
             reconnectAttempts = 0;
@@ -610,6 +755,40 @@ function wireEvents(client, gen) {
         if (!alive()) return;
         useObsStore.setState({ studioMode: studioModeEnabled });
         refreshAll(gen);
+    });
+
+    /*
+     * A drag emits one of these per frame, so this writes to the store only when
+     * the VERDICT changes — not when the numbers do. A producer nudging a source
+     * for ten seconds moves the rack twice: once when it crosses into being
+     * stretched, once when it crosses back.
+     *
+     * Rounded to one decimal for the same reason: the badge says "1.8x", and a
+     * factor wandering in the fourth decimal is not news.
+     */
+    client.on('SceneItemTransformChanged', ({ sceneName, sceneItemId, sceneItemTransform }) => {
+        if (!alive()) return;
+        const next = stretchOf(sceneItemTransform);
+        const cropped = isCropped(sceneItemTransform);
+        const same = (a, b) => (a == null && b == null)
+            || (a != null && b != null && Math.round(a * 10) === Math.round(b * 10));
+        useObsStore.setState(state => {
+            const items = state.sceneItems[sceneName];
+            const it = items?.find(i => i.id === sceneItemId);
+            const w = sceneItemTransform?.sourceWidth ?? null;
+            const h = sceneItemTransform?.sourceHeight ?? null;
+            const settled = same(it?.stretch, next) && it?.cropped === cropped
+                && it?.renderWidth === w && it?.renderHeight === h;
+            if (!it || settled) return {};
+            return {
+                sceneItems: {
+                    ...state.sceneItems,
+                    [sceneName]: items.map(i => (i.id === sceneItemId
+                        ? { ...i, stretch: next, cropped, renderWidth: w, renderHeight: h }
+                        : i)),
+                },
+            };
+        });
     });
 
     client.on('SceneItemEnableStateChanged', ({ sceneName, sceneItemId, sceneItemEnabled }) => {

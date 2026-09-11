@@ -30,8 +30,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/layout/lib/rio-theme/tokens.css" />
   <!-- Knobs resolve under overlays.postgamecallout.* in the mount. -->
-  <meta name="overlay-settings" content="accentColor, fontFamily" />
+  <meta name="overlay-settings" content="accentColor, bodyFont, monoFont" />
   <!-- The AB Theater renders trajectories through the same three.js the hit
        visualizer uses; the mount imports it by bare specifier. -->
   <script type="importmap">
@@ -43,9 +44,6 @@
   }
   </script>
   <style>
-    /* Inter is bundled locally (injected by overlay-base.js); only Chivo Mono is
-       fetched from Google Fonts here. */
-    @import url('https://fonts.googleapis.com/css2?family=Chivo+Mono:wght@600;700;800&display=swap');
     html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
     /* Native full-canvas size hint; the mount scales its 1920×1080 stage to
        whatever size the OBS source is actually set to. */
@@ -129,15 +127,18 @@
       fetchSettings: true,
     });
 
-    // Auto-play when this source comes ON screen (scene cut or the eye icon).
-    // Only a real off→on transition replays: OBS dispatches the current state
-    // right after page load too, and replaying on that restarts an animation
-    // that has only just played on data arrival.
-    let wasShown;
-    OverlayBase.onObsShown((shown) => {
-      if (shown && wasShown === false) cs.replay();
-      wasShown = shown;
-    });
+    /*
+     * On-screen state straight through to the mount's reveal gate (scene cut,
+     * the source's eye, or the app's own conceal cue — onObsShown honours all
+     * three). The gate, not this shell, owns the sequencing: snap dark on hide
+     * so OBS can never retain a full-alpha frame of the finished spotlight,
+     * hold dark through OBS's on→off→on dispatch burst, then play exactly one
+     * show on the next PAINTED frame. It also ignores OBS's redundant
+     * post-load activate, which is what the wasShown bookkeeping here used to
+     * do — and all it used to do, which is why a re-show composited the last
+     * finished frame for a beat before the intro started.
+     */
+    OverlayBase.onObsShown((shown) => cs.setShown(shown));
   </script>
 </body>
 </html>

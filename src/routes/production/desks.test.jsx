@@ -443,7 +443,10 @@ describe('Board desk', () => {
             schedule: { queue: [5] },
         });
         ui(<BoardDesk board={1} />);
-        expect(screen.getByText(/a match needs a single-game board/)).toBeInTheDocument();
+        // The eyebrow names the reason; the rule itself is its expansion, so the
+        // panel states it without spending a line of prose on it.
+        expect(screen.getByText('ROTATING')).toBeInTheDocument();
+        expect(screen.getByTitle(/A rotating board can’t hold a match/)).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /Put on board/ })).not.toBeInTheDocument();
         expect(screen.queryByText('Cara vs Dev')).not.toBeInTheDocument();
     });
@@ -504,7 +507,7 @@ describe('Board desk', () => {
         useStateStore.setState({ score: { 1: {} }, match: {}, schedule: { queue: [] } });
         ui(<BoardDesk board={1} />);
         expect(screen.getByText('NO MATCH')).toBeInTheDocument();
-        expect(screen.getByText(/add one on the Match desk/)).toBeInTheDocument();
+        expect(screen.getByTitle(/Author a fixture on the Match desk/)).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /Put on board/ })).not.toBeInTheDocument();
     });
 
@@ -1102,8 +1105,11 @@ describe('Board desk — post-game', () => {
             },
         });
         ui(<BoardDesk board={1} />);
+        // Said ONCE, on the badge that already states the provenance — the
+        // caption below it is the filename and nothing else.
         expect(screen.getByText('AUTO')).toBeInTheDocument();
-        expect(screen.getByText(/Captured on its own when the game ended/)).toBeInTheDocument();
+        expect(screen.getByTitle(/Captured on its own the moment Project Rio wrote/)).toBeInTheDocument();
+        expect(screen.getByText('decoded.Game_7.json')).toBeInTheDocument();
         // Still recoverable by hand — the button becomes a re-capture.
         expect(screen.getByRole('button', { name: /Re-capture/ })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Clear' })).toBeInTheDocument();
@@ -1133,12 +1139,17 @@ describe('Board desk — post-game', () => {
     it('says what it is waiting for', () => {
         useStateStore.setState({ score: { 1: { game_id: '4242' } }, match: {}, postgame: {} });
         ui(<BoardDesk board={1} />);
-        expect(screen.getByText(/Waiting on the stat file for game 4242/)).toBeInTheDocument();
+        expect(screen.getByText('WAITING')).toBeInTheDocument();
+        expect(screen.getByText('Game 4242')).toBeInTheDocument();
 
+        // With no game id there is nothing to wait FOR, and the emptiness is
+        // already reported twice above — the game-state chip and the region's
+        // own subject. The caption stands down rather than saying it a third time.
         cleanup();
         useStateStore.setState({ score: { 1: {} }, match: {}, postgame: {} });
         ui(<BoardDesk board={1} />);
-        expect(screen.getByText(/No game id on this board yet/)).toBeInTheDocument();
+        expect(screen.queryByText('WAITING')).not.toBeInTheDocument();
+        expect(screen.getByText('Nothing captured')).toBeInTheDocument();
     });
 
     it('captures immediately, staging or not — it is a recovery action', () => {
@@ -1276,7 +1287,7 @@ describe('board lifecycle', () => {
         // A quit is ENDED, a clean finish is FINAL — we know it is not coming
         // back, not that it finished. Both still raise the turnover bar, because
         // a stranded game is exactly where a hand capture is wanted.
-        expect(screen.getByText('ENDED')).toBeInTheDocument();
+        expect(screen.getByText('STALLED')).toBeInTheDocument();
         expect(screen.queryByText('FINAL')).not.toBeInTheDocument();
         expect(screen.getByRole('button', { name: /Clear game state/ })).toBeInTheDocument();
     });

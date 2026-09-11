@@ -68,6 +68,13 @@ _MODIFIERS = {
     "topclosed": "top-closed", "top-closed": "top-closed",
     "botopen": "bot-open", "bot-open": "bot-open",
     "botclosed": "bot-closed", "bot-closed": "bot-closed",
+    # Stat bar / stat card: the bottom line's two LEFT edges (with and without
+    # its "Game" label) against its one right bound. A trio, like the meld pairs
+    # above — a theme carrying fewer than three falls back to its authored,
+    # centred geometry, so a dropped modifier is silent on air rather than loud.
+    "xlabelled": "x-labelled", "x-labelled": "x-labelled",
+    "xbare": "x-bare", "x-bare": "x-bare",
+    "maxr": "maxr",
     # Lower third: a logo's caption-less box, "x y w h".
     "full": "full",
     # The scoreboard's linescore: the BAND the inning columns divide into equal

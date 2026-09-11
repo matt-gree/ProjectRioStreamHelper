@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-    paintedByApp, appPaletteThemesAnything, packagePortColors, resolvePortColors,
+    paintedByApp, appPaletteThemesAnything, packagePortColors, resolvePortColors, drawnTypeRoles,
 } from './designPackage';
 import {
     LAYOUT_SETTINGS, THEME_ELEMENT, DEFAULT_PORT_COLORS,
@@ -11,6 +11,29 @@ import {
 const DEFAULT = { id: 'default', elements: ['statscard', 'stats', 'callout'], appVarElements: [] };
 const CLASSIC = { id: 'classic', elements: ['stats', 'callout'], appVarElements: ['stats'] };
 const PACKAGES = [DEFAULT, CLASSIC];
+
+describe('drawnTypeRoles', () => {
+    const WITH_ROLES = [
+        { ...DEFAULT, typeRoles: { statscard: ['display', 'body', 'mono'], stats: ['body', 'mono'], callout: [] } },
+        { ...CLASSIC, typeRoles: { stats: ['body'], callout: [] } },
+    ];
+
+    it('answers per file, from the package that draws the element', () => {
+        expect(drawnTypeRoles(WITH_ROLES, 'classic', 'stats')).toEqual(['body']);
+        expect(drawnTypeRoles(WITH_ROLES, 'default', 'stats')).toEqual(['body', 'mono']);
+        // classic omits the stat card, so default's file draws it.
+        expect(drawnTypeRoles(WITH_ROLES, 'classic', 'statscard')).toEqual(['display', 'body', 'mono']);
+    });
+
+    // Empty is an ANSWER — this theme sets no text in any role — and is not
+    // the same as unknown, which must not filter anything.
+    it('tells "draws none" apart from "cannot say"', () => {
+        expect(drawnTypeRoles(WITH_ROLES, 'default', 'callout')).toEqual([]);
+        expect(drawnTypeRoles(null, 'default', 'stats')).toBeNull();           // still loading
+        expect(drawnTypeRoles(PACKAGES, 'default', 'stats')).toBeNull();       // older payload
+        expect(drawnTypeRoles(WITH_ROLES, 'default', undefined)).toBeNull();   // type isn't themed
+    });
+});
 
 describe('paintedByApp', () => {
     it('answers from the active package when it themes the element', () => {

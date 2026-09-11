@@ -333,7 +333,7 @@ export function mountPlayerPlates({ host }) {
     // Palette policy (see svg-theme-engine.js): only an app-vars theme is painted
     // with the user's Design-tab variables; a fixed-palette theme must never.
     if (engine.usesAppVars) OverlayBase.applyDesignSettings('playerplates');
-    else OverlayBase.clearDesignSettings();
+    else OverlayBase.clearDesignSettings('playerplates');
     if (themeChanged) {
       anchors = parseAnchors();
       attachFields();

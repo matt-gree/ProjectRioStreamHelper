@@ -38,7 +38,13 @@ const CSS = `
 .sch-names { flex: 1; color: var(--ink, #fff); font-size: 34px; font-weight: 700; }
 .sch-names .sch-vs { color: var(--ink-dim, #9aa); font-size: 24px; margin: 0 12px; }
 .sch-label { color: var(--ink-dim, #9aa); font-size: 22px; font-weight: 600; }
-.sch-time { color: var(--accent, #e60012); font-size: 26px; font-weight: 700; min-width: 120px; text-align: right; }
+/* A clock is a tabular value, so it takes the numeral role rather than the
+   host's display face — the same face the lower third's clock draws in. The
+   min-width holds the column either way; what mono buys is that 11:45 and
+   12:00 occupy the same width, so a list of start times reads as a column
+   instead of a ragged edge. */
+.sch-time { color: var(--accent, #e60012); font-family: var(--font-mono, 'Chivo Mono', ui-monospace, 'SF Mono', monospace);
+  font-variant-numeric: tabular-nums; font-size: 26px; font-weight: 700; min-width: 120px; text-align: right; }
 .sch-livetag { color: #43a047; font-size: 22px; font-weight: 700; letter-spacing: 2px; }
 `;
 

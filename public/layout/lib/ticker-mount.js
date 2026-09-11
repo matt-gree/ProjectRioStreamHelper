@@ -226,7 +226,7 @@ export function mountTicker({ host, sb }) {
     if (disposed) return;
 
     if (engine.usesAppVars) OverlayBase.applyDesignSettings(SETTINGS_TYPE);
-    else OverlayBase.clearDesignSettings();
+    else OverlayBase.clearDesignSettings(SETTINGS_TYPE);
 
     const cached = g(state, `scoreboards.rotation.${SB}.cached_games`, []) || [];
     const gameIds = g(state, `scoreboards.rotation.${SB}.game_ids`, []) || [];

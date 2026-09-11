@@ -722,12 +722,18 @@ describe('The Upcoming Schedule panel no longer authors the order', () => {
         expect(screen.queryByRole('button', { name: /Add match to schedule/ })).not.toBeInTheDocument();
     });
 
-    it('keeps the heading and a display time per match, and says where the order lives', () => {
+    /*
+     * WHERE THE ORDER LIVES IS SHOWN, NOT STATED. The panel carrying no
+     * reorder, remove or add control (the test above) IS the statement that
+     * this is a readout — a caption saying so under a list with no controls in
+     * it explains an absence the producer can already see.
+     */
+    it('keeps the heading and a display time per match, with no caption about it', () => {
         ui(<ScheduleStage element={element} />);
         expect(screen.getByDisplayValue('Tonight')).toBeInTheDocument();
         expect(screen.getByLabelText('Display time for match 2')).toBeInTheDocument();
         expect(screen.getByLabelText('Display time for match 1')).toBeInTheDocument();
-        expect(screen.getByText(/order set on the Match desk/)).toBeInTheDocument();
+        expect(screen.queryByText(/order set on the Match desk/)).not.toBeInTheDocument();
     });
 
     it('reads the order rather than owning it', () => {

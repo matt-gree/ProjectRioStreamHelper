@@ -80,7 +80,7 @@ const FALLBACK_SVG = `
 <svg viewBox="0 0 1920 240" preserveAspectRatio="xMidYMax meet" xmlns="http://www.w3.org/2000/svg">
   <g data-slot="slot0" opacity="0">
     <rect data-part="main-rect" x="16" y="56" width="1888" height="168" rx="16" style="fill:var(--card-bg, #1a1a1a);stroke:var(--border-color, #444)" />
-    <text data-slot="slot0-name" data-maxw="1836" x="48" y="132" style="fill:var(--text-primary, #fff);font-family:var(--font-family, sans-serif)" font-size="30" font-weight="800"></text>
+    <text data-slot="slot0-name" data-maxw="1836" x="48" y="132" style="fill:var(--text-primary, #fff);font-family:var(--font-display, 'Rajdhani', sans-serif)" font-size="30" font-weight="800"></text>
     <g data-slot="slot0-sub" style="opacity:0">
       <text data-slot="slot0-sub-label" x="48" y="162" style="fill:var(--accent, #f59e0b)" font-size="13" font-weight="700"></text>
       <text data-slot="slot0-sub-value" data-maxw="1760" x="124" y="162" style="fill:var(--text-primary, #fff)" font-size="18" font-weight="600"></text>
@@ -577,7 +577,7 @@ export function mountCommentary({ host }) {
     // the Classic package) is painted with the user's Design-tab variables; a
     // fixed-palette theme (the Rio default, Slice26) must never inherit them.
     if (engine.usesAppVars) OverlayBase.applyDesignSettings('commentary');
-    else OverlayBase.clearDesignSettings();
+    else OverlayBase.clearDesignSettings('commentary');
     if (themeChanged) {
       layoutData = parseLayoutData();
       attachFields();

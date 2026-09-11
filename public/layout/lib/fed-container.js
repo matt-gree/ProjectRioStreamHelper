@@ -165,6 +165,14 @@ export async function initFedContainer({
   // legacy named shells still pass theirs in literally.
   const sampleSpec = typeof sample === 'function' ? sample(def) : sample;
 
+  // Tri-state, like OverlayBase.onObsShown's own inputs: undefined until OBS
+  // says otherwise, which in a plain browser (no OBS) means shown.
+  let wasShown;
+  function syncShown() {
+    const live = layers.active();
+    if (live && typeof live.mount.setShown === 'function') live.mount.setShown(wasShown !== false);
+  }
+
   async function render() {
     const live = OverlayBase.deepGet(OverlayBase.state, FEED_KEY, null);
     const sel = resolveFeed({ live, forceElement, previewSel });
@@ -178,6 +186,12 @@ export async function initFedContainer({
       OverlayBase.setBlank(`"${sel.element}" is not a member this container can render`, CONTAINER_ID);
       return;
     }
+    // A member that gates its own reveal (the post-game callouts) has to be
+    // told where the CONTAINER stands, and it has to be told on the way in as
+    // well as when OBS speaks: a member fed while the container is hidden was
+    // built with the gate's default (shown), so it would burn its one reveal
+    // against frames nobody is compositing and arrive already finished.
+    syncShown();
     OverlayBase.setBlank(null, CONTAINER_ID);
   }
 
@@ -196,17 +210,26 @@ export async function initFedContainer({
     shouldRenderSettings: (key) => key.startsWith('overlays.') || key === 'project_rio.hud_enabled',
   });
 
-  // Auto-play when this OBS source/scene comes ON screen (scene cut or the
-  // source's eye icon). Only a real off→on transition replays: OBS also
-  // dispatches the current state right after page load, and replaying on that
-  // restarted an animation that had just played on data arrival (the on-load
-  // appear/vanish/replay stutter). Only the member on screen replays — the idle
-  // ones are retained, not shown.
-  let wasShown;
+  /*
+   * Auto-play when this OBS source/scene comes ON screen (scene cut or the
+   * source's eye icon). Only the member on screen plays — the idle ones are
+   * retained, not shown.
+   *
+   * Two shapes, because a member either owns its reveal sequencing or doesn't:
+   *   • `setShown` — the member has a reveal gate (the post-game callouts).
+   *     Hand it BOTH edges: the gate snaps dark on hide, holds through OBS's
+   *     dispatch burst and plays on a painted frame. Calling replay() as well
+   *     would be a second play.
+   *   • `replay` only — play on a real off→on transition. OBS also dispatches
+   *     the current state right after page load, and replaying on that
+   *     restarted an animation that had just played on data arrival (the
+   *     on-load appear/vanish/replay stutter), so `wasShown` gates it.
+   */
   OverlayBase.onObsShown((shown) => {
-    if (shown && wasShown === false) {
-      const live = layers.active();
-      if (live && typeof live.mount.replay === 'function') live.mount.replay();
+    const live = layers.active();
+    if (live && typeof live.mount.setShown === 'function') live.mount.setShown(shown);
+    else if (shown && wasShown === false && live && typeof live.mount.replay === 'function') {
+      live.mount.replay();
     }
     wasShown = shown;
   });

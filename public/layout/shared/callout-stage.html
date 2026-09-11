@@ -15,9 +15,10 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/layout/lib/rio-theme/tokens.css" />
   <!-- Stat-callout knobs resolve under overlays.postgamecallout.* in the mount.
        The backdrop SVG comes from the active design package (callout.svg). -->
-  <meta name="overlay-settings" content="accentColor, fontFamily" />
+  <meta name="overlay-settings" content="accentColor, bodyFont, monoFont" />
   <!-- three.js importmap kept so the hit element can also be fed here if wanted. -->
   <script type="importmap">
   {
@@ -28,9 +29,6 @@
   }
   </script>
   <style>
-    /* Inter is bundled locally (injected by overlay-base.js); only Chivo Mono is
-       fetched from Google Fonts here. */
-    @import url('https://fonts.googleapis.com/css2?family=Chivo+Mono:wght@600;700;800&display=swap');
     html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
     /* Native full-canvas size hint; the callout mount scales the 1920×1080 stage
        to whatever size the OBS source is actually set to. */

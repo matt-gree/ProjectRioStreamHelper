@@ -88,7 +88,7 @@
 import { createThemeEngine } from './svg-theme-engine.js';
 import { createRevealGate, clearAnimClassOnEnd } from './reveal-gate.js';
 import { ensureGsap } from './gsap-loader.js';
-import { DOT_OFF, dot, bindImageProbe, prettyStadium, linescoreColumns } from './mount-utils.js';
+import { DOT_OFF, dot, bindImageProbe, prettyStadium, linescoreColumns, layoutBox } from './mount-utils.js';
 import { ensurePortPalette, inkOn, portColor as portPaletteColor } from './port-colors.js';
 
 const SETTINGS_TYPE = 'scoreboard';
@@ -915,7 +915,7 @@ export function mountScoreboard({ host, sb, size }) {
     engine.setText('box-home-r', d.sR);
     engine.setText('box-away-name', d.p1 || 'Away');
     engine.setText('box-home-name', d.p2 || 'Home');
-    layoutBox(shown);
+    layoutBox(engine, shown, MAX_INN);
     return total > 0;
   }
 
@@ -940,66 +940,6 @@ export function mountScoreboard({ host, sb, size }) {
    * statement in a data-* attribute is one that can disagree. A theme without
    * these two groups simply keeps its authored fixed positions.
    */
-  function layoutBox(shown) {
-    const grid = engine.slots['box-grid'];
-    const total = engine.slots['box-total'];
-    if (!grid && !total) return;
-    const h1 = engine.slots['box-h-1'];
-    const h2 = engine.slots['box-h-2'];
-    const x1 = h1 ? parseFloat(h1.getAttribute('x')) : NaN;
-    const pitch = h2 && Number.isFinite(x1)
-      ? (parseFloat(h2.getAttribute('x')) || 0) - x1 : 0;
-    if (!(pitch > 0)) return;
-
-    /*
-     * SPREAD. box-grid names a BAND (data-span-x + data-span-w) and however many
-     * innings there are divide it into equal CELLS, each column centred in its
-     * own — so the columns always fill their pane and everything downstream (an
-     * R column, a pane rule, a caption) can be authored at a fixed x that no
-     * game length can collide with — which is what a RULED table needs: under
-     * the sliding layout below, the numbers drift inside a fixed frame and the
-     * R column walks away from its own rule. This is the default package's
-     * Large board.
-     *
-     * CELLS, not endpoints. Pinning the first and last column to the band's
-     * edges is the obvious reading and it is wrong: at five innings the outer
-     * numbers hug the walls while the inner gaps stretch to take up the slack,
-     * so the run reads as four gaps rather than five columns — and under a ruled
-     * table it would put the outer cells half outside the box. Dividing the band
-     * and centring each column in its share is what a table does.
-     *
-     * The cost is honest and bounded: a five-inning game's cells are wider than
-     * a nine's by exactly 9/5, and nothing else changes.
-     */
-    const spanX = grid ? parseFloat(grid.getAttribute('data-span-x')) : NaN;
-    const spanW = grid ? parseFloat(grid.getAttribute('data-span-w')) : NaN;
-    if (Number.isFinite(spanX) && Number.isFinite(spanW)) {
-      const n = Math.max(shown, 1);
-      const cell = spanW / n;
-      for (let i = 1; i <= MAX_INN; i++) {
-        // Only the active columns move; a hidden one keeps its authored x, which
-        // is where it will be wanted again the moment a longer game arrives.
-        const dx = i <= n ? (spanX + cell * (i - 0.5)) - (x1 + (i - 1) * pitch) : 0;
-        // box-h-{i} rides inside box-col-{i}; translating both would move it twice.
-        for (const nm of [`box-col-${i}`, `box-away-${i}`, `box-home-${i}`]) {
-          const el = engine.slots[nm];
-          if (el) el.setAttribute('transform', `translate(${dx},0)`);
-        }
-      }
-      return;
-    }
-
-    /*
-     * SLIDE (the Large board). box-total closes onto the last real inning, and
-     * box-grid pushes back half of what was closed so the block keeps the centre
-     * the theme composed it on. A theme with only box-total gets a left-anchored
-     * table whose R column simply follows the innings in.
-     */
-    const slack = (MAX_INN - Math.max(shown, 1)) * pitch;
-    if (total) total.setAttribute('transform', `translate(${-slack},0)`);
-    if (grid) grid.setAttribute('transform', `translate(${slack / 2},0)`);
-  }
-
   /*
    * The two ways a scoreboard ends up with no players, kept apart because the
    * producer does something different about each:
@@ -1029,7 +969,7 @@ export function mountScoreboard({ host, sb, size }) {
     if (disposed) return;
 
     if (engine.usesAppVars) OverlayBase.applyDesignSettings(SETTINGS_TYPE, NS);
-    else OverlayBase.clearDesignSettings();
+    else OverlayBase.clearDesignSettings(SETTINGS_TYPE, NS);
 
     const p1 = g(state, `score.${SB}.player.1.rioName`, '');
     const p2 = g(state, `score.${SB}.player.2.rioName`, '');

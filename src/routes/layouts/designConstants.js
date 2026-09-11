@@ -142,6 +142,26 @@ export const LAYOUT_SETTINGS = {
         { key: 'showSuperstars', type: 'switch', label: 'Superstar Icons', description: 'Display superstar badge on starred characters' },
         { key: 'showRoleIcon', type: 'switch', label: 'Batting / Fielding Icon', description: 'Display the bat or glove icon indicating the team role' },
         { key: 'showTeamLogo', type: 'switch', label: 'Team Logo', description: 'Display the team logo next to the roster' },
+        /*
+         * The character art is a 52×60 sprite drawn at up to twice that (the
+         * captain is 104 wide), so HOW it is upscaled is visible. Pixel is what
+         * every theme SVG already does to its portraits (`image-rendering:
+         * pixelated` on the scoreboard's nines, the stat cards, the lower third,
+         * the ticker); off (smooth) is what the roster has always drawn, and
+         * stays the default so a roster already on air does not change.
+         * Portraits only — the bat/glove and team logo are high-resolution art
+         * scaled DOWN, where nearest-neighbour just adds jaggies (roster-mount.js).
+         *
+         * A SWITCH, not a Smooth/Pixel select: with two states and one of them
+         * the default, the select drew a labelled segmented row alone among the
+         * roster's chips, so the one panel read two idioms. It rides last in the
+         * strip, after the three parts it does not add to.
+         */
+        {
+            key: 'pixelPortraits', type: 'switch', label: 'Pixel',
+            description: 'Scale the character art up crisp and blocky, matching the scoreboard and stat cards. Off blends it smooth.',
+            defaultValue: false,
+        },
     ],
     // Stat Bar — the wide per-side stat card as its OWN source
     // (?scoreboard=N&team=T), drawing whoever that side has on the field. One
@@ -164,6 +184,30 @@ export const LAYOUT_SETTINGS = {
      * so a source already in a producer's scene does not move.
      */
     playername: [
+        /*
+         * THE TYPE SIZE, in px, and an absolute one — not a fraction of the OBS
+         * source. Because this namespace is global, one number here is the size
+         * of every Player Name in the show; the source's own dimensions only
+         * ever clamp it down when a name will not fit (playername-mount.js).
+         *
+         * That is what makes it worth a field at all. The size used to be the
+         * source's HEIGHT, which meant a producer set type by dragging a corner
+         * in a unit nobody can do in their head (48px wanted an 88px-tall
+         * source), and two names matched only while their boxes did.
+         */
+        { key: 'nameSize', type: 'number-override', label: 'Name Size', description: 'Type size of the player name, in pixels. The same on every Player Name source — resizing one in OBS gives the name more room to run, not a different size.', defaultValue: 48, min: 12, max: 200, step: 1, suffix: 'px' },
+        /*
+          * THE PREFIX'S OWN SIZE, and not a fraction of the name's — the two
+          * runs carry different information and how loud a sponsor tag should
+          * be is a producer's call. It was hard-locked at half the name, which
+          * was a fair default and never a decision.
+          *
+          * 24 is exactly half of the name's 48, so an untouched pair draws what
+          * shipped. It has no effect while the prefix position is Off, and the
+          * height a source needs follows it — a bigger prefix is a taller stack
+          * (playername-mount.js `stackHeight`).
+          */
+        { key: 'prefixSize', type: 'number-override', label: 'Prefix Size', description: 'Type size of the Address Book prefix (sponsor / tag), in pixels — independent of the name. The source has to be tall enough for both runs together.', defaultValue: 24, min: 8, max: 200, step: 1, suffix: 'px' },
         { key: 'align', type: 'select', label: 'Alignment', description: 'Which edge the name sits on. Mirror Sides puts side 1 left and side 2 right — the pair that frames a scoreboard.', options: [{ value: 'auto', label: 'Mirror Sides' }, { value: 'left', label: 'Left' }, { value: 'center', label: 'Middle' }, { value: 'right', label: 'Right' }], defaultValue: 'auto' },
         { key: 'prefixPosition', type: 'select', label: 'Prefix Position', description: 'Where the Address Book prefix (sponsor / tag) sits relative to the name. Off hides it without editing the Address Book.', options: [{ value: 'above', label: 'Above Name' }, { value: 'below', label: 'Below Name' }, { value: 'inline', label: 'Before Name' }, { value: 'off', label: 'Off' }], defaultValue: 'above' },
     ],
@@ -441,11 +485,11 @@ export function settingReachesSize(def, type, size) {
 //
 // That is the distinction the `<meta name="overlay-settings">` whitelist cannot
 // draw, and why this list exists beside it. Both post-game callouts declare
-// `accentColor, fontFamily` and both mean it — postgame-callout-mount.js reads
-// `overlays.global.accentColor` for a portless side and `overlays.global.
-// fontFamily` for its type — but they read the GLOBAL directly and never call
-// applyDesignSettings, so a per-element pin on them would store, broadcast, and
-// be ignored. The meta is honest; it is answering a different question.
+// `accentColor, bodyFont, monoFont` and mean them. The accent is still read
+// straight off the global by postgame-callout-mount.js, so a per-element accent
+// pin on a callout stores, broadcasts and is ignored; the two FONT roles are
+// not, because those mounts now call `OverlayBase.applyTypeRoles(ns)` with their
+// own namespace. The meta is honest; it is answering a different question.
 //
 // Pinned against the mounts themselves by designConstants.test.js. If you add a
 // mount that applies the palette, add it here in the same change or its
@@ -507,7 +551,32 @@ export const OVERRIDABLE_GLOBAL_KEYS = [
     // and picking it from the Add menu would write null, which means unpinned:
     // the row would not appear at all.
     { key: 'finalBadgeColor',  meta: ['finalBadgeColor'],  type: 'color',  label: 'Final Badge Color', seedFrom: 'accentColor' },
-    { key: 'fontFamily',       meta: ['fontFamily'],       type: 'font',   label: 'Font Family', defaultValue: 'Inter' },
+    /*
+     * THREE TYPE ROLES, not one face.
+     *
+     * The token layer has always split broadcast type three ways and every
+     * theme SVG paints from those vars; these are the producer's end of the
+     * same three, so a knob here reaches the whole show rather than the four
+     * DOM-rendered elements the single `fontFamily` could touch.
+     *
+     * They are per-element pinnable for the same reason the accent is: an
+     * element that has to carry a sponsor's face is the exception the override
+     * section exists for. Which of the three a given element OFFERS is its own
+     * `<meta>` whitelist's answer — the post-game callouts declare only
+     * `bodyFont, monoFont`, because their headline type draws at 800/900 and
+     * has not been converted to the display role, and the Player Name and
+     * Event Header declare only `displayFont`, because a name and a band of
+     * titles are all they draw.
+     *
+     * For an element drawn by a THEME SVG the whitelist names all three (a
+     * package may set text in any role), and the theme itself narrows it:
+     * `role` is what the stage matches against the active theme's scanned
+     * `typeRoles` (drawnTypeRoles, ./designPackage.js). A role is offered only
+     * where something is set in it — default's Commentary draws no numerals.
+     */
+    { key: 'displayFont', meta: ['displayFont'], role: 'display', type: 'font', label: 'Display Font', defaultValue: 'Rajdhani',   description: 'Names, titles and status labels' },
+    { key: 'bodyFont',    meta: ['bodyFont'],    role: 'body',    type: 'font', label: 'Body Font',    defaultValue: 'Inter',      description: 'Meta, captions and prose lines' },
+    { key: 'monoFont',    meta: ['monoFont'],    role: 'mono',    type: 'font', label: 'Numeral Font', defaultValue: 'Chivo Mono', description: 'Scores, stats, linescores and clocks' },
 ];
 
 // ── Which types each override key actually REACHES ──
@@ -516,7 +585,7 @@ export const OVERRIDABLE_GLOBAL_KEYS = [
 // overlay-base.js reads a per-element override in three different ways and only
 // one of them is universal:
 //
-//   every type   `perAccent` / `perFont` / `perBadge` / `perCardBlur` /
+//   every type   `perAccent` / the three type roles / `perBadge` / `perCardBlur` /
 //                `perTextBlur` — read straight off `overrideNs` in
 //                applyDesignSettings, so they work wherever it is called.
 //   some types   LAYOUT_VAR_MAP — the card surface and the text colour are read
@@ -542,7 +611,9 @@ export const OVERRIDABLE_GLOBAL_KEYS = [
 // honest answer here is that the pin does not reach.
 const OVERRIDE_READ_TYPES = {
     accentColor: null,
-    fontFamily: null,
+    displayFont: null,
+    bodyFont: null,
+    monoFont: null,
     finalBadgeColor: null,
     cardShadowBlur: null,
     textShadowBlur: null,
@@ -595,10 +666,10 @@ export const DEFAULT_PORT_COLORS = ['#e53935', '#1e88e5', '#fdd835', '#43a047'];
 //
 // Everything NOT listed here survives any package, and that is a fact about the
 // overlays rather than a judgement call:
-//   accentColor / textColor / fontFamily / textShadow* / textStroke*  the Event
+//   accentColor / textColor / the font roles / textShadow* / textStroke*  the Event
 //     Header and Player Name are plain DOM overlays with no theme SVG at all,
 //     so their mounts call applyDesignSettings unconditionally and read
-//     --accent, --text-primary, --font-family, --text-shadow and
+//     --accent, --text-primary, --font-display/body/mono, --text-shadow and
 //     --text-stroke-* whatever is installed.
 //   showCaptains / showLogo   content toggles read through readSetting, never a
 //     CSS var — the ticker and the scoreboard honour them under any theme.
@@ -614,7 +685,8 @@ export const THEME_ONLY_GLOBAL_KEYS = [
 ];
 
 export const GLOBAL_DESIGN_KEYS = [
-    'accentColor', 'cardBg', 'textColor', 'borderRadius', 'borderColor', 'borderWidth', 'fontFamily',
+    'accentColor', 'cardBg', 'textColor', 'borderRadius', 'borderColor', 'borderWidth',
+    'displayFont', 'bodyFont', 'monoFont',
     'showShadow', 'cardShadowBlur', 'cardShadowColor',
     'textShadowEnabled', 'textShadowBlur', 'textShadowColor',
     'textStrokeWidth', 'textStrokeColor',
@@ -634,7 +706,9 @@ export const GLOBAL_DESIGN_DEFAULTS = {
     borderRadius:      16,
     borderColor:       'rgba(255, 255, 255, 0.08)',
     borderWidth:       1,
-    fontFamily:        'Inter',
+    displayFont:       'Rajdhani',
+    bodyFont:          'Inter',
+    monoFont:          'Chivo Mono',
     showShadow:        true,
     cardShadowBlur:    16,
     cardShadowColor:   'rgba(0, 0, 0, 0.5)',

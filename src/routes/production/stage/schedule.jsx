@@ -7,7 +7,7 @@ import { Text } from '../../../components/ui/primitives';
 import { Badge } from '../../../components/ui/badge';
 import { notifications } from '../../../lib/notify';
 import { cn } from '../../../lib/utils';
-import { KIT_INPUT, ListRow } from '../kit';
+import { KIT_INPUT, ListRow, StatusLine } from '../kit';
 import { matchDisplayLabel } from '../matches';
 import { useQueueOrder } from '../queue';
 import { DirectStage } from './generic';
@@ -88,19 +88,16 @@ export default function ScheduleStage({ element, placement }) {
             <DirectStage element={element} placement={placement} />
             <ScheduleHeading />
             {queue.length === 0 ? (
-                <Text size="xs" className="text-muted-foreground">
-                    Nothing in the running order, so this overlay draws only its heading.
-                    Matches join the order as you create them on the Match desk.
-                </Text>
+                <StatusLine
+                    label="EMPTY"
+                    title="Nothing is in the running order, so this overlay draws only its heading. Matches join the order as you create them on the Match desk."
+                />
             ) : (
                 /* A READOUT of the order with one control per row. The position
                    number is here for the same reason it is on the Match desk — it
                    is what the overlay will draw — but it is not editable here, so
                    there is exactly one place a running order can be changed. */
                 <>
-                    <Text size="xs" className="text-muted-foreground/70">
-                        In the order set on the Match desk. Times are per match, so they follow one when it moves.
-                    </Text>
                     {queue.map((id, idx) => {
                         const m = matches[id] || {};
                         const decided = m?.decided === 1 || m?.decided === 2

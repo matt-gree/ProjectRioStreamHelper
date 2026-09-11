@@ -102,7 +102,7 @@ A theme chooses one of two palettes:
   settings before rendering (`classic`).
 
 App-vars themes may use: `--accent`, `--card-bg`, `--text-primary`,
-`--border-color`, `--border-width`, `--font-family`, `--card-shadow-filter`,
+`--border-color`, `--border-width`, `--card-shadow-filter`,
 `--text-shadow`.
 
 **SVG gotchas (either palette):**

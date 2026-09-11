@@ -114,7 +114,7 @@ describe('getStatsLine — the game line rides the HUD transport', () => {
         const info = rd.getStatsLine(state, 1, 1);
         expect(info.gameLine).toBe('2 for 4, HR, 3 RBI');
         expect(info.bottomLabel).toBe('Game');
-        expect(info.stats.map(s => s.value)).toEqual([12, '.417', '.667', '8.0%']);
+        expect(info.stats.map(s => s.value)).toEqual([12, '.417', '.667', '8%']);
     });
 
     it('falls back to the API caption when the board is not on the HUD', () => {
@@ -122,5 +122,61 @@ describe('getStatsLine — the game line rides the HUD transport', () => {
         const info = rd.getStatsLine(state, 1, 1);
         expect(info.gameLine).toBe('');
         expect(info.bottomLabel).toBe('Tournament Stats');
+    });
+});
+
+/*
+ * Precision and width are ONE decision, stated twice: `width` is how many
+ * characters a category needs at its widest, and the stat bar divides its band
+ * in that ratio (layoutStatCells). Change a format without its width and the
+ * cell is sized for a value that no longer exists — nothing throws, the column
+ * is just wrong, or the value auto-fits smaller than the three beside it.
+ */
+describe('getStatsLine — precision and each category\'s width', () => {
+    beforeEach(() => { delete window.RioData; });
+
+    const side = (batting, pitching) => ({
+        score: { 1: {
+            home_team: 2, half_inning: batting ? 'Top' : 'Bottom',
+            batter: 'Yoshi', batter_roster_index: 0,
+            pitcher: 'Yoshi', pitcher_roster_index: 0,
+            stats: { 1: { character: { 0: { batting, pitching } } } },
+        } },
+    });
+
+    /* Whole percents, one decimal of ERA. Baseball writes ERA to two places;
+     * this card is read at a glance, and the dropped digit is what keeps every
+     * cell at 30px with nothing auto-fitting. */
+    it('writes percentages whole and ERA to one decimal', () => {
+        const rd = load({ project_rio: { hud_enabled: true } });
+        const bat = rd.getStatsLine(side({ at_bats: 21, avg: 0.429, slg: 0.952, so_pct: 19.04 }, null), 1, 1);
+        expect(bat.stats.map(s => s.value)).toEqual([21, '.429', '.952', '19%']);
+
+        const pit = rd.getStatsLine(side(null, { ip: '28.1', era: 6.0, k_pct: 19.5, opp_avg: 0.359 }), 1, 1);
+        expect(pit.role).toBe('pitching');
+        expect(pit.stats.map(s => s.value)).toEqual(['28.1', '6.0', '20%', '.359']);
+    });
+
+    /* Maxima, not typical widths: AB 3 ("132"), a rate 5 ("1.000"), a
+     * percentage 4 ("100%"), IP 5 ("128.1"), ERA 4 ("12.0"). */
+    it('gives every category its widest width', () => {
+        const rd = load({ project_rio: { hud_enabled: true } });
+        const bat = rd.getStatsLine(side({ at_bats: 0 }, null), 1, 1);
+        expect(bat.stats.map(s => [s.label, s.width])).toEqual(
+            [['AB', 3], ['AVG', 5], ['SLG', 5], ['SO%', 4]]);
+        const pit = rd.getStatsLine(side(null, {}), 1, 1);
+        expect(pit.stats.map(s => [s.label, s.width])).toEqual(
+            [['IP', 5], ['ERA', 4], ['K%', 4], ['AVG', 5]]);
+    });
+
+    /* The claim `width` makes, checked against the formatter itself: the
+     * widest value each category can produce fits its budget. */
+    it('never formats a value wider than its category claims', () => {
+        const rd = load({ project_rio: { hud_enabled: true } });
+        const bat = rd.getStatsLine(side({ at_bats: 132, avg: 1, slg: 1.5, so_pct: 100 }, null), 1, 1);
+        const pit = rd.getStatsLine(side(null, { ip: '128.1', era: 12.04, k_pct: 100, opp_avg: 1 }), 1, 1);
+        for (const st of [...bat.stats, ...pit.stats]) {
+            expect(String(st.value).length, `${st.label} = ${st.value}`).toBeLessThanOrEqual(st.width);
+        }
     });
 });

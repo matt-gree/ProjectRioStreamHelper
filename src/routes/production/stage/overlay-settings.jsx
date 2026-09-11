@@ -7,7 +7,7 @@ import {
     LAYOUT_SETTINGS, THEME_ELEMENT, OVERRIDABLE_GLOBAL_KEYS, GLOBAL_DESIGN_DEFAULTS,
     OVERRIDE_CAPABLE_TYPES, themeElementFor, overrideReaches, settingReachesSize,
 } from '../../layouts/designConstants';
-import { usePaintedByApp, useDesignPackages } from '../../layouts/designPackage';
+import { usePaintedByApp, useDrawnTypeRoles, useDesignPackages } from '../../layouts/designPackage';
 import { useLayoutWhitelists, declaresAny } from '../../layouts/layoutWhitelist';
 import { FontCombobox } from '../../../components/ui/font-combobox';
 import { Button } from '../../../components/ui/button';
@@ -15,7 +15,7 @@ import { Popover, PopoverTrigger, PopoverContent } from '../../../components/ui/
 import { Plus, X } from 'lucide-react';
 import {
     SegmentedRow, ToggleRow, ToggleChip, ToggleChips, TextRow, NumberRow, NumberField, FractionRow, ColorRow,
-    FieldRow, KIT_LABEL,
+    FieldRow, KIT_LABEL, KIT_SECTION,
 } from '../kit';
 import { cn } from '../../../lib/utils';
 import { stageSettingsSet } from '../controls';
@@ -468,7 +468,7 @@ export const ElementStyleSettings = memo(function ElementStyleSettings({ type, b
     ));
     if (defs.length === 0) return null;
     return (
-        <div className="mt-1 flex flex-col gap-1.5 border-t border-border/60 pt-2">
+        <div className={KIT_SECTION}>
             <Text size="xs" className="label-display text-muted-foreground">Style</Text>
             <SettingGroups os={os} defs={defs} />
         </div>
@@ -488,7 +488,7 @@ export const ElementStyleSettings = memo(function ElementStyleSettings({ type, b
  * the old Setup tab, and when Setup became the Design tab the picker was
  * dropped and nothing on the console replaced it. What that left behind is the
  * argument for this section: a producer can have live per-element pins —
- * `overlays.eventheader.fontFamily`, a transparent `overlays.statsbar.cardBg` —
+ * `overlays.eventheader.displayFont`, a transparent `overlays.statsbar.cardBg` —
  * driving the broadcast with no surface anywhere that shows them, and the only
  * control that touches them at all is Presets' "Reset all overrides", which
  * wipes the lot without naming one.
@@ -503,13 +503,13 @@ export const ElementStyleSettings = memo(function ElementStyleSettings({ type, b
  *      colour only for the types in its LAYOUT_VAR_MAP, and `showShadow`
  *      nowhere at all).
  * (3) is not implied by (2), and the difference is subtle enough to be worth
- * the extra list: both post-game callouts declare `accentColor, fontFamily`
- * and genuinely honour them — postgame-callout-mount.js reads
- * `overlays.global.accentColor` for a portless side and `overlays.global.
- * fontFamily` for its type — but they read the GLOBAL directly and never call
- * applyDesignSettings, which is the only code that consults
- * `overlays.{type}.{key}`. Believing the meta alone would put two rows on each
- * that store, broadcast, and are ignored.
+ * the extra list: both post-game callouts declare `accentColor, bodyFont, monoFont`
+ * and genuinely honour them — but only the two FONT roles are per-element
+ * pinnable: those mounts call `OverlayBase.applyTypeRoles(ns)` with their own
+ * namespace, while the accent is still read straight off
+ * `overlays.global.accentColor` and never through applyDesignSettings, which is
+ * the only other code that consults `overlays.{type}.{key}`. Believing the meta
+ * alone would put an accent row on each that stores, broadcasts, and is ignored.
  *
  * WHY THESE ROWS ARE DISABLED AND NOT DROPPED, unlike `useLiveDefs` above.
  * Both answer the same fact — the active package paints this element itself, so
@@ -853,7 +853,7 @@ function removePair(os, def) {
 }
 
 export const ElementStyleOverrides = memo(function ElementStyleOverrides({
-    type, board, label, size,
+    type, board, label, size, leading,
 }) {
     const ns = board != null ? `${type}.${board}` : type;
     const os = useOverlaySettings(type, ns, label ?? type, board ?? null);
@@ -862,10 +862,33 @@ export const ElementStyleOverrides = memo(function ElementStyleOverrides({
     const globals = useGlobalValues();
     // The stem is a function of the SIZE for the scoreboard, whose three theme
     // files a package may tier differently.
-    const painted = usePaintedByApp(themeElementFor(type, size));
+    const stem = themeElementFor(type, size);
+    const painted = usePaintedByApp(stem);
+    const roles = useDrawnTypeRoles(stem);
     const packages = useDesignPackages();
     const activeId = useSettingsStore(s => s?.overlays?.global?.designPackage) ?? 'default';
     const added = useAddedKeys(ns, pinned);
+
+    /*
+     * IS THIS KEY LIVE ON THE ELEMENT UNDER THE ACTIVE PACKAGE — two questions,
+     * because type is not palette.
+     *
+     * A palette key is dead under a package that paints the element itself. A
+     * FONT ROLE is not: the roles survive `clearDesignSettings`, so a pin reaches
+     * a full-art theme as well as a token skin — what kills it instead is the
+     * theme setting nothing in that role (default's Commentary has no numerals).
+     * Gating the fonts on the palette tier locked them on every themed element
+     * under `default`, which paints all of them itself; gating them on nothing
+     * offered a Numeral Font on elements with no numbers.
+     *
+     * `roles` is null for an element no theme draws (Player Name, Event Header)
+     * or before the package list lands; there the layout's own whitelist, which
+     * `useOverrideDefs` already applied, is the whole answer.
+     */
+    const live = useCallback(
+        d => (d.role ? roles == null || roles.includes(d.role) : painted),
+        [roles, painted],
+    );
 
     // A paired row counts as ON if EITHER half is pinned. Settings written
     // before the two became one row can hold a colour with no size beside it,
@@ -875,8 +898,14 @@ export const ElementStyleOverrides = memo(function ElementStyleOverrides({
         const isOn = d => added.has(d.key) || (d.colorKey && added.has(d.colorKey));
         return { on: defs.filter(isOn), off: defs.filter(d => !isOn(d)) };
     }, [defs, added]);
+    // The picker offers only what would do something — a dead key is never
+    // offered, while a dead key already PINNED keeps its row (below).
+    const addable = useMemo(() => off.filter(live), [off, live]);
 
-    if (defs.length === 0) return null;
+    // `leading` still renders with no overridable keys — it is a guest on this
+    // section's footer row, not part of it, and an element whose theme offers
+    // nothing to pin must not silently lose its intro control with the section.
+    if (defs.length === 0) return leading ? <div className={KIT_SECTION}>{leading}</div> : null;
     const pkgName = packages?.find(p => p.id === activeId)?.name || activeId;
     // The whole explanation of a dead control, as a tooltip on the dead control
     // — it was a two-line paragraph standing above the section, which is a lot
@@ -884,35 +913,61 @@ export const ElementStyleOverrides = memo(function ElementStyleOverrides({
     // is the part that matters: "these don't work" without saying what owns the
     // look leaves the producer where the Design tab's silent knobs left them.
     const paintedNote = `${pkgName} paints this element itself`;
+    const deadNote = d => (d.role
+        ? `${pkgName} sets nothing on this element in the ${d.label}`
+        : paintedNote);
 
     return (
-        <div className="mt-1 flex flex-col gap-1.5 border-t border-border/60 pt-2">
-            <Text size="xs" className="label-display text-muted-foreground">Style overrides</Text>
-            {/* Existing pins stay VISIBLE under a full-art package rather than
-                dropping out: a pin the producer cannot see is a pin they cannot
-                remove, and it starts working again the moment they swap
-                packages. The picker is what closes, because adding one there
-                would do nothing. */}
+        <div className={KIT_SECTION}>
+            {/* THE HEADING IS THE LIST'S, NOT THE BUTTON'S. Nothing is on an
+                element until the producer adds it, so the common state of this
+                section is a caps heading standing over one ghost button that
+                already says "Add style override" — a second name for the only
+                thing under it, in the register this pass keeps deleting. With a
+                list to head it comes back. The DIVIDER stays either way: it is
+                what says the button below it starts a new group rather than
+                belonging to the style settings above. */}
+            {on.length > 0 && (
+                <Text size="xs" className="label-display text-muted-foreground">Style overrides</Text>
+            )}
+            {/* Existing pins stay VISIBLE when the active package leaves them
+                nothing to reach — a full-art palette, or a theme that sets no
+                text in that font role — rather than dropping out: a pin the
+                producer cannot see is a pin they cannot remove, and it starts
+                working again the moment they swap packages. The picker is what
+                closes, because adding one there would do nothing. */}
             {on.map(def => (
                 <OverrideRow
                     key={def.key} os={os} def={def}
                     pinned={pinned[def.key] ?? null}
                     pinnedColor={def.colorKey ? (pinned[def.colorKey] ?? null) : null}
                     globalValue={globals[def.key]}
-                    disabled={!painted} note={paintedNote}
+                    disabled={!live(def)} note={deadNote(def)}
                     onRemove={() => removePair(os, def)}
                 />
             ))}
-            <AddOverride
-                defs={off}
-                disabled={!painted || off.length === 0}
-                title={
-                    !painted ? paintedNote
-                        : off.length === 0 ? 'Every override this element reads is already on it'
-                            : undefined
-                }
-                onAdd={(def) => addPair(os, def, globals)}
-            />
+            {/* THE FOOTER ROW TAKES A GUEST. `leading` is the stage's intro
+                control (./intro.jsx) — the panel's other panel-level, set-once
+                control, which had a near-empty row of its own directly above
+                this one. Two lonely rows with most of a panel's width dead
+                beside each is a worse answer than one shared row, so the guest
+                sits left and the Add button is pushed right to meet it. With no
+                guest the button keeps its natural left edge: the spacer only
+                exists when there is something for it to push away from. */}
+            <div className="flex min-w-0 items-center gap-2">
+                {leading}
+                {leading && <div className="flex-1" />}
+                <AddOverride
+                    defs={addable}
+                    disabled={addable.length === 0}
+                    title={
+                        addable.length > 0 ? undefined
+                            : painted || off.length === 0 ? 'Every override this element reads is already on it'
+                                : paintedNote
+                    }
+                    onAdd={(def) => addPair(os, def, globals)}
+                />
+            </div>
         </div>
     );
 });

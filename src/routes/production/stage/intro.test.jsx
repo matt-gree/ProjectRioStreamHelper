@@ -51,16 +51,37 @@ describe('IntroRow', () => {
 
     it('turning intro off stores disableIntro under the layout type and rewrites OBS', async () => {
         ui(el());
-        fireEvent.click(screen.getByRole('switch')); // on -> off
+        fireEvent.click(screen.getByRole('radio', { name: 'Off' })); // on -> off
         await waitFor(() => expect(setLayoutIntroDisabled).toHaveBeenCalledWith(
             '/layout/scoreboard1/scoreboard.html', true,
         ));
         expect(useSettingsStore.getState().overlays.scoreboard.disableIntro).toBe(true);
     });
 
+    /*
+     * A SEGMENTED PAIR, NOT A HEADED SECTION OF ONE SWITCH. Two things are
+     * pinned here and they failed differently:
+     *
+     * the HEADING — a caps "On show" over a single row, a second name for the
+     * only thing under it, on every animated element's panel; and
+     *
+     * the CONTROL — a switch marks ON with `bg-primary`, spending the console's
+     * on-air colour on a preference, and a lone ToggleChip (tried in between)
+     * marks OFF with a near-invisible outline that reads as a caption. Naming
+     * both states is what makes this legible with no siblings beside it.
+     */
+    it('is a segmented pair, with no section heading over it', () => {
+        ui(el());
+        expect(screen.queryByText(/on show/i)).not.toBeInTheDocument();
+        expect(screen.queryByRole('switch')).not.toBeInTheDocument();
+        expect(screen.getByRole('radio', { name: 'On' })).toHaveAttribute('aria-checked', 'true');
+        expect(screen.getByRole('radio', { name: 'Off' })).toHaveAttribute('aria-checked', 'false');
+        expect(screen.getByTitle(/reloads this source each time it is shown/)).toBeInTheDocument();
+    });
+
     it('reads the stored preference — an off overlay shows the switch off', () => {
         useSettingsStore.setState({ overlays: { scoreboard: { disableIntro: true } } });
         ui(el());
-        expect(screen.getByRole('switch')).not.toBeChecked();
+        expect(screen.getByRole('radio', { name: 'Off' })).toHaveAttribute('aria-checked', 'true');
     });
 });

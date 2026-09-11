@@ -54,7 +54,51 @@ describe('Subject', () => {
         });
         render(<Subject placement={placementFor('scoreboard', { board: 1 })} />);
         expect(screen.getByText('Matt 5–7 Jake')).toBeInTheDocument();
-        expect(screen.getByText('Bot 5')).toBeInTheDocument();
+        // Who and whether, never where in the game — the inning ticks over on
+        // its own and belongs to the board desk's game slot, not to a header.
+        expect(screen.queryByText('Bot 5')).not.toBeInTheDocument();
+    });
+
+    /*
+     * WHERE THE GAME IS UP TO IS A BADGE, THE INNING IS THE QUALIFIER — one
+     * palette with the board desk's own game slot (../kit GameChip), so a panel
+     * header and the desk under it cannot disagree about whether a game is
+     * still going.
+     *
+     * The inning SURVIVES the end of the game. `Final` used to replace it, so a
+     * finished game lost the inning it finished in — which is the fact a
+     * producer wants at the exact moment they are putting the next fixture up.
+     */
+    it('badges a finished game, and leaves the inning to the board desk', () => {
+        setState({
+            score: {
+                1: {
+                    player: { 1: { rioName: 'Matt' }, 2: { rioName: 'Jake' } },
+                    game_id: 'G1', score_left: 5, score_right: 7,
+                    inning: 9, half_inning: 'Bottom', game_over: true,
+                },
+            },
+        });
+        render(<Subject placement={placementFor('scoreboard', { board: 1 })} />);
+        expect(screen.getByText('FINAL')).toBeInTheDocument();
+        // The lowercase word it replaced is gone from the qualifier — and so is
+        // the inning, which belongs to the surface built to WATCH a game.
+        expect(screen.queryByText('Final')).not.toBeInTheDocument();
+        expect(screen.queryByText('Bot 9')).not.toBeInTheDocument();
+    });
+
+    it('badges a live game without waiting for it to end', () => {
+        setState({
+            score: {
+                1: {
+                    player: { 1: { rioName: 'Matt' }, 2: { rioName: 'Jake' } },
+                    game_id: 'G1', inning: 3, half_inning: 'Top',
+                },
+            },
+        });
+        render(<Subject placement={placementFor('scoreboard', { board: 1 })} />);
+        expect(screen.getByText('LIVE')).toBeInTheDocument();
+        expect(screen.queryByText('Top 3')).not.toBeInTheDocument();
     });
 
     it('an empty board says so plainly — escalating is ReadinessNote\'s job', () => {
@@ -72,7 +116,11 @@ describe('Subject', () => {
         render(<Subject placement={placementFor('roster', {
             variant: 't2', item: { sourceName: 's', url: '/layout/scoreboard1/roster.html?team=2' },
         })} />);
-        expect(screen.getByText('Side 2 — Jake')).toBeInTheDocument();
+        // The NAME, not the position: every surface a subject renders on is
+        // titled with the side already (see usePlacementLabel), and the name is
+        // the one thing that title structurally cannot say.
+        expect(screen.getByText('Jake')).toBeInTheDocument();
+        expect(screen.queryByText(/Side 2 —/)).not.toBeInTheDocument();
     });
 
     it('a container states its occupant AND why, so a push reads apart from a rule', () => {

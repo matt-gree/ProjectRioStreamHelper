@@ -9,6 +9,7 @@ from fastapi.templating import Jinja2Templates
 from loguru import logger
 
 from server.api import router_v1
+from server.http_cache import REVALIDATE, RevalidatingStaticFiles
 from server.utils.tasks import spawn, drain
 from server.api.v1.assets import get_msb_assets_path
 from server.api.v1.layouts import layout_url
@@ -220,6 +221,8 @@ templates = Jinja2Templates(directory=_template_dir)
 
 # react assets (/dist/assets) — only mount if built; in dev mode Vite serves these
 if (_dist_dir / "assets").is_dir():
+    # Vite build output, content-hashed — a new build is a new URL, so this is
+    # the ONE static tree that should be cached hard. See server/http_cache.py.
     app.mount("/assets", StaticFiles(directory=str(_dist_dir / "assets")), name="assets")
 
 # MSB assets — user-supplied (Nintendo IP, not bundled). Served from a
@@ -253,7 +256,7 @@ async def msb_asset(file_path: str):
 
 # game assets (non-MSB) — served from public/game_assets/
 if (_public_dir / "game_assets").is_dir():
-    app.mount("/game_assets", StaticFiles(directory=str(_public_dir / "game_assets")), name="game_assets")
+    app.mount("/game_assets", RevalidatingStaticFiles(directory=str(_public_dir / "game_assets")), name="game_assets")
 
 # OBS browser source layouts — served from public/layout/
 _layout_dir = _public_dir / "layout"
@@ -317,19 +320,19 @@ async def layout_index(request: Request) -> HTMLResponse:
     return HTMLResponse(html)
 
 if _layout_dir.is_dir():
-    app.mount("/layout", StaticFiles(directory=str(_layout_dir), html=True), name="layout")
+    app.mount("/layout", RevalidatingStaticFiles(directory=str(_layout_dir), html=True), name="layout")
 
 # RioVisualizer shared web assets (renderer.js core + themes) — served straight
 # from the submodule so the hit overlay and the standalone debug tool share one
 # source of truth. (Frozen builds bundle this dir; that's wired in PRSH.spec.)
 _rio_viz_web = rio_visualizer_dir() / "web"
 if _rio_viz_web.is_dir():
-    app.mount("/rio-visualizer", StaticFiles(directory=str(_rio_viz_web)), name="rio_visualizer")
+    app.mount("/rio-visualizer", RevalidatingStaticFiles(directory=str(_rio_viz_web)), name="rio_visualizer")
 
 # Tournament branding assets (logos) — served from user_data/branding/
 _branding_dir = user_data_dir() / "branding"
 _branding_dir.mkdir(parents=True, exist_ok=True)
-app.mount("/branding", StaticFiles(directory=str(_branding_dir)), name="branding")
+app.mount("/branding", RevalidatingStaticFiles(directory=str(_branding_dir)), name="branding")
 
 # Design-package assets (element theme SVGs). A dynamic route rather than a
 # static mount because each request resolves across two roots: the built-in
@@ -343,7 +346,10 @@ async def design_asset(package_id: str, filename: str):
     path = _resolve_design_asset(package_id, filename)
     if path is None:
         raise HTTPException(status_code=404, detail="No such design asset")
-    return FileResponse(path)
+    # A theme SVG is fetched as a SUBRESOURCE, so nothing revalidates it for
+    # us — see server/http_cache.py for what that costs a producer editing a
+    # package while OBS is open.
+    return FileResponse(path, headers={"cache-control": REVALIDATE})
 
 # Favicon
 @app.get("/favicon.png")

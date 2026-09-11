@@ -6,9 +6,9 @@
     (data-design-vars="app"). Row-stack contract in scoreboard-mount.js.
   -->
   <style>
-    .cs-name { fill: var(--text-primary, #ffffff); font-family: var(--font-family, 'Inter', sans-serif); text-shadow: var(--text-shadow, none); }
-    .cs-score { fill: var(--accent, #f59e0b); font-family: var(--font-family, 'Inter', sans-serif); }
-    .cs-dim  { fill: rgba(255,255,255,0.6); font-family: var(--font-family, 'Inter', sans-serif); }
+    .cs-name { fill: var(--text-primary, #ffffff); font-family: var(--font-body, 'Inter', system-ui, sans-serif); text-shadow: var(--text-shadow, none); }
+    .cs-score { fill: var(--accent, #f59e0b); font-family: var(--font-body, 'Inter', system-ui, sans-serif);  font-variant-numeric: tabular-nums;}
+    .cs-dim  { fill: rgba(255,255,255,0.6); font-family: var(--font-body, 'Inter', system-ui, sans-serif); }
     .cs-rule { stroke: var(--border-color, rgba(255,255,255,0.08)); stroke-width: 1; }
   </style>
 
@@ -34,7 +34,7 @@
     <text data-slot="inn-num" x="346" y="80" text-anchor="middle" class="cs-name" font-size="20" font-weight="800">1</text>
     <g data-slot="final-badge" opacity="0">
       <rect x="318" y="52" width="56" height="24" rx="4" style="fill:var(--final-badge-color, #ef4444)"/>
-      <text x="346" y="68" text-anchor="middle" fill="#ffffff" font-family="var(--font-family, 'Inter', sans-serif)" font-size="11" font-weight="800" letter-spacing="1">FINAL</text>
+      <text x="346" y="68" text-anchor="middle" fill="#ffffff" font-family="var(--font-body, 'Inter', system-ui, sans-serif)" font-size="11" font-weight="800" letter-spacing="1">FINAL</text>
     </g>
   </g>
 

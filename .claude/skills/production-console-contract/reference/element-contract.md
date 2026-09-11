@@ -134,16 +134,44 @@ it, and a panel titled "Roster · Side 2" could not tell a producer whether side
 2 was the player they meant (Rio reassigns away/home every game, so a side is a
 position, not an identity).
 
-- **It renders in exactly two places.** The **stage**, above the body: subject
-  before knobs. The **rail**, as row one of the direct flavor's default quick
-  face. Not the rack — that is a dense scannable monitor and already carries the
-  board/variant detail; a second line per row costs the density that makes it
-  one.
+- **It renders in exactly two places.** The **stage**, in the panel HEADER
+  beside the title (`PanelShell`'s `subject` prop, behind a hairline rule). The
+  **rail**, as row one of the direct flavor's default quick face. Not the rack —
+  that is a dense scannable monitor and already carries the board/variant
+  detail; a second line per row costs the density that makes it one.
+- **In a header it is inline, and the HEADER is what knows that**, not the ~25
+  resolvers — `InlineSubjects` (a context `PanelShell` wraps its subject slot
+  in) flattens the row box and steps the type to 13px/500 against the title's
+  15px/600. What a panel is, what it is showing and what it is bound to are one
+  thought; as the body's first row they were three stacked grey lines and the
+  panel had no entry point. Stacked on a rail card it stays at body size, since
+  there the card IS the subject's context.
 - **It is a readout, never a control** — the only row in the kit with no
-  interaction (`SubjectRow`). No dot and no colour: the console's hues are spoken
-  for, so the tiering is type (subject in foreground, qualifier dimmed).
-  `tone="warn"` is the single exception and means what amber means everywhere
-  else — you would want to know before it is on air.
+  interaction (`SubjectRow`). No dot and no colour of its own: the console's
+  hues are spoken for, so the tiering is type (subject in foreground, qualifier
+  dimmed). `tone="warn"` is one exception and means what amber means everywhere
+  else. The other is `badge`, a NODE for a state a caller already has a palette
+  for — today only the game lifecycle (`GameStageChip`, `kit/GameChip.jsx`,
+  shared with the board desk's own game slot so the two cannot disagree). A
+  state you can see in one glance should not have to be read.
+- **It never repeats what the TITLE says.** Both surfaces are titled with the
+  placement's own coordinates, so `SideSubject` spends its one line on the NAME
+  and not on "Side 1 — " — which is the entire reason the row exists, since a
+  side is a position (Rio reassigns away/home every game) and the position is
+  all a title can give. That guarantee is held up at the other end: a `perSide`
+  element ALWAYS carries its variant in `usePlacementLabel`, however many of it
+  are placed. The `variants.size > 1` rule is right for a size variant (which
+  has a default row and only needs disambiguating against a sibling) and wrong
+  for `?team=`, where there is no default — a producer with only side 1 in their
+  scenes got a panel titled plain "Player Name", the one title that element must
+  never carry.
+- **The badge answers WHETHER; the subject answers WHO. Neither answers WHERE.**
+  `BoardGameSubject` deliberately drops the inning: it is the one number that
+  ticks over on its own, a detail for a surface built to WATCH a game, which the
+  board desk's `GameSlot` is and a panel header is not. It was the qualifier
+  here, which also forced the lifecycle to be a dimmed word REPLACING it — so
+  "is this still going" arrived in the same grey as "Top 9", and a finished game
+  lost the inning it finished in.
 - **It reads LIVE STATE, never settings or a stored preference.** The one
   deliberate exception is an element with a PICK, whose subject is the standing
   intent and says so — and says it in the tense of the row: on a slot it is what
@@ -154,6 +182,16 @@ position, not an identity).
   right for "what would Push show" and a lie beside a source drawing nothing —
   so a direct row reads `Nothing picked yet · Mario suggested`. If you want to
   show a configured value, that is a stage row.
+- **It is the ONLY home for that answer — a stage body never restates it.** The
+  Character Spotlight's picker carried five captions under its dropdown
+  (`SHOWING` / `ON STAGE` / `PUSH SHOWS` / `SUGGESTED` ×2), each naming the
+  character a second time an inch under the control that had just named them —
+  and the subject was saying the same thing a third time in the header of that
+  very panel. Both went: the value is the CONTROL's to show (which is why the
+  picker is now a Combobox carrying the character's sprite and batting line into
+  its closed trigger — `feed-pickers.jsx`), and the tense and the suggestion are
+  the SUBJECT's. A body row that agrees with the header is a row that can only
+  ever agree or be a bug.
 - **Dispatch is by COMPONENT, not a map of hooks** (`SUBJECTS`), same as
   `ELEMENT_QUICK_FACES` and `STAGE_BODIES` and for the same reason: choosing a
   resolver by id would be a conditional hook call.

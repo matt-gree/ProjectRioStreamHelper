@@ -56,6 +56,20 @@ const feed = () => useStateStore.getState()?.production?.feed?.container?.['call
 const memory = () => useStateStore.getState()?.production?.feed?.last?.postgamecallout;
 const ui = () => render(<PostgameCalloutPicker element={spotlight} scoreboard={1} />);
 
+/*
+ * The picker is a popover Combobox, not a native <select>, so a pick is two
+ * acts: open the trigger, click the option. `trigger` is also the READOUT —
+ * it carries the character's name and their line, which is what let the
+ * "SHOWING <name>" caption under it go.
+ */
+const trigger = () => screen.getByRole('combobox');
+const open = () => fireEvent.click(trigger());
+const optionText = () => screen.getAllByRole('option').map(o => o.textContent);
+const pick = (name) => {
+    open();
+    fireEvent.click(screen.getByRole('option', { name: new RegExp(name) }));
+};
+
 // Put this element on the stage (mine) carrying `sel`, so the picker is live.
 // Airing always came from a pick or a push, both of which record the intent —
 // so seed the memory too, mirroring the real flow.
@@ -77,19 +91,38 @@ describe('spotlight pick is decoupled from air', () => {
     it('arms the pick without putting it on the container', () => {
         captureLoaded();
         ui();
-        fireEvent.change(screen.getByRole('combobox'), { target: { value: '1:0' } });
+        pick('Peach');
         // Armed, not aired: intent records Peach, the container stays empty.
         expect(memory()).toMatchObject({ element: 'postgamecallout', team: 1, charIndex: 0, name: 'Peach' });
         expect(feed()).toBeUndefined();
-        expect(screen.getByRole('combobox').value).toBe('1:0');
-        expect(screen.getByText(/Not on the stage — Push shows Peach\./)).toBeTruthy();
+        // The closed trigger IS the readout — the name AND what they did — so
+        // there is no caption under it repeating either.
+        expect(trigger().textContent).toContain('Peach');
+        expect(trigger().textContent).toContain('2-for-4');
+    });
+
+    /*
+     * THE TENSE IS THE PANEL'S SUBJECT, NOT A ROW IN ITS BODY. This picker
+     * carried five captions — SHOWING / ON STAGE / PUSH SHOWS / SUGGESTED —
+     * each naming the character a second time under a control that had just
+     * named them. `FedSubject` (../subject) answers "what is this showing" in
+     * the panel header and on the rail card, and the console has one home for
+     * that question.
+     */
+    it('says nothing about tense — no caption restating the control', () => {
+        captureLoaded();
+        ui();
+        pick('Peach');
+        for (const gone of ['SHOWING', 'PUSH SHOWS', 'ON STAGE', 'SUGGESTED']) {
+            expect(screen.queryByText(gone)).toBeNull();
+        }
     });
 
     it('live-edits the container when this element already holds the stage', () => {
         captureLoaded();
         airing({ team: 2, charIndex: 0, name: 'Wario' }); // spotlight is live on Wario
         ui();
-        fireEvent.change(screen.getByRole('combobox'), { target: { value: '1:0' } }); // swap to Peach
+        pick('Peach'); // swap
         // Live: the pick goes straight to the container.
         expect(feed()).toMatchObject({ element: 'postgamecallout', team: 1, charIndex: 0, name: 'Peach' });
     });
@@ -97,7 +130,7 @@ describe('spotlight pick is decoupled from air', () => {
     it('survives another element taking the stage — the pick is intent, not air', () => {
         captureLoaded();
         ui();
-        fireEvent.change(screen.getByRole('combobox'), { target: { value: '1:0' } });
+        pick('Peach');
 
         // Game Summary takes the stage — the container carries someone else.
         useStateStore.getState().setItems([
@@ -105,20 +138,19 @@ describe('spotlight pick is decoupled from air', () => {
         ]);
         cleanup();
         ui();
-        expect(screen.getByRole('combobox').value).toBe('1:0');
-        expect(screen.getByText(/Not on the stage — Push shows Peach\./)).toBeTruthy();
+        expect(trigger().textContent).toContain('Peach');
     });
 
     it('keeps the pick through a Clear — Clear takes it off air, it does not un-pick', () => {
         captureLoaded();
         airing({ team: 1, charIndex: 0, name: 'Peach' }); // live on Peach
         ui();
-        fireEvent.change(screen.getByRole('combobox'), { target: { value: '' } }); // Clear
+        fireEvent.click(screen.getByLabelText('Take this off the stage'));
         expect(feed()).toBeUndefined();
         expect(memory()).toMatchObject({ name: 'Peach' });
         cleanup();
         ui();
-        expect(screen.getByRole('combobox').value).toBe('1:0');
+        expect(trigger().textContent).toContain('Peach');
     });
 });
 
@@ -188,19 +220,26 @@ describe('characterSummary', () => {
 });
 
 describe('spotlight suggestion', () => {
-    it('opens on the winning side\'s leader in total bases, labelled as a suggestion', () => {
+    /*
+     * A SUGGESTION IS NOT A PICK — and saying so is the PANEL's job, not this
+     * row's. `FedSubject` (../subject) draws "Push shows Daisy · suggested" in
+     * the header of the panel this picker sits in, pinned by subject.test.jsx;
+     * the picker itself only has to open on the proposal rather than sitting
+     * empty, so a producer who just captured a game can go straight to Push.
+     */
+    it('opens on the winning side\'s leader in total bases', () => {
         captureLoaded();
         ui();
-        expect(screen.getByRole('combobox').value).toBe('1:1'); // Daisy, 8 TB
-        expect(screen.getByText(/Suggested — Daisy led the winning side in total bases\./)).toBeTruthy();
+        expect(trigger().textContent).toContain('Daisy'); // 8 TB
+        expect(screen.queryByText('SUGGESTED')).toBeNull();
     });
 
-    it('drops "Nothing fed" while off the stage — there is no feed to clear', () => {
+    it('offers no clear while off the stage — there is no feed to clear', () => {
         captureLoaded();
         ui();
-        const labels = [...screen.getByRole('combobox').options].map(o => o.textContent);
-        expect(labels).not.toContain('Nothing fed');
-        expect(labels.some(l => l.startsWith('Daisy'))).toBe(true);
+        expect(screen.queryByLabelText('Take this off the stage')).toBeNull();
+        open();
+        expect(optionText().some(l => l.startsWith('Daisy'))).toBe(true);
     });
 
     /*
@@ -211,22 +250,52 @@ describe('spotlight suggestion', () => {
     it('carries each character’s line on the option', () => {
         captureLoaded();
         ui();
-        const labels = [...screen.getByRole('combobox').options].map(o => o.textContent);
+        open();
+        const labels = optionText();
         // The server's line, VERBATIM — not the server's line plus a second
         // helping of the stats already in it.
-        expect(labels).toContain('Daisy · 2-for-4, 2 HR, 4 RBI');
-        expect(labels).toContain('Peach · 2-for-4');
+        expect(labels).toContain('Daisy2-for-4, 2 HR, 4 RBI');
+        expect(labels).toContain('Peach2-for-4');
         // Per LABEL, not across the list: two characters may each have a HR.
         for (const l of labels) expect((l.match(/HR/g) || []).length).toBeLessThan(2);
     });
 
-    it('offers "Nothing fed" once the element holds the stage', () => {
+    /*
+     * BOTH SIDES AT ONCE. The groups are the two players, nine roster slots
+     * each, and the choice is made by comparing them — so they are laid out as
+     * columns (Combobox `columns`) rather than stacked, where reaching the
+     * second team means scrolling past the whole of the first.
+     */
+    it('lists both sides under their own headings', () => {
+        captureLoaded();
+        ui();
+        open();
+        expect(screen.getByText('left')).toBeTruthy();
+        expect(screen.getByText('right')).toBeTruthy();
+        expect(optionText().some(l => l.startsWith('Wario'))).toBe(true);
+        expect(optionText().some(l => l.startsWith('Peach'))).toBe(true);
+    });
+
+    /*
+     * THE SPRITE IS WHY A NINE-DEEP ROSTER IS SCANNABLE — a producer knows the
+     * face before they have read the name. It is the app's own asset resolver,
+     * so a pack dropped in mid-show is picked up on the next render, and a
+     * character the pack has no art for simply draws nothing.
+     */
+    it('draws each character’s icon on the option', () => {
+        captureLoaded();
+        ui();
+        open();
+        const icon = screen.getByRole('option', { name: /Daisy/ }).querySelector('img');
+        expect(icon.getAttribute('src')).toMatch(/game_assets\/msb\/characterIcons\/5\.png/);
+    });
+
+    it('offers the clear once the element holds the stage', () => {
         captureLoaded();
         airing({ team: 1, charIndex: 0, name: 'Peach' }); // live
         ui();
-        const labels = [...screen.getByRole('combobox').options].map(o => o.textContent);
-        expect(labels).toContain('Nothing fed');
-        expect(screen.getByText(/On the stage now/)).toBeTruthy();
+        expect(screen.getByLabelText('Take this off the stage')).toBeTruthy();
+        expect(screen.queryByText('ON STAGE')).toBeNull();
     });
 
     it('says to capture a game first when there is nothing to spotlight', () => {

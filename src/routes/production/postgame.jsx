@@ -8,7 +8,7 @@ import { Button } from '../../components/ui/button';
 import { Popover, PopoverTrigger, PopoverContent } from '../../components/ui/popover';
 import { notifications } from '../../lib/notify';
 import { cn } from '../../lib/utils';
-import { ActionRow } from './kit';
+import { ActionRow, StatusLine } from './kit';
 
 /*
  * Post-game — the board's captured box score.
@@ -107,7 +107,15 @@ export const PostGameSubject = memo(function PostGameSubject({ pg }) {
     }
     return (
         <>
-            <Badge className="shrink-0 bg-emerald-500/15 text-[10px] text-emerald-300">
+            {/* The badge STATES the provenance; its title is where the
+                sentence that used to sit under the filename now lives. One
+                statement of "how did this box score get here", not two. */}
+            <Badge
+                className="shrink-0 cursor-help bg-emerald-500/15 text-[10px] text-emerald-300"
+                title={pg.capturedBy === 'auto'
+                    ? 'Captured on its own the moment Project Rio wrote this game’s stat file.'
+                    : 'Captured by hand, from a stat file you picked.'}
+            >
                 {pg.capturedBy === 'auto' ? 'AUTO' : 'CAPTURED'}
             </Badge>
             <Text size="xs" truncate className="min-w-0 text-foreground">
@@ -230,15 +238,36 @@ export default function PostGameSection({ desk }) {
                 ]} />
                 <StatFilePicker onPick={d.capture} disabled={d.busy} />
             </div>
-            <Text size="xs" truncate className="min-w-0 text-muted-foreground" title={d.pg.sourceFile || undefined}>
-                {d.pg.present
-                    ? (d.pg.capturedBy === 'auto'
-                        ? `Captured on its own when the game ended — ${d.pg.sourceFile}`
-                        : d.pg.sourceFile)
-                    : (d.gameId
-                        ? `Waiting on the stat file for game ${d.gameId}.`
-                        : 'No game id on this board yet — finish a game first.')}
-            </Text>
+            {/*
+              * THE FILE IS THE ONLY THING THAT VARIES, so it is the only thing
+              * printed. "Captured on its own when the game ended" was a clause
+              * in front of the filename saying exactly what the region's own
+              * AUTO badge, three rows up, already says — a producer who has read
+              * the badge is reading the sentence to find out where it stops.
+              */}
+            {/*
+              * NOTHING IS SAID FOR A BOARD WITH NO GAME. That state had a line
+              * of its own ("No game id on this board yet — finish a game
+              * first") which was the region's THIRD statement of the same
+              * emptiness: the game-state chip above already reads NO GAME and
+              * the region's own subject already reads "Nothing captured". A
+              * WAIT is worth saying because it means PRSH is watching for the
+              * stat file and the producer needs to press nothing; an absence
+              * two other rows have already reported is not.
+              */}
+            {(d.pg.present || d.gameId) && (
+                <StatusLine
+                    label={d.pg.present ? 'FILE' : 'WAITING'}
+                    title={d.pg.present
+                        ? 'The Project Rio stat file this box score was read from.'
+                        : 'Project Rio writes a stat file when the game finishes, and the capture happens on its own when it lands.'}
+                    className="min-w-0"
+                >
+                    {d.pg.present
+                        ? <span title={d.pg.sourceFile || undefined}>{d.pg.sourceFile}</span>
+                        : `Game ${d.gameId}`}
+                </StatusLine>
+            )}
             {/* The capture is a different game from the one on the board — after
                 game 1 of a Bo3, say. Stale, not wrong: it is genuinely that
                 game's box score and the Game Summary may still be on air with

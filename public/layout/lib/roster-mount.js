@@ -46,7 +46,26 @@ const CSS = `
   pointer-events: none;
 }
 .superstar-badge--captain { width: 36px; height: 36px; }
+.roster-container[data-portraits="pixel"] .captain-container img:not(.superstar-badge),
+.roster-container[data-portraits="pixel"] .character-container img:not(.superstar-badge) {
+  image-rendering: pixelated;
+}
 `;
+
+/*
+ * `overlays.roster.pixelPortraits` — how the character sprites are upscaled.
+ * Anything but a literal `true` is the smooth default, so a stray value
+ * degrades to what the roster has always drawn.
+ *
+ * Portraits only, never the bat/glove, the team logo or the superstar badge:
+ * those are high-resolution art (300–900px) scaled DOWN into the grid, where
+ * nearest-neighbour buys no crispness and costs jagged edges. It is the same
+ * line the theme SVGs draw — every `image-rendering:pixelated` in them is on a
+ * character or a runner, never a logo.
+ */
+export function resolvePortraitStyle(v) {
+  return v === true ? 'pixel' : 'smooth';
+}
 
 let _cssInjected = false;
 function injectCss() {
@@ -90,6 +109,7 @@ export function renderRoster(container, { state, settings, sb, team }) {
   const showSuperstars = deepGet(settings, 'overlays.roster.showSuperstars', true) !== false;
   const showRole = deepGet(settings, 'overlays.roster.showRoleIcon', true) !== false;
   const showTeamLogo = deepGet(settings, 'overlays.roster.showTeamLogo', true) !== false;
+  container.dataset.portraits = resolvePortraitStyle(deepGet(settings, 'overlays.roster.pixelPortraits'));
 
   const slots = RioData.getRosterSlots(state, sb, team, {
     includeRole: showRole,

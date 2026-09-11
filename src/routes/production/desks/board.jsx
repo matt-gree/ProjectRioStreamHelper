@@ -18,7 +18,7 @@ import { cn } from '../../../lib/utils';
 import { useAssetUrls } from '../../../lib/assets';
 import { HALF_INNINGS, ROSTER_SIZE } from '../../../data/msb';
 import { STADIUM_OPTIONS } from '../../../data/stadiums';
-import { ActionRow, FieldRow, KitColumn, KitColumns, TextRow, ToggleChip } from '../kit';
+import { ActionRow, Eyebrow, FieldRow, GAME_STAGE, KitColumn, KitColumns, TextRow, ToggleChip } from '../kit';
 import { GamesSection } from '../games';
 import PostGameSection, { PostGameSubject, usePostGame } from '../postgame';
 import { useBoardQueueId, useNextUp, useQueues } from '../queue';
@@ -372,21 +372,9 @@ const ModeRow = memo(function ModeRow({ d, gameModes, stats, refreshHud, refresh
  * expected outcome, not an alert — but it reads at full strength, because it is
  * the state the producer acts on.
  */
-const GAME_STAGE = {
-    live: {
-        label: 'LIVE', title: 'A feed is writing this board',
-        className: 'bg-emerald-500/15 text-emerald-300',
-    },
-    final: {
-        label: 'FINAL', title: 'The game reached its end',
-        className: 'bg-foreground/10 text-foreground',
-    },
-    stranded: {
-        label: 'ENDED', title: 'The feed lost this game — it won’t update again',
-        className: 'bg-amber-500/15 text-amber-300',
-    },
-};
-
+// The palette moved to ../kit (GameChip): the panel subject in this very
+// panel's header draws the same verdict, and two copies is how one surface
+// ends up amber while the other is grey about one fact.
 const SlotChip = ({ children, title, className }) => (
     <span
         title={title || undefined}
@@ -634,14 +622,18 @@ const FixtureSlot = memo(function FixtureSlot({ sb, matchId, match, conflict }) 
                 */}
               {done && (
                 <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 border-t border-border/50 pt-1.5">
-                    <span className="label-display shrink-0 text-[10px] tracking-wider text-muted-foreground/70">
+                    {/* DONE with nothing beside it IS the statement. The line
+                        that used to fill the value slot ("clear the board when
+                        you're ready") pointed at the turnover bar's own Clear,
+                        which is on screen and lit at exactly this moment. */}
+                    <Eyebrow title={next
+                        ? 'The next fixture waiting in this board’s running order.'
+                        : 'This match is decided and nothing else is waiting in the running order.'}>
                         {next ? 'UP NEXT' : 'DONE'}
-                    </span>
-                    <Text size="xs" dimmed className="min-w-0 flex-1 truncate">
-                        {next
-                            ? next.label
-                            : 'Nothing waiting in the running order — clear the board when you’re ready.'}
-                    </Text>
+                    </Eyebrow>
+                    {next && (
+                        <Text size="xs" dimmed className="min-w-0 flex-1 truncate">{next.label}</Text>
+                    )}
                     {next && canBind && <TakeNextButton sb={sb} label={next.label} />}
                 </div>
               )}
@@ -664,12 +656,13 @@ const FixtureSlot = memo(function FixtureSlot({ sb, matchId, match, conflict }) 
     if (!canBind) {
         return (
             <div className={shell('border-dashed border-border/50')}>
-                <span className="label-display shrink-0 text-[10px] tracking-wider text-muted-foreground/70">
-                    NO MATCH
-                </span>
-                <Text size="xs" dimmed className="min-w-0 flex-1 truncate">
-                    This board rotates a pool — a match needs a single-game board.
-                </Text>
+                {/* Two boards can say NO MATCH for different reasons, and the
+                    reason is the whole content of this row — so it is the
+                    eyebrow's own word, not a sentence after it. */}
+                <Eyebrow title="A rotating board can’t hold a match: a match encodes both sides of one fixture, and a board cycling a pool has no fixed sides to project onto.">
+                    ROTATING
+                </Eyebrow>
+                <Text size="xs" dimmed className="min-w-0 flex-1 truncate">No match</Text>
             </div>
         );
     }
@@ -691,12 +684,9 @@ const FixtureSlot = memo(function FixtureSlot({ sb, matchId, match, conflict }) 
 
     return (
         <div className={shell('border-dashed border-border/50')}>
-            <span className="label-display shrink-0 text-[10px] tracking-wider text-muted-foreground/70">
+            <Eyebrow title="Nothing is waiting in this board’s running order. Author a fixture on the Match desk and it joins the order.">
                 NO MATCH
-            </span>
-            <Text size="xs" dimmed className="min-w-0 flex-1 truncate">
-                Nothing waiting in the running order — add one on the Match desk.
-            </Text>
+            </Eyebrow>
         </div>
     );
 });

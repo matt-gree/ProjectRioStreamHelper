@@ -81,12 +81,11 @@ function useFeedSel(element, board, placement) {
  * `null`/undefined means "this element has no intro" — leave the url alone.
  */
 /*
- * Takes the PLACEMENT, not the narrowed "binding". The component nulls its
- * binding when there is no scene item (see the note below), which is right for
- * anything read off the item — but the VARIANT belongs to the row whether a
- * source exists or not, and nulling it made the catalog tier's "Scoreboard —
- * Small" preview the Large board. Everything here is already `?.`-guarded, so a
- * sourceless placement reads exactly as `null` used to.
+ * Takes the PLACEMENT, never a "binding" narrowed to rows with a scene item.
+ * Anything read off the item wants that narrowing, but the VARIANT belongs to
+ * the row whether a source exists or not, and nulling it made the catalog
+ * tier's "Scoreboard — Small" preview the Large board. Everything here is
+ * already `?.`-guarded, so a sourceless placement reads exactly as `null` did.
  */
 export function previewUrl(element, board, placement, nonce = 0, feedSel = null, introDisabled = null) {
     const binding = placement;
@@ -187,8 +186,6 @@ export function frameMaxWidth(nativeW, nativeH, maxHeight = MAX_PREVIEW_HEIGHT) 
 const FRAME_BORDER = 1;
 
 const StagePreview = memo(function StagePreview({ element, board, binding: maybe, width, height }) {
-    // Same rule as BindingNote: no item, no binding.
-    const binding = maybe?.item ? maybe : null;
     const [open, setOpen] = usePersistentState('prsh.ui.production.preview', true);
     // Bumped to change the url — overlays are static files behind a browser
     // cache, and a producer who just edited a theme wants to see it. A NEW url
@@ -319,13 +316,15 @@ const StagePreview = memo(function StagePreview({ element, board, binding: maybe
                             title={`${element.name} preview`}
                         />
                     </div>
-                    <Text size="xs" dimmed>
-                        {!binding
-                            ? 'Live — not yet in a scene, so this is what Bind would add.'
-                            : binding.parent
-                                ? `Live — ${binding.item.sourceName}, carrying this.`
-                                : `Live — ${binding.item.sourceName} as OBS renders it.`}
-                    </Text>
+                    {/*
+                      * NO CAPTION. "LIVE" was a word that never varied under a
+                      * picture that is visibly live, and the only part of the
+                      * old line that carried information — which source this
+                      * stands for — is stated once by `BindingNote` in the body
+                      * and again by the header. The region's own PREVIEW rule
+                      * above already labels it, with the size and scale, which
+                      * is the fact about a preview a producer actually checks.
+                      */}
                 </>
             )}
         </div>

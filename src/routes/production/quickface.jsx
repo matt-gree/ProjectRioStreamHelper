@@ -1,6 +1,6 @@
 import { memo, useState } from 'react';
 import { Text } from '../../components/ui/primitives';
-import { ActionRow, SelectRow } from './kit';
+import { ActionRow, SelectRow, StatusLine } from './kit';
 import { FEED_OPTION_HOOKS, flattenGroups } from './feed-pickers';
 import { quickFaceFor } from './elements';
 import { useContainerPush } from './feeds';
@@ -46,15 +46,14 @@ function whereLabel(placement, what) {
 const DirectQuickFace = memo(function DirectQuickFace({ element: _element, placement }) {
     const offline = useConsoleOffline();
     if (!placement?.item) {
-        // "No longer" would be a claim we can't make: with OBS offline the
-        // source may be sitting in a scene we simply can't see right now — which
-        // is worth SAYING when that is the actual reason, since a rail card has
-        // no room to explain twice.
-        return (
-            <Text size="xs" className="text-muted-foreground">
-                {offline ? 'OBS not connected.' : 'Not in any scene we can see.'}
-            </Text>
-        );
+        /*
+         * OFFLINE SAYS NOTHING — and the rail is where that matters most. Every
+         * card is unbound with OBS closed, so "OBS not connected." was printed
+         * once per pinned card down a column that exists to be scanned, saying
+         * what the app's own banner says once at the top of the page.
+         */
+        if (offline) return null;
+        return <StatusLine label="NO SOURCE" title="Not in any scene we can see." />;
     }
     return (
         <SourceToggleRow
@@ -70,13 +69,8 @@ const DirectQuickFace = memo(function DirectQuickFace({ element: _element, place
 const ContainerRow = memo(function ContainerRow({ placement }) {
     const offline = useConsoleOffline();
     if (!placement?.item) {
-        return (
-            <Text size="xs" className="text-muted-foreground">
-                {offline
-                    ? 'OBS not connected.'
-                    : 'That container isn’t in any scene we can see.'}
-            </Text>
-        );
+        if (offline) return null;
+        return <StatusLine label="NO SOURCE" title="That container isn’t in any scene we can see." />;
     }
     return (
         <SourceToggleRow

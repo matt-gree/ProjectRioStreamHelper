@@ -16,7 +16,20 @@
 export const REF_W = 1920, REF_H = 1080;
 
 const CSS = `
-.cs-root { position: absolute; inset: 0; overflow: hidden; font-family: var(--cs-font, 'Inter', sans-serif); }
+/* THE ROLE SYSTEM, half-adopted on purpose.
+   The root is the BODY role and every tabular value below is the NUMERAL role,
+   both producer-settable from the Design tab's Typography section. What is
+   deliberately NOT converted is the headline type - the character name, the
+   side names, the splash tag - which draws at weight 800/900 here while the
+   display role's own face (Rajdhani) is fetched at 500/600/700. Re-facing those
+   is a redesign of a shipped graphic with a real weight ladder behind it, not a
+   rename, so it is left as the one place in the show still choosing its own
+   register. */
+.cs-root { position: absolute; inset: 0; overflow: hidden;
+  font-family: var(--font-body, 'Inter', system-ui, sans-serif); }
+/* Gated dark: no frame OBS composites can show the finished spotlight
+   before the intro timeline's from-state lands. See lib/reveal-gate.js. */
+.cs-root.cs-off { opacity: 0 !important; }
 .cs-stage {
   position: absolute; top: 0; left: 0; width: ${REF_W}px; height: ${REF_H}px;
   transform-origin: top left; color: var(--ink);
@@ -27,7 +40,7 @@ const CSS = `
      stand on its own now that nothing blurs the backdrop behind it. */
   --well: rgba(13, 13, 21, 0.82);
   --accent: #ff3d4e; --accent-rgb: 255, 61, 78;
-  --mono: 'Chivo Mono', ui-monospace, 'SF Mono', monospace;
+  --mono: var(--font-mono, 'Chivo Mono', ui-monospace, 'SF Mono', monospace);
   /* Neutral vocabulary — the Rio night/fog scale (lib/rio-theme/tokens.css),
      NOT white. Shared, name for name, with the Game Summary
      (postgame-vs-mount.js) so the two callouts read as one package. White

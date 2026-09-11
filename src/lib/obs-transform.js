@@ -106,3 +106,134 @@ export function sizeMatchTransform(model, target) {
         scaleY: sign(target.scaleY) * (size.height / th),
     };
 }
+
+/*
+ * ── RENDER RESOLUTION: "redraw this source at the size it occupies" ──────────
+ *
+ * A browser source has TWO sizes and OBS never says which one moved.
+ *
+ *   the INPUT's width/height   the resolution the page renders at — the
+ *                              viewport the overlay lays itself out in.
+ *   the ITEM's transform       what that finished texture is then scaled to on
+ *                              the canvas.
+ *
+ * Dragging a scene item's handles — the obvious gesture for "make this bigger"
+ * or "make this smaller" — moves only the SECOND. The page is still rendered at
+ * the old resolution and the compositor scales the result, so what the producer
+ * gets is a picture of an overlay rather than the overlay: soft when it is
+ * enlarged, and, for anything drawn at an absolute size, simply the wrong size.
+ *
+ * BOTH DIRECTIONS COUNT, and that is the point of the whole section. Quality
+ * alone would care only about enlargement (shrinking a texture is lossless),
+ * and this is not only about quality: the Player Name draws its type at a
+ * number of pixels the producer typed, so a source at half scale is drawing a
+ * 48px name at 24px. The setting and the broadcast disagree, silently, and no
+ * amount of looking at either program says why.
+ *
+ * The reconciliation is to re-render the page at the size the item occupies and
+ * take the scaling back out. THE BOX DOES NOT MOVE OR CHANGE SIZE — it is the
+ * same rectangle on the canvas, redrawn instead of resampled — so an element
+ * that fits itself to its viewport looks identical and merely sharper, and an
+ * element with fixed-size type comes back to its real size. That second half is
+ * exactly what a producer means when they drag a Player Name box: the box got
+ * bigger, the name did not.
+ *
+ * Two cautions, both of which this module refuses on rather than guesses at:
+ *
+ *   AN INPUT IS GLOBAL. Resizing it changes the picture in every scene that
+ *   draws it, so every one of those items needs its scale corrected to keep the
+ *   size it has (`rescaleForSource`) — the caller enumerates them.
+ *
+ *   A CROP IS IN SOURCE PIXELS. Change the source's dimensions and the same
+ *   crop numbers describe a different region of a differently-sized page, so
+ *   what the producer cropped away is not what stays cropped away. There is no
+ *   honest arithmetic for that here, so a cropped item is declined.
+ */
+
+// How far from 1:1 is worth saying something about. Two percent is about where
+// a stretched glyph edge starts to show on a 1080p canvas, and it is well
+// inside the rounding a producer's drag lands on.
+export const SCALE_TOLERANCE = 1.02;
+
+export function isCropped(t) {
+    return !!(num(t?.cropLeft) || num(t?.cropRight) || num(t?.cropTop) || num(t?.cropBottom));
+}
+
+/*
+ * The ratio between what this item is DRAWN at and what it RENDERS at — 2 for a
+ * source blown up to double, 0.5 for one shrunk to half, 1 for one at its own
+ * resolution. Null when the pair can't be read.
+ *
+ * The axis FURTHEST FROM 1 rather than the larger one, because either direction
+ * is a disagreement now and "biggest" would call a source squashed to 0.4 on
+ * one axis and left alone on the other a 1. For the uniform scale a corner-drag
+ * produces — which is all but every case — the two axes agree anyway.
+ */
+export function renderFactor(t) {
+    const size = renderedSize(t);
+    const sw = num(t?.sourceWidth);
+    const sh = num(t?.sourceHeight);
+    if (!size || !(sw > 0 && sh > 0)) return null;
+    const fw = size.width / sw;
+    const fh = size.height / sh;
+    return Math.abs(Math.log(fw)) >= Math.abs(Math.log(fh)) ? fw : fh;
+}
+
+/*
+ * The verdict a rack row carries: the factor this item is being scaled by, or
+ * null when it is drawn at its own resolution.
+ *
+ * Separate from `redrawPlan` because the two answer different questions and one
+ * is not the other's precondition. This one is "does what a viewer sees still
+ * match what this source is" — as true of a cropped item as any other, so it
+ * must not inherit that refusal. The plan is "can this be fixed in one press",
+ * which a crop genuinely does rule out. A console that hid the warning wherever
+ * it had no button would be quietest about the sources it can help with least.
+ */
+export function stretchOf(t) {
+    const factor = renderFactor(t);
+    if (factor == null) return null;
+    const off = factor > SCALE_TOLERANCE || factor < 1 / SCALE_TOLERANCE;
+    return off ? factor : null;
+}
+
+/*
+ * The input dimensions that would make this item render 1:1, or null when there
+ * is nothing to fix and nothing safe to do.
+ *
+ * Rounded, because an input takes whole pixels and a producer's drag lands on
+ * fractions of one.
+ */
+export function redrawPlan(t) {
+    if (stretchOf(t) == null || isCropped(t)) return null;
+    const size = renderedSize(t);
+    const width = Math.round(size.width);
+    const height = Math.round(size.height);
+    return width > 0 && height > 0 ? { width, height } : null;
+}
+
+/*
+ * What this item's transform has to become so that it is drawn at the SAME size
+ * it is now, out of a source that is about to be `source` pixels — or null when
+ * nothing needs to change.
+ *
+ * A bounded item needs nothing: its box already states the drawn size and OBS
+ * re-fits the new render into it. An unbounded one is drawn at `scale × source`
+ * and both halves just moved, so the scale is re-solved against the new
+ * dimensions — with the sign put back, since a negative scale is a flip.
+ *
+ * Declines a cropped item for the reason in the section header: its crop is
+ * about to mean something else, and preserving a size computed from the old
+ * meaning would be arithmetic dressed up as an answer.
+ */
+export function rescaleForSource(t, source) {
+    if (!t || inBounds(t) || isCropped(t)) return null;
+    const size = renderedSize(t);
+    const w = num(source?.width);
+    const h = num(source?.height);
+    if (!size || !(w > 0 && h > 0)) return null;
+    return {
+        scaleX: sign(t.scaleX) * (size.width / w),
+        scaleY: sign(t.scaleY) * (size.height / h),
+    };
+}

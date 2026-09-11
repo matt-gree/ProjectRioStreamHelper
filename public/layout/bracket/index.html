@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <meta name="overlay-settings" content="accentColor, cardBg, borderRadius, borderColor, borderWidth, fontFamily, connectorColor, activeColor, maxScale" />
+  <meta name="overlay-settings" content="accentColor, cardBg, borderRadius, borderColor, borderWidth, displayFont, bodyFont, monoFont, connectorColor, activeColor, maxScale" />
   <!-- Inter is bundled locally and injected by overlay-base.js. -->
   <link rel="stylesheet" href="/layout/lib/rio-theme/tokens.css" />
   <style>
@@ -41,7 +41,7 @@
     body {
       overflow: hidden;
       background: transparent;
-      font-family: var(--font-family, 'Inter', sans-serif);
+      font-family: var(--font-body, 'Inter', system-ui, sans-serif);
       color: var(--text-primary, #fff);
     }
 
@@ -163,7 +163,6 @@
       --text-dimmed: var(--fog-500);
       --active-color: rgba(245, 187, 0, 0.55);
       --active-glow: rgba(245, 187, 0, 0.22);
-      --font-family: var(--font-body);
       font-family: var(--font-body);
     }
     body.rio-package .phase-name,

@@ -3,23 +3,27 @@
 <!--
   Player Name — a thin shell over lib/playername-mount.js, which is also what a
   container stands up when this element is fed into one. One side's name
-  (?scoreboard=N&team=1|2) with the address-book prefix beside it; alignment and
-  prefix position are authored on this element's Production stage panel.
+  (?scoreboard=N&team=1|2) with the address-book prefix beside it; the type size,
+  alignment and prefix position are authored on this element's Production stage
+  panel.
 -->
 <head>
   <meta charset="utf-8" />
+  <link rel="stylesheet" href="/layout/lib/rio-theme/tokens.css" />
   <!-- The whitelist must name every knob the mount reads: the stage's Style
        section filters LAYOUT_SETTINGS.playername down to what appears here, so
        an omitted key is a setting the mount honours but nobody can reach. -->
-  <meta name="overlay-settings" content="align, prefixPosition, textColor, accentColor, fontFamily, textShadow, textStroke" />
+  <meta name="overlay-settings" content="nameSize, prefixSize, align, prefixPosition, textColor, accentColor, displayFont, textShadow, textStroke" />
   <!-- Inter is bundled locally and injected by overlay-base.js. -->
   <style>
     html, body { margin: 0; overflow: hidden; }
     /* The declared native size — the catalog's, the preview's and the Add
-       picker's idea of this source's shape. It is a STARTING size, not a
-       canvas: the mount draws the name against whatever box the source really
-       is, taking its type size from the height and letting the name run the
-       width. See the header of lib/playername-mount.js. */
+       picker's idea of this source's shape. It is a STARTING size and pure
+       render headroom: the type size is the `nameSize` setting, so a bigger
+       box is more room for the name to run rather than a bigger name, and the
+       box only ever clamps a size that will not fit it. `refW`/`refH` below
+       carry the same two numbers to the preview, which needs them to know how
+       much of a scale model it is. See the header of lib/playername-mount.js. */
     body { width: 800px; height: 200px; background: transparent; }
     #host { position: fixed; inset: 0; }
   </style>

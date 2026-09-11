@@ -222,7 +222,7 @@ describe('settingOn — the Design tab and the overlays agree what a stored bool
     // export), so its copy is lifted out of the source and run directly.
     const overlaySettingOn = (() => {
         const src = readFileSync('public/layout/lib/overlay-base.js', 'utf8');
-        const m = src.match(/function settingOn\(value, fallback\) \{[\s\S]*?\n  \}/);
+        const m = src.match(/function settingOn\(value, fallback\) \{[\s\S]*?\n {2}\}/);
         if (!m) throw new Error('overlay-base.js no longer defines settingOn');
         return new Function(`${m[0]}; return settingOn;`)();
     })();
@@ -269,10 +269,28 @@ describe('overrideReaches', () => {
     it('agrees with the universal reads applyDesignSettings performs', () => {
         // Read off `overrideNs` for any caller, so they reach every type.
         for (const key of [
-            'accentColor', 'fontFamily', 'finalBadgeColor', 'cardShadowBlur', 'textShadowBlur',
+            'accentColor', 'finalBadgeColor', 'cardShadowBlur', 'textShadowBlur',
             'textStrokeWidth', 'textStrokeColor',
         ]) {
             expect(base).toContain(`overlays.${'${overrideNs}'}.${key}`);
+            expect(overrideReaches(key, 'commentary')).toBe(true);
+            expect(overrideReaches(key, 'scoreboard')).toBe(true);
+        }
+    });
+
+    /*
+     * The three TYPE ROLES reach every type the same way, but they are read in a
+     * LOOP over `TYPE_ROLES` rather than by name — so the string search above
+     * structurally cannot see them, and a search loose enough to see them would
+     * pass on a role that had been dropped from the table. The table itself is
+     * what has to be checked: `applyTypeRoles` reads `overlays.{ns}.{role.key}`
+     * for every entry in it, so listing all three there IS the universal read.
+     */
+    it('agrees with the type roles applyTypeRoles reads', () => {
+        const table = base.slice(base.indexOf('const TYPE_ROLES = [')).split('\n  ];')[0];
+        expect(base).toContain('overlays.${overrideNs}.${role.key}');
+        for (const key of ['displayFont', 'bodyFont', 'monoFont']) {
+            expect(table, `${key} missing from overlay-base's TYPE_ROLES`).toContain(`key: '${key}'`);
             expect(overrideReaches(key, 'commentary')).toBe(true);
             expect(overrideReaches(key, 'scoreboard')).toBe(true);
         }

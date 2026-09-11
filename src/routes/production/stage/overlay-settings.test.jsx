@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
 import { useSettingsStore } from '../../../context/store';
 import { useStagingStore } from '../../../context/staging';
@@ -409,7 +410,7 @@ describe('ElementStyleSettings — app-palette settings under a full-art theme',
  * ── Style overrides ─────────────────────────────────────────────────────────
  * A global design key pinned for ONE element. The UI for these was dropped with
  * the Setup tab while the mechanism stayed live in overlay-base.js, which is how
- * a producer ends up with `overlays.eventheader.fontFamily` on air and no
+ * a producer ends up with `overlays.eventheader.displayFont` on air and no
  * surface anywhere that shows it.
  */
 describe('ElementStyleOverrides', () => {
@@ -420,13 +421,13 @@ describe('ElementStyleOverrides', () => {
         // textShadow/textStroke likewise — the mount binds both.
         supportedSettings: [
             'showHeader', 'textColor', 'accentColor', 'cardBg',
-            'textShadow', 'textStroke', 'fontFamily',
+            'textShadow', 'textStroke', 'displayFont', 'bodyFont', 'monoFont',
         ],
     };
-    const SPOTLIGHT = { type: 'postgamecallout', supportedSettings: ['accentColor', 'fontFamily'] };
+    const SPOTLIGHT = { type: 'postgamecallout', supportedSettings: ['accentColor', 'bodyFont', 'monoFont'] };
     const STATSBAR = {
         type: 'statsbar',
-        supportedSettings: ['accentColor', 'cardBg', 'borderColor', 'fontFamily'],
+        supportedSettings: ['accentColor', 'cardBg', 'borderColor', 'displayFont', 'bodyFont', 'monoFont'],
     };
     // Carry `name` like a real manifest does — the tooltip names the package,
     // and an id-only fixture would pin the lowercase fallback instead.
@@ -463,6 +464,49 @@ describe('ElementStyleOverrides', () => {
         expect(screen.queryByLabelText('Font Family')).not.toBeInTheDocument();
     });
 
+    /*
+     * THE FOOTER ROW CARRIES A GUEST. The stage hands this section its intro
+     * control (./intro.jsx) to ride the Add button's row — two panel-level,
+     * set-once controls that each had a near-empty row of their own.
+     *
+     * The second case is the one that bites: an element whose theme declares no
+     * overridable key returns null here, and a guest passed in unguarded would
+     * disappear with the section it was only ever sharing a row with.
+     */
+    it('renders a leading guest on the footer row', async () => {
+        layouts([EVENTHEADER]);
+        render(<ElementStyleOverrides label="Panel" type="eventheader" leading={<span>Guest</span>} />);
+        await screen.findByRole('button', { name: /Add style override/ });
+        expect(screen.getByText('Guest')).toBeInTheDocument();
+    });
+
+    it('keeps the guest when the element has no overridable keys', async () => {
+        layouts([]);
+        render(<ElementStyleOverrides label="Panel" type="eventheader" leading={<span>Guest</span>} />);
+        expect(await screen.findByText('Guest')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Add style override/ })).not.toBeInTheDocument();
+    });
+
+    it('renders nothing at all with neither keys nor a guest', async () => {
+        layouts([]);
+        const { container } = render(<ElementStyleOverrides label="Panel" type="eventheader" />);
+        await waitFor(() => expect(container).toBeEmptyDOMElement());
+    });
+
+    // A heading over one ghost button that already names itself is a second
+    // name for the only thing under it — and empty is this section's usual
+    // state, so that was most panels most of the time.
+    it('wears no heading until it has a list to head', async () => {
+        layouts([EVENTHEADER]);
+        await show({ type: 'eventheader' });
+        expect(screen.queryByText('Style overrides')).not.toBeInTheDocument();
+
+        cleanup();
+        pin({ eventheader: { accentColor: '#abcdef' } });
+        await show({ type: 'eventheader' });
+        expect(screen.getByText('Style overrides')).toBeInTheDocument();
+    });
+
     it('shows a row for a key already pinned', async () => {
         layouts([EVENTHEADER]);
         pin({ eventheader: { accentColor: '#abcdef' } });
@@ -474,7 +518,7 @@ describe('ElementStyleOverrides', () => {
         layouts([EVENTHEADER]);
         await show({ type: 'eventheader' });
         const options = offered();
-        expect(options).toContain('Font Family');
+        expect(options).toContain('Display Font');
         // Declared AND reached: the bands are a card surface, so the plate's
         // colour is a pin of the global rather than a setting of its own.
         expect(options).toContain('Card Background');
@@ -589,7 +633,7 @@ describe('ElementStyleOverrides', () => {
         await show({ type: 'eventheader' });
         const options = offered();
         expect(options).not.toContain('Accent Color');
-        expect(options).toContain('Font Family');
+        expect(options).toContain('Display Font');
     });
 
     /*
@@ -702,12 +746,12 @@ describe('ElementStyleOverrides', () => {
      */
     it('leaves exactly one way to take a row off', async () => {
         layouts([EVENTHEADER]);
-        pin({ eventheader: { accentColor: '#abcdef', fontFamily: 'Rajdhani' } });
+        pin({ eventheader: { accentColor: '#abcdef', displayFont: 'Rajdhani' } });
         await show({ type: 'eventheader' });
         expect(screen.queryByLabelText('Reset Accent Color')).not.toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Reset' })).not.toBeInTheDocument();
         expect(screen.getByLabelText('Remove Accent Color override')).toBeInTheDocument();
-        expect(screen.getByLabelText('Remove Font Family override')).toBeInTheDocument();
+        expect(screen.getByLabelText('Remove Display Font override')).toBeInTheDocument();
     });
 
     /*
@@ -729,7 +773,7 @@ describe('ElementStyleOverrides', () => {
 
     /*
      * The whitelist is a CLAIM, not proof. Both post-game callouts declare
-     * accentColor + fontFamily and neither mount ever calls applyDesignSettings
+     * accentColor + the two font roles, and neither mount calls applyDesignSettings
      * — they are painted by rio-theme/tokens.css — so the meta alone would put
      * a picker offering two dead keys on each.
      */
@@ -779,7 +823,9 @@ describe('ElementStyleOverrides', () => {
      */
     it('disables an existing pin under a package that paints the element itself', async () => {
         layouts([STATSBAR]);
-        packages([FULL_ART]);
+        // A theme that also sets no text in any font role, so nothing at all is
+        // left to add — the fonts are gated separately (see below).
+        packages([{ ...FULL_ART, typeRoles: { statsbar: [] } }]);
         useSettingsStore.setState({
             overlays: { global: { designPackage: 'default' }, statsbar: { accentColor: '#abcdef' } },
             production: {},
@@ -836,6 +882,71 @@ describe('ElementStyleOverrides', () => {
         expect(screen.getByRole('button', { name: /Add style override/ })).not.toBeDisabled();
         // ...and nothing wears the tooltip when nothing is dead.
         expect(screen.getByLabelText('Accent Color').closest('[title]')).toBeNull();
+    });
+
+    /*
+     * TYPE IS NOT PALETTE. The three font roles survive `clearDesignSettings`,
+     * so a font pin reaches a full-art theme as well as a token skin — what
+     * makes one dead is the theme setting nothing in that role. Gated on the
+     * palette tier, every font was locked on every themed element under
+     * `default`, which paints all of them itself.
+     */
+    it('offers the fonts a full-art theme draws, and only those', async () => {
+        layouts([STATSBAR]);
+        packages([{ ...FULL_ART, typeRoles: { statsbar: ['body', 'mono'] } }]);
+        useSettingsStore.setState({ overlays: { global: { designPackage: 'default' } }, production: {} });
+        await show({ type: 'statsbar' });
+        await waitFor(() => expect(screen.getByRole('button', { name: /Add style override/ })).not.toBeDisabled());
+        const options = offered();
+        expect(options).toEqual(expect.arrayContaining(['Body Font', 'Numeral Font']));
+        expect(options).not.toContain('Display Font');
+        // ...and the palette keys stay out: this package paints the card.
+        expect(options).not.toContain('Accent Color');
+    });
+
+    it('drops a font the theme never sets text in, under a token skin too', async () => {
+        layouts([STATSBAR]);
+        packages([FULL_ART, { ...SKIN, typeRoles: { statsbar: ['display'] } }]);
+        useSettingsStore.setState({ overlays: { global: { designPackage: 'classic' } }, production: {} });
+        await show({ type: 'statsbar' });
+        await waitFor(() => expect(offered()).toContain('Accent Color'));
+        const options = screen.queryAllByRole('button').map(b => b.textContent);
+        expect(options).toContain('Display Font');
+        expect(options).not.toContain('Body Font');
+        expect(options).not.toContain('Numeral Font');
+    });
+
+    it('keeps a pinned font the theme does not draw, disabled and removable', async () => {
+        layouts([STATSBAR]);
+        packages([{ ...FULL_ART, typeRoles: { statsbar: ['display'] } }]);
+        useSettingsStore.setState({
+            overlays: { global: { designPackage: 'default' }, statsbar: { monoFont: 'Roboto Mono', displayFont: 'Oswald' } },
+            production: {},
+        });
+        await show({ type: 'statsbar' });
+        const mono = screen.getByRole('button', { name: /Remove Numeral Font override/ });
+        const display = screen.getByRole('button', { name: /Remove Display Font override/ });
+        await waitFor(() => expect(mono.parentElement)
+            .toHaveAttribute('title', 'Default sets nothing on this element in the Numeral Font'));
+        // A drawn role under a full-art package is LIVE — no tooltip.
+        expect(display.parentElement).not.toHaveAttribute('title');
+        expect(mono).not.toBeDisabled();
+    });
+
+    /*
+     * An element no theme draws answers from its whitelist alone — the Player
+     * Name sets a name and a prefix, both in the display role, so it declares
+     * that one and never offers a Body or Numeral Font.
+     */
+    it('offers the Player Name only the display font', async () => {
+        const html = readFileSync('public/layout/scoreboard1/playername.html', 'utf8');
+        const meta = html.match(/<meta name="overlay-settings" content="([^"]*)"/)[1];
+        layouts([{ type: 'playername', supportedSettings: meta.split(',').map(s => s.trim()) }]);
+        await show({ type: 'playername' });
+        const options = offered();
+        expect(options).toContain('Display Font');
+        expect(options).not.toContain('Body Font');
+        expect(options).not.toContain('Numeral Font');
     });
 
     /*

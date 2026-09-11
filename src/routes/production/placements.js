@@ -543,9 +543,24 @@ export function usePlacementLabel(placements) {
         }
         return (p) => {
             const a = axes.get(p.element.id);
+            /*
+             * A PER-SIDE ELEMENT ALWAYS NAMES ITS SIDE, however many of it are
+             * placed. The `size > 1` rule is right for a size variant, which has
+             * a default row and only needs disambiguating against a sibling —
+             * and wrong for `?team=`, where there IS no default and the element's
+             * name is a position it cannot supply on its own ("Player Name" says
+             * nothing about which player). A producer with only side 1 in their
+             * scenes got a row and a panel titled "Player Name", which is the
+             * one title that element must never carry.
+             *
+             * It also settles the subject beside it (../subject `SideSubject`):
+             * that row spends its one line on the NAME precisely because the
+             * title is guaranteed to carry the side.
+             */
             const detail = [
                 a?.boards.size > 1 && p.board != null ? boardTag(p.board) : null,
-                a?.variants.size > 1 ? variantLabelFor(p.element, p.variant, mode) : null,
+                (a?.variants.size > 1 || p.element.perSide)
+                    ? variantLabelFor(p.element, p.variant, mode) : null,
             ].filter(Boolean).join(' · ');
             return { name: p.element.name, detail: detail || null };
         };
@@ -720,4 +735,36 @@ export function togglePin(pins, id, placements) {
     return cur.some(p => placementTarget(p, placements) === id)
         ? cur.filter(p => placementTarget(p, placements) !== id)
         : [...cur, id];
+}
+
+/*
+ * ── IS OBS SCALING THIS PLACEMENT'S SOURCE — the factor, or null ────────────
+ *
+ * The verdict itself is mirrored on the scene item (`mapItem`, ../../context/
+ * obs.jsx). This is the question of WHICH ROWS ARE ENTITLED TO SAY SO, and it
+ * lives here rather than in either surface because the rack badge and the stage
+ * row must not be able to disagree about it.
+ *
+ * ONLY THE PLAYER NAME, for now, and not out of caution — the other elements
+ * genuinely have less to complain about. Every one of them fits its artwork to
+ * whatever viewport it is handed, so a scaled item costs them sharpness and
+ * nothing else, and a warning on all of them would put an amber badge on most
+ * of a producer's rack for a fidelity note. The Player Name is the one element
+ * that draws at an ABSOLUTE size: `nameSize` is a number the producer typed, so
+ * a half-scale item is drawing 24px type from a 48px setting, and the setting
+ * and the broadcast disagree with nothing anywhere to say why. That is a
+ * correctness fault, not a quality one, and it is what earns the row.
+ *
+ * The gate is on the ELEMENT, so widening it later is this list growing — and
+ * the day another element takes a fixed size, it belongs in it.
+ *
+ * A FED row is excluded on top of that: the source being scaled is the
+ * container's, and the container has its own row above it. Warning on both
+ * would double every count and point half of them at a panel with no fix.
+ */
+const SCALE_SENSITIVE = new Set(['playername']);
+
+export function stretchOfPlacement(p) {
+    if (!p || isFedPlacement(p) || !SCALE_SENSITIVE.has(p.element?.id)) return null;
+    return p.item?.stretch ?? null;
 }

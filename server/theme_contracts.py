@@ -101,6 +101,10 @@ def _statsbar_slots() -> dict[str, Slot]:
         "line-group": Slot("group"),
         "line-label": Slot("text"),
         "line-text": Slot("text"),
+        # Optional: the BAND the stat cells divide by each category's character
+        # budget (data-span-x / data-span-w; layoutStatCells in mount-utils.js).
+        # Absent, the theme's authored columns stand.
+        "stat-row": Slot("group"),
     }
     for i in range(6):
         core = i <= 3  # four stats filled today; 4-5 reserved
