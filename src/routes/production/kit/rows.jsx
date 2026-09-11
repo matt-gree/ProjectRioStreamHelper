@@ -461,8 +461,13 @@ function useDebouncedText(value, onChange, ms) {
 // field states how much it expects: 300px of empty box around one character
 // reads as a field that has lost its value, which is the same reason NumberRow
 // has always been a fixed `w-20` rather than a flexed input.
+//
+// `inputClassName` restyles the INPUT, where `className` sits on the row — for a
+// field that has to match the height of the pickers beside it (the Player
+// Plates card's typed sub-plate, beside two 32px pickers).
 export const TextRow = memo(function TextRow({
     label, value, onChange, placeholder, disabled, staged, debounceMs = 300, ariaLabel, short, className,
+    inputClassName,
 }) {
     const [draft, type, commit] = useDebouncedText(value, onChange, debounceMs);
     const deferred = debounceMs > 0;
@@ -479,6 +484,7 @@ export const TextRow = memo(function TextRow({
                     KIT_INPUT,
                     short ? 'w-14 shrink-0 text-center' : 'min-w-0 flex-1',
                     staged && 'border-amber-400/60 text-amber-400',
+                    inputClassName,
                 )}
             />
         </div>

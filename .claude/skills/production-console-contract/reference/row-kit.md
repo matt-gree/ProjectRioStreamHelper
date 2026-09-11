@@ -18,9 +18,9 @@ from. 28px control rhythm. Primitives:
 | Field row | label + any control; `stacked` puts the label above | pickers the kit doesn't own (participant, captain, port, a typed field). Stack it in a column of form fields, where a fixed label gutter would push every control off the panel's left edge |
 | Action row | 1–3 buttons | push, replay/spotlight/split, capture, clock transport |
 | Segmented row | segmented control | plates mode, scorecard score block |
-| List row | lead · name · meta · controls; optionally expandable in place | plates, lower-third slots, schedule queue |
+| List row | lead · name · meta · controls; optionally expandable in place | lower-third slots, schedule queue |
 | Icon toggle | one icon button with on/off state | eye, sub-plate, remove |
-| Sub-plate picker | `SubFieldPicker` (`../subfield-picker.jsx`) — an address-book field chosen by the VALUE it will draw for that person, empty fields marked, an empty choice flagged amber on the closed control | the caster desk's sub-plates — and its "No sub-plate" is the sub-plate's ONLY off switch there (a stored `subVisible: false` reads as none; any pick writes it back on); Player Plates still uses a bare select |
+| Sub-plate picker | `SubFieldPicker` (`../subfield-picker.jsx`) — an address-book field chosen by the VALUE it will draw for that person, empty fields marked, an empty choice flagged amber on the closed control | the caster desk's and Player Plates' sub-plates — and its "No sub-plate" is the sub-plate's ONLY off switch on both (a stored `subVisible: false` reads as none; any pick writes it back on) |
 | Custom block | anything, kit tokens/spacing | Match captain grid, port select, format field |
 
 `ListRow`'s `name` takes a node as well as a string. A row whose primary
