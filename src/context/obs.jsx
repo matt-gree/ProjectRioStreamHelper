@@ -4,6 +4,7 @@ import OBSWebSocket, { EventSubscription } from 'obs-websocket-js';
 import { useSettingsStore } from './store';
 import {
     renderedSize, sizeMatchTransform, redrawPlan, rescaleForSource, isCropped, stretchOf,
+    inputSize, sameInputSize,
 } from '../lib/obs-transform';
 
 /*
@@ -166,6 +167,36 @@ function desiredShutdown(url) {
     return layoutAnimates(url) && !urlIntroDisabled(url);
 }
 
+/*
+ * EVERY scene item drawing this source, with its transform.
+ *
+ * An OBS input is GLOBAL, so both callers that change one (`redrawSourceAtSize`
+ * and a render-matched `matchSceneItemSize`) have to correct the items they are
+ * not looking at, or a source placed in six scenes silently resizes five of
+ * them. One enumeration, so the two cannot drift about what they visit.
+ *
+ * Scenes come from `scenes` — every name OBS knows, mirrored or not — because a
+ * scene the producer never expanded is still on air. Items nested inside GROUPS
+ * are not visited: GetSceneItemList does not descend, and a PRSH source is
+ * placed at scene level by addBrowserSource.
+ */
+async function itemsOfSource(sourceName) {
+    const out = [];
+    for (const sceneName of useObsStore.getState().scenes || []) {
+        let items;
+        try {
+            ({ sceneItems: items } = await obs.call('GetSceneItemList', { sceneName }));
+        } catch {
+            continue;   // a scene that vanished between the list and here
+        }
+        for (const it of items || []) {
+            if (it.sourceName !== sourceName) continue;
+            out.push({ sceneName, id: it.sceneItemId, transform: it.sceneItemTransform });
+        }
+    }
+    return out;
+}
+
 function isPrshUrl(url, gcPort) {
     if (!url) return false;
     try {
@@ -269,7 +300,21 @@ export const useObsStore = create((set) => ({
      *
      * Returns the size it landed on, so the caller can say what happened.
      */
-    matchSceneItemSize: async ({ scene, itemId, modelScene, modelItemId }) => {
+    /*
+     * `matchRender` copies the model's RESOLUTION too, for an element whose type
+     * is drawn at an absolute size — see the section in lib/obs-transform.js.
+     * The caller decides (../routes/production/stage/sizematch.jsx, off the one
+     * `isScaleSensitive` list), because whether the second size matters is a
+     * fact about the element and not about the transforms.
+     *
+     * It is the SAME global-input problem `redrawSourceAtSize` has below, so it
+     * is the same discipline: every other item of this source is re-solved to
+     * keep the size it has, and a crop anywhere is a refusal rather than a skip.
+     * `sourceName` is required for that and optional otherwise.
+     */
+    matchSceneItemSize: async ({
+        scene, itemId, modelScene, modelItemId, sourceName, matchRender = false,
+    }) => {
         if (!obs) throw new Error('Not connected to OBS');
         const [model, target] = await Promise.all([
             obs.call('GetSceneItemTransform', {
@@ -277,14 +322,49 @@ export const useObsStore = create((set) => ({
             }),
             obs.call('GetSceneItemTransform', { sceneName: scene, sceneItemId: itemId }),
         ]);
-        const patch = sizeMatchTransform(model?.sceneItemTransform, target?.sceneItemTransform);
+        let mine = target?.sceneItemTransform;
+        const theirs = model?.sceneItemTransform;
+
+        /*
+         * The resolution first, because the transform is then solved against
+         * the dimensions the source is ABOUT to have. Skipped when the two
+         * already agree, which is the ordinary case and the one that must not
+         * cost a scene sweep or touch a global input for nothing.
+         */
+        let render = null;
+        if (matchRender && sourceName && !sameInputSize(theirs, mine)) {
+            render = inputSize(theirs);
+            if (!render) throw new Error('OBS reports no size for one of these sources yet');
+            const occurrences = await itemsOfSource(sourceName);
+            if (occurrences.some(o => isCropped(o.transform))) {
+                throw new Error('This source is cropped in at least one scene — changing its '
+                    + 'render size would move what the crop cuts. Match it in OBS instead.');
+            }
+            await obs.call('SetInputSettings', {
+                inputName: sourceName,
+                inputSettings: { width: render.width, height: render.height },
+                overlay: true,
+            });
+            await Promise.all(occurrences.map((o) => {
+                // Not this one: it is about to be given the model's size outright.
+                if (o.sceneName === scene && o.id === itemId) return null;
+                const keep = rescaleForSource(o.transform, render);
+                if (!keep) return null;   // a bounded item's box already fixes its size
+                return obs.call('SetSceneItemTransform', {
+                    sceneName: o.sceneName, sceneItemId: o.id, sceneItemTransform: keep,
+                }).catch(() => { /* one scene's correction must not strand the rest */ });
+            }).filter(Boolean));
+            mine = { ...mine, sourceWidth: render.width, sourceHeight: render.height };
+        }
+
+        const patch = sizeMatchTransform(theirs, mine);
         if (!patch) {
             throw new Error('OBS reports no size for one of these sources yet');
         }
         await obs.call('SetSceneItemTransform', {
             sceneName: scene, sceneItemId: itemId, sceneItemTransform: patch,
         });
-        return renderedSize(model.sceneItemTransform);
+        return { ...renderedSize(theirs), render };
     },
 
     /*
@@ -301,11 +381,8 @@ export const useObsStore = create((set) => ({
      * extra list call; a source in six is exactly the case that would otherwise
      * blow five of them up without saying so.
      *
-     * Scenes are enumerated from `scenes` (every name OBS knows, mirrored or
-     * not) rather than from the console's tracked subset, because a scene the
-     * producer never expanded is still on air. Items nested inside GROUPS are
-     * not visited — GetSceneItemList does not descend, and a PRSH source is
-     * placed at scene level by addBrowserSource.
+     * The scene sweep is `itemsOfSource` above, shared with the render-matched
+     * half of `matchSceneItemSize` — the same global input, the same correction.
      *
      * The corrections go out together so the window in which another scene is
      * drawing the new resolution at the old scale is a frame, not a loop.
@@ -320,20 +397,7 @@ export const useObsStore = create((set) => ({
             throw new Error('OBS is already rendering this source at its full size');
         }
 
-        const names = useObsStore.getState().scenes || [];
-        const occurrences = [];
-        for (const sceneName of names) {
-            let items;
-            try {
-                ({ sceneItems: items } = await obs.call('GetSceneItemList', { sceneName }));
-            } catch {
-                continue;   // a scene that vanished between the list and here
-            }
-            for (const it of items || []) {
-                if (it.sourceName !== sourceName) continue;
-                occurrences.push({ sceneName, id: it.sceneItemId, transform: it.sceneItemTransform });
-            }
-        }
+        const occurrences = await itemsOfSource(sourceName);
 
         /*
          * A CROP anywhere is a refusal, not a skip. The crop is in source pixels

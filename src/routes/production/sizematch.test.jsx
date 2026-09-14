@@ -20,6 +20,7 @@ const item = (id, sourceName, url, enabled = false) =>
 const ROSTER = 'http://x/layout/scoreboard1/roster.html';
 const LOGO = 'http://x/layout/scoreboard1/teamlogo.html';
 const CTRL = 'http://x/layout/controller/controller.html';
+const PLAYERNAME = 'http://x/layout/scoreboard1/playername.html';
 
 const obs = (sceneItems, extra = {}) => useObsStore.setState({
     status: 'connected',
@@ -59,9 +60,9 @@ describe('matching a pair’s size', () => {
         pair();
         ui(<Stage selection="roster~t1@Game" />);
         fireEvent.click(screen.getByRole('button', { name: /Match Side 2/ }));
-        expect(match).toHaveBeenCalledWith({
+        expect(match).toHaveBeenCalledWith(expect.objectContaining({
             scene: 'Game', itemId: 1, modelScene: 'Game', modelItemId: 2,
-        });
+        }));
     });
 
     // Both halves get the row, which is what makes "push" one rack click away
@@ -70,9 +71,9 @@ describe('matching a pair’s size', () => {
         pair();
         ui(<Stage selection="roster~t2@Game" />);
         fireEvent.click(screen.getByRole('button', { name: /Match Side 1/ }));
-        expect(match).toHaveBeenCalledWith({
+        expect(match).toHaveBeenCalledWith(expect.objectContaining({
             scene: 'Game', itemId: 2, modelScene: 'Game', modelItemId: 1,
-        });
+        }));
     });
 
     // The side vocabulary is a producer setting, and a control that names a side
@@ -123,9 +124,12 @@ describe('matching a pair’s size', () => {
         obs({ Game: [item(1, 'Ctrl 1', `${CTRL}?team=1`), item(2, 'Ctrl 2', `${CTRL}?team=2`)] });
         ui(<Stage selection="controller~t1@Game" />);
         fireEvent.click(screen.getByRole('button', { name: /Match Side 2/ }));
-        expect(match).toHaveBeenCalledWith({
+        expect(match).toHaveBeenCalledWith(expect.objectContaining({
             scene: 'Game', itemId: 1, modelScene: 'Game', modelItemId: 2,
-        });
+            // Fits its artwork to whatever viewport it is handed, so the drawn
+            // size is the whole answer and its global input is left alone.
+            matchRender: false,
+        }));
     });
 
     /*
@@ -143,9 +147,9 @@ describe('matching a pair’s size', () => {
         ] });
         ui(<Stage selection="controller~t1.p1@Game" />);
         fireEvent.click(screen.getByRole('button', { name: /Match Side 2/ }));
-        expect(match).toHaveBeenCalledWith({
+        expect(match).toHaveBeenCalledWith(expect.objectContaining({
             scene: 'Game', itemId: 1, modelScene: 'Game', modelItemId: 2,
-        });
+        }));
     });
 
     /*
@@ -157,6 +161,32 @@ describe('matching a pair’s size', () => {
         obs({ Game: [item(1, 'Ctrl A', `${CTRL}?port=1`), item(2, 'Ctrl B', `${CTRL}?port=3`)] });
         ui(<Stage selection="controller~p1@Game" />);
         expect(screen.queryByRole('button', { name: /Match/ })).not.toBeInTheDocument();
+    });
+
+    /*
+     * THE PLAYER NAME ASKS FOR BOTH SIZES.
+     *
+     * It is the one element that draws its type at a number of pixels the
+     * producer typed, so the source's own RESOLUTION decides the name and the
+     * item's transform only scales the result. Matching the transform alone put
+     * this pair's boxes on each other and its names 18px apart — the arithmetic
+     * is measured in ../../lib/obs-transform.test.js; this is the panel asking
+     * for it, off the one `isScaleSensitive` list the rack's amber badge reads.
+     *
+     * `sourceName` travels with it because an OBS input is GLOBAL: the same
+     * source in another scene has to be re-solved to keep the size it has.
+     */
+    it('matches the render resolution too, on the element drawn at an absolute size', () => {
+        obs({ Game: [
+            item(1, 'Name 1', `${PLAYERNAME}?scoreboard=1&team=1`),
+            item(2, 'Name 2', `${PLAYERNAME}?scoreboard=1&team=2`),
+        ] });
+        ui(<Stage selection="playername~t1@Game" />);
+        fireEvent.click(screen.getByRole('button', { name: /Match Side 2/ }));
+        expect(match).toHaveBeenCalledWith(expect.objectContaining({
+            scene: 'Game', itemId: 1, modelScene: 'Game', modelItemId: 2,
+            matchRender: true, sourceName: 'Name 1',
+        }));
     });
 
     /*

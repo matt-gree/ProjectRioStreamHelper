@@ -2,7 +2,11 @@ import { describe, it, expect } from 'vitest';
 import {
     BOUNDS_NONE, renderedSize, sizeMatchTransform,
     renderFactor, redrawPlan, rescaleForSource, isCropped, stretchOf, SCALE_TOLERANCE,
+    inputSize, sameInputSize,
 } from './obs-transform';
+import {
+    requestedScale, fitToHeight, heightForNameSize,
+} from '../../public/layout/lib/playername-mount.js';
 
 // A default OBS scene item: a 452x140 browser source at 1:1, no crop, no box.
 const item = (over = {}) => ({
@@ -247,5 +251,95 @@ describe('rescaleForSource — the OTHER scenes drawing the same input', () => {
         expect(rescaleForSource(item({ cropLeft: 8 }), { width: 904, height: 280 })).toBeNull();
         expect(rescaleForSource(item(), { width: 0, height: 280 })).toBeNull();
         expect(rescaleForSource(null, { width: 904, height: 280 })).toBeNull();
+    });
+});
+
+/*
+ * ── THE SECOND SIZE ─────────────────────────────────────────────────────────
+ *
+ * A browser source has two, and for an element that draws at an ABSOLUTE size
+ * both of them decide what a viewer sees. These pin the fault that made "Match
+ * the other side" not work on the Player Name — with the mount's own fit, so
+ * the number in the failure is the number that reaches the canvas rather than
+ * this file's opinion of it.
+ */
+describe('input size — the resolution behind the drawn size', () => {
+    it('reads the input off the transform, and refuses an unmeasured page', () => {
+        expect(inputSize(item())).toEqual({ width: 452, height: 140 });
+        expect(inputSize(item({ sourceWidth: 0, sourceHeight: 0 }))).toBeNull();
+    });
+
+    it('compares two sources on it', () => {
+        expect(sameInputSize(item(), item({ scaleX: 0.5 }))).toBe(true);
+        expect(sameInputSize(item(), item({ sourceHeight: 200 }))).toBe(false);
+        // An unmeasured page is never "the same as" anything.
+        expect(sameInputSize(item(), item({ sourceWidth: 0 }))).toBe(false);
+    });
+});
+
+describe('matching a pair whose type is drawn at an absolute size', () => {
+    // The Player Name's own fit, so the assertion is what the overlay draws.
+    const NAME = 48, PREFIX = 'above', TAG = 24;
+    const drawnNamePx = (t) => {
+        const asked = requestedScale(NAME);
+        const capped = fitToHeight(asked, t.sourceHeight, PREFIX, TAG / NAME);
+        return (NAME * (capped / asked)) * renderFactor(t);
+    };
+
+    // Side 2 was dragged smaller and redrawn, so its input IS its box; side 1
+    // is untouched. Both draw the typed 48px, because the size is a global
+    // setting and neither source is being scaled.
+    const model = item({ sourceWidth: 500, sourceHeight: 125 });
+    const target = item({ sourceWidth: 800, sourceHeight: 200 });
+
+    it('starts from a pair that already agrees about the name', () => {
+        expect(heightForNameSize(NAME, PREFIX, TAG)).toBeLessThan(125);
+        expect(drawnNamePx(model)).toBeCloseTo(48, 5);
+        expect(drawnNamePx(target)).toBeCloseTo(48, 5);
+    });
+
+    /*
+     * THE FAULT. Matching the scene item alone lands the boxes on each other
+     * and leaves the two names 18px apart — on the one element where the number
+     * the producer typed is supposed to be the number on air, in the press
+     * whose entire purpose is to make the pair the same.
+     */
+    it('matching only the transform puts the boxes together and the names apart', () => {
+        const matched = { ...target, ...sizeMatchTransform(model, target) };
+        expect(renderedSize(matched)).toEqual(renderedSize(model));
+        expect(drawnNamePx(matched)).toBeCloseTo(30, 5);
+        expect(drawnNamePx(model)).toBeCloseTo(48, 5);
+        // ...and it introduces the very stretch the rack badges this element for.
+        expect(stretchOf(matched)).toBeCloseTo(0.625, 5);
+    });
+
+    /*
+     * THE FIX: copy the resolution first, then solve the transform against the
+     * dimensions the source is about to have. The two are then identical in
+     * every respect that reaches the canvas, which is what the button promised.
+     */
+    it('copying the resolution first makes the names agree too', () => {
+        const render = inputSize(model);
+        const resized = { ...target, sourceWidth: render.width, sourceHeight: render.height };
+        const matched = { ...resized, ...sizeMatchTransform(model, resized) };
+        expect(renderedSize(matched)).toEqual(renderedSize(model));
+        expect(drawnNamePx(matched)).toBeCloseTo(drawnNamePx(model), 5);
+        expect(stretchOf(matched)).toBeNull();
+    });
+
+    /*
+     * A STRETCHED MODEL IS COPIED AS IT IS, stretch included. "The same as the
+     * other one" is the promise; normalising both to 1:1 would be this panel
+     * editing the sibling, which is the one thing it must not do — and the pair
+     * is then one Redraw press from identically right on either half.
+     */
+    it('reproduces a stretched model rather than improving on it', () => {
+        const stretched = item({ sourceWidth: 500, sourceHeight: 125, scaleX: 2, scaleY: 2 });
+        const render = inputSize(stretched);
+        const resized = { ...target, sourceWidth: render.width, sourceHeight: render.height };
+        const matched = { ...resized, ...sizeMatchTransform(stretched, resized) };
+        expect(renderedSize(matched)).toEqual(renderedSize(stretched));
+        expect(drawnNamePx(matched)).toBeCloseTo(drawnNamePx(stretched), 5);
+        expect(stretchOf(matched)).toBeCloseTo(2, 5);
     });
 });

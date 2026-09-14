@@ -765,6 +765,21 @@ export function togglePin(pins, id, placements) {
 const SCALE_SENSITIVE = new Set(['playername']);
 
 export function stretchOfPlacement(p) {
-    if (!p || isFedPlacement(p) || !SCALE_SENSITIVE.has(p.element?.id)) return null;
+    if (!isScaleSensitive(p)) return null;
     return p.item?.stretch ?? null;
+}
+
+/*
+ * The same gate as a question rather than a reading, for the THIRD surface that
+ * needs it: matching a pair's size (../../lib/obs-transform, `sameInputSize`).
+ *
+ * A stretch warning and a size match are the two halves of one fact — that this
+ * element's drawn size and its render resolution are different numbers and both
+ * matter — so they read the same list. Asked through a function because
+ * `stretchOfPlacement` answers null both for an element that is not sensitive
+ * and for a sensitive one that is drawn 1:1, and the size match needs those
+ * apart: the second still has both sizes to copy.
+ */
+export function isScaleSensitive(p) {
+    return !!p && !isFedPlacement(p) && SCALE_SENSITIVE.has(p.element?.id);
 }

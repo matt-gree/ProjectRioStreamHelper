@@ -6,7 +6,7 @@ import { notifications } from '../../../lib/notify';
 import { Button } from '../../../components/ui/button';
 import { FieldRow } from '../kit';
 import { StagedDot } from '../controls';
-import { sideSibling } from '../placements';
+import { sideSibling, isScaleSensitive } from '../placements';
 import { sideOfVariant } from '../instances';
 import { useSideLabels } from '../sides';
 
@@ -29,6 +29,15 @@ import { useSideLabels } from '../sides';
  * SIZE, NOT POSITION — see lib/obs-transform.js. Two halves of a pair are a
  * pair because they sit in different places.
  *
+ * WHICH SIZE, THOUGH — a browser source has two, and for the Player Name both
+ * of them decide what a viewer sees. Matching the scene item alone left that
+ * pair's boxes identical and its two names at 30px and 48px, which is the one
+ * thing a producer can see about a Player Name and the only reason they pressed
+ * this. `isScaleSensitive` is the gate and lib/obs-transform.js carries the
+ * arithmetic and the measurement; the row itself says nothing about it, because
+ * "make this one the same size as the other one" is what the button already
+ * promised and the fault was that it did not.
+ *
  * It renders only when BOTH sources are really in this scene, which is the
  * whole situation it serves. A disabled button explaining that the other side
  * isn't placed yet would sit on every single-sided Roster, Team Logo and Player
@@ -41,6 +50,7 @@ const pendingKey = (placement) => `obs:size:${placement.scene}:${placement.item.
 export function matchSize(placement, sibling, label) {
     const mine = placement.item.sourceName;
     const theirs = sibling.item.sourceName;
+    const matchRender = isScaleSensitive(placement);
     stageOrRun({
         key: pendingKey(placement),
         label: `Size ${mine} to ${theirs}`,
@@ -58,13 +68,25 @@ export function matchSize(placement, sibling, label) {
                 itemId: placement.item.id,
                 modelScene: sibling.scene,
                 modelItemId: sibling.item.id,
+                sourceName: mine,
+                matchRender,
             });
+            /*
+             * The RESOLUTION is worth a clause when it moved, and only then. It
+             * is a change to a global input — the same source in another scene
+             * has just been re-solved to hold its size — so a producer who goes
+             * looking should find it named. On the ordinary press it did not
+             * move and there is nothing to report.
+             */
+            const redrawn = size?.render
+                ? ` Both now render at ${size.render.width} × ${size.render.height}.`
+                : '';
             notifications.show({
                 color: 'green',
-                message: size
+                message: (size?.width
                     ? `${mine} is now ${Math.round(size.width)} × ${Math.round(size.height)}`
                         + ` — the same as ${label}.`
-                    : `${mine} now matches ${theirs}.`,
+                    : `${mine} now matches ${theirs}.`) + redrawn,
             });
         },
     });

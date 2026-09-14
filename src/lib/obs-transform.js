@@ -78,6 +78,55 @@ export function renderedSize(t) {
 }
 
 /*
+ * The RESOLUTION a source renders at — its input's own width/height, which OBS
+ * reports on every transform as the item's source size. The other of the two
+ * sizes in the section below, and null when OBS has not measured the page yet.
+ *
+ * Read here rather than off the input settings because a transform is what both
+ * callers already hold, and because the two must agree: an input resized behind
+ * the console's back shows up here on the next transform read.
+ */
+export function inputSize(t) {
+    const width = num(t?.sourceWidth);
+    const height = num(t?.sourceHeight);
+    return width > 0 && height > 0 ? { width, height } : null;
+}
+
+/*
+ * ── WHY A PAIR CAN NEED BOTH SIZES COPIED ───────────────────────────────────
+ *
+ * For an element that fits its artwork to whatever viewport it is handed, the
+ * drawn size IS the whole of "how big is it" and `sizeMatchTransform` is the
+ * whole answer. For one that draws at an ABSOLUTE size — today the Player Name,
+ * the same one `SCALE_SENSITIVE` names in ../routes/production/placements.js —
+ * it is half of it. That element's type size is a number of pixels solved
+ * against the page's own viewport, so what reaches the canvas is
+ *
+ *     nameSize (clamped by the INPUT's height) × (drawn size / INPUT size)
+ *
+ * and matching only the second factor leaves the first free. Measured, with a
+ * side 2 that had been redrawn to 500×125 beside an untouched 800×200 side 1:
+ * both names were drawing 48px, and "Match side 2" — a press whose entire
+ * purpose is to make them the same — put side 1's box on side 2's and its name
+ * at 30px against side 2's 48px. It also introduced a 0.625 stretch on the one
+ * element the rack raises an amber badge for, so the console's next word about
+ * the source it had just been asked to fix was a warning.
+ *
+ * So for those elements a pair is matched on BOTH sizes: the input as well as
+ * the transform. Copying the model's stretch along with it is correct and not a
+ * compromise — the button says "the same as the other one", not "better than
+ * the other one", and a pair that is identically wrong is one press from
+ * identically right on either half (`redrawPlan`). It is the pull-never-push
+ * rule that settles it: normalising the two to 1:1 instead would be this
+ * panel editing the sibling's source, which is the one thing it must not do.
+ */
+export function sameInputSize(a, b) {
+    const x = inputSize(a);
+    const y = inputSize(b);
+    return !!x && !!y && x.width === y.width && x.height === y.height;
+}
+
+/*
  * The partial `sceneItemTransform` that makes `target` the size of `model`, or
  * null when the pair reports something we can't solve (a zero dimension, a
  * source OBS hasn't measured yet because the browser page has not loaded).
