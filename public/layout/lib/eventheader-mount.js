@@ -37,6 +37,10 @@ const REF_W = 1920, REF_H = 1080;
  */
 const BASE_FONT_PX = 34;
 const LINE_HEIGHT = 1.2;
+/* The platform mark's own box, as a multiple of the type it sits in. Its SEAT
+ * is derived from this and the measured cap height, so the two can only be
+ * stated once — see .eh-mark below. */
+const MARK_EM = 0.82;
 const BAND_EM = 45 / BASE_FONT_PX;
 // Half the air the band has around its line box. The optical correction is
 // clamped to it so the plate always CONTAINS the type: centring the ink is
@@ -153,33 +157,41 @@ const CSS = `
 /*
  * The platform mark, sized off the TYPE rather than the band: it is a character
  * of the handle it belongs to, so it has to grow with the handle and not with
- * the plate around it. 0.82em is the mark's own box against a cap height of
- * roughly 0.72 — the brand artwork is drawn to the edges of its 24x24 viewBox
- * where a capital is not, so matching the em box makes it read SMALLER than the
- * letters beside it.
+ * the plate around it. ${MARK_EM}em is the mark's own box against a cap height
+ * of roughly two thirds — the brand artwork is drawn to the edges of its 24x24
+ * viewBox where a capital is not, so matching the em box makes it read SMALLER
+ * than the letters beside it.
  *
  * Seated on the baseline by eye, not by vertical-align: baseline: an inline
  * SVG's baseline is its bottom edge, which would hang the whole mark above the
  * text. The row is align-items: baseline, so this is nudged instead.
  */
 .eh-mark {
-  width: 0.82em;
-  height: 0.82em;
+  width: ${MARK_EM}em;
+  height: ${MARK_EM}em;
   display: inline-block;
   vertical-align: baseline;
   margin-right: 0.3em;
   /*
-   * Seated on the CAP BAND, derived rather than nudged by eye. An inline box
-   * with vertical-align: baseline sits with its BOTTOM on the baseline, so a
-   * 0.82em mark overhangs a 0.727em cap band (Inter) by 0.093em — all of it
-   * below the letters. Half of that pushed back down centres it on them.
+   * Seated on the CAP BAND, from the MEASURED face — not a baked constant. An
+   * inline box with vertical-align: baseline sits with its BOTTOM on the
+   * baseline, so the mark overhangs the cap band by (${MARK_EM} - cap), all of
+   * it below the letters; half of that pushed back down centres it on them.
    *
-   * An approximation on purpose: cap height is a fact about the face, and the
-   * face is the producer's. Getting this wrong costs a decorative glyph a pixel
-   * of seat, where the ROW's optical centring moves the whole band and is
-   * measured per font (capCentreOffset above).
+   * CAP HEIGHT IS A FACT ABOUT THE FACE, AND THE FACE IS THE PRODUCER'S, which
+   * is the whole reason the ROW's optical correction is measured (capMetrics
+   * above) rather than baked. This seat was baked anyway, at Inter's nominal
+   * 0.727 — and the display role has defaulted to Rajdhani since type became
+   * three roles, whose measured cap is 0.643. The 0.084em the two differ by is
+   * half a mark-height of error: 1.4px at the composed 34px and growing with
+   * Font Size, which is a mark visibly riding above the handle it belongs to.
+   * One measurement now answers both, so a producer's face cannot move one
+   * without the other.
+   *
+   * The literal is the fallback for a face the canvas cannot measure, and is
+   * the mean of the two above rather than either of them.
    */
-  transform: translateY(0.046em);
+  transform: translateY(calc((${MARK_EM}em - var(--eh-cap, 0.685em)) / 2));
 }
 .eh-sep {
   color: var(--accent, #f59f00);
@@ -217,15 +229,23 @@ const capOffsets = new Map();
 let probeCtx = null;
 
 /**
- * How far the type must move DOWN, as a fraction of the font size, for its cap
- * band to sit on the line box's centre. Negative moves it up; 0 when the font
- * can't be measured, which leaves today's line-box centring.
+ * The two things the cap band is worth measuring for, from ONE probe:
+ *
+ *   dy  — how far the type must move DOWN, as a fraction of the font size, for
+ *         its cap band to sit on the line box's centre. Negative moves it up;
+ *         0 when the font can't be measured, which leaves line-box centring.
+ *   cap — the cap height itself, as a fraction of the font size, which is what
+ *         seats the platform mark on that band (see .eh-mark). 0 when the font
+ *         can't be measured, which leaves the CSS fallback.
+ *
+ * Together because they are one fact about the face read two ways, and a second
+ * probe is a second thing that can disagree.
  *
  * @param fontSpec a resolved CSS font-family list, e.g. `"Bebas Neue", Inter, sans-serif`
  */
-function capCentreOffset(fontSpec) {
+function capMetrics(fontSpec) {
     if (capOffsets.has(fontSpec)) return capOffsets.get(fontSpec);
-    let out = 0;
+    let out = { dy: 0, cap: 0 };
     try {
         if (!probeCtx) probeCtx = document.createElement('canvas').getContext('2d');
         // Reset first: an unparseable assignment is a NO-OP that silently keeps
@@ -244,10 +264,13 @@ function capCentreOffset(fontSpec) {
             // font's own content area — the same arithmetic the browser does.
             const baseline = (line - (asc + desc)) / 2 + asc;
             const dy = (line / 2 - (baseline - cap / 2)) / PROBE_PX;
-            out = Math.max(-SLACK_EM, Math.min(SLACK_EM, dy));
+            out = {
+                dy: Math.max(-SLACK_EM, Math.min(SLACK_EM, dy)),
+                cap: cap / PROBE_PX,
+            };
         }
     } catch {
-        out = 0;
+        out = { dy: 0, cap: 0 };
     }
     /*
      * ONLY CACHE A MEASUREMENT THE REAL FACE PRODUCED. A webfont arrives
@@ -437,7 +460,7 @@ export function mountEventHeader({ host, sb = 1 }) {
     autoScale();
 
     /*
-     * Seat the type on the plate's centre (see capCentreOffset). Kept apart from
+     * Seat the type on the plate's centre (see capMetrics). Kept apart from
      * update() so a webfont that lands after the first render re-centres without
      * one: the metrics measured before the face arrived are the FALLBACK's, and
      * a `loadingdone` is the only notice we get that they are now wrong.
@@ -447,7 +470,14 @@ export function mountEventHeader({ host, sb = 1 }) {
     let typeSize = { header: BASE_FONT_PX, footer: BASE_FONT_PX };
 
     function alignRows() {
-        const em = capCentreOffset(getComputedStyle(stage).fontFamily);
+        const { dy: em, cap } = capMetrics(getComputedStyle(stage).fontFamily);
+        // The mark's seat, published for the CSS to divide (see .eh-mark). An
+        // unmeasurable face clears the property rather than writing 0, so the
+        // declaration's own fallback is what answers — 0 would seat the mark
+        // half a mark-height below the baseline, which is worse than the wrong
+        // constant this replaced.
+        if (cap > 0) stage.style.setProperty('--eh-cap', `${cap.toFixed(4)}em`);
+        else stage.style.removeProperty('--eh-cap');
         for (const [band, row] of [['header', hdrRow], ['footer', ftrRow]]) {
             const dy = em * typeSize[band];
             row.style.transform = Math.abs(dy) > 0.05 ? `translateY(${dy.toFixed(2)}px)` : '';
@@ -465,7 +495,8 @@ export function mountEventHeader({ host, sb = 1 }) {
 
         // overlays.eventheader.<key> element setting, with a hard default.
         const s = (key, def) => OverlayBase.deepGet(settings, `overlays.eventheader.${key}`, def);
-        const on = (key) => s(key, true) !== false; // switches default ON
+        // settingOn, not `!== false` — see the note in scoreboard-mount's readToggles.
+        const on = (key) => OverlayBase.settingOn(s(key, true), true); // switches default ON
 
         // ── layout knobs ────────────────────────────────────────────────
         const sep = s('separator', '◆');

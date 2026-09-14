@@ -50,6 +50,7 @@ describe('overlay-settings whitelist parity', () => {
         ['scorecard', 'public/layout/scorecard/scorecard.html'],
         ['playername', 'public/layout/scoreboard1/playername.html'],
         ['statsbar', 'public/layout/scoreboard1/statsbar.html'],
+        ['schedule', 'public/layout/schedule/schedule.html'],
         ['roster', 'public/layout/scoreboard1/roster.html'],
         // The controller's three settings are query params on a gc-overlay
         // iframe rather than anything PRSH draws, which makes this parity
@@ -406,6 +407,36 @@ describe('Event Header stage — what stays a setting', () => {
         // …and the host is watched, not just the window.
         expect(mount).toContain('new ResizeObserver');
         expect(mount).toContain('ro.observe(root)');
+    });
+
+    /*
+     * THE PLATFORM MARK IS SEATED ON THE MEASURED CAP BAND, NOT A BAKED ONE.
+     *
+     * The mark is an inline box whose BOTTOM sits on the baseline, so it
+     * overhangs the cap band by (its own height − cap height), all of it below
+     * the letters, and half of that pushed back down centres it on them. Cap
+     * height is a fact about the FACE — which is why the row's own optical
+     * correction is measured — and the seat was a constant anyway, at Inter's
+     * nominal 0.727. The display role has defaulted to Rajdhani since type
+     * became three roles, and Rajdhani's measured cap is 0.643: the mark rode
+     * 1.4px above the handle at the composed 34px, and further at every larger
+     * Font Size.
+     *
+     * One probe answers both, so a producer's face cannot move the type without
+     * moving the mark with it.
+     */
+    it('seats the platform mark on the measured cap band', () => {
+        const mount = readFileSync('public/layout/lib/eventheader-mount.js', 'utf8');
+        // One probe, reporting both readings of the cap band.
+        expect(mount).toMatch(/out = \{\s*dy:/);
+        expect(mount).toContain('cap: cap / PROBE_PX');
+        // Published for the CSS to divide…
+        expect(mount).toContain("stage.style.setProperty('--eh-cap'");
+        // …and divided there, rather than restated as a number.
+        expect(mount).toContain('transform: translateY(calc((${MARK_EM}em - var(--eh-cap');
+        // An unmeasurable face falls back to the declaration, never to 0 —
+        // which would seat the mark half its own height below the baseline.
+        expect(mount).toContain("stage.style.removeProperty('--eh-cap')");
     });
 
     /*
