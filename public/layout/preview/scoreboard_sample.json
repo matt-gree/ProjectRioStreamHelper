@@ -289,7 +289,7 @@
                   "hrs_allowed": 0
                 },
                 "batting_line": "1-for-3, RBI",
-                "pitching_line": "2.1, 1 H, 0 R, 0 ER, 0 BB, 2 K, 0 HR, 13 P"
+                "pitching_line": "2.1 IP, 1 H, 0 R, 0 ER, 0 BB, 2 K, 0 HR, 13 P"
               }
             },
             "1": {
@@ -384,7 +384,7 @@
                   "hrs_allowed": 0
                 },
                 "batting_line": "1-for-3, HR, 4 RBI",
-                "pitching_line": "0.0, 0 H, 0 R, 0 ER, 0 BB, 0 K, 0 HR, 0 P"
+                "pitching_line": "0.0 IP, 0 H, 0 R, 0 ER, 0 BB, 0 K, 0 HR, 0 P"
               }
             },
             "2": {
@@ -479,7 +479,7 @@
                   "hrs_allowed": 0
                 },
                 "batting_line": "1-for-3",
-                "pitching_line": "0.0, 0 H, 0 R, 0 ER, 0 BB, 0 K, 0 HR, 0 P"
+                "pitching_line": "0.0 IP, 0 H, 0 R, 0 ER, 0 BB, 0 K, 0 HR, 0 P"
               }
             },
             "3": {
@@ -574,7 +574,7 @@
                   "hrs_allowed": 0
                 },
                 "batting_line": "1-for-3",
-                "pitching_line": "0.0, 0 H, 0 R, 0 ER, 0 BB, 0 K, 0 HR, 0 P"
+                "pitching_line": "0.0 IP, 0 H, 0 R, 0 ER, 0 BB, 0 K, 0 HR, 0 P"
               }
             },
             "4": {
@@ -669,7 +669,7 @@
                   "hrs_allowed": 0
                 },
                 "batting_line": "0-for-3",
-                "pitching_line": "0.0, 0 H, 0 R, 0 ER, 0 BB, 0 K, 0 HR, 0 P"
+                "pitching_line": "0.0 IP, 0 H, 0 R, 0 ER, 0 BB, 0 K, 0 HR, 0 P"
               }
             },
             "5": {
@@ -764,7 +764,7 @@
                   "hrs_allowed": 0
                 },
                 "batting_line": "0-for-2",
-                "pitching_line": "0.0, 0 H, 0 R, 0 ER, 0 BB, 0 K, 0 HR, 0 P"
+                "pitching_line": "0.0 IP, 0 H, 0 R, 0 ER, 0 BB, 0 K, 0 HR, 0 P"
               }
             },
             "6": {
@@ -859,7 +859,7 @@
                   "hrs_allowed": 0
                 },
                 "batting_line": "2-for-2, 2B",
-                "pitching_line": "0.0, 0 H, 0 R, 0 ER, 0 BB, 0 K, 0 HR, 0 P"
+                "pitching_line": "0.0 IP, 0 H, 0 R, 0 ER, 0 BB, 0 K, 0 HR, 0 P"
               }
             },
             "7": {
@@ -954,7 +954,7 @@
                   "hrs_allowed": 0
                 },
                 "batting_line": "0-for-1, HBP",
-                "pitching_line": "0.0, 0 H, 0 R, 0 ER, 0 BB, 0 K, 0 HR, 0 P"
+                "pitching_line": "0.0 IP, 0 H, 0 R, 0 ER, 0 BB, 0 K, 0 HR, 0 P"
               }
             },
             "8": {
@@ -1049,7 +1049,7 @@
                   "hrs_allowed": 1
                 },
                 "batting_line": "1-for-2",
-                "pitching_line": "2.2, 10 H, 7 R, 7 ER, 2 BB, 0 K, 1 HR, 41 P"
+                "pitching_line": "2.2 IP, 10 H, 7 R, 7 ER, 2 BB, 0 K, 1 HR, 41 P"
               }
             }
           }
@@ -1148,7 +1148,7 @@
                   "hrs_allowed": 0
                 },
                 "batting_line": "1-for-3",
-                "pitching_line": "0.0, 0 H, 0 R, 0 ER, 0 BB, 0 K, 0 HR, 0 P"
+                "pitching_line": "0.0 IP, 0 H, 0 R, 0 ER, 0 BB, 0 K, 0 HR, 0 P"
               }
             },
             "1": {
@@ -1243,7 +1243,7 @@
                   "hrs_allowed": 0
                 },
                 "batting_line": "3-for-3, 2B, RBI",
-                "pitching_line": "0.0, 0 H, 0 R, 0 ER, 0 BB, 0 K, 0 HR, 0 P"
+                "pitching_line": "0.0 IP, 0 H, 0 R, 0 ER, 0 BB, 0 K, 0 HR, 0 P"
               }
             },
             "2": {
@@ -1338,7 +1338,7 @@
                   "hrs_allowed": 0
                 },
                 "batting_line": "0-for-3",
-                "pitching_line": "0.0, 0 H, 0 R, 0 ER, 0 BB, 0 K, 0 HR, 0 P"
+                "pitching_line": "0.0 IP, 0 H, 0 R, 0 ER, 0 BB, 0 K, 0 HR, 0 P"
               }
             },
             "3": {
@@ -1433,7 +1433,7 @@
                   "hrs_allowed": 0
                 },
                 "batting_line": "1-for-3, HR, 2 RBI",
-                "pitching_line": "0.0, 0 H, 0 R, 0 ER, 0 BB, 0 K, 0 HR, 0 P"
+                "pitching_line": "0.0 IP, 0 H, 0 R, 0 ER, 0 BB, 0 K, 0 HR, 0 P"
               }
             },
             "4": {
@@ -1528,7 +1528,7 @@
                   "hrs_allowed": 0
                 },
                 "batting_line": "0-for-2, HBP",
-                "pitching_line": "0.0, 0 H, 0 R, 0 ER, 0 BB, 0 K, 0 HR, 0 P"
+                "pitching_line": "0.0 IP, 0 H, 0 R, 0 ER, 0 BB, 0 K, 0 HR, 0 P"
               }
             },
             "5": {
@@ -1623,7 +1623,7 @@
                   "hrs_allowed": 1
                 },
                 "batting_line": "1-for-3, 3B, RBI",
-                "pitching_line": "5.0, 7 H, 5 R, 5 ER, 1 BB, 1 K, 1 HR, 34 P"
+                "pitching_line": "5.0 IP, 7 H, 5 R, 5 ER, 1 BB, 1 K, 1 HR, 34 P"
               }
             },
             "6": {
@@ -1718,7 +1718,7 @@
                   "hrs_allowed": 0
                 },
                 "batting_line": "1-for-2, HBP",
-                "pitching_line": "0.0, 0 H, 0 R, 0 ER, 0 BB, 0 K, 0 HR, 0 P"
+                "pitching_line": "0.0 IP, 0 H, 0 R, 0 ER, 0 BB, 0 K, 0 HR, 0 P"
               }
             },
             "7": {
@@ -1813,7 +1813,7 @@
                   "hrs_allowed": 0
                 },
                 "batting_line": "2-for-3, 2B, RBI",
-                "pitching_line": "0.0, 0 H, 0 R, 0 ER, 0 BB, 0 K, 0 HR, 0 P"
+                "pitching_line": "0.0 IP, 0 H, 0 R, 0 ER, 0 BB, 0 K, 0 HR, 0 P"
               }
             },
             "8": {
@@ -1908,7 +1908,7 @@
                   "hrs_allowed": 0
                 },
                 "batting_line": "2-for-3, 2 RBI",
-                "pitching_line": "0.0, 0 H, 0 R, 0 ER, 0 BB, 0 K, 0 HR, 0 P"
+                "pitching_line": "0.0 IP, 0 H, 0 R, 0 ER, 0 BB, 0 K, 0 HR, 0 P"
               }
             }
           }
