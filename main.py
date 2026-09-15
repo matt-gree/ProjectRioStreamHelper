@@ -149,6 +149,72 @@ def _run_asyncio():
             _server_failed.set()
 
 
+def _selftest() -> int:
+    """Launch-ability check for a freshly built binary (`PRSH --selftest`).
+
+    Reaching this function at all is most of the test: main.py's
+    module-level imports have already run, and that graph is where a
+    frozen build dies without leaving a trace. A dependency that reads its
+    own distribution metadata at import time (see the copy_metadata note in
+    PRSH.spec) raises before the app executes a line of its own code — no
+    log file, no server, just a PyInstaller crash dialog on the user's
+    machine. Nothing in CI caught that until this existed.
+
+    What follows covers the two things importing main.py does NOT reach:
+    the platform modules imported lazily inside the frozen branch below,
+    and the files that are read off disk rather than imported. PyInstaller
+    has no reason to trace either, so both are spec entries that can go
+    stale silently — a missing data path lets the app start and simply
+    serves a blank page or a themeless overlay.
+    """
+    import importlib
+
+    from server.paths import app_root
+
+    failures: list[str] = []
+
+    lazy = ['server.port_conflict']
+    if sys.platform == 'darwin':
+        lazy.append('server.tray')
+    elif sys.platform == 'win32':
+        lazy.append('server.win_window')
+    for name in lazy:
+        try:
+            importlib.import_module(name)
+        except Exception as exc:
+            failures.append(f"import {name} -> {exc.__class__.__name__}: {exc}")
+
+    # Read at runtime by path, never imported. The manifest is a pair
+    # because PyInstaller drops dot-prefixed dirs on Windows and the spec
+    # stages a second copy — server.py accepts either, so this does too.
+    root = app_root()
+    required = [
+        ('dist/index.html',),
+        ('dist/assets',),
+        ('dist/.vite/manifest.json', 'dist/vite_manifest.json'),
+        ('public/layout',),
+        ('public/design',),
+        ('public/game_assets',),
+        ('public/logo.png',),
+        ('server/rio/pyrio/CharNames.csv',),
+        ('server/rio/pyrio/constants/character_attributes.csv',),
+        ('server/rio/pyrio/constants/stadiums',),
+    ]
+    for candidates in required:
+        if not any((root / rel).exists() for rel in candidates):
+            failures.append(f"missing bundled path: {' or '.join(candidates)}")
+
+    for failure in failures:
+        print(f"selftest FAIL  {failure}")
+    if failures:
+        print(f"selftest FAILED with {len(failures)} problem(s); root={root}")
+        return 1
+
+    print(f"selftest OK  python={sys.version.split()[0]} "
+          f"frozen={getattr(sys, 'frozen', False)} root={root}")
+    return 0
+
+
 def _writable_root() -> str:
     """Return a writable root directory for logs and user data.
 
@@ -171,6 +237,13 @@ def _writable_root() -> str:
 if __name__ == '__main__':
     # Pyinstaller fix
     multiprocessing.freeze_support()
+
+    # Checked before the stdout/stderr redirect and the tray/Tk branch
+    # below, so the result reaches the caller's console and the process
+    # exits instead of parking on a tray icon. CI runs this against the
+    # freshly built binary on every platform — see build-release.yml.
+    if '--selftest' in sys.argv[1:]:
+        sys.exit(_selftest())
 
     frozen = getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS')
     if frozen:

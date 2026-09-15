@@ -17,6 +17,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from PyInstaller.utils.hooks import copy_metadata
+
 block_cipher = None
 
 # Freeze the app version into server/_version.py before bundling. This is
@@ -111,6 +113,25 @@ a = Analysis(
 
         # Default user_data game config (only if directory exists)
         *([('user_data/games', 'user_data/games')] if os.path.isdir('user_data/games') else []),
+
+        # A PACKAGE THAT READS ITS OWN VERSION AT IMPORT TIME NEEDS ITS
+        # .dist-info IN THE BUNDLE. PyInstaller bundles modules, not
+        # distribution metadata, so `importlib.metadata` finds nothing at
+        # runtime and the import raises PackageNotFoundError — which, from
+        # main.py's module-level `from server.state import State`, means the
+        # app dies before it reaches a single line of its own code (the
+        # frozen-build face of that is a PyInstaller "Unhandled exception in
+        # script" dialog, no log file, no server).
+        #
+        # Two links of the aiopath chain do this today and neither ships a
+        # PyInstaller hook: caio (`Distribution.from_name("caio").version`,
+        # since 0.9.26) and aiofile (`importlib.metadata.metadata("aiofile")`).
+        # The versions are unpinned, so `pip install .` on a build runner
+        # picks them up whenever upstream adds the call — which is exactly how
+        # this shipped broken on every platform at once. Collect the whole
+        # chain recursively rather than the two known readers, so the next
+        # link that grows a metadata lookup is already covered.
+        *copy_metadata('aiopath', recursive=True),
     ],
     hiddenimports=[
         # FastAPI + ASGI

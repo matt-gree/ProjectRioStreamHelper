@@ -172,6 +172,40 @@ jobs:
           PYINSTALLER_TARGET_ARCH: x86_64
         run: arch -x86_64 pyinstaller PRSH.spec --noconfirm
 
+      # ── Smoke-test the binary we just built ──
+      # `PRSH --selftest` runs main.py's whole module-level import graph,
+      # then the lazily-imported platform modules and the bundled data
+      # paths, and exits 0 (see _selftest in main.py). Nothing in this
+      # workflow launched the artifact before, which is how prerelease 12
+      # shipped unlaunchable on every platform at once: a dependency had
+      # grown an `importlib.metadata` lookup at import time, PyInstaller
+      # bundles no distribution metadata, and the app died before it could
+      # write a log line. The cost of catching that is one process start.
+      - name: Smoke-test built app (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          bin=dist/PRSH.app/Contents/MacOS/PRSH
+          if [ "${{ matrix.arch }}" = "x86_64" ]; then
+            arch -x86_64 "$bin" --selftest
+          else
+            "$bin" --selftest
+          fi
+
+      - name: Smoke-test built app (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # Built windowed (console=False), so the exe has no console to
+          # print into. Start-Process hands it real stdout/stderr handles
+          # and waits for the exit code, which is the contract — main.py's
+          # print() is a no-op when Python finds no usable stdout.
+          $p = Start-Process -FilePath dist\PRSH\PRSH.exe -ArgumentList '--selftest' `
+            -Wait -PassThru `
+            -RedirectStandardOutput selftest.out -RedirectStandardError selftest.err
+          Get-Content selftest.out, selftest.err -ErrorAction SilentlyContinue
+          if ($p.ExitCode -ne 0) { throw "PRSH --selftest failed with exit code $($p.ExitCode)" }
+
       # ── Package (macOS: pre-zip to preserve .app symlinks) ──
       # -y is required to store symlinks as symlinks; without it `zip`
       # dereferences each symlink and stores the linked file's contents,
