@@ -495,8 +495,7 @@ export function mountEventHeader({ host, sb = 1 }) {
 
         // overlays.eventheader.<key> element setting, with a hard default.
         const s = (key, def) => OverlayBase.deepGet(settings, `overlays.eventheader.${key}`, def);
-        // settingOn, not `!== false` — see the note in scoreboard-mount's readToggles.
-        const on = (key) => OverlayBase.settingOn(s(key, true), true); // switches default ON
+        const on = (key) => s(key, true) !== false; // switches default ON
 
         // ── layout knobs ────────────────────────────────────────────────
         const sep = s('separator', '◆');
