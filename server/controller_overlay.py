@@ -25,6 +25,32 @@ from server.settings import Settings
 # on the one platform that needed to be able to test it.
 
 
+# A PRSH frozen build is windowed (PRSH.spec: console=False) and gc-overlay is
+# a console app (gc-overlay.spec: console=True — PRSH drains its stdout, and a
+# windowed PyInstaller exe has no stdout to drain). On Windows a console child
+# of a windowed parent has no console to inherit, so it ALLOCATES one: an empty
+# black terminal window appears beside the overlay and stays for the session.
+# CREATE_NO_WINDOW suppresses the allocation without touching the pipes, which
+# is why this is the fix rather than flipping the child to console=False.
+# No-op everywhere else: the flag only exists on Windows.
+_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
+
+
+def _child_env() -> dict:
+    """Environment for the gc-overlay child.
+
+    PYTHONUNBUFFERED because we hand the child a PIPE, and CPython
+    block-buffers stdout onto a pipe — so gc-overlay's transport diagnostics
+    ("Waiting for Dolphin/Project Rio to start...", the hooked/elevation
+    messages) sit in an 8 KB buffer and reach `_drain_output` long after the
+    producer needed them, or never. Honoured by a frozen build too: the
+    bootloader runs an ordinary CPython, which reads this at init.
+    """
+    env = os.environ.copy()
+    env["PYTHONUNBUFFERED"] = "1"
+    return env
+
+
 def _port_free(port: int) -> bool:
     """Return True if TCP port is bindable on localhost right now."""
     try:
@@ -108,6 +134,7 @@ def _read_gc_version(gc_dir: Path | None) -> str | None:
             text=True,
             timeout=15,
             cwd=str(gc_dir),
+            creationflags=_NO_WINDOW,
         )
     except (OSError, subprocess.SubprocessError):
         return None
@@ -235,6 +262,8 @@ class ControllerOverlay:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
                 cwd=str(cls._gc_overlay_path),
+                creationflags=_NO_WINDOW,
+                env=_child_env(),
             )
 
             cls._running = True
@@ -363,7 +392,17 @@ class ControllerOverlay:
 
     @classmethod
     async def _drain_output(cls):
-        """Continuously read and log stdout from the subprocess."""
+        """Continuously read and log stdout from the subprocess.
+
+        INFO, not DEBUG. main.py registers its file sinks at INFO/ERROR, so a
+        debug line reaches the dev console and never the `tsh_info.txt` a
+        producer actually sends you — and gc-overlay's stdout is the only
+        account of WHY an overlay is sitting on "Waiting for controller
+        data...". It is not chatty: every print site fires on startup or on a
+        transport status CHANGE (`_report_status` dedupes), and aiohttp's
+        access log is off (`run_app(print=None)`), so this is a handful of
+        lines per session rather than anything per-tick.
+        """
         try:
             while cls._process and cls._process.stdout:
                 line = await cls._process.stdout.readline()
@@ -371,7 +410,7 @@ class ControllerOverlay:
                     break
                 text = line.decode(errors="replace").rstrip()
                 if text:
-                    logger.debug("[gc-overlay] {}", text)
+                    logger.info("[gc-overlay] {}", text)
         except asyncio.CancelledError:
             pass
         except Exception:

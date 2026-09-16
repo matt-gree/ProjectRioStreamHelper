@@ -179,6 +179,35 @@ app-wide. Per-side follow made both meaningless (the layout picks the port per
 side) and nothing ever read the setting; both were deleted 2026-08-28. The
 subprocess is launched with `--port` only.
 
+### Two spawn flags that only matter on Windows, and are silent when missing
+
+`server/controller_overlay.py`, and the fix for each is one keyword argument
+on the `create_subprocess_exec`, so both are easy to drop in a refactor.
+
+**`creationflags=_NO_WINDOW` (`CREATE_NO_WINDOW`).** PRSH freezes windowed
+(`PRSH.spec: console=False`) and gc-overlay freezes as a console app
+(`gc-overlay.spec: console=True`). On Windows a console child of a windowed
+parent has **no console to inherit, so it allocates one** — an empty black
+terminal window appears beside the overlay and stays for the session. Flipping
+the child to `console=False` is the wrong fix: a windowed PyInstaller exe has
+no stdout, and PRSH pipes and drains gc-overlay's stdout. The version probe
+(`_read_gc_version`) takes the same flag or it flashes a console at startup.
+
+**`env=_child_env()` (`PYTHONUNBUFFERED=1`).** CPython block-buffers stdout
+onto a pipe, and a pipe is exactly what PRSH hands the child — so gc-overlay's
+transport diagnostics, which are the only account of *why* an overlay is
+sitting on "Waiting for controller data...", sit in an 8 KB buffer and reach
+`_drain_output` long after they were wanted, or never. Honoured by a frozen
+build: the PyInstaller bootloader runs an ordinary CPython, which reads it at
+init. Pinned by `tests/unit/test_controller_overlay.py`.
+
+**A waiting overlay is usually not PRSH's bug**, and the Windows one worth
+knowing is in gc-overlay: dolphin-memory-engine finds its target BY PROCESS
+NAME and ships stock Dolphin's list, which does not include `Project Rio.exe`.
+See gc-overlay's own CLAUDE.md (`dolphin_process.py` / `_prepare_hook`) — the
+env var it works through is captured in a C static on the first hook attempt,
+so the ordering there is load-bearing.
+
 ### The previews, and the off-by-one they exist to catch
 
 The Connections card iframes gc-overlay directly at `?port=1..4&bg=transparent`,

@@ -20,6 +20,7 @@ a transport for every platform PRSH runs on, so there is no platform gate left t
 monkeypatch. What decides the feature is whether gc-overlay is FOUND.
 """
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -235,3 +236,51 @@ async def test_a_player_who_changes_controller_between_games_takes_the_new_port(
     await apply("rjb", 3, "MattGree", 1, game_id="g2")
 
     assert (name_on(1), port_on(1)) == ("rjb", 3)
+
+
+# ── 3. how the subprocess is spawned ────────────────────────────────────────
+#
+# Two flags that are invisible on macOS and decide whether the feature works
+# at all on Windows. Neither raises when wrong: the producer gets an empty
+# black console window beside their overlay, and a log with nothing in it.
+
+def test_the_child_never_allocates_a_console_window(monkeypatch):
+    """A console child of a windowed parent ALLOCATES a console on Windows.
+
+    PRSH freezes with console=False and gc-overlay with console=True (PRSH
+    drains its stdout, which a windowed exe has none of), so the child has no
+    console to inherit and Windows makes it one — an empty terminal window
+    that stays up for the session. CREATE_NO_WINDOW is the suppression, and
+    it has to be the flag rather than flipping the child windowed.
+    """
+    import importlib
+
+    # CREATE_NO_WINDOW is a Windows-only stdlib constant, so a POSIX test run
+    # has to supply both halves of the condition to see the branch at all.
+    monkeypatch.setattr(os, "name", "nt")
+    monkeypatch.setattr(subprocess, "CREATE_NO_WINDOW", 0x08000000, raising=False)
+    try:
+        assert importlib.reload(co)._NO_WINDOW == 0x08000000
+    finally:
+        monkeypatch.undo()
+        importlib.reload(co)
+
+
+def test_the_flag_is_inert_off_windows():
+    """CREATE_NO_WINDOW does not exist on POSIX; the launch must still work."""
+    assert co._NO_WINDOW == 0
+
+
+def test_the_child_runs_unbuffered():
+    """gc-overlay's stdout is a PIPE, so CPython block-buffers it.
+
+    Its transport diagnostics are the only account of why the overlay is
+    sitting on "Waiting for controller data...", and at 8 KB of buffering
+    they reach PRSH's log long after they were wanted, or never.
+    """
+    assert co._child_env()["PYTHONUNBUFFERED"] == "1"
+
+
+def test_the_child_inherits_the_rest_of_the_environment(monkeypatch):
+    monkeypatch.setenv("PRSH_TEST_MARKER", "kept")
+    assert co._child_env()["PRSH_TEST_MARKER"] == "kept"
