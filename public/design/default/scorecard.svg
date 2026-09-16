@@ -364,8 +364,11 @@
        compromise, it is the ceiling: `format_pitching_line` prints all eight
        fields even at zero ("omission is ambiguous in a pitcher line"), so the
        pitching line is systematically the longer of the two, and its worst
-       realistic case ("9.0, 12 H, 10 R, 9 ER, 5 BB, 15 K, 3 HR, 145 P") is 347
-       units at 16px against 369 at 17. The batting line was authored at 18 on
+       realistic case ("9.0 IP, 12 H, 10 R, 9 ER, 5 BB, 15 K, 3 HR, 145 P") is
+       350.8 units at 16px against 372.7 at 17, in a 364 box. Re-measured
+       2026-09-13, when the innings gained their unit; the 347 quoted here
+       before was 15 units adrift of what the string actually measured, which is
+       the hazard of a number in a comment that nothing re-derives. The batting line was authored at 18 on
        its own (shorter) evidence; matching it down is what makes the rows read
        as one block.
 

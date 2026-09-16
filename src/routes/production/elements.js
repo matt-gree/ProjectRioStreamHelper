@@ -473,12 +473,15 @@ export const ELEMENTS = [
         id: 'schedule',
         name: 'Upcoming Schedule',
         // The producer's running order (schedule.queue, ids into match.{M})
-        // rendered by the schedule overlay. THE ORDER IS NOT AUTHORED HERE:
-        // membership and position live on the Match desk, where the fixtures
-        // are, so a ticker's settings can't hold a second copy of tonight's
-        // running order free to disagree with the stack. This element's stage
-        // keeps what is genuinely its own — the overlay's heading, and each
-        // match's display time (per-match, so it follows a reorder).
+        // rendered by the schedule overlay, through the active design
+        // package's schedule.svg. THE ORDER IS NOT AUTHORED HERE: membership
+        // and position live on the Match desk, where the fixtures are, so a
+        // ticker's settings can't hold a second copy of tonight's running
+        // order free to disagree with the stack. This element's stage keeps
+        // what is genuinely its own — the overlay's heading, each match's
+        // display time (per-match, so it follows a reorder), and the two
+        // settings that decide which of the order this board draws (see
+        // `scheduleRows` in lib/schedule-mount.js).
         flavor: 'direct',
         url: '/layout/schedule/schedule.html',
         width: 1920,

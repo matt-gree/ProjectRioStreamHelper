@@ -197,34 +197,41 @@ export function mountScoreboard({ host, sb, size }) {
     return g(settings, `overlays.${SETTINGS_TYPE}.${k}`, def);
   }
 
+  // A PRODUCER SWITCH IS RESOLVED BY settingOn, NEVER BY `!== false`.
+  // `PUT /api/v1/settings` stores its value as a STRING and settings.json is
+  // hand-editable, so "false" is a shape that really occurs — and under the bare
+  // comparison it is not `false`, so the switch read ON while the console that
+  // wrote it read OFF. One rule, shared with the Design tab's own `settingOn`
+  // (src/routes/layouts/designConstants.js), pinned by designConstants.test.js.
   function readToggles(settings) {
+    const on = OverlayBase.settingOn;
     // showLogo is promoted-to-global (per-layout → overlays.global.showLogo);
     // a per-board pin still wins over both, so check it before the global chain.
     const perSbLogo = g(settings, `overlays.${SETTINGS_TYPE}.${SB}.showLogo`, undefined);
     const showLogo = perSbLogo !== undefined
-      ? perSbLogo !== false
-      : OverlayBase.readSetting(SETTINGS_TYPE, 'showLogo', true) !== false;
+      ? on(perSbLogo, true)
+      : on(OverlayBase.readSetting(SETTINGS_TYPE, 'showLogo', true), true);
     return {
-      showTeamLogos: sbGet(settings, 'showTeamLogos', true) !== false,
-      showGameMode: sbGet(settings, 'showGameMode', true) !== false,
+      showTeamLogos: on(sbGet(settings, 'showTeamLogos', true), true),
+      showGameMode: on(sbGet(settings, 'showGameMode', true), true),
       showLogo,
       // Producer switches for melded themes with independent segments (Scoreboard
       // S): showLive is a master override for the live cluster (off hides it even
       // during a live game); showInning toggles the inning number segment. Themes
       // without those segments ignore both.
-      showLive:     sbGet(settings, 'showLive', true) !== false,
-      showInning:   sbGet(settings, 'showInning', true) !== false,
+      showLive:     on(sbGet(settings, 'showLive', true), true),
+      showInning:   on(sbGet(settings, 'showInning', true), true),
       // The batter's / pitcher's headline stats beside their portraits (Large
       // only — no other size declares the slots).
-      showStats:    sbGet(settings, 'showStats', true) !== false,
+      showStats:    on(sbGet(settings, 'showStats', true), true),
       // The two BANDS the Large board can drop (no other size has either), each
       // a producer switch on top of its own content gate. They are choices about
       // the SCENE, not about the data: with both off the card is a header strip
       // a producer can leave up over live play, with both on it is the full
       // between-innings graphic, and that range is the whole reason there is no
       // middle size any more.
-      showRoster:   sbGet(settings, 'showRoster', true) !== false,
-      showBox:      sbGet(settings, 'showBox', true) !== false,
+      showRoster:   on(sbGet(settings, 'showRoster', true), true),
+      showBox:      on(sbGet(settings, 'showBox', true), true),
     };
   }
 

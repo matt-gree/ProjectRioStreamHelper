@@ -265,3 +265,117 @@ export function layoutStatCells(engine, stats) {
     }
   }
 }
+
+
+/**
+ * Place a fixed-size node against the MEASURED edge of a text run.
+ *
+ * A PORTRAIT BESIDE A NAME CANNOT BE AUTHORED AT AN x, because the name's width
+ * is the data. The matchup band's summary proved both halves of that: with the
+ * portrait fixed on the outside and the name anchored inward, "Joan" (82 units)
+ * left her captain icon floating 170 from her own name while "MattGree" (153)
+ * sat 95 from his — the icon read as an orphan rather than as part of a run.
+ * Fix it by moving the portrait inward instead, next to the score, and the gap
+ * moves to the other side of the name: 108 units of held-open reserve in the
+ * common state, because a captain only exists once a match is bound. There is
+ * no authored x that is right in both states, which is what makes this the
+ * mount's job — the same reason `layoutBox` and `layoutStatCells` are here.
+ *
+ * The theme declares the relationship and keeps the geometry: `data-pin-before`
+ * / `data-pin-after` name the text slot, `data-pin-gap` the space (default 16).
+ * A theme that declares neither keeps its authored x, so this is opt-in and no
+ * third-party package moves.
+ *
+ * Call it AFTER `refitText` — the auto-fit changes the very width being
+ * measured, so pinning first pins to a size that is about to change.
+ */
+export function pinBesideText(node, textEl, { side, gap = 16 } = {}) {
+  if (!node || !textEl) return;
+  const box = textEl.getBBox();
+  // An empty run has no edges to pin to; leave the node where it was authored
+  // rather than stacking it on the anchor point.
+  if (!box.width) return;
+  const w = parseFloat(node.getAttribute('width')) || 0;
+  const x = side === 'before' ? box.x - gap - w : box.x + box.width + gap;
+  node.setAttribute('x', String(Math.round(x)));
+}
+
+/**
+ * Apply every `data-pin-before` / `data-pin-after` a theme declares.
+ *
+ * Whole-theme sweep rather than a per-slot call list, so a package can pin a
+ * node the mount has never heard of.
+ */
+export function applyTextPins(engine) {
+  for (const node of Object.values(engine.slots)) {
+    if (!node || typeof node.getAttribute !== 'function') continue;
+    const before = node.getAttribute('data-pin-before');
+    const after = before ? null : node.getAttribute('data-pin-after');
+    if (!before && !after) continue;
+    pinBesideText(node, engine.slots[before || after], {
+      side: before ? 'before' : 'after',
+      gap: parseFloat(node.getAttribute('data-pin-gap')) || 16,
+    });
+  }
+}
+
+/**
+ * Apply every `data-pin-before` / `data-pin-after` inside one subtree.
+ *
+ * `resolve(name)` answers the anchor node for a declared name: the engine's
+ * slot map for a theme's top-level nodes, a `[data-part]` lookup for a cloned
+ * card. Split out of `applyTextPins` because a CLONE is not in `engine.slots`
+ * and never will be — the ticker stamps its card template once per game, so
+ * the pin has to be resolved against the clone or every card pins to the
+ * prototype's (empty, therefore un-pinnable) name.
+ */
+export function applyPinsIn(root, resolve) {
+  if (!root || typeof root.querySelectorAll !== 'function') return;
+  for (const node of root.querySelectorAll('[data-pin-before],[data-pin-after]')) {
+    const before = node.getAttribute('data-pin-before');
+    const after = before ? null : node.getAttribute('data-pin-after');
+    if (!before && !after) continue;
+    pinBesideText(node, resolve(before || after), {
+      side: before ? 'before' : 'after',
+      gap: parseFloat(node.getAttribute('data-pin-gap')) || 16,
+    });
+  }
+}
+
+/* ── WHO WON A RESULTS CARD ──────────────────────────────────────────────
+ *
+ * Shared by the Matchup summary's five history cards and the Results Ticker's
+ * scrolling ones, because they are the same card: two players, two numbers,
+ * one of them won. It lives here rather than in either mount for the reason
+ * `layoutBox` does — a rule two elements draw from is one rule, and two copies
+ * of it agree only until somebody improves one.
+ *
+ * WHY IT IS A FUNCTION AND NOT A DIM. Both cards' only cue used to be
+ * `opacity = 0.5` on the losing SCORE, and dimmed white on a dark card is not
+ * a cue at broadcast size — on the ticker it is a 16px numeral going past at
+ * 60px/s. So a theme gets three markers per row and may take any subset:
+ *
+ *   `-win`   the winner's own marker (a plate, a rail, a lit half) — shown on
+ *            the winning side only, so "won" is DRAWN rather than inferred
+ *   `-row`   the whole row, portrait and all, dimmed for the loser
+ *   `-name` / `-score`  the per-node dim, for a theme with no row group
+ *
+ * `-row` and the per-node dim are EXCLUSIVE, and that is the whole reason this
+ * is a function: a row group that also dimmed its children would multiply and
+ * land the loser at 0.2, which reads as a rendering fault rather than as a
+ * result. An undecided game (no winner — a tie, a quit, a row the API never
+ * resolved, an ongoing game) dims nothing and marks nobody: the card states
+ * both scores at full strength, which is the honest answer.
+ */
+export const LOSER_DIM = '0.45';
+
+export function rowOutcome(winnerSide, side, { hasRow = false } = {}) {
+  const decided = winnerSide === 1 || winnerSide === 2;
+  const dim = decided && winnerSide !== side ? LOSER_DIM : '1';
+  return {
+    row: dim,
+    name: hasRow ? '1' : dim,
+    score: hasRow ? '1' : dim,
+    win: winnerSide === side ? '1' : '0',
+  };
+}

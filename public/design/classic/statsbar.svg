@@ -1,36 +1,116 @@
 <svg viewBox="0 0 452 118" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" data-design-vars="app">
   <!--
-    CLASSIC package - Stats bar (452x118): the original per-team batter/pitcher
-    stat card, painted with the user's Design-tab CSS variables
-    (data-design-vars="app"). The statValueColor / subtextColor overrides keep
-    working via the app stat-value / stat-subtext CSS vars. Full roster width;
-    values auto-fit via data-maxw. card-bg swaps between data-h-full and
-    data-h-compact when the bottom line row is hidden (stats-card-mount.js).
+    CLASSIC package - Stat BAR (452x118): the wide per-side batter/pitcher stat
+    card, painted with the user's Design-tab CSS variables
+    (data-design-vars="app"). The statValueColor / subtextColor overrides reach
+    it through - -stat-value-color / - -stat-subtext-color. card-bg swaps between
+    data-h-full and data-h-compact when the bottom line row is hidden
+    (stats-card-mount.js).
+
+    IN STEP WITH classic/statscard.svg, which is the same element at a different
+    aspect: one mount, one slot set, one RioData.getStatsLine resolution. A
+    producer running the bar in one scene and the card in another is looking at
+    one object, so the two files carry the same portrait treatment and the same
+    bottom-line rules. Change one, look at the other.
+
+    == THE CELLS ARE NOT EQUAL, AND THAT IS THE POINT =======================
+    stat-row declares the BAND (74..432 - 8 past the portrait, and ending on
+    the card's own content inset) and the mount divides it in the ratio of what
+    each CATEGORY needs: `width` on each stat, in characters, from
+    RioData.getStatsLine (layoutStatCells in mount-utils.js). Batting is
+    AB 3 / AVG 5 / SLG 5 / SO% 4 and pitching IP 5 / ERA 4 / K% 4 / AVG 5, so
+    the columns differ between the two sets and move under the batter-change
+    cross-fade. Per CATEGORY, never per value - a column sized to the number in
+    it would shove its neighbours when an AB ticked 9 to 10.
+
+    Equal columns were what this file had until 2026-09-12, and they were the
+    bug: a two-digit AB got the cell built for a ".429" and floated in most of
+    it, which on the batting set is most of the row. The x and maxw authored
+    below are the BATTING allocation - a starting state the mount overwrites on
+    every bind.
+
+    == THE BOTTOM LINE IS LEFT-ALIGNED, AND THAT IS WHAT MAKES IT BIG ========
+    "Game" sits at the left and the line runs from x=68 to the card's right
+    content edge (432) - 364 units, against the roughly 320 a CENTRED line could
+    claim while dodging that label, because a centred line grows out of the
+    middle BOTH ways and has to reserve on the right the width it is already
+    spending on the left. It was centred at 13px here: the smallest type on a
+    card whose other numbers are 23, and an ordinary pitching line auto-fit
+    smaller still.
+
+    68 IS MEASURED IN THIS PACKAGE'S OWN FACE. It was 64, and 64 came from
+    default/statsbar.svg's 56, which is measured against RAJDHANI - "Game" is
+    32.7 units there at 14px. Classic sets its label in Inter at 13, where the
+    word is 36.6 and ends at 56.6, so 64 left a 7-unit gap where the default
+    leaves 11. Same idea one element over in classic/statscard.svg, where the
+    inherited number left the caption all but touching its line.
+
+    The label is not always bound - it belongs to a HUD game's line, while an
+    API board's "Tournament Stats" arrives as the line ITSELF - so line-text
+    authors BOTH left edges (data-x-labelled / data-x-bare) against one right
+    bound (data-maxr) and the mount picks. All three or none: lineTextBox
+    refuses a partial set, or the line would sit left-aligned during a game and
+    jump back to centred the moment it ended.
+
+    A LINE IS NOT A LABEL, and it is not a value either. `subtextColor` is
+    described on its own control as covering "stat labels and the game line
+    text", so the line has to follow it - but unset it should read like the
+    default package's, which draws this line in full ink. Hence the nested
+    fallback: the producer's subtext colour when they have chosen one, the
+    palette's text colour when they have not. It was flat dim here, which made
+    the longest string on the card the quietest thing on it.
   -->
   <style>
     .cst-val { fill: var(--stat-value-color, var(--text-primary, #ffffff)); font-family: var(--font-body, 'Inter', system-ui, sans-serif); text-shadow: var(--text-shadow, none);  font-variant-numeric: tabular-nums;}
-    .cst-sub { fill: var(--stat-subtext-color, rgb(155,155,155)); font-family: var(--font-body, 'Inter', system-ui, sans-serif); text-shadow: var(--text-shadow, none); }
+    .cst-sub { fill: var(--stat-subtext-color, rgb(155,155,155)); font-family: var(--font-body, 'Inter', system-ui, sans-serif); }
+    .cst-cap { fill: var(--stat-subtext-color, var(--text-primary, #ffffff)); font-family: var(--font-body, 'Inter', system-ui, sans-serif); text-shadow: var(--text-shadow, none); }
   </style>
 
-  <rect data-slot="card-bg" x="1" y="1" width="450" height="114" rx="12" data-h-full="114" data-h-compact="74"
+  <!-- 8 UNITS OF BLEED ON EVERY EDGE - see "A card's bleed is half the widest
+       border its producer can set" in public/design/README.md. This card had 1
+       on three sides and 3 on the fourth: the Border Thickness slider runs to
+       16px, an SVG stroke straddles its path, so past about 4 this card was
+       slicing its own rounded corners square against the viewBox and sitting a
+       unit high in its own source while it did it. 452-16 = 436 wide,
+       118-16 = 102 tall. -->
+  <rect data-slot="card-bg" x="8" y="8" width="436" height="102" rx="12" data-h-full="102" data-h-compact="64"
         style="fill:var(--card-bg, rgba(20,20,30,0.92));stroke:var(--border-color, rgba(255,255,255,0.08));stroke-width:var(--border-width, 1px);filter:var(--card-shadow-filter, none)"/>
 
   <g data-slot="content">
-    <image data-slot="char-icon" x="11" y="15" width="46" height="46" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+    <!-- ONE CONTENT INSET: 12 units inside the card, so 20..432. Every rule,
+         the portrait's left edge and the stat band's outer bounds are measured
+         from it, which is what stops a divider running out to sit under the
+         border (this one was authored 8..444, i.e. across the card's own edge).
 
-    <text data-slot="stat-0-value" data-maxw="86" x="114" y="40" text-anchor="middle" class="cst-val" font-size="23" font-weight="700">0</text>
-    <text data-slot="stat-0-label" x="114" y="58" text-anchor="middle" class="cst-sub" font-size="12.5" letter-spacing="0.3">AB</text>
-    <text data-slot="stat-1-value" data-maxw="86" x="209" y="40" text-anchor="middle" class="cst-val" font-size="23" font-weight="700">.000</text>
-    <text data-slot="stat-1-label" x="209" y="58" text-anchor="middle" class="cst-sub" font-size="12.5" letter-spacing="0.3">AVG</text>
-    <text data-slot="stat-2-value" data-maxw="86" x="304" y="40" text-anchor="middle" class="cst-val" font-size="23" font-weight="700">.000</text>
-    <text data-slot="stat-2-label" x="304" y="58" text-anchor="middle" class="cst-sub" font-size="12.5" letter-spacing="0.3">SLG</text>
-    <text data-slot="stat-3-value" data-maxw="86" x="399" y="40" text-anchor="middle" class="cst-val" font-size="23" font-weight="700">0%</text>
-    <text data-slot="stat-3-label" x="399" y="58" text-anchor="middle" class="cst-sub" font-size="12.5" letter-spacing="0.3">SO%</text>
+         The portrait sits on the card, not in a well with an accent bar down
+         its left edge. That pairing is the default package's signature and it
+         came in here for one revision; classic draws its cards as one
+         surface. Centred in the stat band: 8..72, so 46 units of icon at 17. -->
+    <image data-slot="char-icon" x="20" y="17" width="46" height="46" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
 
+    <!-- Authored at the BATTING allocation; the mount re-divides the band per
+         stat set (data-span-x / data-span-w). The band starts 8 past the
+         portrait and ends on the content inset. -->
+    <g data-slot="stat-row" data-span-x="74" data-span-w="358">
+      <text data-slot="stat-0-value" data-maxw="54.33" x="105.59" y="40" text-anchor="middle" class="cst-val" font-size="23" font-weight="700">0</text>
+      <text data-slot="stat-0-label" x="105.59" y="58" text-anchor="middle" class="cst-sub" font-size="12.5" letter-spacing="0.3">AB</text>
+      <text data-slot="stat-1-value" data-maxw="90.55" x="189.83" y="40" text-anchor="middle" class="cst-val" font-size="23" font-weight="700">.000</text>
+      <text data-slot="stat-1-label" x="189.83" y="58" text-anchor="middle" class="cst-sub" font-size="12.5" letter-spacing="0.3">AVG</text>
+      <text data-slot="stat-2-value" data-maxw="90.55" x="295.11" y="40" text-anchor="middle" class="cst-val" font-size="23" font-weight="700">.000</text>
+      <text data-slot="stat-2-label" x="295.11" y="58" text-anchor="middle" class="cst-sub" font-size="12.5" letter-spacing="0.3">SLG</text>
+      <text data-slot="stat-3-value" data-maxw="72.45" x="389.88" y="40" text-anchor="middle" class="cst-val" font-size="23" font-weight="700">0%</text>
+      <text data-slot="stat-3-label" x="389.88" y="58" text-anchor="middle" class="cst-sub" font-size="12.5" letter-spacing="0.3">SO%</text>
+    </g>
+
+    <!-- The divider is where the COMPACT card ends (data-h-compact = 72-8), so
+         switching the game line off trims the card to exactly this edge rather
+         than to a point halfway through the rule, which is what the old pair
+         (card 1..75, rule 74..76) did. -->
     <g data-slot="line-group">
-      <rect x="8" y="74" width="436" height="2" style="fill:var(--border-color, rgb(255,255,255))"/>
-      <text data-slot="line-label" x="12" y="101" class="cst-sub" font-size="13" font-weight="600"></text>
-      <text data-slot="line-text" data-maxw="320" x="226" y="101" text-anchor="middle" class="cst-sub" font-size="13" font-weight="600"></text>
+      <rect x="20" y="72" width="412" height="1.5" style="fill:rgba(255,255,255,0.12)"/>
+      <text data-slot="line-label" x="20" y="97" class="cst-sub" font-size="13" font-weight="600"></text>
+      <text data-slot="line-text" data-maxw="364" data-x-labelled="68" data-x-bare="20" data-maxr="432"
+            x="68" y="97" class="cst-cap" font-size="16" font-weight="600"></text>
     </g>
   </g>
 </svg>

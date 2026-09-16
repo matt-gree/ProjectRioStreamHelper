@@ -1,0 +1,228 @@
+<svg viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+  <!--
+    DEFAULT package - Upcoming Schedule (1920x1080): the running order as a
+    board. Fixed Rio palette; the producer's Design-tab colours never repaint
+    it.
+
+    THE CARD'S HEIGHT IS DATA, so two things here are authored poses rather
+    than positions. `card-bg` declares `data-compact-h` (its height with zero
+    rows) and schedule-mount.js sets the real height from the row count; the
+    `card` group's authored translate is a four-row pose, and the mount
+    rewrites its Y each render so the board stays centred on the canvas as the
+    running order grows. The X in that translate is the theme's and is kept.
+
+    ROWS ARE CLONES. `match-template` is the prototype, hidden at opacity 0, and
+    its `data-h` is the row PITCH (content plus the gap under it), not its
+    drawn height. The mount clones it once per shown match into `rows` and
+    binds the parts by `data-part`.
+
+    WHY ONLY THE LIVE ROW WEARS THE ACCENT: red is the loudest thing on this
+    card, and a rail on every row spends it on the fact that a schedule
+    contains matches. The rail is the state (live / upcoming / played), so the
+    mount recolours it and the eye gets one place to look.
+  -->
+  <style>
+    .sh-ink { fill: var(--ink); font-family: var(--font-display); }
+    .sh-lab { fill: var(--ink); font-family: var(--font-display); }
+    .sh-num { fill: var(--ink); font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+    .sh-mush      { animation: sh-mush-bob  var(--bob-dur)  ease-in-out var(--bob-delay)  infinite alternate; will-change: transform; }
+    .sh-mush-sway { animation: sh-mush-sway var(--sway-dur) ease-in-out var(--sway-delay) infinite alternate; will-change: transform; }
+    @keyframes sh-mush-bob  { from { transform: translateY(calc(var(--bob-amp)  * -0.5)); } to { transform: translateY(calc(var(--bob-amp)  * 0.5)); } }
+    @keyframes sh-mush-sway { from { transform: translateX(calc(var(--sway-amp) * -0.5)); } to { transform: translateX(calc(var(--sway-amp) * 0.5)); } }
+    @media (prefers-reduced-motion: reduce) {
+      .sh-mush, .sh-mush-sway { animation: none; will-change: auto; }
+    }
+  </style>
+  <defs>
+    <symbol id="rio-mark" viewBox="0 0 16 16" shape-rendering="crispEdges">
+      <rect x="5" y="0" width="6" height="1" fill="#000000"/>
+      <rect x="3" y="1" width="2" height="1" fill="#000000"/>
+      <rect x="5" y="1" width="1" height="1" fill="#ff0000"/>
+      <rect x="6" y="1" width="1" height="1" fill="#ffffff"/>
+      <rect x="7" y="1" width="1" height="1" fill="#ff0000"/>
+      <rect x="8" y="1" width="2" height="1" fill="#ffffff"/>
+      <rect x="10" y="1" width="1" height="1" fill="#ff0000"/>
+      <rect x="11" y="1" width="2" height="1" fill="#000000"/>
+      <rect x="2" y="2" width="1" height="1" fill="#000000"/>
+      <rect x="3" y="2" width="2" height="1" fill="#ff0000"/>
+      <rect x="5" y="2" width="2" height="1" fill="#ffffff"/>
+      <rect x="7" y="2" width="1" height="1" fill="#ff0000"/>
+      <rect x="8" y="2" width="3" height="1" fill="#ffffff"/>
+      <rect x="11" y="2" width="2" height="1" fill="#ff0000"/>
+      <rect x="13" y="2" width="1" height="1" fill="#000000"/>
+      <rect x="1" y="3" width="1" height="1" fill="#000000"/>
+      <rect x="2" y="3" width="2" height="1" fill="#ff0000"/>
+      <rect x="4" y="3" width="4" height="1" fill="#ffffff"/>
+      <rect x="8" y="3" width="1" height="1" fill="#ff0000"/>
+      <rect x="9" y="3" width="3" height="1" fill="#ffffff"/>
+      <rect x="12" y="3" width="2" height="1" fill="#ff0000"/>
+      <rect x="14" y="3" width="1" height="1" fill="#000000"/>
+      <rect x="1" y="4" width="1" height="1" fill="#000000"/>
+      <rect x="2" y="4" width="4" height="1" fill="#ff0000"/>
+      <rect x="6" y="4" width="3" height="1" fill="#ffffff"/>
+      <rect x="9" y="4" width="1" height="1" fill="#ff0000"/>
+      <rect x="10" y="4" width="2" height="1" fill="#ffffff"/>
+      <rect x="12" y="4" width="2" height="1" fill="#ff0000"/>
+      <rect x="14" y="4" width="1" height="1" fill="#000000"/>
+      <rect x="0" y="5" width="1" height="1" fill="#000000"/>
+      <rect x="1" y="5" width="1" height="1" fill="#ffffff"/>
+      <rect x="2" y="5" width="2" height="1" fill="#ff0000"/>
+      <rect x="4" y="5" width="2" height="1" fill="#ffffff"/>
+      <rect x="6" y="5" width="1" height="1" fill="#ff0000"/>
+      <rect x="7" y="5" width="3" height="1" fill="#ffffff"/>
+      <rect x="10" y="5" width="4" height="1" fill="#ff0000"/>
+      <rect x="14" y="5" width="1" height="1" fill="#ffffff"/>
+      <rect x="15" y="5" width="1" height="1" fill="#000000"/>
+      <rect x="0" y="6" width="1" height="1" fill="#000000"/>
+      <rect x="1" y="6" width="2" height="1" fill="#ffffff"/>
+      <rect x="3" y="6" width="1" height="1" fill="#ff0000"/>
+      <rect x="4" y="6" width="3" height="1" fill="#ffffff"/>
+      <rect x="7" y="6" width="1" height="1" fill="#ff0000"/>
+      <rect x="8" y="6" width="4" height="1" fill="#ffffff"/>
+      <rect x="12" y="6" width="1" height="1" fill="#ff0000"/>
+      <rect x="13" y="6" width="2" height="1" fill="#ffffff"/>
+      <rect x="15" y="6" width="1" height="1" fill="#000000"/>
+      <rect x="0" y="7" width="1" height="1" fill="#000000"/>
+      <rect x="1" y="7" width="2" height="1" fill="#ffffff"/>
+      <rect x="3" y="7" width="2" height="1" fill="#ff0000"/>
+      <rect x="5" y="7" width="3" height="1" fill="#ffffff"/>
+      <rect x="8" y="7" width="1" height="1" fill="#ff0000"/>
+      <rect x="9" y="7" width="2" height="1" fill="#ffffff"/>
+      <rect x="11" y="7" width="2" height="1" fill="#ff0000"/>
+      <rect x="13" y="7" width="2" height="1" fill="#ffffff"/>
+      <rect x="15" y="7" width="1" height="1" fill="#000000"/>
+      <rect x="0" y="8" width="1" height="1" fill="#000000"/>
+      <rect x="1" y="8" width="2" height="1" fill="#ffffff"/>
+      <rect x="3" y="8" width="3" height="1" fill="#ff0000"/>
+      <rect x="6" y="8" width="2" height="1" fill="#ffffff"/>
+      <rect x="8" y="8" width="1" height="1" fill="#ff0000"/>
+      <rect x="9" y="8" width="1" height="1" fill="#ffffff"/>
+      <rect x="10" y="8" width="3" height="1" fill="#ff0000"/>
+      <rect x="13" y="8" width="2" height="1" fill="#ffffff"/>
+      <rect x="15" y="8" width="1" height="1" fill="#000000"/>
+      <rect x="0" y="9" width="1" height="1" fill="#000000"/>
+      <rect x="1" y="9" width="1" height="1" fill="#ffffff"/>
+      <rect x="2" y="9" width="4" height="1" fill="#ff0000"/>
+      <rect x="6" y="9" width="4" height="1" fill="#000000"/>
+      <rect x="10" y="9" width="4" height="1" fill="#ff0000"/>
+      <rect x="14" y="9" width="1" height="1" fill="#ffffff"/>
+      <rect x="15" y="9" width="1" height="1" fill="#000000"/>
+      <rect x="0" y="10" width="1" height="1" fill="#000000"/>
+      <rect x="1" y="10" width="3" height="1" fill="#ff0000"/>
+      <rect x="4" y="10" width="2" height="1" fill="#000000"/>
+      <rect x="6" y="10" width="4" height="1" fill="#ffffff"/>
+      <rect x="10" y="10" width="2" height="1" fill="#000000"/>
+      <rect x="12" y="10" width="3" height="1" fill="#ff0000"/>
+      <rect x="15" y="10" width="1" height="1" fill="#000000"/>
+      <rect x="1" y="11" width="1" height="1" fill="#000000"/>
+      <rect x="2" y="11" width="1" height="1" fill="#ff0000"/>
+      <rect x="3" y="11" width="1" height="1" fill="#000000"/>
+      <rect x="4" y="11" width="2" height="1" fill="#ffffff"/>
+      <rect x="6" y="11" width="1" height="1" fill="#000000"/>
+      <rect x="7" y="11" width="2" height="1" fill="#ffffff"/>
+      <rect x="9" y="11" width="1" height="1" fill="#000000"/>
+      <rect x="10" y="11" width="2" height="1" fill="#ffffff"/>
+      <rect x="12" y="11" width="1" height="1" fill="#000000"/>
+      <rect x="13" y="11" width="1" height="1" fill="#ff0000"/>
+      <rect x="14" y="11" width="1" height="1" fill="#000000"/>
+      <rect x="2" y="12" width="2" height="1" fill="#000000"/>
+      <rect x="4" y="12" width="2" height="1" fill="#ffffff"/>
+      <rect x="6" y="12" width="1" height="1" fill="#000000"/>
+      <rect x="7" y="12" width="2" height="1" fill="#ffffff"/>
+      <rect x="9" y="12" width="1" height="1" fill="#000000"/>
+      <rect x="10" y="12" width="2" height="1" fill="#ffffff"/>
+      <rect x="12" y="12" width="2" height="1" fill="#000000"/>
+      <rect x="3" y="13" width="1" height="1" fill="#000000"/>
+      <rect x="4" y="13" width="2" height="1" fill="#ffffff"/>
+      <rect x="6" y="13" width="1" height="1" fill="#000000"/>
+      <rect x="7" y="13" width="2" height="1" fill="#ffffff"/>
+      <rect x="9" y="13" width="1" height="1" fill="#000000"/>
+      <rect x="10" y="13" width="2" height="1" fill="#ffffff"/>
+      <rect x="12" y="13" width="1" height="1" fill="#000000"/>
+      <rect x="4" y="14" width="1" height="1" fill="#000000"/>
+      <rect x="5" y="14" width="6" height="1" fill="#ffffff"/>
+      <rect x="11" y="14" width="1" height="1" fill="#000000"/>
+      <rect x="5" y="15" width="6" height="1" fill="#000000"/>
+    </symbol>
+    <clipPath id="sh-head-clip"><rect x="0" y="0" width="1240" height="99" rx="20"/></clipPath>
+  </defs>
+
+  <!--
+    The board. The authored translate is a FOUR-ROW pose: 1240 wide by
+    124 + 4*82 = 452 tall, centred on 1080 gives y = 314. The mount keeps the
+    340 and recomputes the 314. At the ten-row cap the card is 944 tall (992
+    with the overflow line), which is what sets that cap: an eleventh row would
+    leave the frame less clear than the shadow under the card needs.
+  -->
+  <g data-slot="card" transform="translate(340,314)">
+    <rect data-slot="card-bg" data-compact-h="124" x="0" y="0" width="1240" height="452" rx="20"
+          style="fill:var(--band);stroke:var(--border);stroke-width:1.5;filter:drop-shadow(0 18px 44px rgba(0,0,0,0.55))"/>
+
+    <!-- Header: the field drifts behind the title, clipped to the header's own
+         box. One plane, six marks: the rows below are a table and a table is
+         the one surface atmosphere must stay out of. -->
+    <g data-part="field" clip-path="url(#sh-head-clip)">
+      <g transform="translate(110,26)"><g class="sh-mush" style="--bob-dur:17.4s;--bob-amp:15.2px;--bob-delay:-8.1s"><use class="sh-mush-sway" href="#rio-mark" width="32" height="32" opacity="0.045" style="--sway-dur:23.1s;--sway-amp:26.4px;--sway-delay:-3.4s"/></g></g>
+      <g transform="translate(246,58)"><g class="sh-mush" style="--bob-dur:13.2s;--bob-amp:26.7px;--bob-delay:-2.6s"><use class="sh-mush-sway" href="#rio-mark" width="48" height="48" opacity="0.065" style="--sway-dur:18.9s;--sway-amp:39.8px;--sway-delay:-11.2s"/></g></g>
+      <g transform="translate(404,12)"><g class="sh-mush" style="--bob-dur:16.1s;--bob-amp:16.9px;--bob-delay:-5.3s"><use class="sh-mush-sway" href="#rio-mark" width="32" height="32" opacity="0.04" style="--sway-dur:24.8s;--sway-amp:24.1px;--sway-delay:-7.7s"/></g></g>
+      <g transform="translate(790,64)"><g class="sh-mush" style="--bob-dur:11.9s;--bob-amp:38.4px;--bob-delay:-4.1s"><use class="sh-mush-sway" href="#rio-mark" width="64" height="64" opacity="0.075" style="--sway-dur:15.3s;--sway-amp:62.1px;--sway-delay:-9.6s"/></g></g>
+      <g transform="translate(972,20)"><g class="sh-mush" style="--bob-dur:15.6s;--bob-amp:17.8px;--bob-delay:-1.9s"><use class="sh-mush-sway" href="#rio-mark" width="48" height="48" opacity="0.06" style="--sway-dur:20.4s;--sway-amp:37.2px;--sway-delay:-2.2s"/></g></g>
+      <g transform="translate(1124,54)"><g class="sh-mush" style="--bob-dur:17.8s;--bob-amp:15.1px;--bob-delay:-6.8s"><use class="sh-mush-sway" href="#rio-mark" width="32" height="32" opacity="0.045" style="--sway-dur:22.6s;--sway-amp:25.3px;--sway-delay:-5.1s"/></g></g>
+    </g>
+
+    <!-- The producer types the heading, so the CAPS are the theme's: the size,
+         the tracking and the rule under it were all drawn for a caps line. A
+         package that wants sentence case drops the text-transform. -->
+    <text data-slot="title" data-maxw="1020" x="620" y="58" text-anchor="middle" class="sh-ink"
+          font-size="44" font-weight="700" letter-spacing="4"
+          style="text-transform:uppercase">UPCOMING MATCHES</text>
+    <rect x="580" y="74" width="80" height="5" rx="2.5" style="fill:var(--accent)"/>
+    <rect x="24" y="99" width="1192" height="1.5" fill="rgba(255,255,255,0.10)"/>
+
+    <!-- Clones land here, one per shown match, at y = index * data-h. -->
+    <g data-slot="rows" transform="translate(16,108)">
+      <text data-slot="overflow" data-h="48" data-maxw="600" x="604" y="0" text-anchor="middle"
+            class="sh-lab" font-size="20" font-weight="600" letter-spacing="2"
+            style="fill-opacity:0.5" opacity="0"></text>
+    </g>
+
+    <!-- Prototype row: 1208 wide by 72 drawn, on an 82 pitch.
+         ONE LINE. A schedule is a table of matches and a table's row is a line:
+         the round on the left, the matchup mirrored about the row's centre so
+         every row's two names land in the same two columns however long they
+         are, and when it happens on the right. It was two lines (meta over
+         matchup) on a 1240 card, which put the four short strings of a typical
+         row at the four corners of a 98-unit box with a hole in the middle.
+         Everything on this line is optically centred on the row's own centre
+         (36), which for caps means centred on the CAP HEIGHT, about 0.35 of the
+         font size above the baseline, not on the em box.
+
+         THE FOUR data-maxw VALUES ARE A GUTTER BUDGET, not four independent
+         limits: every one of them is reached by real data (a long round name, a
+         long rio name, "After the break"), so the clearance between two
+         neighbouring columns is what is left when BOTH are at their bound. The
+         label ends at 258 against a name that can start at 318, and the status
+         starts at 960 against a name that can end at 890 - 60 and 70 units. At
+         272 and 252 they were 18 and 38, which auto-fits happily into two
+         columns that read as one collided string. -->
+    <g data-slot="match-template" data-h="82" opacity="0">
+      <rect data-part="row-bg" x="0" y="0" width="1208" height="72" rx="10"
+            fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
+      <rect data-part="rail" x="0" y="12" width="6" height="48" rx="3" style="fill:var(--accent)"/>
+
+      <text data-part="label" data-maxw="230" x="28" y="43" class="sh-lab"
+            font-size="21" font-weight="600" letter-spacing="1.8" style="fill-opacity:0.62">ROUND</text>
+
+      <text data-part="side1-name" data-maxw="234" x="552" y="47" text-anchor="end" class="sh-ink"
+            font-size="32" font-weight="700">Side One</text>
+      <rect data-part="plate" x="566" y="19" width="76" height="34" rx="8" fill="rgba(0,0,0,0.38)"/>
+      <text data-part="plate-text" data-maxw="66" x="604" y="44" text-anchor="middle" class="sh-num"
+            font-size="22" font-weight="700">Bo5</text>
+      <text data-part="side2-name" data-maxw="234" x="656" y="47" text-anchor="start" class="sh-ink"
+            font-size="32" font-weight="700">Side Two</text>
+
+      <text data-part="status" data-maxw="220" x="1180" y="44" text-anchor="end" class="sh-lab"
+            font-size="24" font-weight="700" letter-spacing="1.6">7:15 PM</text>
+    </g>
+  </g>
+</svg>

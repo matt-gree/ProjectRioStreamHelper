@@ -251,6 +251,26 @@ export const LAYOUT_SETTINGS = {
         { key: 'activeColor', type: 'color-override', label: 'Active Match Color', description: 'Highlight color for active/in-progress matches' },
         { key: 'maxScale', type: 'number-override', label: 'Max Upscale', description: '1.0 = never enlarge past designed pixel sizes (small brackets stay native, centered). 1.5+ lets small brackets grow to fill the OBS source.', defaultValue: 1.0, min: 0.5, max: 3.0, step: 0.1 },
     ],
+    /*
+     * Upcoming Schedule. Two settings, and both of them exist because
+     * `schedule.queue` is the union of every running order and nothing ever
+     * takes a fixture out of it (server/schedule.py) — so the list this board
+     * draws from only ever grows, and an unbounded list on a fixed canvas is
+     * the one thing a broadcast graphic may not be.
+     *
+     * The HEADING is not here: it is `schedule.title` in State, authored on
+     * this element's stage beside each match's display time, because both are
+     * facts about tonight rather than about how this overlay looks.
+     */
+    schedule: [
+        { key: 'showDecided', type: 'switch', label: 'Decided Matches', description: 'Keep decided matches on the board, dimmed. Off by default — the running order never drops one, so an evening\u2019s board would grow all night.', defaultValue: false },
+        // Ten is the canvas, not a taste: the default theme's card is
+        // 124 + rows*82 tall and centres on 1080, so ten rows reach 944 (992
+        // with the overflow line) and an eleventh would crowd the frame.
+        // Anything over the cap becomes the "+N more" line, which is why the
+        // number is safe to turn down as well as up.
+        { key: 'maxRows', type: 'number-override', label: 'Rows Shown', description: 'How many matches the board draws before it folds the rest into a "+N more" line', defaultValue: 6, min: 1, max: 10, step: 1 },
+    ],
     ticker: [
         { key: 'tickerSpeed', type: 'number-override', label: 'Scroll Speed', description: 'Horizontal scroll rate of the ticker (pixels per second)', defaultValue: 60, min: 10, max: 300, step: 10, suffix: 'px/s' },
         { key: 'tickerGap', type: 'number-override', label: 'Card Spacing', description: 'Space between game cards (px)', defaultValue: 16, min: 0, max: 80, step: 2, suffix: 'px' },
@@ -414,6 +434,7 @@ export function settingOn(value, fallback) {
 // `overlays.statsbar.*` now has exactly one reader, so the answer exists.
 export const THEME_ELEMENT = {
     statsbar: 'statsbar',
+    schedule: 'schedule',
     statscard: 'statscard',
     commentary: 'commentary',
     lowerthird: 'lowerthird',
@@ -498,7 +519,7 @@ export const OVERRIDE_CAPABLE_TYPES = [
     // Conditional — applied only when the active theme opts in
     // (`engine.usesAppVars`), which is what THEME_ELEMENT above gates on.
     'scoreboard', 'scorecard', 'statsbar', 'statscard',
-    'commentary', 'lowerthird', 'matchup', 'playerplates', 'ticker',
+    'commentary', 'lowerthird', 'matchup', 'playerplates', 'schedule', 'ticker',
     // Unconditional — no theme SVG exists for these, so the palette is the only
     // thing that styles them under every package.
     'eventheader', 'playername',
@@ -603,12 +624,21 @@ export const OVERRIDABLE_GLOBAL_KEYS = [
 // designConstants.test.js, because a key promoted to a row it cannot reach is
 // exactly the silent no-op the override gating exists to prevent.
 //
-// `statsbar` is deliberately absent from the card-surface rows even though it
-// draws a card: LAYOUT_VAR_MAP still keys those vars under `stats`, the name
-// this element had before the 2026-08-23 rename, so the reads do not fire for
-// it. Fixing that key changes what is on air (a pinned transparent cardBg would
-// start applying), so it is a decision, not a typo — and until it is made, the
-// honest answer here is that the pin does not reach.
+// THE STAT PAIR REACHES THE CARD SURFACE AGAIN as of 2026-09-12. It did not
+// between the 2026-08-23 rename and then: LAYOUT_VAR_MAP was still keyed on
+// `stats`, the name the element had before, so for `statsbar` / `statscard` the
+// lookup missed and NONE of these vars were written — including the two the
+// element's own panel advertises, Stat Value Color and Subtext Color. The
+// decision the old note deferred is made: a pin that has never once applied is
+// not a pin anyone is relying on, and two colour controls the UI offers and the
+// overlay ignores cost more than the theoretical producer whose stored, inert
+// cardBg starts painting.
+//
+// `borderRadius` is the one surface key NOT extended to them, and for a reason
+// that outlives this fix: `rx` cannot take a CSS variable in SVG, so a themed
+// card's corner is a literal in the artwork and `--border-radius` has nothing to
+// bind to. Offering it here would put back exactly the silent no-op this table
+// exists to prevent.
 const OVERRIDE_READ_TYPES = {
     accentColor: null,
     displayFont: null,
@@ -626,10 +656,10 @@ const OVERRIDE_READ_TYPES = {
     textStrokeWidth: null,
     textStrokeColor: null,
     textShadowColor: null,
-    cardBg: ['scoreboard', 'eventheader'],
-    borderColor: ['scoreboard'],
+    cardBg: ['scoreboard', 'eventheader', 'statsbar', 'statscard'],
+    borderColor: ['scoreboard', 'statsbar', 'statscard'],
     borderRadius: ['scoreboard'],
-    borderWidth: ['scoreboard'],
+    borderWidth: ['scoreboard', 'statsbar', 'statscard'],
     textColor: ['scoreboard', 'playername'],
     showLogo: ['scoreboard'],
     showCaptains: ['ticker'],

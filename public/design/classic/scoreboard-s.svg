@@ -1,50 +1,203 @@
-<svg viewBox="0 0 388 156" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" data-design-vars="app">
+<svg viewBox="0 0 388 156" preserveAspectRatio="xMidYMid meet" data-layout="absolute" xmlns="http://www.w3.org/2000/svg" data-design-vars="app">
   <!--
-    CLASSIC package - Scoreboard S (388x156): the small scoreboard re-authored
-    for the vertical two-line canvas (side 1 over side 2, TOP/BOT inning column
-    on the right), painted with the user's Design-tab CSS variables
-    (data-design-vars="app"). Row-stack contract in scoreboard-mount.js.
+    CLASSIC package - Scoreboard S (388x156): the compact pill - side 1 over
+    side 2, with the inning and the live count as segments the card GROWS to
+    enclose. Painted with the user's Design-tab CSS variables
+    (data-design-vars="app").
+
+    == WHY THIS IS A HORIZONTAL MELD AND NOT A STACK ========================
+    It was a stack until 2026-09-12, and the stack is what cost it the count.
+    This canvas is 156 tall; a fixed two-line core takes 112 of it and the
+    game-mode band 28, which leaves 8 units - so there was nowhere to put a
+    count, a diamond or an outs row, and the producer's Live Cluster and Inning
+    switches sat on the console controlling nothing. The board could not say
+    what the count was, which is most of what a small scoreboard is FOR.
+
+    The fix is on the other axis: the core is narrow, and the card grows its
+    WIDTH rightwards to enclose whichever segments are showing. card-bg declares
+    data-compact-w (names and scores alone); each segment declares data-cardw,
+    the card width when IT is the rightmost visible; and the mount takes the max
+    over what is on. Both segments carry data-anim="expand-right", so they are
+    revealed by the card's own right edge sweeping over them rather than on a
+    clock of their own.
+
+      compact          232   names + scores
+      row-inning       300   the inning number and its arrows
+      row-live         372   the count, the outs and the bases
+
+    data-compact-h / row-mode's data-cardh are the same pair one axis over: the
+    mode band grows the card's HEIGHT from 112 to 140 when it shows.
+
+    == THE MELD IS BORROWED; THE LOOK IS NOT ================================
+    The segment widths match the default package's Small board so the two are
+    the same object at the same size and swapping packages costs nobody their
+    OBS placement. Everything INSIDE the card is this package's own: no accent
+    rail down the left edge, no side-coloured tick or gradient wash behind the
+    names, no plates. Classic states a card as one rounded surface with a
+    hairline border and separates what is inside it with hairline RULES - the
+    same 1-unit lines this file drew before it grew any segments - and the sides
+    are told apart the way they were: by their logos, their names and their
+    position. A card whose parts each announce themselves is default's idea.
+
+    The card carries 8 units of bleed all round, against the default package's
+    flush box - so the live segment is 372 where default's is 380 and the core
+    112 where default's is 128. That is the package rule (README: "A card's
+    bleed is half the widest border its producer can set"), and this theme needs
+    it twice over: it paints a - -card-shadow-filter and an app-driven border
+    the default package has no equivalent for, and a card flush to its canvas
+    clips both.
+
+    THE ARROW REPLACES THE TOP / BOT LABEL this file used to draw. It is the
+    same fact - which half of the inning - and an arrow either side of a 48px
+    numeral is what fits beside it; a word cannot share that column. classic's
+    Large board keeps its TOP / BOT, where there is room for the word.
   -->
   <style>
-    .cs-name { fill: var(--text-primary, #ffffff); font-family: var(--font-body, 'Inter', system-ui, sans-serif); text-shadow: var(--text-shadow, none); }
+    .cs-name  { fill: var(--text-primary, #ffffff); font-family: var(--font-body, 'Inter', system-ui, sans-serif); text-shadow: var(--text-shadow, none); }
     .cs-score { fill: var(--accent, #f59e0b); font-family: var(--font-body, 'Inter', system-ui, sans-serif);  font-variant-numeric: tabular-nums;}
-    .cs-dim  { fill: rgba(255,255,255,0.6); font-family: var(--font-body, 'Inter', system-ui, sans-serif); }
-    .cs-rule { stroke: var(--border-color, rgba(255,255,255,0.08)); stroke-width: 1; }
+    /* NOT `-num`: that suffix is the NUMERAL ROLE in the theme type vocabulary
+       and promises var(- -font-mono). This package sets every one of its
+       elements in the body role - one face, which is what the single pre-2.0
+       font setting migrated onto - so a class named for the numeral role here
+       would be a name that lies about what it binds. The tabular figures are
+       still declared, because that is a property of a VALUE and not of the
+       face: the producer's body font need not carry them by default, and a
+       count that shoves its neighbour as it ticks is what they prevent. */
+    .cs-count { fill: var(--text-primary, #ffffff); font-family: var(--font-body, 'Inter', system-ui, sans-serif); text-shadow: var(--text-shadow, none);  font-variant-numeric: tabular-nums;}
+    .cs-dim   { fill: rgba(255,255,255,0.6); font-family: var(--font-body, 'Inter', system-ui, sans-serif); }
   </style>
 
-  <rect data-slot="card-bg" x="14" y="8" width="360" height="112" rx="14"
-        style="fill:var(--card-bg, rgba(15,15,25,0.88));filter:var(--card-shadow-filter, none)"/>
-  <rect x="14" y="8" width="360" height="112" rx="14" fill="none"
-        style="stroke:var(--border-color, rgba(255,255,255,0.08));stroke-width:var(--border-width, 1px)"/>
+  <!-- ONE RECT, CARRYING ITS OWN STROKE: the mount animates this element's
+       width and height, so a separate border rect would stay where it was
+       authored and detach the moment a segment came on.
 
-  <g data-slot="row-top" data-h="112">
-    <image data-slot="s1-logo" x="28" y="18" width="36" height="36" preserveAspectRatio="xMidYMid meet" opacity="0"/>
-    <text data-slot="s1-name" data-maxw="150" x="72" y="42" class="cs-name" font-size="16" font-weight="700">Player One</text>
-    <text data-slot="s1-score" data-maxw="48" x="308" y="48" text-anchor="end" class="cs-score" font-size="28" font-weight="800">0</text>
+       NO card-rail. That slot is optional in the mount (scoreboard-mount.js
+       filters the absent one out of the size pass), which is what lets a
+       package decline the default's accent bar.
 
-    <line class="cs-rule" x1="28" y1="64" x2="308" y2="64"/>
+       8 UNITS OF BLEED ON EVERY EDGE - see "A card's bleed is half the widest
+       border its producer can set" in public/design/README.md. Two of those
+       edges are the mount's, not this file's, so what is authored here is their
+       MAXIMUM: the live segment's data-cardw of 372 puts the card's widest right
+       edge on 380, and row-mode's data-cardh of 140 puts its lowest bottom edge
+       on 148. Both clear the canvas by 8.
 
-    <image data-slot="s2-logo" x="28" y="74" width="36" height="36" preserveAspectRatio="xMidYMid meet" opacity="0"/>
-    <text data-slot="s2-name" data-maxw="150" x="72" y="98" class="cs-name" font-size="16" font-weight="700">Player Two</text>
-    <text data-slot="s2-score" data-maxw="48" x="308" y="104" text-anchor="end" class="cs-score" font-size="28" font-weight="800">0</text>
+       The left margin was 8 against a right margin of 4, which was the channel
+       the accent rail used to sit in - the rail went and its gap stayed, so the
+       card was off-centre by exactly the width of something that is no longer
+       drawn. -->
+  <rect data-slot="card-bg" x="8" y="8" width="372" height="112" rx="14"
+        data-compact-w="232" data-compact-h="112"
+        style="fill:var(--card-bg, rgba(15,15,25,0.88));stroke:var(--border-color, rgba(255,255,255,0.08));stroke-width:var(--border-width, 1px);filter:var(--card-shadow-filter, none)"/>
 
-    <line class="cs-rule" x1="320" y1="24" x2="320" y2="104"/>
+  <!-- ░░ CORE side 1 (always shown) ░░ -->
+  <g data-slot="row-top">
+    <image data-slot="s1-logo" x="20" y="18" width="36" height="36" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+    <text data-slot="s1-name" data-maxw="112" x="66" y="42.43" class="cs-name" font-size="20" font-weight="700">Player One</text>
+    <text data-slot="s1-score" data-maxw="44" x="223.63" y="46.98" text-anchor="end" class="cs-score" font-size="32" font-weight="800">0</text>
+  </g>
 
-    <text data-slot="inn-half" x="346" y="56" text-anchor="middle" class="cs-dim" font-size="11" font-weight="700" letter-spacing="0.5">TOP</text>
-    <text data-slot="inn-num" x="346" y="80" text-anchor="middle" class="cs-name" font-size="20" font-weight="800">1</text>
+  <!-- NO RULE BETWEEN THE TWO ROWS EITHER. It was the last line left on this
+       card and it went the same way as the column dividers: - -border-color paints
+       it, - -border-width does not, so it reads as a second border a producer
+       cannot size - and on a card 112 units tall it was the loudest thing
+       between two names.
+
+       Nothing is lost. Two logos, two names and two scores stacked one above the
+       other are already two rows; the card's own mid-line at 64 is where the rule
+       was, and it is still where the eye divides them. A hairline across that is
+       a line drawn over a boundary that was never in doubt.
+
+       The remaining rules in this package all separate CELLS or BANDS - the
+       linescore's R column, the Stat Card's 2x2, the Scorecard's section
+       dividers - work nothing else is doing. -->
+
+  <!-- ░░ CORE side 2 (always shown) ░░ -->
+  <g data-slot="row-bottom">
+    <image data-slot="s2-logo" x="20" y="74" width="36" height="36" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+    <text data-slot="s2-name" data-maxw="112" x="66" y="98.43" class="cs-name" font-size="20" font-weight="700">Player Two</text>
+    <text data-slot="s2-score" data-maxw="44" x="223.63" y="102.98" text-anchor="end" class="cs-score" font-size="32" font-weight="800">0</text>
+  </g>
+
+  <!-- ░░ GAME MODE band: grows the card's HEIGHT, not its width ░░
+       data-center="card" hands the x to the mount, which drives it off the same
+       tween as the card's right edge - the label has to stay centred on a card
+       whose width is melding underneath it, so it cannot sit at an authored x.
+       data-maxw is sized for the COMPACT card (232 wide), the narrowest centre
+       this ever has. -->
+  <g data-slot="row-mode" data-cardh="140">
+    <text data-slot="meta-game-mode" data-center="card" data-maxw="192" x="124" y="139" text-anchor="middle" class="cs-dim" font-size="14" font-weight="600" letter-spacing="0.4">Game Mode</text>
+  </g>
+
+  <!-- ░░ INNING segment: melds the card to 300 ░░
+       NO COLUMN DIVIDER. This segment and the live one each had a vertical rule
+       at their left edge, and they were wrong twice over. They take
+       - -border-color, so a producer who picks a strong border to find the card's
+       OUTLINE lights up two lines through the middle of it instead - and at
+       1 unit they ignore - -border-width entirely, so the two halves of one
+       control disagree. And the meld has already done their job: the card
+       physically grows to admit each segment, which is a stronger boundary than
+       a hairline and one the eye gets for free.
+
+       THE RULE BETWEEN THE TWO NAMES STAYS, because it is a ROW divider and not
+       a column one: it separates two things that are otherwise the same row, and
+       it ends with the names it belongs to rather than running the card's
+       melding width.
+
+       inn-num is CENTRED on the arrow cluster (250..282) rather than started at
+       an x tuned for one glyph: a two-digit extra-innings number has to grow
+       both ways from the arrows it sits between, not push one side into them.
+
+       data-maxw IS 52, AND THAT IS WHAT MAKES EXTRA INNINGS FIT. The number has
+       roughly 232..292 to live in - the names' column ends at 228 and the bases
+       begin at 296 - and "10" at 48px is 62 wide, so a bound any looser let the
+       tenth inning run into both neighbours. At 52 a single digit still draws at
+       the full 48 and only a two-digit inning comes down (to about 40), which is
+       the one case that needs it. -->
+  <g data-slot="row-inning" data-anim="expand-right" data-cardw="300">
+    <text data-slot="inn-num" data-maxw="52" x="266" y="80.47" text-anchor="middle" class="cs-count" font-size="48" font-weight="800">1</text>
+    <g data-slot="inn-arrow-up"><path d="M250 37H282L266 19L250 37Z" style="fill:var(--accent, #f59e0b)"/></g>
+    <g data-slot="inn-arrow-down" opacity="0"><path d="M250 91H282L266 109L250 91Z" style="fill:var(--accent, #f59e0b)"/></g>
     <g data-slot="final-badge" opacity="0">
-      <rect x="318" y="52" width="56" height="24" rx="4" style="fill:var(--final-badge-color, #ef4444)"/>
-      <text x="346" y="68" text-anchor="middle" fill="#ffffff" font-family="var(--font-body, 'Inter', system-ui, sans-serif)" font-size="11" font-weight="800" letter-spacing="1">FINAL</text>
+      <rect x="238" y="51" width="55" height="26" rx="6" style="fill:var(--final-badge-color, #ef4444)"/>
+      <text x="265.5" y="69.59" text-anchor="middle" fill="#ffffff" font-family="var(--font-body, 'Inter', system-ui, sans-serif)" font-size="14" font-weight="800" letter-spacing="0.5">FINAL</text>
     </g>
   </g>
 
-  <!-- Game-mode band. This theme is STACK-laid (no data-layout="absolute"), so
-       it takes no data-cardh: the mount stacks it under row-top and sizes
-       card-bg to whatever is showing, which is the same collapse the default
-       package gets from the vertical meld. Authored at a local y origin of 0,
-       per the row-stack contract. -->
-  <g data-slot="row-mode" data-h="28">
-    <line class="cs-rule" data-part="div" x1="28" y1="0" x2="360" y2="0"/>
-    <text data-slot="meta-game-mode" data-maxw="300" x="28" y="19" class="cs-dim" font-size="12" font-weight="600" letter-spacing="0.4">Game Mode</text>
+  <!-- ░░ LIVE segment: the count, the outs and the bases. Melds the card to 372 ░░
+       THE COUNT IS TEXT AT THIS SIZE, not lit dots. Three balls and two strikes
+       is five dots plus their labels, and there is no column here that can hold
+       them beside a diamond - so the board says "3-2", which is how a count is
+       read aloud anyway. The Large board has the room and draws the dots.
+
+       The OUTS stay dots, because two of them fit and "outs" has no spoken
+       shorthand. One short of the terminal value on both, as everywhere: a
+       third out ends the half-inning before a frame can show it.
+
+       The bases are squares on a SQUARE lattice here rather than the Large
+       board's rotated-square outline with dots - at 24 units there is no room
+       for a shape and a marker inside it, so the base IS the marker.
+
+       A ROTATED SQUARE'S EXTENT IS NOT ITS y. Each base is a 24x24 rect turned
+       -45 about its own top-left CORNER, so the shape reaches 16.97 (24/root 2)
+       above the y written on it and 2B's anchor sits 19 higher again than the
+       other two - the cluster's real top is 2B's apex, 35.97 above base-1's
+       authored y. Shifting these by eye is how 2B ended up poking out through
+       the top of a card that had just been shortened by 8.
+
+       Measured, the cluster runs 16.03 (2B's apex) to 112 (the count's baseline
+       - digits have no descender, so the baseline IS the bottom of the ink)
+       inside a card of 8..120: 8 clear at each end, which is the card's own
+       bleed again and is exactly the inner half of the widest border a producer
+       can set. At 16px the cluster and the border meet and neither is cut. -->
+  <g data-slot="row-live" data-anim="expand-right" data-cardw="372">
+    <text data-slot="balls" x="309.238" y="112" class="cs-count" font-size="24" font-weight="700">0</text>
+    <text x="331.44" y="110.32" text-anchor="middle" class="cs-dim" font-size="24" font-weight="700">-</text>
+    <text data-slot="strikes" x="339.238" y="112" class="cs-count" font-size="24" font-weight="700">0</text>
+    <circle data-slot="out-0" cx="321.5" cy="82" r="6.5" style="fill:rgba(255,255,255,0.05);stroke:rgba(255,255,255,0.15);stroke-width:1"/>
+    <circle data-slot="out-1" cx="342.5" cy="82" r="6.5" style="fill:rgba(255,255,255,0.05);stroke:rgba(255,255,255,0.15);stroke-width:1"/>
+    <rect data-slot="base-3" x="296" y="52" width="24" height="24" transform="rotate(-45 296 52)" style="fill:rgba(255,255,255,0.05);stroke:rgba(255,255,255,0.15);stroke-width:1"/>
+    <rect data-slot="base-2" x="315" y="33" width="24" height="24" transform="rotate(-45 315 33)" style="fill:rgba(255,255,255,0.05);stroke:rgba(255,255,255,0.15);stroke-width:1"/>
+    <rect data-slot="base-1" x="334" y="52" width="24" height="24" transform="rotate(-45 334 52)" style="fill:rgba(255,255,255,0.05);stroke:rgba(255,255,255,0.15);stroke-width:1"/>
   </g>
 </svg>

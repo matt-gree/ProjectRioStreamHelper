@@ -1,6 +1,11 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach } from 'vitest';
 import { renderRoster, resolvePortraitStyle } from '../../../public/layout/lib/roster-mount.js';
+// The REAL rule, not a third copy of it: designConstants' settingOn is the
+// app-side mirror of overlay-base's, and designConstants.test.js pins the two
+// against each other by parsing the source. Stubbing a hand-written boolean
+// check here would let this suite pass on a rule the overlay does not use.
+import { settingOn } from './designConstants';
 
 /*
  * The roster's Pixel switch — off is smooth (what it always drew), on is what
@@ -25,7 +30,7 @@ const SLOTS = [
 ];
 
 beforeEach(() => {
-    globalThis.OverlayBase = { deepGet, BASE_URL: '' };
+    globalThis.OverlayBase = { deepGet, settingOn, BASE_URL: '' };
     globalThis.RioData = { getRosterSlots: () => SLOTS };
     document.body.innerHTML = '';
 });
@@ -41,11 +46,23 @@ function draw(pixelPortraits) {
 const rendering = (img) => getComputedStyle(img).imageRendering;
 
 describe('resolvePortraitStyle', () => {
-    it('is smooth unless the switch is literally on', () => {
+    it('is smooth unless the switch is on', () => {
         expect(resolvePortraitStyle(true)).toBe('pixel');
         expect(resolvePortraitStyle(false)).toBe('smooth');
         expect(resolvePortraitStyle(undefined)).toBe('smooth');
         expect(resolvePortraitStyle('pixel')).toBe('smooth');
+    });
+
+    /*
+     * A STORED SWITCH IS NOT ALWAYS A BOOLEAN. `PUT /api/v1/settings` takes its
+     * value as a string and settings.json is hand-editable, so "true" / "false"
+     * are shapes that really occur — and under the bare `v === true` this read
+     * until 2026-09-12, a producer who set the switch over the API got smooth
+     * portraits and a console switch that said Pixel.
+     */
+    it('reads a stringified switch the way the console does', () => {
+        expect(resolvePortraitStyle('true')).toBe('pixel');
+        expect(resolvePortraitStyle('false')).toBe('smooth');
     });
 });
 

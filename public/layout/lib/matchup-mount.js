@@ -22,12 +22,20 @@
 //   and per card i ∈ 1..5:
 //     game{i}                (group — hidden when there's no i-th game)
 //     game{i}-side1-logo / game{i}-side2-logo   (team logo, falls back to captain icon)
-//     game{i}-side1-score / game{i}-side2-score (loser dimmed)
+//     game{i}-side1-score / game{i}-side2-score (final score; dimmed for the
+//                                                loser unless the theme has a -row)
 //     game{i}-side1-name / game{i}-side2-name   (optional — the two player names,
-//                                                restated per card by intro themes)
+//                                                restated per card so a card says
+//                                                WHOSE score each number is)
+//     game{i}-side1-row / game{i}-side2-row     (optional — the whole row, logo
+//                                                included; dimmed for the loser)
+//     game{i}-side1-win / game{i}-side2-win     (optional — the winner's marker;
+//                                                shown on the winning side only)
 //     game{i}-away-name / game{i}-home-name      (optional — away/home-oriented
 //     game{i}-away-score / game{i}-home-score       per-game restatement of the two
-//     game{i}-away-logo / game{i}-home-logo         sides; awaySide comes from server)
+//     game{i}-away-logo / game{i}-home-logo         sides; awaySide comes from
+//     game{i}-away-row / game{i}-home-row           the server)
+//     game{i}-away-win / game{i}-home-win
 //     game{i}-mode, game{i}-stadium, game{i}-date
 //     game{i}-date-full     (optional — date WITH year, e.g. "JUN 1, 2026")
 // Text slots may carry data-maxw="<svg-units>" to auto-fit long values.
@@ -37,13 +45,18 @@
 // derivation at fetch time; this mount only binds values.
 
 import { createThemeEngine } from './svg-theme-engine.js';
+import { applyTextPins, rowOutcome, LOSER_DIM } from './mount-utils.js';
 import { createRevealGate, clearAnimClassOnEnd } from './reveal-gate.js';
 
 const SETTINGS_TYPE = 'matchup';
 const ELEMENT = 'matchup';
 const DEFAULT_PACKAGE = 'default';
 const MAX_CARDS = 5;
-const LOSER_DIM = '0.45';
+/* `rowOutcome` / `LOSER_DIM` moved to mount-utils.js when the Results
+ * Ticker's cards needed the same rule — see the note there. Re-exported so
+ * a theme author reading this mount still finds the vocabulary its five
+ * history cards are bound with. */
+export { rowOutcome, LOSER_DIM };
 
 // Minimal inline fallback if a theme SVG can't be fetched (offline / typo).
 const FALLBACK_SVG = `
@@ -156,12 +169,6 @@ export function mountMatchup({ host }) {
 
     engine.setText(`${p}-side1-score`, game.side1Score ?? '');
     engine.setText(`${p}-side2-score`, game.side2Score ?? '');
-    // Dim the loser's score (attribute set AFTER setText, which clears opacity).
-    const winner = game.winnerSide;
-    const s1 = engine.slots[`${p}-side1-score`];
-    const s2 = engine.slots[`${p}-side2-score`];
-    if (s1) s1.setAttribute('opacity', winner === 2 ? LOSER_DIM : '1');
-    if (s2) s2.setAttribute('opacity', winner === 1 ? LOSER_DIM : '1');
 
     setImageFallback(`${p}-side1-logo`, [teamLogoUrl(game.side1Team), charIconUrl(game.side1Captain)]);
     setImageFallback(`${p}-side2-logo`, [teamLogoUrl(game.side2Team), charIconUrl(game.side2Captain)]);
@@ -175,16 +182,25 @@ export function mountMatchup({ host }) {
     const sideTeam = (s) => (s === 1 ? game.side1Team : game.side2Team);
     const sideCaptain = (s) => (s === 1 ? game.side1Captain : game.side2Captain);
     const awaySide = game.awaySide === 2 ? 2 : 1;
-    for (const [role, side] of [['away', awaySide], ['home', awaySide === 1 ? 2 : 1]]) {
+    const roles = [['away', awaySide], ['home', awaySide === 1 ? 2 : 1]];
+    for (const [role, side] of roles) {
       engine.setText(`${p}-${role}-name`, sideName(side), { optional: true });
       engine.setText(`${p}-${role}-score`, sideScore(side), { optional: true });
-      // Dim the loser's whole row identity (name + score) so the winner reads.
-      const dim = winner && winner !== side ? LOSER_DIM : '1';
-      const sc = engine.slots[`${p}-${role}-score`];
-      if (sc) sc.setAttribute('opacity', dim);
-      const nm = engine.slots[`${p}-${role}-name`];
-      if (nm) nm.setAttribute('opacity', dim);
       setImageFallback(`${p}-${role}-logo`, [teamLogoUrl(sideTeam(side)), charIconUrl(sideCaptain(side))]);
+    }
+
+    // The outcome LAST, in both orientations: setText clears (or sets) opacity,
+    // so a dim written before the value it dims is thrown away.
+    for (const [role, side] of [['side1', 1], ['side2', 2], ...roles]) {
+      const row = engine.slots[`${p}-${role}-row`];
+      const o = rowOutcome(game.winnerSide, side, { hasRow: !!row });
+      if (row) row.setAttribute('opacity', o.row);
+      for (const part of ['name', 'score']) {
+        const el = engine.slots[`${p}-${role}-${part}`];
+        if (el) el.setAttribute('opacity', o[part]);
+      }
+      const win = engine.slots[`${p}-${role}-win`];
+      if (win) win.setAttribute('opacity', o.win);
     }
 
     engine.setText(`${p}-mode`, game.gameMode || '', { optional: true });
@@ -291,12 +307,23 @@ export function mountMatchup({ host }) {
     if (bandFull) bandFull.setAttribute('opacity', hasHistory ? '1' : '0');
     if (bandCompact) bandCompact.setAttribute('opacity', hasHistory ? '0' : '1');
 
-    engine.refitText();
-    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { if (!disposed) engine.refitText(); });
+    // Fit, THEN pin: the auto-fit changes the very name width the portraits are
+    // measured against, so pinning first pins to a size about to change.
+    fitAndPin();
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { if (!disposed) fitAndPin(); });
 
     // Reveal only when the fetched identity changes, not on unrelated re-renders.
     const key = `${theme}|${matchId}|${name1}|${name2}|${mu.fetchedAt || ''}`;
     if (key !== revealKey) { revealKey = key; gate.requestReveal(); }
+  }
+
+  // The summary's captain portraits sit against the MEASURED edge of each name
+  // (data-pin-before / data-pin-after in the theme) — see pinBesideText in
+  // mount-utils.js for why no authored x is right in both states. Anything that
+  // re-fits has to re-pin, which is why the two travel together.
+  function fitAndPin() {
+    engine.refitText();
+    applyTextPins(engine);
   }
 
   function setShown(shown) { gate.setShown(shown); }
@@ -304,12 +331,12 @@ export function mountMatchup({ host }) {
   function dispose() {
     disposed = true;
     gate.dispose();
-    window.removeEventListener('resize', engine.refitText);
+    window.removeEventListener('resize', fitAndPin);
     host.classList.remove('mu-host', 'mu-reveal');
     host.innerHTML = '';
   }
 
-  window.addEventListener('resize', engine.refitText);
+  window.addEventListener('resize', fitAndPin);
 
   return { update, setShown, dispose };
 }

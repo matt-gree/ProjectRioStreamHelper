@@ -12,16 +12,23 @@ dropped, a fixed root size added, and a var() painted as a presentation
 attribute. Compiling it must recover the full slot inventory of the original.
 """
 import io
+import re
 import zipfile
 from pathlib import Path
 
 import pytest
 
 from server.theme_compiler import compile_svg, parse_grammar_id
+from server.theme_contracts import CONTRACTS
 
 REPO = Path(__file__).resolve().parents[2]
 DEFAULT_MATCHUP = (REPO / "public" / "design" / "default" / "matchup.svg").read_text()
 FIGMA_EXPORT = (REPO / "tests" / "data" / "design" / "matchup_figma_export.svg").read_text()
+
+
+def _grammar_slots(svg_text: str) -> set[str]:
+    """The slot names a designer export names, in layer-name grammar."""
+    return {m.split("_")[0] for m in re.findall(r'id="slot=([^"]+)"', svg_text)}
 
 
 def _slots(svg_text: str) -> set[str]:
@@ -276,10 +283,20 @@ def test_figma_export_round_trip_recovers_the_theme():
     out, report = compile_svg(FIGMA_EXPORT, "matchup", filename="matchup.svg")
     assert report.changed
     assert not any(f.level == "error" for f in report.findings)
-    # every slot the hand-authored original declared is recovered
-    assert _slots(out) >= _slots(DEFAULT_MATCHUP)
-    # auto-fit hints survived the id round-trip
-    assert out.count("data-maxw=") == DEFAULT_MATCHUP.count("data-maxw=")
+    # Every slot the EXPORT declares comes back as a data-slot marker, measured
+    # against the export's OWN inventory rather than against whatever `default`
+    # declares today. This fixture is a frozen sample of a design tool's output
+    # (grammar ids, a baked scale factor on the mark, no <style>, no data-*), so
+    # coupling it to the shipped theme turns every theme edit into a failure of
+    # a test about the COMPILER -- which is what the matchup's winner markers
+    # did. Generate-then-compile parity for the shipped themes is
+    # test_figma_template.py's job, and it compares per name.
+    assert _slots(out) == _grammar_slots(FIGMA_EXPORT)
+    # ...and nothing came back that the contract does not name.
+    assert _slots(out) <= set(CONTRACTS["matchup"].slots)
+    # auto-fit hints survived the id round-trip (the export's own count, same
+    # reason as above)
+    assert out.count("data-maxw=") == FIGMA_EXPORT.count("maxw=")
     # export quirks normalized
     assert 'width="1920"' not in out.split(">", 1)[0]
     assert 'preserveAspectRatio="xMidYMax meet"' in out

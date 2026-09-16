@@ -5,7 +5,7 @@
 // (postgame-callout-mount.js): the producer pushes a captured game onto the
 // shared Callout Stage; this mount renders BOTH sides at once — captain hero
 // art left/right with the team logo dimmed large behind, the match context
-// (tournament · event · round · format) top-center, and the side-vs-side game
+// (tournament · event · round · game mode) top-center, and the side-vs-side game
 // totals (runs / hits / homeruns / stars won / strikeouts pitched) unfolding
 // out of the center line.
 //
@@ -14,9 +14,9 @@
 //   m.replay();   // re-run the reveal (e.g. OBS source made active)
 //   m.dispose();
 //
-// Data: postgame.{N}.player.{T}.totals + .teamName (server capture),
-// score.{N}.phase/best_of/player.{T}.series_wins (match projection) and
-// tournamentInfo.* for the top strip.
+// Data: postgame.{N}.player.{T}.totals + .teamName + .meta.gameMode (server
+// capture), score.{N}.phase (match projection) and tournamentInfo.* for the
+// top strip.
 //
 // THEME CONTRACT (extends callout.svg): the backdrop SVG still comes from the
 // active design package (/design/{pkg}/callout.svg) and recolors through
@@ -50,6 +50,21 @@ function charArtUrl(name) {
 // rio-data.js loads before this module (see callout-stage.html); the
 // window.RioData guard just matches the other mounts' defensive style.
 function teamLogoUrl(teamName) { return teamName && window.RioData ? RioData.teamLogoUrl(teamName) : ''; }
+
+// The mode the CAPTURED game was played under. The capture freezes it
+// (postgame.{N}.meta.gameMode, its TagSetID resolved at capture time), so a
+// summary shown after the board has moved on still names this game's mode.
+// A producer's pick on the board outranks it — the same rule RioData.gameMode
+// states — and the board's own mode is the fallback for a capture that predates
+// the field or whose id the mode cache could not resolve.
+function summaryGameMode(state, sb) {
+  const g = OverlayBase.deepGet;
+  const tag = g(OverlayBase.settings, `scoreboards.binding.${sb}.stats_tag`, '');
+  if (tag && g(OverlayBase.settings, `scoreboards.binding.${sb}.stats_tag_manual`, false)) return tag;
+  return g(state, `postgame.${sb}.meta.gameMode`, '')
+    || (window.RioData ? RioData.gameMode(state, sb) : '')
+    || '';
+}
 
 // ── styles (scoped under .pv-root) ──────────────────────────────────────────
 // Slice26 "maximal" vocabulary rendered in HTML: one big translucent data well
@@ -228,7 +243,12 @@ const CSS = `
 .pv-match .tourney { font-size: 19px; font-weight: 700; letter-spacing: 3.5px; text-transform: uppercase; color: var(--ink-3); }
 .pv-match .round { margin-top: 6px; font-size: 40px; font-weight: 900; line-height: 1.05; letter-spacing: -0.3px; color: var(--ink); }
 .pv-match .series { margin-top: 12px; display: flex; align-items: center; justify-content: center; }
-.pv-match .bo {
+/* A mode name is a free-form string ("Mario Baseball (Base Game + QoL)"), so
+   the pill truncates inside the card's ceiling rather than widening it into
+   the identity plates. min-width: 0 is what lets a flex item shrink at all. */
+.pv-match .mode {
+  min-width: 0; max-width: 100%; box-sizing: border-box;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   padding: 4px 14px; border-radius: 7px; background: var(--slab);
   border: 1px solid var(--edge-soft); color: var(--ink-2);
   font-size: 16px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase;
@@ -531,7 +551,12 @@ export function mountPostgameVs({ host }) {
   }
 
   // Single-game card: no series record here — just tournament/round context
-  // and the format pill.
+  // and the game-mode pill.
+  //
+  // THE PILL NAMES THE MODE, NOT THE FORMAT. It said "Best of N", which on the
+  // Bo1 default match every unbound board gets is a pill announcing nothing —
+  // and the series is the match's story, not this one game's. The mode is a
+  // fact about THIS game. No mode known → no pill, never a bare placeholder.
   //
   // THE CARD ALWAYS RENDERS, and "Game Summary" is the deliberate headline when
   // there is no round to name. A game played outside a start.gg event still
@@ -546,7 +571,7 @@ export function mountPostgameVs({ host }) {
         <div class="card">
           ${bits.length ? `<div class="tourney">${escapeHtml(bits.join(' · '))}</div>` : ''}
           <div class="round">${escapeHtml(ctx.round || 'Game Summary')}</div>
-          ${ctx.bestOf ? `<div class="series"><span class="bo">Best of ${escapeHtml(String(ctx.bestOf))}</span></div>` : ''}
+          ${ctx.gameMode ? `<div class="series"><span class="mode">${escapeHtml(ctx.gameMode)}</span></div>` : ''}
         </div>
       </div>`;
   }
@@ -814,7 +839,7 @@ export function mountPostgameVs({ host }) {
       linescore: g(state, `postgame.${sb}.linescore`, null),
       winnerSide: g(state, `postgame.${sb}.meta.winnerSide`, 0),
       round: g(state, `score.${sb}.phase`, ''),
-      bestOf: g(state, `score.${sb}.best_of`, null),
+      gameMode: summaryGameMode(state, sb),
       tournament: g(state, 'tournamentInfo.name', ''),
       eventName: g(state, 'tournamentInfo.event_name', ''),
       port1: Number.isInteger(g(state, `score.${sb}.player.1.port`, null)) ? g(state, `score.${sb}.player.1.port`, null) : null,

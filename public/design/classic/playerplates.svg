@@ -1,0 +1,240 @@
+<svg viewBox="0 0 1920 240" preserveAspectRatio="xMidYMax meet" xmlns="http://www.w3.org/2000/svg" data-design-vars="app">
+  <!--
+    CLASSIC package - Player Plates: the default package's two-player band
+    geometry, painted with the user's Design-tab CSS variables instead of the Rio
+    brand palette. data-design-vars="app" opts in, so the mount runs
+    applyDesignSettings and accent / card background / text / border / shadow all
+    follow the app's design knobs like the pre-2.0 overlays did.
+
+    A SIBLING OF classic/commentary.svg by contract and by design: the same plate
+    sized to its name, the same drawer behind it, the same badge at the drawer's
+    right end - and literally the same numbers, because this plate IS the first
+    plate of that file's two-caster row (200, 550 wide). A producer running a
+    caster strip and a player band in one scene is looking at one object at two
+    widths, and until this file existed the second of those two was the DEFAULT
+    package's Rio-branded plate - a missing element falls back element-by-element,
+    not package-by-package.
+
+    == NO RAIL, AND THE NAME TOOK THE SPACE BACK ============================
+    Both packages hung a vertical accent bar inside the plate's left edge and
+    started the name 44 units in behind it. The bar is the DEFAULT package's
+    signature, and on a card whose entire content is one name it is the only
+    thing between that name and the edge it should be measured from: with it
+    gone the name starts on the plate's own 24-unit padding and gets 502 units
+    of fit bound instead of 482.
+
+    The accent did not need replacing, and no longer appears in this element at
+    all - see THE DRAWER WEARS A MARK below.
+
+    == THE BOX IS THE ELEMENT, NOT THE CANVAS ================================
+    1920 x 240: full stream width, because the anchors are measured against the
+    stream frame, and only as tall as the card plus the room its shadow needs, so
+    how high up the scene the band sits is the producer's decision in OBS rather
+    than a number baked into a theme. The mount bottom-anchors whatever box the
+    theme declares and crops the overflow, which is why classic/commentary.svg
+    can still be authored on the retired full 1920x1080 canvas and land right.
+
+    Two identical single-player plates, side1 and side2, BOTH authored at the
+    LEFT anchor - they overlap at rest, and the mount translates each to its
+    resolved anchor and reveals it. The layout block at the foot of this file
+    gives each anchor's X OFFSET from that authored position: left is the first
+    plate of Commentary's two-caster row, right is the same plate mirrored about
+    the frame's centre, and center canvas-centres a lone plate ((1920-550)/2).
+
+    == THE DRAWER WEARS A MARK, NOT A FIELD NAME =============================
+    It used to print the address-book field's name - TWITTER, PRONOUNS, MAIN - in
+    accent caps in front of the value, and that label cost 84 units of an already
+    short drawer to restate what the value had already said. "he/him" is a
+    pronoun and "Mario" is a main; the one value that genuinely cannot say what
+    it is, is a bare handle, because "@mattgree" does not name a service.
+
+    So the drawer carries a 32px mark at its right end for exactly that case
+    (bound by the mount from the slot's address-book field - SUB_GLYPHS in
+    sub-glyph.js) and the value starts on the plate's own 24-unit padding like
+    the name above it, with 502 units of fit bound instead of 418. A package that
+    draws the badge at all has to draw EVERY mark the mount can ask for, since a
+    field whose symbol is missing shows nothing and nothing is what a field that
+    wears no mark looks like - so all three are declared below. The reasoning for
+    each is written once, in classic/commentary.svg.
+
+    NO ATMOSPHERE FIELD. The drifting mark field is the default package's, and it
+    is fixed artwork: it would not repaint with the producer's palette, so a
+    themeable plate carrying one would be a card whose surface followed the
+    Design tab and whose texture did not.
+
+    SLOT CONTRACT (public/design/README.md), for n in 1,2: a side{n} position
+    group holding the parts main-rect (required), sub-rect and sub-icon, and the
+    slots side{n}-name, side{n}-sub (the show/hide target, authored hidden) and
+    side{n}-sub-value.
+
+    COLOUR: CSS variables resolve in SVG ONLY through inline style="", never via
+    presentation attributes.
+  -->
+  <style>
+    .cpp-name  { fill: var(--text-primary, #ffffff); font-family: var(--font-body, 'Inter', system-ui, sans-serif); text-shadow: var(--text-shadow, none); }
+    .cpp-value { fill: var(--text-primary, #ffffff); font-family: var(--font-body, 'Inter', system-ui, sans-serif); text-shadow: var(--text-shadow, none); }
+  </style>
+
+  <g data-slot="side1" opacity="0">
+    <!-- The drawer is drawn BEFORE the plate so it tucks out from behind it. -->
+    <g data-slot="side1-sub" style="opacity:0">
+      <rect data-part="sub-rect" x="200" y="94" width="550" height="100" rx="16"
+            style="fill:var(--card-bg, rgba(20,20,30,0.92));stroke:var(--border-color, rgba(255,255,255,0.08));stroke-width:var(--border-width, 1px);filter:var(--card-shadow-filter, none)"/>
+      <use data-part="sub-icon" href="#rio-mark" x="694" y="142" width="32" height="32" opacity="0"/>
+      <text data-slot="side1-sub-value" data-maxw="502" x="224" y="168" class="cpp-value" font-size="28" font-weight="600"></text>
+    </g>
+    <rect data-part="main-rect" x="200" y="26" width="550" height="96" rx="16"
+          style="fill:var(--card-bg, rgba(20,20,30,0.92));stroke:var(--border-color, rgba(255,255,255,0.08));stroke-width:var(--border-width, 1px);filter:var(--card-shadow-filter, none)"/>
+    <text data-slot="side1-name" data-maxw="502" x="224" y="90" class="cpp-name" font-size="46" font-weight="800" letter-spacing="0.5"></text>
+  </g>
+
+  <g data-slot="side2" opacity="0">
+    <g data-slot="side2-sub" style="opacity:0">
+      <rect data-part="sub-rect" x="200" y="94" width="550" height="100" rx="16"
+            style="fill:var(--card-bg, rgba(20,20,30,0.92));stroke:var(--border-color, rgba(255,255,255,0.08));stroke-width:var(--border-width, 1px);filter:var(--card-shadow-filter, none)"/>
+      <use data-part="sub-icon" href="#rio-mark" x="694" y="142" width="32" height="32" opacity="0"/>
+      <text data-slot="side2-sub-value" data-maxw="502" x="224" y="168" class="cpp-value" font-size="28" font-weight="600"></text>
+    </g>
+    <rect data-part="main-rect" x="200" y="26" width="550" height="96" rx="16"
+          style="fill:var(--card-bg, rgba(20,20,30,0.92));stroke:var(--border-color, rgba(255,255,255,0.08));stroke-width:var(--border-width, 1px);filter:var(--card-shadow-filter, none)"/>
+    <text data-slot="side2-name" data-maxw="502" x="224" y="90" class="cpp-name" font-size="46" font-weight="800" letter-spacing="0.5"></text>
+  </g>
+
+  <defs>
+    <!-- .. THE PROJECT RIO MARK ..................................... -->
+    <!-- Verbatim pixel data from public/game_assets/ProjectRio.svg, inlined so
+         the package stays self-contained - the same call classic/commentary.svg,
+         classic/matchup.svg and classic/scorecard.svg already make. It keeps its
+         own colours: it is the house logo, and a token skin repaints the surfaces
+         a producer owns, not the identity of the thing the app is for. -->
+    <symbol id="rio-mark" viewBox="0 0 16 16" shape-rendering="crispEdges">
+        <rect x="5" y="0" width="6" height="1" fill="#000000"/>
+        <rect x="3" y="1" width="2" height="1" fill="#000000"/>
+        <rect x="5" y="1" width="1" height="1" fill="#ff0000"/>
+        <rect x="6" y="1" width="1" height="1" fill="#ffffff"/>
+        <rect x="7" y="1" width="1" height="1" fill="#ff0000"/>
+        <rect x="8" y="1" width="2" height="1" fill="#ffffff"/>
+        <rect x="10" y="1" width="1" height="1" fill="#ff0000"/>
+        <rect x="11" y="1" width="2" height="1" fill="#000000"/>
+        <rect x="2" y="2" width="1" height="1" fill="#000000"/>
+        <rect x="3" y="2" width="2" height="1" fill="#ff0000"/>
+        <rect x="5" y="2" width="2" height="1" fill="#ffffff"/>
+        <rect x="7" y="2" width="1" height="1" fill="#ff0000"/>
+        <rect x="8" y="2" width="3" height="1" fill="#ffffff"/>
+        <rect x="11" y="2" width="2" height="1" fill="#ff0000"/>
+        <rect x="13" y="2" width="1" height="1" fill="#000000"/>
+        <rect x="1" y="3" width="1" height="1" fill="#000000"/>
+        <rect x="2" y="3" width="2" height="1" fill="#ff0000"/>
+        <rect x="4" y="3" width="4" height="1" fill="#ffffff"/>
+        <rect x="8" y="3" width="1" height="1" fill="#ff0000"/>
+        <rect x="9" y="3" width="3" height="1" fill="#ffffff"/>
+        <rect x="12" y="3" width="2" height="1" fill="#ff0000"/>
+        <rect x="14" y="3" width="1" height="1" fill="#000000"/>
+        <rect x="1" y="4" width="1" height="1" fill="#000000"/>
+        <rect x="2" y="4" width="4" height="1" fill="#ff0000"/>
+        <rect x="6" y="4" width="3" height="1" fill="#ffffff"/>
+        <rect x="9" y="4" width="1" height="1" fill="#ff0000"/>
+        <rect x="10" y="4" width="2" height="1" fill="#ffffff"/>
+        <rect x="12" y="4" width="2" height="1" fill="#ff0000"/>
+        <rect x="14" y="4" width="1" height="1" fill="#000000"/>
+        <rect x="0" y="5" width="1" height="1" fill="#000000"/>
+        <rect x="1" y="5" width="1" height="1" fill="#ffffff"/>
+        <rect x="2" y="5" width="2" height="1" fill="#ff0000"/>
+        <rect x="4" y="5" width="2" height="1" fill="#ffffff"/>
+        <rect x="6" y="5" width="1" height="1" fill="#ff0000"/>
+        <rect x="7" y="5" width="3" height="1" fill="#ffffff"/>
+        <rect x="10" y="5" width="4" height="1" fill="#ff0000"/>
+        <rect x="14" y="5" width="1" height="1" fill="#ffffff"/>
+        <rect x="15" y="5" width="1" height="1" fill="#000000"/>
+        <rect x="0" y="6" width="1" height="1" fill="#000000"/>
+        <rect x="1" y="6" width="2" height="1" fill="#ffffff"/>
+        <rect x="3" y="6" width="1" height="1" fill="#ff0000"/>
+        <rect x="4" y="6" width="3" height="1" fill="#ffffff"/>
+        <rect x="7" y="6" width="1" height="1" fill="#ff0000"/>
+        <rect x="8" y="6" width="4" height="1" fill="#ffffff"/>
+        <rect x="12" y="6" width="1" height="1" fill="#ff0000"/>
+        <rect x="13" y="6" width="2" height="1" fill="#ffffff"/>
+        <rect x="15" y="6" width="1" height="1" fill="#000000"/>
+        <rect x="0" y="7" width="1" height="1" fill="#000000"/>
+        <rect x="1" y="7" width="2" height="1" fill="#ffffff"/>
+        <rect x="3" y="7" width="2" height="1" fill="#ff0000"/>
+        <rect x="5" y="7" width="3" height="1" fill="#ffffff"/>
+        <rect x="8" y="7" width="1" height="1" fill="#ff0000"/>
+        <rect x="9" y="7" width="2" height="1" fill="#ffffff"/>
+        <rect x="11" y="7" width="2" height="1" fill="#ff0000"/>
+        <rect x="13" y="7" width="2" height="1" fill="#ffffff"/>
+        <rect x="15" y="7" width="1" height="1" fill="#000000"/>
+        <rect x="0" y="8" width="1" height="1" fill="#000000"/>
+        <rect x="1" y="8" width="2" height="1" fill="#ffffff"/>
+        <rect x="3" y="8" width="3" height="1" fill="#ff0000"/>
+        <rect x="6" y="8" width="2" height="1" fill="#ffffff"/>
+        <rect x="8" y="8" width="1" height="1" fill="#ff0000"/>
+        <rect x="9" y="8" width="1" height="1" fill="#ffffff"/>
+        <rect x="10" y="8" width="3" height="1" fill="#ff0000"/>
+        <rect x="13" y="8" width="2" height="1" fill="#ffffff"/>
+        <rect x="15" y="8" width="1" height="1" fill="#000000"/>
+        <rect x="0" y="9" width="1" height="1" fill="#000000"/>
+        <rect x="1" y="9" width="1" height="1" fill="#ffffff"/>
+        <rect x="2" y="9" width="4" height="1" fill="#ff0000"/>
+        <rect x="6" y="9" width="4" height="1" fill="#000000"/>
+        <rect x="10" y="9" width="4" height="1" fill="#ff0000"/>
+        <rect x="14" y="9" width="1" height="1" fill="#ffffff"/>
+        <rect x="15" y="9" width="1" height="1" fill="#000000"/>
+        <rect x="0" y="10" width="1" height="1" fill="#000000"/>
+        <rect x="1" y="10" width="3" height="1" fill="#ff0000"/>
+        <rect x="4" y="10" width="2" height="1" fill="#000000"/>
+        <rect x="6" y="10" width="4" height="1" fill="#ffffff"/>
+        <rect x="10" y="10" width="2" height="1" fill="#000000"/>
+        <rect x="12" y="10" width="3" height="1" fill="#ff0000"/>
+        <rect x="15" y="10" width="1" height="1" fill="#000000"/>
+        <rect x="1" y="11" width="1" height="1" fill="#000000"/>
+        <rect x="2" y="11" width="1" height="1" fill="#ff0000"/>
+        <rect x="3" y="11" width="1" height="1" fill="#000000"/>
+        <rect x="4" y="11" width="2" height="1" fill="#ffffff"/>
+        <rect x="6" y="11" width="1" height="1" fill="#000000"/>
+        <rect x="7" y="11" width="2" height="1" fill="#ffffff"/>
+        <rect x="9" y="11" width="1" height="1" fill="#000000"/>
+        <rect x="10" y="11" width="2" height="1" fill="#ffffff"/>
+        <rect x="12" y="11" width="1" height="1" fill="#000000"/>
+        <rect x="13" y="11" width="1" height="1" fill="#ff0000"/>
+        <rect x="14" y="11" width="1" height="1" fill="#000000"/>
+        <rect x="2" y="12" width="2" height="1" fill="#000000"/>
+        <rect x="4" y="12" width="2" height="1" fill="#ffffff"/>
+        <rect x="6" y="12" width="1" height="1" fill="#000000"/>
+        <rect x="7" y="12" width="2" height="1" fill="#ffffff"/>
+        <rect x="9" y="12" width="1" height="1" fill="#000000"/>
+        <rect x="10" y="12" width="2" height="1" fill="#ffffff"/>
+        <rect x="12" y="12" width="2" height="1" fill="#000000"/>
+        <rect x="3" y="13" width="1" height="1" fill="#000000"/>
+        <rect x="4" y="13" width="2" height="1" fill="#ffffff"/>
+        <rect x="6" y="13" width="1" height="1" fill="#000000"/>
+        <rect x="7" y="13" width="2" height="1" fill="#ffffff"/>
+        <rect x="9" y="13" width="1" height="1" fill="#000000"/>
+        <rect x="10" y="13" width="2" height="1" fill="#ffffff"/>
+        <rect x="12" y="13" width="1" height="1" fill="#000000"/>
+        <rect x="4" y="14" width="1" height="1" fill="#000000"/>
+        <rect x="5" y="14" width="6" height="1" fill="#ffffff"/>
+        <rect x="11" y="14" width="1" height="1" fill="#000000"/>
+        <rect x="5" y="15" width="6" height="1" fill="#000000"/>
+    </symbol>
+
+    <!-- .. PLATFORM MARKS ........................................... -->
+    <!-- What a bare handle can't say for itself. Drawn in the palette's text
+         colour, so they sit at the value's own weight rather than advertising.
+         The ids are contract - playerplates-mount.js maps an address-book subField
+         onto them (SUB_GLYPHS in public/layout/lib/sub-glyph.js) - and all three
+         are here together on purpose: a missing symbol shows no badge, which is
+         indistinguishable from a field that wears none. -->
+    <symbol id="sub-glyph-x" viewBox="0 0 24 24">
+      <path style="fill:var(--text-primary, #ffffff)" d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+    </symbol>
+    <symbol id="sub-glyph-youtube" viewBox="0 0 24 24">
+      <path style="fill:var(--text-primary, #ffffff)" d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+    </symbol>
+  </defs>
+
+  <!-- Per-anchor X offset from the authored (left) plate position. -->
+  <script type="application/json" data-layouts="1">
+  { "anchors": { "left": 0, "center": 485, "right": 970 } }
+  </script>
+</svg>

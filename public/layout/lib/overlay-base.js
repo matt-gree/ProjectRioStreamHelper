@@ -618,7 +618,22 @@
   };
   const LAYOUT_VAR_MAP = {
     scoreboard: { ...CARD_OVERRIDE_VARS, textColor: { prop: '--text-primary' } },
-    stats: STATS_VARS,
+    // KEYED BY THE LAYOUT TYPE THE MOUNT PASSES, which for the stat pair is
+    // `statsbar` / `statscard` — never the `stats` this was keyed on until
+    // 2026-09-12. That id was renamed across five layers on 2026-08-23 (element
+    // id, overlays.* namespace, layout file, layouts-API type, theme element)
+    // and this was the sixth, so the lookup simply stopped matching: under an
+    // app-vars theme the Stat Value Color and Subtext Color controls, and the
+    // four per-element card overrides beside them, wrote settings nothing read.
+    // It failed the way a missing var always does — the card rendered, in the
+    // theme's own authored fallback, so the only symptom was a colour picker
+    // that did nothing.
+    //
+    // BOTH halves of the pair, and that is the point of the shared object: they
+    // are one element at two aspects sharing one mount, so a var reaching the
+    // bar and not the card is the same disagreement the theme files are held to.
+    statsbar: STATS_VARS,
+    statscard: STATS_VARS,
     bracket: {
       connectorColor: { prop: '--connector-color', dedicated: true },
       activeColor:    { prop: '--active-color',    dedicated: true },
@@ -1102,6 +1117,14 @@
     brandingLogoUrl,
     onObsShown,
     readSetting,
+    // EXPOSED BECAUSE EVERY MOUNT NEEDS IT, and until 2026-09-12 none could
+    // have it: this was module-private, so every producer SWITCH in every mount
+    // resolved itself with a bare `!== false`. That is the exact rule the
+    // comment on settingOn says is wrong — it reads the STRING "false" as on,
+    // and a string is what `PUT /api/v1/settings` stores and what a hand-edited
+    // settings.json holds. The switch then sat in the console reading OFF while
+    // the overlay drew the row.
+    settingOn,
     setBlank,
     setNote,
     PREVIEW_MODE,

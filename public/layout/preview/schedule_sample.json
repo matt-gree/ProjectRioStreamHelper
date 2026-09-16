@@ -2,20 +2,46 @@
   "state": {
     "schedule.title": "Upcoming Matches",
     "schedule.queue": [
+      1,
       2,
       3,
       4,
-      5
+      5,
+      6,
+      7
     ],
-    "match.2": {
-      "label": "Winners Final",
-      "stage": "live",
+    "match.1": {
+      "label": "Winners Semi",
+      "stage": "post",
+      "decided": 1,
       "format": {
         "bestOf": 5
       },
       "series": {
-        "1": 0,
-        "2": 0
+        "1": 3,
+        "2": 1
+      },
+      "gameMode": "Stars Off",
+      "scheduledAt": "",
+      "player": {
+        "1": {
+          "rioName": "MattGree"
+        },
+        "2": {
+          "rioName": "remkey"
+        }
+      }
+    },
+    "match.2": {
+      "label": "Winners Final",
+      "stage": "live",
+      "decided": null,
+      "format": {
+        "bestOf": 5
+      },
+      "series": {
+        "1": 2,
+        "2": 1
       },
       "gameMode": "Stars Off",
       "scheduledAt": "",
@@ -31,6 +57,7 @@
     "match.3": {
       "label": "Losers Quarter",
       "stage": "draft",
+      "decided": null,
       "format": {
         "bestOf": 5
       },
@@ -39,7 +66,7 @@
         "2": 0
       },
       "gameMode": "Stars Off",
-      "scheduledAt": "7:15 PM",
+      "scheduledAt": "",
       "player": {
         "1": {
           "rioName": "Baltor33"
@@ -52,6 +79,7 @@
     "match.4": {
       "label": "Losers Semi",
       "stage": "draft",
+      "decided": null,
       "format": {
         "bestOf": 5
       },
@@ -66,13 +94,14 @@
           "rioName": "remkey"
         },
         "2": {
-          "rioName": "TBD"
+          "rioName": "Baltor33"
         }
       }
     },
     "match.5": {
-      "label": "Grand Final",
+      "label": "Losers Final",
       "stage": "draft",
+      "decided": null,
       "format": {
         "bestOf": 5
       },
@@ -81,7 +110,51 @@
         "2": 0
       },
       "gameMode": "Stars Off",
-      "scheduledAt": "8:30 PM",
+      "scheduledAt": "8:15 PM",
+      "player": {
+        "1": {
+          "rioName": "Joan"
+        },
+        "2": {
+          "rioName": "TBD"
+        }
+      }
+    },
+    "match.6": {
+      "label": "Grand Final",
+      "stage": "draft",
+      "decided": null,
+      "format": {
+        "bestOf": 7
+      },
+      "series": {
+        "1": 0,
+        "2": 0
+      },
+      "gameMode": "Stars Off",
+      "scheduledAt": "8:45 PM",
+      "player": {
+        "1": {
+          "rioName": "TBD"
+        },
+        "2": {
+          "rioName": "TBD"
+        }
+      }
+    },
+    "match.7": {
+      "label": "Grand Final Reset",
+      "stage": "draft",
+      "decided": null,
+      "format": {
+        "bestOf": 7
+      },
+      "series": {
+        "1": 0,
+        "2": 0
+      },
+      "gameMode": "Stars Off",
+      "scheduledAt": "",
       "player": {
         "1": {
           "rioName": "TBD"

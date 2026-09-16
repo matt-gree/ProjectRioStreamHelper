@@ -64,7 +64,7 @@ const CSS = `
  * character or a runner, never a logo.
  */
 export function resolvePortraitStyle(v) {
-  return v === true ? 'pixel' : 'smooth';
+  return OverlayBase.settingOn(v, false) ? 'pixel' : 'smooth';
 }
 
 let _cssInjected = false;
@@ -106,9 +106,11 @@ export function renderRoster(container, { state, settings, sb, team }) {
   const { deepGet } = OverlayBase;
   container.innerHTML = '';
 
-  const showSuperstars = deepGet(settings, 'overlays.roster.showSuperstars', true) !== false;
-  const showRole = deepGet(settings, 'overlays.roster.showRoleIcon', true) !== false;
-  const showTeamLogo = deepGet(settings, 'overlays.roster.showTeamLogo', true) !== false;
+  // settingOn, not `!== false` — see the note in scoreboard-mount's readToggles.
+  const on = OverlayBase.settingOn;
+  const showSuperstars = on(deepGet(settings, 'overlays.roster.showSuperstars', true), true);
+  const showRole = on(deepGet(settings, 'overlays.roster.showRoleIcon', true), true);
+  const showTeamLogo = on(deepGet(settings, 'overlays.roster.showTeamLogo', true), true);
   container.dataset.portraits = resolvePortraitStyle(deepGet(settings, 'overlays.roster.pixelPortraits'));
 
   const slots = RioData.getRosterSlots(state, sb, team, {

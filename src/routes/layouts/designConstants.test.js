@@ -260,6 +260,51 @@ describe('settingOn — the Design tab and the overlays agree what a stored bool
     });
 });
 
+/*
+ * ONE RULE FOR A STORED SWITCH, IN EVERY RUNTIME THAT READS ONE.
+ *
+ * `settingOn` exists because three rules were in use for the same shape: it
+ * reads a boolean, the strings "true"/"false", and falls back for anything
+ * else. What it could not do until 2026-09-12 is reach the MOUNTS — it was
+ * private to overlay-base, so every producer switch in every mount resolved
+ * itself with a bare `!== false`, which reads the string "false" as ON.
+ *
+ * That string is not hypothetical: `PUT /api/v1/settings` stores its value as
+ * one, and settings.json is hand-editable. The console wrote a real boolean and
+ * read its switch OFF; anything that went through the API wrote a string and the
+ * overlay drew the row anyway — Rosters and Box Score on the Large board, the
+ * ticker's captains, the roster's Pixel switch, the Event Header's bands.
+ *
+ * A census rather than a spot check, because the failure is per-call-site and
+ * silent: a mount added tomorrow with one more `!== false` is the same bug back.
+ * STATE is exempt and stays a plain comparison — `game_completed === true` is a
+ * fact the server wrote, not a switch a producer set.
+ */
+describe('a producer switch is resolved by settingOn', () => {
+    const MOUNTS = readdirSync('public/layout/lib')
+        .filter((f) => f.endsWith('.js') && f !== 'overlay-base.js');
+    // A line that reads a SETTING — the per-layout helpers and any literal
+    // overlays.* path. State reads (`score.N.…`) match none of these.
+    const READS_A_SETTING = /readSetting\(|sbGet\(|scGet\(|overlays\./;
+    const RAW_BOOLEAN = /!==\s*false|===\s*true/;
+
+    it('exposes settingOn on the OverlayBase surface', () => {
+        const base = readFileSync('public/layout/lib/overlay-base.js', 'utf8');
+        const surface = base.slice(base.indexOf('window.OverlayBase = {'));
+        expect(surface).toContain('settingOn,');
+    });
+
+    it.each(MOUNTS)('%s compares no setting against a raw boolean', (file) => {
+        const lines = readFileSync(`public/layout/lib/${file}`, 'utf8').split('\n');
+        const offenders = lines
+            .map((line, i) => [i + 1, line])
+            .filter(([, line]) => !line.trim().startsWith('//') && !line.trim().startsWith('*'))
+            .filter(([, line]) => RAW_BOOLEAN.test(line) && READS_A_SETTING.test(line))
+            .map(([n, line]) => `${file}:${n} ${line.trim()}`);
+        expect(offenders, 'use OverlayBase.settingOn(value, fallback)').toEqual([]);
+    });
+});
+
 describe('overrideReaches', () => {
     const base = readFileSync('public/layout/lib/overlay-base.js', 'utf8');
     // The map body — `const LAYOUT_VAR_MAP = { … };` up to the closing brace at
@@ -350,16 +395,38 @@ describe('overrideReaches', () => {
     });
 
     /*
-     * `statsbar` draws a card and still gets none of those rows, because
-     * LAYOUT_VAR_MAP keys them under `stats` — the name the element had before
-     * the 2026-08-23 rename. This test states the CURRENT truth so the console
-     * and the runtime agree; if the map is ever renamed, this is what will fail
-     * and send you here to widen the list in the same change.
+     * THE MAP IS KEYED ON THE TYPE THE MOUNT PASSES, and for the stat pair that
+     * is `statsbar` / `statscard`. It was keyed on `stats` — the name before the
+     * 2026-08-23 rename — until 2026-09-12, which meant the lookup never matched
+     * and the element's own Stat Value Color / Subtext Color controls wrote
+     * settings nothing read. Both halves are listed because they are one element
+     * at two aspects sharing one mount; a var reaching the bar and not the card
+     * is the same disagreement the theme files are held to.
      */
-    it('records that the stats card’s surface pins do not reach it', () => {
-        expect(varMap).toContain('stats: STATS_VARS');
-        expect(varMap).not.toContain('statsbar:');
-        expect(overrideReaches('cardBg', 'statsbar')).toBe(false);
+    it('keys the stat vars on the type the mount actually passes', () => {
+        const mount = readFileSync('public/layout/lib/stats-card-mount.js', 'utf8');
+        expect(mount).toContain("settingsType || 'statsbar'");
+        expect(mount).toContain('OverlayBase.applyDesignSettings(SETTINGS_TYPE)');
+        for (const type of ['statsbar', 'statscard']) {
+            expect(varMap, `${type} missing from LAYOUT_VAR_MAP`).toContain(`${type}: STATS_VARS`);
+            expect(overrideReaches('cardBg', type)).toBe(true);
+            expect(overrideReaches('borderColor', type)).toBe(true);
+            expect(overrideReaches('borderWidth', type)).toBe(true);
+        }
+        // The dead key is gone, or the next rename hides behind a stale alias.
+        expect(varMap).not.toContain('stats: STATS_VARS');
+    });
+
+    /*
+     * `rx` cannot take a CSS variable in SVG, so a themed card's corner is a
+     * literal in the artwork. Offering the radius on an element drawn by a theme
+     * SVG would be offering a knob that moves nothing — the silent no-op this
+     * whole table exists to prevent.
+     */
+    it('does not offer the corner radius on a theme-drawn card', () => {
+        for (const type of ['statsbar', 'statscard']) {
+            expect(overrideReaches('borderRadius', type)).toBe(false);
+        }
     });
 
     /*

@@ -86,6 +86,14 @@ def _matchup_slots() -> dict[str, Slot]:
             s[f"game{i}-{role}-name"] = Slot("text")
             s[f"game{i}-{role}-score"] = Slot("text")
             s[f"game{i}-{role}-logo"] = Slot("image")
+        # WHO WON, drawn rather than inferred: `-win` is the winning side's own
+        # marker and `-row` the whole row (logo included) the loser's dim is
+        # applied to. Both orientations, all optional -- `rowOutcome` in
+        # matchup-mount.js is the rule, including why `-row` and the per-node
+        # dim are exclusive.
+        for role in ("side1", "side2", "away", "home"):
+            s[f"game{i}-{role}-row"] = Slot("any")
+            s[f"game{i}-{role}-win"] = Slot("any")
         s[f"game{i}-mode"] = Slot("text")
         s[f"game{i}-stadium"] = Slot("text")
         s[f"game{i}-date"] = Slot("text")
@@ -201,6 +209,11 @@ def _scoreboard_slots() -> dict[str, Slot]:
 
 
 _TICKER_PARTS = {
+    # Not inside card-template: the badge's optional atmosphere layer, which
+    # the default package runs behind RESULTS and clips with its own clipPath.
+    # The badge is the one STATIC region of a moving element -- a sprite inside
+    # the card template would be animated once per clone.
+    "field": Slot("group"),
     "away-name": Slot("text", required=True),
     "home-name": Slot("text", required=True),
     "away-cap": Slot("image"),
@@ -208,9 +221,38 @@ _TICKER_PARTS = {
     "score-away": Slot("text", required=True),
     "score-home": Slot("text", required=True),
     "score-group": Slot("group"),
+    # A side's whole cluster (icon, name and score), dimmed for the loser, and
+    # the winner's own marker. Both optional and both shared with the Matchup
+    # summary's history cards -- see `rowOutcome` in mount-utils.js for why the
+    # row dim and the per-node dim are mutually exclusive.
+    "away-row": Slot("group"),
+    "home-row": Slot("group"),
+    "away-win": Slot("any"),
+    "home-win": Slot("any"),
     "vs": Slot("text"),
     "meta": Slot("text"),
+    # The park. Bound but drawn by no shipped theme: the footer carries the
+    # MODE, because the competition earns the line and the park is flavour a
+    # results card does not need. Dropping a fact from a theme is not dropping
+    # it from the contract, so a package that wants it only has to draw it.
+    "stadium": Slot("text"),
     "card-bg": Slot("any"),
+}
+
+
+_SCHEDULE_PARTS = {
+    # Not inside match-template: the optional atmosphere layer, which the
+    # default package runs in the header (the one part of this card whose
+    # geometry is fixed) and clips with its own clipPath.
+    "field": Slot("group"),
+    "row-bg": Slot("rect"),
+    "rail": Slot("rect"),
+    "label": Slot("text"),
+    "status": Slot("text"),
+    "side1-name": Slot("text", required=True),
+    "side2-name": Slot("text", required=True),
+    "plate": Slot("rect"),
+    "plate-text": Slot("text"),
 }
 
 
@@ -221,6 +263,25 @@ CONTRACTS: dict[str, Contract] = {
     "matchup": Contract((1920, 480), "xMidYMax meet", slots=_matchup_slots(),
                         alt_canvases=((1920, 1080),)),
     "statsbar": Contract((452, 118), "xMidYMid meet", slots=_statsbar_slots()),
+    # The running order as a board. Full canvas, because the card's HEIGHT is
+    # the row count and the mount centres it there; its width and its X are the
+    # theme's. `card-bg` declares data-compact-h (the card with zero rows) and
+    # `match-template` data-h (the row pitch) — the two numbers the mount needs to
+    # resize the card, and the reason a theme can change the row height without
+    # touching code.
+    "schedule": Contract(
+        (1920, 1080), "xMidYMid meet",
+        slots={
+            "card": Slot("group", required=True),
+            "card-bg": Slot("rect", required=True),
+            "title": Slot("text"),
+            "rows": Slot("group", required=True),
+            "match-template": Slot("group", required=True),
+            "overflow": Slot("text"),
+        },
+        parts=_SCHEDULE_PARTS,
+        note="card-bg needs data-compact-h (height with zero rows); match-template needs data-h (the row pitch).",
+    ),
     "ticker": Contract(
         (1920, 80), "xMidYMid meet",
         slots={

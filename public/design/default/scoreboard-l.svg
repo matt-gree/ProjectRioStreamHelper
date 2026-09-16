@@ -305,6 +305,6 @@
          live board simply shows the mode and the stadium. -->
     <text data-slot="meta-game-mode" data-maxw="188" x="670" y="36" text-anchor="middle" class="sb-dim" font-size="11" font-weight="600" letter-spacing="0.4" opacity="0">Game Mode</text>
     <text data-slot="meta-main" data-maxw="188" x="670" y="61" text-anchor="middle" class="sb-dim" font-size="13" font-weight="600">Stadium</text>
-    <text data-slot="meta-date" data-maxw="188" x="670" y="84" text-anchor="middle" class="sb-dim" font-size="11" opacity="0.75">Date</text>
+    <text data-slot="meta-date" data-maxw="188" x="670" y="84" text-anchor="middle" class="sb-dim" font-size="11" fill-opacity="0.75">Date</text>
   </g>
 </svg>

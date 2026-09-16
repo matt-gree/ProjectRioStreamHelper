@@ -51,7 +51,7 @@
         </svg>
       </g>
       <text data-slot="title" data-maxw="220" x="120" y="212" text-anchor="middle"
-            style="fill:var(--text-primary, #ffffff);font-family:var(--font-body, 'Inter', system-ui, sans-serif)" font-size="22" font-weight="600" opacity="0.75"></text>
+            style="fill:var(--text-primary, #ffffff);font-family:var(--font-body, 'Inter', system-ui, sans-serif)" font-size="22" font-weight="600" fill-opacity="0.75"></text>
     </g>
 
     <g data-tpl="match" data-w="620">

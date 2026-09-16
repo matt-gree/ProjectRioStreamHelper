@@ -37,9 +37,13 @@
     "Game" sits at the left and the line runs from x=56 to the card's right
     content edge (442) - 386 units, against the 330 a CENTRED line could claim
     while dodging that label. Measured in Inter 700: an ordinary pitching line
-    ("10.0, 12 H, 2 R, 2 ER, 0 BB, 10 K, 1 HR, 75 P") is 363 units at 18px, so
-    the common heavy case renders at full size where centred-at-13.5px it was
-    the SMALLEST type on a card whose other numbers are 30.
+    ("10.0 IP, 12 H, 2 R, 2 ER, 0 BB, 10 K, 1 HR, 75 P") is 383.8 units at 18px,
+    so the common heavy case renders at full size where centred-at-13.5px it was
+    the SMALLEST type on a card whose other numbers are 30. It clears the bound
+    by 2.2 units and used to clear it by 23: the innings gained their unit on
+    2026-09-13 (format_pitching_line), and a line long enough to need it - the
+    worst realistic case, 396.2 - now auto-fits to about 17.5px, which is the
+    mechanism working rather than a budget being overrun.
 
     The label is not always there - `line-label` is bound only for a HUD game's
     line, and an API board's "Tournament Stats" arrives as the line itself - so

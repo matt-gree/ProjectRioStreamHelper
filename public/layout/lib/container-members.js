@@ -247,10 +247,13 @@ export const MEMBERS = {
     },
     schedule: {
         size: [1920, 1080],
-        mount: async (box) => {
-            const { mountSchedule } = await load('schedule-mount');
-            return mountSchedule({ host: hostIn(box) });
-        },
+        // `simple`, not a bespoke mount: this element is themed now, and its
+        // update reads the active design package out of the SETTINGS argument.
+        // A mount that returns `inst` unwrapped gets the container's selection
+        // there instead, so a classic-package show would have drawn its
+        // schedule in the default theme inside a container and in classic on
+        // its own source, with nothing to say why.
+        mount: simple('schedule-mount', 'mountSchedule'),
         watch: (key) => key.startsWith('schedule.') || key.startsWith('match.'),
         sample: { file: 'schedule', content: {} },
     },

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { linescoreColumns, prettyStadium, layoutBox, lineTextBox, layoutStatCells } from '../../../public/layout/lib/mount-utils.js';
+import { linescoreColumns, prettyStadium, layoutBox, lineTextBox, layoutStatCells, pinBesideText, applyTextPins } from '../../../public/layout/lib/mount-utils.js';
 
 /*
  * Two rules a scoreboard gets wrong SILENTLY — nothing throws, nothing logs, and
@@ -336,5 +336,80 @@ describe('layoutStatCells', () => {
             expect(xs(e)).toEqual([0, 0, 0, 0]);
             expect(maxws(e)).toEqual([92, 92, 92, 92]);
         }
+    });
+});
+
+
+/*
+ * pinBesideText — a portrait beside a name, where the name's width IS the data.
+ *
+ * The matchup band proved both fixed-x alternatives wrong on air: portrait
+ * outside and "Joan" left her captain icon floating 170 units from her own
+ * name, portrait inside and the 108-unit reserve stood open on every board with
+ * no match bound. Neither throws, and a preview built around one name length
+ * looks fine.
+ */
+
+// Text node whose measured box is the whole contract; an image node is an x and
+// a width. Plain objects, like the layoutBox fixtures above.
+const textNode = (x, width) => ({
+    getBBox: () => ({ x, y: 0, width, height: 40 }),
+    getAttribute: () => null,
+});
+const imageNode = (attrs) => ({
+    attrs: { ...attrs },
+    getAttribute(k) { return k in this.attrs ? String(this.attrs[k]) : null; },
+    setAttribute(k, v) { this.attrs[k] = String(v); },
+});
+const xOf = (node) => parseFloat(node.getAttribute('x'));
+
+describe('pinBesideText', () => {
+    it('holds one gap whatever the name measures', () => {
+        // Side 1: end-anchored name, portrait before it. A long name and a
+        // short one must leave the SAME gap — that is the whole point.
+        for (const [left, width] of [[619, 153], [690, 82]]) {
+            const sprite = imageNode({ x: 464, width: 72 });
+            pinBesideText(sprite, textNode(left, width), { side: 'before', gap: 16 });
+            expect(xOf(sprite) + 72).toBe(left - 16);
+        }
+    });
+
+    it('pins after a start-anchored run on the other side', () => {
+        const sprite = imageNode({ x: 1384, width: 72 });
+        pinBesideText(sprite, textNode(1148, 83), { side: 'after', gap: 16 });
+        expect(xOf(sprite)).toBe(1148 + 83 + 16);
+    });
+
+    it('leaves an empty run alone rather than stacking on its anchor', () => {
+        // A name slot with no text measures 0 wide, and its bbox.x is wherever
+        // the anchor happens to be. Pinning to that would park the portrait on
+        // top of the score; the authored x is the better answer.
+        const sprite = imageNode({ x: 464, width: 72 });
+        pinBesideText(sprite, textNode(772, 0), { side: 'before', gap: 16 });
+        expect(xOf(sprite)).toBe(464);
+    });
+});
+
+describe('applyTextPins', () => {
+    it('applies only what the theme declares, and leaves everything else put', () => {
+        const slots = {
+            'side1-name': textNode(619, 153),
+            'side1-sprite': imageNode({ x: 464, width: 72, 'data-pin-before': 'side1-name', 'data-pin-gap': '16' }),
+            'side2-name': textNode(1148, 83),
+            'side2-sprite': imageNode({ x: 1384, width: 72, 'data-pin-after': 'side2-name' }),
+            // Declares nothing: a theme that never opted in must not move, which
+            // is what keeps this off every third-party package.
+            'logo': imageNode({ x: 84, width: 110 }),
+        };
+        applyTextPins({ slots });
+        expect(xOf(slots['side1-sprite'])).toBe(619 - 16 - 72);
+        expect(xOf(slots['side2-sprite'])).toBe(1148 + 83 + 16);  // default gap 16
+        expect(xOf(slots['logo'])).toBe(84);
+    });
+
+    it('survives a slot naming a target the theme does not have', () => {
+        const slots = { orphan: imageNode({ x: 10, width: 20, 'data-pin-before': 'nope' }) };
+        expect(() => applyTextPins({ slots })).not.toThrow();
+        expect(xOf(slots.orphan)).toBe(10);
     });
 });

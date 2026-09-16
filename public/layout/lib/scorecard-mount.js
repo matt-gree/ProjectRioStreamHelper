@@ -118,7 +118,8 @@ export function mountScorecard({ host, sb }) {
   // ── settings / toggles ──────────────────────────────────────────────────────
   function readToggles(settings) {
     const t = k => scGet(settings, k, null);
-    const bool = (k, d) => { const v = t(k); return v == null ? d : v !== false; };
+    // settingOn, not `!== false` — see the note in scoreboard-mount's readToggles.
+    const bool = (k, d) => { const v = t(k); return v == null ? d : OverlayBase.settingOn(v, d); };
     return {
       showHeader:   bool('showHeader', true),
       showPhase:    bool('showPhase', true),

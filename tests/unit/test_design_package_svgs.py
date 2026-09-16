@@ -195,21 +195,23 @@ def test_drawer_sprites_are_rebindable(svg: Path):
     field rather than sharing the plate's. The mount finds the sprites by
     ``data-part="sub-glyph"``, so a sprite without it keeps drifting mushrooms
     while the badge two inches away says YouTube.
+
+    The gate is the FIELD, not the badge. The two share a glyph id and nothing
+    else: a badge is one caption bound per slot, a field is a texture, and a
+    token skin draws the first and not the second (fixed artwork cannot repaint
+    with the producer's palette). Gated on the badge, Classic could not wear one
+    without also growing an atmosphere field it has a written reason not to have.
     """
-    text = svg.read_text()
-    if 'data-part="sub-icon"' not in text:
-        return
     root = ET.parse(svg).getroot()
-    uses = [
-        u for g in root.iter(f"{SVG_NS}g") if g.get("data-slot") in ("sub-field",)
-        for u in g.iter(f"{SVG_NS}use")
-    ] or [
-        # Player Plates authors its drawer fields in place (fixed geometry), so
-        # they aren't a data-slot group; find them through the clip instead.
-        u for g in root.iter(f"{SVG_NS}g") if g.get("data-part") == "sub-field"
-        for u in g.iter(f"{SVG_NS}use")
-    ]
-    assert uses, f"{svg.parent.name}/{svg.name}: the drawer carries no field to rebind"
+    fields = [g for g in root.iter(f"{SVG_NS}g")
+              # Commentary's drawer field is a data-slot group the mount clones
+              # per plate; Player Plates authors its own in place (fixed
+              # geometry), so it is marked with a data-part instead.
+              if g.get("data-slot") == "sub-field" or g.get("data-part") == "sub-field"]
+    if not fields:
+        return
+    uses = [u for g in fields for u in g.iter(f"{SVG_NS}use")]
+    assert uses, f"{svg.parent.name}/{svg.name}: the drawer's field holds no sprites"
     for u in uses:
         assert u.get("data-part") == "sub-glyph", (
             f"{svg.parent.name}/{svg.name}: a drawer sprite is not marked "
@@ -351,6 +353,7 @@ def test_inlined_rio_mark_matches_the_shipped_asset(svg: Path):
 TOKEN_HOSTS = [
     REPO / "public" / "layout" / "shared" / "container.html",
     REPO / "public" / "layout" / "scoreboard1" / "statsbar.html",
+    REPO / "public" / "layout" / "schedule" / "schedule.html",
     # These four host no theme SVG at all — they are here for the FACES. The
     # token layer's @import is the only place Rajdhani and Chivo Mono are
     # fetched, and `applyTypeRoles` skips fetching them precisely because every
@@ -655,3 +658,96 @@ def test_display_type_stays_within_the_weights_the_token_layer_loads(svg: Path):
                 f"{weight.group(1)}, but the token layer loads Rajdhani at "
                 f"500/600/700 only:\n  {node}"
             )
+
+
+# Slots already in this state when the rule was written (2026-09-11), found by
+# it. Each renders at FULL strength today, not at the value below -- so every
+# one of them is a live visual change to an element on air, which wants the
+# producer's eye rather than a drive-by fix inside a matchup change. The rule
+# holds for everything else; shrink this list, never add to it.
+@pytest.mark.parametrize("svg", PACKAGE_SVGS, ids=lambda p: f"{p.parent.name}/{p.name}")
+def test_a_bound_text_slot_does_not_dim_itself_with_opacity(svg: Path):
+    """A resting dim belongs in `fill-opacity`, never in `opacity`.
+
+    `setText` in svg-theme-engine.js REWRITES the opacity attribute on every
+    slot it binds -- to 0/1 for an optional slot, removed entirely otherwise --
+    so a caption authored at `opacity="0.65"` renders at full strength the
+    moment it carries data. It fails the way every theme bug worth a test fails:
+    the overlay looks fine, just not the way it was drawn. Classic's matchup had
+    its total-games caption, and all five cards' dates, modes and stadiums, in
+    exactly this state.
+
+    0 and 1 are the two values the contract itself uses (hidden until bound,
+    and plainly visible), so only a fraction in between is a claim the mount
+    will overwrite. `fill-opacity` survives, and multiplies correctly with the
+    loser dim a mount applies on top of it.
+
+    The rule is UNCONDITIONAL -- there is no allowlist. It shipped with one
+    (_OPACITY_DIM_DEBT, seven slots across three files), and the seven were
+    cleared two ways, because a dim the mount has always stripped is an
+    authored value that was never once seen on air: honour it where the number
+    still reads at broadcast size (default/scoreboard-l's meta-date, classic's
+    lowerthird logo caption -- both 0.75), and DELETE it where it does not.
+    Classic's commentary sub-values asked for 0.92, an 8% cut on white under a
+    30px/800 name that no viewer can resolve; classic/scoreboard-l's meta-date
+    asked for 0.65 on top of `cl-dim2`, a fill that is ALREADY 0.40 alpha, so
+    the two multiplied to 0.26 -- 2.27:1 at 10px, the smallest type on the card
+    and under the 3:1 floor. A stacked class alpha is the trap here: read the
+    fill before trusting the number beside it.
+    """
+    for node in re.findall(r"<text\b[^>]*>", _uncommented(svg.read_text())):
+        if "data-slot=" not in node:
+            continue
+        # NOT \b before `opacity`: a word boundary sits between the hyphen and
+        # the o, so \bopacity matches `fill-opacity` -- the very attribute this
+        # test is asking authors to use.
+        m = re.search(r'(?<![-\w])opacity="([^"]+)"', node)
+        if not m:
+            continue
+        try:
+            value = float(m.group(1))
+        except ValueError:
+            continue
+        assert value in (0.0, 1.0), (
+            f"{svg.parent.name}/{svg.name}: a bound text slot rests at "
+            f'opacity="{m.group(1)}", which setText overwrites. Use '
+            f"fill-opacity in the inline style instead:\n  {node}"
+        )
+
+
+MATCHUP_CARD_PAIRS = ("win", "row", "name", "score", "logo")
+
+
+@pytest.mark.parametrize(
+    "svg",
+    [p for p in PACKAGE_SVGS if p.name == "matchup.svg"],
+    ids=lambda p: p.parent.name,
+)
+def test_a_matchup_card_states_its_outcome_for_both_sides_on_every_card(svg: Path):
+    """Half of the winner cue is worse than none of it.
+
+    Every marker on a matchup card is optional -- a theme may draw the outcome
+    with a plate, with a row dim, with neither -- but whatever it chooses it
+    owes to BOTH sides of ALL five cards. A `-win` group on side 1 only would
+    mark every game side 1 won and silently say nothing about the other half,
+    which is indistinguishable from side 2 never winning. Same for the names:
+    one named row and one anonymous one is worse than two anonymous ones,
+    because it reads as a label for the card rather than for the row.
+    """
+    text = svg.read_text()
+    present = {
+        part: {
+            (i, t)
+            for i in range(1, 6)
+            for t in (1, 2)
+            if f'data-slot="game{i}-side{t}-{part}"' in text
+        }
+        for part in MATCHUP_CARD_PAIRS
+    }
+    everywhere = {(i, t) for i in range(1, 6) for t in (1, 2)}
+    for part, found in present.items():
+        assert found in (set(), everywhere), (
+            f"{svg.parent.name}: game{{i}}-side{{T}}-{part} is declared on "
+            f"{len(found)} of 10 card rows, not 0 and not all 10. Missing: "
+            f"{sorted(everywhere - found)}"
+        )

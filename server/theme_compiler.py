@@ -77,6 +77,15 @@ _MODIFIERS = {
     "maxr": "maxr",
     # Lower third: a logo's caption-less box, "x y w h".
     "full": "full",
+    # Matchup summary: a portrait pinned to the MEASURED edge of a name, because
+    # the name's width is the data and no authored x is right for both a short
+    # name and a long one (mount-utils pinBesideText). The slot name, the
+    # direction and the gap are a trio like the meld pairs above — drop one
+    # through a design tool and the portrait silently reverts to a fixed x that
+    # is wrong at half the name lengths.
+    "pinbefore": "pin-before", "pin-before": "pin-before",
+    "pinafter": "pin-after", "pin-after": "pin-after",
+    "pingap": "pin-gap", "pin-gap": "pin-gap",
     # The scoreboard's linescore: the BAND the inning columns divide into equal
     # cells, however many innings the game ran (scoreboard-mount layoutBox).
     # A pair, like the meld metadata above — a band with only one of its two

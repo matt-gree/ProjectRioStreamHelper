@@ -162,6 +162,21 @@ def test_round_trip_preserves_every_modifier(src, tokens):
     assert not missing, f"modifier(s) lost in the round trip: {sorted(missing)}"
 
 
+# Attributes the COMPILER writes from the package manifest rather than from a
+# layer name. `data-design-vars` is set from `"palette": "app"` and lives on the
+# root <svg>, which is the document in a design tool and not a layer at all — so
+# there is nothing for it to ride on and nothing for the grammar to spell. It
+# survives the round trip as a root attribute, which is what
+# test_round_trip_preserves_every_modifier already checks; demanding a layer-name
+# spelling for it would be demanding the wrong thing.
+#
+# It only surfaced here once a TOKEN SKIN declared `data-layout` as well: the
+# root then carries a marker, so the rule below starts reading its other
+# attributes. `default/scoreboard-s.svg` is the melding board with a fixed
+# palette, `classic/scoreboard-s.svg` is the one with both.
+MANIFEST_ATTRS = {"data-design-vars"}
+
+
 @pytest.mark.parametrize("src", SHIPPED, ids=lambda p: f"{p.parent.name}/{p.stem}")
 def test_every_modifier_on_a_marked_layer_is_expressible_as_a_layer_name(src):
     """The `box-away-R` test one axis over. Figma keeps names, not attributes, so
@@ -171,7 +186,7 @@ def test_every_modifier_on_a_marked_layer_is_expressible_as_a_layer_name(src):
 
     for tag, attrs in marked_layers(src.read_text()):
         for attr in attrs:
-            if attr in MARKER_ATTRS:
+            if attr in MARKER_ATTRS or attr in MANIFEST_ATTRS:
                 continue
             assert attr in _ATTR_TO_GRAMMAR, (
                 f"<{tag}> carries {attr}, which has no layer-name spelling — "

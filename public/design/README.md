@@ -105,6 +105,54 @@ App-vars themes may use: `--accent`, `--card-bg`, `--text-primary`,
 `--border-color`, `--border-width`, `--card-shadow-filter`,
 `--text-shadow`.
 
+### A CARD'S BLEED IS HALF THE WIDEST BORDER ITS PRODUCER CAN SET
+
+**`--border-width` is a producer control, `borderWidth` runs 0-16px, and an SVG
+stroke straddles its path** — so at the top of that range 8 units of the border
+are drawn OUTSIDE the rect's own box. A card authored flush to its canvas
+therefore cuts its own border off, and the failure is worse than it sounds: the
+straight runs survive (they are only thinned) while the ROUNDED CORNERS, whose
+outer arc lies furthest out, are sliced square. The card stops looking like a
+card with a thin border and starts looking like a rendering fault, and it does
+it only for the producers who touched the control.
+
+So **every card keeps at least 8 units of canvas clear on every edge it
+controls**, and the margins it controls are EQUAL. Classic's Stat Bar had 1 on
+three sides and 3 on the fourth, which meant the Border Thickness slider was
+usable over about a fifth of its range; its own corners went square at 4.
+
+Two edges are usually not the theme's to control, and that is not an exception
+to the rule: a row-stack card's HEIGHT is the active rows (`scoreboard-l`) and a
+melding card's WIDTH is the visible segments (`scoreboard-s`), so those edges
+are data. Author the stack so its MAXIMUM still clears 8.
+
+The card SHADOW is deliberately not part of this budget. `cardShadowBlur`
+defaults to 16 and reaches 80, and reserving even the default would cost a
+452x118 bar a fifth of its height — a soft edge that fades out under a crop
+costs a little of the falloff, where a hard border loses its corners.
+
+### A DIVIDER IS WHITE; ONLY A BORDER IS `--border-color`
+
+**`--border-color` and `--border-width` are one control in two halves, and an
+internal rule can only honour one of them.** A hairline between two table cells
+has a width of its own — 1, or 1.5 — because it is structure, not a card's edge;
+so painting it with `--border-color` gives the producer a line they can recolour
+and cannot size. Worse, it inverts what the control appears to do: pick a strong
+colour to find a card's OUTLINE and what lights up is a grid of lines through
+the middle of it, while the outline itself stays a hairline at whatever width
+was set.
+
+So `--border-color` paints **card and sub-card outlines only** — anything that is
+the edge of a surface, including the small cards inside a band. Every internal
+rule takes a literal white alpha instead: `rgba(255,255,255,0.12)` for a
+divider, `0.15` for a drawn shape's outline. The palette still reaches them, via
+`--card-bg` underneath.
+
+A rule that separates nothing should not exist at all, whatever its colour.
+Classic's Small board carried three — two marking segment boundaries the meld
+already draws by growing the card, and one between two rows that a stacked logo,
+name and score had already made into two rows.
+
 **SVG gotchas (either palette):**
 
 * `var()` resolves **only via inline `style="…"`** — never presentation
@@ -231,7 +279,7 @@ opacity). Inside it:
 | Divider bar (optional) | `data-part="sub-divider"` on a `<rect>` inside `slot{i}-sub` | Extent auto-derived from the `sub` geometry, drawn middle-out on reveal. Author `y`/`height`/`fill` freely. |
 | Caster name | `data-slot="slot{i}-name"` on a `<text>` | |
 | Sub-info wrapper | `data-slot="slot{i}-sub"` on a `<g>` | The show/hide target. Start hidden (`style="opacity:0"`); the mount slides+fades it. No `clip-path`. |
-| Sub-info label / value | `data-slot="slot{i}-sub-label"` / `-sub-value"` on `<text>` | The producer-chosen address-book field + its value. The **label is optional and the `default` package omits it** — a field name is something the producer needs in the app, not on the stream. See the badge below, and `sub-glyph.js` for the reasoning. |
+| Sub-info label / value | `data-slot="slot{i}-sub-label"` / `-sub-value"` on `<text>` | The producer-chosen address-book field + its value. The **label is optional and both built-in packages omit it** — a field name is something the producer needs in the app, not on the stream. See the badge below, and `sub-glyph.js` for the reasoning. |
 | Sub-info badge (optional) | `data-part="sub-icon"` on a `<use>` inside `slot{i}-sub` | The mark that says which platform a bare handle belongs to. `x` tweened from `subIcon` in the layout JSON; the mount sets its `href` and shows it only for fields that map to a mark it can draw. Declaring it means declaring all of `sub-glyph-x`, `sub-glyph-youtube` and `rio-mark` — a missing symbol is indistinguishable from a field that wears no mark. |
 | Atmosphere (optional) | `data-slot="field"` / `"sub-field"` on a `<g>` in `<defs>` | One field per surface, authored across the whole canvas; the mount clones each into every plate and clips it to that plate's `main-rect` / `sub-rect`, so four plates show four slices of one scatter. Each direct child is one sprite and must declare `data-l` / `data-r` — the exact horizontal extremes of its own motion — or it stays animating in plates that can't show it. `sub-field` sprites also carry `data-part="sub-glyph"` (rebindable — see above). |
 
@@ -280,7 +328,7 @@ matchup doesn't shift the lower band sideways. Inside each `side{n}`:
 | Divider bar (optional) | `data-part="sub-divider"` on a `<rect>` inside `side{n}-sub` | Extent auto-derived from its authored width, drawn middle-out on reveal. |
 | Player name | `data-slot="side{n}-name"` on a `<text>` | |
 | Sub-info wrapper | `data-slot="side{n}-sub"` on a `<g>` | Show/hide target. Start hidden (`style="opacity:0"`); the mount slides+fades it. No `clip-path`. |
-| Sub-info label / value | `data-slot="side{n}-sub-label"` / `-sub-value"` on `<text>` | As Commentary: the label is optional and the `default` package omits it in favour of the badge. |
+| Sub-info label / value | `data-slot="side{n}-sub-label"` / `-sub-value"` on `<text>` | As Commentary: the label is optional and both built-in packages omit it in favour of the badge. |
 | Sub-info badge (optional) | `data-part="sub-icon"` on a `<use>` inside `side{n}-sub` | As Commentary, but at a fixed `x` — this band never reflows. Also reads a MANUAL side's typed label when there's no `subField` to resolve. |
 | Atmosphere (optional) | a clipped `<g>` inside `side{n}`, marked `data-part="field"` / `"sub-field"` | The theme carries its own `clipPath` and the field travels with the card — the plate never resizes, only the whole group translates. The mount only stops the marks ticking while the surface is hidden, and rebinds `sub-field`'s sprites. Give the two sides **different** scatters — identical marks in identical places on adjacent plates read as a copy-paste. |
 
@@ -308,17 +356,64 @@ Fetch control on the Production page's Matchup History element).
 |------|---------|-------------|
 | `logo` | `<image>` | Tournament logo (`/branding/`). Hidden if none uploaded. |
 | `logo-default` | `<g>`/any | Your fallback brand mark — shown only when no logo is set. |
+| `event-name` | `<text>` | The start.gg event/tournament name; hidden when empty. |
 | `subtitle` | `<text>` | The match label (e.g. `Winners Final`); hidden when empty. |
 | `side1-name` / `side2-name` | `<text>` | The two player names. |
 | `side1-sprite` / `side2-sprite` | `<image>` | The match's chosen captain headshot. Hidden if none. |
+| `side1-seed` / `side2-seed` | `<text>` | Bracket seed from the bound set (`#1 SEED`); hidden when unseeded. |
 | `side1-wins` / `side2-wins` | `<text>` | All-time series win counts. |
 | `total-games` | `<text>` | `ALL TIME · N GAMES` (or `FIRST MEETING`). |
+| `history` / `history-container` | `<g>` | The card region; `display:none` when the two have no shared history. |
+| `band-full` / `band-compact` | any | Two band backgrounds; the compact one swaps in with no shared history. |
 | `game{i}` (i=1..5) | `<g>` | One recent-game card, newest first. Hidden when there's no i-th game. |
-| `game{i}-side1-logo` / `-side2-logo` | `<image>` | That game's team logo (captain's default team), falling back to the captain icon. |
-| `game{i}-side1-score` / `-side2-score` | `<text>` | Final score; the loser's is dimmed by the mount. |
-| `game{i}-mode` / `game{i}-stadium` / `game{i}-date` | `<text>` | Game mode · stadium · short date; each hidden when empty. |
+| `game{i}-side{T}-row` | `<g>` | That side's whole row — logo included — dimmed when it lost. |
+| `game{i}-side{T}-win` | `<g>` | That side's **winner marker**; shown only on the side that won. |
+| `game{i}-side{T}-logo` | `<image>` | That game's team logo (captain's default team), falling back to the captain icon. |
+| `game{i}-side{T}-score` | `<text>` | Final score. |
+| `game{i}-side{T}-name` | `<text>` | That side's player, restated on every card. |
+| `game{i}-{away,home}-*` | — | The same four, oriented by the game's own away/home instead of by side. |
+| `game{i}-date` / `game{i}-date-full` | `<text>` | The game's date, short (`SEP 8`) or with the year. **Prefer the full one on a card**: a head-to-head reaches back seasons, so a bare `SEP 8` on the fifth card dates it to no particular year. |
+| `game{i}-mode` | `<text>` | The game mode — the competition the game belonged to. Hidden when empty. |
+| `game{i}-stadium` | `<text>` | The park. Bound by the mount, **drawn by neither shipped theme** — see below. |
 
 Runtime colour seam: `--accent` (per-layout pin `overlays.matchup.accentColor`).
+
+**A CARD'S FOOTER IS ONE LINE.** The mode and the stadium were two dim 19px
+lines stacked in the same face, colour and weight, so they read as one
+indistinguishable grey block under the scoreline rather than as two facts —
+nothing told the eye which mattered, and together they were the tallest thing
+on the card after the rows. The mode is the competition and earns its place;
+the park is flavour a history card does not need (Slice26 dropped it for the
+same reason, and it is the producer's own call here). `game{i}-stadium` stays a
+real slot the mount binds, so a theme that wants it only has to draw it. What
+remains matches the **date** it brackets — 17px, not 19 — so the two captions
+frame the rows instead of competing with them, and the line they gave up went
+to the rows: 48 units tall and snug, 56 now.
+
+**A PORTRAIT BESIDE A NAME HAS NO AUTHORABLE `x`**, because the name's width is
+the data. Declare the relationship instead and the mount measures it:
+`data-pin-before="<slot>"` / `data-pin-after="<slot>"` place this node's inner
+edge `data-pin-gap` (default 16) from that text slot's measured edge —
+`pinBesideText` / `applyTextPins` in `mount-utils.js`, applied after the
+auto-fit, since the fit changes the very width being measured. Opt-in: a theme
+that declares neither keeps its authored `x`. Both fixed alternatives were
+tried on air and both fail, in opposite directions: portrait *outside* an
+inward-anchored name left a short tag (`Joan`, 82 units) with its captain icon
+floating 170 away while a long one (`MattGree`, 153) sat 95 from it; portrait
+*inside*, next to the score, just moves the hole to the far side of the name
+and holds 108 units of it open on every board with no match bound, because a
+captain only exists once a match is bound.
+
+**A card has to say WHO WON, and an opacity does not say it.** The band's only
+outcome cue used to be a 0.45 dim on the losing *score*, which is not a cue at
+broadcast size — and the card it sat on named neither player, so reading the
+dim right still only told you which NUMBER lost. The team logos are no
+substitute: they are the CAPTAINS' teams, and those change game to game, so
+one player is Mario on card 1 and Yoshi on card 2. `rowOutcome` in
+`matchup-mount.js` is the rule, and a theme may take any subset of the three
+markers — but `-row` and the per-node dim are **exclusive**: a row group whose
+children were also dimmed would multiply to 0.2, which reads as a rendering
+fault rather than as a result.
 
 ### `callout.svg`
 
@@ -409,15 +504,90 @@ A size implements whatever row subset fits — only `row-top` is always drawn;
 full slot list is in the header comment of `scoreboard-mount.js`; runtime
 colour seams `--side1` / `--side2` carry each player's controller-port colour.
 
+### `schedule.svg`
+
+The Upcoming Schedule (`public/layout/lib/schedule-mount.js`): the running
+order as a board, authored full-canvas at 1920×1080 because the card's HEIGHT
+is the row count.
+
+| Slot | Node | What it is |
+|---|---|---|
+| `card` | `<g>` | the whole board. The mount rewrites its translate **Y** each render so the card stays centred as it grows; the authored **X** is kept. |
+| `card-bg` | `<rect>` | the plate. `data-compact-h` = its height with ZERO rows; the mount sets `height`. |
+| `title` | `<text>` | the heading (`schedule.title`). |
+| `rows` | `<g>` | where row clones are parked, at `y = index × pitch`. |
+| `match-template` | `<g>` | the prototype row, hidden at `opacity:0`. `data-h` = the row **PITCH** (drawn height plus the gap under it), not its drawn height. |
+| `overflow` | `<text>` | "+N MORE", authored INSIDE `rows` so its `y` is row-space. `data-h` = what it adds to the card when it shows. |
+
+Row parts (`data-part` inside `match-template`, all optional): `row-bg`,
+`rail`, `label`, `status`, `side1-name`, `plate`, `plate-text`, `side2-name`.
+One more part lives OUTSIDE the template: `field`, the optional atmosphere
+layer.
+
+**Two numbers make the card resizable without a code change** — `data-compact-h`
+and `data-h`. A theme that wants taller rows changes its pitch and nothing else;
+a theme that forgets one falls back to the mount's defaults (124 and 82), which
+will be wrong for its own artwork rather than broken.
+
+**THE RAIL IS ONE COLOUR AT THREE STRENGTHS.** A row is live, upcoming or
+played, and the mount says which in the rail's `fill-opacity` (1 / 0.3 / 0.15)
+over whatever the theme painted it. So author the rail in the accent and leave
+the state to the mount: three authored colours would be a fourth palette,
+agreeing with neither the package nor the producer's accent. A played row is
+dimmed ONCE, on the clone's own group — never dim a part as well, or the two
+multiply (`rowOutcome` in `matchup-mount.js` is the same trap stated for the
+matchup cards).
+
+**The rows are a table, so keep atmosphere out of them.** `default/schedule.svg`
+runs its mark field in the HEADER only, clipped by the theme's own `clipPath` —
+the header is the one part of this card whose geometry is fixed, and a drifting
+mark behind a column of names is the one place the field costs legibility
+outright.
+
 ### `ticker.svg`
 
 The Results Ticker (`public/layout/lib/ticker-mount.js`): the 1920×80 bar
 plus ONE prototype game card, `<g data-slot="card-template" data-w="…">`,
-whose inner parts are marked `data-part` (`away-name`, `home-name`,
-`away-cap`, `home-cap`, `score-group`, `score-away`, `score-home`, `vs`,
-`meta`). The mount clones the template per game into `<g data-slot="track">`
-(declare the visible width with `data-vw`) and scrolls it; clip the track
-region with a `<clipPath>` so cards don't escape the bar.
+whose inner parts are marked `data-part` (`card-bg`, `away-name`, `home-name`,
+`away-cap`, `home-cap`, `away-row`, `home-row`, `away-win`, `home-win`,
+`score-group`, `score-away`, `score-home`, `vs`, `meta`, `stadium`). The mount
+clones the template per game into `<g data-slot="track">` (declare the visible
+width with `data-vw`) and scrolls it; clip the track region with a `<clipPath>`
+so cards don't escape the bar.
+
+Three rules a theme has to compose with, none of them cosmetic:
+
+- **Anchor the card on its CENTRE.** Pin the score plate there, anchor each
+  name INWARD against it, and pin each captain icon to the measured outer edge
+  of its name with `data-pin-before` / `data-pin-after` / `data-pin-gap` (the
+  mount resolves them per clone, after the auto-fit). Names pinned to the
+  card's outer edges instead put a *variable* hole between a name and the
+  number it labels — 23% of the shipped card, breathing as the names changed.
+  What should vary with a name's length is the card's outer margin.
+- **State the outcome on both sides.** `away-win` / `home-win` is the winner's
+  own marker, shown on the winning side only; `away-row` / `home-row` is that
+  side's whole cluster, dimmed for the loser. Take any subset, but a row group
+  and a per-node dim are mutually exclusive — see `rowOutcome` in
+  `mount-utils.js`, shared with `matchup.svg`'s history cards. A dim on the
+  losing number alone is not a cue at broadcast size, and a ticker's numbers
+  are moving.
+- **Draw the plate outside every part.** `score-group` is hidden on a game with
+  no result, so anything inside it disappears on a live card. The plate is the
+  fixed object the eye tracks as the cards go past; it belongs in the theme's
+  own chrome, with `vs` swapping in where the numbers were.
+
+`meta` is the composed footer and carries the game MODE and the date — the same
+call `matchup.svg`'s cards make, for the same reason. `stadium` is bound
+separately and drawn by no shipped theme; a package that wants the park only
+has to draw it.
+
+The default package runs its mushroom field on the RESULTS badge
+(`data-part="field"`, clipped to the badge's own shape). That is the one static
+region of a moving element: drifting marks behind the track would fight the
+scroll, and a sprite inside `card-template` would be animated once per clone.
+On the badge's saturated accent ground the mark's own red pixels vanish, so the
+opacities run roughly double the dark-band elements' — tune them against a
+render, not by copying a number.
 
 ### `statsbar.svg`
 

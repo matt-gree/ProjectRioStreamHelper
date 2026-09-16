@@ -1,15 +1,22 @@
 <!DOCTYPE html>
 <html lang="en">
 <!--
-  Upcoming Schedule — a thin shell over lib/schedule-mount.js, which is also what
-  a container stands up when this element is fed into one. Renders
-  `schedule.queue` with each match resolved live from `match.{M}.*`; queue
-  authoring lives on the Production page.
+  Upcoming Schedule — a thin shell over lib/schedule-mount.js, which is also
+  what a container stands up when this element is fed into one. Renders
+  `schedule.queue` with each match resolved live from `match.{M}.*`, drawn
+  through the active design package's schedule.svg.
+
+  QUEUE MEMBERSHIP AND ORDER ARE NOT AUTHORED HERE — they live on the Match
+  desk. This element's own stage panel keeps the heading and each match's
+  display time.
 -->
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="overlay-settings" content="accentColor, cardBg, textColor, displayFont, bodyFont, monoFont" />
+  <!-- Every key the mount or an app-vars theme actually reads. The two at the
+       front are this element's own (LAYOUT_SETTINGS.schedule); the rest are
+       global design keys the classic package's schedule.svg paints from. -->
+  <meta name="overlay-settings" content="maxRows, showDecided, accentColor, cardBg, textColor, borderColor, borderWidth, displayFont, bodyFont, monoFont, cardShadow, textShadow, showShadow" />
   <link rel="stylesheet" href="/layout/lib/rio-theme/tokens.css" />
   <style>
     html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
@@ -28,9 +35,10 @@
     const sched = mountSchedule({ host: document.getElementById('host') });
 
     OverlayBase.init({
-      render: () => sched.update(OverlayBase.state),
+      render: () => sched.update(OverlayBase.state, OverlayBase.settings),
       sample: 'schedule',
       shouldRender: sched.shouldRender,
+      shouldRenderSettings: (key) => key.startsWith('overlays.'),
       fetchSettings: true,
     });
   </script>

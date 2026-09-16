@@ -52,21 +52,68 @@
     editing only and never ship.
     --><!--
     DEFAULT package - Matchup History: the Project Rio head-to-head band.
-    Layout: BRAND CAP · all-time series summary (names + win counts) · match
-    label, over five most-recent game cards (team logos · score · mode · park).
+    Layout: BRAND CAP + all-time count . the two names flanking a SCORE PLATE
+    . event + round, over five most-recent game cards.
+
+    THE SUMMARY HELD FIVE POOLS OF DEAD AIR. Measured on a real head-to-head
+    with no set bound: the name ended at 705 and the win count began at 849, so
+    144 units of open band sat between a name and the number it was labelling
+    (129 on the mirror side), the name block reserved 88 units for a captain
+    portrait that only exists once a match is bound, and a static caption said
+    "LAST 5 MEETINGS" on the left while the all-time count floated alone above
+    the score on the right. Three fixes, and none of them is "move things
+    closer": the counts sit in a PLATE, so the air either side became margin
+    around an object the eye can see and a name of any length varies that
+    margin instead of opening a hole (28 units now, from 144); the names anchor
+    INWARD against that plate, which leaves the only length-dependent gap
+    between a PORTRAIT and a name on the outer edge, where the band has margin
+    anyway; and the two captions became one that carries data, because the
+    cards each state a full date now and the static one had nothing left to
+    say. The counts are centred in their halves of the plate, so a two-digit
+    total grows 24 each way instead of dragging one edge out by 49.
+
+    WHAT A CARD HAS TO SAY. The old card was a team logo, a score, a dash, a
+    score and a team logo, and the ONLY thing marking the winner was a 0.45
+    opacity on the losing number. Two problems, and the second is the worse
+    one: dimmed white on a near-black card is not a cue at broadcast size, and
+    a card that names no player cannot say whose number lost even if you read
+    the dim right. The team logos do not stand in for the players either - they
+    are the CAPTAINS' teams, which change from game to game, so the same
+    player appears as Mario in one card and Yoshi in the next.
+
+    So each card is now a two-row scoreline (the cue taken from the Slice26
+    intro band): portrait . NAME . score, one row per side, with the winner's
+    row drawn - a gold plate, a gold rail, a gold W beside the number - and the
+    loser's row dimmed whole, the logo with it. The rows are the authored SIDES
+    and never away/home, so side 1 is the top row on all five cards and the eye
+    can scan one column and count wins. Cards, not a stub-column table, because
+    the mount hides the cards it has no game for: five self-contained cards with
+    two shown reads fine, where a table with three empty columns reads broken.
 
     SLOT CONTRACT (the mount binds by data-slot; see public/design/README.md):
       logo           <image>  tournament logo (/branding/); hidden if none
       logo-default   <g>      Rio mushroom shown when no logo is set
+      event-name     <text>   start.gg event/tournament name; optional
       subtitle       <text>   the match label (e.g. Winners Final); optional
       side1-name / side2-name <text>  player names (auto-fit to data-maxw)
       side1-sprite / side2-sprite <image>  chosen captain headshot; hidden if none
+      side1-seed / side2-seed <text>  bracket seed ("#1 SEED"); optional
       side1-wins / side2-wins <text>  all-time series win counts
-      total-games    <text>   "ALL TIME · N GAMES" / "FIRST MEETING"
+      total-games    <text>   "ALL TIME . N GAMES" / "FIRST MEETING" (the
+                              summary's one caption, under the pill)
+      history-container <g>   divider + cards; hidden on a first meeting
       game{i} (i=1..5) <g>    one recent-game card; hidden when absent
-      game{i}-side1-logo / game{i}-side2-logo <image>  team logo (captain-icon fallback)
-      game{i}-side1-score / game{i}-side2-score <text> final score (loser dimmed)
-      game{i}-mode / game{i}-stadium / game{i}-date <text>
+      game{i}-side{T}-row <g> the whole row; dimmed for the loser
+      game{i}-side{T}-win <g> the winner's marker; shown on the winning side only
+      game{i}-side{T}-logo <image>  team logo (captain-icon fallback)
+      game{i}-side{T}-name <text>   that side's player, restated per card
+      game{i}-side{T}-score <text>  final score
+      game{i}-date-full <text> the date WITH the year: a head-to-head reaches
+                              back seasons, so a bare "SEP 8" on the fifth card
+                              dates it to no particular year
+      game{i}-mode    <text>   the competition. game{i}-stadium is a real slot
+                              the mount binds and these themes do not draw:
+                              see the note on the card row
 
     COLOUR: CSS variables resolve in SVG ONLY through inline style="", never via
     presentation attributes. The accent var is overridden by the mount at
@@ -274,101 +321,255 @@
     <g transform="translate(1829,618)"><g style="will-change:auto;--bob-dur:7.63s;--bob-amp:84.31px;--bob-delay:-2.07s"><use href="#rio-mark" width="96" height="96" opacity="0.08" style="will-change:auto;--sway-dur:12.35s;--sway-amp:97.47px;--sway-delay:-11.07s" /></g></g>  <!-- 96, over the top rim -->
 
     <!-- ░░ BRAND CAP ░░ -->
-    <rect id="scaffold=logo" x="84" y="664" width="110" height="110" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="84" y="664" width="110" height="110" preserveAspectRatio="xMidYMid meet" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=logo hidden" />
+    <rect id="scaffold=logo" x="84" y="647" width="110" height="110" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="84" y="647" width="110" height="110" preserveAspectRatio="xMidYMid meet" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=logo hidden" />
     <g id="slot=logo-default">
       <!-- The BOX stays 110: it is a slot for whatever logo the user uploaded,
            and that is arbitrary artwork with no grid. The MARK inside it is not
            arbitrary — it is a 16px pixel grid painted with crispEdges, so at a
            size that is not a whole multiple the renderer snaps its rows to uneven
            widths and the baseball stitching reads as a corrupted asset. 112 is
-           7 x 16, centred on the same box. Drawn at 110 (6.875 grid pixels)
-           through a hand-written scale factor until 2026-08-01. -->
-      <use href="#rio-mark" x="83" y="663" width="112" height="112" />
+           7 x 16, centred on the same box. -->
+      <use href="#rio-mark" x="83" y="646" width="112" height="112" />
     </g>
 
     <!-- ░░ SERIES SUMMARY ░░ -->
-    <rect x="228" y="656" width="220" height="34" rx="6" fill="#E60012" />
-    <text x="338" y="680" text-anchor="middle" font-size="18" font-weight="700" letter-spacing="2.5" fill="#ffffff" font-family="Rajdhani">HEAD TO HEAD</text>
-    <text x="228" y="768" font-size="21" font-weight="500" letter-spacing="1" fill="#8f8fa3" font-family="Inter" id="slot=total-games">ALL TIME</text>
+    <!-- Left: what this band is, and how deep the record goes. ONE caption,
+         carrying data: the pill had a static "LAST 5 MEETINGS" under it and
+         the all-time count floating alone above the score, which is two
+         captions saying nearly the same thing from opposite ends of the strip.
+         The cards each carry a full date now, so the static one had nothing
+         left to tell anyone. -->
+    <rect x="228" y="670" width="220" height="34" rx="6" fill="#E60012" />
+    <text x="338" y="694" text-anchor="middle" font-size="18" font-weight="700" letter-spacing="2.5" fill="#ffffff" font-family="Rajdhani">HEAD TO HEAD</text>
+    <text x="228" y="726" font-size="17" font-weight="500" letter-spacing="1.5" fill="#8f8fa3" font-family="Inter" id="slot=total-games maxw=300">ALL TIME</text>
 
-    <rect id="scaffold=side1-sprite" x="488" y="660" width="72" height="72" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="488" y="660" width="72" height="72" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=side1-sprite hidden" />
-    <text x="576" y="712" font-size="40" font-weight="700" fill="#f5f5f8" font-family="Rajdhani" id="slot=side1-name maxw=280">Player One</text>
-    <text x="898" y="748" text-anchor="end" font-size="82" font-weight="700" font-variant-numeric="tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=side1-wins maxw=110">0</text>
-    <text x="960" y="740" text-anchor="middle" font-size="52" font-weight="600" fill="#8f8fa3" font-family="Rajdhani">–</text>
-    <text x="1022" y="748" text-anchor="start" font-size="82" font-weight="700" font-variant-numeric="tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=side2-wins maxw=110">0</text>
-    <text x="1344" y="712" text-anchor="end" font-size="40" font-weight="700" fill="#f5f5f8" font-family="Rajdhani" id="slot=side2-name maxw=280">Player Two</text>
-    <rect id="scaffold=side2-sprite" x="1360" y="660" width="72" height="72" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="1360" y="660" width="72" height="72" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=side2-sprite hidden" />
+    <!-- The score PLATE. See the note on PLATE_X in the generator: the two
+         counts hung in open band between the two names, 144 units clear on one
+         side and 129 on the other, so neither name read as labelling the
+         number beside it. Each count is centred in its half, so a two-digit
+         total grows evenly instead of dragging one edge outward. -->
+    <rect x="800" y="663" width="320" height="78" rx="12" fill="#ffffff" opacity="0.06" />
+    <rect x="800" y="663" width="320" height="78" rx="12" fill="none" stroke-width="1" stroke="#1f1f30" />
+    <text x="880" y="724" text-anchor="middle" font-size="64" font-weight="700" font-variant-numeric="tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=side1-wins maxw=120">0</text>
+    <text x="960" y="716" text-anchor="middle" font-size="40" font-weight="600" fill="#8f8fa3" font-family="Rajdhani">–</text>
+    <text x="1040" y="724" text-anchor="middle" font-size="64" font-weight="700" font-variant-numeric="tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=side2-wins maxw=120">0</text>
 
-    <text x="1836" y="700" text-anchor="end" font-size="30" font-weight="700" opacity="1" fill="#f5f5f8" font-family="Rajdhani" id="slot=subtitle maxw=380 hidden">Winners Final</text>
-    <text x="1836" y="740" text-anchor="end" font-size="20" font-weight="500" letter-spacing="2" fill="#8f8fa3" font-family="Inter">LAST 5 GAMES</text>
+    <!-- Each side: portrait . name . seed, the name anchored against the
+         plate and the seed hanging below it so a seedless side stays centred.
+         THE PORTRAIT IS PINNED TO THE NAME, not authored at an x: the name is
+         the data, so a fixed portrait left a short name (Joan, 82 units) with
+         its captain icon floating 170 away while a long one (MattGree, 153)
+         sat 95 from it. Moving the portrait inward next to the score only
+         moves the hole to the other side of the name, and holds it open in
+         the common state, because a captain exists only once a match is
+         bound. pinBesideText in mount-utils.js; the authored x here is the
+         longest-name position, which is what a theme engine-less renderer
+         falls back to. -->
+    <rect id="scaffold=side1-sprite" x="464" y="666" width="72" height="72" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="464" y="666" width="72" height="72" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=side1-sprite pinbefore=side1-name pingap=16 hidden" />
+    <text x="772" y="716" text-anchor="end" font-size="40" font-weight="700" fill="#f5f5f8" font-family="Rajdhani" id="slot=side1-name maxw=220">Player One</text>
+    <text x="772" y="742" text-anchor="end" font-size="18" font-weight="600" letter-spacing="1" opacity="1" fill="#8f8fa3" font-family="Inter" id="slot=side1-seed maxw=220 hidden">#1 SEED</text>
+    <text x="1148" y="716" text-anchor="start" font-size="40" font-weight="700" fill="#f5f5f8" font-family="Rajdhani" id="slot=side2-name maxw=220">Player Two</text>
+    <text x="1148" y="742" text-anchor="start" font-size="18" font-weight="600" letter-spacing="1" opacity="1" fill="#8f8fa3" font-family="Inter" id="slot=side2-seed maxw=220 hidden">#4 SEED</text>
+    <rect id="scaffold=side2-sprite" x="1384" y="666" width="72" height="72" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="1384" y="666" width="72" height="72" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=side2-sprite pinafter=side2-name pingap=16 hidden" />
 
-    <!-- divider between summary and cards -->
-    <rect x="64" y="798" width="1792" height="2" fill="#1f1f30" />
+    <!-- Right: the event over the round. Both are empty until a start.gg set
+         is bound. The marquee stays CENTRED on the band rather than sliding
+         over to fill this column, because it would then jump the moment a set
+         loaded: an empty third is cheaper than a subject that moves. -->
+    <text x="1836" y="696" text-anchor="end" font-size="20" font-weight="600" letter-spacing="1" opacity="1" fill="#8f8fa3" font-family="Rajdhani" id="slot=event-name maxw=340 hidden">MSB Singles</text>
+    <text x="1836" y="732" text-anchor="end" font-size="30" font-weight="700" opacity="1" fill="#f5f5f8" font-family="Rajdhani" id="slot=subtitle maxw=340 hidden">Winners Final</text>
 
-    <!-- ░░ GAME CARDS (newest first) ░░ -->
-    <g opacity="1" id="slot=game1 hidden">
-      <rect x="72" y="816" width="344" height="188" rx="10" fill="#ffffff" opacity="0.04" />
-      <rect x="72" y="816" width="344" height="188" rx="10" fill="none" stroke-width="1" stroke="#1f1f30" />
-      <text x="396" y="848" text-anchor="end" font-size="17" font-weight="500" fill="#8f8fa3" font-family="Inter" id="slot=game1-date">JUN 1</text>
-      <rect id="scaffold=game1-side1-logo" x="96" y="850" width="48" height="48" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="96" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=game1-side1-logo hidden" />
-      <text x="196" y="896" text-anchor="middle" font-size="46" font-weight="700" font-variant-numeric="tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=game1-side1-score maxw=72">0</text>
-      <text x="244" y="892" text-anchor="middle" font-size="28" font-weight="600" fill="#8f8fa3" font-family="Rajdhani">–</text>
-      <text x="292" y="896" text-anchor="middle" font-size="46" font-weight="700" font-variant-numeric="tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=game1-side2-score maxw=72">0</text>
-      <rect id="scaffold=game1-side2-logo" x="344" y="850" width="48" height="48" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="344" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=game1-side2-logo hidden" />
-      <text x="96" y="948" font-size="19" font-weight="500" fill="#8f8fa3" font-family="Inter" id="slot=game1-mode maxw=296">Game mode</text>
-      <text x="96" y="980" font-size="19" font-weight="500" fill="#8f8fa3" font-family="Inter" id="slot=game1-stadium maxw=296">Stadium</text>
-    </g>
+    <!-- ░░ GAME CARDS (newest first) ░░
+         Each card is a two-row scoreline: the authored SIDES, never away/home,
+         so side 1 is the top row on all five and the eye can scan one column
+         and count. The winner row is drawn (plate . rail . W) and the loser row
+         dimmed whole, its team logo with it; rowOutcome in matchup-mount.js is
+         the rule.
 
-    <g opacity="1" id="slot=game2 hidden">
-      <rect x="430" y="816" width="344" height="188" rx="10" fill="#ffffff" opacity="0.04" />
-      <rect x="430" y="816" width="344" height="188" rx="10" fill="none" stroke-width="1" stroke="#1f1f30" />
-      <text x="754" y="848" text-anchor="end" font-size="17" font-weight="500" fill="#8f8fa3" font-family="Inter" id="slot=game2-date">JUN 1</text>
-      <rect id="scaffold=game2-side1-logo" x="454" y="850" width="48" height="48" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="454" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=game2-side1-logo hidden" />
-      <text x="554" y="896" text-anchor="middle" font-size="46" font-weight="700" font-variant-numeric="tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=game2-side1-score maxw=72">0</text>
-      <text x="602" y="892" text-anchor="middle" font-size="28" font-weight="600" fill="#8f8fa3" font-family="Rajdhani">–</text>
-      <text x="650" y="896" text-anchor="middle" font-size="46" font-weight="700" font-variant-numeric="tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=game2-side2-score maxw=72">0</text>
-      <rect id="scaffold=game2-side2-logo" x="702" y="850" width="48" height="48" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="702" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=game2-side2-logo hidden" />
-      <text x="454" y="948" font-size="19" font-weight="500" fill="#8f8fa3" font-family="Inter" id="slot=game2-mode maxw=296">Game mode</text>
-      <text x="454" y="980" font-size="19" font-weight="500" fill="#8f8fa3" font-family="Inter" id="slot=game2-stadium maxw=296">Stadium</text>
-    </g>
+         A CARD HAS ONE FOOTER LINE AND NO STADIUM. The mode and the park were
+         two dim 19px lines stacked in the same face, colour and weight, so
+         they read as one indistinguishable grey block under the scoreline
+         rather than as two facts: nothing told the eye which mattered, and
+         the pair was the tallest thing on the card after the rows. The mode
+         is the competition and earns its place; the park is flavour a history
+         card does not need, and Slice26 dropped it for the same reason. The
+         mount still binds game{i}-stadium as an optional slot, so a theme
+         that wants it only has to draw it. What is left matches the DATE it
+         brackets (17px, not 19), so the two captions frame the rows instead
+         of competing with them, and the line they gave up went to the rows:
+         48 units tall and snug, 56 now. -->
+    <g id="slot=history-container">
+      <!-- The divider is IN here with the cards, so a first meeting does not
+           draw a rule under nothing. The band itself does not collapse (no
+           band-compact): the mushroom field is scattered across its full 392,
+           so a short band would leave two thirds of that field painting over
+           transparency. -->
+      <rect x="64" y="772" width="1792" height="2" fill="#1f1f30" />
 
-    <g opacity="1" id="slot=game3 hidden">
-      <rect x="788" y="816" width="344" height="188" rx="10" fill="#ffffff" opacity="0.04" />
-      <rect x="788" y="816" width="344" height="188" rx="10" fill="none" stroke-width="1" stroke="#1f1f30" />
-      <text x="1112" y="848" text-anchor="end" font-size="17" font-weight="500" fill="#8f8fa3" font-family="Inter" id="slot=game3-date">JUN 1</text>
-      <rect id="scaffold=game3-side1-logo" x="812" y="850" width="48" height="48" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="812" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=game3-side1-logo hidden" />
-      <text x="912" y="896" text-anchor="middle" font-size="46" font-weight="700" font-variant-numeric="tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=game3-side1-score maxw=72">0</text>
-      <text x="960" y="892" text-anchor="middle" font-size="28" font-weight="600" fill="#8f8fa3" font-family="Rajdhani">–</text>
-      <text x="1008" y="896" text-anchor="middle" font-size="46" font-weight="700" font-variant-numeric="tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=game3-side2-score maxw=72">0</text>
-      <rect id="scaffold=game3-side2-logo" x="1060" y="850" width="48" height="48" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="1060" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=game3-side2-logo hidden" />
-      <text x="812" y="948" font-size="19" font-weight="500" fill="#8f8fa3" font-family="Inter" id="slot=game3-mode maxw=296">Game mode</text>
-      <text x="812" y="980" font-size="19" font-weight="500" fill="#8f8fa3" font-family="Inter" id="slot=game3-stadium maxw=296">Stadium</text>
-    </g>
+      <g opacity="1" id="slot=game1 hidden">
+        <rect x="72" y="786" width="344" height="220" rx="10" fill="#ffffff" opacity="0.04" />
+        <rect x="72" y="786" width="344" height="220" rx="10" fill="none" stroke-width="1" stroke="#1f1f30" />
+        <text x="100" y="818" font-size="17" font-weight="500" letter-spacing="1" fill="#8f8fa3" font-family="Inter" id="slot=game1-date-full maxw=170">JUN 1, 2026</text>
+        <rect x="100" y="830" width="290" height="1" fill="#ffffff" opacity="0.07" />
 
-    <g opacity="1" id="slot=game4 hidden">
-      <rect x="1146" y="816" width="344" height="188" rx="10" fill="#ffffff" opacity="0.04" />
-      <rect x="1146" y="816" width="344" height="188" rx="10" fill="none" stroke-width="1" stroke="#1f1f30" />
-      <text x="1470" y="848" text-anchor="end" font-size="17" font-weight="500" fill="#8f8fa3" font-family="Inter" id="slot=game4-date">JUN 1</text>
-      <rect id="scaffold=game4-side1-logo" x="1170" y="850" width="48" height="48" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="1170" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=game4-side1-logo hidden" />
-      <text x="1270" y="896" text-anchor="middle" font-size="46" font-weight="700" font-variant-numeric="tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=game4-side1-score maxw=72">0</text>
-      <text x="1318" y="892" text-anchor="middle" font-size="28" font-weight="600" fill="#8f8fa3" font-family="Rajdhani">–</text>
-      <text x="1366" y="896" text-anchor="middle" font-size="46" font-weight="700" font-variant-numeric="tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=game4-side2-score maxw=72">0</text>
-      <rect id="scaffold=game4-side2-logo" x="1418" y="850" width="48" height="48" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="1418" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=game4-side2-logo hidden" />
-      <text x="1170" y="948" font-size="19" font-weight="500" fill="#8f8fa3" font-family="Inter" id="slot=game4-mode maxw=296">Game mode</text>
-      <text x="1170" y="980" font-size="19" font-weight="500" fill="#8f8fa3" font-family="Inter" id="slot=game4-stadium maxw=296">Stadium</text>
-    </g>
+        <!-- side 1: the winner plate, then the row that sits on it -->
+        <g opacity="1" id="slot=game1-side1-win hidden">
+          <rect x="84" y="842" width="320" height="56" rx="10" opacity="0.13" fill="#f5bb00" />
+          <rect x="84" y="842" width="5" height="56" rx="2.5" fill="#f5bb00" />
+          <text x="304" y="878" text-anchor="middle" font-size="24" font-weight="700" fill="#f5bb00" font-family="Rajdhani">W</text>
+        </g>
+        <g id="slot=game1-side1-row">
+          <rect id="scaffold=game1-side1-logo" x="100" y="848" width="44" height="44" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="100" y="848" width="44" height="44" preserveAspectRatio="xMidYMid meet" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=game1-side1-logo hidden" />
+          <text x="154" y="878" font-size="22" font-weight="700" fill="#f5f5f8" font-family="Rajdhani" id="slot=game1-side1-name maxw=128">Player One</text>
+          <text x="390" y="884" text-anchor="end" font-size="40" font-weight="700" font-variant-numeric="tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=game1-side1-score maxw=56">0</text>
+        </g>
 
-    <g opacity="1" id="slot=game5 hidden">
-      <rect x="1504" y="816" width="344" height="188" rx="10" fill="#ffffff" opacity="0.04" />
-      <rect x="1504" y="816" width="344" height="188" rx="10" fill="none" stroke-width="1" stroke="#1f1f30" />
-      <text x="1828" y="848" text-anchor="end" font-size="17" font-weight="500" fill="#8f8fa3" font-family="Inter" id="slot=game5-date">JUN 1</text>
-      <rect id="scaffold=game5-side1-logo" x="1528" y="850" width="48" height="48" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="1528" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=game5-side1-logo hidden" />
-      <text x="1628" y="896" text-anchor="middle" font-size="46" font-weight="700" font-variant-numeric="tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=game5-side1-score maxw=72">0</text>
-      <text x="1676" y="892" text-anchor="middle" font-size="28" font-weight="600" fill="#8f8fa3" font-family="Rajdhani">–</text>
-      <text x="1724" y="896" text-anchor="middle" font-size="46" font-weight="700" font-variant-numeric="tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=game5-side2-score maxw=72">0</text>
-      <rect id="scaffold=game5-side2-logo" x="1776" y="850" width="48" height="48" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="1776" y="850" width="48" height="48" preserveAspectRatio="xMidYMid meet" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=game5-side2-logo hidden" />
-      <text x="1528" y="948" font-size="19" font-weight="500" fill="#8f8fa3" font-family="Inter" id="slot=game5-mode maxw=296">Game mode</text>
-      <text x="1528" y="980" font-size="19" font-weight="500" fill="#8f8fa3" font-family="Inter" id="slot=game5-stadium maxw=296">Stadium</text>
+        <!-- side 2: the winner plate, then the row that sits on it -->
+        <g opacity="1" id="slot=game1-side2-win hidden">
+          <rect x="84" y="902" width="320" height="56" rx="10" opacity="0.13" fill="#f5bb00" />
+          <rect x="84" y="902" width="5" height="56" rx="2.5" fill="#f5bb00" />
+          <text x="304" y="938" text-anchor="middle" font-size="24" font-weight="700" fill="#f5bb00" font-family="Rajdhani">W</text>
+        </g>
+        <g id="slot=game1-side2-row">
+          <rect id="scaffold=game1-side2-logo" x="100" y="908" width="44" height="44" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="100" y="908" width="44" height="44" preserveAspectRatio="xMidYMid meet" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=game1-side2-logo hidden" />
+          <text x="154" y="938" font-size="22" font-weight="700" fill="#f5f5f8" font-family="Rajdhani" id="slot=game1-side2-name maxw=128">Player Two</text>
+          <text x="390" y="944" text-anchor="end" font-size="40" font-weight="700" font-variant-numeric="tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=game1-side2-score maxw=56">0</text>
+        </g>
+
+        <text x="100" y="986" font-size="17" font-weight="500" fill="#8f8fa3" font-family="Inter" id="slot=game1-mode maxw=290">Game mode</text>
+      </g>
+
+      <g opacity="1" id="slot=game2 hidden">
+        <rect x="430" y="786" width="344" height="220" rx="10" fill="#ffffff" opacity="0.04" />
+        <rect x="430" y="786" width="344" height="220" rx="10" fill="none" stroke-width="1" stroke="#1f1f30" />
+        <text x="458" y="818" font-size="17" font-weight="500" letter-spacing="1" fill="#8f8fa3" font-family="Inter" id="slot=game2-date-full maxw=170">JUN 1, 2026</text>
+        <rect x="458" y="830" width="290" height="1" fill="#ffffff" opacity="0.07" />
+
+        <!-- side 1: the winner plate, then the row that sits on it -->
+        <g opacity="1" id="slot=game2-side1-win hidden">
+          <rect x="442" y="842" width="320" height="56" rx="10" opacity="0.13" fill="#f5bb00" />
+          <rect x="442" y="842" width="5" height="56" rx="2.5" fill="#f5bb00" />
+          <text x="662" y="878" text-anchor="middle" font-size="24" font-weight="700" fill="#f5bb00" font-family="Rajdhani">W</text>
+        </g>
+        <g id="slot=game2-side1-row">
+          <rect id="scaffold=game2-side1-logo" x="458" y="848" width="44" height="44" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="458" y="848" width="44" height="44" preserveAspectRatio="xMidYMid meet" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=game2-side1-logo hidden" />
+          <text x="512" y="878" font-size="22" font-weight="700" fill="#f5f5f8" font-family="Rajdhani" id="slot=game2-side1-name maxw=128">Player One</text>
+          <text x="748" y="884" text-anchor="end" font-size="40" font-weight="700" font-variant-numeric="tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=game2-side1-score maxw=56">0</text>
+        </g>
+
+        <!-- side 2: the winner plate, then the row that sits on it -->
+        <g opacity="1" id="slot=game2-side2-win hidden">
+          <rect x="442" y="902" width="320" height="56" rx="10" opacity="0.13" fill="#f5bb00" />
+          <rect x="442" y="902" width="5" height="56" rx="2.5" fill="#f5bb00" />
+          <text x="662" y="938" text-anchor="middle" font-size="24" font-weight="700" fill="#f5bb00" font-family="Rajdhani">W</text>
+        </g>
+        <g id="slot=game2-side2-row">
+          <rect id="scaffold=game2-side2-logo" x="458" y="908" width="44" height="44" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="458" y="908" width="44" height="44" preserveAspectRatio="xMidYMid meet" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=game2-side2-logo hidden" />
+          <text x="512" y="938" font-size="22" font-weight="700" fill="#f5f5f8" font-family="Rajdhani" id="slot=game2-side2-name maxw=128">Player Two</text>
+          <text x="748" y="944" text-anchor="end" font-size="40" font-weight="700" font-variant-numeric="tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=game2-side2-score maxw=56">0</text>
+        </g>
+
+        <text x="458" y="986" font-size="17" font-weight="500" fill="#8f8fa3" font-family="Inter" id="slot=game2-mode maxw=290">Game mode</text>
+      </g>
+
+      <g opacity="1" id="slot=game3 hidden">
+        <rect x="788" y="786" width="344" height="220" rx="10" fill="#ffffff" opacity="0.04" />
+        <rect x="788" y="786" width="344" height="220" rx="10" fill="none" stroke-width="1" stroke="#1f1f30" />
+        <text x="816" y="818" font-size="17" font-weight="500" letter-spacing="1" fill="#8f8fa3" font-family="Inter" id="slot=game3-date-full maxw=170">JUN 1, 2026</text>
+        <rect x="816" y="830" width="290" height="1" fill="#ffffff" opacity="0.07" />
+
+        <!-- side 1: the winner plate, then the row that sits on it -->
+        <g opacity="1" id="slot=game3-side1-win hidden">
+          <rect x="800" y="842" width="320" height="56" rx="10" opacity="0.13" fill="#f5bb00" />
+          <rect x="800" y="842" width="5" height="56" rx="2.5" fill="#f5bb00" />
+          <text x="1020" y="878" text-anchor="middle" font-size="24" font-weight="700" fill="#f5bb00" font-family="Rajdhani">W</text>
+        </g>
+        <g id="slot=game3-side1-row">
+          <rect id="scaffold=game3-side1-logo" x="816" y="848" width="44" height="44" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="816" y="848" width="44" height="44" preserveAspectRatio="xMidYMid meet" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=game3-side1-logo hidden" />
+          <text x="870" y="878" font-size="22" font-weight="700" fill="#f5f5f8" font-family="Rajdhani" id="slot=game3-side1-name maxw=128">Player One</text>
+          <text x="1106" y="884" text-anchor="end" font-size="40" font-weight="700" font-variant-numeric="tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=game3-side1-score maxw=56">0</text>
+        </g>
+
+        <!-- side 2: the winner plate, then the row that sits on it -->
+        <g opacity="1" id="slot=game3-side2-win hidden">
+          <rect x="800" y="902" width="320" height="56" rx="10" opacity="0.13" fill="#f5bb00" />
+          <rect x="800" y="902" width="5" height="56" rx="2.5" fill="#f5bb00" />
+          <text x="1020" y="938" text-anchor="middle" font-size="24" font-weight="700" fill="#f5bb00" font-family="Rajdhani">W</text>
+        </g>
+        <g id="slot=game3-side2-row">
+          <rect id="scaffold=game3-side2-logo" x="816" y="908" width="44" height="44" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="816" y="908" width="44" height="44" preserveAspectRatio="xMidYMid meet" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=game3-side2-logo hidden" />
+          <text x="870" y="938" font-size="22" font-weight="700" fill="#f5f5f8" font-family="Rajdhani" id="slot=game3-side2-name maxw=128">Player Two</text>
+          <text x="1106" y="944" text-anchor="end" font-size="40" font-weight="700" font-variant-numeric="tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=game3-side2-score maxw=56">0</text>
+        </g>
+
+        <text x="816" y="986" font-size="17" font-weight="500" fill="#8f8fa3" font-family="Inter" id="slot=game3-mode maxw=290">Game mode</text>
+      </g>
+
+      <g opacity="1" id="slot=game4 hidden">
+        <rect x="1146" y="786" width="344" height="220" rx="10" fill="#ffffff" opacity="0.04" />
+        <rect x="1146" y="786" width="344" height="220" rx="10" fill="none" stroke-width="1" stroke="#1f1f30" />
+        <text x="1174" y="818" font-size="17" font-weight="500" letter-spacing="1" fill="#8f8fa3" font-family="Inter" id="slot=game4-date-full maxw=170">JUN 1, 2026</text>
+        <rect x="1174" y="830" width="290" height="1" fill="#ffffff" opacity="0.07" />
+
+        <!-- side 1: the winner plate, then the row that sits on it -->
+        <g opacity="1" id="slot=game4-side1-win hidden">
+          <rect x="1158" y="842" width="320" height="56" rx="10" opacity="0.13" fill="#f5bb00" />
+          <rect x="1158" y="842" width="5" height="56" rx="2.5" fill="#f5bb00" />
+          <text x="1378" y="878" text-anchor="middle" font-size="24" font-weight="700" fill="#f5bb00" font-family="Rajdhani">W</text>
+        </g>
+        <g id="slot=game4-side1-row">
+          <rect id="scaffold=game4-side1-logo" x="1174" y="848" width="44" height="44" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="1174" y="848" width="44" height="44" preserveAspectRatio="xMidYMid meet" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=game4-side1-logo hidden" />
+          <text x="1228" y="878" font-size="22" font-weight="700" fill="#f5f5f8" font-family="Rajdhani" id="slot=game4-side1-name maxw=128">Player One</text>
+          <text x="1464" y="884" text-anchor="end" font-size="40" font-weight="700" font-variant-numeric="tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=game4-side1-score maxw=56">0</text>
+        </g>
+
+        <!-- side 2: the winner plate, then the row that sits on it -->
+        <g opacity="1" id="slot=game4-side2-win hidden">
+          <rect x="1158" y="902" width="320" height="56" rx="10" opacity="0.13" fill="#f5bb00" />
+          <rect x="1158" y="902" width="5" height="56" rx="2.5" fill="#f5bb00" />
+          <text x="1378" y="938" text-anchor="middle" font-size="24" font-weight="700" fill="#f5bb00" font-family="Rajdhani">W</text>
+        </g>
+        <g id="slot=game4-side2-row">
+          <rect id="scaffold=game4-side2-logo" x="1174" y="908" width="44" height="44" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="1174" y="908" width="44" height="44" preserveAspectRatio="xMidYMid meet" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=game4-side2-logo hidden" />
+          <text x="1228" y="938" font-size="22" font-weight="700" fill="#f5f5f8" font-family="Rajdhani" id="slot=game4-side2-name maxw=128">Player Two</text>
+          <text x="1464" y="944" text-anchor="end" font-size="40" font-weight="700" font-variant-numeric="tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=game4-side2-score maxw=56">0</text>
+        </g>
+
+        <text x="1174" y="986" font-size="17" font-weight="500" fill="#8f8fa3" font-family="Inter" id="slot=game4-mode maxw=290">Game mode</text>
+      </g>
+
+      <g opacity="1" id="slot=game5 hidden">
+        <rect x="1504" y="786" width="344" height="220" rx="10" fill="#ffffff" opacity="0.04" />
+        <rect x="1504" y="786" width="344" height="220" rx="10" fill="none" stroke-width="1" stroke="#1f1f30" />
+        <text x="1532" y="818" font-size="17" font-weight="500" letter-spacing="1" fill="#8f8fa3" font-family="Inter" id="slot=game5-date-full maxw=170">JUN 1, 2026</text>
+        <rect x="1532" y="830" width="290" height="1" fill="#ffffff" opacity="0.07" />
+
+        <!-- side 1: the winner plate, then the row that sits on it -->
+        <g opacity="1" id="slot=game5-side1-win hidden">
+          <rect x="1516" y="842" width="320" height="56" rx="10" opacity="0.13" fill="#f5bb00" />
+          <rect x="1516" y="842" width="5" height="56" rx="2.5" fill="#f5bb00" />
+          <text x="1736" y="878" text-anchor="middle" font-size="24" font-weight="700" fill="#f5bb00" font-family="Rajdhani">W</text>
+        </g>
+        <g id="slot=game5-side1-row">
+          <rect id="scaffold=game5-side1-logo" x="1532" y="848" width="44" height="44" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="1532" y="848" width="44" height="44" preserveAspectRatio="xMidYMid meet" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=game5-side1-logo hidden" />
+          <text x="1586" y="878" font-size="22" font-weight="700" fill="#f5f5f8" font-family="Rajdhani" id="slot=game5-side1-name maxw=128">Player One</text>
+          <text x="1822" y="884" text-anchor="end" font-size="40" font-weight="700" font-variant-numeric="tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=game5-side1-score maxw=56">0</text>
+        </g>
+
+        <!-- side 2: the winner plate, then the row that sits on it -->
+        <g opacity="1" id="slot=game5-side2-win hidden">
+          <rect x="1516" y="902" width="320" height="56" rx="10" opacity="0.13" fill="#f5bb00" />
+          <rect x="1516" y="902" width="5" height="56" rx="2.5" fill="#f5bb00" />
+          <text x="1736" y="938" text-anchor="middle" font-size="24" font-weight="700" fill="#f5bb00" font-family="Rajdhani">W</text>
+        </g>
+        <g id="slot=game5-side2-row">
+          <rect id="scaffold=game5-side2-logo" x="1532" y="908" width="44" height="44" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="1532" y="908" width="44" height="44" preserveAspectRatio="xMidYMid meet" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=game5-side2-logo hidden" />
+          <text x="1586" y="938" font-size="22" font-weight="700" fill="#f5f5f8" font-family="Rajdhani" id="slot=game5-side2-name maxw=128">Player Two</text>
+          <text x="1822" y="944" text-anchor="end" font-size="40" font-weight="700" font-variant-numeric="tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=game5-side2-score maxw=56">0</text>
+        </g>
+
+        <text x="1532" y="986" font-size="17" font-weight="500" fill="#8f8fa3" font-family="Inter" id="slot=game5-mode maxw=290">Game mode</text>
+      </g>
     </g>
 
     <!-- .. MUSHROOM FIELD, near plane .............................. -->

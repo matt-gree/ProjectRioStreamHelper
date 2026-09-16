@@ -1,0 +1,99 @@
+<svg viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" data-design-vars="app">
+  <!--
+    CLASSIC package - Upcoming Schedule (1920x1080): the running order as a
+    board, painted with the producer's Design-tab CSS variables
+    (data-design-vars="app"). Same slot contract as the default package's; the
+    difference is the header, which is an accent cap here rather than a rule
+    under a title, because accent-forward chrome is this package's idiom (see
+    its ticker's RESULTS badge).
+
+    THE CARD'S HEIGHT IS DATA. `card-bg` declares `data-compact-h` (its height
+    with zero rows) and schedule-mount.js sets the real height from the row
+    count; the `card` group's authored translate is a four-row pose whose Y the
+    mount rewrites each render so the board stays centred as the order grows.
+
+    NO ATMOSPHERE FIELD HERE, and that is a palette decision rather than a
+    stylistic one: the Rio mark is fixed red and white, and this package's
+    header is whatever colour the producer picked. A branded texture drifting
+    behind an arbitrary accent is the coloured-shadow mistake in another key
+    (see public/design/README.md).
+
+    THE HEADER CAP CANNOT CARRY THE CARD'S BORDER. A stroke on the cap would
+    draw a line straight across the middle of the card where the cap meets the
+    rows, so the cap is fill-only and clipped to the card's own rounded box;
+    the one stroke is card-bg's, which is what the Border Thickness slider is
+    for.
+  -->
+  <style>
+    .csh-name { fill: var(--text-primary, #ffffff); font-family: var(--font-display, 'Rajdhani', sans-serif); text-shadow: var(--text-shadow, none); }
+    .csh-lab  { fill: var(--text-primary, #ffffff); font-family: var(--font-display, 'Rajdhani', sans-serif); }
+    .csh-dim  { fill: rgba(255,255,255,0.55); font-family: var(--font-body, 'Inter', system-ui, sans-serif); }
+    .csh-num  { fill: var(--accent, #f59e0b); font-family: var(--font-mono, 'Chivo Mono', ui-monospace, monospace); font-variant-numeric: tabular-nums; }
+  </style>
+  <defs>
+    <clipPath id="csh-card-clip"><rect x="0" y="0" width="1240" height="4000" rx="18"/></clipPath>
+  </defs>
+
+  <!-- Four-row pose: 1240 wide by 124 + 4*82 = 452 tall, centred on 1080
+       gives y = 314. The mount keeps the 340 and recomputes the 314. -->
+  <g data-slot="card" transform="translate(340,314)">
+    <rect data-slot="card-bg" data-compact-h="124" x="0" y="0" width="1240" height="452" rx="18"
+          style="fill:var(--card-bg, rgba(15,15,25,0.88));stroke:var(--border-color, rgba(255,255,255,0.08));stroke-width:var(--border-width, 1px);filter:var(--card-shadow-filter, none)"/>
+
+    <!-- Accent cap. Clipped to the card so its top corners follow the card's
+         radius however the producer sets it, and squared off at the bottom. -->
+    <g clip-path="url(#csh-card-clip)">
+      <rect x="0" y="0" width="1240" height="96" style="fill:var(--accent, #f59e0b)"/>
+      <rect x="0" y="94" width="1240" height="2" fill="rgba(0,0,0,0.25)"/>
+    </g>
+
+    <text data-slot="title" data-maxw="1020" x="620" y="60" text-anchor="middle" fill="#ffffff"
+          font-family="var(--font-display, 'Rajdhani', sans-serif)"
+          font-size="40" font-weight="700" letter-spacing="3"
+          style="text-transform:uppercase">UPCOMING MATCHES</text>
+
+    <g data-slot="rows" transform="translate(16,108)">
+      <text data-slot="overflow" data-h="48" data-maxw="600" x="604" y="0" text-anchor="middle"
+            class="csh-dim" font-size="19" font-weight="700" letter-spacing="2" opacity="0"></text>
+    </g>
+
+    <!-- Prototype row: 1208 wide by 72 drawn, on an 82 pitch.
+         ONE LINE. A schedule is a table of matches and a table's row is a line:
+         the round on the left, the matchup mirrored about the row's centre so
+         every row's two names land in the same two columns however long they
+         are, and when it happens on the right. It was two lines (meta over
+         matchup) on a 1240 card, which put the four short strings of a typical
+         row at the four corners of a 98-unit box with a hole in the middle.
+         Everything on this line is optically centred on the row's own centre
+         (36), which for caps means centred on the CAP HEIGHT, about 0.35 of the
+         font size above the baseline, not on the em box.
+
+         THE FOUR data-maxw VALUES ARE A GUTTER BUDGET, not four independent
+         limits: every one of them is reached by real data (a long round name, a
+         long rio name, "After the break"), so the clearance between two
+         neighbouring columns is what is left when BOTH are at their bound. The
+         label ends at 258 against a name that can start at 318, and the status
+         starts at 960 against a name that can end at 890 - 60 and 70 units. At
+         272 and 252 they were 18 and 38, which auto-fits happily into two
+         columns that read as one collided string. -->
+    <g data-slot="match-template" data-h="82" opacity="0">
+      <rect data-part="row-bg" x="0" y="0" width="1208" height="72" rx="8"
+            fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
+      <rect data-part="rail" x="0" y="12" width="6" height="48" rx="3" style="fill:var(--accent, #f59e0b)"/>
+
+      <text data-part="label" data-maxw="230" x="28" y="43" class="csh-dim"
+            font-size="19" font-weight="700" letter-spacing="1.6">ROUND</text>
+
+      <text data-part="side1-name" data-maxw="234" x="552" y="47" text-anchor="end" class="csh-name"
+            font-size="32" font-weight="700">Side One</text>
+      <rect data-part="plate" x="566" y="19" width="76" height="34" rx="8" fill="rgba(0,0,0,0.35)"/>
+      <text data-part="plate-text" data-maxw="66" x="604" y="44" text-anchor="middle" class="csh-num"
+            font-size="22" font-weight="800">Bo5</text>
+      <text data-part="side2-name" data-maxw="234" x="656" y="47" text-anchor="start" class="csh-name"
+            font-size="32" font-weight="700">Side Two</text>
+
+      <text data-part="status" data-maxw="220" x="1180" y="44" text-anchor="end" class="csh-lab"
+            font-size="24" font-weight="700" letter-spacing="1.6">7:15 PM</text>
+    </g>
+  </g>
+</svg>
