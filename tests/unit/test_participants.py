@@ -477,3 +477,41 @@ def test_an_unhashable_startgg_id_does_not_break_the_rebuild():
 
     assert Participants.MatchByRioName("Fine") is not None
     assert Participants.MatchByStartGG(["not", "hashable"]) is None
+
+
+# --- the display block is exactly what a scoreboard can draw ---
+
+def test_every_display_field_has_a_scoreboard_target():
+    """A `display.*` key with no entry in RESURFACE_MAP is a field nothing can
+    put on air.
+
+    `display` is the resolve-by-copy payload — the projectors' whole job is to
+    copy it into `score.{N}.player.{T}.*` — so a key the map does not name is a
+    value a producer can type and never see. `mainCharacter` was the single
+    exception for a long time and was removed on 2026-09-15 (MSB drafts a team
+    per game; it had no "main" to record), which is what makes this an equality
+    and not a subset: the next field added to either side has to be added to
+    both, or it is decoration.
+    """
+    from server.participants import _DISPLAY_DEFAULTS
+    from server.rio.resurface import RESURFACE_MAP
+
+    assert set(_DISPLAY_DEFAULTS) == set(RESURFACE_MAP)
+
+
+def test_a_retired_display_field_is_dropped_off_a_stored_row():
+    """No migration needed, in either direction.
+
+    `_merge_block` keeps only keys the defaults name, so a `participants.json`
+    written before a field was retired loses it the next time it is loaded —
+    and `Commentary._normalize_slot` independently drops a `subField` naming it.
+    Both halves self-heal, which is why retiring a display field is a supported
+    move rather than a schema bump.
+    """
+    row = Participants._normalize(
+        {"id": "p_old", "display": {"tag": "Alice", "mainCharacter": "Yoshi"}},
+        "p_old",
+    )
+
+    assert "mainCharacter" not in row["display"]
+    assert row["display"]["tag"] == "Alice"

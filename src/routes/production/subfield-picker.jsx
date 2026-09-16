@@ -1,7 +1,7 @@
 import { memo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-    CaptionsOff, Check, ChevronsUpDown, Gamepad2, Globe, IdCard, MapPin, Star, Tag, UserRound,
+    CaptionsOff, Check, ChevronsUpDown, Gamepad2, Globe, IdCard, MapPin, Tag, UserRound,
 } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '../../components/ui/popover';
 import { Command, CommandGroup, CommandItem, CommandList } from '../../components/ui/command';
@@ -25,8 +25,8 @@ import { SOCIAL_MARKS } from '../../../public/layout/lib/social-marks.js';
  *
  * Same Popover + Command shape as ParticipantPicker, the picker that sits beside
  * it, so the two controls on a caster's row open and read alike. There is no
- * search box — nine fixed fields are scanned, not searched — so the list itself
- * takes focus on open, which is what keeps arrow keys and Enter working.
+ * search box — a handful of fixed fields are scanned, not searched — so the
+ * list itself takes focus on open, which keeps arrow keys and Enter working.
  *
  * The marks: the two platforms wear the brand marks the overlays draw
  * (../../public/layout/lib/social-marks.js — a handle cannot say which platform
@@ -37,7 +37,6 @@ const FIELD_ICONS = {
     fullName: IdCard,
     pronoun: UserRound,
     prefix: Tag,
-    mainCharacter: Star,
     country: Globe,
     state: MapPin,
     rioName: Gamepad2,

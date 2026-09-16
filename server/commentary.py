@@ -23,11 +23,18 @@ MAX_SLOTS = 4
 # `identities.rioName` / `display.*` field on a participant row. Keep in sync with
 # SUBFIELD_OPTIONS in src/context/commentary.js (the client offers the same list;
 # this dict is the authoritative validator).
+#
+# A FIELD MSB HAS NO CONCEPT OF IS NOT A FIELD. `mainCharacter` sat here until
+# 2026-09-15: a "main" is a fighting-game idea, and Mario Superstar Baseball is
+# drafted per game — the captain is the game's answer and the roster is on the
+# board already. It was never resurfaced onto a scoreboard either (no entry in
+# RESURFACE_MAP), so the only thing it could ever draw was a caster's sub-plate
+# saying something the game does not have. `_normalize_slot` drops an unknown
+# subField, so a slot authored against it self-heals to "no sub-plate".
 SUBFIELD_LABELS = {
     "fullName": "Full Name",
     "pronoun": "Pronouns",
     "prefix": "Prefix",
-    "mainCharacter": "Main",
     "country": "Country",
     "state": "State",
     "twitter": "Twitter",

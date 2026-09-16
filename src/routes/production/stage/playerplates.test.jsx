@@ -18,7 +18,7 @@ vi.mock('../../../context/playerplates', async (orig) => ({
 
 const person = (id, tag, display = {}) => ({
     id, identities: { rioName: tag, startgg: null },
-    display: { tag, prefix: '', fullName: '', pronoun: '', country: '', state: '', twitter: '', youtube: '', mainCharacter: '', ...display },
+    display: { tag, prefix: '', fullName: '', pronoun: '', country: '', state: '', twitter: '', youtube: '', ...display },
     prefs: { side: null },
 });
 
@@ -51,7 +51,7 @@ beforeEach(() => {
         loaded: true, loading: false,
         participants: [
             person('p_rjb', 'rjb', { twitter: '@rjb_msb' }),
-            person('p_matt', 'MattGree', { mainCharacter: 'Yoshi' }),
+            person('p_matt', 'MattGree', { fullName: 'Matt Greene' }),
         ],
     });
     setConfig({
@@ -166,14 +166,14 @@ describe('Player Plates stage', () => {
         setConfig({
             source: 'manual', matchId: null,
             sides: {
-                1: side({ participantId: 'p_matt', subField: 'mainCharacter' }),
+                1: side({ participantId: 'p_matt', subField: 'fullName' }),
                 2: side({ name: 'Guest Player', location: 'right' }),
             },
         });
         const user = userEvent.setup();
         ui();
         expect(card('Side 1 plate').getByRole('combobox', { name: 'Side 1 sub-plate' }))
-            .toHaveTextContent('Yoshi');
+            .toHaveTextContent('Matt Greene');
 
         // Nothing to resolve for a typed name, so its sub-plate is typed too.
         expect(card('Side 2 plate').queryByRole('combobox', { name: 'Side 2 sub-plate' })).not.toBeInTheDocument();

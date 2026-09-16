@@ -18,7 +18,7 @@ vi.mock('../../../context/commentary', async (orig) => ({
 
 const person = (id, tag, display = {}, rioName = tag) => ({
     id, identities: { rioName, startgg: null },
-    display: { tag, prefix: '', fullName: '', pronoun: '', country: '', state: '', twitter: '', youtube: '', mainCharacter: '', ...display },
+    display: { tag, prefix: '', fullName: '', pronoun: '', country: '', state: '', twitter: '', youtube: '', ...display },
     prefs: { side: null },
 });
 

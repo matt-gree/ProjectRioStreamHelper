@@ -22,7 +22,6 @@ export const SUBFIELD_OPTIONS = [
     { value: "fullName", label: "Full Name" },
     { value: "pronoun", label: "Pronouns" },
     { value: "prefix", label: "Prefix" },
-    { value: "mainCharacter", label: "Main" },
     { value: "country", label: "Country" },
     { value: "state", label: "State" },
     { value: "twitter", label: "Twitter" },

@@ -45,7 +45,6 @@ _DISPLAY_DEFAULTS = {
     "state": "",          # → score.player.state
     "twitter": "",        # → score.player.twitter
     "youtube": "",        # → score.player.youtube
-    "mainCharacter": "",  # no scoreboard target; used by player views/elements
 }
 
 _IDENTITY_DEFAULTS = {

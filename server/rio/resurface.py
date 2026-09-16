@@ -4,7 +4,10 @@ Maps a participant registry ``display.*`` field to the ``score.{N}.player.{T}.*`
 field overlays read. Used by both the HUD/Live/Rotator resurface path
 (``server/rio/provider.py``) and the Match projector (``server/match.py``) so the
 two stay in lockstep. Mirrors the frontend resolver (``src/lib/participants.js``).
-``mainCharacter`` has no scoreboard target and is intentionally omitted.
+
+EVERY ``display.*`` FIELD IS HERE, and that is the point: a field with no
+scoreboard target is a field nothing can draw. ``mainCharacter`` was the one
+exception and is gone (2026-09-15) — see server/commentary.py.
 """
 
 RESURFACE_MAP = {
