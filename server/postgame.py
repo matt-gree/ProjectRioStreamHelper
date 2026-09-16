@@ -17,7 +17,7 @@ stage still flips to ``post`` when a match is bound)::
     postgame.{N}.capturedAt     ISO-8601 capture time
     postgame.{N}.sourceFile     stat-file basename
     postgame.{N}.meta           { startDate, endDate, stadium, tagSetId,
-                                  inningsSelected, inningsPlayed, isMercy,
+                                  gameMode, inningsSelected, inningsPlayed, isMercy,
                                   wasQuit, quitter, version, winnerSide }
     postgame.{N}.player.{T}      { rioName, score, isWinner, captain, teamName,
                                    totals { runs, hits, homeruns, stars_won,
@@ -48,6 +48,7 @@ from loguru import logger
 from server import postgame_contacts, postgame_files, postgame_stats
 from server.match import Match
 from server.postgame_files import norm_game_id
+from server.rio import stats_api
 from server.rio.pyrio.stat_file_parser import StatObj
 from server.state import State
 
@@ -129,6 +130,11 @@ class PostGame:
             "endDate": data.get("Date - End", ""),
             "stadium": stat.stadium(),
             "tagSetId": data.get("TagSetID"),
+            # The mode THIS game was played under, by name — frozen at capture
+            # so a summary shown after the board has moved on still names it.
+            # Cache-only (never a network round-trip inside the capture lock);
+            # '' when unknown, and the Game Summary falls back to the board's.
+            "gameMode": stats_api.game_mode_name(data.get("TagSetID")),
             "inningsSelected": stat.inningsSelected(),
             "inningsPlayed": stat.inningsPlayed(),
             "isMercy": stat.isMercy(),
@@ -266,8 +272,22 @@ class PostGame:
         so post-game owns this hop. The winner from the captured box score is
         mapped to a match side by rioName (immune to board-side swaps) and
         ``Match.award_game`` bumps ``match.{m}.series.{side}`` + re-projects.
-        The stage guard makes this once-per-game: re-capturing the same
-        finished game while already ``post`` never double-credits the series.
+
+        THE STAGE HOP AND THE CREDIT ARE TWO THINGS, and nesting the second
+        inside the first meant **only the first captured game of a match could
+        ever advance the series**. The guard was hired as the once-per-game
+        check, but it is a once-per-MATCH check: game 2 of a Bo3 arrives with the
+        match already at ``post``, so it was skipped in silence — a Bo3 could
+        never get past 1-0, never decide, and sat on "between games" forever. The
+        same skip swallowed every re-capture after a first one that could not
+        resolve a winner (a quit game reports no ``winnerSide``), which is how a
+        **Bo1** ended a night at 0-0 with three captured games behind it.
+
+        ``award_game``'s ``game_id`` dedup is the real once-per-game guard, and
+        it is durable (``match.{m}.credited``), so re-capturing the same finished
+        game is still a no-op — across a restart too, which the class-level set
+        this replaced could not manage and which is why the stage guard was
+        standing in for it.
         """
         m = Match.scoreboard_match(sb)
         if not m:
@@ -276,17 +296,21 @@ class PostGame:
             await State.Set(f"match.{m}.stage", "post")
             logger.info("[PostGame] match {} → post (board {})", m, sb)
 
-            payload = cls._captured.get(sb) or {}
-            winner_side = (payload.get("meta") or {}).get("winnerSide")
-            winner_rio = ""
-            if winner_side in (1, 2):
-                winner_rio = ((payload.get("player") or {}).get(str(winner_side)) or {}).get("rioName", "")
-            if winner_rio:
-                await Match.award_game(m, winner_rio,
-                                       game_id=payload.get("gameId") or None)
-            elif winner_side in (1, 2):
-                logger.warning("[PostGame] sb{}: winner side {} has no rioName — series not advanced",
-                               sb, winner_side)
+        payload = cls._captured.get(sb) or {}
+        winner_side = (payload.get("meta") or {}).get("winnerSide")
+        winner_rio = ""
+        if winner_side in (1, 2):
+            winner_rio = ((payload.get("player") or {}).get(str(winner_side)) or {}).get("rioName", "")
+        if winner_rio:
+            await Match.award_game(m, winner_rio,
+                                   game_id=payload.get("gameId") or None)
+        elif winner_side in (1, 2):
+            logger.warning("[PostGame] sb{}: winner side {} has no rioName — series not advanced",
+                           sb, winner_side)
+        else:
+            # A quit game reports no winner. Saying so once is what makes the
+            # 0-0 series afterwards explicable instead of a mystery.
+            logger.info("[PostGame] sb{}: capture has no winner — series not advanced", sb)
 
     @classmethod
     async def clear(cls, sb: int) -> None:

@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useSettingsStore, useStateStore } from '../../context/store';
+import { matchComplete } from '../../../public/layout/lib/match-format.js';
 
 /*
  * The queue — `schedule.queue`, an ORDER over matches, read from the board's side.
@@ -29,11 +30,19 @@ import { useSettingsStore, useStateStore } from '../../context/store';
  * Mirrors `Schedule.not_waiting_reason` on the server, wording included; keep
  * the two in step.
  *
- * `decided` is the finished test, NOT `stage`: a Bo3 sits at `stage: post`
- * between games and is still the current fixture. `stage === 'draft'` is a
- * separate, anti-bounce test — a fixture that has already been on a board and
- * been fed would otherwise become "next" again the moment the board moves off it,
- * and the verb would ping-pong between two matches.
+ * COMPLETE is the finished test, NOT `decided` and NOT `stage`. Not `stage`,
+ * because a Bo3 sits at `stage: post` between games and is still the current
+ * fixture. And not `decided`, because a DOUBLEHEADER IS COMPLETE AFTER TWO GAMES
+ * HOWEVER THEY FALL: a 1-1 split is finished and has no winner, so asking for one
+ * here offered a played fixture back to a board as though it were fresh — UP NEXT
+ * and a `Put on board` on a match with no games left in it. The server had
+ * already moved to `Match.is_complete` and this copy had not, which is the worse
+ * half: the preview promised a take the server would refuse to make.
+ *
+ * `stage === 'draft'` is a separate, anti-bounce test — a fixture that has
+ * already been on a board and been fed would otherwise become "next" again the
+ * moment the board moves off it, and the verb would ping-pong between two
+ * matches.
  *
  * The reason is what the Match desk shows. `stage` has no writer a producer can
  * see, so the anti-bounce test used to strand a fed-then-unbound fixture out of
@@ -45,7 +54,13 @@ export function notWaitingReason(match, boundIds, boundBoard = null) {
         return boundBoard ? `it is already on board ${boundBoard}` : 'it is already on a board';
     }
     const d = match.decided;
-    if (d === 1 || d === 2 || d === '1' || d === '2') return 'the series is decided';
+    if (matchComplete((match.format || {}).bestOf,
+                      match.series?.[1] ?? match.series?.['1'],
+                      match.series?.[2] ?? match.series?.['2'], d)) {
+        return (d === 1 || d === 2 || d === '1' || d === '2')
+            ? 'the series is decided'
+            : 'the doubleheader is split';
+    }
     if ((match.stage || 'draft') !== 'draft') return 'it has already been played';
     return null;
 }

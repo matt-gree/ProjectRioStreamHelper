@@ -18,14 +18,15 @@ import {
     isFedPlacement, placementTarget, stretchOfPlacement, togglePin as togglePinIn, useConsoleOffline,
     useConsolePlacements, useConsoleScenes, usePlacementLabel,
 } from './placements';
-import { StateChip, chipFor } from './kit';
+import { GameStageChip, StateChip, chipFor } from './kit';
 import {
     removeSourceFromScene, setSourceVisibility, useDisplayedEnabled, useOtherScenesWith,
     useRemovalStaged,
 } from './bindings';
 import { useContainerPush } from './feeds';
+import { useWaitingCount } from './queue';
 import { useMemberScope } from './containers';
-import { boardDeskId, useActiveBoards, useBoardLabel } from './boards';
+import { boardDeskId, useActiveBoards, useBoardLabel, useBoardLifecycle } from './boards';
 import { useBoardDeskRow, BOARD_TAG_TITLE } from './desks/board';
 import { notifications } from '../../lib/notify';
 
@@ -341,7 +342,7 @@ const StretchBadge = memo(function StretchBadge({ factor, cropped }) {
 // One rack row. Rows relocate as OBS state changes; the entry animation is
 // motion-safe so prefers-reduced-motion users get an instant move.
 const RackRow = memo(function RackRow({
-    state, name, meta, tag, tagTitle, dimmed, selected, onSelect, quickAction,
+    state, name, meta, tag, tagTitle, badge, dimmed, selected, onSelect, quickAction,
     pinnable, pinned, onPinToggle, nested, rowAction, stretch, cropped,
 }) {
     return (
@@ -384,6 +385,12 @@ const RackRow = memo(function RackRow({
                     warning — the `ml-auto` on whichever comes first pushes the
                     pair right together. */}
                 {stretch ? <StretchBadge factor={stretch} cropped={cropped} /> : null}
+                {/* A lifecycle badge, which is neither the TYPE tag above nor a
+                    source status: it says where the row's GAME is up to. Only a
+                    board row has one, and only when there is a game — ../kit
+                    GameStageChip renders nothing otherwise, so this is unguarded
+                    on purpose. */}
+                {badge}
             </button>
             {quickAction}
             {pinnable && <PinToggle pinned={pinned} onToggle={onPinToggle} />}
@@ -420,15 +427,42 @@ function SectionHeader({ label, accent, count, onToggle, open, action }) {
     );
 }
 
-// Match desk meta: the primary (lowest-id) match's label + series score.
+/*
+ * Match desk meta: WHAT IS LEFT TO PUT ON A BOARD.
+ *
+ * It used to be the lowest-id match's id and series score — `M1 · 0–0` — which
+ * named a fixture nobody asked about (the first one ever authored, decided
+ * weeks ago on a long-running rig) and quoted a number that is 0–0 all night on
+ * the Bo1 almost every night is. The row said nothing a producer could act on.
+ *
+ * The desk is the top row of the rack now, and this is what a producer opens the
+ * app to read: how much of tonight is still ahead. `all played` is the whole
+ * cold-start answer in two words — every fixture is decided, so the night that is
+ * still on screen is last night's and the next thing to do is author a card.
+ *
+ * `none waiting` is kept apart from it because they are different situations:
+ * fixtures exist and are undecided, but each is on a board, out of its order, or
+ * held back by its stage — which the Match desk's own stage control explains per
+ * fixture. Collapsing the two would have the rack say "all played" over a match
+ * that is live right now.
+ */
 function useMatchDeskMeta() {
-    return useStateStore(useShallow(s => {
+    const waiting = useWaitingCount();
+    const { total, allDecided } = useStateStore(useShallow(s => {
         const matches = s?.match ?? {};
-        const ids = Object.keys(matches).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
-        if (!ids.length) return { meta: 'no match', idle: true };
-        const m = matches[ids[0]] ?? {};
-        return { meta: `M${ids[0]} · ${m?.series?.[1] ?? 0}–${m?.series?.[2] ?? 0}`, idle: false };
+        const ids = Object.keys(matches).filter(k => /^\d+$/.test(k));
+        return {
+            total: ids.length,
+            allDecided: ids.every(id => {
+                const d = matches[id]?.decided;
+                return d === 1 || d === 2 || d === '1' || d === '2';
+            }),
+        };
     }));
+    if (!total) return { meta: 'no matches', idle: true };
+    if (waiting) return { meta: `${waiting} waiting`, idle: false };
+    // Never dimmed: "all played" is the one meta here that is a prompt to act.
+    return { meta: allDecided ? 'all played' : 'none waiting', idle: false };
 }
 
 /*
@@ -472,10 +506,21 @@ export const DESKS = [
  * kinds under it, and a header whose control applies to half its rows is a header
  * that lies.
  *
- * Boards come first because they are the rig: the fixture, the capture and the
- * bracket all act ON a board. Bounded, permanent, one row each — the treatment
- * matches are deliberately NOT given, since matches accumulate all night and
- * belong in a list inside one row.
+ * BOARDS USED TO COME FIRST, on the argument that they are the rig — "the
+ * fixture, the capture and the bracket all act ON a board". Two thirds of that
+ * argument has since left the tier: Capture is a region on the board panel and
+ * Bracket moved onto the source that draws it, so what it really said was that
+ * the Match desk acts on a board, which is true of every desk there could be.
+ *
+ * Match reads first now because that is the order the work happens in: a night is
+ * authored before any board matters, and the fixtures outlive every game that
+ * plays under them. It also puts the one row that can say how much of tonight is
+ * left (`useMatchDeskMeta` — `3 waiting`, `all played`) at the top of the surface
+ * the app opens onto, which is the whole cold-start readout.
+ *
+ * They still keep separate sections — see the paragraph above this one for why.
+ * Bounded, permanent, one row each: the treatment matches are deliberately NOT
+ * given, since matches accumulate all night and belong in a list inside one row.
  */
 export function useRigRows() {
     const boards = useActiveBoards();
@@ -510,10 +555,22 @@ const BoardDeskRow = memo(function BoardDeskRow({
     // beside it did not fit the row and is stated at full length on the board's
     // own panel (see useBoardDeskRow).
     const { tag, idle } = useBoardDeskRow(desk.board);
+    /*
+     * WHERE THE GAME IS UP TO, on the surface the producer actually lands on.
+     *
+     * The rack is the first thing the app opens onto, and a board row said only
+     * its name and its type — so a board holding last night's finished game was
+     * indistinguishable from one mid-inning without opening the panel. The desk
+     * has drawn this chip all along; moving it here costs one component and is
+     * the whole of the cold-start readout.
+     */
+    const lifecycle = useBoardLifecycle(desk.board);
+    const restoredAt = useStateStore(s => s?.score?.[desk.board]?.restored_at);
     return (
         <RackRow
             state="desk" name={desk.name} meta={null} dimmed={idle}
             tag={tag} tagTitle={BOARD_TAG_TITLE[tag]}
+            badge={<GameStageChip lifecycle={lifecycle} at={restoredAt} />}
             selected={selection === desk.id} onSelect={() => onSelect(desk.id)}
             pinnable
             pinned={pinned.has(desk.id)}
@@ -871,13 +928,14 @@ export const Rack = memo(function Rack({
             <ScrollArea className="min-h-0 flex-1">
                 <div className="flex flex-col gap-1 p-2">
                     <StretchNotice placements={placements} onSelect={setSelection} />
-                    <RigSection
-                        open={!shut.has('rig')} onToggle={() => toggleTier('rig')}
+                    {/* MATCH FIRST. See DESKS for why the order flipped. */}
+                    <DeskSection
+                        open={!shut.has('desk')} onToggle={() => toggleTier('desk')}
                         selection={selection} onSelect={setSelection}
                         pinned={pinned} onPinToggle={togglePin}
                     />
-                    <DeskSection
-                        open={!shut.has('desk')} onToggle={() => toggleTier('desk')}
+                    <RigSection
+                        open={!shut.has('rig')} onToggle={() => toggleTier('rig')}
                         selection={selection} onSelect={setSelection}
                         pinned={pinned} onPinToggle={togglePin}
                     />

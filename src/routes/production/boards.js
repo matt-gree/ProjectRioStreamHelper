@@ -1,4 +1,5 @@
 import { useSettingsStore, useStateStore } from '../../context/store';
+import { notifications } from '../../lib/notify';
 import { DESK_PREFIX } from './instances';
 
 /*
@@ -83,6 +84,23 @@ export function useBoardLabel() {
 }
 
 /*
+ * Rename a board. Momentary by contract, like the HUD re-read and the capture:
+ * an alias is a label on a work surface, not something that reaches air, so
+ * staging it would mean a producer looking at a board whose panel disagrees with
+ * the rack row naming it.
+ *
+ * A blank alias is how you go BACK to `Scoreboard {N}` — the server stores the
+ * empty string and `useBoardLabel` falls through to the default, which is why
+ * the panel's title field shows that default as a PLACEHOLDER rather than as a
+ * value to delete.
+ */
+export function setBoardAlias(sb, alias) {
+    const v = (alias ?? '').trim();
+    return fetch(`/api/v1/scoreboards/${sb}/alias?alias=${encodeURIComponent(v)}`, { method: 'PUT' })
+        .catch(e => notifications.show({ message: `Rename: ${e?.message || e}`, color: 'red' }));
+}
+
+/*
  * A board reduced to what tells it from its siblings — for a row that has
  * already said what it is.
  *
@@ -111,13 +129,23 @@ export function useBoardTag() {
  * next fixture, and the app knowing it is what lets the bind say something
  * useful instead of nothing.
  *
- * Three sources, because no single one covers both transports:
+ * Four inputs, because no single one covers both transports:
  *
+ *   restored         the game came off DISK at boot, not from a feed in this
+ *                    process (server/boards.py marks it; any real frame clears
+ *                    it). PRSH has no idea a night ended — State.Load restores
+ *                    yesterday's score and the provider then re-reads
+ *                    decoded.hud.json, which still holds yesterday's last frame —
+ *                    so the app opened the next day with a fully populated console
+ *                    describing 18-hour-old data and nothing saying so. The flag
+ *                    DECAYS rather than needing to be dismissed: the next game's
+ *                    first frame retires it, so an app restart mid-broadcast shows
+ *                    it for one frame and goes back to LIVE on its own.
  *   game_over        the HUD path, per frame, from pyrio's end-of-game rule.
- *                    The ONLY signal that survives a restart — it is recomputed
- *                    from the frame on disk, so a board that boots holding last
- *                    night's game says so. Everything else here is a change, and
- *                    a change is exactly what a restart has already missed.
+ *                    Recomputed from the frame on disk, so it survives a restart
+ *                    where the other two flags (both records of a CHANGE) do not —
+ *                    which is what `restored` above is for: a boot has already
+ *                    missed every change there was.
  *   game_completed   the API path: this slot holds a completed-game record.
  *   live_following   the API path again, and a different fact: the server
  *                    stopped polling a game that never finished cleanly, so the
@@ -132,8 +160,23 @@ export function useBoardTag() {
  * clearing is the producer's, deliberately — a game ending must not strip the
  * elements drawing it the instant the last out lands.
  */
-export function boardLifecycle({ gameId, gameOver, gameCompleted, liveFollowing, captured }) {
+export function boardLifecycle({
+    gameId, gameOver, gameCompleted, liveFollowing, captured, restored,
+}) {
     if (!gameId) return 'empty';
+    /*
+     * RESTORED OUTRANKS EVERYTHING BELOW, because "this is not current" outranks
+     * every detail of a game that is not current: last night's board is both
+     * restored and final, and FINAL there reads as "a game just finished here",
+     * which is the one thing it is not.
+     *
+     * Nothing about the CAPTURE hangs off this. The turnover bar decides whether
+     * to offer one from whether a capture exists for the board's game, which is
+     * the honest question and already what it asks — a restored board with nothing
+     * captured still needs the button, since PRSH can be killed between the last
+     * out and the capture.
+     */
+    if (restored) return 'restored';
     /*
      * A CAPTURE FOR THIS GAME MEANS THIS GAME IS OVER.
      *
@@ -161,7 +204,14 @@ export function boardLifecycle({ gameId, gameOver, gameCompleted, liveFollowing,
 }
 
 /* Whether what a board is showing has stopped being a game in progress. */
-export const isStaleBoard = (lifecycle) => lifecycle === 'final' || lifecycle === 'stranded';
+/*
+ * `restored` is in here, and it has to be: the turnover bar renders on
+ * `isStaleBoard`, so a board that boots holding last night's game would otherwise
+ * lose Clear and Put-on-board at exactly the moment they are the only two presses
+ * a producer wants.
+ */
+export const STALE_LIFECYCLES = ['final', 'stranded', 'restored'];
+export const isStaleBoard = (lifecycle) => STALE_LIFECYCLES.includes(lifecycle);
 
 export function useBoardLifecycle(sb) {
     // Returns a string, so no useShallow — zustand's Object.is comparison is
@@ -180,6 +230,7 @@ export function useBoardLifecycle(sb) {
             // evidence (../postgame draws the same distinction for `stale`).
             captured: !!(pg?.present && pg?.gameId != null
                 && String(pg.gameId) === String(b?.game_id)),
+            restored: !!b?.restored,
         });
     });
 }

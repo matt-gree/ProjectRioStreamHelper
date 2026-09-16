@@ -268,3 +268,236 @@ async def test_unbinding_does_not_blank_the_live_games_tag_set():
     await Match.clear_scoreboard(1)
 
     assert deep_get(State.state, "score.1.tag_set") == 210
+
+
+# ---------------------------------------------------------------------------
+# A board that booted holding last night's game is not a feed
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_a_restored_board_is_not_treated_as_a_live_feed():
+    """The cold start: last night's game is still on the board and the producer
+    binds tonight's fixture.
+
+    `game_id` alone could not tell this from a game in progress, so the fixture
+    deferred every blank to last night's players and dropped both of the picks
+    that only exist BEFORE a game — the new name landed and everything behind it
+    stayed, which is what "the new match attaches to the previous scoreboard"
+    was.
+    """
+    await State.SetBatch([
+        ("score.1.game_id", "yesterday"),
+        ("score.1.game_over", True),
+        ("score.1.restored", True),
+        ("score.1.player.1.rioName", "LastNight"),
+    ])
+    assert Match._board_side_has_feed_data(1, 1) is False
+
+    m = await make_port_match(3)
+    await Match.project_scoreboard(1, m)
+
+    # The picks land, because there is no feed to outrank them.
+    assert deep_get(State.state, "score.1.player.1.port") == 3
+
+
+@pytest.mark.asyncio
+async def test_a_game_still_being_shown_outranks_the_picks():
+    """The other half of the same rule, so neither can be widened alone.
+
+    A completed record on screen is CONTENT — real ports, real captain, real
+    names — and a draft pick must not overwrite it (see
+    `test_a_fixture_port_stays_off_a_completed_game`). Only `restored` is residue.
+    """
+    await State.SetBatch([
+        ("score.1.game_id", "tonight"),
+        ("score.1.game_over", True),
+        ("score.1.restored", False),
+        ("score.1.player.1.rioName", "Alice"),
+    ])
+    assert Match._board_side_has_feed_data(1, 1) is True
+
+
+# ---------------------------------------------------------------------------
+# Clearing a board hands it back to its fixture
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_clearing_a_board_restores_the_bound_fixtures_names():
+    """The bug the producer hit as "clear it and the names vanish".
+
+    The projector jointly owns `player.{T}.*` and runs only on a bind or a fixture
+    mutation, so a clear built from plain state writes blanked the fixture's names
+    with nothing left to restore them: the fixture slot still read `M2 · Alice vs
+    Bob` while the scoreboard drew nobody, until the next bind or edit healed it.
+    The workaround was knowing to clear BEFORE binding and never after.
+
+    `release_and_clear_game` blanks and THEN re-projects, so the order does the
+    work: a board with no `game_id` is one the projector writes its full key set
+    to, picks included.
+    """
+    from server.rio.provider import release_and_clear_game
+
+    m = await make_match(captain="Birdo", rio_name="Alice")
+    await seed_live_game(1)
+    await Match.project_scoreboard(1, m)
+    await State.Set("score.1.match", m)
+    # Mid-game, the fixture defers to the feed: the real captain stands.
+    assert deep_get(State.state, "score.1.player.1.rio_captainIndex") == 3
+
+    await release_and_clear_game(1)
+
+    # The game is gone...
+    assert deep_get(State.state, "score.1.game_id") is None
+    assert deep_get(State.state, "score.1.inning") == 1
+    # ...and the fixture is back, rather than the board going nameless.
+    assert deep_get(State.state, "score.1.player.1.rioName") == "Alice"
+    # With its picks, which only a board with no feed may take.
+    assert deep_get(State.state, "score.1.player.1.character.0.name") == "Birdo"
+    assert deep_get(State.state, "score.1.player.1.rio_captainIndex") == 0
+
+
+@pytest.mark.asyncio
+async def test_clearing_an_unbound_board_leaves_it_empty():
+    """No fixture, nothing to hand back to — the clear is just a clear.
+
+    Worth pinning beside the above: the re-projection must be conditional on a
+    binding, or a board with no match would have the projector called with a falsy
+    `m`, which is the BLANK path and would work by accident rather than by rule.
+    """
+    from server.rio.provider import release_and_clear_game
+
+    await seed_live_game(1)
+    await release_and_clear_game(1)
+
+    assert deep_get(State.state, "score.1.game_id") is None
+    assert deep_get(State.state, "score.1.player.1.rioName") == ""
+
+
+# ---------------------------------------------------------------------------
+# BINDING IS AUTHORING; TAKING IS TURNOVER — only the second clears the board
+# ---------------------------------------------------------------------------
+
+async def _finished_hud_game_on_board_1():
+    await State.SetBatch([
+        ("score.1.game_id", "lastgame"),
+        ("score.1.game_over", True),
+        ("score.1.score_left", 8),
+        ("score.1.inning", 6),
+        ("score.1.stadium", "Mario Stadium"),
+        ("score.1.player.1.rioName", "Yesterday"),
+    ])
+
+
+@pytest.mark.asyncio
+async def test_attaching_a_match_never_blanks_a_hud_board():
+    """ATTACHING A FIXTURE IS NOT A REQUEST TO DELETE A GAME.
+
+    The clear ran inside `bind_board`, so every path that attaches a fixture
+    inherited it — the Match desk's board chips, the board desk's bind,
+    `/startgg/load-set`. On a HUD board the game on screen is whatever Project Rio
+    is showing, and saying "this game is Match 5" is the ordinary working gesture,
+    so the console answered it by blanking the producer's scoreboard. Nothing asked
+    for a removal and nothing said one had happened.
+    """
+    from server.api.v1.match import bind_board
+
+    await _finished_hud_game_on_board_1()
+    m = await make_match(rio_name="Alice")
+
+    await bind_board(1, m)
+
+    assert deep_get(State.state, "score.1.game_id") == "lastgame"
+    assert deep_get(State.state, "score.1.score_left") == 8
+    assert deep_get(State.state, "score.1.stadium") == "Mario Stadium"
+    # The fixture still lands — this is about what binding LEAVES ALONE, not about
+    # binding doing less.
+    assert deep_get(State.state, "score.1.match") == m
+
+
+@pytest.mark.asyncio
+async def test_the_take_is_the_verb_that_turns_a_board_over():
+    """...and the clear lives there, where the producer's button says so.
+
+    "Putting the next match up is how a board turns over" is still true; it was
+    just wired to the wrong gesture.
+    """
+    from server.api.v1.match import bind_board
+
+    await _finished_hud_game_on_board_1()
+    m = await make_match(rio_name="Alice")
+
+    await bind_board(1, m, supersede=True)
+
+    assert deep_get(State.state, "score.1.game_id") is None
+    assert deep_get(State.state, "score.1.score_left") == 0
+    assert deep_get(State.state, "score.1.inning") == 1
+    assert deep_get(State.state, "score.1.stadium") == ""
+    # And the new fixture is on it, not the old game's player.
+    assert deep_get(State.state, "score.1.player.1.rioName") == "Alice"
+
+
+@pytest.mark.asyncio
+async def test_binding_mid_game_leaves_the_game_alone():
+    """Binding mid-game is a real move — it is why the identity gate exists.
+
+    The gate on the clear is the game being OVER, never the bind itself.
+    """
+    from server.api.v1.match import bind_board
+
+    await seed_live_game(1)
+    await State.Set("score.1.score_left", 4)
+    m = await make_match(rio_name="Alice")
+
+    await bind_board(1, m, supersede=True)
+
+    assert deep_get(State.state, "score.1.game_id") == "4077258482"
+    assert deep_get(State.state, "score.1.score_left") == 4
+
+
+@pytest.mark.asyncio
+async def test_binding_over_a_completed_api_record_leaves_it_alone(monkeypatch):
+    """An API board's POOL owns its slot, so a completed record there is CONTENT.
+
+    Real ports, a real captain and real names — the same content the feed-shared
+    rule protects from a draft pick — and a fixture bound to label it is
+    legitimate. Clearing it would destroy exactly that, and for a live API game the
+    pool would re-push it a second later anyway.
+    """
+    from server.api.v1 import match as match_api
+
+    monkeypatch.setattr(match_api, "transport", lambda sb: "api")
+    await State.SetBatch([
+        ("score.2.game_id", "completed-record"),
+        ("score.2.game_completed", True),
+        ("score.2.score_left", 8),
+    ])
+    m = await make_match(rio_name="Alice")
+
+    await match_api.bind_board(2, m, supersede=True)
+
+    assert deep_get(State.state, "score.2.game_id") == "completed-record"
+    assert deep_get(State.state, "score.2.score_left") == 8
+
+
+@pytest.mark.asyncio
+async def test_a_take_over_a_restored_api_board_does_clear_it(monkeypatch):
+    """The exception to the exception: residue is residue on any transport.
+
+    Nothing chose a restored game this session — not a producer, not a pool — so
+    the pool-owns-the-slot argument above does not reach it.
+    """
+    from server.api.v1 import match as match_api
+
+    monkeypatch.setattr(match_api, "transport", lambda sb: "api")
+    await State.SetBatch([
+        ("score.2.game_id", "yesterday"),
+        ("score.2.game_completed", True),
+        ("score.2.restored", True),
+        ("score.2.score_left", 8),
+    ])
+    m = await make_match(rio_name="Alice")
+
+    await match_api.bind_board(2, m, supersede=True)
+
+    assert deep_get(State.state, "score.2.game_id") is None
+    assert deep_get(State.state, "score.2.score_left") == 0

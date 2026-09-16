@@ -18,14 +18,17 @@ import { cn } from '../../../lib/utils';
 import { useAssetUrls } from '../../../lib/assets';
 import { HALF_INNINGS, ROSTER_SIZE } from '../../../data/msb';
 import { STADIUM_OPTIONS } from '../../../data/stadiums';
-import { ActionRow, Eyebrow, FieldRow, GAME_STAGE, KitColumn, KitColumns, TextRow, ToggleChip } from '../kit';
-import { GamesSection } from '../games';
-import PostGameSection, { PostGameSubject, usePostGame } from '../postgame';
+import { Eyebrow, FieldRow, GAME_STAGE, KIT_SECTION, KitColumn, ToggleChip } from '../kit';
+import { GamesSection, PlaybackModeControl, usePlaybackMode } from '../games';
+import PostGameSection, { PostGameActions, PostGameSubject, usePostGame } from '../postgame';
 import { useBoardQueueId, useNextUp, useQueues } from '../queue';
 import { useGameModes, withHeldModes } from '../gamemodes';
 import { isStaleBoard, useBoardLifecycle, useMatchBindableBoards } from '../boards';
 import { useSideLabels } from '../sides';
 import { bindScoreboard, takeNextMatch } from '../../../context/match';
+import {
+    formatLabel, isSplit, matchComplete, seriesContinues,
+} from '../../../../public/layout/lib/match-format.js';
 
 /*
  * Board desk — the console's panel for one scoreboard.
@@ -109,7 +112,6 @@ const num = (v, fallback = 0) => {
  * confidence. The server writes a list; this is about what the readout does when
  * something upstream doesn't.
  */
-const poolSize = (ids) => (Array.isArray(ids) ? ids.length : 0);
 
 /*
  * WHY the sides are ordered the way they are.
@@ -122,24 +124,39 @@ const poolSize = (ids) => (Array.isArray(ids) ? ids.length : 0);
  * explaining at all.
  */
 const SIDE_REASON = {
-    manual: 'set by hand',
-    match: 'from the bound match',
-    pin: 'pinned in the Address Book',
-    back_to_back: 'as they were last game',
+    manual: {
+        label: 'BY HAND',
+        title: 'Sides set by hand — your swap outranks the bound match, an Address Book pin and last game until you hand it back',
+    },
+    match: { label: 'FROM MATCH', title: 'Sides taken from the match bound to this board' },
+    pin: { label: 'PINNED', title: 'Sides from a preferred side pinned on a player’s Address Book row' },
+    back_to_back: { label: 'LAST GAME', title: 'Sides kept as they were last game' },
 };
 
 /*
- * WHICH LAYER SEATED THE SIDES — three words on the region’s own eyebrow.
+ * WHICH LAYER SEATED THE SIDES — A STATUS, NOT A SENTENCE ABOUT ONE.
  *
  * It was a sentence one tier under the subject: "Alice on the left — pinned in
  * Settings", later "Alice on side 1 — pinned in the Address Book". Two of its
  * three parts were already drawn larger a few pixels below, in the mirror: which
  * player is on which side is the whole point of that graphic, and repeating it
- * in prose is how a panel gets read as wordy. What the mirror CANNOT show is the
- * only part worth keeping — why the order is what it is — so that is all that is
- * left, and it rides the header rule beside the controls that change it.
+ * in prose is how a panel gets read as wordy. So it came down to the layer alone,
+ * on the region’s own eyebrow — "Sides from the bound match".
+ *
+ * That is still a sentence, and a sentence is what the eye stops to READ. Every
+ * other fact on this rule is a badge (HUD, the mode, the game’s own stage an inch
+ * above), so the one item that stays prose is the one that costs the most to scan
+ * and says the least — four of its five words are the same on every board. The
+ * layer is a state with four values, which is what a chip is for.
+ *
+ * ITS SUBJECT IS THE BUTTON BESIDE IT. `Swap sides` is the control this badge
+ * qualifies and it sits immediately to its right, so a `SIDES` eyebrow in front
+ * would put the word twice in four inches — and the rail card spends the same
+ * words on the same press (../quickface), so the button keeps its full name
+ * rather than the badge borrowing half of it. The full sentence lives in the
+ * title, where a producer who has not met the cascade can still find it.
  */
-export function sideReasonPhrase(reason) {
+export function sideReasonStatus(reason) {
     return SIDE_REASON[reason] || null;
 }
 
@@ -156,28 +173,20 @@ export function sideReasonPhrase(reason) {
  * useMatchBindableBoards, and bind_scoreboard on the server, which encode the
  * same rule). So they are stated as two things, never picked as one.
  *
- * This is the sentence; ../games holds the controls that set it.
+ * THE REGION'S RULE CARRIES THE CONTROL, NOT A SENTENCE ABOUT IT. `playbackLine`
+ * lived here and wrote the Games rule's subject — "Rotating — nothing in its
+ * pool yet", "One game, pinned — following it live" — and every clause of it was
+ * already drawn somewhere the producer was looking anyway. The MODE is the
+ * segmented that sat directly beneath it, and is now on the rule itself
+ * (../games `PlaybackModeControl`); the POOL COUNT is the rotator's own status
+ * line, the only surface that can also say WHY a pool is empty; RUNNING is the
+ * Start/Stop button that "(paused)" was describing; and "following it live" is
+ * the refresh countdown beside it — a caption on a clock, telling you what the
+ * clock is doing. Three statements of one fact, the middle one in prose.
+ *
+ * `boardTypeTag` below is the same two axes compressed to what a rack row holds,
+ * and is all that is left of the sentence.
  */
-export function playbackLine({ transport, mode, running, poolCount, gameId, live }) {
-    if (transport === 'hud') return 'One game — the local HUD feed.';
-    if (mode === 'rotate') {
-        // Rotation on with an empty pool is a real state (nothing matched the
-        // filters yet), and "0 in pool" reads like a count that failed.
-        if (!poolCount) return 'Rotating — nothing in its pool yet.';
-        return running
-            ? `Rotating — ${poolCount} in pool.`
-            : `Rotating (paused) — ${poolCount} in pool.`;
-    }
-    // A pinned game that is still being played tracks the ongoing feed on its
-    // own, server-side (OngoingGamePool._reapply_single_live). Saying so is what
-    // the panel owed the producer: the game list below is a BROWSER they refresh
-    // when they want to see what else is on, and it was easy to read the two as
-    // one thing back when that list re-fetched on a visible countdown.
-    if (gameId) return live ? 'One game, pinned — following it live.' : 'One game, pinned.';
-    return poolCount
-        ? `One game — following the newest of ${poolCount} in pool.`
-        : 'One game — nothing in its pool yet.';
-}
 
 /*
  * UP NEXT — the board takes the next queued fixture.
@@ -196,7 +205,7 @@ export function playbackLine({ transport, mode, running, poolCount, gameId, live
  * queue (../queue), but the SERVER re-resolves and binds under a lock — the button
  * never sends an id, so two boards pressed together can't land on one fixture.
  */
-const TakeNextButton = memo(function TakeNextButton({ sb, label }) {
+const TakeNextButton = memo(function TakeNextButton({ sb, label, primary = false }) {
     const [taking, setTaking] = useState(false);
     const take = () => {
         setTaking(true);
@@ -206,9 +215,9 @@ const TakeNextButton = memo(function TakeNextButton({ sb, label }) {
     };
     return (
         <Button
-            size="xs" variant="secondary" className="h-7 shrink-0"
+            size="xs" variant={primary ? 'default' : 'secondary'} className="h-7 shrink-0"
             onClick={take} disabled={taking}
-            title={`Put ${label} on this board — the next match in the queue`}
+            title={`Put ${label} on this board — whatever game is on it now is cleared as this goes up`}
         >
             <SkipForward size={12} className="mr-1 shrink-0" />
             Put on board
@@ -336,16 +345,8 @@ const ModeRow = memo(function ModeRow({ d, gameModes, stats, refreshHud, refresh
 });
 
 /*
- * THE GAME SLOT — the board's first clock, in the same shape as its second.
- *
- * A board runs TWO clocks and the panel drew them as different kinds of thing.
- * The game (score.{N}: empty → live → final/stranded, feed-owned, watched) was a
- * bare line of text; the match (match.{M}: draft → live → post, producer-owned,
- * driven) was a bordered slot with an id chip, both players and the round. Same
- * subject, two registers, so the pair never read as the two halves of one
- * question — which is most of why the game state was described as "hidden".
- *
- * One shape now, twice: chip · side · score · side · where it is up to.
+ * THE BOARD'S FIRST CLOCK. The pair's history is on BoardSubject below, which is
+ * where the two of them now live on one row.
  *
  * WHERE THE GAME IS UP TO MOVES TO THE CHIP, and the meta goes back to being the
  * inning. It used to be the other way round — `Final` and `Ended` were printed
@@ -387,21 +388,26 @@ const SlotChip = ({ children, title, className }) => (
     </span>
 );
 
-const GameSlot = memo(function GameSlot({ d, lifecycle }) {
+/*
+ * THE GAME LINE — chip · side · score · side · where it is up to.
+ *
+ * A fragment, not a box: it is half of one row (see BoardSubject), and the
+ * flex-1 name cells are what make the two clocks share their width.
+ */
+const GameLine = memo(function GameLine({ d, lifecycle }) {
     const { label } = useSideLabels();
     const { g } = d;
-    const shell = 'flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-2 py-1.5';
 
     if (!g.name1 && !g.name2) {
         return (
-            <div className={cn(shell, 'border-dashed border-border/50')}>
+            <>
                 <SlotChip title="Nothing has loaded onto this board">NO GAME</SlotChip>
                 <Text size="xs" dimmed className="min-w-0 flex-1 truncate">
                     {d.transport === 'hud'
                         ? 'Waiting for Project Rio to write a game.'
                         : 'Waiting for a game from this board’s pool.'}
                 </Text>
-            </div>
+            </>
         );
     }
 
@@ -416,7 +422,7 @@ const GameSlot = memo(function GameSlot({ d, lifecycle }) {
         ? `${(g.halfInning || 'Top') === 'Top' ? 'Top' : 'Bot'} ${g.inning}`
         : null;
     return (
-        <div className={cn(shell, 'border-border/60 bg-secondary/30')}>
+        <>
             {stage && (
                 <SlotChip title={stage.title} className={stage.className}>{stage.label}</SlotChip>
             )}
@@ -426,43 +432,59 @@ const GameSlot = memo(function GameSlot({ d, lifecycle }) {
             </span>
             <span className="min-w-0 flex-1 truncate text-right text-sm">{g.name2 || label(2)}</span>
             {where && <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{where}</span>}
-        </div>
+        </>
     );
 });
 
 /*
- * THE FIXTURE SLOT — which fixture this board is carrying, as a PLACE rather than
- * a sentence about one.
+ * THE BOARD'S SUBJECT — BOTH CLOCKS ON ONE ROW, BECAUSE THEY SHARE A SUBJECT.
  *
- * It was a line of prose that read "No match on this board" when empty: a
- * statement ABOUT absence, sitting where a bound fixture printed
- * "Match 2 · Winners R2 · 1–0" — prose as well, and prose that never said who was
- * playing, which is the first thing a producer checks a fixture for. Neither
- * state looked like the thing it was describing.
+ * A board runs TWO clocks: the game (`score.{N}`: empty → live → final/stranded,
+ * feed-owned, watched) and the match (`match.{M}`: draft → live → post +
+ * `decided`, producer-owned, driven). They were drawn as different KINDS of
+ * thing — the game a bare line of text, the match a bordered slot — so the pair
+ * never read as two halves of one question, which is most of why the game state
+ * was once described as "hidden". Giving them one shape fixed that and created
+ * the next problem: two full-width bars, stacked, each spending its width on the
+ * SAME TWO NAMES, with ~400px of dead air in the middle of both.
  *
- * One shape, three states, and the SHAPE carries the state:
+ * THE NAMES ARE THE SHARED SUBJECT, so they are drawn ONCE and the two clocks
+ * become the two ends of one row: the game on the left (its stage, the score,
+ * the inning), the fixture on the right behind a rule (its id, the series, the
+ * round, the unlink). Nothing was dropped — the fixture's copy of the names is
+ * what went, and it was a copy: the Match projector WRITES `match.{M}`'s
+ * participants into `score.{N}.player.{T}.rioName` (`_FEED_SHARED_KEYS`,
+ * server/match.py), so on a bound board the two lines were the same two strings
+ * from the same key, one projected into the other.
  *
- *   bound    solid holder with the fixture in it — id, the two players with the
- *            series between them, the round and phase as a trailing qualifier.
- *   waiting  the same holder, DASHED, holding a GHOST of the fixture that would
- *            fill it, with the take beside it. The producer reads what they are
- *            about to put on air in the place it is about to appear.
- *   empty    dashed and quiet, naming where fixtures come from instead of
- *            restating that there aren't any.
+ * EXCEPT WHEN THEY ARE NOT, WHICH IS THE WHOLE POINT OF SPLITTING THEM AGAIN.
+ * A live feed can overwrite those names with different players — that is exactly
+ * what `score.{N}.match_conflict` is raised for — and there the DIFFERENCE is
+ * the content: a merged row could only show one pair, which is the one thing a
+ * producer resolving a conflict must not be given. So the merge is conditional
+ * on the two clocks agreeing, and the row splits back into the two bars the
+ * moment they don't, with the fixture's own names under the game's and the
+ * amber the conflict already spends.
  *
- * Dashed-means-unbound is the console's existing vocabulary (the `—` chip), not a
- * new idiom, and the two filled states differ in surface as well as border — the
- * rule that a selection must be visible in a stack, applied to a slot.
- *
- * The take no longer has to name its fixture ("Up next · FrostyFeet492"), because
- * the slot it acts on names it an inch to the left. That rule — never change what
- * is on air from a control that doesn't say what to — is satisfied more strongly
- * by putting the fixture and the verb in one box than by cramming the name into
- * the button, where it was truncating at 60% of the row.
+ * `agree` compares the names rather than trusting the flag alone: the flag is
+ * the server's identity gate and answers a slightly different question (it also
+ * auto-retires), while a fixture bound with NO participants yet is a real state
+ * the gate says nothing about — and splitting there is right, because "Side 1 vs
+ * Side 2" under a live game is how a producer sees they bound an empty draft.
  */
-const FixtureSlot = memo(function FixtureSlot({ sb, matchId, match, conflict }) {
+const BoardSubject = memo(function BoardSubject({
+    sb, d, lifecycle, matchId, match, conflict, postgame,
+}) {
     const next = useNextUp(sb);
     const canBind = useMatchBindableBoards()(sb);
+    /*
+     * A TAKE IS THE PANEL'S LOUD PRESS ONLY DURING A TURNOVER. Over a LIVE game an
+     * unbound board's take is an ordinary correction — the fixture was authored
+     * after the first pitch — and a filled brand-red button beside a game in
+     * progress reads as something that needs doing now. Once the game is over,
+     * stalled, or left from a previous session, it IS the thing to do.
+     */
+    const stale = isStaleBoard(lifecycle);
     // One staging key for one fact. The Match desk's bind chips stage under
     // `bind:{sb}` too, so a producer in confirm mode cannot leave two entries
     // disagreeing about what board {sb} holds — and either surface shows the
@@ -479,214 +501,315 @@ const FixtureSlot = memo(function FixtureSlot({ sb, matchId, match, conflict }) 
         run: () => bindScoreboard(sb, null),
     });
 
-    const shell = (extra) => cn(
-        'flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-2 py-1.5',
-        extra,
+    const w1 = num(match?.series?.[1] ?? match?.series?.['1'], 0);
+    const w2 = num(match?.series?.[2] ?? match?.series?.['2'], 0);
+    /*
+     * THE SERIES IS ONLY NEWS IN A SERIES. `default_match()` is `{"bestOf": 1}`
+     * and a Bo1 night is what almost every night is, where this cell reads 0–0
+     * for the whole match and then 1–0 once the capture lands — a number that
+     * says nothing the game's own score does not. A Bo3 needs it and keeps it.
+     */
+    const series = num(match?.bestOf, 1) > 1;
+    const round = [match?.label, match?.phase].filter(Boolean).join(' · ');
+    /*
+     * WHEN IS A FIXTURE DONE? `decided`, never `stage` — the server only ever
+     * moves stage forward, and a Bo3 sits at `post` BETWEEN GAMES while still
+     * being the current fixture (server/schedule.py states this rule once, for
+     * `not_waiting_reason`; this is the same question asked on the panel).
+     *
+     * The two states say different things and the row says both, because "what
+     * happens when a match goes to post" was invisible here: a finished fixture
+     * and a mid-series one rendered identically, and a producer at the end of a
+     * match had no way to tell that nothing was going to clear it for them. Only
+     * ONE server path unbinds by itself (`_retire_match_from_board` — a decided
+     * match plus a new game between different players), so on the ordinary end of
+     * a night, clearing the board is the producer's move.
+     */
+    /*
+     * IS THE FIXTURE OUT OF GAMES? — not "who won it". `decided` answered both
+     * while every multi-game format was odd; a DOUBLEHEADER IS COMPLETE AFTER
+     * TWO GAMES HOWEVER THEY FALL, so a 1-1 split is finished and unwon. Asking
+     * `decided` here left a split bound to its board with no handover offered.
+     */
+    const done = bound && matchComplete(
+        match?.bestOf, match?.series?.[1], match?.series?.[2], match?.decided,
     );
+    const split = bound && isSplit(
+        match?.bestOf, match?.series?.[1], match?.series?.[2], match?.decided,
+    );
+    /*
+     * "BETWEEN GAMES" IS A THING ONLY A SERIES HAS. It was `stage === 'post'`
+     * and not decided, which on a **Bo1** — `default_match()`, and what nearly
+     * every night is — describes no state at all: there is no next game to be
+     * between. It showed up anyway whenever a capture failed to credit a winner
+     * (a quit game reports none), so the board answered "what happened to my
+     * match?" with a Bo3 concept that could not apply to it. The format is what
+     * decides whether another game can follow, so the format gates the phrase.
+     */
+    const between = bound && !done && match?.stage === 'post'
+        && num(match?.bestOf, 1) > 1;
+    const winner = (done && !split) ? (match.decided === 1 ? match?.name1 : match?.name2) : '';
 
-    if (bound) {
-        const w1 = num(match?.series?.[1] ?? match?.series?.['1'], 0);
-        const w2 = num(match?.series?.[2] ?? match?.series?.['2'], 0);
+    // Two copies of one pair of strings, or two different pairs? See the note
+    // above — this is what decides whether the row is one or two.
+    const same = (a, b) => (a || '').trim().toLowerCase() === (b || '').trim().toLowerCase();
+    const agree = bound && !conflict
+        && same(d.g.name1, match?.name1) && same(d.g.name2, match?.name2);
+
+    const unlinkButton = (
         /*
-         * THE SERIES IS ONLY NEWS IN A SERIES. `default_match()` is
-         * `{"bestOf": 1}` and a Bo1 night is what almost every night is, where
-         * this cell reads 0–0 for the whole match and then 1–0 once the capture
-         * lands — a number that says nothing the row above it does not, in the
-         * middle of the two names, which is the widest thing a Bo1 slot prints.
-         * A Bo3 needs it and keeps it.
-         */
-        const series = num(match?.bestOf, 1) > 1;
-        const round = [match?.label, match?.phase].filter(Boolean).join(' · ');
-        /*
-         * WHEN IS A FIXTURE DONE? `decided`, never `stage` — the server only ever
-         * moves stage forward, and a Bo3 sits at `post` BETWEEN GAMES while still
-         * being the current fixture (server/schedule.py states this rule once, for
-         * `not_waiting_reason`; this is the same question asked on the panel).
+         * UNBIND, from the board's side. It used to live only on the Match desk's
+         * lit bind chip — correct, since a match fills one board so retiring IS
+         * unbinding that chip, but it asked a producer looking at the wrong
+         * fixture ON THIS BOARD to go find the match holding it. The verb belongs
+         * wherever the fact is shown, and both routes are the same staged write.
          *
-         * The two states say different things and the slot says both, because
-         * "what happens when a match goes to post" was invisible here: a finished
-         * fixture and a mid-series one rendered identically, and a producer at the
-         * end of a match had no way to tell that nothing was going to clear it for
-         * them. Only ONE server path unbinds by itself (`_retire_match_from_board`
-         * — a decided match plus a new game between different players), so on the
-         * ordinary end of a night, clearing the board is the producer's move.
+         * No confirm: it unbinds, it doesn't delete — the fixture keeps its series
+         * and goes back to the running order, and Up next puts it straight back.
          */
-        const done = match?.decided === 1 || match?.decided === 2;
-        const between = !done && match?.stage === 'post';
-        const winner = done ? (match.decided === 1 ? match?.name1 : match?.name2) : '';
-        return (
-            <div
+        <SimpleTooltip
+            label={stagedOff
+                ? 'Staged: this board hands back to its own feed on the next confirm'
+                : `Take Match ${matchId} off this board — it keeps its series`}
+        >
+            <button
+                type="button"
+                onClick={unbind}
+                aria-label={`Take match ${matchId} off board ${sb}`}
                 className={cn(
-                    'min-w-0 rounded-md border px-2 py-1.5',
-                    conflict
-                        // Amber is what the console spends on "you would want to
-                        // know before this is on air" — the same tone the conflict
-                        // sentence below already uses, so the slot and its
-                        // explanation match.
-                        ? 'border-amber-500/50 bg-amber-500/5'
-                        : 'border-border/60 bg-secondary/30',
+                    'shrink-0 transition-colors',
+                    stagedOff ? 'text-amber-400' : 'text-muted-foreground/70 hover:text-foreground',
                 )}
             >
-              <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                <span className="label-display shrink-0 rounded bg-secondary px-1 text-[10px] tracking-wider text-muted-foreground">
-                    M{matchId}
-                </span>
-                {/* The winner reads at full strength and the loser drops a tier:
-                    the result is the thing you are checking at this point, and it
-                    needs no colour to say it. */}
+                <Unlink size={13} />
+            </button>
+        </SimpleTooltip>
+    );
+
+    /*
+     * The fixture, with or without its copy of the names. `compact` is the merged
+     * row, where the names are the game's an inch to the left; the full form is
+     * the split, where saying who the FIXTURE thinks is playing is the reason the
+     * second bar exists at all.
+     */
+    const fixtureBody = (compact) => (
+        <>
+            <span className="label-display shrink-0 rounded bg-secondary px-1 text-[10px] tracking-wider text-muted-foreground">
+                M{matchId}
+            </span>
+            {/* The winner reads at full strength and the loser drops a tier: the
+                result is the thing you are checking at this point, and it needs no
+                colour to say it. */}
+            {!compact && (
                 <span className={cn(
                     'min-w-0 flex-1 truncate text-sm',
-                    done && match.decided !== 1 ? 'text-muted-foreground' : 'text-foreground',
+                    done && !split && match.decided !== 1
+                        ? 'text-muted-foreground' : 'text-foreground',
                 )}>
                     {match?.name1 || 'Side 1'}
                 </span>
-                {series ? (
-                    <span className="shrink-0 text-sm tabular-nums text-muted-foreground">
-                        {w1}–{w2}
-                    </span>
-                ) : (
-                    <span className="shrink-0 text-xs text-muted-foreground/60">vs</span>
-                )}
+            )}
+            {series ? (
+                <span
+                    className="shrink-0 text-sm tabular-nums text-muted-foreground"
+                    title={`Series — ${match?.name1 || 'Side 1'} ${w1}, ${match?.name2 || 'Side 2'} ${w2}, ${formatLabel(match?.bestOf, { long: true })}`}
+                >
+                    {w1}–{w2}
+                </span>
+            ) : (!compact && <span className="shrink-0 text-xs text-muted-foreground/60">vs</span>)}
+            {!compact && (
                 <span className={cn(
                     'min-w-0 flex-1 truncate text-right text-sm',
-                    done && match.decided !== 2 ? 'text-muted-foreground' : 'text-foreground',
+                    done && !split && match.decided !== 2
+                        ? 'text-muted-foreground' : 'text-foreground',
                 )}>
                     {match?.name2 || 'Side 2'}
                 </span>
-                {done && (
-                    <span
-                        className="label-display shrink-0 rounded bg-secondary px-1 text-[10px] tracking-wider text-foreground"
-                        title={winner ? `${winner} took the series` : 'Series decided'}
-                    >
-                        FINAL
-                    </span>
-                )}
-                {round && (
-                    <span className="shrink-0 truncate text-xs text-muted-foreground">{round}</span>
-                )}
-                {between && (
-                    // Why nothing cleared: the game is over, the FIXTURE isn't.
-                    <span className="shrink-0 truncate text-xs text-muted-foreground">
-                        between games
-                    </span>
-                )}
-                {/*
-                 * UNBIND, from the board's side. It used to live only on the
-                 * Match desk's lit bind chip — correct, since a match fills one
-                 * board so retiring IS unbinding that chip, but it asked a
-                 * producer looking at the wrong fixture ON THIS BOARD to go find
-                 * the match holding it. The verb belongs wherever the fact is
-                 * shown, and both routes are the same staged write.
-                 *
-                 * No confirm: it unbinds, it doesn't delete — the fixture keeps
-                 * its series and goes back to the running order, and Up next puts
-                 * it straight back.
-                 */}
-                <SimpleTooltip
-                    label={stagedOff
-                        ? 'Staged: this board hands back to its own feed on the next confirm'
-                        : `Take Match ${matchId} off this board — it keeps its series`}
+            )}
+            {/*
+              * DECIDED, NOT `FINAL` — because the game chip four inches to the
+              * left says FINAL and means something else. A game is final when it
+              * reached its last out; a fixture is decided when the SERIES is over,
+              * and a Bo1 whose game has just been captured is both at once: two
+              * identical badges on one row, a hand's width apart, for two facts
+              * that differ in exactly the way a producer is checking. They were
+              * on separate rows when this badge was written, which is the only
+              * reason one word could serve both. `decided` is the state key's own
+              * word and the one this file uses everywhere else; the winner is in
+              * the title, where a name has room to be a name.
+              */}
+            {done && (
+                <span
+                    className="label-display shrink-0 rounded bg-secondary px-1 text-[10px] tracking-wider text-foreground"
+                    title={split
+                        ? 'Both games played and the doubleheader is split — nobody took it'
+                        : (winner ? `${winner} took the series` : 'Series decided')}
                 >
-                    <button
-                        type="button"
-                        onClick={unbind}
-                        aria-label={`Take match ${matchId} off board ${sb}`}
-                        className={cn(
-                            'shrink-0 transition-colors',
-                            stagedOff
-                                ? 'text-amber-400'
-                                : 'text-muted-foreground/70 hover:text-foreground',
-                        )}
-                    >
-                        <Unlink size={13} />
-                    </button>
-                </SimpleTooltip>
-              </div>
+                    {/* SPLIT is the word for the one finished-and-unwon state
+                        there is, and only an even format can reach it. Calling
+                        it DECIDED would name a winner that does not exist. */}
+                    {split ? 'SPLIT' : 'DECIDED'}
+                </span>
+            )}
+            {round && <span className="min-w-0 shrink truncate text-xs text-muted-foreground">{round}</span>}
+            {between && (
+                // Why nothing cleared: the game is over, the FIXTURE isn't.
+                <span className="shrink-0 truncate text-xs text-muted-foreground">between games</span>
+            )}
+            {unlinkButton}
+        </>
+    );
 
-              {/*
-                * THE END-OF-MATCH MOVE, in the slot the match is finishing in.
-                *
-                * A decided fixture stays bound — deliberately, since only a new
-                * game between different players auto-retires one — so the board
-                * sat on a finished match with the take hidden behind an unbind the
-                * producer had to know to press first. Taking the next fixture
-                * needs no unbind: `bind_board` overwrites `score.{N}.match`, so
-                * Put on board IS the handover.
-                *
-                * THERE IS EXACTLY ONE TAKE ON THE PANEL AT A TIME. This is the
-                * FIXTURE's end of life and holds while the board is empty; the
-                * turnover bar's is the GAME's, for the Bo1 whose match is not
-                * decided yet because the capture that decides it has not been
-                * made — so the bar stands its take down whenever this one is up
-                * (see TurnoverBar `fixtureDone`).
-                */}
-              {done && (
-                <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 border-t border-border/50 pt-1.5">
-                    {/* DONE with nothing beside it IS the statement. The line
-                        that used to fill the value slot ("clear the board when
-                        you're ready") pointed at the turnover bar's own Clear,
-                        which is on screen and lit at exactly this moment. */}
-                    <Eyebrow title={next
-                        ? 'The next fixture waiting in this board’s running order.'
-                        : 'This match is decided and nothing else is waiting in the running order.'}>
-                        {next ? 'UP NEXT' : 'DONE'}
-                    </Eyebrow>
-                    {next && (
-                        <Text size="xs" dimmed className="min-w-0 flex-1 truncate">{next.label}</Text>
-                    )}
-                    {next && canBind && <TakeNextButton sb={sb} label={next.label} />}
-                </div>
-              )}
-            </div>
+    /*
+     * THE END-OF-MATCH MOVE, on the row the match is finishing on.
+     *
+     * A decided fixture stays bound — deliberately, since only a new game between
+     * different players auto-retires one — so the board sat on a finished match
+     * with the take hidden behind an unbind the producer had to know to press
+     * first. Taking the next fixture needs no unbind: `bind_board` overwrites
+     * `score.{N}.match`, so Put on board IS the handover.
+     *
+     * THERE IS EXACTLY ONE TAKE ON THE PANEL AT A TIME, and the rule used to
+     * reconcile only TWO of the three places one can appear. This is the
+     * FIXTURE's end of life; the UP NEXT tail is an UNBOUND board's; the turnover
+     * bar's is the GAME's, for the Bo1 whose match is not decided yet because the
+     * capture that decides it has not been made.
+     *
+     * It keeps its own line — a second row INSIDE the subject box — because it is
+     * about the next fixture rather than this one, and because the take is a
+     * button that must not compete with the row above for width.
+     */
+    const footer = done ? (
+        <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 border-t border-border/50 pt-1.5">
+            {/* DONE with nothing beside it IS the statement. The line that used to
+                fill the value slot ("clear the board when you're ready") pointed
+                at the turnover bar's own Clear, which is on screen and lit at
+                exactly this moment. */}
+            <Eyebrow title={next
+                ? 'The next fixture waiting in this board’s running order.'
+                : 'This match is decided and nothing else is waiting in the running order.'}>
+                {next ? 'UP NEXT' : 'DONE'}
+            </Eyebrow>
+            {next && <Text size="xs" dimmed className="min-w-0 flex-1 truncate">{next.label}</Text>}
+            {next && canBind && <TakeNextButton sb={sb} label={next.label} primary={stale} />}
+        </div>
+    ) : null;
+
+    /*
+     * WHAT THE RIGHT-HAND END SAYS WHEN NO FIXTURE IS BOUND. All three of these
+     * were full-width dashed BARS of their own — one of them ("NO MATCH") a bar
+     * holding a single chip — under a game row that already ran the width of the
+     * desk. They carry a chip's worth of content, so they ride the game's row.
+     *
+     * A ROTATING BOARD CANNOT HOLD A FIXTURE, and the tail says so instead of
+     * offering a take the server would 409: a match encodes both sides of one
+     * fixture, and a board cycling a pool has no fixed sides to project onto (the
+     * same rule as `bind_scoreboard` / `take_next_match` on the server, and
+     * ../boards `useMatchBindableBoards` is the one client statement of it). It
+     * is tested AFTER `bound` on purpose — a board switched to rotate while
+     * already holding a match still shows that match, because unbinding it is
+     * exactly how a producer fixes that state.
+     */
+    let tail;
+    if (bound) {
+        tail = fixtureBody(true);
+    } else if (!canBind) {
+        // Two boards can say NO MATCH for different reasons, and the reason is the
+        // whole content — so it is the eyebrow's own word, not a sentence after it.
+        tail = (
+            <Eyebrow title="A rotating board can’t hold a match: a match encodes both sides of one fixture, and a board cycling a pool has no fixed sides to project onto.">
+                ROTATING
+            </Eyebrow>
+        );
+    } else if (next) {
+        tail = (
+            <>
+                <Eyebrow title="The next fixture waiting in this board’s running order.">UP NEXT</Eyebrow>
+                {/* The ghost: dimmed because it is not on the board yet. */}
+                <span className="min-w-0 shrink truncate text-xs text-muted-foreground">{next.label}</span>
+                <TakeNextButton sb={sb} label={next.label} primary={stale} />
+            </>
+        );
+    } else {
+        tail = (
+            <Eyebrow title="Nothing is waiting in this board’s running order. Author a fixture on the Match desk and it joins the order.">
+                NO MATCH
+            </Eyebrow>
         );
     }
 
     /*
-     * A ROTATING BOARD CANNOT HOLD A FIXTURE, and the slot says so instead of
-     * offering a take the server would 409. A match encodes both sides of one
-     * fixture; a board cycling a pool has no fixed sides to project onto — the
-     * same rule as `bind_scoreboard` / `take_next_match` on the server and the
-     * Match desk's dimmed bind chips (../boards `useMatchBindableBoards` is the
-     * one client statement of it).
-     *
-     * It sits AFTER the bound branch on purpose: a board switched to rotate while
-     * already holding a match still shows that match, because unbinding it is
-     * exactly how a producer fixes that state.
+     * THE TURNOVER PRESSES BELONG TO THE ROW THEY ACT ON. They were a bordered
+     * strip of their own under the subject, which read as a button floating in
+     * the panel with nothing attaching it to the board it clears — and the thing
+     * it attaches to is right above it. Third group, third rule.
      */
-    if (!canBind) {
-        return (
-            <div className={shell('border-dashed border-border/50')}>
-                {/* Two boards can say NO MATCH for different reasons, and the
-                    reason is the whole content of this row — so it is the
-                    eyebrow's own word, not a sentence after it. */}
-                <Eyebrow title="A rotating board can’t hold a match: a match encodes both sides of one fixture, and a board cycling a pool has no fixed sides to project onto.">
-                    ROTATING
-                </Eyebrow>
-                <Text size="xs" dimmed className="min-w-0 flex-1 truncate">No match</Text>
-            </div>
-        );
-    }
+    const actions = (
+        <TurnoverActions
+            sb={sb} lifecycle={lifecycle} matchId={matchId} match={match}
+            onClear={d.resetGame} clearStaged={d.isStaged('reset')} postgame={postgame}
+        />
+    );
 
-    if (next) {
+    // The box is the GAME's — it is the subject, and the fixture qualifies it.
+    const box = cn(
+        'min-w-0 rounded-md border px-2 py-1.5',
+        d.g.name1 || d.g.name2
+            ? 'border-border/60 bg-secondary/30'
+            : 'border-dashed border-border/50',
+    );
+
+    if (bound && !agree) {
         return (
-            <div className={shell('border-dashed border-border/70')}>
-                <span className="label-display shrink-0 text-[10px] tracking-wider text-muted-foreground/70">
-                    UP NEXT
-                </span>
-                {/* The ghost: dimmed because it is not on the board yet. */}
-                <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
-                    {next.label}
-                </span>
-                <TakeNextButton sb={sb} label={next.label} />
-            </div>
+            <>
+                <div className={cn(box, 'flex flex-wrap items-center gap-x-2 gap-y-1')}>
+                    <div className="flex min-w-0 flex-1 basis-80 items-center gap-x-2">
+                        <GameLine d={d} lifecycle={lifecycle} />
+                    </div>
+                    {actions}
+                </div>
+                <div
+                    className={cn(
+                        'min-w-0 rounded-md border px-2 py-1.5',
+                        conflict
+                            // Amber is what the console spends on "you would want
+                            // to know before this is on air" — the same tone the
+                            // conflict sentence below already uses, so the slot
+                            // and its explanation match.
+                            ? 'border-amber-500/50 bg-amber-500/5'
+                            : 'border-border/60 bg-secondary/30',
+                    )}
+                >
+                    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                        {fixtureBody(false)}
+                    </div>
+                    {footer}
+                </div>
+            </>
         );
     }
 
     return (
-        <div className={shell('border-dashed border-border/50')}>
-            <Eyebrow title="Nothing is waiting in this board’s running order. Author a fixture on the Match desk and it joins the order.">
-                NO MATCH
-            </Eyebrow>
+        <div className={box}>
+            {/* TWO GROUPS, NOT ONE RUN OF CELLS. The names are `flex-1` with
+                `min-w-0`, so as bare siblings of the tail they would truncate to
+                nothing rather than let the fixture wrap — the group's `basis`
+                is what reserves the game a real width and sends the tail to its
+                own line on a narrow panel, which is the old two-bar layout and
+                the right thing to degrade to. */}
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <div className="flex min-w-0 flex-1 basis-80 items-center gap-x-2">
+                    <GameLine d={d} lifecycle={lifecycle} />
+                </div>
+                {/* The rule is the tail's own left border, so it travels with the
+                    group when the row wraps instead of stranding a divider at the
+                    end of the line above. */}
+                <div className="flex min-w-0 shrink items-center gap-x-2 border-l border-border/60 pl-2">
+                    {tail}
+                </div>
+                {actions}
+            </div>
+            {footer}
         </div>
     );
 });
@@ -709,6 +832,11 @@ const BoardQueueRow = memo(function BoardQueueRow({ sb }) {
     const setItem = useSettingsStore(s => s.setItem);
     if (queues.length <= 1) return null;
     return (
+        // IT OWNS ITS SECTION RULE, because it is the section's only member and
+        // it self-hides. A divider drawn by the desk around it would be a rule
+        // under the capture with nothing beneath it on every single-order rig,
+        // which is almost every rig.
+        <div className={KIT_SECTION}>
         <FieldRow label="Matches from">
             <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                 {queues.map(q => (
@@ -731,6 +859,7 @@ const BoardQueueRow = memo(function BoardQueueRow({ sb }) {
                 ))}
             </div>
         </FieldRow>
+        </div>
     );
 });
 
@@ -793,8 +922,8 @@ function LiveRefreshCountdown({ active }) {
 }
 
 /*
- * The board's TYPE in one word — `playbackLine` compressed to what fits a rack
- * row. The two axes produce exactly three states, because HUD + rotate is not a
+ * The board's TYPE in one word — the two axes above compressed to what fits a
+ * rack row, and what is left of the sentence they used to be written out as. The two axes produce exactly three states, because HUD + rotate is not a
  * real one: board 1 under the HUD toggle is single by construction whatever its
  * stored mode says (../boards `useMatchBindableBoards` and `bind_scoreboard`
  * encode the same rule). So the pair collapses to three words with nothing lost.
@@ -906,20 +1035,15 @@ export function useBoardDesk(sb) {
     // What the game on this board is actually being played in.
     const liveMode = useStateStore(s => s?.score?.[sb]?.game_mode || '');
 
-    // The playback axis, for the readout only — this desk does not author it yet.
-    const playback = useSettingsStore(useShallow(s => {
-        const p = s?.scoreboards?.binding?.[sb]?.playback
-            ?? s?.scoreboards?.binding?.[String(sb)]?.playback ?? {};
-        return {
-            mode: p.mode || 'single',
-            running: !!p.running,
-            gameId: p.gameId ?? null,
-        };
-    }));
-    // Mirrored into State by the server, so a rotating board's pool size is a
-    // read rather than a fetch (the rack draws this on every frame too).
-    const poolCount = useStateStore(
-        s => poolSize(s?.scoreboards?.rotation?.[sb]?.game_ids),
+    // The one thing the desk still asks of the playback binding: a PINNED game
+    // is the one the server re-applies from the live feed on its own, which is
+    // the condition the Games rule's refresh countdown runs under. The mode
+    // belongs to the control that sets it (../games `usePlaybackMode`) and the
+    // pool count to the rotator's own status line — both were read here only to
+    // build a sentence the rule no longer prints.
+    const pinnedGameId = useSettingsStore(
+        s => (s?.scoreboards?.binding?.[sb]?.playback
+            ?? s?.scoreboards?.binding?.[String(sb)]?.playback ?? {}).gameId ?? null,
     );
 
     const g = useStateStore(useShallow(s => {
@@ -1070,54 +1194,52 @@ export function useBoardDesk(sb) {
      * game back. Reset clears, Re-read HUD restores; nothing in between puts the
      * feed back on the board on its own.
      */
-    const resetGame = () => stageOrRun({
+    /*
+     * `releaseMatch` takes the bound fixture OFF the board as part of the clear —
+     * see the endpoint, and TurnoverBar, which is the one place that decides it.
+     * The staging entry carries it, so a staged clear commits the same shape it
+     * was previewed as.
+     */
+    const resetGame = (releaseMatch = false) => stageOrRun({
         // The staging KEY stays `reset` — it is an id, and the Match desk and the
         // quick face stage against it — but what a producer reads in the confirm
         // buffer is the verb printed on the button they pressed.
         key: `board:${sb}:reset`,
-        label: `Board ${sb}: clear game state`,
+        label: releaseMatch
+            ? `Board ${sb}: clear board (game + match)`
+            : `Board ${sb}: clear game`,
         value: true,
-        run: () => {
-            if (transport === 'hud') {
-                fetch('/api/v1/rio/release', { method: 'POST' }).catch(() => {});
-            }
-            const entries = [
-                ['score_left', 0], ['score_right', 0], ['inning', 1], ['half_inning', 'Top'],
-                ['outs', 0], ['strikes', 0], ['balls', 0],
-                ['cbRioRunnerOn1', false], ['cbRioRunnerOn2', false], ['cbRioRunnerOn3', false],
-                ['runner1Name', ''], ['runner2Name', ''], ['runner3Name', ''],
-                ['batter', ''], ['pitcher', ''], ['batter_hand', 0], ['pitcher_hand', 0],
-                ['batterSide', 'right'], ['batter_roster_index', -1], ['pitcher_roster_index', -1],
-                ['star_chance', false], ['game_completed', false], ['game_over', false],
-                ['game_id', null],
-                ['home_team', 2], ['innings_selected', null], ['stadium', ''],
-                ['tag_set', null],
-                // The resolved name beside tag_set's raw id; both feeds write it,
-                // so both have to be cleared or an overlay keeps naming the old mode.
-                ['game_mode', ''],
-                ['side_reason', ''], ['away_linescore', []], ['home_linescore', []],
-            ];
-            for (const pos of ['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF']) {
-                entries.push([`field.${pos}`, '']);
-            }
-            for (const t of [1, 2]) {
-                entries.push(
-                    [`player.${t}.rioName`, ''], [`player.${t}.name`, ''],
-                    [`player.${t}.msb_team`, ''], [`player.${t}.team`, ''],
-                    [`player.${t}.rio_captainIndex`, -1], [`player.${t}.logo`, ''],
-                    [`player.${t}.port`, null], [`player.${t}.team_stars`, 0],
-                    [`player.${t}.batting_hands`, []], [`player.${t}.fielding_hands`, []],
-                );
-                for (let i = 0; i < 9; i++) {
-                    entries.push(
-                        [`player.${t}.character.${i}.name`, ''],
-                        [`player.${t}.character.${i}.is_starred`, false],
-                        [`player.${t}.character.${i}.position`, ''],
-                    );
-                }
-            }
-            setItems(entries.map(([k, v]) => ({ key: `${base}.${k}`, value: v })));
-        },
+        /*
+         * ONE CALL, AND THE SERVER OWNS THE KEY LIST.
+         *
+         * This used to build ~120 resting values here and send them as plain state
+         * writes. Two things were wrong with that, and only the second was
+         * visible:
+         *
+         * The key list is the INVERSE of what a live frame writes, so its only
+         * honest home is beside that writer (`clear_game_entries`,
+         * server/rio/provider.py). Kept here it was a third copy — the browser's,
+         * the one in test_state_completeness described as "mirroring" the browser's,
+         * and the writer itself — and the copies had already drifted apart on
+         * `player.{T}.name` while BOTH missed the six resurface fields
+         * (`full_name`, `pronoun`, `country`, `state`, `twitter`, `youtube`), so a
+         * clear left the previous player's pronouns and socials on air.
+         *
+         * And a clear has to RE-PROJECT the bound fixture, which no amount of state
+         * writing from a browser can do: the Match projector jointly owns
+         * `player.{T}.*` and runs only on a bind or a fixture mutation, so blanking
+         * those keys from here left the fixture's names gone with nothing to bring
+         * them back — the slot above still read `M2 · Alice vs Bob` while the
+         * scoreboard drew nobody, and the workaround was knowing to clear BEFORE
+         * binding and never after.
+         *
+         * The HUD release moved with it (the endpoint decides from the board's own
+         * transport), so this is no longer two requests that could half-land.
+         */
+        run: () => fetch(
+            `/api/v1/scoreboards/${sb}/clear-game?release_match=${releaseMatch ? 'true' : 'false'}`,
+            { method: 'POST' },
+        ).catch(() => {}),
     });
 
     /*
@@ -1162,7 +1284,7 @@ export function useBoardDesk(sb) {
     };
 
     return {
-        sb, base, transport, feedLive, statsTag, statsTagManual, liveMode, playback, poolCount,
+        sb, base, transport, feedLive, statsTag, statsTagManual, liveMode, pinnedGameId,
         g, boundMatch, clearAtBatState,
         val, isStaged, setField, swapSides, releaseSides, resetGame, setNameOverride,
         setStatsTag, useLiveMode,
@@ -1185,19 +1307,28 @@ export function useBoardDesk(sb) {
  */
 const SidesControl = memo(function SidesControl({ d, reason, transport }) {
     const manual = reason === 'manual';
-    const phrase = sideReasonPhrase(reason);
+    const status = sideReasonStatus(reason);
     // Only the HUD feed carries the server-side override, so only a HUD board
     // can be handed back (see releaseSides).
     const releasable = manual && transport === 'hud';
     return (
         <>
-            {phrase && (
-                <Text
-                    size="xs" span truncate
-                    className={cn('min-w-0', manual ? 'text-amber-500/90' : 'text-muted-foreground')}
+            {status && (
+                <SlotChip
+                    title={status.title}
+                    // SlotChip's default palette is an `||` fallback, so a
+                    // className has to carry the neutral fill too or the chip
+                    // arrives unpainted — twMerge lets the amber win after it.
+                    className={cn(
+                        'cursor-help bg-secondary text-muted-foreground',
+                        // Amber is the console's "a hand is on this", the same
+                        // tone the mode override's ring spends — and the one
+                        // layer here a producer can be holding open.
+                        manual && 'bg-amber-500/15 text-amber-300',
+                    )}
                 >
-                    Sides {phrase}
-                </Text>
+                    {status.label}
+                </SlotChip>
             )}
             {releasable && (
                 <Button
@@ -1652,16 +1783,85 @@ const ScoreBox = memo(function ScoreBox({ side, d }) {
  * not been made. Here the gate is the game being over, which is the moment this
  * bar exists for.
  *
- * `fixtureDone` keeps there being exactly ONE take on the panel: a decided
- * fixture offers its own, in the slot it is finishing in, and holds it after the
- * board is cleared — so this one stands down rather than printing a second.
+ * IT STANDS ITS TAKE DOWN FOR TWO DIFFERENT REASONS, and it only ever had one.
+ *
+ * A DECIDED fixture offers its own take, in the slot it is finishing in, and
+ * holds it after the board is cleared — so a second one here would be two takes
+ * on one panel.
+ *
+ * A fixture whose SERIES CAN STILL CONTINUE must not offer one at all. `decided`
+ * alone was the gate, and a Bo3 between games is undecided — so the bar sat under
+ * a live series offering to put the NEXT fixture on the board, one press away from
+ * replacing a match that was 1–0 and still being played. The right question is
+ * whether another game can follow under this same fixture, which is `bestOf` and
+ * `decided` together.
+ *
+ * Keeping both halves ungated for the Bo1 is what the original note was about and
+ * still holds: `default_match()` is `{bestOf: 1}`, the match is over in every
+ * sense that matters the moment the game is, and gating on `decided` hid the
+ * producer's next press behind the capture that sets it. A Bo1 therefore takes at
+ * game end; a Bo3 waits for its series.
  */
-const TurnoverBar = memo(function TurnoverBar({
-    sb, lifecycle, matchId, fixtureDone, onClear, clearStaged, postgame,
+/*
+ * THE BAR SAYS NOTHING. IT IS THE PRESSES.
+ *
+ * It opened with a sentence, and the sentence went through two lives, each of
+ * which was a duplicate of something already on screen a few pixels away.
+ *
+ * FIRST IT WAS THE CAPTURE — "Captured automatically." — a receipt for something
+ * that had already happened, on the one strip a producer reads to find out what
+ * to do NEXT, and the Post-game region below prints that receipt properly: the
+ * AUTO badge, both names and the final score. Over a board carrying a game from
+ * a previous session it was worse than redundant: the chip an inch above said
+ * OLD, nothing had been captured this session at all, and the bar under it
+ * talked about a stat file.
+ *
+ * SO IT BECAME THE CONDITION — "Left over from before PRSH started." — which is
+ * the GameChip's own job, in the GameChip's own words, one row up (OLD, STALLED,
+ * FINAL, each with the full sentence in its title). Three rows of this panel now
+ * opened with the same two players and the third one opened with prose about
+ * them, so the producer read the matchup three times to reach a button.
+ *
+ * Both lives had the same fault: this strip is the only place on the panel that
+ * exists to be PRESSED, and everything it can say is said better by the surface
+ * that owns the fact. What is left is the verbs, at their natural width — a
+ * group of presses rather than a full-width banner — and the chip above carries
+ * the condition it always did.
+ */
+const TurnoverActions = memo(function TurnoverActions({
+    sb, lifecycle, matchId, match, onClear, clearStaged, postgame,
 }) {
     const next = useNextUp(sb);
     const canBind = useMatchBindableBoards()(sb);
-    if (!isStaleBoard(lifecycle)) return null;
+    /*
+     * THE TURNOVER PRESSES ARE THE END OF A GAME'S; THE CLEAR IS EVERY BOARD'S.
+     * This whole group used to return null off `isStaleBoard`, with a second
+     * `Clear game` down in the game-state region covering the other times — so
+     * there was always exactly one clear on the panel and it was in a DIFFERENT
+     * PLACE depending on the board's lifecycle. What a producer saw was the
+     * button moving: press Clear here, the board empties, and the clear they
+     * just used is now at the bottom of the panel.
+     *
+     * One press, one place. Capture and the take stay gated — you do not hand a
+     * board on or capture a stat file mid-game — but the clear is the verb a
+     * board always owes, so it renders here always and the region's copy is gone.
+     */
+    const atTurnover = isStaleBoard(lifecycle);
+
+    const decided = num(match?.decided, 0) === 1 || num(match?.decided, 0) === 2;
+    /*
+     * Can another game follow under this same fixture? `bestOf > 1 && !decided`
+     * answered it while every multi-game format was ODD — somebody always
+     * clinches, so `decided` is the end. A DOUBLEHEADER is the one format that
+     * can be COMPLETE AND UNDECIDED (1-1 is a split and nobody takes it), which
+     * left alone would stand the take down all night on a fixture with no games
+     * left to play. Counting the games the format holds answers both, and lives
+     * in ../../../../public/layout/lib/match-format.js because the overlay
+     * runtime asks the same question of the same field.
+     */
+    const stillToPlay = seriesContinues(
+        match?.bestOf, match?.series?.[1], match?.series?.[2], decided,
+    );
 
     const { pg, stale, busy, capture } = postgame;
     // A capture from an EARLIER game is not this game's receipt (../postgame
@@ -1670,43 +1870,120 @@ const TurnoverBar = memo(function TurnoverBar({
     const captured = pg.present && !stale;
     const bound = matchId != null && matchId !== '';
 
+    /*
+     * OUT OF GAMES, which is not the same as WON — a doubleheader is complete
+     * after two games however they fall, so a 1-1 split is finished and unwon.
+     * Every "is this fixture done with the board" question below asks this, not
+     * `decided`, or a split would strand the panel: no handover offered, and a
+     * clear that leaves the finished fixture bound for the projector to repaint.
+     */
+    const complete = bound && matchComplete(
+        match?.bestOf, match?.series?.[1], match?.series?.[2], match?.decided,
+    );
+
+    /*
+     * ONLY A GAME THAT REACHED ITS END HAS A RESULT TO CAPTURE, which is what the
+     * chip above already says in its own words. A STALLED game has none — its
+     * score is a frozen mid-game frame — and a RESTORED one's belongs to a
+     * previous session, where the recovery is the file picker in the post-game
+     * region and not a button in the middle of tonight's turnover. Offering it on
+     * all three is how the cold-start bar ended up talking about stat files.
+     */
+    const offerCapture = lifecycle === 'final' && !captured;
+
+    /*
+     * THE ONE FILLED PRESS IS THE FORWARD MOVE, and which move that is depends on
+     * whether there is a fixture to go up. Taking one CLEARS THE BOARD ON ITS WAY
+     * (bind_board's `_clear_superseded_game`), so a producer with a match waiting
+     * never has to tidy first — which is the reassurance the bar can only give by
+     * putting the take in front and standing the clear down to a ghost beside it.
+     * With nothing waiting, clearing IS the forward move and takes the fill.
+     *
+     * Everything else on the bar is ghost. A strip where three buttons are equally
+     * loud is a strip that has not answered the question.
+     */
+    const takeable = atTurnover && Boolean(next) && canBind && bound && !complete && !stillToPlay;
+
+    /*
+     * Is a take on the panel AT ALL? The fixture slot above carries one for an
+     * unbound board (the UP NEXT ghost) and for a decided fixture, and the clear
+     * must stand down to a ghost beside either of those exactly as it does beside
+     * this bar's own — or the cold start shows a filled Clear and a filled take
+     * and asks the producer which is the next thing to do.
+     */
+    const slotTake = atTurnover && Boolean(next) && canBind && (!bound || complete);
+
+    /*
+     * DOES THE CLEAR TAKE THE FIXTURE WITH IT?
+     *
+     * Only when the fixture is DONE with this board. A decided fixture has no
+     * further game to put here, so leaving it bound only means the projector
+     * repaints its two names the instant the game keys are blanked — which is
+     * exactly what happened, and is the console's most baffling outcome: press the
+     * button that empties a board, watch the board refill with last night's
+     * finished matchup at 0-0. The way out was two presses on two different rows,
+     * with nothing saying so.
+     *
+     * A fixture that can still continue keeps its binding, which is the whole
+     * reason this endpoint re-projects at all: a Bo3 between games, or a Bo1 whose
+     * capture has not landed yet, must keep its match on the board.
+     *
+     * TWO NAMES, BECAUSE THEY ARE TWO DIFFERENT ACTS. One label that sometimes
+     * unbinds is the worse trade — the producer cannot tell from the button what
+     * their board will be holding afterwards, which is the only thing they are
+     * asking it.
+     */
+    const releaseMatch = complete;
+
     return (
-        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-border/60 bg-secondary/20 px-2 py-1.5">
-            {captured ? (
-                // THE RECEIPT IS THREE WORDS, NOT THE BOX SCORE. The post-game
-                // region below prints that, badge and all, and a panel that says
-                // the same thing twice is the wordiness this rework is about.
-                // What the bar owes the producer is only whether press one
-                // happened.
-                <Text size="xs" truncate dimmed className="min-w-0 flex-1">
-                    {pg.capturedBy === 'auto' ? 'Captured automatically.' : 'Captured.'}
-                </Text>
-            ) : (
-                <>
-                    <Text size="xs" truncate dimmed className="min-w-0 flex-1">
-                        {bound ? `Nothing captured for M${matchId} yet.` : 'Nothing captured.'}
-                    </Text>
-                    <SimpleTooltip label="Read this game’s stat file — it advances the match to post-game and credits the series">
-                        <Button
-                            variant="ghost" size="xs" className="shrink-0"
-                            onClick={() => capture()} disabled={busy}
-                        >
-                            Capture
-                        </Button>
-                    </SimpleTooltip>
-                </>
+        // A GROUP ON THE SUBJECT'S ROW, not a strip of its own. Once the prose
+        // came off it, a bordered full-width bar holding one button read as a
+        // press floating under the panel with nothing to attach it to — and what
+        // it attaches to is the row above, which is the board it acts on. Its
+        // rule is on its left, the same idiom as the fixture tail beside it.
+        <div className="flex min-w-0 shrink-0 items-center gap-x-2 border-l border-border/60 pl-2">
+            {offerCapture && (
+                <SimpleTooltip label="Read this game’s stat file — it advances the match to post-game and credits the series">
+                    <Button
+                        variant="ghost" size="xs" className="h-7 shrink-0"
+                        onClick={() => capture()} disabled={busy}
+                    >
+                        Capture
+                    </Button>
+                </SimpleTooltip>
             )}
-            <SimpleTooltip label="Blank this board’s live game. The captured box score stays — it has its own Clear below.">
+            <SimpleTooltip label={releaseMatch
+                ? `Blank this board and take M${matchId} off it. The captured box score stays — the post-game region has its own Clear.`
+                : 'Blank this board’s game. The match stays bound, and its next game projects onto it.'}
+            >
                 <Button
-                    variant="ghost"
+                    variant={takeable || slotTake ? 'ghost' : 'default'}
                     size="xs"
-                    onClick={onClear}
-                    className={cn('shrink-0', clearStaged && 'text-amber-400')}
+                    onClick={() => onClear(releaseMatch)}
+                    className={cn(
+                        'h-7 shrink-0',
+                        clearStaged && (takeable || slotTake
+                            ? 'text-amber-400' : 'ring-1 ring-amber-400'),
+                    )}
                 >
-                    {clearStaged ? 'Clear staged' : 'Clear game state'}
+                    {clearStaged
+                        ? 'Clear staged'
+                        : (releaseMatch ? `Clear & unbind M${matchId}` : 'Clear game')}
                 </Button>
             </SimpleTooltip>
-            {next && canBind && !fixtureDone && <TakeNextButton sb={sb} label={next.label} />}
+            {/* WHY NOTHING IS BEING OFFERED, in the place the take would be — a
+                bar that simply omits its third button leaves the producer looking
+                for it. A badge, not the sentence it was ("… — same match stays
+                up"), for the same reason the rest of this strip lost its prose:
+                which game of the series this is IS the answer, and the fixture
+                slot above already holds the series score it belongs to. */}
+            {atTurnover && stillToPlay && (
+                <SlotChip title="This match isn’t decided — its next game projects onto this board, so there is nothing to take yet">
+                    GAME {num(match?.series?.[1], 0) + num(match?.series?.[2], 0) + 1}
+                    {' '}OF {num(match?.bestOf, 1)}
+                </SlotChip>
+            )}
+            {takeable && <TakeNextButton sb={sb} label={next.label} primary />}
         </div>
     );
 });
@@ -1718,10 +1995,11 @@ export default function BoardDesk({ board }) {
     const lifecycle = useBoardLifecycle(sb);
     const stats = useStatsDiagnostics(sb);
     const postgame = usePostGame(sb);
+    // Owned here because its control and its surface are on two different rows
+    // — the Games rule and the Games body (../games `usePlaybackMode`).
+    const [playbackMode, setPlaybackMode] = usePlaybackMode(sb);
     const { options: gameModes } = useGameModes();
     const [refreshingHud, setRefreshingHud] = useState(false);
-    const aliases = useSettingsStore(s => s?.scoreboards?.aliases);
-    const storedAlias = aliases?.[sb] ?? aliases?.[String(sb)] ?? '';
 
     // Force a re-read of the HUD file — the recovery path after a board has been
     // cleared or hand-edited, so it matches what Project Rio is showing again.
@@ -1731,28 +2009,15 @@ export default function BoardDesk({ board }) {
             .finally(() => setRefreshingHud(false));
     }, []);
 
-    const commitAlias = useCallback((next) => {
-        const v = (next ?? '').trim();
-        if (v === storedAlias) return;
-        fetch(`/api/v1/scoreboards/${sb}/alias?alias=${encodeURIComponent(v)}`, { method: 'PUT' })
-            .catch(e => notifications.show({ message: `Rename: ${e?.message || e}`, color: 'red' }));
-    }, [sb, storedAlias]);
-
     return (
         <>
             {/* WHAT this board is carrying, before what you can do to it. The
                 live game is the subject; the bind and the side ordering are
                 qualifiers on it, so they read a tier down rather than as three
                 competing subjects. */}
-            <GameSlot d={d} lifecycle={lifecycle} />
-            <FixtureSlot sb={sb} matchId={g.match} match={d.boundMatch} conflict={g.conflict} />
-            <TurnoverBar
-                sb={sb}
-                lifecycle={lifecycle}
-                matchId={g.match}
-                fixtureDone={d.boundMatch?.decided === 1 || d.boundMatch?.decided === 2}
-                onClear={d.resetGame}
-                clearStaged={d.isStaged('reset')}
+            <BoardSubject
+                sb={sb} d={d} lifecycle={lifecycle}
+                matchId={g.match} match={d.boundMatch} conflict={g.conflict}
                 postgame={postgame}
             />
             {g.conflict && (
@@ -1766,8 +2031,11 @@ export default function BoardDesk({ board }) {
                 which is the one thing a roster readout exists to avoid. The
                 wiring is four one-line settings and reads fine below. */}
             <div className="flex flex-col gap-1.5 pt-1">
-                {/* score.{N}.*: what is on air this game. */}
+                {/* score.{N}.*: what is on air this game. KIT_SECTION's `first:`
+                    reset is why this one draws no rule: a divider separates
+                    siblings and there is nothing above it to separate from. */}
                 <KitColumn
+                    className={KIT_SECTION}
                     label="Game state"
                     subject={(
                         <ModeRow
@@ -1872,40 +2140,26 @@ export default function BoardDesk({ board }) {
                         </Text>
                     )}
 
-                    {/* The escape hatch, at the bottom of the thing it escapes
-                        from, and ALONE: Swap sat beside it and the pair read as
-                        two equal buttons, when one flips an orientation and the
-                        other blanks the board. Swap belongs with the layer that
-                        decides it, on the region's own rule (see SidesControl).
+                    {/* NO CLEAR DOWN HERE. It was the escape hatch for
+                        "every other time" — a live game to blank, a hand-built
+                        board to start over — while the turnover group up on the
+                        subject row owned the press at the end of a game. But that
+                        group's Clear is UNCONDITIONAL, so the two were never
+                        alternatives: they were both on screen on an empty or live
+                        board and only one of them on a final one. What a producer
+                        saw was the button MOVING — press Clear at the top, the
+                        board empties, and the clear they just used is suddenly
+                        also sitting at the bottom of the panel.
 
-                        ONE VERB, ONE NAME, ONE BUTTON. This and the turnover bar's
-                        are the same `resetGame`, and were called "Reset game
-                        state" and "Clear the board" — two names on one panel for
-                        one press, with "reset" additionally suggesting a return to
-                        defaults rather than what it does, which is empty the
-                        board. Naming them the same thing then showed the real
-                        problem: both were on screen at once at the end of a game.
-                        The bar owns the press at the moment it is part of a
-                        sequence; this is the hatch for every other time — a live
-                        game to blank, a hand-built board to start over — so it
-                        stands down while the bar is up. `fit` because a lone
-                        button given `flex-1` was a ~1200px banner. */}
-                    {!isStaleBoard(lifecycle) && (
-                        <ActionRow
-                            fit
-                            className="pt-0.5"
-                            actions={[
-                                {
-                                    label: 'Clear game state', onClick: d.resetGame, variant: 'outline',
-                                    className: 'border-destructive/40 text-destructive hover:bg-destructive/10',
-                                },
-                            ]}
-                        />
-                    )}
+                        One press, one place, and the place is the row it acts on.
+                        A control that relocates when its subject changes state is
+                        its own confusion (the Match desk's `Clear` makes the same
+                        argument about its two faces), and the top is the right
+                        home: the clear is part of a sequence with Capture and the
+                        take, and those three have to be read together. */}
                 </KitColumn>
 
-                <Divider className="my-1.5" />
-{/* THE POOL IS WHAT EARNS A REGION, not the transport. This was
+                  {/* THE POOL IS WHAT EARNS A REGION, not the transport. This was
                       "Games" on every board, carrying a badge, a playback
                       sentence, a re-read and the mode across four lines — and on
                       a HUD board ../games returns nothing, so a board with one
@@ -1914,36 +2168,35 @@ export default function BoardDesk({ board }) {
                       moved up onto the Game-state rule (see ModeRow); what is
                       left is the pool surface, which only an API board has.
 
-                      The playback sentence stays down here with it, because on an
-                      API board it IS the region's subject — a live game table or a
-                      filter with a running transport is what it describes. */}
+                      THE MODE RIDES THE RULE, where the sentence about it used to
+                      be. It is the region's subject in the only sense that
+                      matters — everything in the body belongs to whichever half
+                      is chosen — and as a `fullWidth` segmented at the top of the
+                      body it was a two-option control drawn as a ~1100px bar. The
+                      pool count and the running flag that the sentence also
+                      carried are the rotator's own status line and its own
+                      Start/Stop, a few rows down and unable to disagree. */}
                   {d.transport === 'api' && (
                   <KitColumn
+                    className={KIT_SECTION}
                     label="Games"
-                    subject={(
-                        <>
-                            <Text size="xs" truncate dimmed className="min-w-0">
-                                {playbackLine({
-                                    transport: d.transport,
-                                    mode: d.playback.mode,
-                                    running: d.playback.running,
-                                    gameId: d.playback.gameId,
-                                    poolCount: d.poolCount,
-                                    live: d.g.gameLive,
-                                })}
-                            </Text>
-                            {/* Exactly the condition the server polls under: a
-                                single-mode board with a pinned game still being
-                                played (game_pool._live_consumers_exist). */}
-                            <LiveRefreshCountdown
-                                active={d.playback.mode !== 'rotate'
-                                    && d.playback.gameId != null
-                                    && d.g.gameLive}
-                            />
-                        </>
+                    subject={<PlaybackModeControl mode={playbackMode} onChange={setPlaybackMode} />}
+                    /* Exactly the condition the server polls under: a
+                       single-mode board with a pinned game still being played
+                       (game_pool._live_consumers_exist). The countdown is the
+                       whole of what "following it live" used to say in words. */
+                    action={(
+                        <LiveRefreshCountdown
+                            active={playbackMode !== 'rotate'
+                                && d.pinnedGameId != null
+                                && d.g.gameLive}
+                        />
                     )}
                   >
-                    <GamesSection sb={sb} transport={d.transport} gameModes={gameModes} />
+                    <GamesSection
+                        sb={sb} mode={playbackMode}
+                        transport={d.transport} gameModes={gameModes}
+                    />
                   </KitColumn>
                   )}
 
@@ -1952,16 +2205,37 @@ export default function BoardDesk({ board }) {
                       capture on its own, so the subject usually fills itself in
                       and the controls below are the recovery path. Was a desk of
                       its own until its board picker gave it away (see
-                      ../postgame). */}
-                  <KitColumn label="Post-game" subject={<PostGameSubject pg={postgame.pg} />}>
+                      ../postgame).
+
+                      THE VERBS RIDE THE RULE, in the `action` slot the sides'
+                      Swap already uses one region up. All three are recovery —
+                      the capture that matters fires on its own, and the one on
+                      the turnover bar covers the press a producer makes at the
+                      end of a game — so as a row of their own under the subject
+                      they were the loudest thing in the region and cost it a
+                      third of its height for controls nobody reaches for on an
+                      ordinary night. On the rule, an uncaptured board is ONE ROW.
+
+                      IT HAS ITS OWN RULE ABOVE IT, like every other region here.
+                      The panel drew exactly one divider, hard-coded under Game
+                      state, so on an API board the line landed above Games and
+                      Post-game ran straight on out of the pool surface, while on
+                      a HUD board the board's name ran straight on out of the
+                      capture. KIT_SECTION is the kit's one statement of what a
+                      section's rule is, `first:` resets included — which is
+                      exactly why the Games region can be absent without leaving
+                      a rule hanging at the top of the stack. */}
+                  <KitColumn
+                    className={KIT_SECTION}
+                    label="Post-game"
+                    subject={<PostGameSubject pg={postgame.pg} />}
+                    action={<PostGameActions desk={postgame} />}
+                  >
                     <PostGameSection desk={postgame} />
                   </KitColumn>
 
-                {/* How the board is WIRED — settings, which outlive this game, so
-                    they read below what is on air rather than beside it.
-                    PROPERTIES ONLY: whether this board exists at all is rig
-                    membership, and that belongs to the rack's BOARDS section
-                    beside the + that adds one (see RowRemove in ../rack).
+                {/* WHAT IS LEFT OF "HOW THE BOARD IS WIRED" IS ONE ROW, and it
+                    draws itself only on a rig that has a choice to make.
 
                     GAMES IS ITS OWN REGION AND TAKES THE FULL WIDTH, not a field
                     inside "This board". Choosing between one game and a rotating
@@ -1971,58 +2245,30 @@ export default function BoardDesk({ board }) {
                     beside the name it became a label-gutter row, which is how a
                     demoted control gets read as a minor setting; given only 7 of
                     12 columns it was a tall stack of full-width fields with 300px
-                    of empty panel beside it. The width is what lets the rotator
-                    put its pool and its transport side by side (../games) and the
-                    game table show a mode name without truncating it.
+                    of empty panel beside it.
 
-                    THE GAME MODE IS NOT A BOARD PROPERTY. It lived up here as a
-                    field beside the board's Name, with the Games region that
-                    actually owns it directly underneath and nothing tying the two
-                    together — a mode floating above a header that had its own
-                    badge and sentence, so it read as one more setting rather than
-                    part of what this board is fetching. It IS the binding
+                    THE GAME MODE IS NOT A BOARD PROPERTY either. It IS the binding
                     (`scoreboards.binding.{N}.stats_tag`), it decides which tag
-                    every stats fetch for this board goes out under, and on a HUD
-                    board it was the only thing in this half of the panel a
-                    producer ever changes. It is the Games region's first row now.
+                    every stats fetch for this board goes out under, and it is the
+                    Game-state rule's own control now (`ModeRow`).
 
-                    WHAT IS LEFT IS THE LEAST URGENT THING ON THE PANEL, so it goes
-                    last. Sat above Games it was a bare labelled field wedged
-                    between two regions with eyebrows, which is what made the
-                    bottom half read as a pile rather than as three regions: a
-                    board's name is set once and its running order once a night,
-                    while everything above changes every game. Ordered by how often
-                    a producer touches it, the panel now reads game state → where
-                    the games come from → what the last one ended as → what this
-                    board is called.
+                    AND THE NAME IS RENAMED WHERE IT IS NAMED. A `Name` field sat
+                    here, at the foot of a body four regions long, setting the
+                    15px title printed at the top of the very same panel — the
+                    console's longest distance between a value and its control,
+                    and the producer had to scroll past everything the board was
+                    doing to reach it. It is the panel title itself now
+                    (`PanelShell onRename`, via ../production `deskBodiesFor`).
 
-                    No region eyebrow on purpose: the rows already say "Matches
-                    from" and "Name", so a THIS BOARD label would be a third label
-                    line stating nothing they don't. */}
-                <KitColumns>
-                    {/* Which running order Up next walks for THIS board. Only
-                        once there is more than one to choose between: on a
-                        single-order rig the answer is "the only one", and a
-                        picker with one option is a control that cannot do
-                        anything. Authored here rather than on the Match desk
-                        because it is a property of the board, not of the order —
-                        the order's own heading just reports the consequence. */}
-                    <BoardQueueRow sb={sb} />
-
-                    {/* TextRow echoes keystrokes locally and writes once you stop
-                        or blur — a rename is a settings round-trip and every
-                        overlay reading the alias would otherwise redraw per
-                        letter. */}
-                    <TextRow
-                        label="Name" value={storedAlias} placeholder={`Scoreboard ${sb}`}
-                        onChange={commitAlias}
-                    />
-                    {/* A third, empty cell. `KitColumns` is a 2-up grid and the
-                        running order only appears on a rig with more than one, so
-                        without this the Name spread across the whole panel on the
-                        single-order rig that is almost every rig. */}
-                    <span aria-hidden />
-                </KitColumns>
+                    So the region is the running order alone, which appears only
+                    on a rig with more than one — and `BoardQueueRow` owns its own
+                    section rule for exactly that reason: a section whose only
+                    member self-hides must take its divider with it, or a
+                    single-order rig draws a rule under the capture with nothing
+                    beneath it. No region eyebrow: the row already says "Matches
+                    from", and a THIS BOARD label over one row would be a second
+                    name for its only member. */}
+                <BoardQueueRow sb={sb} />
             </div>
         </>
     );

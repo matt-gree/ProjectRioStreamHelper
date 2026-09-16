@@ -11,6 +11,7 @@ from server.rio import hit_visualizer
 from server.rio.hud_watcher import HudWatcher
 from server.rio.resurface import RESURFACE_MAP as _RESURFACE_MAP
 from server.rio import stats_api
+from server.boards import RESTORED_AT_KEY, RESTORED_KEY
 from server.rio.stats_tracker import StatsTracker
 from server.match import Match
 from server.participants import Participants
@@ -239,6 +240,18 @@ async def apply_parsed_game_to_state(parsed: dict, scoreboard_number: int, home_
         # (`game_completed`). Hence the False default rather than a carry-over.
         (f"{sb}.game_over", bool(parsed.get("game_over", False))),
 
+        # THIS FRAME IS AN EVENT, SO THE BOARD IS CURRENT. `restored` marks a game
+        # that came off disk at boot rather than from a feed in this process (see
+        # server/boards.py), and clearing it here is what makes the flag DECAY
+        # instead of needing a producer to dismiss it: the first real frame of the
+        # next game retires last night's without anyone pressing anything.
+        #
+        # False on every frame, including the boot read — which is why
+        # `Boards.mark_restored()` runs AFTER the provider starts rather than
+        # before, and why no apply path needed a new argument.
+        (f"{sb}.{RESTORED_KEY}", False),
+        (f"{sb}.{RESTORED_AT_KEY}", ""),
+
         # Per-inning runs for the box score. Reuses the same keys the completed
         # game linescore renders from, so overlays render live + final the same.
         (f"{sb}.away_linescore", left.get("inning_scores", [])),
@@ -381,6 +394,10 @@ async def apply_completed_game_to_state(game: dict, scoreboard_number: int, side
         # silently override the user's selected source.
         (f"{sb}.game_id", game.get("game_id")),
         (f"{sb}.game_completed", True),
+        # A record fetched from the API is current, whatever its age as a GAME
+        # (see the live batch above for why the flag decays here too).
+        (f"{sb}.{RESTORED_KEY}", False),
+        (f"{sb}.{RESTORED_AT_KEY}", ""),
         (f"{sb}.date_time_start", _ts(game.get("date_time_start"))),
         (f"{sb}.date_time_end", _ts(game.get("date_time_end"))),
         (f"{sb}.innings_played", game.get("innings_played", 0)),
@@ -476,6 +493,163 @@ async def apply_completed_game_to_state(game: dict, scoreboard_number: int, side
     _clear_unresurfaced_prefix(entries, sb)
     await State.SetBatch(entries)
     await State.Save()
+
+
+# Nine fielding slots, in the order the diamond is written above.
+_FIELD_POSITIONS = ("P", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF")
+
+
+def clear_game_entries(scoreboard_number: int) -> list[tuple]:
+    """Every key a game writes, at its RESTING value — the inverse of BOTH
+    appliers above, and deliberately next to them.
+
+    THIS LIST EXISTED THREE TIMES AND HAD ALREADY DRIFTED. The board desk built it
+    in the browser and sent ~120 keys over the socket; ``test_state_completeness``
+    kept a second copy described as mirroring the first; and the live writer above
+    is the third, the only one that actually defines what needs clearing. The two
+    copies disagreed about ``player.{T}.name`` — and BOTH of them missed six more:
+    ``full_name``, ``pronoun``, ``country``, ``state``, ``twitter`` and ``youtube``
+    are written by ``_apply_resurface`` every frame and were cleared by nobody, so
+    clearing a board left the previous player's pronouns and socials on air under
+    whatever came next.
+
+    So the resurface targets are DERIVED from ``RESURFACE_MAP`` rather than
+    re-listed: adding an address-book field to the map now clears itself, which is
+    the only way this stays true. Everything else is stated once, here.
+
+    Pure — it builds the batch and writes nothing, so a caller can fold it into a
+    batch of its own (see ``release_and_clear_game``).
+    """
+    base = f"score.{scoreboard_number}"
+    entries: list[tuple] = [
+        (f"{base}.score_left", 0),
+        (f"{base}.score_right", 0),
+        (f"{base}.inning", 1),
+        (f"{base}.half_inning", "Top"),
+        (f"{base}.outs", 0),
+        (f"{base}.strikes", 0),
+        (f"{base}.balls", 0),
+        (f"{base}.cbRioRunnerOn1", False),
+        (f"{base}.cbRioRunnerOn2", False),
+        (f"{base}.cbRioRunnerOn3", False),
+        (f"{base}.runner1Name", ""),
+        (f"{base}.runner2Name", ""),
+        (f"{base}.runner3Name", ""),
+        (f"{base}.batter", ""),
+        (f"{base}.pitcher", ""),
+        (f"{base}.batter_hand", 0),
+        (f"{base}.pitcher_hand", 0),
+        (f"{base}.batterSide", "right"),
+        (f"{base}.batter_roster_index", -1),
+        (f"{base}.pitcher_roster_index", -1),
+        (f"{base}.star_chance", False),
+        (f"{base}.game_completed", False),
+        (f"{base}.game_over", False),
+        # A cleared board holds no game, so it cannot hold one that came off disk.
+        (f"{base}.{RESTORED_KEY}", False),
+        (f"{base}.{RESTORED_AT_KEY}", ""),
+        (f"{base}.game_id", None),
+        (f"{base}.home_team", 2),
+        (f"{base}.innings_selected", None),
+        (f"{base}.stadium", ""),
+        (f"{base}.tag_set", None),
+        # The resolved name beside tag_set's raw id. Both feeds write it, so both
+        # have to be cleared or an overlay keeps naming the old mode.
+        (f"{base}.game_mode", ""),
+        (f"{base}.side_reason", ""),
+        (f"{base}.away_linescore", []),
+        (f"{base}.home_linescore", []),
+    ]
+    # THE COMPLETED-GAME PATH WRITES ELEVEN MORE, and the clear covered none of
+    # them: a board can hold either kind of game, so the inverse has to invert
+    # both appliers. `innings_played` is the worst of it — the scoreboard sizes its
+    # linescore from it (`linescoreColumns`), so a cleared board drew a table for
+    # the game that was just cleared — and `date_time_*` is what `meta-date`
+    # renders. The elo four are the dead keys CLAUDE.md already flags as written
+    # and read by nothing, and they are cleared anyway: "nothing reads it today" is
+    # not a reason to leave a fact about a game on a board that has none.
+    entries.extend([
+        (f"{base}.date_time_start", ""),
+        (f"{base}.date_time_end", ""),
+        (f"{base}.innings_played", 0),
+        (f"{base}.winner_user", ""),
+        (f"{base}.loser_user", ""),
+        (f"{base}.winner_score", 0),
+        (f"{base}.loser_score", 0),
+        (f"{base}.winner_incoming_elo", None),
+        (f"{base}.winner_result_elo", None),
+        (f"{base}.loser_incoming_elo", None),
+        (f"{base}.loser_result_elo", None),
+    ])
+    for pos in _FIELD_POSITIONS:
+        entries.append((f"{base}.field.{pos}", ""))
+    for team in (1, 2):
+        side = f"{base}.player.{team}"
+        entries.extend([
+            (f"{side}.rioName", ""),
+            (f"{side}.msb_team", ""),
+            (f"{side}.rio_captainIndex", -1),
+            (f"{side}.logo", ""),
+            (f"{side}.port", None),
+            (f"{side}.team_stars", 0),
+            (f"{side}.batting_hands", []),
+            (f"{side}.fielding_hands", []),
+        ])
+        # Derived, never re-listed — see the docstring.
+        for target in _RESURFACE_MAP.values():
+            entries.append((f"{side}.{target}", ""))
+        for i in range(9):
+            entries.extend([
+                (f"{side}.character.{i}.name", ""),
+                (f"{side}.character.{i}.is_starred", False),
+                (f"{side}.character.{i}.position", ""),
+            ])
+    return entries
+
+
+async def release_and_clear_game(scoreboard_number: int, *, reproject: bool = True) -> None:
+    """Blank board ``sb`` back to a resting game, then hand it back to its fixture.
+
+    THE RE-PROJECTION IS THE POINT, and its absence was a real bug on air. The
+    Match projector owns ``score.{N}.player.{T}.*`` jointly with the feed and runs
+    only on a bind or a fixture mutation — so a clear, which was ~120 plain state
+    writes from the browser, blanked the bound fixture's names with nothing left to
+    restore them. The board went on reporting ``M2 · Alice vs Bob`` in its fixture
+    slot while the scoreboard drew no names at all, and the producer's workaround
+    was to know to clear BEFORE binding and never after.
+
+    Order matters: blank first, re-project second. The projector's feed-shared rule
+    reads the board it is writing onto, and a board with no ``game_id`` is one it
+    will write its full key set to — so the fixture comes back complete, picks
+    included, rather than deferring to the game that was just cleared.
+
+    On a HUD board it also RELEASES the feed. The server keeps the last frame
+    Project Rio wrote (the re-read needs it), but a manual swap re-orients that
+    frame and re-applies it, so clearing without releasing meant the next swap
+    brought the whole game back. Clear releases, Re-read HUD restores; nothing in
+    between puts the feed back on the board on its own.
+    """
+    from server.bindings import transport
+
+    if transport(scoreboard_number) == "hud":
+        # App-wide, like the `/rio/release` endpoint the client used to call for
+        # this: there is one cached HUD frame, not one per board.
+        RioGameDataProvider.release_feed()
+
+    await State.SetBatch(clear_game_entries(scoreboard_number))
+    await State.Save()
+
+    # `reproject=False` is for a caller that is about to project anyway — today
+    # `bind_board`, which clears BEFORE it writes the new `score.{N}.match`, so the
+    # fixture in scope here is still the OUTGOING one. Re-projecting it would put
+    # the previous match back on the board for the moment between the clear and the
+    # bind, which is both wasted work and the wrong fixture.
+    if not reproject:
+        return
+    m = Match.scoreboard_match(scoreboard_number)
+    if m:
+        await Match.project_scoreboard(scoreboard_number, m)
+        await State.Save()
 
 
 def pin_swap(left: str, right: str) -> bool | None:

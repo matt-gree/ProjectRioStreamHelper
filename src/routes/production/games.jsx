@@ -6,7 +6,6 @@ import {
 import { Stack, Text, Loader } from '../../components/ui/primitives';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
-import { NumberInput } from '../../components/ui/number-input';
 import { MultiSelect } from '../../components/ui/multi-select';
 import { SegmentedControl } from '../../components/ui/segmented-control';
 import { Switch } from '../../components/ui/switch';
@@ -25,7 +24,7 @@ import { useSocketSubscribe } from '../../context/socket';
 import { useSettingsStore, useStateStore } from '../../context/store';
 import { stageOrRun } from '../../context/staging';
 import ParticipantPicker from '../../components/ParticipantPicker';
-import { KitColumns } from './kit';
+import { KitColumns, NumberField } from './kit';
 
 /*
  * Games — where a board's games come from, and how it plays them.
@@ -102,6 +101,17 @@ const formatTimestamp = (ts) => {
  */
 const DEFAULT_POOL = { filters: [], scope: 'both', excluded: [], refresh_interval: 60 };
 const EMPTY_LIST = [];
+
+/*
+ * RIO'S OWN CAP, WRITTEN DOWN, because a search that does not name one still
+ * gets it. The Limit field read `All` as its placeholder and sent nothing when
+ * empty — so the one state the field described as unlimited was the state that
+ * quietly returned the newest 50, and a producer widening a pool by clearing the
+ * limit narrowed it back to the default without being told. The field is filled
+ * in with 50 now: the number is the truth either way, and a number a producer
+ * can see is a number they can change.
+ */
+const DEFAULT_LIMIT = 50;
 
 async function putJSON(url, body) {
     return fetch(url, {
@@ -315,12 +325,13 @@ function GameFilters({ value, onChange, tagOptions, showRefine = true, trailing 
             {showRefine && (
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                     <Label className="whitespace-nowrap text-xs" htmlFor={limitId}>Limit</Label>
-                    <NumberInput
+                    <NumberField
                         id={limitId}
-                        placeholder="All"
+                        ariaLabel="Limit"
                         min={1} max={500}
-                        value={v.limit_games ?? null}
-                        onChange={(val) => onChange({ limit_games: val || null })}
+                        value={v.limit_games ?? DEFAULT_LIMIT}
+                        onChange={(val) => onChange({ limit_games: val })}
+                        clearable={false}
                         className="w-[76px]"
                     />
                     {dateOpen ? (
@@ -428,7 +439,7 @@ const SingleGameFinder = memo(function SingleGameFinder({ sb, tagOptions }) {
         (filters.vs_username ?? []).forEach(u => params.append('vs_username', u));
         if (filters.start_time != null) params.append('start_time', String(filters.start_time));
         if (filters.end_time != null) params.append('end_time', String(filters.end_time));
-        params.append('limit_games', String(filters.limit_games ?? 100));
+        params.append('limit_games', String(filters.limit_games ?? DEFAULT_LIMIT));
         return params.toString();
     }, [filters]);
 
@@ -627,7 +638,8 @@ const scopeOptions = [
 ];
 
 const EMPTY_FILTER = {
-    tag: [], username: [], vs_username: [], limit_games: null, start_time: null, end_time: null,
+    tag: [], username: [], vs_username: [], limit_games: DEFAULT_LIMIT,
+    start_time: null, end_time: null,
 };
 
 /*
@@ -640,9 +652,11 @@ const EMPTY_FILTER = {
  * momentary: Start/Stop/Next mean now, the same rule as Take and capture.
  *
  * The status line under the transport is the reason this block is on the panel
- * rather than in a dialog. `Rotating — nothing in its pool yet` (the board's
- * readout) says the pool is empty; only this line says *why* — filters edited
- * since the last Find, an unreachable API, or no filter at all yet.
+ * rather than in a dialog, and it is now the ONLY place the pool is counted: the
+ * region's rule used to quote the number too ("Rotating — 6 in pool"), which is
+ * a second statement of the half of this line that is never the interesting
+ * half. Only this one can say *why* a pool is empty — filters edited since the
+ * last Find, an unreachable API, or no filter at all yet.
  */
 const RotatingGames = memo(function RotatingGames({
     sb, pool, tagOptions, status, transportCall, countdown,
@@ -788,18 +802,32 @@ const RotatingGames = memo(function RotatingGames({
                 it keeps current, where a label-gutter row forced it down to
                 "Keep current" and dropped the tooltip that explains the off
                 state. The interval stays visible-but-disabled rather than
-                appearing and disappearing under the switch. */}
+                appearing and disappearing under the switch.
+
+                BOTH FIELDS EMPTY OUT, AND NEITHER IS `NumberInput` ANY MORE.
+                They were controlled straight off the stored value with a
+                `val || 30` at the call site, which is two bugs stacked: the
+                coercion turned the keystroke that CLEARS the box into a write
+                of the default, and the controlled value then refilled the box
+                with it — so clearing to type a fresh `120` gave you `30120`,
+                and there was no way to get an empty field at all. `NumberField`
+                (../kit) holds the draft and commits on a pause or on blur, and
+                `clearable={false}` says what an empty box means HERE: not an
+                answer (there is no board that cycles every `` seconds) but a
+                producer halfway to a new number, so it writes nothing and puts
+                the old value back when focus leaves. */}
             <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
                 <div className="flex items-center gap-2">
                     <Label className="whitespace-nowrap text-xs" htmlFor={`rot-interval-${sb}`}>
                         Seconds per game
                     </Label>
-                    <NumberInput
+                    <NumberField
                         id={`rot-interval-${sb}`}
-                        aria-label="Seconds per game"
+                        ariaLabel="Seconds per game"
                         min={5} max={600}
                         value={playback.interval}
-                        onChange={(val) => updatePlayback({ interval: val || 30 })}
+                        onChange={(val) => updatePlayback({ interval: val })}
+                        clearable={false}
                         className="w-[72px]"
                         suffix="s"
                     />
@@ -814,16 +842,16 @@ const RotatingGames = memo(function RotatingGames({
                     <SimpleTooltip label="Automatically pick up newly-started and finished games while rotating. Off = the pool only changes when you press Find games.">
                         <Label className="whitespace-nowrap text-xs">Keep pool current</Label>
                     </SimpleTooltip>
-                    <NumberInput
-                        aria-label="Re-check interval"
+                    <NumberField
+                        ariaLabel="Re-check interval"
                         min={10} max={600}
                         value={refreshSecs}
                         disabled={(pool.refresh_interval ?? 0) === 0}
                         onChange={(val) => {
-                            const next = val || 10;
-                            setRefreshSecs(next);
-                            if ((pool.refresh_interval ?? 0) > 0) updatePool({ refresh_interval: next });
+                            setRefreshSecs(val);
+                            if ((pool.refresh_interval ?? 0) > 0) updatePool({ refresh_interval: val });
                         }}
+                        clearable={false}
                         className="w-[72px]"
                         suffix="s"
                     />
@@ -838,13 +866,13 @@ const RotatingGames = memo(function RotatingGames({
                     <div className="flex items-center gap-1.5">
                         <Button
                             size="xs" variant="secondary"
-                            className={cn(showDirty && 'ring-1 ring-amber-400')}
+                            className={cn('h-7', showDirty && 'ring-1 ring-amber-400')}
                             onClick={findGames} disabled={finding}
                         >
                             {finding ? <Loader size={12} /> : <Search size={13} />}
                             Find games
                         </Button>
-                        <Button size="xs" variant="outline" onClick={openPool}>
+                        <Button size="xs" variant="outline" className="h-7" onClick={openPool}>
                             Pool games
                             {(members.length > 0 || excludedIds.length > 0) && (
                                 <Badge variant="secondary" className="ml-1 text-[10px]">
@@ -857,8 +885,8 @@ const RotatingGames = memo(function RotatingGames({
                     <div className="flex items-center gap-2">
                         {!running ? (
                             <Button
-                                size="sm"
-                                className="bg-[#14b8a6] text-black hover:bg-[#14b8a6]/90"
+                                size="xs"
+                                className="h-7 bg-[#14b8a6] text-black hover:bg-[#14b8a6]/90"
                                 onClick={() => transportCall('start')}
                             >
                                 Start rotating
@@ -866,8 +894,8 @@ const RotatingGames = memo(function RotatingGames({
                         ) : (
                             <>
                                 <Button
-                                    size="sm" variant="outline"
-                                    className="border-destructive/40 text-destructive"
+                                    size="xs" variant="outline"
+                                    className="h-7 border-destructive/40 text-destructive"
                                     onClick={() => transportCall('stop')}
                                 >
                                     Stop
@@ -875,7 +903,7 @@ const RotatingGames = memo(function RotatingGames({
                                 {status.total_games > 0 && (
                                     <div className="flex items-center gap-1.5">
                                         <Button
-                                            size="icon-sm" variant="secondary"
+                                            size="icon-sm" variant="secondary" className="size-7"
                                             aria-label="Previous game in the pool"
                                             onClick={() => transportCall('prev')}
                                         >
@@ -885,7 +913,7 @@ const RotatingGames = memo(function RotatingGames({
                                             {status.current_index + 1}/{status.total_games}
                                         </Text>
                                         <Button
-                                            size="icon-sm" variant="secondary"
+                                            size="icon-sm" variant="secondary" className="size-7"
                                             aria-label="Next game in the pool"
                                             onClick={() => transportCall('next')}
                                         >
@@ -962,39 +990,31 @@ function useAdvanceCountdown(active, nextAdvanceAt) {
 }
 
 /*
- * GamesSection — the board panel's "where do this board's games come from" region.
+ * THE MODE IS THE REGION'S SUBJECT, SO IT RIDES THE REGION'S RULE — and the
+ * value has to be owned above both halves of it. The board desk puts
+ * `PlaybackModeControl` on the Games rule (`KitColumn subject`, the same slot
+ * the feed's badge and mode picker ride one region up) and the chosen half in
+ * the body, so this hook is called ONCE, by the desk, and the value passed to
+ * both. Two calls would be two local echoes free to disagree about which mode
+ * the board is in — on the one control that decides where a board's games come
+ * from.
  *
- * The mode, then the mode's own surface. The mode segmented is full-width and
- * full-size: it is the subject here, and everything under it belongs to whichever
- * half is chosen.
+ * `mode` is server-backed (a settings round-trip), so a click has to wait for
+ * the PUT to echo back before the control moves — which reads as a locked
+ * segmented while the server is busy fetching. Echo the click locally and
+ * reconcile once the persisted value catches up.
  *
- * The transport badge and the playback sentence are NOT here — the board desk
- * puts them on the region's own header rule (`KitColumn subject`), because a
- * one-line statement of state does not need a row of its own on a surface that
- * was already too tall.
+ * AN ECHO THAT OUTLIVES A FAILED WRITE IS A LIE, and this one had no way to
+ * end: the override cleared only when the server AGREED with it, so a PUT
+ * that 4xx'd or never landed left the segmented showing a mode the board is
+ * not in, for the rest of the session. On the one control that decides where
+ * a board's games come from, that is the worst possible thing to be wrong
+ * about. Drop back to the server's answer and say so — the same rule every
+ * other fire-and-forget write on the console follows.
  */
-export const GamesSection = memo(function GamesSection({ sb, transport, gameModes }) {
-    const pool = useSettingsStore(s => s?.scoreboards?.binding?.[sb]?.pool
-        ?? s?.scoreboards?.binding?.[String(sb)]?.pool ?? DEFAULT_POOL);
+export function usePlaybackMode(sb) {
     const serverMode = useSettingsStore(s => s?.scoreboards?.binding?.[sb]?.playback?.mode
         ?? s?.scoreboards?.binding?.[String(sb)]?.playback?.mode ?? 'single');
-    const [status, setStatus] = useRotationStatus(sb);
-    const countdown = useAdvanceCountdown(status.active, status.next_advance_at);
-
-    /*
-     * `mode` is server-backed (a settings round-trip), so a click has to wait for
-     * the PUT to echo back before the control moves — which reads as a locked
-     * segmented while the server is busy fetching. Echo the click locally and
-     * reconcile once the persisted value catches up.
-     *
-     * AN ECHO THAT OUTLIVES A FAILED WRITE IS A LIE, and this one had no way to
-     * end: the override cleared only when the server AGREED with it, so a PUT
-     * that 4xx'd or never landed left the segmented showing a mode the board is
-     * not in, for the rest of the session. On the one control that decides where
-     * a board's games come from, that is the worst possible thing to be wrong
-     * about. Drop back to the server's answer and say so — the same rule every
-     * other fire-and-forget write on the console follows.
-     */
     const [modeOverride, setModeOverride] = useState(null);
     const mode = modeOverride ?? serverMode;
     useEffect(() => {
@@ -1010,6 +1030,43 @@ export const GamesSection = memo(function GamesSection({ sb, transport, gameMode
             .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); })
             .catch(failed);
     }, [sb]);
+    return [mode, setMode];
+}
+
+/*
+ * A SEGMENTED AT ITS OWN WIDTH, and it is what the region's rule says now.
+ *
+ * It was `fullWidth` at the top of the body — a two-option control drawn as a
+ * ~1100px bar on a full-width desk, which is the same "nothing on a full-width
+ * desk gets flex-1" the rest of this panel already follows. Above it the rule
+ * carried a SENTENCE about the very choice this control makes ("Rotating —
+ * nothing in its pool yet"), so the region opened by saying the same thing
+ * twice, once in prose and once in a banner, with the pool's own status line
+ * saying the third of it a few rows down. The control states it and changes it;
+ * that is one statement, in the slot the console keeps for a region's subject.
+ */
+export const PlaybackModeControl = memo(function PlaybackModeControl({ mode, onChange }) {
+    return (
+        <SegmentedControl
+            size="xs" className="shrink-0"
+            data={playbackOptions} value={mode} onChange={onChange}
+        />
+    );
+});
+
+/*
+ * GamesSection — the surface belonging to whichever mode is chosen: the live
+ * game list you pick one from, or the pool filter with its timing and transport.
+ *
+ * The mode control and the transport badge are NOT here — they ride the
+ * region's own header rule on the board desk, because a region's subject does
+ * not need a row of its own on a surface that was already too tall.
+ */
+export const GamesSection = memo(function GamesSection({ sb, mode, transport, gameModes }) {
+    const pool = useSettingsStore(s => s?.scoreboards?.binding?.[sb]?.pool
+        ?? s?.scoreboards?.binding?.[String(sb)]?.pool ?? DEFAULT_POOL);
+    const [status, setStatus] = useRotationStatus(sb);
+    const countdown = useAdvanceCountdown(status.active, status.next_advance_at);
 
     // Transport is momentary — the same rule as Take and post-game capture. A
     // producer pressing Next means now, not on the next confirm.
@@ -1027,18 +1084,12 @@ export const GamesSection = memo(function GamesSection({ sb, transport, gameMode
      */
     if (transport === 'hud') return null;
 
-    return (
-        <Stack gap="sm">
-            <SegmentedControl fullWidth data={playbackOptions} value={mode} onChange={setMode} />
-
-            {mode === 'rotate' ? (
-                <RotatingGames
-                    sb={sb} pool={pool} tagOptions={gameModes}
-                    status={status} transportCall={transportCall} countdown={countdown}
-                />
-            ) : (
-                <SingleGameFinder sb={sb} tagOptions={gameModes} />
-            )}
-        </Stack>
+    return mode === 'rotate' ? (
+        <RotatingGames
+            sb={sb} pool={pool} tagOptions={gameModes}
+            status={status} transportCall={transportCall} countdown={countdown}
+        />
+    ) : (
+        <SingleGameFinder sb={sb} tagOptions={gameModes} />
     );
 });

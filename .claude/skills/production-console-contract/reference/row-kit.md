@@ -23,6 +23,36 @@ from. 28px control rhythm. Primitives:
 | Sub-plate picker | `SubFieldPicker` (`../subfield-picker.jsx`) — an address-book field chosen by the VALUE it will draw for that person, empty fields marked, an empty choice flagged amber on the closed control | the caster desk's and Player Plates' sub-plates — and its "No sub-plate" is the sub-plate's ONLY off switch on both (a stored `subVisible: false` reads as none; any pick writes it back on) |
 | Custom block | anything, kit tokens/spacing | Match captain grid, port select, format field |
 
+### A NUMBER FIELD YOU CAN EMPTY
+
+`NumberRow` / `NumberField` (and `useNumberDraft` under both) — three rules, each
+of which is invisible until a producer tries to **retype** a value rather than
+nudge it.
+
+- **Keystrokes are local; the store is written on a pause or on blur.** A
+  controlled field bound straight to a setting refills itself from the store on
+  the keystroke that empties it, so clearing `30` to type `120` gives you
+  `30120`. Every value typed on the way is also a write that reaches the whole
+  rig.
+- **`clearable` says what an EMPTY BOX MEANS, and only the caller knows.** Blank
+  is an ANSWER on a style override — "nothing pinned here", with the placeholder
+  showing the inherited value through it — so it commits `null`. Blank is a STATE
+  YOU PASS THROUGH on a bounded knob like a rotation interval: there is no board
+  that cycles every `` seconds, so `clearable={false}` writes nothing and puts
+  the old value back when focus leaves.
+- **`min`/`max` clamp on BLUR and never on the timer.** Until the producer
+  leaves, every number they type is a prefix of the one they mean, and clamping a
+  prefix is how a range makes a field unusable: in a 5..600 field `120` pauses
+  after `1`, the debounce commits, the clamp turns it into 5, and the store drops
+  `5` into the box under the cursor. The settle pass runs even with nothing
+  pending, because the debounce has usually already written what was typed — it
+  writes nothing when the draft already agrees with the store.
+
+`KIT_NUMBER` (`kit/tokens.js`) rides `KIT_INPUT` on both: native spinner arrows
+off, `tabular-nums` on. The arrows are a click target inside a field whose value
+goes to air — a triple-click to select the rotation interval took it from 30 to
+28 before anything was typed — and 16px of chrome inside a 28px control.
+
 `ListRow`'s `name` takes a node as well as a string. A row whose primary
 content is itself editable (a person picker, a slot type select) passes the
 control — wrapping an input in the expand button would make it inert, so the
@@ -35,9 +65,11 @@ sharing one set of column rails, the sub-plate dropping to a second line below
 producer compares DOWN the list (who is on, what their sub-plate says); a
 `ListRow` flexes its controls per row and cannot line them up.
 
-Plus: `PanelShell` (header: chip · display-face name · primary action · pin ·
-close where applicable; body; optional footer), `StateChip`, `QuickCard`,
-labelled column wrapper. The kit exists so the cheap path and the cohesive path
+Plus: `PanelShell` (header: chip · display-face name · subject · primary action ·
+pin · close where applicable; body; optional footer — and `onRename`, which turns
+the name into the field that SETS it, for the one kind of panel whose title is a
+stored producer-authored string), `StateChip`, `QuickCard`, labelled column
+wrapper. The kit exists so the cheap path and the cohesive path
 are the same path — a bespoke panel should be *harder* to write than a
 conforming one.
 

@@ -263,9 +263,11 @@ position, not an identity).
   columns** (the Match desk uses two: "Who's playing" · "Fixture") — column
   grouping is a kit feature, not a per-element invention. `KitColumns` takes an
   optional `template` for an asymmetric split, and `KitColumn` takes a `subject`
-  that rides its header rule beside the label — for a region whose whole state is
-  one line (the board's `Games`: transport badge + playback sentence), which
-  otherwise spends a 28px row and a gap restating what the eyebrow introduces.
+  that rides its header rule beside the label — for a region whose whole state,
+  or whose one choice, is a single control (the board's `Games`: the playback
+  segmented), which otherwise spends a 28px row and a gap restating what the
+  eyebrow introduces. `action` is the same rule's right-hand slot, for the verbs
+  a region owns (Post-game's capture/clear/pick).
 - **A nested column cannot use a container query to size itself.** The
   `@container` is `PanelShell`'s body, so `@4xl:grid-cols-3` inside a half-width
   column still fires on the *panel's* width and squeezes each cell to a third of

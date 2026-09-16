@@ -170,3 +170,23 @@ async def sync_stats_tag(sb_id: int, name: str | None) -> bool:
         return False
     await Settings.Set(key, value)
     return True
+
+
+async def clear_stats_tag(sb_id: int) -> None:
+    """Drop a board's game-mode tag, and the producer's override of it.
+
+    THE MODE GOES WITH THE GAME. ``stats_tag`` names the mode a board's stats are
+    fetched for, and it is the FEED's answer unless a producer overrode it — so a
+    board with no game has no mode either, and leaving the last game's season on
+    an emptied board left the one control on the game rule still describing the
+    game that had just been taken off it.
+
+    BOTH KEYS, or this makes things worse rather than better: ``sync_stats_tag``
+    stands down whenever ``stats_tag_manual`` is set, so clearing the value and
+    leaving the flag would blank the mode and then stop the next game from ever
+    filling it back in — a permanent blank in place of a stale name. Clearing the
+    flag hands the board back to the feed, which is the same shape as the console's
+    own "Use live".
+    """
+    await Settings.Set(f"scoreboards.binding.{sb_id}.stats_tag", "")
+    await Settings.Set(f"scoreboards.binding.{sb_id}.stats_tag_manual", False)

@@ -86,7 +86,6 @@ def reset_singletons():
         "hud_watcher": Provider.hud_watcher,
         "stats_slots": dict(StatsTracker._slots),
         "rotations": dict(PoolManager._rotations),
-        "credited_games": copy.deepcopy(Match._credited_games),
         "gameend_pending": set(GameEndWatcher._pending),
         "gameend_done": set(GameEndWatcher._done),
         "autocapture_done": set(StatFileWatcher._done),
@@ -147,7 +146,6 @@ def reset_singletons():
 
     StatsTracker._slots = {}
     PoolManager._rotations = {}
-    Match._credited_games = {}
     GameEndWatcher._pending = set()
     GameEndWatcher._done = set()
     StatFileWatcher._done = set()
@@ -190,7 +188,6 @@ def reset_singletons():
     PostGame._capture_lock = None
     StatsTracker._slots = saved["stats_slots"]
     PoolManager._rotations = saved["rotations"]
-    Match._credited_games = saved["credited_games"]
     GameEndWatcher._pending = saved["gameend_pending"]
     GameEndWatcher._done = saved["gameend_done"]
     StatFileWatcher._done = saved["autocapture_done"]

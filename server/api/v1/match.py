@@ -16,8 +16,10 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import ORJSONResponse
 from pydantic import BaseModel
 
+from server.bindings import transport
+from server.boards import board_lifecycle, is_stale
 from server.match import Match, _norm_side, default_match
-from server.rio.provider import RioGameDataProvider
+from server.rio.provider import RioGameDataProvider, release_and_clear_game
 from server.schedule import Schedule
 from server.startgg.provider import auto_fill_entries
 from server.state import State
@@ -81,6 +83,52 @@ class BindPayload(BaseModel):
     match: int | None = None
 
 
+def _side_wins(src: dict, side: int) -> int:
+    """One side's wins out of a series dict, whichever way its keys are typed."""
+    try:
+        return int(src.get(str(side), src.get(side)) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _check_series_fits(m: int, payload: "MatchPayload") -> None:
+    """A SERIES MAY NOT HOLD MORE GAMES THAN THE FORMAT ALLOWS.
+
+    The desk's steppers are the only caller that writes ``series`` by hand, and
+    they clamp themselves — this is the backstop that makes the rule the
+    RECORD's rather than one surface's, since the same PUT is a plain REST call.
+
+    Stated as "may not INCREASE past the format", not "may not exceed it",
+    because the two come apart on the one move that must stay available:
+    LOWERING ``bestOf`` under a series already longer than it (a Bo3 at 2-1 set
+    back to a Bo1). That is not adding a game, and rejecting it would trap the
+    producer in a format they cannot leave without first zeroing a score that is
+    on air. So an over-full series can always be corrected DOWN, and only a write
+    that makes it longer is refused.
+    """
+    if payload.series is None:
+        return
+    best = payload.format.get("bestOf") if payload.format else None
+    if best is None:
+        best = (Match.get(m).get("format") or {}).get("bestOf")
+    try:
+        best = int(best or 1)
+    except (TypeError, ValueError):
+        best = 1
+
+    cur = Match.get(m).get("series") or {}
+    merged = {str(k): v for k, v in cur.items()}
+    merged.update({str(k): v for k, v in payload.series.items()})
+    now = _side_wins(cur, 1) + _side_wins(cur, 2)
+    nxt = _side_wins(merged, 1) + _side_wins(merged, 2)
+    if nxt > best and nxt > now:
+        raise HTTPException(
+            409,
+            f"match {m} allows {best} game{'' if best == 1 else 's'}: a series of "
+            f"{nxt} is more than the format holds",
+        )
+
+
 def _flatten(prefix: str, obj: dict, out: list[tuple]) -> None:
     for k, v in obj.items():
         key = f"{prefix}.{k}"
@@ -141,6 +189,7 @@ async def update_match(m: int, payload: MatchPayload):
     match doesn't exist."""
     if not Match.exists(m):
         raise HTTPException(404, f"match {m!r} not found")
+    _check_series_fits(m, payload)
 
     entries: list[tuple] = []
     _flatten(f"match.{m}", payload.model_dump(exclude_none=True), entries)
@@ -405,7 +454,61 @@ async def _unbind_board(sb: int) -> None:
     await RioGameDataProvider.reorient_board(sb)
 
 
-async def bind_board(sb: int, m, *, project: bool = True) -> None:
+async def _clear_superseded_game(sb: int) -> None:
+    """Clear a board's game as part of TURNING THE BOARD OVER to the next fixture.
+
+    BINDING IS AUTHORING; TAKING IS TURNOVER. Only the second one clears, and
+    conflating them is a bug this function used to carry.
+
+    It ran inside `bind_board`, so EVERY path that attaches a fixture inherited it
+    — the Match desk's board chips, the board desk's bind, `/startgg/load-set`.
+    Attaching a match to a HUD board therefore BLANKED THE PRODUCER'S SCOREBOARD:
+    on a HUD board the game on screen is whatever Project Rio is showing, saying
+    "this game is Match 5" is the ordinary working gesture, and PRSH answered it by
+    deleting the game. That is backwards, and it is worse than leaving stale data,
+    because the producer did not ask for anything to be removed and nothing said
+    anything was.
+
+    What the auto-clear was originally hired for is already solved elsewhere, and
+    better. The real defect behind "a new match attaches to the previous
+    scoreboard" was the PROJECTOR deferring to stale feed data and dropping its
+    picks, which `Match._board_side_has_feed_data` now answers directly by not
+    treating a `restored` board as a live feed. What is left — last night's score
+    sitting under tonight's names — is a thing the producer can SEE, with an
+    explicit, prominent verb for it on the board desk's turnover bar. A visible
+    button they choose beats an invisible rule that sometimes eats their game.
+
+    So the only caller is `take_next_match`, whose whole meaning is "this board is
+    done with what it has, move on", and whose button says so.
+
+    Two conditions survive:
+
+    * the game is over (`is_stale` — final, stranded, or restored). A LIVE game is
+      never cleared even by a take: binding mid-game is a real move, which is why
+      `evaluate_match_gate_for_board` exists to catch a mismatch created that way.
+
+    * the board's own feed delivers its next game — a HUD board, or any board whose
+      game is `restored` residue nobody chose this session.
+
+      An API board is the exception because its POOL owns the slot: a completed
+      record sitting there is content the producer configured, with real ports, a
+      real captain and real names (the same content `_board_side_has_feed_data`
+      protects from a draft pick), and a fixture bound to label it is legitimate.
+      Clearing it would destroy exactly that — and for a *live* API game the pool
+      would re-push it a second later anyway (`_reapply_single_live`), so the clear
+      is both risky and ineffective there.
+    """
+    lifecycle = board_lifecycle(sb)
+    if not is_stale(lifecycle):
+        return
+    if lifecycle != "restored" and transport(sb) != "hud":
+        return
+    # `reproject=False`: the caller binds and projects immediately after, and the
+    # fixture in scope right now is still the outgoing one.
+    await release_and_clear_game(sb, reproject=False)
+
+
+async def bind_board(sb: int, m, *, project: bool = True, supersede: bool = False) -> None:
     """Put match ``m`` on board ``sb``, moving it off any board already holding it.
 
     A MATCH FILLS EXACTLY ONE BOARD. A match exists so the stream can show a
@@ -423,10 +526,19 @@ async def bind_board(sb: int, m, *, project: bool = True) -> None:
     ``project=False`` is for a caller that projects immediately afterwards
     (`apply_startgg_set` ends in `project_match` + `_resettle_bound_boards`), so a
     fixture isn't projected twice — once empty, then once filled.
+
+    ``supersede=True`` ALSO CLEARS the board's outgoing game, and belongs to the
+    turnover verb alone (`take_next_match`). It defaults off because binding is
+    AUTHORING: attaching a fixture says "this fixture describes this board", never
+    "delete what is on it". With the clear wired in here unconditionally, putting a
+    match on a HUD board blanked the game Project Rio was showing — see
+    `_clear_superseded_game`.
     """
     for other in Match.bound_scoreboards(m):
         if other != sb:
             await _unbind_board(other)
+    if supersede:
+        await _clear_superseded_game(sb)
     await State.Set(f"score.{sb}.match", m)
     await State.Save()
     if project:
@@ -511,7 +623,9 @@ async def take_next_match(sb: int, queue: str | None = None):
                 409,
                 f"scoreboard {sb} is rotating — bind a match to a single-game board",
             )
-        await bind_board(sb, m)
+        # The one superseding bind: this verb's entire meaning is "this board is
+        # done with what it has", and the button that calls it says so.
+        await bind_board(sb, m, supersede=True)
     return {"success": True, "match": m, "queue": Schedule.queue()}
 
 

@@ -11,4 +11,4 @@ export {
     FieldRow, ActionRow, SegmentedRow, ListRow, IconToggle, KitColumns, KitColumn,
     Eyebrow, StatusLine, InlineSubjects,
 } from './rows';
-export { KIT_INPUT, KIT_INPUT_FLOW, KIT_FIELD, KIT_LABEL, KIT_SECTION } from './tokens';
+export { KIT_INPUT, KIT_INPUT_FLOW, KIT_FIELD, KIT_LABEL, KIT_NUMBER, KIT_SECTION } from './tokens';

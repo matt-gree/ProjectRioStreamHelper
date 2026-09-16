@@ -4,7 +4,77 @@ import { Text } from '../../../components/ui/primitives';
 import { SimpleTooltip } from '../../../components/ui/simple-tooltip';
 import { cn } from '../../../lib/utils';
 import { StateChip } from './StateChip';
-import { InlineSubjects } from './rows';
+import { InlineSubjects, useDebouncedText } from './rows';
+
+/*
+ * A PANEL WHOSE NAME IS AUTHORED IS RENAMED WHERE IT IS NAMED.
+ *
+ * The board desk had a `Name` field in the LAST region of its body — under the
+ * game, the pool and the capture, four regions below the title it sets, on the
+ * one surface that already prints that name in 15px semibold at the top. A
+ * producer looking to rename a board looks at the name; asking them to scroll
+ * past everything the board is doing to find a labelled text field is the
+ * console's longest distance between a value and its control.
+ *
+ * Only a panel whose title is genuinely a STORED, producer-authored string may
+ * pass `onRename` — a board's alias, and nothing else so far. Every other title
+ * on the stage is derived (an element's name, its board, its size), and an
+ * element panel whose title took typing would be offering to rename a thing
+ * that has no name of its own.
+ *
+ * It looks like the title until you touch it: no frame at rest, a border on
+ * hover, the input treatment on focus. A field drawn as a field here would put
+ * a form control where the panel's entry point is and make every panel that
+ * cannot be renamed look like it lost one.
+ *
+ * WIDTH IS THE CONTENT'S, and it is measured by the BROWSER. An input has no
+ * intrinsic content width, so the alternative is a fixed box with dead space to
+ * the right of a short name — the "field that has lost its value" shape
+ * `TextRow`'s `short` exists to avoid. `field-sizing: content` is the one answer
+ * that cannot drift: a `ch` estimate was tried and came up ~5px short of the
+ * ink, because `ch` is the width of a ZERO and this title is Rajdhani caps on
+ * 0.08em of tracking — two font facts, neither of which a number in this file
+ * can keep up with. `size` is the fallback for a browser without it (an
+ * approximate character count, which is what `size` has always meant), and the
+ * min/max keep an empty field a target and a long name from pushing the subject
+ * off the rule.
+ *
+ * Debounced like `TextRow` — a rename is a settings round-trip and every surface
+ * reading the alias (the rack row, the rail card, this title) would otherwise
+ * redraw on the keystroke. Enter blurs, which commits; Escape is deliberately
+ * not a revert, because the commit has usually already landed by then and a
+ * half-undo is worse than none.
+ */
+const PanelTitleField = memo(function PanelTitleField({ value, placeholder, onChange }) {
+    const [draft, type, commit] = useDebouncedText(value, onChange, 300);
+    const shown = draft ?? '';
+    const chars = (shown || placeholder || '').length;
+    return (
+        <input
+            type="text"
+            aria-label="Name"
+            value={shown}
+            placeholder={placeholder}
+            onChange={(e) => type(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+            size={Math.min(24, Math.max(8, chars + 1))}
+            className={cn(
+                'label-display min-w-[5rem] max-w-[16rem] shrink [field-sizing:content]',
+                'rounded border border-transparent bg-transparent',
+                'px-1 py-0.5 text-[0.9375rem] font-semibold text-foreground',
+                'hover:border-border focus:border-ring focus:bg-input/30 focus:outline-none',
+                // THE PLACEHOLDER IS THE TITLE, AT TITLE STRENGTH. `Scoreboard 4`
+                // is what the board is called until someone calls it something
+                // else, so drawing it at placeholder grey would grey out the
+                // panel's entry point on every board nobody has renamed — which
+                // is most of them — for an implementation detail about where the
+                // string is stored.
+                'placeholder:text-foreground',
+            )}
+        />
+    );
+});
 
 // Panel frame for stage panels (and desk bodies): header = chip · name ·
 // subject · primary action · pin · close (where applicable); body; optional
@@ -13,7 +83,7 @@ import { InlineSubjects } from './rows';
 // `pinnable={false}` is the quickFace: null case — the pin affordance does
 // not render at all, an intentional and visible state per the contract.
 export const PanelShell = memo(function PanelShell({
-    state, title, subject, meta, primaryAction,
+    state, title, titlePlaceholder, onRename, subject, meta, primaryAction,
     pinnable = true, pinned = false, onPinToggle,
     onClose, footer, children, className,
 }) {
@@ -29,9 +99,15 @@ export const PanelShell = memo(function PanelShell({
                     contents has no entry point. One step (15px against the
                     body's 12px), not a headline: this is a dense work surface
                     and the controls are why anyone is here. */}
-                <Text truncate className="label-display min-w-0 text-[0.9375rem] font-semibold text-foreground">
-                    {title}
-                </Text>
+                {onRename ? (
+                    <PanelTitleField
+                        value={title} placeholder={titlePlaceholder} onChange={onRename}
+                    />
+                ) : (
+                    <Text truncate className="label-display min-w-0 text-[0.9375rem] font-semibold text-foreground">
+                        {title}
+                    </Text>
+                )}
                 {/*
                   * THE SUBJECT SITS BESIDE THE TITLE, not above the body.
                   *

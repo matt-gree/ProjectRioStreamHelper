@@ -17,6 +17,7 @@ from server.paths import app_root, user_data_dir, ensure_game_data, rio_visualiz
 from server.rio.game_pool import OngoingGamePool, CompletedGamePool
 from server.rio.rotation import PoolManager
 from server.rio.provider import RioGameDataProvider
+from server import boards
 from server.rio import stats_api
 from server.settings import Settings, Config
 from server.startgg.provider import StartGGProvider
@@ -100,6 +101,15 @@ async def lifespan(app: FastAPI):
     # written onto a row, and Settings already is. One-shot; it clears the keys.
     await Participants.adopt_legacy_pin()
     await RioGameDataProvider.Start()
+    # AFTER the provider, on purpose. Boards that booted holding a game are
+    # flagged as not-current (server/boards.py), and the provider's own boot read
+    # of decoded.hud.json — a one-shot read of a file that was already on disk,
+    # not a frame that arrived — goes through the ordinary per-frame batch, which
+    # clears the flag. Marking first would be undone by it; marking after is what
+    # lets an archive read be treated as an archive with no new argument threaded
+    # through every apply path. Before the pools, so a genuinely fresh API game
+    # clears the flag the moment it lands.
+    await boards.mark_restored()
     # Warm the Rio caches once per launch rather than trusting a cache.pkl
     # timestamp that can be a day stale. Fire-and-forget so a slow/offline Rio
     # API doesn't delay startup; the manual Settings refresh covers mid-session.

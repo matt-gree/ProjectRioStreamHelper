@@ -98,7 +98,58 @@ describe('Rack desks', () => {
         ui(<Rack />);
         const section = within(document.querySelector('[data-rack-section="desk"]'));
         expect(section.getByText('Match')).toBeInTheDocument();
-        expect(section.getByText('no match')).toBeInTheDocument();
+        /*
+         * The meta is WHAT IS LEFT TO PUT ON A BOARD, not a fixture's id and
+         * series. `M1 · 0–0` named the first match ever authored — decided weeks
+         * ago on a long-running rig — and quoted a number that stays 0–0 all
+         * night on the Bo1 almost every night is.
+         */
+        expect(section.getByText('no matches')).toBeInTheDocument();
+    });
+
+    /*
+     * THE COLD START, on the row a producer lands on first.
+     *
+     * Opening the app the morning after a night, every fixture is decided and the
+     * board still carries last night's game — so the two rows at the top of the
+     * rack have to say that between them, or the console looks like a live rig
+     * and the producer has to reverse-engineer which parts are real.
+     */
+    it('says how much of tonight is left to put on a board', () => {
+        useStateStore.setState({
+            match: { 1: { decided: 1 }, 2: { decided: 2 } },
+            schedule: { queue: [1, 2] },
+            score: {},
+        });
+        ui(<Rack />);
+        const section = within(document.querySelector('[data-rack-section="desk"]'));
+        expect(section.getByText('all played')).toBeInTheDocument();
+    });
+
+    it('counts the fixtures still waiting for a board', () => {
+        useStateStore.setState({
+            match: { 1: { stage: 'draft' }, 2: { stage: 'draft' }, 3: { decided: 1 } },
+            schedule: { queue: [1, 2, 3] },
+            score: {},
+        });
+        ui(<Rack />);
+        const section = within(document.querySelector('[data-rack-section="desk"]'));
+        expect(section.getByText('2 waiting')).toBeInTheDocument();
+    });
+
+    /*
+     * `all played` and `none waiting` are kept apart because collapsing them
+     * would have the rack claim a match is played over one that is LIVE.
+     */
+    it('does not call an undecided match played just because nothing is waiting', () => {
+        useStateStore.setState({
+            match: { 1: { stage: 'live' } },
+            schedule: { queue: [1] },
+            score: { 1: { match: 1 } },
+        });
+        ui(<Rack />);
+        const section = within(document.querySelector('[data-rack-section="desk"]'));
+        expect(section.getByText('none waiting')).toBeInTheDocument();
     });
 
     // Board-scoped work is a REGION on the board, not a desk. Capture's board
@@ -352,13 +403,52 @@ describe('Rack rig', () => {
  * rack lists nothing that isn't really in a scene: those were six dead "—" rows
  * pretending to be a catalog, and the section's + is the honest version.
  */
+/*
+ * A board row says where its GAME is up to, because the rack is what the app
+ * opens onto: a board holding last night's finished game was indistinguishable
+ * from one mid-inning without opening the panel.
+ */
+describe('Rack board rows', () => {
+    it('badges a board that booted holding an old game', () => {
+        useStateStore.setState({ score: { 1: { game_id: 'yesterday', restored: true } } });
+        ui(<Rack />);
+        const section = within(document.querySelector('[data-rack-section="rig"]'));
+        expect(section.getByText('OLD')).toBeInTheDocument();
+    });
+
+    it('badges a live board as live', () => {
+        useStateStore.setState({ score: { 1: { game_id: 'now' } } });
+        ui(<Rack />);
+        const section = within(document.querySelector('[data-rack-section="rig"]'));
+        expect(section.getByText('LIVE')).toBeInTheDocument();
+    });
+
+    // An empty board has no lifecycle to report, and GameStageChip renders
+    // nothing for it — which is what lets the row drop it in unguarded.
+    it('badges nothing on a board with no game', () => {
+        useStateStore.setState({ score: {} });
+        ui(<Rack />);
+        const section = within(document.querySelector('[data-rack-section="rig"]'));
+        expect(section.queryByText('OLD')).not.toBeInTheDocument();
+        expect(section.queryByText('LIVE')).not.toBeInTheDocument();
+    });
+});
+
 describe('Rack scene sections', () => {
     it('lists a scene section per OBS scene, program first and labelled', () => {
         obs({ Game: [item(1, 'SB', SB)], Break: [] });
         ui(<Rack />);
         const headers = [...document.querySelectorAll('[data-rack-section]')]
             .map(s => s.getAttribute('data-rack-section'));
-        expect(headers).toEqual(['rig', 'desk', 'Game', 'Break']);
+        /*
+         * MATCH BEFORE BOARDS, and the order is the point rather than an
+         * accident of render sequence: a night is authored before any board
+         * matters, and the Match row is the one that can say how much of tonight
+         * is left — so it sits at the top of the surface the app opens onto.
+         * Boards used to lead on an argument ("the fixture, the capture and the
+         * bracket all act ON a board") that Capture and Bracket have since left.
+         */
+        expect(headers).toEqual(['desk', 'rig', 'Game', 'Break']);
         expect(screen.getByText('PROGRAM · Game')).toBeInTheDocument();
     });
 

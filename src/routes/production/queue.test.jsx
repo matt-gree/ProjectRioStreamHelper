@@ -101,6 +101,39 @@ describe('useNextUp', () => {
     });
 
     /*
+     * COMPLETE, NOT DECIDED. A doubleheader is complete after two games however
+     * they fall, so a 1-1 split is finished and has no winner — and asking
+     * `decided` here offered a played fixture back to a board as though it were
+     * fresh: UP NEXT and a `Put on board` on a match with no games left in it.
+     *
+     * The server had already moved to `Match.is_complete` and this copy had not,
+     * which is the worse half of the same bug: the preview promised a take the
+     * server would refuse to make.
+     */
+    it('skips a split doubleheader — finished is finished, winner or not', () => {
+        state({
+            match: {
+                1: fixture('Alice', 'Bob', { format: { bestOf: 2 }, series: { 1: 1, 2: 1 } }),
+                2: fixture('Carol', 'Dave'),
+            },
+            schedule: { queue: [1, 2] },
+        });
+        ui(<Probe />);
+        expect(probe()).toBe('2:Carol vs Dave|1');
+    });
+
+    // The game BEFORE that one is still the fixture's own: a DH at 1-0 has a
+    // game left, so it is not finished and the format's whole point survives.
+    it('still offers a doubleheader that has only played one of its two', () => {
+        state({
+            match: { 1: fixture('Alice', 'Bob', { format: { bestOf: 2 }, series: { 1: 1, 2: 0 } }) },
+            schedule: { queue: [1] },
+        });
+        ui(<Probe />);
+        expect(probe()).toBe('1:Alice vs Bob|1');
+    });
+
+    /*
      * The anti-bounce rule. Without it, moving a board off an undecided fixture
      * leaves it queued, unbound and undecided — so it is immediately "next" again
      * and the verb ping-pongs between two matches.
@@ -595,11 +628,22 @@ describe('The Match desk states — and can change — a fixture’s lifecycle',
         expect(screen.getByText(/it has already been played/)).toBeInTheDocument();
     });
 
+    /*
+     * ONE VERB, AND IT IS THE BAR'S OWN. The popover used to carry three raw stage
+     * buttons — draft | live | post — which made it the THIRD control in that bar
+     * moving a fixture backwards, and its `draft` was the same write as "Ready next
+     * game". It offers that verb now instead of a flag, and only where the stage is
+     * what is holding the fixture back.
+     *
+     * `live` and `post` are gone entirely: no producer wants to CLAIM a game has
+     * been fed or has finished, and both are the server's to say (`note_live`, the
+     * post-game paths).
+     */
     it('sets a played fixture back to draft, which is the way out of the strand', async () => {
         state({ match: { 1: fixture('Alice', 'Bob', { stage: 'live' }) }, schedule: { queue: [1] } });
         ui(<MatchDesk />);
         openStage();
-        fireEvent.click(screen.getByRole('button', { name: 'draft' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Ready next game' }));
         await waitFor(() => expect(fetch).toHaveBeenCalledWith(
             '/api/v1/match/1',
             expect.objectContaining({ method: 'PUT', body: JSON.stringify({ stage: 'draft' }) }),
@@ -619,10 +663,11 @@ describe('The Match desk states — and can change — a fixture’s lifecycle',
             production: { confirm: { enabled: true } },
             scoreboards: { active: [1, 2], aliases: {}, binding: {} },
         });
-        state({ match: { 1: fixture('Alice', 'Bob') }, schedule: { queue: [1] } });
+        // A fixture the stage is holding back, so the popover offers its verb.
+        state({ match: { 1: fixture('Alice', 'Bob', { stage: 'post' }) }, schedule: { queue: [1] } });
         ui(<MatchDesk />);
         openStage();
-        fireEvent.click(screen.getByRole('button', { name: 'post' }));
+        fireEvent.click(screen.getAllByRole('button', { name: 'Ready next game' })[0]);
         await waitFor(() => expect(fetch).toHaveBeenCalledWith(
             '/api/v1/match/1', expect.objectContaining({ method: 'PUT' }),
         ));
@@ -814,5 +859,95 @@ describe('Up next on a rail card', () => {
         expect(screen.queryByRole('button', { name: 'Up next' })).not.toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Swap sides' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /Re-read HUD/ })).toBeInTheDocument();
+    });
+});
+
+/*
+ * A PLAYED MATCH IS AN ORDINARY ROW.
+ *
+ * Its leading decided run was collapsed behind a `2 played ›` disclosure, which
+ * made the thing a producer most often wants to act on at the end of a night the
+ * one thing they had to open a fold to reach — and gave the desk two row shapes
+ * for one kind of record. The result badge already says a fixture is finished.
+ *
+ * What the fold was really solving is that a night accumulates and nothing ever
+ * removed a fixture; that is answered by the clears, not by hiding the rows.
+ */
+describe('The Match desk draws played fixtures like every other row', () => {
+    const played = (n1, n2, side) => fixture(n1, n2, { stage: 'post', decided: side });
+
+    it('leaves decided fixtures in the list, in the order they ran', () => {
+        state({
+            match: { 1: played('Alice', 'Bob', 1), 2: played('Cara', 'Dev', 2), 3: fixture('Eve', 'Fay') },
+            schedule: { queue: [1, 2, 3] },
+        });
+        ui(<MatchDesk />);
+        expect(screen.queryByRole('button', { name: /played/i })).not.toBeInTheDocument();
+        for (const who of ['Alice', 'Cara', 'Eve']) {
+            expect(screen.getByText(new RegExp(who))).toBeInTheDocument();
+        }
+    });
+
+    /*
+     * A VERB'S PROMINENCE TRACKS WHETHER IT IS THE EXPECTED NEXT STEP. Removing a
+     * finished fixture is most of what is left to do to it, and it was an
+     * anonymous trash glyph weighing the same as flip and membership. A fixture
+     * that has NOT been played keeps the icon: deleting one is a rare correction,
+     * not the shape of the night.
+     */
+    it('gives a finished fixture a labelled clear and an unplayed one the icon', () => {
+        state({
+            match: { 1: played('Alice', 'Bob', 1), 2: fixture('Eve', 'Fay') },
+            schedule: { queue: [1, 2] },
+        });
+        ui(<MatchDesk />);
+        const clears = screen.getAllByRole('button', { name: /Clear match/ });
+        expect(clears).toHaveLength(2);
+        // The decided one reads as a button; the draft one is still a glyph.
+        expect(clears.filter(b => /Clear/.test(b.textContent))).toHaveLength(1);
+    });
+
+    // The bulk clear is the panel's one FILLED press. Eight filled red rows under
+    // it would be a wall of alarm that teaches a producer to stop reading them.
+    it('keeps the row clears quieter than the night strip’s', () => {
+        state({
+            match: { 1: played('Alice', 'Bob', 1), 2: played('Cara', 'Dev', 2) },
+            schedule: { queue: [1, 2] },
+        });
+        ui(<MatchDesk />);
+        expect(screen.getByRole('button', { name: /Clear played/ }))
+            .toHaveAttribute('data-variant', 'default');
+        for (const b of screen.getAllByRole('button', { name: /Clear match/ })) {
+            expect(b).toHaveAttribute('data-variant', 'secondary');
+        }
+    });
+});
+
+/*
+ * THREE VERBS USED TO MOVE A FIXTURE BACKWARDS in one bar, and two of them did the
+ * identical write: `Next game` was `stage → draft`, and so was the stage popover's
+ * `draft`. `Next game` also showed at ANY `post`, decided included — so a finished
+ * Bo1 offered "Reopen" and "Next game" side by side with nothing saying which was
+ * which.
+ */
+describe('The Match desk fixture bar offers one verb per moment', () => {
+    it('offers the next game only while the series is undecided', () => {
+        state({
+            match: { 1: fixture('Alice', 'Bob', { stage: 'post' }) },
+            schedule: { queue: [1] },
+        });
+        ui(<MatchDesk />);
+        expect(screen.getByRole('button', { name: 'Ready next game' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Reopen' })).not.toBeInTheDocument();
+    });
+
+    it('offers only the correction once the series is decided', () => {
+        state({
+            match: { 1: fixture('Alice', 'Bob', { stage: 'post', decided: 1 }) },
+            schedule: { queue: [1] },
+        });
+        ui(<MatchDesk />);
+        expect(screen.getByRole('button', { name: /Reopen/ })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Ready next game' })).not.toBeInTheDocument();
     });
 });

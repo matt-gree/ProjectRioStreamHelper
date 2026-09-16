@@ -1,4 +1,4 @@
-import { Fragment, memo, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import {
     ArrowLeftRight, ChevronRight, ChevronsUpDown, Check, ListOrdered, ListPlus, Plus,
@@ -25,11 +25,12 @@ import { Popover, PopoverTrigger, PopoverContent } from '../../../components/ui/
 import { SimpleTooltip } from '../../../components/ui/simple-tooltip';
 import { notifications } from '../../../lib/notify';
 import { cn } from '../../../lib/utils';
-import { KIT_FIELD, FieldRow, KitColumn, KitColumns } from '../kit';
+import { FORMATS, formatLabel, gamesToWin, matchComplete } from '../../../../public/layout/lib/match-format.js';
+import { GameStageChip, KIT_FIELD, FieldRow, KitColumn, KitColumns } from '../kit';
 import { StagedDot, MoveButtons } from '../controls';
-import { useActiveBoards, useMatchBindableBoards } from '../boards';
+import { useActiveBoards, useBoardLifecycle, useMatchBindableBoards } from '../boards';
 import { useSideLabels } from '../sides';
-import { useNextInOrder, useQueueOrder, useQueues, useWaitingReason } from '../queue';
+import { useNextInOrder, useQueueOrder, useQueues, useWaitingCount, useWaitingReason } from '../queue';
 import { useGameModes } from '../gamemodes';
 import {
     queueMatch, unqueueMatch, moveQueuedMatch,
@@ -447,36 +448,74 @@ const FormatField = memo(function FormatField({ m, draft, bestOf }) {
         const live = series[side] ?? series[String(side)] ?? 0;
         return Number(draft.val(`series.${side}`, live)) || 0;
     };
+    /*
+     * A SERIES NEVER HOLDS MORE GAMES THAN ITS FORMAT ALLOWS, so the ceiling on
+     * one side is whatever the other side has left of the format. The steppers
+     * are the only surface that writes the series by hand — capture arithmetic
+     * is the server's — and an uncapped pair let a doubleheader be typed to 2-1:
+     * three games in a two-game fixture, on a count a bound board puts on air.
+     * `PUT /match/{m}` refuses the same write (`_check_series_fits`), so the rule
+     * is the record's; this is what stops the producer reaching a refusal.
+     */
+    const cap = (side) => Math.max(0, (Number(bestOf) || 1) - winsFor(side === 1 ? 2 : 1));
+    const atCap = (side) => winsFor(side) >= cap(side);
     const bump = (side, delta) => {
-        const next = Math.max(0, winsFor(side) + delta);
+        const cur = winsFor(side);
+        // NEVER CLAMP DOWN. Lowering `bestOf` under a longer series leaves both
+        // sides over the ceiling (a Bo3 at 2-1 set back to a Bo1), and there a
+        // clamping `+` would answer a press meant to ADD a game by deleting two.
+        // Out of room is a press that does nothing; the `–` still corrects.
+        if (delta > 0 && cur + delta > cap(side)) return;
+        const next = Math.max(0, cur + delta);
+        if (next === cur) return;
         draft.setField(`series.${side}`, next, `Match ${m}: side ${side} series → ${next}`);
     };
     const staged = draft.isStaged('series.1') || draft.isStaged('series.2');
 
     // A plain render helper, not a nested component: a component defined in
     // render gets a fresh identity each pass and remounts its subtree.
-    const step = (side, delta, glyph) => (
-        <button
-            type="button"
-            onClick={() => bump(side, delta)}
-            aria-label={`Side ${side} ${delta > 0 ? '+1' : '-1'} game`}
-            className="px-1 text-muted-foreground hover:text-foreground"
-        >
-            {glyph}
-        </button>
-    );
+    const step = (side, delta, glyph) => {
+        const spent = delta > 0 ? atCap(side) : winsFor(side) <= 0;
+        return (
+            <button
+                type="button"
+                onClick={() => bump(side, delta)}
+                disabled={spent}
+                aria-label={`Side ${side} ${delta > 0 ? '+1' : '-1'} game`}
+                title={delta > 0 && spent
+                    ? `All ${Number(bestOf) || 1} games of this format are accounted for`
+                    : undefined}
+                className={cn(
+                    'px-1 text-muted-foreground',
+                    spent ? 'cursor-default opacity-30' : 'hover:text-foreground',
+                )}
+            >
+                {glyph}
+            </button>
+        );
+    };
 
     return (
         <Group gap="xs" className="flex-nowrap items-center">
             <StagedDot show={draft.isStaged('format.bestOf')} />
+            {/* A DOUBLEHEADER IS A FORMAT, NOT A SECOND FIXTURE TYPE — `bestOf: 2`,
+                which the clinch majority (`bestOf // 2 + 1`) already reads as
+                "win both", so a sweep decides it and a 1-1 split correctly never
+                does. Only the NAME is new: "Bo2" is the arithmetic's word for a
+                thing that cannot exist, so no surface prints it (../format
+                labels every one of them). It is offered second because a
+                doubleheader is the common repeat — far more common here than a
+                Bo3 — and a longer series is the rarity after it. */}
             <select
-                aria-label="Best of"
+                aria-label="Format"
                 value={String(bestOf)}
                 onChange={(e) => draft.setField('format.bestOf', parseInt(e.target.value, 10),
-                    `Match ${m}: Bo${e.target.value}`)}
+                    `Match ${m}: ${formatLabel(e.target.value) || 'Bo1'}`)}
                 className={cn(QUIET_FIELD, 'w-[72px] shrink-0')}
             >
-                {[1, 3, 5, 7].map(n => <option key={n} value={n}>Bo{n}</option>)}
+                {FORMATS.map(n => (
+                    <option key={n} value={n}>{formatLabel(n) || 'Bo1'}</option>
+                ))}
             </select>
             <Group gap="none" className="h-8 flex-nowrap items-center rounded-md border border-border bg-transparent px-1">
                 {step(1, -1, '–')}
@@ -529,7 +568,6 @@ const STAGE_MEANING = {
     post:  'A game finished. Never offered while it sits here.',
 };
 
-const STAGES = ['draft', 'live', 'post'];
 
 /*
  * WHICH RUNNING ORDER this fixture is in — membership, which is a property of the
@@ -647,12 +685,30 @@ const MembershipControl = memo(function MembershipControl({ m, queues, queueOf }
  * is per fixture, so on a night of eight fresh drafts all eight are waiting and
  * only one of them is next. See `useNextInOrder`.
  */
+/*
+ * THE STAGE BADGE IS A READOUT WITH ONE VERB, not a flag picker.
+ *
+ * It carried three buttons — draft | live | post — which made it the THIRD control
+ * in this bar that moves a fixture backwards, and two of the three were the same
+ * write: "Ready next game" is `stage → draft`, and so was this popover's `draft`.
+ * A producer reading a bar with `Reopen`, `Ready next game` and a stage picker had
+ * no way to tell which of them was the one they wanted, and the two that agreed did
+ * not say so.
+ *
+ * What is genuinely valuable here is the DIAGNOSIS — "why is this not coming up?",
+ * which nothing on the desk gave before it existed and which the four eligibility
+ * conditions make invisible (server/schedule.py `not_waiting_reason`). That stays.
+ * Where the blocker is the stage itself, the popover offers the SAME verb the bar
+ * does rather than a second way to write the flag; `live` and `post` are never
+ * offered at all, because no producer wants to claim a game has been fed or has
+ * finished — those are the server's to say (`note_live`, the post-game paths).
+ */
 const StageControl = memo(function StageControl({ m, stage, reason, queued, first }) {
     const [open, setOpen] = useState(false);
-    const set = (next) => {
+    const toDraft = () => {
         setOpen(false);
-        if (next === stage) return;
-        updateMatch(Number(m), { stage: next })
+        if (stage === 'draft') return;
+        updateMatch(Number(m), { stage: 'draft' })
             .catch(failed('Stage'));
     };
     // Membership first: it outranks the four fixture conditions, because a match
@@ -675,19 +731,6 @@ const StageControl = memo(function StageControl({ m, stage, reason, queued, firs
             <PopoverContent align="end" className="w-72">
                 <Stack gap="xs">
                     <Text size="xs" className="label-display text-muted-foreground">Lifecycle</Text>
-                    <div className="flex gap-1">
-                        {STAGES.map(s => (
-                            <Button
-                                key={s}
-                                size="xs"
-                                variant={s === stage ? 'default' : 'outline'}
-                                onClick={() => set(s)}
-                                className="flex-1 capitalize"
-                            >
-                                {s}
-                            </Button>
-                        ))}
-                    </div>
                     <Text size="xs" className="text-muted-foreground">{STAGE_MEANING[stage]}</Text>
                     {/* The answer to "why is this not coming up?", which nothing
                         on the desk used to give.
@@ -699,9 +742,22 @@ const StageControl = memo(function StageControl({ m, stage, reason, queued, firs
                         the one place a producer goes to find out what is next. */}
                     <div className="border-t border-border/60 pt-1.5">
                         {blocked ? (
-                            <Text size="xs" className="text-muted-foreground">
-                                <span className="text-foreground">Not up next</span> — {blocked}.
-                            </Text>
+                            <Stack gap="xs">
+                                <Text size="xs" className="text-muted-foreground">
+                                    <span className="text-foreground">Not up next</span> — {blocked}.
+                                </Text>
+                                {/* The one blocker a producer can clear from here,
+                                    and the SAME verb the bar shows — never a second
+                                    way to write the flag. The other three are
+                                    cleared by acting on the thing they name (take
+                                    it off its board, reopen the series, put it in an
+                                    order), each of which has its own control. */}
+                                {stage !== 'draft' && (
+                                    <Button size="xs" variant="secondary" onClick={toDraft}>
+                                        Ready next game
+                                    </Button>
+                                )}
+                            </Stack>
                         ) : first ? (
                             <Text size="xs" className="text-emerald-300">
                                 Waiting for a board — this is the next one in line.
@@ -749,11 +805,8 @@ function decidedSide(match) {
     return null;
 }
 
-function clinchedSide(match) {
-    const bestOf = (match?.format || {}).bestOf ?? 1;
-    const need = Math.floor(bestOf / 2) + 1;
-    const w1 = Number(match?.series?.[1] ?? match?.series?.['1'] ?? 0);
-    const w2 = Number(match?.series?.[2] ?? match?.series?.['2'] ?? 0);
+function clinchedSide(bestOf, w1, w2) {
+    const need = gamesToWin(bestOf);
     return w1 >= need ? 1 : w2 >= need ? 2 : null;
 }
 
@@ -775,10 +828,34 @@ const MatchAccordion = memo(function MatchAccordion({
     // stage popover cannot claim it from `waitReason` alone.
     const nextInOrder = useNextInOrder(queueOf);
     const [confirmDel, setConfirmDel] = useState(false);
+    const sides = useSideLabels();
+
+    /*
+     * THE SERIES THIS ROW IS READING, STAGED VALUES INCLUDED. `draft.val` is how
+     * every other control on the desk reads a field mid-edit, and the series
+     * verbs were the ones that skipped it: the stepper in the body writes into
+     * the staging buffer while the clinch arithmetic up here read live state, so
+     * under confirm mode bumping a side to the win count turned the score amber
+     * and offered no Decide at all until the bump was committed — two commits for
+     * one intent, with the button invisible in between. Two halves of one row
+     * must not disagree about which series they are looking at.
+     */
+    const bestOf = draft.val('format.bestOf', (draft.match?.format || {}).bestOf ?? 1);
+    const w1 = Number(draft.val('series.1', draft.match?.series?.[1] ?? draft.match?.series?.['1'] ?? 0)) || 0;
+    const w2 = Number(draft.val('series.2', draft.match?.series?.[2] ?? draft.match?.series?.['2'] ?? 0)) || 0;
     const decided = decidedSide(draft.match);
     // Only interesting where it DISAGREES with the record: someone is at the win
     // count and nothing has recorded it, which is the producer's cue to decide.
-    const clinched = decided ? null : clinchedSide(draft.match);
+    const clinched = decided ? null : clinchedSide(bestOf, w1, w2);
+    /*
+     * OUT OF GAMES WITH NOBODY AT THE WIN COUNT — the doubleheader split, which is
+     * a COMPLETE fixture rather than a stuck one. A DH is complete after two games
+     * however they fall, so 1-1 is finished and simply has no winner, and the desk
+     * offers NO VERB TO INVENT ONE: the badge states it, everything that moves a
+     * fixture on stands down beside it, and there is nothing left to decide. The
+     * only correction is to the series itself, on the steppers.
+     */
+    const split = !decided && !clinched && matchComplete(bestOf, w1, w2, null);
 
     const onPickSet = (s) => stageOrRun({
         key: `match:${m}:startgg`,
@@ -853,7 +930,6 @@ const MatchAccordion = memo(function MatchAccordion({
     const roundLabel = draft.val('label', draft.match?.label || '');
     const compPhase = draft.val('phase', draft.match?.phase || '');
     const gameMode = draft.val('gameMode', draft.match?.gameMode || '');
-    const bestOf = draft.val('format.bestOf', (draft.match?.format || {}).bestOf ?? 1);
     const n1 = sideName(draft.match, 1);
     const n2 = sideName(draft.match, 2);
     // The collapsed line's fixture tail — what tells two matches between the
@@ -967,16 +1043,42 @@ const MatchAccordion = memo(function MatchAccordion({
                 </button>
                 {decided && (
                     <Badge className="shrink-0 bg-emerald-500/15 text-[10px] font-semibold uppercase tracking-wider text-emerald-300">
-                        Side {decided} wins
+                        {sides.label(decided)} wins
                     </Badge>
                 )}
-                <StageControl
-                    m={m}
-                    stage={stage}
-                    reason={waitReason}
-                    queued={queuePos != null}
-                    first={nextInOrder === String(m)}
-                />
+                {/* THE SAME WORD THE BOARD USES, on the same fact. A split is
+                    finished and unwon, so it gets neither the emerald fill (there
+                    is no winner to celebrate) nor `DECIDED` (there is no winner to
+                    name) — and without a badge of its own the row was a finished
+                    fixture wearing a draft's face. */}
+                {split && (
+                    <SimpleTooltip label={`Both games played and the doubleheader is split ${w1}–${w2} — nobody took it`}>
+                        <Badge className="shrink-0 bg-secondary text-[10px] font-semibold uppercase tracking-wider text-foreground">
+                            Split
+                        </Badge>
+                    </SimpleTooltip>
+                )}
+                {/* A DECIDED FIXTURE HAS NO STAGE QUESTION, so it no longer
+                    carries the badge that answers one. The control exists to say
+                    why a fixture is not coming up; on a finished one the answer is
+                    "because it is finished", which the emerald badge to its left
+                    has just said in the producer's words rather than the state
+                    key's. Worse, the popover's one verb is "Ready next game",
+                    which on a decided match writes `stage = draft` and changes
+                    nothing about whether it is offered — a button that looks like
+                    the way out of a state it cannot leave. `POST` beside
+                    `SIDE 1 WINS` was two chips for one fact, one of them in app
+                    vocabulary. Reopen is the only move a finished fixture has, and
+                    it is now the only one shown. */}
+                {!decided && !split && (
+                    <StageControl
+                        m={m}
+                        stage={stage}
+                        reason={waitReason}
+                        queued={queuePos != null}
+                        first={nextInOrder === String(m)}
+                    />
+                )}
                 {/* THE SERIES VERB, next to the badge that states the series. At
                     most one of the two ever shows, because they answer opposite
                     states of one fact: a decided match can be reopened, and a
@@ -991,7 +1093,7 @@ const MatchAccordion = memo(function MatchAccordion({
                     <Button
                         size="xs" variant="ghost" onClick={() => onDecide(null)}
                         className="shrink-0 text-muted-foreground"
-                        title="Reopen the series — undo the decided winner"
+                        title="Correction: undo the recorded series winner. Not a lifecycle move — it does not start another game."
                     >
                         Reopen
                         <StagedDot show={draft.isStaged('decide')} />
@@ -1000,16 +1102,30 @@ const MatchAccordion = memo(function MatchAccordion({
                     <Button
                         size="xs" variant="secondary" onClick={() => onDecide(clinched)}
                         className="shrink-0"
-                        title={`Record Side ${clinched} as the series winner`}
+                        title={`Record ${sides.label(clinched)} as the series winner`}
                     >
-                        Decide: Side {clinched}
+                        Decide: {sides.label(clinched)}
                         <StagedDot show={draft.isStaged('decide')} />
                     </Button>
                 ) : null}
-                {stage === 'post' && (
-                    <Button size="xs" variant="secondary" onClick={onNextGame} className="shrink-0">
-                        Next game
-                    </Button>
+                {/* NEXT GAME IS PART OF THE PAIR RULE ABOVE, and was left out of
+                    it. It showed at ANY `post`, decided included — so a finished
+                    Bo1 offered "Reopen" and "Next game" side by side, two verbs
+                    that move the fixture backwards in different ways, with nothing
+                    saying which. A decided series has no next game; the only thing
+                    to offer there is the correction.
+
+                    It re-arms THIS fixture (stage → draft) rather than creating
+                    anything, which is why the label says so: "Next game" alone read
+                    as though a game would appear somewhere, and the honest answer
+                    to "where does it go?" is nowhere — the same match goes back to
+                    being offerable. */}
+                {stage === 'post' && !decided && !split && (
+                    <SimpleTooltip label="Put this match back in play for its next game — nothing is created, the series score is kept">
+                        <Button size="xs" variant="secondary" onClick={onNextGame} className="shrink-0">
+                            Ready next game
+                        </Button>
+                    </SimpleTooltip>
                 )}
                 {/* Flip is icon-only and lives with the record actions rather than
                     on the two side fields it swaps. The sides grid puts its spine
@@ -1034,25 +1150,55 @@ const MatchAccordion = memo(function MatchAccordion({
                         <StagedDot show={draft.isStaged('flip')} />
                     </button>
                 </SimpleTooltip>
+                {/* A VERB'S PROMINENCE TRACKS WHETHER IT IS THE EXPECTED NEXT
+                    STEP. On a finished fixture, removing it is most of what is
+                    left to do — and it was an anonymous 14px trash glyph, the
+                    same weight as flip and membership, on a desk whose New match
+                    and Clear played had just been made unmissable. So a decided
+                    row gets the labelled button and every other row keeps the
+                    icon, because deleting a fixture that has not been played is a
+                    rare correction rather than the shape of the night.
+
+                    `secondary`, never `default`: the night strip's bulk clear is
+                    the panel's one filled press, and eight filled red rows under
+                    it would be a wall of alarm that teaches a producer to stop
+                    reading them.
+
+                    IT DOES NOT MOVE. Position is stable across both faces — a
+                    control that relocates when its record changes state is its
+                    own confusion, and the far right is where this console already
+                    puts destroy. */}
                 <Popover open={confirmDel} onOpenChange={setConfirmDel}>
                     <PopoverTrigger asChild>
-                        <button
-                            type="button"
-                            aria-label={`Delete match ${m}`}
-                            className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                        >
-                            <Trash2 size={14} />
-                        </button>
+                        {decided ? (
+                            <Button
+                                size="xs" variant="secondary" className="h-7 shrink-0"
+                                aria-label={`Clear match ${m}`}
+                            >
+                                <Trash2 size={13} className="mr-1" /> Clear
+                            </Button>
+                        ) : (
+                            <button
+                                type="button"
+                                aria-label={`Clear match ${m}`}
+                                className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                            >
+                                <Trash2 size={14} />
+                            </button>
+                        )}
                     </PopoverTrigger>
-                    <PopoverContent align="end" className="w-56">
+                    <PopoverContent align="end" className="w-60">
                         <Stack gap="xs">
-                            <Text size="sm" className="text-foreground">Delete this match?</Text>
+                            <Text size="sm" className="text-foreground">Clear this match?</Text>
+                            {/* "Deletes" in the body keeps the permanence honest
+                                while the VERB stays the one word this desk uses
+                                for removing a fixture. */}
                             <Text size="xs" className="text-muted-foreground">
-                                Unbinds and blanks any boards it fills.
+                                Deletes the fixture. Unbinds and blanks any board it fills.
                             </Text>
                             <Group gap="xs" className="justify-end">
                                 <Button size="xs" variant="ghost" onClick={() => setConfirmDel(false)}>Cancel</Button>
-                                <Button size="xs" variant="destructive" onClick={onDelete}>Delete</Button>
+                                <Button size="xs" variant="destructive" onClick={onDelete}>Clear</Button>
                             </Group>
                         </Stack>
                     </PopoverContent>
@@ -1249,6 +1395,150 @@ function useBoardsByQueue(active) {
  * never changes (`queue_id_for`), so renaming is safe — a board's assignment points
  * at the id and survives.
  */
+/*
+ * PLAYED FIXTURES FOLD. A night's card accumulates, and by the end of it — or on
+ * the morning after one — tonight's work is buried under eight decided matches
+ * that nothing is ever going to do anything with again.
+ *
+ * A DISPLAY ANSWER TO A DISPLAY PROBLEM. The alternative was a verb that unqueued
+ * decided fixtures (the "End session" this replaced), which mutates stored state to
+ * fix a list being long and throws away the order the night actually ran in. The
+ * schedule overlay already hides decided matches by default, so the on-air half was
+ * never a problem — only the desk's.
+ *
+ * IT FOLDS THE LEADING RUN, NOT EVERY DECIDED FIXTURE. A night runs top to bottom,
+ * so played ones are a prefix in the ordinary case, and folding only the prefix can
+ * never REORDER what is left — a decided match in the middle of an order stays
+ * visible, which is right: out of sequence is exactly when it is worth seeing.
+ */
+/*
+ * THE DESK'S "WHAT NOW" STRIP — the same shape as the board desk's turnover bar,
+ * deliberately: one sentence naming the state, one FILLED press ending it. The
+ * console should have exactly one thing that looks like this, and a producer who
+ * has learnt it on a board should not have to learn it again here.
+ *
+ * It appears only where the desk genuinely owes a press — every fixture played,
+ * or none authored. Both are the cold start: the app opens on a night that is
+ * over, and the previous answer was a collapsed "1 played" fold above a finished
+ * card, with a small outline New match at the bottom of the panel. Nothing on
+ * screen was the next thing to do, so nothing looked like it.
+ *
+ * The sentence it replaced explained what a match IS ("participants, captains,
+ * bracket phase, mode and format — then bind it to a board…"), which is a
+ * paragraph of helper text where a button belongs. What a match is, is learnt by
+ * making one.
+ *
+ * With SEVERAL running orders there is no unambiguous button — "New match" cannot
+ * say which order — so the strip points at the `+` that can and carries no press
+ * of its own. That is the same trap `QueueHeading` exists to avoid, not a
+ * different rule.
+ */
+/*
+ * CLEARING WHAT HAS BEEN PLAYED — the question the desk was not asking.
+ *
+ * A match is removed by exactly two things today: the trash on its own card, one
+ * at a time, and Reset State, which also resets every board's binding and
+ * playback mode and so is never used for tidying. Between them there was nothing,
+ * so the end of a night was eight presses of a trash icon or a hatch nobody
+ * reaches for — and the desk's own prominent verb, after a match ended, was ADD
+ * ANOTHER. That is a forward press stepping straight over the obvious question,
+ * and it is how the desk fills up with fixtures nobody will look at again.
+ *
+ * THE SCOPE IS ALWAYS WHAT THE TEXT BESIDE IT IS ABOUT. On the fold that is one
+ * order's leading decided run, which is the exact set the fold is collapsing and
+ * counting; on the night strip it is every match, because that strip only appears
+ * when every match is decided. One verb, one name, and the popover states the
+ * count and the real consequence each time, so the blast radius is never a guess.
+ *
+ * IT NAMES THE BOARD IT WILL BLANK. A decided fixture STAYS BOUND — that is the
+ * whole reason the board desk's fixture slot has a `done` branch — so clearing a
+ * played run can unbind and blank a board that is on air. Excluding bound matches
+ * instead was the other option and is worse: the last match of a night is almost
+ * always still on its board, so "clear played" would leave exactly the one the
+ * producer most wanted gone, with nothing saying why. Name the consequence and
+ * let them decide.
+ *
+ * Sequential deletes by EXPLICIT id, not a re-derived list: every delete
+ * re-projects the running orders, so re-deriving between calls would be walking a
+ * moving target. `delete_match` is the one removal path and already unbinds,
+ * blanks and prunes from the order — this is N of it, never a second
+ * implementation.
+ */
+const ClearPlayed = memo(function ClearPlayed({ ids, boards }) {
+    const [open, setOpen] = useState(false);
+    const [busy, setBusy] = useState(false);
+    const run = async () => {
+        setOpen(false);
+        setBusy(true);
+        try {
+            for (const id of ids) await deleteMatch(Number(id));
+        } catch (e) {
+            failed('Clear played')(e);
+        } finally {
+            setBusy(false);
+        }
+    };
+    if (!ids.length) return null;
+    return (
+        <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+                <Button size="xs" className="h-7 shrink-0" disabled={busy}>
+                    <Trash2 size={13} className="mr-1" /> Clear played
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-64">
+                <Stack gap="xs">
+                    <Text size="sm" className="text-foreground">
+                        Clear {ids.length} played {ids.length === 1 ? 'match' : 'matches'}?
+                    </Text>
+                    {/* The real consequence, or the absence of one — said either
+                        way, because a control that goes quiet when it has nothing
+                        to warn about is quietest in the cases you cannot tell
+                        apart. */}
+                    <Text size="xs" className="text-muted-foreground">
+                        {boards.length
+                            ? `${boards.map(b => `Board ${b}`).join(' and ')} still ${boards.length > 1 ? 'hold' : 'holds'} one — it will be unbound and blanked.`
+                            : 'No board is holding any of them.'}
+                    </Text>
+                    <Group gap="xs" className="justify-end">
+                        <Button size="xs" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
+                        <Button size="xs" variant="destructive" onClick={run}>Clear</Button>
+                    </Group>
+                </Stack>
+            </PopoverContent>
+        </Popover>
+    );
+});
+
+const NightLead = memo(function NightLead({ empty, single, creating, onNew, ids, boards }) {
+    return (
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-border/60 bg-secondary/20 px-2 py-1.5">
+            <Text size="xs" dimmed className="min-w-0 flex-1">
+                {empty ? 'No matches yet.' : 'Every match has been played.'}
+                {!single && !empty && ' Add tonight’s with the + on a running order.'}
+                {!single && empty && ' Add one with the + on the running order it belongs to.'}
+            </Text>
+            {/* CLEARING COMES FIRST WHEN THERE IS SOMETHING TO CLEAR. A finished
+                night's loud button was New match, which is a forward press over an
+                unasked question — and the state it leads to is a desk with tonight's
+                fixture buried under last night's. Clearing lands on the EMPTY
+                state, where New match is the primary and the only thing on the
+                strip, so the two steps chain and each has exactly one obvious
+                press. */}
+            {!empty && <ClearPlayed ids={ids} boards={boards} />}
+            {single && (
+                <Button
+                    size="xs" className="h-7 shrink-0" variant={empty ? 'default' : 'ghost'}
+                    disabled={creating} onClick={() => onNew()}
+                >
+                    <Plus size={13} className="mr-1" /> New match
+                </Button>
+            )}
+        </div>
+    );
+});
+
+
 const QueueHeading = memo(function QueueHeading({ queue, boards, first, last, onNew, creating }) {
     const [title, setTitle] = useState(queue.title);
     const [confirmDel, setConfirmDel] = useState(false);
@@ -1445,14 +1735,71 @@ export default function MatchDesk() {
             : (queueOrder.length ? [{ id: 'main', title: '', matches: queueOrder }] : []);
         const of = {};
         for (const q of gs) for (const id of q.matches) of[id] = q.id;
+        /*
+         * A PLAYED MATCH IS AN ORDINARY ROW. Its leading decided run used to be
+         * counted here and collapsed behind a `2 played ›` disclosure, which made
+         * the thing a producer most often wants to act on at the end of a night
+         * the one thing they had to open a fold to reach — and gave the desk two
+         * row shapes for one kind of record. The result badge already says a
+         * fixture is finished; the row does not also need to be a different
+         * object. Every match in an order renders the same way, in order.
+         */
         return { groups: gs, unenrolled: ids.filter(id => of[id] == null) };
     }, [queues, queueOrder, ids]);
     // Which boards draw their next fixture from each order — the consequence of an
     // order that the desk would otherwise never mention.
     const boardsByQueue = useBoardsByQueue(active);
 
+    /*
+     * IS THERE ANYTHING TO RUN? The rack answers this in two words
+     * (`useMatchDeskMeta`) and the desk it opens answered it nowhere — so a night
+     * whose fixtures were all played showed a collapsed "1 played" fold, a
+     * finished card, and a small outline New match at the very bottom, none of
+     * which is a producer being told what to do. `idle` is the state where the
+     * desk owes them a press: no fixture is waiting for a board AND none is
+     * coming (every one decided, or none authored). `none waiting` is deliberately
+     * NOT idle — those fixtures are on boards or held back per fixture, which the
+     * stage control explains where the fixture is.
+     */
+    const waiting = useWaitingCount();
+    const allDecided = ids.length > 0
+        && ids.every(id => decidedSide(matches[id]) != null);
+    const idle = waiting === 0 && (ids.length === 0 || allDecided);
+
+    // Which boards a delete of `list` would unbind and blank — the consequence
+    // ClearPlayed names before it runs. Read off the same `boundMap` the bind
+    // chips use, so the warning and the chips cannot disagree about who holds
+    // what.
+    const boardsHolding = useCallback((list) => {
+        const want = new Set(list.map(String));
+        return active.filter(sb => want.has(String(boundMap[sb] ?? '')));
+    }, [active, boundMap]);
+
     const newestId = ids[ids.length - 1] || null;
     const effectiveOpen = openId === null ? newestId : (openId || null);
+
+    /*
+     * One row, called from two places — the folded played run and the tail below
+     * it — so the props cannot drift between them. `i` is the index in the FULL
+     * order, never in the slice: `queuePos` is the fixture's real place, and the
+     * move arrows bound at the order's ends.
+     */
+    const row = (id, i, q) => (
+        <MatchAccordion
+            key={id}
+            m={id}
+            open={effectiveOpen === id}
+            onToggle={() => setOpenId(effectiveOpen === id ? '' : id)}
+            active={active}
+            boundMap={boundMap}
+            gameModes={gameModes}
+            canBind={canBind}
+            queuePos={i + 1}
+            queueLen={q.matches.length}
+            queues={groups}
+            queueOf={q.id}
+        />
+    );
 
     // `qid` is which running order the fixture is created INTO — the heading's
     // `+` names its own, the desk-level button names none and takes the first.
@@ -1480,15 +1827,15 @@ export default function MatchDesk() {
      */
     return (
         <Stack gap="xs">
-            {ids.length === 0 && (
-                <Text size="sm" className="pb-1 text-muted-foreground">
-                    No matches yet.{' '}
-                    {groups.length > 1
-                        ? 'Create one with the + on the running order it belongs to,'
-                        : 'Create one'}{' '}
-                    to author the fixture — participants, captains, bracket phase, mode
-                    and format — then bind it to a board to project it onto the broadcast.
-                </Text>
+            {idle && (
+                <NightLead
+                    empty={ids.length === 0}
+                    single={groups.length <= 1}
+                    creating={creating}
+                    onNew={onNew}
+                    ids={ids}
+                    boards={boardsHolding(ids)}
+                />
             )}
             {/* Iterated per ORDER rather than over a flat list with
                 index-keyed headings: an order that exists but is empty still
@@ -1509,26 +1856,7 @@ export default function MatchDesk() {
                             creating={creating}
                         />
                     )}
-                    {q.matches.map((id, i) => (
-                        <MatchAccordion
-                            key={id}
-                            m={id}
-                            open={effectiveOpen === id}
-                            onToggle={() => setOpenId(effectiveOpen === id ? '' : id)}
-                            active={active}
-                            boundMap={boundMap}
-                            gameModes={gameModes}
-                            canBind={canBind}
-                            // Position within ITS OWN order, and that
-                            // order's length — the arrows bound at its ends,
-                            // because moving is not the same verb as
-                            // changing which order a fixture is in.
-                            queuePos={i + 1}
-                            queueLen={q.matches.length}
-                            queues={groups}
-                            queueOf={q.id}
-                        />
-                    ))}
+                    {q.matches.map((id, i) => row(id, i, q))}
                 </Fragment>
             ))}
             {unenrolled.length > 0 && (
@@ -1558,7 +1886,7 @@ export default function MatchDesk() {
                     several, "New match" cannot say WHICH — each heading's
                     `+` is the answer, and a button that always meant the
                     first order would be the trap it replaced. */}
-                {groups.length <= 1 && (
+                {groups.length <= 1 && !idle && (
                     <Button size="xs" variant="outline" disabled={creating} onClick={() => onNew()}>
                         <Plus size={13} className="mr-1" /> New match
                     </Button>
@@ -1586,6 +1914,7 @@ const BindChip = memo(function BindChip({
 }) {
     const pending = usePending(`bind:${sb}`);
     const displayBound = pending ? pending.value != null : bound;
+    const lifecycle = useBoardLifecycle(sb);
     /*
      * The bound chip's tip is the RETIRE affordance. The Match tab's panel had a
      * separate Retire button, because it unbound every board bound to this match
@@ -1628,6 +1957,14 @@ const BindChip = memo(function BindChip({
                     </span>
                 )}
                 Board {sb}
+                {/* WHERE THAT BOARD'S GAME IS UP TO, on the chip that says the
+                    fixture is on it. The desk could say a match was on board 1 and
+                    nothing about whether board 1's game was live, finished or gone
+                    — so "is this match done with the board?" meant leaving the desk
+                    to find out. Only on the LIT chip: the other boards' games are
+                    not this fixture's business, and a row of lifecycles would be
+                    the rack's job done badly. */}
+                {displayBound && <GameStageChip lifecycle={lifecycle} />}
             </Button>
         </SimpleTooltip>
     );

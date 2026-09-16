@@ -32,8 +32,27 @@ import { cn } from '../../../lib/utils';
  * Amber on STALLED is the deliberate reuse — amber means "you'd want to know
  * before this is on air" everywhere in the console, and a feed that lost its
  * game is exactly that.
+ *
+ * OLD IS THE COLD START, AND IT IS THE ONLY STAGE THAT IS NOT ABOUT THE GAME.
+ * The other three describe how a game ended; this one says the game on the board
+ * came off disk when PRSH started and nothing has fed it since — which is the
+ * state a producer opens the app to the morning after a night, with yesterday's
+ * score, yesterday's fixture and yesterday's capture all still there and, until
+ * this chip, nothing anywhere saying so.
+ *
+ * Amber, and it outranks FINAL: last night's board is both, and FINAL there reads
+ * as "a game just finished here", which is the one thing it is not. Amber is what
+ * the console spends on "you'd want to know before this is on air", and a board
+ * quietly showing an 18-hour-old score is exactly that.
+ *
+ * It needs no dismissing — `restored` is cleared by the next real frame
+ * (../boards), so the chip retires itself the moment tonight's game starts.
  */
 export const GAME_STAGE = {
+    restored: {
+        label: 'OLD', title: 'This game was on the board when PRSH started, and nothing has fed it since',
+        className: 'bg-amber-500/15 text-amber-300',
+    },
     live: {
         label: 'LIVE', title: 'A feed is writing this board',
         className: 'bg-emerald-500/15 text-emerald-300',
@@ -64,10 +83,39 @@ export const GameChip = memo(function GameChip({ children, title, className }) {
     );
 });
 
-// `lifecycle` is ../boards `boardLifecycle`. Renders nothing for a stage with no
-// badge (an empty board), so a caller can drop it in unguarded.
-export const GameStageChip = memo(function GameStageChip({ lifecycle }) {
+/*
+ * `lifecycle` is ../boards `boardLifecycle`. Renders nothing for a stage with no
+ * badge (an empty board), so a caller can drop it in unguarded.
+ *
+ * `at` is an optional ISO timestamp (`score.{N}.restored_at`) folded into the
+ * title rather than the label: the chip is a STATE and the date is a detail, so a
+ * row keeps one word whatever it knows. Absent is a legal answer — the HUD file
+ * may be unreadable — and the chip just says OLD without one.
+ */
+export const GameStageChip = memo(function GameStageChip({ lifecycle, at }) {
     const stage = GAME_STAGE[lifecycle];
     if (!stage) return null;
-    return <GameChip title={stage.title} className={stage.className}>{stage.label}</GameChip>;
+    const when = at ? `${stage.title} — ${formatGameDate(at)}` : stage.title;
+    return <GameChip title={when} className={stage.className}>{stage.label}</GameChip>;
 });
+
+/*
+ * A timestamp as a producer reads it: "Sep 12" for another day, a clock time for
+ * today. Never a year — a board cannot hold a game from a different one and
+ * survive to be read about it.
+ *
+ * Returns "" for anything unparseable rather than throwing or printing
+ * "Invalid Date": the input is a file mtime or a feed's own field, and a console
+ * that crashes on a malformed one would take the rack with it.
+ */
+export function formatGameDate(iso) {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    const today = new Date();
+    const sameDay = d.getDate() === today.getDate()
+        && d.getMonth() === today.getMonth()
+        && d.getFullYear() === today.getFullYear();
+    return sameDay
+        ? d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+        : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}

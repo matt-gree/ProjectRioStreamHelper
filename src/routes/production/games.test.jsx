@@ -4,7 +4,7 @@ import { TooltipProvider } from '../../components/ui/tooltip';
 import { SocketContext } from '../../context/socket';
 import { useSettingsStore, useStateStore } from '../../context/store';
 import { useStagingStore } from '../../context/staging';
-import { GamesSection } from './games';
+import { GamesSection, PlaybackModeControl, usePlaybackMode } from './games';
 
 /*
  * Games — the board's pool/playback surface.
@@ -53,9 +53,24 @@ const bind = (playback = {}, pool = {}) => useSettingsStore.setState({
     scoreboards: { active: [1], binding: { 1: { playback, pool } } },
 });
 
-const section = (props = {}) => (
-    <GamesSection sb={1} transport="api" gameModes={[]} {...props} />
-);
+/*
+ * The board desk's composition, in the one shape that matters here: the mode
+ * control rides the region's RULE and its surface is the region's body, with the
+ * value owned above both (`usePlaybackMode`). Two calls of that hook would be
+ * two local echoes free to disagree, which is why the desk holds it and why a
+ * test that only mounts the body would be testing a shape nothing renders.
+ */
+function Games({ sb = 1, transport = 'api', gameModes = [] }) {
+    const [mode, setMode] = usePlaybackMode(sb);
+    return (
+        <>
+            <PlaybackModeControl mode={mode} onChange={setMode} />
+            <GamesSection sb={sb} mode={mode} transport={transport} gameModes={gameModes} />
+        </>
+    );
+}
+
+const section = (props = {}) => <Games {...props} />;
 
 describe('GamesSection', () => {
     it('offers the playback choice as its subject', () => {
@@ -66,13 +81,17 @@ describe('GamesSection', () => {
 
     /*
      * A HUD board's game is whatever Project Rio is playing: no pool, no playback
-     * choice, no way in. The region collapses to its header, which the board desk
-     * draws (the transport badge and the playback sentence — desks.test.jsx pins
-     * that); everything here would be a control with nothing to act on
-     * (server/bindings.py derives this).
+     * choice, no way in — so the board desk draws no Games region at all, and the
+     * transport badge it would have carried is on the game-state rule instead
+     * (desks.test.jsx pins that). Everything here would be a control with nothing
+     * to act on (server/bindings.py derives this).
      */
     it('draws nothing at all on a HUD board', () => {
-        const { container } = ui(section({ transport: 'hud' }));
+        // The body alone — on a HUD board the desk renders no Games region at
+        // all, rule and control included (desks.test.jsx pins that).
+        const { container } = ui(
+            <GamesSection sb={1} mode="single" transport="hud" gameModes={[]} />,
+        );
         expect(container).toBeEmptyDOMElement();
     });
 
@@ -154,6 +173,25 @@ describe('One game', () => {
     });
 
     /*
+     * THE LIMIT IS FILLED IN WITH RIO'S OWN CAP.
+     *
+     * The field's placeholder read `All` and an empty one sent no `limit_games`
+     * at all — but a Rio search that names no limit still gets the newest 50, so
+     * the one state the console described as unlimited was the most limited one
+     * on offer, and a producer clearing the box to widen a pool narrowed it back
+     * to the default with nothing anywhere saying so.
+     */
+    it('fills the limit in with the 50 Rio applies anyway', async () => {
+        ui(section());
+        fireEvent.click(screen.getByRole('radio', { name: 'Completed' }));
+        expect(screen.getByLabelText('Limit')).toHaveValue(50);
+        fireEvent.click(screen.getByRole('button', { name: /Find games/ }));
+        await waitFor(() => expect(fetch).toHaveBeenCalledWith(
+            expect.stringContaining('limit_games=50'), { method: 'POST' },
+        ));
+    });
+
+    /*
      * Putting a game on the board is the one act on this surface that reaches air,
      * so it stages. Everything else is a read (search, refresh) or pool prep (the
      * filter, an exclusion), which is why the rest writes straight through.
@@ -227,6 +265,80 @@ describe('Rotating', () => {
         expect(screen.getByRole('button', { name: 'Filter by player' })).toBeInTheDocument();
         expect(screen.getByLabelText('Seconds per game')).toHaveValue(45);
         expect(screen.getByRole('button', { name: 'Start rotating' })).toBeInTheDocument();
+    });
+
+    /*
+     * A BOX YOU CAN EMPTY IS A BOX YOU CAN RETYPE.
+     *
+     * Both intervals were controlled straight off the stored value with a
+     * `val || 30` at the call site — two faults stacked. The coercion turned the
+     * keystroke that CLEARS the field into a write of the DEFAULT, and the
+     * controlled value then refilled the box with it, so a producer clearing 30
+     * to type 120 got `30120` and never once saw an empty field. Nothing is
+     * written while the box is blank: it is a producer halfway to a number, not
+     * an answer.
+     */
+    it('lets an interval be cleared out entirely and retyped', () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        try {
+            bind({ mode: 'rotate', interval: 30 });
+            ui(section());
+            const field = screen.getByLabelText('Seconds per game');
+
+            fireEvent.change(field, { target: { value: '' } });
+            expect(field).toHaveValue(null);
+            // Even after the debounce would have fired: a blank commits nothing.
+            vi.advanceTimersByTime(600);
+            expect(field).toHaveValue(null);
+            expect(fetch).not.toHaveBeenCalledWith(
+                '/api/v1/rotation/1/playback', expect.anything(),
+            );
+
+            fireEvent.change(field, { target: { value: '120' } });
+            vi.advanceTimersByTime(600);
+            expect(fetch).toHaveBeenCalledWith('/api/v1/rotation/1/playback', expect.objectContaining({
+                method: 'PUT', body: JSON.stringify({ interval: 120 }),
+            }));
+        } finally { vi.useRealTimers(); }
+    });
+
+    /*
+     * Leaving a field blank is not a request to blank the setting — there is no
+     * board that cycles every `` seconds. The box puts back what it was showing
+     * and writes nothing.
+     */
+    it('restores the interval when a cleared field is left empty', () => {
+        bind({ mode: 'rotate', interval: 45 });
+        ui(section());
+        const field = screen.getByLabelText('Re-check interval');
+        fireEvent.change(field, { target: { value: '' } });
+        fireEvent.blur(field);
+        expect(field).toHaveValue(60);
+        expect(fetch).not.toHaveBeenCalledWith(
+            '/api/v1/rotation/1/pool', expect.anything(),
+        );
+    });
+
+    /*
+     * THE RANGE IS APPLIED ON BLUR AND NEVER ON THE TIMER. Every number on the
+     * way to 120 is a prefix of it, and clamping a prefix is how a lower bound
+     * makes a field unusable: `1` would commit as 5 and the store would drop a
+     * `5` into the box under the cursor.
+     */
+    it('squares a number with its range only once you leave the field', () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        try {
+            bind({ mode: 'rotate', interval: 30 });
+            ui(section());
+            const field = screen.getByLabelText('Seconds per game');
+            fireEvent.change(field, { target: { value: '1' } });
+            vi.advanceTimersByTime(600);
+            expect(field).toHaveValue(1);
+            fireEvent.blur(field);
+            expect(fetch).toHaveBeenCalledWith('/api/v1/rotation/1/playback', expect.objectContaining({
+                method: 'PUT', body: JSON.stringify({ interval: 5 }),
+            }));
+        } finally { vi.useRealTimers(); }
     });
 
     /*

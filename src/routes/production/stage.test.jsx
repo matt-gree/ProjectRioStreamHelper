@@ -56,6 +56,41 @@ describe('Stage without OBS', () => {
         expect(screen.queryByRole('button', { name: /quick rail/ })).not.toBeInTheDocument();
     });
 
+    /*
+     * A PANEL WHOSE NAME IS AUTHORED IS RENAMED WHERE IT IS NAMED. Only a desk
+     * that hands the stage a `rename` gets a typeable title; every other panel's
+     * title is derived, and offering to type over one would promise a name the
+     * thing does not have.
+     */
+    it('makes a renameable desk’s title the field that sets it', () => {
+        const wrote = [];
+        ui(<Stage
+            selection="desk:board:2"
+            deskBodies={{
+                'desk:board:2': {
+                    title: 'Cam A',
+                    rename: { value: 'Cam A', placeholder: 'Scoreboard 2', onChange: v => wrote.push(v) },
+                    body: <p>board body</p>,
+                },
+            }}
+        />);
+        const field = screen.getByLabelText('Name');
+        expect(field).toHaveValue('Cam A');
+        expect(field).toHaveAttribute('placeholder', 'Scoreboard 2');
+        fireEvent.change(field, { target: { value: 'Cam B' } });
+        fireEvent.blur(field);
+        expect(wrote).toEqual(['Cam B']);
+    });
+
+    it('leaves a derived title as text — there is no name to type over', () => {
+        ui(<Stage
+            selection="desk:match"
+            deskBodies={{ 'desk:match': { title: 'Match', body: <p>desk body</p> } }}
+        />);
+        expect(screen.queryByLabelText('Name')).not.toBeInTheDocument();
+        expect(screen.getByText('Match')).toBeInTheDocument();
+    });
+
     it('falls back to a hint when nothing valid is selected', () => {
         ui(<Stage selection="nope" />);
         expect(screen.getByText(/Pick anything in the rack/)).toBeInTheDocument();

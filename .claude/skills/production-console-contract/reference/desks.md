@@ -91,7 +91,8 @@ Rules:
   find yourself ordering a list to make a lookup work, fix the lookup.
 - **An empty count prints no number.** `rotating · 0` and `0 in pool` read as a
   count that failed rather than as nothing yet; say `rotating` / `nothing in its
-  pool yet` instead. Same rule in the rack meta and in `playbackLine`.
+  pool yet` instead. The rack meta and the rotator's own status line both follow
+  it.
 - **Desks are always racked**, in a permanent section above the scenes, and the
   `DESK` header carries **no `+`** — the fixed desks are fixed. The one it used
   to carry added a *board*, which is the tell that split the tiers.
@@ -331,18 +332,66 @@ sources).
   "Dry Bon…", which is the one thing a roster readout exists to avoid. Under the
   divider: the board's two properties (stats game mode · name) as a single
   two-column row, then **Games** full width (see below).
-- **The two properties carry no region eyebrow.** The rows already read `Game
-  mode` and `Name`; a `THIS BOARD` label over them was a third label line stating
-  nothing they don't — and giving them a 5-of-12 column so they could have one
-  cost Games the width it needed *and* left ~300px of empty panel beside a tall
-  stack of full-width fields. That emptiness is what made the surface read as too
-  tall before anyone measured it.
+- **EVERY REGION DRAWS ITS OWN RULE, AND `KIT_SECTION` IS HOW.** The desk had one
+  hard-coded `<Divider>` under Game state, so on an API board the only line on the
+  panel landed above Games and **Post-game ran straight on out of the pool
+  surface**, while on a HUD board (no Games region) the board's *name* ran straight
+  on out of the capture. `KIT_SECTION` is the kit's one statement of a section's
+  rule, `first:` resets included — which is exactly what lets the Games region be
+  absent without leaving a rule hanging at the top of the stack. Never hand-roll a
+  divider between regions; that is how a body ends up with six sections ruled one
+  way and a seventh ruled another.
+- **A REGION'S VERBS RIDE ITS RULE** (`KitColumn action`), not a row under its
+  subject. Post-game's three — `Capture`/`Re-capture` · `Clear` · `Pick a file` —
+  were a row of their own, which on a full-width desk made the region's loudest
+  thing a filled button under a readout and above a caption, for an act that on an
+  ordinary night nobody performs: the stat file fires the capture on its own
+  (`postgame_watch.py`), and the press a producer *does* make at the end of a game
+  is the turnover bar's Capture, beside the clear and the take it belongs with. On
+  the rule, a board with nothing captured is ONE ROW. Its captions (`FILE` ·
+  `MATCH`) then share one wrapping line, because two eyebrowed half-sentences on a
+  1100px panel are two rows each ~85% empty.
+- **THE RECOVERY CAPTURE IS NEVER THE PANEL'S FILLED PRESS, AND IS DISABLED WITH
+  NO GAME.** Exactly one filled press belongs to a panel and it is the forward move
+  (the clear, or the take) — a filled capture down here made two, and drew the
+  *recovery* path louder than the turnover bar's own Capture, which is a ghost.
+  Worse, `find_file` matches the stat file by `score.{N}.game_id`
+  (`server/postgame_files.py`), so on an emptied board that filled button could
+  only ever answer "No game id for this scoreboard yet". The **file picker beside
+  it stays live**: picking by hand captures WITHOUT the game-id match, which is the
+  entire reason that hatch exists.
+- **NOTHING IS LEFT OF "THIS BOARD" BUT ITS RUNNING ORDER.** It held `Game mode`
+  and `Name` and carried no region eyebrow — the rows said it, and giving them a
+  5-of-12 column so they could have one cost Games the width it needed *and* left
+  ~300px of empty panel beside a tall stack of full-width fields. The mode went to
+  the Game-state rule (it is the binding, not a board property); the name went to
+  the panel's own TITLE. What remains is `Matches from`, which appears only on a
+  rig with more than one running order — so `BoardQueueRow` owns its own
+  `KIT_SECTION`, because a section whose only member self-hides must take its
+  divider with it.
+- **A BOARD IS RENAMED WHERE IT IS NAMED** (`PanelShell onRename`, wired by
+  `deskBodiesFor` in ../production). A `Name` field at the foot of a body four
+  regions long was setting the 15px string printed at the top of the same panel:
+  the console's longest distance between a value and its control, reached by
+  scrolling past everything the board is doing. The title looks like a title until
+  you touch it — no frame at rest, a border on hover, the input treatment on focus
+  — and is sized by `field-sizing: content` with `size` as the fallback (a `ch`
+  estimate came up ~5px short of the ink, because `ch` is the width of a ZERO and
+  this title is Rajdhani caps on 0.08em of tracking; two font facts no number in
+  that file can keep up with). The **stored** alias is the value and
+  `Scoreboard {N}` the placeholder, drawn at TITLE strength: that is what the
+  board is called until someone calls it something else, so placeholder grey would
+  grey out the panel's entry point on every board nobody has renamed. **Only a
+  desk that hands the stage a `rename` gets a typeable title** — every other stage
+  title is derived, and offering to type over one would promise a name the thing
+  does not have.
 - **Transport stays a readout** (`HUD`/`API` badge, derived from board 1 + the
   global HUD toggle). There is no per-board source selector and adding one is a
   regression, not a feature.
-- **Transport and playback are TWO AXES, stated as two things.** The badge is
-  where games come from (derived); `playbackLine()` beside it is how this board
-  shows them (chosen — single or rotate). Do **not** flatten them into one
+- **Transport and playback are TWO AXES, stated as two things** — a region
+  apart. The badge is where games come from (derived, on the game-state rule);
+  the playback segmented on the Games rule is how this board shows them (chosen
+  — single or rotate). Do **not** flatten them into one
   "HUD / single game / rotator" list: that is what the Match tab did, and it makes
   *HUD + rotate* expressible when it is not a real state — board 1 under the HUD
   toggle is single by construction whatever its stored mode says, a rule
@@ -355,14 +404,25 @@ A board's games are authored on the board, and the surface is an **instrument, n
 a settings list** — the shape `PoolBrowser` had on the Match tab, kept.
 
 - **GAMES IS ITS OWN REGION and takes the full panel width**
-  (`KitColumn label="Games"`), and the **mode segmented is full-width and
-  full-size** — it is the subject of the region. Everything below it belongs to
-  whichever half is selected. Choosing between one game and a rotating pool is the
-  biggest decision made about an API board, and each half brings a real surface
-  with it.
-- **The transport badge and the playback sentence ride the region's header rule**
-  (`KitColumn subject`, drawn by the desk), not a row inside the region. On a HUD
-  board that header *is* the whole region — `GamesSection` returns `null`.
+  (`KitColumn label="Games"`), and the **mode segmented rides the region's own
+  rule** (`KitColumn subject`, `PlaybackModeControl` in ../games) at its natural
+  width. It is the subject of the region — everything in the body belongs to
+  whichever half is selected, and each half brings a real surface with it — but
+  a subject is a thing to state, not a banner: `fullWidth` at the top of the body
+  drew a two-option control ~1100px wide on a full-width desk.
+- **THE RULE CARRIES THE CONTROL, NEVER A SENTENCE ABOUT IT.** `playbackLine`
+  wrote this subject until 2026-09-14 (`Rotating — nothing in its pool yet`,
+  `One game, pinned — following it live`) and every clause of it was drawn again
+  within a few rows: the mode by the segmented directly beneath, the count by the
+  rotator's status line, `(paused)` by the Start button, `following it live` by
+  the refresh countdown beside it — a caption on a clock. Deleted, with the
+  control in its place.
+- **The playback VALUE is owned by the desk, not by either half** — `usePlaybackMode`
+  (../games) is called once and passed to both the rule's control and the body,
+  because it carries a local echo of a settings round-trip and two copies of that
+  could disagree about which mode the board is in.
+- On a HUD board there is **no Games region at all** — the transport badge rides
+  the game-state rule (`ModeRow`) and `GamesSection` returns `null`.
 - **The rotator is two columns, because it has two subjects**: what is IN the pool
   (scope · filter · limit/dates) and how the pool PLAYS (cadence · transport ·
   status). Stacked they were seven full-width rows; side by side the region is
@@ -393,10 +453,16 @@ a settings list** — the shape `PoolBrowser` had on the Match tab, kept.
   The tempo instinct was right about exactly one thing — a date range is not a
   mid-game control — and the **Live/Completed tab already handles that**: the
   filter fields only exist on the tab a producer deliberately switched to.
-- **The status line is the reason the rotating block is on the panel.**
-  `playbackLine` says the pool is empty; only the dot line says why — no filter
-  yet, filters edited since the last Find (amber, and the Find button rings to
-  match), or an unreachable API. Never move it back behind the dialog.
+- **The status line is the reason the rotating block is on the panel**, and it is
+  the ONLY place the pool is counted. Only it can say *why* a pool is empty — no
+  filter yet, filters edited since the last Find (amber, and the Find button rings
+  to match), or an unreachable API. Never move it back behind the dialog, and
+  never quote its count on the region's rule as well.
+- **One height across the inset.** Find games · Pool games · Start/Stop · the
+  prev/next pair are all the kit's 28px row. `Start rotating` was `size="sm"`
+  (32px) beside two `xs` (24px) siblings, so the control a producer reaches for
+  most on a rotating board sat visibly off the line it shares. The teal is what
+  makes it the region's press; the extra 4px was not.
 - **Nothing here searches the Rio API on mount.** Selecting a board desk must not
   cost a search: `Find games` runs on the button, and on opening `Pool games`
   while stopped. The single-game **Live** tab is the one exception and it is a
@@ -412,11 +478,11 @@ a settings list** — the shape `PoolBrowser` had on the Match tab, kept.
   BROWSER of what else is on; a browser refreshes when you ask it to. The only
   automatic fetching in the console is the one a producer set up deliberately: a
   rotating pool's **Keep pool current** (`pool.refresh_interval`), server-side.
-  `playbackLine` says which case a pinned game is in ("following it live"), and
   `games.test.jsx` pins that no timer comes back.
 - **The live-refresh countdown belongs to the BOARD, and it is a readout of the
-  SERVER's cadence.** It rides the Games region header beside the sentence that
-  says the board is following a live game (`LiveRefreshCountdown`, desks/board.jsx)
+  SERVER's cadence.** It rides the Games region's rule (`KitColumn action`,
+  `LiveRefreshCountdown` in desks/board.jsx) and is the whole of what the rule's
+  old "following it live" clause was saying
   — never on the game list, which is the browser the countdown used to be
   mistaken for. It fetches nothing: every successful poll emits
   `v1.game_pool.ongoing_update` *after* `_reapply_single_live` has pushed the
@@ -433,6 +499,19 @@ a settings list** — the shape `PoolBrowser` had on the Match tab, kept.
   **visible-but-disabled** rather than appearing under the switch — a control that
   vanishes moves everything below it. A label gutter is what forced these down to
   `Each game` / `Keep current` and dropped the tooltip.
+- **Both intervals are kit `NumberField`s with `clearable={false}`**, not
+  `NumberInput`. They were controlled straight off the stored value with a
+  `val || 30` at the call site — two faults stacked: the coercion turned the
+  keystroke that CLEARS the box into a write of the default, and the controlled
+  value refilled the box with it, so clearing 30 to type 120 gave `30120` and an
+  empty field was unreachable. See the number-field rules in `row-kit.md`.
+- **THE LIMIT IS FILLED IN WITH RIO'S OWN CAP (50), not left blank under an
+  `All` placeholder.** A Rio search that names no `limit_games` still returns the
+  newest 50, so the one state the console described as unlimited was the most
+  limited one on offer — and clearing the box to widen a pool narrowed it back to
+  the default with nothing saying so. `DEFAULT_LIMIT` in `../games.jsx` is the one
+  statement of it, seeding `EMPTY_FILTER`, the field's fallback and the completed
+  search's query (which had its own, different `?? 100`).
 - **What stages vs what fires now.** Putting a game on a board **stages**
   (`board:{sb}:game`) — it is the one act here that reaches air, and the one thing
   `PoolBrowser` got wrong (it fired immediately). The filter, the scope, the

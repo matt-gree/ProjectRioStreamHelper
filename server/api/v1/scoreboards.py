@@ -1,14 +1,15 @@
 from server.utils.router import method
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import ORJSONResponse
-from server.bindings import DEFAULT_BINDING, get_binding, transport
+from server.bindings import DEFAULT_BINDING, clear_stats_tag, get_binding, transport
 from server.bindings import hud_target_scoreboards as _hud_target_scoreboards
 from server.postgame import PostGame
-from server.rio.provider import RioGameDataProvider
+from server.rio.provider import RioGameDataProvider, release_and_clear_game
 from server.rio.rotation import PoolManager
 from server.rio.stats_tracker import StatsTracker
 from server.settings import Settings
 from server.state import State
+from server.utils.deep_dict import deep_get
 from server.utils.tasks import spawn
 
 router = APIRouter()
@@ -229,6 +230,83 @@ async def set_hud_enabled(
 
     await State.Save()
     return ORJSONResponse({"success": True, "hud_enabled": bool(enabled)})
+
+
+@method(
+    router.post, "/scoreboards/{sb_id}/clear-game",
+    version="1", id="scoreboards.clear_game",
+    response_class=ORJSONResponse
+)
+async def clear_board_game(
+    sb_id: int,
+    release_match: bool = False,
+    session_id: str | None = None,
+) -> ORJSONResponse:
+    """Blank one board back to a resting game, optionally releasing its fixture.
+
+    The producer's between-games verb, and the one the board desk's Clear now
+    calls. It used to build the ~120-key batch in the browser and send it as plain
+    state writes, which meant the clear could not do the one thing it had to: the
+    Match projector jointly owns `score.{N}.player.{T}.*` and runs only on a bind
+    or a fixture mutation, so blanking those keys from the client left the bound
+    fixture's names gone with nothing to restore them — the fixture slot still said
+    `M2 · Alice vs Bob` while the scoreboard drew nobody.
+
+    Deliberately does NOT touch `postgame.{N}`. The captured box score is a
+    different broadcast surface (the Game Summary and Character Spotlight draw it),
+    it is the thing most likely to be on air while the next fixture is prepped, and
+    it has its own Clear on the post-game region. Dropping it here would be the
+    irreversible half of a verb whose reversible half is what was asked for.
+
+    Nor the pool. The STATS TAG it does clear (``clear_stats_tag``): the mode is
+    the game's, not the board's — it is the feed's answer unless a producer
+    overrode it — so leaving the last game's season on an emptied board left the
+    one control on the game rule still describing the game just taken off it.
+
+    ``release_match`` IS THE ANSWER TO "I CLEARED IT AND IT CAME BACK".
+
+    Keeping the binding is right while the fixture still has a game to give — that
+    is the whole reason this endpoint re-projects, and a Bo3 between games must
+    keep its match on the board. But over a fixture that is DONE it produced the
+    console's most baffling outcome: the clear blanked the board, the projector
+    immediately repainted the decided fixture's two names onto it, and the
+    scoreboard went back to drawing last night's finished matchup at 0-0. The
+    producer pressed the button that empties a board and the board did not empty.
+    Two presses on two different rows (clear here, unlink in the fixture slot) were
+    the only way out, and nothing said so.
+
+    So the caller says whether the fixture is coming off, and the board desk sets
+    it from the one condition that answers it — the fixture being decided, i.e.
+    having no further game to put here.
+
+    Released FIRST, and through ``_unbind_board``: it is the one statement of the
+    unbind rule (drop the keys, blank what the projector owns, then RE-SETTLE, or
+    the board keeps explaining its orientation by a `side_reason` layer that is no
+    longer there). Restating any of that here is how the two paths drift. Clearing
+    afterwards then finds no match to re-project, which is exactly the intent.
+
+    Deliberately does NOT touch ``postgame.{N}`` in either mode. The captured box
+    score is a different broadcast surface (the Game Summary and Character
+    Spotlight draw it), it is the thing most likely to be on air while the next
+    fixture is prepped — a Bo1 that decides the moment it is captured would have
+    its own summary stripped by the very release this flag performs — and it has
+    its own Clear on the post-game region.
+    """
+    active = Settings.Get("scoreboards.active", [1])
+    if sb_id not in active:
+        raise HTTPException(status_code=404, detail="Scoreboard not found")
+
+    if release_match and deep_get(State.state, f"score.{sb_id}.match") is not None:
+        from server.api.v1.match import _unbind_board
+
+        await _unbind_board(sb_id)
+
+    await release_and_clear_game(sb_id)
+    await clear_stats_tag(sb_id)
+    StatsTracker.reset_scoreboard(sb_id)
+    return ORJSONResponse(
+        {"success": True, "scoreboard": sb_id, "released": bool(release_match)}
+    )
 
 
 @method(

@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { Radio, PlugZap, ArrowLeftRight, CircleDot, X } from 'lucide-react';
 import { useObsStore } from '../../context/obs';
@@ -22,7 +22,7 @@ import { Stage } from './stage';
 import { Rail } from './rail';
 import MatchDesk from './desks/match';
 import BoardDesk from './desks/board';
-import { boardDeskId, useActiveBoards, useBoardLabel } from './boards';
+import { boardDeskId, setBoardAlias, useActiveBoards, useBoardLabel } from './boards';
 
 /*
  * Production console — the producer's broadcast control board. Three surfaces
@@ -238,10 +238,21 @@ export const DESK_BODIES = {
  * what says how many there are. Pure, so `rack.test.jsx` can check the full set
  * of rows against the full set of bodies without a store.
  */
-export function deskBodiesFor(boards, label = (sb) => `Scoreboard ${sb}`) {
+export function deskBodiesFor(boards, label = (sb) => `Scoreboard ${sb}`, rename = () => null) {
     const out = { ...DESK_BODIES };
     for (const sb of boards) {
-        out[boardDeskId(sb)] = { title: label(sb), body: <BoardDesk board={sb} /> };
+        out[boardDeskId(sb)] = {
+            title: label(sb),
+            /*
+             * A BOARD IS RENAMED WHERE IT IS NAMED — in the panel's own title
+             * (`PanelShell onRename`), not in a `Name` field at the foot of a
+             * body four regions long. `rename` is null for every other desk,
+             * because every other stage title is DERIVED and offering to type
+             * over one would promise a name the thing does not have.
+             */
+            rename: rename(sb),
+            body: <BoardDesk board={sb} />,
+        };
     }
     return out;
 }
@@ -249,7 +260,19 @@ export function deskBodiesFor(boards, label = (sb) => `Scoreboard ${sb}`) {
 function useDeskBodies() {
     const boards = useActiveBoards();
     const label = useBoardLabel();
-    return useMemo(() => deskBodiesFor(boards, label), [boards, label]);
+    const aliases = useSettingsStore(s => s?.scoreboards?.aliases);
+    /*
+     * The STORED alias, not the resolved label: the title field holds what the
+     * producer typed and shows `Scoreboard {N}` as its placeholder, so emptying
+     * it reads as "back to the default" rather than as a field they have to
+     * clear before they can see one.
+     */
+    const rename = useCallback((sb) => ({
+        value: aliases?.[sb] ?? aliases?.[String(sb)] ?? '',
+        placeholder: `Scoreboard ${sb}`,
+        onChange: (next) => setBoardAlias(sb, next),
+    }), [aliases]);
+    return useMemo(() => deskBodiesFor(boards, label, rename), [boards, label, rename]);
 }
 
 export default function Production() {

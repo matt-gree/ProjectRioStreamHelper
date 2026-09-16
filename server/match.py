@@ -19,6 +19,7 @@ binding is verified against Manual boards.
 
 from loguru import logger
 
+from server.boards import board_lifecycle
 from server.participants import Participants
 from server.rio.resurface import RESURFACE_MAP
 from server.state import State
@@ -103,8 +104,8 @@ _OPTIONAL_PICK_KEYS = frozenset({"port", "rio_captainIndex", "character.0.name"}
 # |   format/provider  |                                |                     |
 #
 # The discriminator for both rules is `_board_side_has_feed_data`, which asks
-# `score.{N}.game_id` — NOT "is the side populated", because a projection's own
-# output populates the side.
+# whether the board has a game_id AND is not `restored` (server/boards.py) — NOT
+# "is the side populated", because a projection's own output populates the side.
 #
 # Adding a fixture field? Decide which column it is in before writing it. Every
 # bug this table records was a field that looked like it had no column at all.
@@ -174,13 +175,22 @@ class Match:
     # the Rio API. Session-only; None re-syncs on the next set.
     _primary_synced_pair: tuple[str, str] | None = None
 
-    # match id (str) -> {game id (str): credited side}. Two watchers can report
-    # the same finished game (HUD post-game capture + the API GameEndWatcher on
-    # another board bound to the same match); ids make award_game idempotent so
-    # the second report is a no-op instead of a double series credit. Session-
-    # only: a restart re-crediting a game would need the same id re-reported,
-    # which the stage guard / _done sets already prevent.
-    _credited_games: dict[str, dict] = {}
+    # WHICH FINISHED GAMES HAVE ALREADY ADVANCED A SERIES lives ON THE MATCH
+    # (`match.{m}.credited` = {game id: side}), not in a class variable.
+    #
+    # Two watchers can report the same finished game (the HUD post-game capture
+    # and the API GameEndWatcher on another board bound to the same match), and
+    # ids are what make award_game idempotent so the second report is a no-op
+    # rather than a double credit. That set used to be session-only, on the
+    # argument that "a restart re-crediting a game would need the same id
+    # re-reported, which the stage guard already prevents" — and the stage guard
+    # standing in for it is exactly what stopped game 2 of a Bo3 from EVER being
+    # credited (see postgame._promote_match). A record that outlives the process
+    # is what lets that guard go: re-capturing a game after a restart is an
+    # ordinary recovery press, and it must stay a no-op.
+    #
+    # It rides `match.{m}`, so it is unset with the fixture and needs no teardown
+    # of its own.
 
     # ----- reads -----------------------------------------------------------
 
@@ -234,11 +244,29 @@ class Match:
         supposed to clear (the stale-fixture-on-air bug the full-key-set rule
         exists to prevent).
 
-        `game_id` is the honest discriminator — it is written by both feed paths
-        (`apply_parsed_game_to_state` / `apply_completed_game_to_state`), never by
-        a projection, and it goes when the board's game does. A board with no game
-        has nothing but projections on it, so blanking is right there.
+        `game_id` answers it for every game a producer is DELIBERATELY SHOWING —
+        live, stranded mid-frame, or a completed record on screen as content. All
+        three have real ports, a real captain and real names, and all three must
+        outrank a draft pick: that is what `test_a_fixture_port_stays_off_a_
+        completed_game` and the captain carve-out below are defending, and it is
+        why this is not simply "is the lifecycle live".
+
+        What it cannot answer is a game that is on the board because it was on the
+        board when PRSH last exited. `restored` (server/boards.py) is that state
+        and only that state — residue, chosen by nobody this session — and the key
+        it is missing from is `game_id`, which a finished game keeps forever. So a
+        producer opening the app the next day and binding tonight's fixture got a
+        board that deferred every blank to last night's players and dropped both
+        picks, because an 18-hour-old frame still looked like a feed.
+
+        The general turnover case (a game that ENDED this session, and the next
+        fixture going up over it) is not fixed here and should not be: `bind_board`
+        clears a stale board's game before it projects, so the projection that
+        follows sees no game at all. Removing the game is a truer answer than
+        reasoning about whose it was.
         """
+        if board_lifecycle(sb) == "restored":
+            return False
         if not deep_get(State.state, f"score.{sb}.game_id"):
             return False
         return not cls._board_side_is_empty(sb, t)
@@ -619,14 +647,45 @@ class Match:
         return None
 
     @classmethod
+    def best_of(cls, m) -> int:
+        """The fixture's format, defaulted to a Bo1 — the app's only assumption."""
+        return int((cls.get(m).get("format") or {}).get("bestOf") or 1)
+
+    @classmethod
+    def games_played(cls, m) -> int:
+        """Games credited to the series so far, both sides."""
+        series = cls.get(m).get("series") or {}
+        return (int(series.get("1", series.get(1)) or 0)
+                + int(series.get("2", series.get(2)) or 0))
+
+    @classmethod
     def _need(cls, m) -> int:
         """Wins required to take the series — a simple majority
         (``bestOf // 2 + 1``), which only decides a series for an odd
         ``bestOf``. Ingestion paths that set ``format.bestOf`` (e.g.
         ``apply_startgg_set``) are responsible for normalizing even/falsy
         values so a series is always decidable."""
-        best_of = int((cls.get(m).get("format") or {}).get("bestOf") or 1)
-        return best_of // 2 + 1
+        return cls.best_of(m) // 2 + 1
+
+    @classmethod
+    def is_complete(cls, m) -> bool:
+        """Has this fixture run out of games? A DIFFERENT QUESTION FROM WHO WON.
+
+        ``decided`` records a WINNER, and for every odd format that is also the
+        record of the end — somebody always clinches. **A doubleheader
+        (``bestOf: 2``) is complete after two games however they fall**, and a
+        1-1 split has no winner at all, so anywhere ``decided`` was standing in
+        for "this fixture is finished" a split would read as still running.
+
+        A Bo1 at 0-0 is NOT complete: its game may have ended without crediting
+        (a quit game reports no winner) and the fixture still has its game to
+        give. Mirrors ``matchComplete`` in
+        ``public/layout/lib/match-format.js``, which answers this for the console
+        and the overlays off the same two fields.
+        """
+        if _norm_side(cls.get(m).get("decided")) is not None:
+            return True
+        return cls.games_played(m) >= cls.best_of(m)
 
     @classmethod
     async def award_game(cls, m, winner_rio: str, game_id=None) -> int | None:
@@ -638,14 +697,27 @@ class Match:
 
         Pass ``game_id`` when the caller knows which finished game it is
         crediting: the same game then advances the series at most once per
-        match (returns the previously credited side on a repeat). ``None``
-        skips the dedup for callers without an id."""
+        match (returns the previously credited side on a repeat), durably — the
+        record is ``match.{m}.credited``, so a re-capture after a restart is
+        still a no-op. ``None`` skips the dedup for callers without an id."""
         if game_id is not None:
-            prior = cls._credited_games.get(str(m), {}).get(str(game_id))
+            prior = (cls.get(m).get("credited") or {}).get(str(game_id))
             if prior is not None:
                 logger.info("[Match] {}: game {} already credited to side {} — skipping",
                             m, game_id, prior)
                 return prior
+        # A SERIES NEVER HOLDS MORE GAMES THAN ITS FORMAT ALLOWS. The dedup above
+        # answers "have I already counted THIS game"; this answers "does the
+        # fixture have a game left to count at all", which is a different
+        # question and the one an extra game asks. A board keeps its binding
+        # until the producer clears or hands it on, so the game after a finished
+        # fixture arrives on a board still bound to it — crediting that would
+        # push a doubleheader to 2-1 and a Bo1 to 2-0, inventing a game the
+        # format says cannot exist and putting the count on air.
+        if cls.is_complete(m):
+            logger.info("[Match] {}: already complete ({} of Bo{}) — game not credited",
+                        m, cls.games_played(m), cls.best_of(m))
+            return None
         side = cls.side_for_rio(m, winner_rio)
         if side is None:
             logger.warning("[Match] {}: winner {!r} not on this match — series not advanced",
@@ -654,6 +726,8 @@ class Match:
         series = cls.get(m).get("series") or {}
         wins = int(series.get(str(side), series.get(side)) or 0) + 1
         entries = [(f"match.{m}.series.{side}", wins)]
+        if game_id is not None:
+            entries.append((f"match.{m}.credited.{game_id}", side))
         # First side to clinch owns `decided`; a later dead-rubber game never
         # flips it (arithmetic, not last-writer).
         if wins >= cls._need(m) and _norm_side(cls.get(m).get("decided")) is None:
@@ -663,8 +737,6 @@ class Match:
         await State.SetBatch(entries)
         await State.Save()
         await cls.project_match(m)
-        if game_id is not None:
-            cls._credited_games.setdefault(str(m), {})[str(game_id)] = side
         logger.info("[Match] {}: game to side {} ({}) — series now {}",
                     m, side, winner_rio, cls.get(m).get("series"))
         return side
@@ -720,9 +792,11 @@ class Match:
         - ``conflict`` — neither live player matches an *undecided* match. Do NOT
                           clear; the producer resolves. Carries ``expected`` +
                           ``feed`` for the notification.
-        - ``retire``   — neither matches but the match is already *decided*: the
-                          series is over and different players are on now, so the
-                          match auto-retires and the board runs unbound.
+        - ``retire``   — neither matches but the match is already *complete*: it
+                          is out of games and different players are on now, so the
+                          match auto-retires and the board runs unbound. COMPLETE,
+                          not decided — a split doubleheader has no winner and is
+                          just as finished (``is_complete``).
         """
         m = cls.scoreboard_match(sb)
         if not m:
@@ -745,7 +819,7 @@ class Match:
             "expected": {"1": e1, "2": e2},
             "feed": {"left": left_rio or "", "right": right_rio or ""},
         }
-        if _norm_side(match.get("decided")) is not None:
+        if cls.is_complete(m):
             return {"status": "retire", **payload}
         return {"status": "conflict", **payload}
 

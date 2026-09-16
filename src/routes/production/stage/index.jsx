@@ -239,7 +239,14 @@ export const Stage = memo(function Stage({ selection, deskBodies = {}, pins = []
     if (desk) {
         return (
             <PanelShell
-                state="desk" title={desk.title} meta={desk.meta}
+                state="desk"
+                // A renameable desk's title IS its stored value, so an empty one
+                // falls through to the placeholder rather than printing a
+                // default the producer would have to delete to get at.
+                title={desk.rename ? desk.rename.value : desk.title}
+                titlePlaceholder={desk.rename?.placeholder}
+                onRename={desk.rename?.onChange}
+                meta={desk.meta}
                 pinnable={desk.pinnable !== false}
                 pinned={pinnedIds.has(selection)}
                 onPinToggle={() => onPinToggle?.(selection)}

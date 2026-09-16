@@ -5,6 +5,8 @@ lifecycle contracts the Match tab and overlays rely on: lowest-id reuse, the
 last-board guard, mode-change state clearing, and POST /scoreboards/reset
 returning every board to a clean single binding with no authored matches left.
 """
+import asyncio
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -16,6 +18,7 @@ from server.match import Match, default_match
 from server.postgame import PostGame
 from server.settings import Settings
 from server.state import State
+from server.utils.deep_dict import deep_get
 
 # Minimal shape `PostGame._project_entries` requires — enough to make
 # `postgame.{N}.present` true, which is all these teardown tests read.
@@ -370,3 +373,132 @@ def test_name_override_rejects_bad_team(client, no_stats_fetch):
     r = client.put("/api/v1/scoreboards/1/player/3/name-override",
                    params={"name": "X"})
     assert r.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# POST /scoreboards/{sb}/clear-game — the between-games verb
+# ---------------------------------------------------------------------------
+
+def test_clear_game_blanks_the_board_and_keeps_the_capture(client):
+    """It clears a GAME, not a board.
+
+    The captured box score is a different broadcast surface (the Game Summary and
+    Character Spotlight draw it) and the thing most likely to be on air while the
+    next fixture is prepped, so it survives and keeps its own Clear on the
+    post-game region — dropping it here would be the irreversible half of a verb
+    whose reversible half is what was asked for.
+    """
+    State.state.setdefault("score", {})["1"] = {
+        "game_id": "123", "score_left": 7, "inning": 6, "stadium": "Mario Stadium",
+    }
+
+    resp = client.post("/api/v1/scoreboards/1/clear-game")
+
+    assert resp.status_code == 200, resp.text
+    assert State.state["score"]["1"]["game_id"] is None
+    assert State.state["score"]["1"]["score_left"] == 0
+    assert State.state["score"]["1"]["inning"] == 1
+    assert State.state["score"]["1"]["stadium"] == ""
+
+
+def test_clear_game_keeps_the_pool_and_the_playback(client):
+    """A board's pool and playback are not part of its game — they are which
+    games can fill it, which a clear must not answer."""
+    before = dict(get_binding(1))
+
+    client.post("/api/v1/scoreboards/1/clear-game")
+
+    after = get_binding(1)
+    assert after["pool"] == before["pool"]
+    assert after["playback"] == before["playback"]
+
+
+def test_clear_game_takes_the_game_mode_with_it(client):
+    """THE MODE GOES WITH THE GAME. `stats_tag` is the feed's answer unless a
+    producer overrode it, so a board with no game has no mode — leaving the last
+    game's season on an emptied board left the one control on the game rule
+    still describing the game just taken off it.
+
+    BOTH keys: `sync_stats_tag` stands down while `stats_tag_manual` is set, so
+    clearing the value alone would blank the mode and then stop the next game
+    from ever filling it back in.
+    """
+    asyncio.run(Settings.Set("scoreboards.binding.1.stats_tag", "NNL Season 10"))
+    asyncio.run(Settings.Set("scoreboards.binding.1.stats_tag_manual", True))
+
+    client.post("/api/v1/scoreboards/1/clear-game")
+
+    assert get_binding(1)["stats_tag"] == ""
+    assert get_binding(1)["stats_tag_manual"] is False
+
+
+def test_clear_game_keeps_a_fixture_that_still_has_a_game_to_give(client):
+    """The default, and the reason this endpoint re-projects at all.
+
+    A Bo3 between games must keep its match on the board — blanking the numbers
+    is not the same as taking the fixture off.
+    """
+    asyncio.run(State.Set("match.1", {"format": {"bestOf": 3}, "series": {"1": 1, "2": 0}}))
+    asyncio.run(State.Set("score.1.match", 1))
+    State.state["score"]["1"]["game_id"] = "123"
+
+    client.post("/api/v1/scoreboards/1/clear-game")
+
+    assert deep_get(State.state, "score.1.match") == 1
+
+
+def test_clear_game_can_take_a_finished_fixture_off_the_board(client):
+    """`release_match` IS the answer to "I cleared it and it came back".
+
+    Over a DECIDED fixture the plain clear blanked the board and the Match
+    projector immediately repainted the fixture's two names onto it, so the
+    scoreboard went back to drawing a finished matchup at 0-0 — the producer
+    pressed the button that empties a board and the board did not empty.
+    """
+    asyncio.run(State.Set("match.1", {
+        "format": {"bestOf": 1}, "decided": 1,
+        "player": {"1": {"rioName": "Alice"}, "2": {"rioName": "Bob"}},
+    }))
+    asyncio.run(State.Set("score.1.match", 1))
+    State.state["score"]["1"]["game_id"] = "123"
+
+    resp = client.post("/api/v1/scoreboards/1/clear-game",
+                       params={"release_match": "true"})
+
+    assert resp.status_code == 200
+    assert resp.json()["released"] is True
+    assert deep_get(State.state, "score.1.match") is None
+    # ...and the names the projector would have put back are gone with it. That
+    # is the whole point: the board is EMPTY, not repainted.
+    assert not deep_get(State.state, "score.1.player.1.rioName")
+    assert not deep_get(State.state, "score.1.player.2.rioName")
+
+
+def test_a_release_on_an_unbound_board_is_a_plain_clear(client):
+    """No binding to drop, and no error for asking — the board desk sets the flag
+    from the fixture's own state, and a board can lose its match between the
+    render and the press."""
+    State.state.setdefault("score", {})["1"] = {"game_id": "123", "inning": 4}
+
+    resp = client.post("/api/v1/scoreboards/1/clear-game",
+                       params={"release_match": "true"})
+
+    assert resp.status_code == 200
+    assert deep_get(State.state, "score.1.game_id") is None
+
+
+def test_clear_game_never_drops_the_capture_even_when_releasing(client):
+    """A Bo1 decides the moment it is captured, so the release fires at exactly
+    the moment its Game Summary is most likely to be on air."""
+    asyncio.run(State.Set("postgame.1", {"present": True, "gameId": "123"}))
+    asyncio.run(State.Set("match.1", {"format": {"bestOf": 1}, "decided": 1}))
+    asyncio.run(State.Set("score.1.match", 1))
+    State.state["score"]["1"]["game_id"] = "123"
+
+    client.post("/api/v1/scoreboards/1/clear-game", params={"release_match": "true"})
+
+    assert deep_get(State.state, "postgame.1.present") is True
+
+
+def test_clear_game_404s_on_a_board_that_does_not_exist(client):
+    assert client.post("/api/v1/scoreboards/99/clear-game").status_code == 404

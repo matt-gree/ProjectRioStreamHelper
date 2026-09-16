@@ -202,3 +202,33 @@ async def test_take_next_refuses_a_rotating_board(monkeypatch, rig):
         await take_next_match(2)
     assert exc.value.status_code == 409
     assert Match.bound_scoreboards(a) == []
+
+
+@pytest.mark.asyncio
+async def test_take_next_turns_the_board_over(rig):
+    """THE TAKE IS THE ONE SUPERSEDING BIND, and the flag is one line that could be
+    dropped without any other test noticing.
+
+    The clear used to live inside `bind_board` itself, so every path that attached
+    a fixture cleared — which blanked a HUD board the moment a producer said "this
+    game is Match 5". It moved onto this verb, whose whole meaning is "this board
+    is done with what it has" and whose button says so; this pins that it actually
+    arrived.
+    """
+    from server.state import State
+    from server.utils.deep_dict import deep_get
+
+    rig(1)
+    await State.SetBatch([
+        ("score.1.game_id", "lastgame"),
+        ("score.1.game_over", True),
+        ("score.1.score_left", 8),
+    ])
+    a = await make_match()
+    await Schedule.set_queue([a])
+
+    await take_next_match(1)
+
+    assert deep_get(State.state, "score.1.match") == a
+    assert deep_get(State.state, "score.1.game_id") is None
+    assert deep_get(State.state, "score.1.score_left") == 0

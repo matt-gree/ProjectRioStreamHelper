@@ -447,8 +447,14 @@ class Schedule:
         held = Match.bound_scoreboards(mid)
         if held:
             return f"it is already on board {held[0]}"
-        if match.get("decided") in (1, 2, "1", "2"):
-            return "the series is decided"
+        # COMPLETE, not decided: a split doubleheader has no winner and is just
+        # as finished (Match.is_complete). The `stage` condition below would
+        # catch a played fixture anyway — this is what gives it the true reason
+        # rather than "it has already been played" for a fixture that is over.
+        if Match.is_complete(mid):
+            return ("the doubleheader is split"
+                    if match.get("decided") in (None, "", 0)
+                    else "the series is decided")
         if (match.get("stage") or "draft") != "draft":
             return "it has already been played"
         return None

@@ -10,6 +10,24 @@
 export const KIT_INPUT = 'h-7 w-full rounded-md border border-border bg-card px-2 text-xs text-foreground';
 
 /*
+ * A NUMBER FIELD ON TOP OF THAT — the spinners OFF, the figures tabular.
+ *
+ * Native `type="number"` arrows are a click target sitting inside a field whose
+ * value goes to air, and they hit whenever a producer double- or triple-clicks
+ * to select what is in the box: a triple-click on the rotation interval took it
+ * from 30 to 28 before anything was typed. They are also 16px of chrome inside a
+ * 28px control, so the number they decorate has less room than the arrows do.
+ * `NumberInput` (../../../components/ui/number-input) has always dropped them;
+ * this is the kit saying the same thing, so a console number field looks and
+ * behaves the same wherever it is drawn.
+ *
+ * `tabular-nums` for the reason every changing value in this console carries it:
+ * proportional digits reflow the field as the number ticks.
+ */
+export const KIT_NUMBER = '[appearance:textfield] tabular-nums '
+    + '[&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none';
+
+/*
  * The label column beside a field. 64px is right on a 252px rail card and a
  * 278px rack row — and it was the ONLY width, so on the stage, where a panel is
  * three or four times that, the same column clipped "Bottom Offset" to

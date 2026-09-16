@@ -9,7 +9,7 @@ import { cn } from '../../../lib/utils';
 import { HexColorPicker, RgbaStringColorPicker } from 'react-colorful';
 import { Popover, PopoverContent, PopoverTrigger } from '../../../components/ui/popover';
 import { parseRgba, toRgba, isCompleteColor } from '../../../lib/colors';
-import { KIT_INPUT, KIT_LABEL } from './tokens';
+import { KIT_INPUT, KIT_LABEL, KIT_NUMBER } from './tokens';
 
 /*
  * The row kit — the shapes every console surface (rack rows, rail cards,
@@ -265,11 +265,39 @@ export const SelectRow = memo(function SelectRow({
  * The typing contract for a number, extracted because two rows now need it: the
  * plain NumberRow and the size half of a colour-and-size row. See NumberField
  * below for the input it drives; the rules live here.
+ *
+ * `clearable` says WHAT AN EMPTY BOX MEANS, and it is the caller's to answer
+ * because only the caller knows. Blank is an ANSWER on a style override — it
+ * means "nothing pinned here", the placeholder shows the inherited value
+ * through it, and committing `null` is the whole point. Blank is a STATE YOU
+ * PASS THROUGH on a bounded knob like a rotation interval: there is no such
+ * thing as a board that cycles every `` seconds, so an empty box is a producer
+ * halfway to typing a new number and nothing to write. Pass
+ * `clearable={false}` there and the field restores what it was showing when
+ * focus leaves, having written nothing.
+ *
+ * The distinction is invisible until you try to RETYPE a value: with no draft
+ * at all a controlled field refills from the store on the keystroke that
+ * empties it, so clearing the box and typing `120` gives you `30120` — which
+ * is what the rotator's two intervals did, straight onto `NumberInput` with a
+ * `val || 30` at the call site.
+ *
+ * `min`/`max` CLAMP ON BLUR AND NEVER ON THE TIMER, which is the same rule one
+ * level down. A field is settled when the producer leaves it; until then every
+ * number they type is a prefix of the one they mean, and clamping a prefix is
+ * how a range makes itself unusable — in a 5..600 field, typing `120` pauses
+ * after `1`, the debounce commits, the clamp turns it into 5, the store
+ * changes, and the sync effect drops `5` into the box under the cursor. So the
+ * timer writes what was typed and only the blur (or Enter) squares it with the
+ * range, which is also the moment a snap to the limit is legible rather than
+ * baffling.
  */
-function useNumberDraft(value, onChange, debounceMs) {
+function useNumberDraft(value, onChange, debounceMs, { clearable = true, min, max } = {}) {
     const shown = value == null ? '' : String(value);
     const [draft, setDraft] = useState(shown);
     const draftRef = useRef(shown);
+    const shownRef = useRef(shown);
+    shownRef.current = shown;
     const editing = useRef(false);
     const timer = useRef(null);
     const cb = useRef(onChange);
@@ -283,17 +311,41 @@ function useNumberDraft(value, onChange, debounceMs) {
         setDraft(shown);
     }, [shown]);
 
-    const commit = useCallback(() => {
+    // `settle` means the producer has LEFT the field (blur, Enter) rather than
+    // paused in it — the only moment the range may be applied.
+    const commit = useCallback((settle = false) => {
         if (timer.current) { clearTimeout(timer.current); timer.current = null; }
-        if (!editing.current) return;
+        // A SETTLE RUNS EVEN WITH NOTHING PENDING, because the debounce has
+        // usually already written what was typed — so by the time focus leaves,
+        // an out-of-range number is in the store and this is the only pass that
+        // can square it. It writes nothing when the draft already agrees with
+        // what is stored, which is every blur on a field nobody touched.
+        const pending = editing.current;
+        if (!pending && !settle) return;
         editing.current = false;
         const t = draftRef.current;
-        if (t === '') return cb.current?.(null);
-        const n = Number(t);
+        if (t === '') {
+            if (!pending) return;
+            if (clearable) return cb.current?.(null);
+            // Nothing to write, and the box must not be left holding a blank
+            // the store does not have — put back what it was showing. The
+            // store never changed, so the sync effect above would not fire.
+            draftRef.current = shownRef.current;
+            setDraft(shownRef.current);
+            return;
+        }
+        let n = Number(t);
         // A number input reports '' for anything it cannot parse, so this is
         // belt and braces — but a NaN here would be stored and drawn.
-        if (!Number.isNaN(n)) cb.current?.(n);
-    }, []);
+        if (Number.isNaN(n)) return;
+        if (settle) {
+            if (min != null && n < min) n = min;
+            if (max != null && n > max) n = max;
+        }
+        if (!pending && String(n) === shownRef.current) return;
+        cb.current?.(n);
+    }, [clearable, min, max]);
+    const settle = useCallback(() => commit(true), [commit]);
 
     // A stage that swaps out from under a typed number should keep it.
     useEffect(() => commit, [commit]);
@@ -303,36 +355,54 @@ function useNumberDraft(value, onChange, debounceMs) {
         setDraft(v);
         editing.current = true;
         if (timer.current) clearTimeout(timer.current);
-        if (v !== '') timer.current = setTimeout(commit, debounceMs);
+        // `setTimeout` hands its callback a numeric id, so the timer must NOT
+        // be `commit` itself — that id would arrive as `settle`.
+        if (v !== '') timer.current = setTimeout(() => commit(), debounceMs);
     }, [commit, debounceMs]);
 
-    return { draft, type, commit };
+    return { draft, type, commit, settle };
 }
 
 /*
  * The bare number input — no row, no label. For a row that already has both and
- * needs a number in it (the colour-and-size override rows).
+ * needs a number in it (the colour-and-size override rows), and for a control
+ * group that labels its own fields inline (the rotator's two intervals).
+ *
+ * `suffix` is the unit, drawn inside the box and not clickable: `Keep pool
+ * current [60] s` needs the `s` because its label cannot say it, and a unit
+ * typed into a row of its own would cost a whole 28px line to write one letter.
  */
 export const NumberField = memo(function NumberField({
-    value, onChange, min, max, step, disabled, staged, placeholder, ariaLabel,
-    className, debounceMs = 300,
+    value, onChange, min, max, step, disabled, staged, placeholder, ariaLabel, id,
+    className, debounceMs = 300, clearable = true, suffix,
 }) {
-    const { draft, type, commit } = useNumberDraft(value, onChange, debounceMs);
-    return (
+    const { draft, type, settle } = useNumberDraft(value, onChange, debounceMs, { clearable, min, max });
+    const input = (
         <input
             type="number" min={min} max={max} step={step} disabled={disabled}
+            id={id}
             aria-label={ariaLabel}
             placeholder={placeholder}
             value={draft}
             onChange={(e) => type(e.target.value)}
-            onBlur={commit}
-            onKeyDown={(e) => { if (e.key === 'Enter') commit(); }}
+            onBlur={settle}
+            onKeyDown={(e) => { if (e.key === 'Enter') settle(); }}
             className={cn(
-                KIT_INPUT, 'w-14 shrink-0 text-center',
+                KIT_INPUT, KIT_NUMBER, 'w-14 shrink-0 text-center',
+                suffix && 'pr-5 text-left',
                 staged && 'border-amber-400/60 text-amber-400',
                 className,
             )}
         />
+    );
+    if (suffix == null) return input;
+    return (
+        <div className="relative flex shrink-0 items-center">
+            {input}
+            <span className="pointer-events-none absolute right-2 text-xs text-muted-foreground">
+                {suffix}
+            </span>
+        </div>
     );
 });
 
@@ -358,7 +428,7 @@ export const NumberRow = memo(function NumberRow({
      * answer once the producer has left the field, so an empty draft commits on
      * BLUR alone; a typed number still settles by itself.
      */
-    const { draft, type, commit } = useNumberDraft(value, onChange, debounceMs);
+    const { draft, type, settle } = useNumberDraft(value, onChange, debounceMs, { min, max });
 
     return (
         <div className={cn(ROW, className)}>
@@ -373,9 +443,9 @@ export const NumberRow = memo(function NumberRow({
                 placeholder={placeholder}
                 value={draft}
                 onChange={(e) => type(e.target.value)}
-                onBlur={commit}
-                onKeyDown={(e) => { if (e.key === 'Enter') commit(); }}
-                className={cn(KIT_INPUT, 'w-20', staged && 'border-amber-400/60 text-amber-400')}
+                onBlur={settle}
+                onKeyDown={(e) => { if (e.key === 'Enter') settle(); }}
+                className={cn(KIT_INPUT, KIT_NUMBER, 'w-20', staged && 'border-amber-400/60 text-amber-400')}
             />
             {suffix && <Text size="xs" span dimmed className="shrink-0">{suffix}</Text>}
         </div>
@@ -445,7 +515,7 @@ export const FractionRow = memo(function FractionRow({
  *     reorder or another surface's edit still reaches the field, but never
  *     overwrites a half-typed word.
  */
-function useDebouncedText(value, onChange, ms) {
+export function useDebouncedText(value, onChange, ms) {
     const [draft, setDraft] = useState(value ?? '');
     const draftRef = useRef(draft);
     const timer = useRef(null);
@@ -981,10 +1051,11 @@ export function KitColumns({ children, template, className }) {
  * would otherwise sit in the field list pretending to be a field.
  *
  * `subject` rides the same rule, beside the label rather than pushed right: a
- * region whose state is one line (the board's Games — transport badge plus the
- * playback sentence) spends a whole 28px row plus a gap on it otherwise, and it
- * belongs to the eyebrow the way a `SubjectRow` belongs to a panel. Left-aligned
- * on purpose — the far edge of a 900px column is not "next to GAMES".
+ * region whose state or whose one choice is a single control (the board's Games
+ * — the playback segmented; its Post-game — the captured line) spends a whole
+ * 28px row plus a gap on it otherwise, and it belongs to the eyebrow the way a
+ * `SubjectRow` belongs to a panel. Left-aligned on purpose — the far edge of a
+ * 900px column is not "next to GAMES".
  */
 export function KitColumn({ label, subject, action, children, className }) {
     return (
