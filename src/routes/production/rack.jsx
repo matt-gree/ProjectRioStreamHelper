@@ -342,8 +342,7 @@ const StretchBadge = memo(function StretchBadge({ factor, cropped }) {
     );
 });
 
-// One rack row. Rows relocate as OBS state changes; the entry animation is
-// motion-safe so prefers-reduced-motion users get an instant move.
+// One rack row. Rows relocate as OBS state changes.
 const RackRow = memo(function RackRow({
     state, name, meta, tag, tagTitle, badge, dimmed, selected, onSelect, quickAction,
     pinnable, pinned, onPinToggle, nested, rowAction, stretch, cropped,
@@ -357,7 +356,7 @@ const RackRow = memo(function RackRow({
             data-rack-row={name}
             data-rack-nested={nested ? '' : undefined}
             className={cn(
-                'group flex h-8 items-center gap-2 rounded-md px-2 motion-safe:animate-in motion-safe:fade-in-0',
+                'group flex h-8 items-center gap-2 rounded-md px-2',
                 selected ? 'bg-secondary/70' : 'hover:bg-secondary/40',
                 dimmed && !selected && 'opacity-60',
                 // A fed row is a choice WITHIN the source above it, not a source
