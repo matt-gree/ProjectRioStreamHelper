@@ -1,7 +1,7 @@
 """Where PRSH looks for Project Rio's decoded.hud.json when nothing is configured.
 
 This path is load-bearing twice: it is the HUD file the watcher watches, and
-`server/postgame_files` derives the StatFiles directory from its grandparent.
+`server/postgame/files.py` derives the StatFiles directory from its grandparent.
 Getting it wrong costs the producer the live scoreboard AND post-game capture,
 and presents as "PRSH doesn't see my game".
 """

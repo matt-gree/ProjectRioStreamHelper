@@ -1,7 +1,7 @@
 """Character Spotlight server layer: the event-derived per-character counters
 (star hits, wall jumps, sliding catches — no aggregated stat-file fields exist
 for these) and the per-AB walkthrough payload (``PostGame.character_abs``)."""
-from server import postgame_contacts, postgame_stats
+from server.postgame import contacts as postgame_contacts, stats as postgame_stats
 from server.postgame import PostGame
 
 

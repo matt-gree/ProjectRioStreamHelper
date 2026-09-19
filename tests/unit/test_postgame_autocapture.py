@@ -8,7 +8,7 @@ the same ``watchfiles`` loop HudWatcher already runs.
 import orjson
 import pytest
 
-from server.postgame_watch import StatFileWatcher
+from server.postgame.watch import StatFileWatcher
 from server.settings import Settings
 
 
@@ -36,7 +36,7 @@ def captures(monkeypatch):
         calls.append((sb, by))
         return {"success": True, "scoreboard": sb}
 
-    monkeypatch.setattr("server.postgame_watch.PostGame.capture", fake_capture)
+    monkeypatch.setattr("server.postgame.watch.PostGame.capture", fake_capture)
     return calls
 
 
@@ -110,7 +110,7 @@ async def test_a_declined_capture_can_be_retried(stat_dir, boards, monkeypatch):
         calls.append(sb)
         return {"success": len(calls) > 1, "reason": "still writing"}
 
-    monkeypatch.setattr("server.postgame_watch.PostGame.capture", flaky)
+    monkeypatch.setattr("server.postgame.watch.PostGame.capture", flaky)
     p = write_stat(stat_dir, 100)
     await StatFileWatcher._on_file(p)
     await StatFileWatcher._on_file(p)

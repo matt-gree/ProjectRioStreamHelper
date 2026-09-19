@@ -42,7 +42,7 @@ instance instead. Four env vars (resolved in `server/paths.py`, HUD one in
 | `PRSH_USER_DATA_DIR` | Writable dir for state.json/settings.json/participants/branding (created on resolve) |
 | `PRSH_PORT` | Server port; wins over settings.json (port-conflict preflight checks the same port) |
 | `PRSH_NO_BROWSER` | Suppress the autostart browser tab |
-| `PRSH_HUD_FILE` | **Authoritative** decoded.hud.json path — no existence check (the file may not exist until a replay writes it; its parent dir must exist at boot). Also anchors post-game stat-file resolution (`server/postgame_files.py`), so an isolated instance won't read the real Rio StatFiles dir either |
+| `PRSH_HUD_FILE` | **Authoritative** decoded.hud.json path — no existence check (the file may not exist until a replay writes it; its parent dir must exist at boot). Also anchors post-game stat-file resolution (`server/postgame/files.py`), so an isolated instance won't read the real Rio StatFiles dir either |
 
 ```bash
 ISO=/tmp/prsh-agent && mkdir -p "$ISO"

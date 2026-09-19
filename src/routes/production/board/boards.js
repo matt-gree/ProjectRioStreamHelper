@@ -206,7 +206,7 @@ export function boardLifecycle({
      *
      * The server already knows: the stat file Project Rio writes IS the
      * end-of-game signal for a local board, which is why auto-capture is built on
-     * it (server/postgame_watch.py). `captured` is that same signal read back —
+     * it (server/postgame/watch.py). `captured` is that same signal read back —
      * a `postgame.{N}` whose `gameId` is this board's — so the two runtimes agree
      * about when a game ended instead of the console holding a weaker opinion.
      *

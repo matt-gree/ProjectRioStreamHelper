@@ -1,4 +1,4 @@
-"""Stat-file location + IO for the post-game capture (``server/postgame.py``).
+"""Stat-file location + IO for the post-game capture (``server/postgame/capture.py``).
 
 Project Rio writes a decoded stat file per finished game under
 ``StatFiles/MarioSuperstarBaseball/`` — a sibling of the ``HudFiles`` directory
@@ -41,7 +41,7 @@ def stat_dir() -> Path:
     Resolution mirrors ``provider.get_user_hud_path``: ``PRSH_HUD_FILE`` is
     authoritative, then the configured HUD path, then the OS default. Honouring
     the env override matters now that auto-capture watches this directory
-    (``server/postgame_watch.py``) — resolving past it pointed an isolated
+    (``server/postgame/watch.py``) — resolving past it pointed an isolated
     agent/CI instance at the developer's REAL Project Rio folder, where it would
     capture live games into a throwaway state file.
 

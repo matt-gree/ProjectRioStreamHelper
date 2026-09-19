@@ -21,7 +21,7 @@ never fires, and the producer resolves it by hand — consistent with
 
 Server-side by design: series crediting must not depend on the producer UI being
 open. HUD/local boards are credited by the post-game stat-file path instead
-(``server/postgame.py``); a match binds to exactly one board, so the two paths
+(``server/postgame/capture.py``); a match binds to exactly one board, so the two paths
 never both fire for the same game.
 """
 import asyncio

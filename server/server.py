@@ -22,7 +22,7 @@ from server.rio import stats_api
 from server.settings import Settings, Config
 from server.startgg.provider import StartGGProvider
 from server.controller_overlay import ControllerOverlay
-from server.postgame_watch import StatFileWatcher
+from server.postgame.watch import StatFileWatcher
 from server.announcements import Announcements
 from server.automations import Automations
 from server.league_logos import LeagueLogos

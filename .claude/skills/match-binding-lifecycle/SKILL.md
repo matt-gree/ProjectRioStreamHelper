@@ -298,7 +298,7 @@ fixture:
 
 Two mutually-exclusive paths (a match binds to one board):
 
-- **HUD board (1)**: post-game stat-file capture (`server/postgame.py`),
+- **HUD board (1)**: post-game stat-file capture (`server/postgame/capture.py`),
   gated on GameID + `Loaded-from-HUD == 0`, credits via `Match.award_game`.
 - **API boards**: `GameEndWatcher` (`server/rio/game_end.py`) fires when a
   followed game **drops out of the ongoing feed**. Candidate criteria: api

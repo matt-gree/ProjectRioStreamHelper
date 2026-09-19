@@ -7,7 +7,7 @@ unreachable Rio API must not hold it. Unknown → '', and the overlay falls back
 to the board's own mode."""
 import pytest
 
-from server import postgame_stats
+from server.postgame import stats as postgame_stats
 from server.postgame import PostGame
 from server.rio import stats_api
 
@@ -65,8 +65,8 @@ async def test_a_rebuilt_capture_is_oriented_by_the_capture_not_the_board(
     hold the next game by then; orienting against it fell back to away = side 1
     while the persisted projection had Bob (home) on side 1, so the Spotlight
     walked Alice's at-bats under a character picked from Bob's list."""
-    from server import postgame_files
-    import server.postgame as pg_mod
+    from server.postgame import files as postgame_files
+    import server.postgame.capture as pg_mod
     from server.state import State
 
     (tmp_path / "decoded.Game_42.json").write_text("{}")

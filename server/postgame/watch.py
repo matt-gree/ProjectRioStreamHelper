@@ -24,9 +24,9 @@ from pathlib import Path
 from loguru import logger
 from watchfiles import Change, awatch
 
-from server import postgame_files
+from server.postgame import files as postgame_files
 from server.postgame import PostGame
-from server.postgame_files import norm_game_id
+from server.postgame.files import norm_game_id
 from server.settings import Settings
 from server.state import State
 from server.utils.deep_dict import deep_get

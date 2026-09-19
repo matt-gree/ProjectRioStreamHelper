@@ -472,7 +472,7 @@ class Settings:
             # Capture a finished game's box score as soon as Project Rio writes
             # its stat file, instead of waiting for the producer to press
             # Capture. The file landing IS the end-of-game signal for a local
-            # board — see server/postgame_watch.py. Off leaves capture manual;
+            # board — see server/postgame/watch.py. Off leaves capture manual;
             # the button is on every board panel either way.
             "auto_capture": True,
         },

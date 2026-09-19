@@ -1,7 +1,7 @@
 """Post-game side totals: stars won from resolved Star Chance at-bats, the
 per-inning linescore reconstruction, and the aggregate block the Game Summary
 callout reads (no stat-file fields exist for the first two)."""
-from server import postgame_stats
+from server.postgame import stats as postgame_stats
 
 
 def ev(half, result, star_chance=1):

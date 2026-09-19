@@ -11,7 +11,7 @@ import time
 import orjson
 import pytest
 
-from server import postgame_files as pgf
+from server.postgame import files as pgf
 
 
 # --- norm_game_id ---

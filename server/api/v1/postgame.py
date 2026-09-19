@@ -4,7 +4,7 @@ Project Rio stat file and project it onto a scoreboard.
 Plain @router (like match.py / commentary.py): the projected ``postgame.{N}.*``
 fields live in the State store and reach clients through the state broadcast. Only
 the heavy per-event ``Events`` array is served directly from here (it is kept out
-of State on purpose — see server/postgame.py).
+of State on purpose — see server/postgame/capture.py).
 
 Capture is a **manual producer action** (no auto game-end detection yet). The
 default path matches the stat file by ``score.{N}.game_id`` + the
@@ -17,7 +17,7 @@ import asyncio
 from fastapi import APIRouter
 from fastapi.responses import ORJSONResponse
 
-from server import postgame_files
+from server.postgame import files as postgame_files
 from server.postgame import PostGame
 
 router = APIRouter(prefix="/postgame", tags=["postgame"])

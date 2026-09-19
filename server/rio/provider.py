@@ -130,7 +130,7 @@ def get_default_hud_file_path() -> Path:
         # folder redirection, where AppData lives on a network share — and
         # Project Rio writes to the variable, so guessing the literal path is
         # how PRSH ends up watching a file nothing will ever write. This also
-        # feeds the StatFiles dir for post-game capture (server/postgame_files),
+        # feeds the StatFiles dir for post-game capture (server/postgame/files.py),
         # so the guess costs the producer two features, not one.
         # Same resolution order as server/paths.py:_frozen_writable_root.
         base = os.environ.get("APPDATA") or str(Path.home() / "AppData" / "Roaming")
@@ -840,7 +840,7 @@ class RioGameDataProvider:
         # The stat directory is a sibling of the HUD file's, so auto-capture was
         # left watching the old rig's folder. Imported here, not at module level:
         # postgame_files resolves its directory THROUGH this module.
-        from server.postgame_watch import StatFileWatcher
+        from server.postgame.watch import StatFileWatcher
         await StatFileWatcher.Restart()
         game = await cls.hud_watcher.reload()
         if game:

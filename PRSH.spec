@@ -77,7 +77,7 @@ a = Analysis(
         # trajectories) reads these off disk via __file__-relative paths, so
         # they must be copied into the bundle — PyInstaller only bundles .py
         # modules by default. Missing them makes simulate_contacts raise
-        # FileNotFoundError, which postgame.py swallows into an empty spotlight.
+        # FileNotFoundError, which server/postgame/capture.py swallows into an empty spotlight.
         ('server/rio/pyrio/CharNames.csv', 'server/rio/pyrio'),
         ('server/rio/pyrio/constants/character_attributes.csv', 'server/rio/pyrio/constants'),
         ('server/rio/pyrio/constants/stadiums', 'server/rio/pyrio/constants/stadiums'),

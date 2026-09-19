@@ -4,9 +4,9 @@ Project Rio's on-disk **stat file** and projects it onto a scoreboard.
 Unlike live data (which the feed writes) or the API stats path (StatsTracker),
 post-game numbers come from the authoritative stat file Project Rio writes to
 disk when a game ends. File location/selection lives in
-``server/postgame_files.py`` (GameID + Loaded-from-HUD gated, never "newest
-file"), box-score shaping in ``server/postgame_stats.py``, and the per-AB
-Character Spotlight walkthrough in ``server/postgame_contacts.py`` — this
+``server/postgame/files.py`` (GameID + Loaded-from-HUD gated, never "newest
+file"), box-score shaping in ``server/postgame/stats.py``, and the per-AB
+Character Spotlight walkthrough in ``server/postgame/contacts.py`` — this
 module owns the caches, the capture/projection lifecycle, and the match hop.
 
 State shape (own ``postgame.*`` namespace, scoreboard-keyed; the match's lifecycle
@@ -45,9 +45,9 @@ from datetime import datetime, timezone
 
 from loguru import logger
 
-from server import postgame_contacts, postgame_files, postgame_stats
+from server.postgame import contacts as postgame_contacts, files as postgame_files, stats as postgame_stats
 from server.match import Match
-from server.postgame_files import norm_game_id
+from server.postgame.files import norm_game_id
 from server.rio import stats_api
 from server.rio.pyrio.stat_file_parser import StatObj
 from server.state import State

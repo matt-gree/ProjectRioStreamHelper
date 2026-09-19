@@ -35,7 +35,7 @@ character's story once, holding on the spray chart.
 | **3D hit replay** (Three.js scene, camera modes, ball trails, stadium) | `rio-visualizer/web/renderer.js` (~1615 lines, git submodule) |
 | **Stadium themes** (per-arena palette / fog / lighting / mound repaint) | `rio-visualizer/web/themes.js` |
 | **Host page** (the sized OBS shell + three.js importmap) | `public/layout/postgame/spotlight.html` (own source) · `public/layout/shared/container.html` (in a container) |
-| **Data contract** (box score → State; heavy per-AB payload → REST) | `server/postgame.py` (`character_abs`, `_side_block`, `_star_cost`) |
+| **Data contract** (box score → State; heavy per-AB payload → REST) | `server/postgame/capture.py` (`character_abs`, `_side_block`, `_star_cost`) |
 | **REST/State surface** | `server/api/v1/postgame.py` (`GET /api/v1/postgame/abs`) |
 | **Element registration** | `src/routes/production/elements.js` |
 | **Preview sample** | `public/layout/preview/postgame_sample.json` |
@@ -75,7 +75,7 @@ fresh schema, while State can predate fields like `batting.runs`).
 
 ### 2.1 The AB record (one plate appearance)
 
-`character_abs()` in `server/postgame.py` builds an ordered list of these. This
+`character_abs()` in `server/postgame/capture.py` builds an ordered list of these. This
 is the contract the mount's walkthrough consumes — treat the field names as
 stable:
 

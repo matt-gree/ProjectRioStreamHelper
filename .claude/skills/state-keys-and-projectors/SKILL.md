@@ -194,7 +194,7 @@ pointer — this map is the source of truth).
 ## The projector pattern (resolve-by-copy)
 
 Four modules follow it — `server/match.py`, `server/commentary.py`,
-`server/playerplates.py`, `server/postgame.py`. **Reuse the shape; do not
+`server/playerplates.py`, `server/postgame/capture.py`. **Reuse the shape; do not
 invent a new one.** `server/commentary.py` is the cleanest reference
 implementation.
 

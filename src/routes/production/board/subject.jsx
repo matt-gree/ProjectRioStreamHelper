@@ -565,7 +565,7 @@ export const BoardSubject = memo(function BoardSubject({
  * in three places, in the wrong order: the take was buried inside the fixture slot
  * ABOVE, the capture was a region at the bottom, and only the clear was here. The
  * ordering was causally backwards too — capture is what advances the match to
- * `post` and credits the series (server/postgame.py), so the fixture slot printed
+ * `post` and credits the series (server/postgame/capture.py), so the fixture slot printed
  * the consequence a screen above its cause.
  *
  * It never acts on its own. Clearing at the final out would strip the elements

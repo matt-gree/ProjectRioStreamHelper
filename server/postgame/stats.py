@@ -1,4 +1,4 @@
-"""Box-score shaping for the post-game capture (``server/postgame.py``).
+"""Box-score shaping for the post-game capture (``server/postgame/capture.py``).
 
 Pure functions over a parsed stat file (``StatObj`` + its raw ``Events``
 array): per-character batting/pitching blocks, event-derived counters the stat

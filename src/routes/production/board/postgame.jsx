@@ -21,7 +21,7 @@ import { ActionRow, StatusLine } from '../kit';
  * desks. See ./board/desk.
  *
  * It is also mostly a READOUT now. The stat file Project Rio writes at the final
- * out fires the capture on its own (server/postgame_watch.py), so the button
+ * out fires the capture on its own (server/postgame/watch.py), so the button
  * below is the recovery path — a file that landed late, a capture cleared and
  * wanted back, or a rig with auto-capture switched off — and the panel says
  * which of the two filled it.
@@ -286,7 +286,7 @@ const StatFilePicker = memo(function StatFilePicker({ onPick, disabled }) {
  * so the recovery path was drawn louder than the press it recovers.
  *
  * AND IT IS DISABLED WITH NO GAME TO READ. `find_file` matches the stat file by
- * `score.{N}.game_id` (server/postgame_files.py), so on an empty board this
+ * `score.{N}.game_id` (server/postgame/files.py), so on an empty board this
  * button can only ever answer "No game id for this scoreboard yet" — which it
  * did, in the app's most prominent colour, on every freshly-cleared board. The
  * file picker beside it stays live: picking by hand captures WITHOUT the game-id

@@ -367,7 +367,7 @@ sources).
   (the clear, or the take) — a filled capture down here made two, and drew the
   *recovery* path louder than the turnover bar's own Capture, which is a ghost.
   Worse, `find_file` matches the stat file by `score.{N}.game_id`
-  (`server/postgame_files.py`), so on an emptied board that filled button could
+  (`server/postgame/files.py`), so on an emptied board that filled button could
   only ever answer "No game id for this scoreboard yet". The **file picker beside
   it stays live**: picking by hand captures WITHOUT the game-id match, which is the
   entire reason that hatch exists.

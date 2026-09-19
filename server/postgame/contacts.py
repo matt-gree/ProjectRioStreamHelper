@@ -1,4 +1,4 @@
-"""Per-AB walkthrough for the Character Spotlight (``server/postgame.py``).
+"""Per-AB walkthrough for the Character Spotlight (``server/postgame/capture.py``).
 
 Builds the heavy, REST-only payload behind ``PostGame.character_abs``: every
 resolved plate appearance for one roster character, enriched with
@@ -9,7 +9,7 @@ scoreboard-keyed caches stay in ``PostGame``.
 """
 from loguru import logger
 
-from server.postgame_stats import HIT_CODES, result_code, star_cost
+from server.postgame.stats import HIT_CODES, result_code, star_cost
 from server.rio.pyrio.stat_file_parser import StatObj
 
 

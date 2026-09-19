@@ -63,7 +63,7 @@ def reset_singletons():
     from server.settings import Settings
     from server.match import Match
     from server.postgame import PostGame
-    from server.postgame_watch import StatFileWatcher
+    from server.postgame.watch import StatFileWatcher
     from server.rio.game_end import GameEndWatcher
     from server.rio.game_pool import CompletedGamePool, OngoingGamePool
     from server.rio.provider import RioGameDataProvider as Provider

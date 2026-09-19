@@ -97,7 +97,7 @@ export default function SettingsModal({ opened, onClose }) {
     const confirmEnabled = useSettingsStore(state => state?.production?.confirm?.enabled) === true;
     const confirmHotkey = useSettingsStore(state => state?.production?.confirm?.hotkey) || 'F9';
     // The stat file Project Rio writes at the final out is the end-of-game
-    // signal for a local board (server/postgame_watch.py).
+    // signal for a local board (server/postgame/watch.py).
     const autoCapture = useSettingsStore(state => state?.postgame?.auto_capture) !== false;
 
     // ── Output ──

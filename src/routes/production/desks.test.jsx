@@ -1508,7 +1508,7 @@ describe('Board desk', () => {
  * running order regions rather than desks.
  *
  * It is also mostly a readout now — the stat file Project Rio writes at the
- * final out fires the capture on its own (server/postgame_watch.py), so the
+ * final out fires the capture on its own (server/postgame/watch.py), so the
  * button is the recovery path and the panel says which of the two filled it.
  */
 describe('Board desk — post-game', () => {
@@ -1623,7 +1623,7 @@ describe('Board desk — post-game', () => {
     /*
      * A CAPTURE NEEDS A GAME ID TO MATCH A STAT FILE BY, so on an empty board the
      * press can only ever answer "No game id for this scoreboard yet"
-     * (server/postgame_files.py `find_file`) — and it made that answer in the
+     * (server/postgame/files.py `find_file`) — and it made that answer in the
      * app's most prominent colour, as a FILLED button, on every board a producer
      * had just cleared. The hand-picked file is the way in when there is no id to
      * match: it captures WITHOUT one, which is the whole reason that hatch
@@ -1756,7 +1756,7 @@ describe('board lifecycle', () => {
      * for that exact moment never appeared.
      *
      * The stat file IS the end-of-game signal for a local board; the server
-     * already builds auto-capture on it (server/postgame_watch.py).
+     * already builds auto-capture on it (server/postgame/watch.py).
      */
     it('takes a capture for this game as the game being over', () => {
         expect(boardLifecycle({ gameId: 'G1', captured: true })).toBe('final');
