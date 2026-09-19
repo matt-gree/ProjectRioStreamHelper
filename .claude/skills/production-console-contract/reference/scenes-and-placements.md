@@ -292,20 +292,29 @@ catalog left, live preview right.
   header — and one catalog row picked on two boards is two sources with their
   own air state, settings and instance id. Keying on url alone collapses them,
   which is the bug board-aware binding fixed one axis over.
-- **Every row carries the same checkbox; the BOARD is asked beside the
-  preview.** The board strip ("Add on") sits under the preview header, one
-  toggle per board, and it is only rendered on a multi-board rig — on a
-  single-board rig the row's box carries board 1 and there is nothing to ask.
-  The list's own box is the whole of "this goes in": it ticks the primary board,
-  and unticking clears **every** board the row was picked on, which is the only
-  reading of an unchecked box that isn't a lie. The boards a row is going in on
-  are then *stated* back on the row (`boardsNote`) rather than controlled from
-  it, so a producer scanning the list still sees the scoreboard going in twice
-  without the row growing a control per board.
-  On a multi-board rig the strip is **always present**, even for a row with no
-  board to ask about (it says so) — appearing and disappearing as the producer
-  stepped between a scoreboard and a lower third moved the preview under the
-  cursor by its own height.
+- **The BOARD is asked FIRST, once, by a tab across the full width** (`BoardTabs`,
+  above both the list and the preview, because it scopes both). A producer
+  building a scene thinks "what does board 2 need", so the tab's board is what
+  every board-reading row's box answers for, and what the preview draws. The
+  list under a tab is that board's elements, then a **Show-wide** rule and every
+  row that reads no board, the same under every tab. Each tab names the board
+  (its alias) and what is on it, and counts its picks, so a batch spread across
+  tabs is never out of sight; the row itself notes the OTHER boards it is picked
+  on (`boardsNote`, "also 2") and the tray chip names its board and clicking it
+  switches tab. Unticking takes back only the tab's pick. The picker **opens on
+  the scene's board** (`sceneBoard` — the board with the most explicit
+  `?scoreboard=` sources in the scene; board-less sources say nothing), and
+  `in scene` answers per the tab's board. A single-board rig draws no tabs and
+  one list. This replaced a per-row "Add for" strip beside the preview, which
+  asked the board one row at a time and never showed a board's set as a set.
+  Two registry flags refine which tab a row lands on, both picker-only:
+  **`showWide`** (`picksBoard`) files a board reader that is chrome for the whole
+  show — the Event Header, which reads a board for its Round alone — on the
+  Show-wide shelf, added naming no board (board 1 by default; the stage's Board
+  row still re-points it); **`rotatingOnly`** (`offeredOn`) lists the Results
+  Ticker only under a board that is actually rotating (`useRotatingBoards`, the
+  same rule as `useMatchBindableBoards`), because the pool is all it draws. The
+  Controller stays under a board: it follows a side's port on that board.
 - **Look, then choose: the FIRST click on a row previews it, the SECOND selects
   it.** Browsing the catalog is what a producer does most in here and it must
   not quietly build a batch, so one click is always the cheap, reversible act —
@@ -318,15 +327,28 @@ catalog left, live preview right.
   it KEEPS the preview — focus and check stay different questions, so unchecking
   never also takes the frame away. The checkbox is unchanged and still selects
   in one click from anywhere in the list.
-- **A disabled Add has to say what would enable it, IN VIEW.** Those two rules
-  together mean a producer can reach a full preview, a named scene and a dead
-  Add with nothing on screen joining them up. One `addBlocker` value answers
-  "what is in the way" and both the footer line and the Add tooltip are phrased
-  off it — two ternaries would be two answers — and on a multi-board rig it
-  names the **board strip**, not the box in the list, because a board-scoped row
-  can be ticked from either and only one of them is where the eye is. The
-  visible footer line is the primary channel: a tooltip on the greyed control is
+- **A disabled Add has to say what would enable it, IN VIEW.** Previewing a row
+  is not selecting it, so a producer can reach a full preview, a named scene and
+  a dead Add with nothing joining them up. The footer line states it ("tick a
+  box") and the Add tooltip phrases the same condition as the act. The visible
+  footer line is the primary channel: a tooltip on the greyed control is
   reachable only by hovering the thing already read as dead.
+- **A per-side pair is ONE row** (`pairRows`): Stat Bar, Stat Card, Roster,
+  Player Name, Team Logo and Controller fold their side 1 / side 2 catalog rows
+  into one, because both sides is the usual answer. The row's box takes both
+  (`aria-checked="mixed"` while one is in; from mixed it completes the pair). A
+  plain-text toggle per side at the row's end takes one side alone and previews
+  it — shown on hover, on the previewed row, and while one side alone is in,
+  held with `invisible` at rest so nothing moves; bordered chips on every pair
+  read as a wall of badges. A pair with one side already in the scene says so
+  in words (`Side 1 in scene`), never a dot. The arrows stop on the pair once.
+  **Picks stay per side** — each side is its own source, name and URL — so Add
+  and naming are untouched; only the tray folds back (both sides for one board
+  = one chip, whose × takes both). Side toggles use the producer's side words,
+  never a bare digit, which in this dialog would read as a board.
+- **Within a shelf the cards lead** (`rowRank`): the Scorecard shares the
+  Scoreboard shelf rather than heading one of its own, and the scoreboard sizes
+  and the scorecard sort ahead of the per-side rows from the same folder.
 - **The preview is `?preview=1&sample=1`** through `ScaledIframe` — the real
   overlay, drawn against its own sample bundle, because a producer building a
   scene has no game running. (The STAGE preview deliberately omits `sample`;

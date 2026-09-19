@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useSettingsStore, useStateStore } from '../../context/store';
 import { notifications } from '../../lib/notify';
 import { DESK_PREFIX } from './instances';
@@ -30,15 +31,32 @@ export function useActiveBoards() {
  * stored mode is ignored, so a stale "rotate" left from a HUD-off session must
  * not disable it here either. Keep the two in step; they encode one rule.
  */
+export function isRotatingBoard(sb, { hudEnabled, bindings } = {}) {
+    // Server default for the HUD toggle is on, so only an explicit false is off.
+    if (Number(sb) === 1 && hudEnabled !== false) return false;
+    const b = bindings?.[sb] ?? bindings?.[String(sb)];
+    return b?.playback?.mode === 'rotate';
+}
+
 export function useMatchBindableBoards() {
     const hudEnabled = useSettingsStore(s => s?.project_rio?.hud_enabled);
     const bindings = useSettingsStore(s => s?.scoreboards?.binding);
-    return (sb) => {
-        // Server default for the HUD toggle is on, so only an explicit false is off.
-        if (Number(sb) === 1 && hudEnabled !== false) return true;
-        const b = bindings?.[sb] ?? bindings?.[String(sb)];
-        return b?.playback?.mode !== 'rotate';
-    };
+    return (sb) => !isRotatingBoard(sb, { hudEnabled, bindings });
+}
+
+/*
+ * The boards that are ACTUALLY rotating a pool, as a stable list — the same
+ * rule as above, for a caller that needs it as data (the Add picker offers
+ * the Results Ticker only on these, because the pool is all it draws).
+ */
+export function useRotatingBoards() {
+    const hudEnabled = useSettingsStore(s => s?.project_rio?.hud_enabled);
+    const bindings = useSettingsStore(s => s?.scoreboards?.binding);
+    const active = useActiveBoards();
+    return useMemo(
+        () => active.filter(sb => isRotatingBoard(sb, { hudEnabled, bindings })),
+        [active, hudEnabled, bindings],
+    );
 }
 
 /*

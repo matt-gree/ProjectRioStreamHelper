@@ -87,6 +87,11 @@
  *                 callouts, the Event Header and the Results Ticker. `readsBoard`
  *                 is the one question "does this source name a board", asked by
  *                 the Add picker's board step and the stage's Board row.
+ *   `showWide`   — a board reader that is still chrome for the whole show
+ *                 (the Event Header): the Add picker files it on the Show-wide
+ *                 shelf rather than under a board's tab. Picker-only.
+ *   `rotatingOnly` — draws a board's rotation pool, so the Add picker lists
+ *                 it only under a board that is rotating one. Picker-only.
  *   Feed-scoped — the board is fixed by the pushed CONTENT ({ element,
  *                 scoreboard } in the feed payload). The shared container is
  *                 board-agnostic on purpose, so fed elements never take `scope`.
@@ -546,6 +551,9 @@ export const ELEMENTS = [
     {
         id: 'ticker',
         boardParam: true,
+        // Draws its board's rotation POOL and nothing else, so the Add picker
+        // offers it only under a board that is actually rotating one.
+        rotatingOnly: true,
         name: 'Results Ticker',
         // The scrolling results strip (rotator group) — completed games cycling
         // along the bottom. Nothing to decide live but whether it's up: its
@@ -560,6 +568,11 @@ export const ELEMENTS = [
     {
         id: 'eventheader',
         boardParam: true,
+        // Reads a board for ONE field (Round) and is otherwise chrome for the
+        // whole broadcast, so the Add picker shelves it Show-wide and adds it
+        // with no board named (board 1 by the documented default). The stage's
+        // Board row still re-points it — `readsBoard` is unchanged.
+        showWide: true,
         name: 'Event Header',
         // The two persistent bands framing the canvas: top (competition ·
         // location · dates) and bottom (message · event · phase · round). It

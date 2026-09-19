@@ -5,7 +5,7 @@ import { useSettingsStore } from '../../context/store';
 import { useObsStore } from '../../context/obs';
 import {
     AddSourceDialog, addName, overlayUrl, isBoardScoped, pickKey, pickerPreviewUrl, rowLabel,
-    boardsNote,
+    boardsNote, sceneBoard, picksBoard, offeredOn, pairRows,
 } from './addsource';
 
 /*
@@ -19,8 +19,8 @@ import {
  * one at a time, and honest when only some of them land.
  *
  * And LOOKING IS NOT CHOOSING: the row body previews, the checkbox selects, and
- * which board a board-scoped pick lands on is asked in the preview pane beside
- * the thing it describes. Tests below pin all three, because the failure they
+ * which board a board-scoped pick lands on is asked ONCE, by the board tab the
+ * list is showing. Tests below pin all three, because the failure they
  * replaced — browsing the catalog quietly building a batch — was invisible until
  * the producer read the footer.
  */
@@ -177,17 +177,109 @@ describe('addName', () => {
     });
 });
 
-describe('boardsNote — the row states its boards, it does not control them', () => {
-    it('lists the picked boards on a multi-board rig', () => {
-        expect(boardsNote(layout(), new Set([2, 1]), [1, 2])).toBe('1, 2');
-        expect(boardsNote(layout(), new Set([2]), [1, 2])).toBe('2');
+describe('boardsNote — the row states the boards out of sight', () => {
+    // The tab already says the board the row's own box answers for.
+    it('lists the OTHER picked boards on a multi-board rig', () => {
+        expect(boardsNote(layout(), new Set([2, 1, 3]), [1, 2, 3], 1)).toBe('2, 3');
+        expect(boardsNote(layout(), new Set([2]), [1, 2], 1)).toBe('2');
+        expect(boardsNote(layout(), new Set([1]), [1, 2], 1)).toBe('');
     });
 
-    // A "1" on a rig with one board is a fact with no alternative — noise.
     it('says nothing on a single-board rig, or for a board-less row', () => {
-        expect(boardsNote(layout(), new Set([1]), [1])).toBe('');
-        expect(boardsNote(lowerthird, new Set([null]), [1, 2])).toBe('');
-        expect(boardsNote(layout(), undefined, [1, 2])).toBe('');
+        expect(boardsNote(layout(), new Set([1]), [1], 1)).toBe('');
+        expect(boardsNote(lowerthird, new Set([null]), [1, 2], null)).toBe('');
+        expect(boardsNote(layout(), undefined, [1, 2], 1)).toBe('');
+    });
+});
+
+describe('picksBoard — which rows go under a board’s tab', () => {
+    const eventheader = layout({
+        group: 'eventheader', name: 'Event Header', type: 'eventheader',
+        url: 'http://host:5260/layout/eventheader/eventheader.html',
+        sizeLabel: undefined, parentName: undefined,
+    });
+    const controller = layout({
+        group: 'controller', name: 'controller', type: 'controller',
+        url: 'http://host:5260/layout/controller/controller.html?team=1',
+        sizeLabel: undefined, parentName: 'Controller', team: 1,
+    });
+
+    it('asks a board for the scoreboard and the side-following controller', () => {
+        expect(picksBoard(layout())).toBe(true);
+        expect(picksBoard(controller)).toBe(true);
+    });
+
+    // The Event Header reads a board for one field and is otherwise chrome for
+    // the whole show — Show-wide in the picker, still re-pointable on stage.
+    it('shelves the Event Header show-wide though it can name a board', () => {
+        expect(isBoardScoped(eventheader)).toBe(true);
+        expect(picksBoard(eventheader)).toBe(false);
+        expect(picksBoard(lowerthird)).toBe(false);
+    });
+});
+
+describe('offeredOn — the Results Ticker only under a rotating board', () => {
+    const ticker = layout({
+        group: 'rotator', name: 'Results Ticker', type: 'ticker',
+        url: 'http://host:5260/layout/rotator/ticker.html',
+        sizeLabel: undefined, parentName: undefined,
+    });
+    // It draws the board's rotation pool and nothing else.
+    it('offers the ticker only on a board that is rotating', () => {
+        expect(offeredOn(ticker, 2, [2])).toBe(true);
+        expect(offeredOn(ticker, 1, [2])).toBe(false);
+        expect(offeredOn(ticker, 1, [])).toBe(false);
+    });
+    it('offers everything else on every board', () => {
+        expect(offeredOn(layout(), 1, [])).toBe(true);
+        expect(offeredOn(lowerthird, null, [])).toBe(true);
+    });
+});
+
+const statsbar = (team) => layout({
+    group: 'scoreboard1', name: 'statsbar', type: 'statsbar',
+    url: `http://host:5260/layout/scoreboard1/statsbar.html?team=${team}`,
+    width: 452, height: 118, sizeLabel: undefined, parentName: 'Stat Bar', team,
+});
+
+describe('pairRows — a side 1 / side 2 pair is one row', () => {
+    it('folds both sides into one row, in side order, where the first side was', () => {
+        const rows = pairRows([layout(), statsbar(2), lowerthird, statsbar(1)]);
+        expect(rows.map(r => r.members.length)).toEqual([1, 2, 1]);
+        expect(rows[1].members.map(l => l.team)).toEqual([1, 2]);
+        expect(rows[1].key).toBe(statsbar(1).url);
+    });
+
+    // A lone side is an ordinary row — there is nothing to fold it with.
+    it('leaves a lone side alone', () => {
+        const rows = pairRows([statsbar(1), lowerthird]);
+        expect(rows.map(r => r.members.length)).toEqual([1, 1]);
+    });
+});
+
+describe('sceneBoard — the tab a scene opens on', () => {
+    const item = (url) => ({ url, isPrsh: true });
+    it('picks the board the scene already holds most of', () => {
+        expect(sceneBoard([
+            item('http://h/layout/scoreboard1/scoreboard.html?scoreboard=2'),
+            item('http://h/layout/scoreboard1/statsbar.html?team=1&scoreboard=2'),
+            item('http://h/layout/scoreboard1/statsbar.html?team=1&scoreboard=1'),
+        ], [1, 2])).toBe(2);
+    });
+
+    // A board-less source says nothing about a board — read through the
+    // documented default it would pull every scene toward board 1.
+    it('ignores sources that name no board', () => {
+        expect(sceneBoard([
+            item('http://h/layout/lowerthird/lowerthird.html'),
+            item('http://h/layout/lowerthird/lowerthird.html'),
+            item('http://h/layout/scoreboard1/scoreboard.html?scoreboard=2'),
+        ], [1, 2])).toBe(2);
+    });
+
+    it('falls back to the rig’s first board, never a board it no longer has', () => {
+        expect(sceneBoard([], [2, 3])).toBe(2);
+        expect(sceneBoard([item('http://h/x.html?scoreboard=5')], [1, 2])).toBe(1);
     });
 });
 
@@ -274,41 +366,49 @@ describe('AddSourceDialog', () => {
     });
 
     /*
-     * WHICH BOARD is a property of the pick, not of the catalog row — so it is
-     * asked in the preview pane, beside the thing it describes, and only when
-     * there is a choice to make. One board means the pick silently carries board
-     * 1, exactly as it always did.
+     * WHICH BOARD is asked once, by the tab — and only when the rig has a
+     * choice to make. One board means no tabs and the pick carries board 1.
      */
-    it('asks which board only when the rig has more than one', async () => {
+    it('draws board tabs only when the rig has more than one board', async () => {
         ui('Break');
         await screen.findByText('Scoreboard — Large');
-        preview('Scoreboard — Large');
-        expect(screen.queryByRole('checkbox', { name: /^Scoreboard 1/ })).not.toBeInTheDocument();
+        expect(screen.queryByRole('tablist', { name: 'Board' })).not.toBeInTheDocument();
 
         cleanup();
         useSettingsStore.setState({ scoreboards: { active: [1, 2] } });
         ui('Break');
         await screen.findByText('Scoreboard — Large');
-        preview('Scoreboard — Large');
-        expect(screen.getByRole('checkbox', { name: 'Scoreboard 1' })).toBeInTheDocument();
-        expect(screen.getByRole('checkbox', { name: 'Scoreboard 2' })).toBeInTheDocument();
+        expect(screen.getByRole('tab', { name: 'Scoreboard 1' })).toHaveAttribute('aria-selected', 'true');
+        expect(screen.getByRole('tab', { name: 'Scoreboard 2' })).toBeInTheDocument();
+    });
 
-        // A board-less row is never asked, however many boards the rig has.
-        preview('Lower Third');
-        expect(screen.queryByRole('checkbox', { name: 'Scoreboard 2' })).not.toBeInTheDocument();
+    // A board's tab lists that board's elements; what reads no board sits
+    // beneath on a Show-wide shelf that is the same under every tab.
+    it('puts board-less overlays on a show-wide shelf under the board’s', async () => {
+        useSettingsStore.setState({ scoreboards: { active: [1, 2] } });
+        ui('Break');
+        await screen.findByText('Lower Third');
+        const order = screen.getAllByText(/^(Scoreboard — Large|show-wide · .*|Lower Third)$/)
+            .map(el => el.textContent.split(' ')[0]);
+        expect(order).toEqual(['Scoreboard', 'show-wide', 'Lower']);
     });
 
     /*
      * One catalog row, two boards, two sources. This is why a pick is keyed on
-     * url + board: the row's own checkbox answers "does it go in", and the
-     * preview pane's per-board boxes answer "how many times".
+     * url + board: tick it on one tab, switch, tick it on the other.
      */
-    it('adds one catalog row twice when two boards are ticked', async () => {
+    it('adds one catalog row twice when it is ticked on two tabs', async () => {
         useSettingsStore.setState({ scoreboards: { active: [1, 2] } });
         ui('Break');
         await screen.findByText('Scoreboard — Large');
         select('Scoreboard — Large');
-        fireEvent.click(screen.getByRole('checkbox', { name: 'Scoreboard 2' }));
+        fireEvent.click(screen.getByRole('tab', { name: 'Scoreboard 2' }));
+        // The box answers for THIS tab's board, so it is unticked here…
+        expect(screen.getByRole('checkbox', { name: 'Select Scoreboard — Large' }))
+            .toHaveAttribute('aria-checked', 'false');
+        // …and the row says where else it is going in.
+        expect(screen.getByText('also 1')).toBeInTheDocument();
+        select('Scoreboard — Large');
         fireEvent.click(screen.getByRole('button', { name: /add 2 hidden/i }));
 
         await waitFor(() => expect(addBrowserSource).toHaveBeenCalledTimes(2));
@@ -320,6 +420,40 @@ describe('AddSourceDialog', () => {
             url: 'http://host:5260/layout/scoreboard1/scoreboard.html?size=l&scoreboard=2',
             inputName: 'Scoreboard — Large (Board 2)',
         });
+    });
+
+    // The tab counts its picks — the batch on a tab out of sight is still seen.
+    it('counts each board’s picks on its tab', async () => {
+        useSettingsStore.setState({ scoreboards: { active: [1, 2] } });
+        ui('Break');
+        await screen.findByText('Scoreboard — Large');
+        select('Scoreboard — Large');
+        expect(screen.getAllByTitle(/picked for this board$/).map(el => el.title))
+            .toEqual(['1 picked for this board']);
+        expect(screen.getByRole('tab', { name: 'Scoreboard 1' }))
+            .toContainElement(screen.getByTitle('1 picked for this board'));
+    });
+
+    // Opened from a scene that already holds board 2's sources, the picker is
+    // about board 2 — and "in scene" answers for the tab's board.
+    it('opens on the scene’s board and marks what that board already has', async () => {
+        useSettingsStore.setState({ scoreboards: { active: [1, 2] } });
+        useObsStore.setState({
+            mirroredScenes: ['Game 2'],
+            sceneItems: {
+                'Game 2': [{
+                    sourceName: 'SB2', isPrsh: true,
+                    url: 'http://host:5260/layout/scoreboard1/scoreboard.html?size=l&scoreboard=2',
+                }],
+            },
+        });
+        ui('Game 2');
+        await screen.findByText('Scoreboard — Large');
+        expect(screen.getByRole('tab', { name: 'Scoreboard 2' })).toHaveAttribute('aria-selected', 'true');
+        expect(screen.getByText('in scene')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Scoreboard 1' }));
+        expect(screen.queryByText('in scene')).not.toBeInTheDocument();
     });
 
     /*
@@ -506,34 +640,6 @@ describe('AddSourceDialog', () => {
         expect(screen.getByText(/^Nothing selected yet — tick a box/)).toBeInTheDocument();
     });
 
-    /*
-     * On a multi-board rig it names the BOARD STRIP, not the box in the list — a
-     * board-scoped row can be ticked from either, and only one of them is where
-     * the producer is looking.
-     */
-    it('points a board-scoped row at the board strip it is previewing', async () => {
-        useSettingsStore.setState({ scoreboards: { active: [1, 2] } });
-        ui('Break');
-        await screen.findByText('Scoreboard — Large');
-        preview('Scoreboard — Large');
-
-        expect(screen.getByRole('button', { name: /add hidden/i })).toBeDisabled();
-        expect(screen.getByText(/^Nothing selected yet — tick a board above/))
-            .toBeInTheDocument();
-    });
-
-    // And once a board IS ticked the line is the count again, with Add live.
-    it('drops the prompt the moment a board is ticked', async () => {
-        useSettingsStore.setState({ scoreboards: { active: [1, 2] } });
-        ui('Break');
-        await screen.findByText('Scoreboard — Large');
-        preview('Scoreboard — Large');
-        fireEvent.click(screen.getByRole('checkbox', { name: 'Scoreboard 2' }));
-
-        expect(screen.getByText(/^1 selected/)).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /add hidden/i })).toBeEnabled();
-    });
-
     // The other half: the checkbox is the whole of "this goes in" — and it
     // previews too, because you should see what you just agreed to put on air.
     it('selects on the checkbox, and previews what it selected', async () => {
@@ -547,20 +653,21 @@ describe('AddSourceDialog', () => {
         expect(screen.getByTitle('Lower Third preview')).toBeInTheDocument();
     });
 
-    // Unticking clears EVERY board it was picked on: a box that left a board 2
-    // pick behind would be a lie, and the tray would disagree with the row.
-    it('untick clears every board the row was picked on', async () => {
+    // Unticking takes back only THIS tab's pick — the other board's is still
+    // stated on the row and in the tray, so nothing is left behind unseen.
+    it('untick on one tab leaves the other board’s pick', async () => {
         useSettingsStore.setState({ scoreboards: { active: [1, 2] } });
         ui('Break');
         await screen.findByText('Scoreboard — Large');
         select('Scoreboard — Large');
-        fireEvent.click(screen.getByRole('checkbox', { name: 'Scoreboard 2' }));
+        fireEvent.click(screen.getByRole('tab', { name: 'Scoreboard 2' }));
+        select('Scoreboard — Large');
         expect(screen.getByText(/^2 selected/)).toBeInTheDocument();
 
         select('Scoreboard — Large');
-        expect(screen.getByText(/^Nothing selected yet/)).toBeInTheDocument();
-        expect(screen.getByRole('checkbox', { name: 'Scoreboard 2' }))
-            .not.toBeChecked();
+        expect(screen.getByText(/^1 selected/)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Remove Scoreboard — Large · B1' }))
+            .toBeInTheDocument();
     });
 
     // The preview has to work on a machine with no game running, which is what
@@ -652,6 +759,78 @@ describe('AddSourceDialog', () => {
         select('Lower Third');
         fireEvent.click(screen.getByRole('button', { name: 'Remove Lower Third' }));
         expect(screen.getByText(/^Nothing selected yet/)).toBeInTheDocument();
+    });
+
+    describe('a per-side pair', () => {
+        beforeEach(() => {
+            vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({
+                ok: true, json: () => Promise.resolve([layout(), statsbar(1), statsbar(2), lowerthird]),
+            })));
+        });
+
+        it('lists the pair as one row with a chip per side', async () => {
+            ui('Break');
+            await screen.findByText('Stat Bar');
+            expect(screen.queryByText('Stat Bar — Side 1')).not.toBeInTheDocument();
+            expect(screen.getByRole('checkbox', { name: 'Select Stat Bar — Side 1' })).toBeInTheDocument();
+            expect(screen.getByRole('checkbox', { name: 'Select Stat Bar — Side 2' })).toBeInTheDocument();
+        });
+
+        // The usual answer is both sides, so the row's box gives both — and
+        // the tray folds them back into one chip.
+        it('takes both sides from the row’s box, as one chip in the tray', async () => {
+            ui('Break');
+            await screen.findByText('Stat Bar');
+            select('Stat Bar');
+            expect(screen.getByRole('checkbox', { name: 'Select Stat Bar' }))
+                .toHaveAttribute('aria-checked', 'true');
+            expect(screen.getByText(/^2 selected/)).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: 'Remove Stat Bar' })).toBeInTheDocument();
+
+            fireEvent.click(screen.getByRole('button', { name: /add 2 hidden/i }));
+            await waitFor(() => expect(addBrowserSource).toHaveBeenCalledTimes(2));
+            expect(addBrowserSource.mock.calls.map(c => c[0].inputName))
+                .toEqual(['Stat Bar — Side 1', 'Stat Bar — Side 2']);
+        });
+
+        it('takes one side alone from its chip, and says the box is mixed', async () => {
+            ui('Break');
+            await screen.findByText('Stat Bar');
+            fireEvent.click(screen.getByRole('checkbox', { name: 'Select Stat Bar — Side 2' }));
+            expect(screen.getByRole('checkbox', { name: 'Select Stat Bar' }))
+                .toHaveAttribute('aria-checked', 'mixed');
+            expect(screen.getByRole('button', { name: 'Remove Stat Bar — Side 2' })).toBeInTheDocument();
+            // …and previews the side it took.
+            expect(screen.getByTitle('Stat Bar — Side 2 preview')).toBeInTheDocument();
+
+            // The box from mixed completes the pair rather than clearing it.
+            select('Stat Bar');
+            expect(screen.getByText(/^2 selected/)).toBeInTheDocument();
+            select('Stat Bar');
+            expect(screen.getByText(/^Nothing selected yet/)).toBeInTheDocument();
+        });
+
+        it('removes both sides with the folded chip’s ×', async () => {
+            ui('Break');
+            await screen.findByText('Stat Bar');
+            select('Stat Bar');
+            fireEvent.click(screen.getByRole('button', { name: 'Remove Stat Bar' }));
+            expect(screen.getByText(/^Nothing selected yet/)).toBeInTheDocument();
+        });
+
+        // A pair is ONE stop for the arrows, and Enter takes both sides.
+        it('walks a pair as one row', async () => {
+            ui('Break');
+            await screen.findByText('Stat Bar');
+            const dialog = screen.getByRole('dialog');
+            fireEvent.keyDown(dialog, { key: 'ArrowDown' });
+            fireEvent.keyDown(dialog, { key: 'ArrowDown' });
+            expect(screen.getByTitle('Stat Bar — Side 1 preview')).toBeInTheDocument();
+            fireEvent.keyDown(dialog, { key: 'Enter' });
+            expect(screen.getByText(/^2 selected/)).toBeInTheDocument();
+            fireEvent.keyDown(dialog, { key: 'ArrowDown' });
+            expect(screen.getByTitle('Lower Third preview')).toBeInTheDocument();
+        });
     });
 
     /*
