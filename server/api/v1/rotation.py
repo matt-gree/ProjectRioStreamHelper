@@ -15,7 +15,6 @@ class PoolUpdatePayload(BaseModel):
     left unchanged (merged against the current config, not replaced)."""
     filters: list[dict[str, Any]] | None = None
     scope: str | None = None
-    pinned: list[int] | None = None
     excluded: list[int] | None = None
     refresh_interval: float | None = None
 
@@ -25,11 +24,6 @@ class PlaybackUpdatePayload(BaseModel):
     mode: str | None = None
     gameId: int | None = None
     interval: float | None = None
-
-
-class PinPayload(BaseModel):
-    game_id: int
-    game: dict[str, Any] | None = None
 
 
 class GameIdPayload(BaseModel):
@@ -84,29 +78,6 @@ async def set_playback(
         return ORJSONResponse({"success": True, **await PoolManager.get_config(sb_id)})
     await PoolManager.set_playback(sb_id, updates)
     return ORJSONResponse({"success": True, **await PoolManager.get_config(sb_id)})
-
-
-@method(
-    router.post, "/rotation/{sb_id}/pin",
-    version="1", id="rotation.pin",
-    response_class=ORJSONResponse
-)
-async def pin_game(sb_id: int, payload: PinPayload, session_id: str | None = None) -> ORJSONResponse:
-    """Add a game to the pool's pinned list (always-included regardless of
-    filter) — the "Find a game" search/pin flow, since game IDs aren't
-    human-readable."""
-    await PoolManager.pin_game(sb_id, payload.game_id, payload.game)
-    return ORJSONResponse({"success": True})
-
-
-@method(
-    router.post, "/rotation/{sb_id}/unpin",
-    version="1", id="rotation.unpin",
-    response_class=ORJSONResponse
-)
-async def unpin_game(sb_id: int, payload: GameIdPayload, session_id: str | None = None) -> ORJSONResponse:
-    await PoolManager.unpin_game(sb_id, payload.game_id)
-    return ORJSONResponse({"success": True})
 
 
 @method(

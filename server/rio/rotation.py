@@ -219,33 +219,6 @@ class PoolManager:
             state.interval = merged["interval"]
 
     @classmethod
-    async def pin_game(cls, sb_id: int, game_id, game: dict | None = None):
-        """Add a game to the pool's pinned list (always-included regardless
-        of filter). `game` is the full dict from the frontend's search result
-        — needed to resolve a *completed* game's display fields later, since
-        there's no fetch-by-id endpoint for completed games (only filtered
-        search); live games resolve fresh from OngoingGamePool every tick so
-        don't need caching."""
-        pool_cfg = get_binding(sb_id)["pool"]
-        pinned = list(pool_cfg.get("pinned") or [])
-        if game_id not in pinned:
-            pinned.append(game_id)
-        updates = {"pinned": pinned}
-        if game and not OngoingGamePool.get_game(game_id):
-            cache = dict(pool_cfg.get("pinned_cache") or {})
-            cache[str(game_id)] = game
-            updates["pinned_cache"] = cache
-        await cls.set_pool(sb_id, updates)
-
-    @classmethod
-    async def unpin_game(cls, sb_id: int, game_id):
-        pool_cfg = get_binding(sb_id)["pool"]
-        pinned = [g for g in (pool_cfg.get("pinned") or []) if g != game_id]
-        cache = dict(pool_cfg.get("pinned_cache") or {})
-        cache.pop(str(game_id), None)
-        await cls.set_pool(sb_id, {"pinned": pinned, "pinned_cache": cache})
-
-    @classmethod
     async def exclude_game(cls, sb_id: int, game_id):
         pool_cfg = get_binding(sb_id)["pool"]
         excluded = list(pool_cfg.get("excluded") or [])

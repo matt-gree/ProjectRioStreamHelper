@@ -66,80 +66,59 @@ The fastest way to find the folder is **Connections → MSB image pack → Open 
 
 ## How It Works
 
-The web UI shows one or more **scoreboards**. Each scoreboard is an independent set of state keys (teams, players, score, inning, runners, etc.) that can be populated from one of four input methods. The same state drives both the in-app UI and the OBS browser-source overlays in `public/layout/`.
+The console shows one or more **scoreboards** (boards). Each board is an independent set of state keys (teams, players, score, inning, runners, etc.) and has its own desk on the **Production** tab. The same state drives the console and every OBS browser-source overlay in `public/layout/`.
 
 State changes flow through a single store (`server/state.py`) that broadcasts diffs over SocketIO and optionally (toggle in settings) exports each value as a text file under `user_data/stream_labels/` for use as OBS Text Sources.
 
 ---
 
-## Input Methods
+## Where a Board's Game Comes From
 
-Each scoreboard has a **Source** dropdown (in the score-controls panel) with four options. Switching source changes which inputs are active and which side panel appears.
+There is no source picker. **Board 1 follows the local HUD file** while **Connections → Project Rio → Follow local HUD** is on; every other board (and board 1 with that switch off) takes its games from the Project Rio API. The board desk shows which with a `HUD` / `API` badge on its game-state header.
 
-### 1. Manual
+A board with no game on it is simply empty: you can bind a match to it, and the score, count and runners can be set by hand from the board desk.
 
-You type or click everything yourself: player names, characters, score, balls/strikes/outs, runners on base, captains, superstars. Nothing is read from the game. Use this when there's no live HUD file (e.g., reviewing a recorded set, or operating a scoreboard for a remote player).
+### Local HUD (board 1)
 
-All scoreboard fields are editable in this mode.
-
-### 2. HUD (live local game)
-
-PRSH watches Project Rio's `decoded.hud.json` file and pushes every change into the scoreboard in real time — score, inning, half-inning, batter/pitcher, balls/strikes/outs, runners on base, character stats. This is the right mode when *you* are running the Project Rio client locally.
+PRSH watches Project Rio's `decoded.hud.json` file and pushes every change into the board in real time — score, inning, half-inning, batter/pitcher, balls/strikes/outs, runners on base, character stats. This is the right setup when *you* are running the Project Rio client locally.
 
 **HUD file default paths (auto-detected):**
 - macOS: `~/Library/Application Support/Project Rio/HudFiles/decoded.hud.json`
 - Windows: `%APPDATA%\Project Rio\HudFiles\decoded.hud.json`
 - Override for custom path on the **Connections** tab
 
-The watcher uses OS-level file events (kqueue / inotify / ReadDirectoryChanges via `watchfiles`), so there's no polling cost between game updates.
+The watcher uses OS-level file events (kqueue / inotify / ReadDirectoryChanges via `watchfiles`), so there's no polling cost between game updates. **Re-read HUD** on the board desk reloads the file by hand.
 
-**Side preservation.** Project Rio randomly assigns away/home each game. PRSH keeps the same player on the same side across back-to-back games via three layers:
-1. **Pinned player** (Address Book → **Side**) — give someone a preferred side and PRSH always seats
+**Side preservation.** Project Rio randomly assigns away/home each game. PRSH decides which player sits on side 1 and side 2 on every board, in this order:
+1. **Swap sides** on the board desk — outranks everything for the rest of the current game. **Use auto** hands the sides back.
+2. **The bound match** — a match's side 1 participant is seated on side 1.
+3. **Pinned player** (Address Book → **Side**) — give someone a preferred side and PRSH seats
    them there. Any number of people can have one; if two players in the same game want the *same*
    side, the pin steps aside and the next layer decides.
-2. **Back-to-back detection** — if a returning player switched sides, auto-swap.
-3. **Manual swap button** — persists for the rest of the current game.
+4. **Back-to-back detection** — if a returning player switched sides, auto-swap.
 
-Player text fields (full name, country, pronoun, social handles) remain manually editable in HUD mode; only the Rio-supplied fields lock to the game.
+The desk shows which layer decided with a badge beside **Swap sides**. While a game is feeding the board, the fields the feed writes (score, count, runners) stop taking input — a hand edit would be overwritten by the next frame. Address Book fields (name, pronouns, socials) still resolve from the Address Book.
 
-### 3. Live API Game
+### Project Rio API (every other board)
 
-Pulls active games from the Project Rio API (`https://api.projectrio.app/`) instead of from a local HUD file. Use this for **remote** matches you're casting — pick the game from a searchable list and PRSH polls the API to keep the scoreboard live.
+For **remote** matches you're casting. The board desk's **Games** region picks how the board plays:
 
-**Populating the list (right-side panel when source is "Live API Game"):**
-- **Refresh** — fetch the current set of ongoing games once.
-- **Auto-poll** — keep refreshing on an interval (default 10 s, configurable 5–300 s). When auto-poll is on, the currently loaded game also gets re-applied automatically so its score/state stays current.
-- **Filters** — Username, Vs Username, Game Mode (resolved from the API's tag-set list).
-- **Load** — assign that game's data to the scoreboard.
+**One game** — pick a single game and keep it on the board.
+- **Live** tab: the games being played right now. The list loads when you open it; **Refresh** re-fetches it.
+- **Completed** tab: search finished games by game mode, player, opponent, date range and **Limit** (Rio returns at most 50), then **Find games**.
+- **Put on board** puts that game on the board. A live game stays current on its own — PRSH keeps polling it while it is on a board.
 
-The pinned-player setting is honored here too; if the pinned player is on the "wrong" side of the API game, sides are swapped on load.
+**Rotating** — cycle the board through a pool of games.
+- **Scope**: `Live + Completed`, `Live Only` or `Completed Only`.
+- **Filter**: game modes, player, opponent, and (for completed games) date range and limit. **Find games** fills the pool from the filter.
+- **Seconds per game** — how long each game stays up (5–600 s).
+- **Keep pool current** — re-checks the filter on an interval (10–600 s, default 60) so newly started and newly finished games join the pool and ones that no longer match leave it. Off = the pool only changes when you press **Find games**.
+- **Pool games** opens the pool's member list, where you can exclude a game (and put it back).
+- **Start rotating** / **Stop**, with previous / next to step by hand.
 
-### 4. Rotator
+A rotation that was running when PRSH closed resumes on the next launch. A game that fails to apply logs a warning and the rotation moves on.
 
-Cycles a scoreboard through a list of games at a configurable interval — typically used to display a continuous "now playing” or “previous matches" feed without hand-loading each game. Games can come from the **completed** API endpoint, the **ongoing** endpoint, or both.
-
-**Populating the rotation (right-side panel when source is "Rotator"):**
-
-1. **Search completed games** (top of the panel):
-   - **Username**, **Vs Username**, **Tags** (game modes), **Limit** (games returned).
-   - Click **Search** to fetch from `/games`. Each search creates a *search set* — labeled chips you can stack, remove individually, or reuse. New searches add to the pool rather than replacing it.
-   - Filters persist across page reloads (`settings.rotation_search.*`) and the rotation is re-fetched automatically when the app restarts.
-
-2. **Pull in live games**: open **Manage → Live Games** tab and click **Refresh Live Games**. Live games can be added to the rotation alongside completed ones.
-
-3. **Auto-poll** (optional): keeps re-fetching the completed-games query on an interval so newly finished games are automatically added to the pool.
-
-4. **Manage modal**: a dual-pane (Available / In Rotation) view per pool with column filters (Username, Stadium, Mode, Date range), sortable headers, and pagination. **Add** / **Remove** moves games between panes; **Load** assigns a single game to the scoreboard immediately without changing rotation membership.
-
-5. **Pool selector** — choose `Both`, `Live Only`, or `Completed` to control which games the rotator advances through.
-
-6. **Interval** — seconds between auto-advances (5–600).
-
-7. **Start** — begins the rotation. Use `< / >` to step manually; the badge shows `current/total · seconds-to-next`.
-
-Rotations resume across app restarts. If a rotation was active when PRSH was closed, it re-fetches the completed-game pool and restarts the same rotation in the background on next launch.
-
-**Per-rotation behavior:** stats for every player in the rotation are pre-fetched in the background as soon as the rotation starts, so transitions don't block on the API. A failure to apply one game logs a warning and moves on rather than killing the rotation.
+The pinned-player rule applies to API games too: if a pinned player is on the "wrong" side of a game, the sides are swapped when it is applied.
 
 ---
 
@@ -176,19 +155,19 @@ PRSH can manage an optional `gc-overlay` subprocess that draws controller inputs
 
 ## Multiple Scoreboards
 
-Click **+** in the scoreboard tab strip to add another scoreboard. Each scoreboard:
-- Has its own source (one can be HUD while another is on a Rotator).
+Add a board from the **+** in the Production rack's **BOARDS** section. Each board:
+- Takes its games independently (board 1 can follow the HUD while board 2 rotates API games).
 - Has its own state subtree (`score.{N}.*`).
-- Can be renamed via the pencil icon (the alias appears in the tab and can be referenced from layouts).
-- Can be removed (close button); at least one scoreboard always remains.
+- Can be renamed by clicking the title of its desk.
+- Can be removed from its rack row; at least one board always remains.
 
-Each layout HTML file accepts a `?scoreboard=N` query parameter to bind to a specific scoreboard.
+Each layout HTML file accepts a `?scoreboard=N` query parameter to bind to a specific board (a missing parameter means board 1).
 
 ---
 
 ## Settings & Data
 
-- **`user_data/settings.json`** — all user preferences (HUD path, pinned player, rotation config, auto-poll state, etc.).
+- **`user_data/settings.json`** — all user preferences (HUD path, each board's games and rotation, design settings, etc.).
 - **`user_data/state.json`** — persisted scoreboard state. If the app fails to start due to corrupt state: `echo '{}' > user_data/state.json`.
 - **`user_data/branding/`** — drop tournament logos here; served at `/branding/`.
 - **`user_data/stream_labels/`** — text-file mirror of state (off by default).

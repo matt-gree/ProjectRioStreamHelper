@@ -1,5 +1,5 @@
 from server.utils.router import method
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter
 from fastapi.responses import ORJSONResponse
 from server.rio.stats_tracker import StatsTracker
 from server.rio import stats_api
@@ -42,32 +42,6 @@ async def rio_stats_diagnostics(
 ) -> ORJSONResponse:
     """Return diagnostic info about the last stats API fetch for a scoreboard."""
     return ORJSONResponse(stats_api.get_last_fetch_info(scoreboard_number=scoreboard))
-
-
-@method(
-    router.get, "/rio/key/status",
-    version="1", id="rio.key.status",
-    response_class=ORJSONResponse
-)
-async def rio_key_status(session_id: str | None = None) -> ORJSONResponse:
-    """Check whether a Rio API key is configured (never exposes the key)."""
-    return ORJSONResponse({"configured": stats_api.load_rio_key() is not None})
-
-
-@method(
-    router.put, "/rio/key",
-    version="1", id="rio.key.set",
-    response_class=ORJSONResponse
-)
-async def rio_key_set(request: Request, session_id: str | None = None) -> ORJSONResponse:
-    """Save a Rio API key to user_data/.env and reset the API client."""
-    body = await request.json()
-    key = body.get("key", "").strip()
-    if not key:
-        raise HTTPException(status_code=400, detail="key is required")
-    stats_api.save_rio_key(key)
-    stats_api.reset_client()
-    return ORJSONResponse({"success": True})
 
 
 @method(

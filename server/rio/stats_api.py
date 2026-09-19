@@ -102,18 +102,6 @@ def load_rio_key() -> str | None:
     return None
 
 
-def save_rio_key(key: str) -> None:
-    """Write the Rio API key to user_data/.env."""
-    _ENV_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _ENV_PATH.write_text(f"RIO_KEY={key}\n", encoding="utf-8")
-
-
-def reset_client() -> None:
-    """Discard the cached RioWeb client so it is recreated with the current key."""
-    global _client
-    _client = None
-
-
 def _get_client() -> RioWeb:
     """Lazy singleton for the RioWeb API client."""
     global _client

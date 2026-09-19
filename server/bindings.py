@@ -11,7 +11,8 @@ Replaces the old `scoreboards.sources.{N}.type` enum (manual | hud | live_game)
             "filters":  [ {id, tag: [...], username: [...],
                            vs_username: [...], limit_games}, ... ],
             "scope":    "live" | "completed" | "both",
-            "pinned":   [gameId, ...],   # always in, regardless of filter
+            "pinned":   [gameId, ...],   # always in, regardless of filter —
+                                         # only the 1.x rotation migration fills it
             "excluded": [gameId, ...],   # never in, even if it matches
         },
         "playback": {
