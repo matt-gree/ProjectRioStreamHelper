@@ -4,6 +4,7 @@ socketio.emit is mocked (conftest) and all disk paths are redirected to a temp
 dir (conftest isolate_user_data), so these run without a server or touching
 user_data.
 """
+import orjson
 import pytest
 
 from server.state import State
@@ -521,3 +522,20 @@ async def test_a_jpg_stream_label_downloads_and_is_stored_as_png(tmp_path, monke
     assert not (tmp_path / "logo.jpg").exists()
     with Image.open(tmp_path / "logo.png") as img:
         assert img.format == "PNG"
+
+
+async def test_load_drops_retired_state_keys(isolate_user_data):
+    """A board's keys are overwritten, never swept, so keys nothing writes any
+    more (the ELO cluster, a league TEAM, the old player schedule) would sit in
+    state.json forever."""
+    (isolate_user_data / "state.json").write_bytes(orjson.dumps({
+        "playerSchedule": {"players": {}},
+        "score": {"3": {
+            "winner_incoming_elo": 1500, "loser_result_elo": 1490, "stadium": "Mario Stadium",
+            "player": {"1": {"league_team": "X", "rioName": "A"}},
+        }},
+    }))
+    await State.Load()
+    assert "playerSchedule" not in State.state
+    board = State.state["score"]["3"]
+    assert board == {"stadium": "Mario Stadium", "player": {"1": {"rioName": "A"}}}

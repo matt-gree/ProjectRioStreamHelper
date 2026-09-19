@@ -22,7 +22,6 @@ Isolation overrides for agent/CI runs (see .claude/skills/run-and-verify):
 """
 import os
 import sys
-import shutil
 import subprocess
 from pathlib import Path
 
@@ -187,21 +186,3 @@ def ensure_pyrio_importable() -> None:
     sys.modules["pyrio"] = importlib.import_module("server.rio.pyrio")
 
 
-def ensure_game_data():
-    """Copy bundled game config files to the writable user_data on first run.
-
-    Only relevant for frozen builds where user_data is outside the bundle.
-    """
-    if not _is_frozen():
-        return
-
-    bundled = Path(sys._MEIPASS) / "user_data" / "games"
-    target = user_data_dir() / "games"
-
-    if not bundled.is_dir():
-        return
-    if target.is_dir():
-        return  # already copied
-
-    logger.info(f"[paths] Copying bundled game data to {target}")
-    shutil.copytree(str(bundled), str(target))

@@ -244,6 +244,70 @@ def _retire_seeded_containers(production: dict) -> bool:
     return True
 
 
+# Settings no code reads any more. `_deep_merge` keeps whatever the file had,
+# so a key the app stopped using stays in every settings.json forever unless it
+# is named here. Dotted paths; an `overlays.{ns}.{key}` entry is also dropped
+# from that namespace's per-board children (`overlays.{ns}.{N}.{key}`).
+_RETIRED_SETTINGS = (
+    # TournamentStreamHelper leftovers
+    "hotkeys",
+    "general.profanity_filter",
+    "general.disable_autoupdate",
+    "general.disable_overwrite",
+    "general.control_score_from_stage_strike",
+    "challonge",
+    "ui.color_scheme",
+    # 1.x game feeds and the old global pin
+    "ongoing_games",
+    "completed_games",
+    "project_rio.pinned_hud_only",
+    # overlay settings whose controls are gone
+    "overlays.scene",
+    "overlays.global.textShadowX",
+    "overlays.global.textShadowY",
+    "overlays.roster.portraitStyle",
+    "overlays.scorecard.showBases",
+    "overlays.scorecard.showRosters",
+    "overlays.schedule.showCompleted",
+)
+
+
+def _drop_retired(settings: dict) -> bool:
+    """Remove every `_RETIRED_SETTINGS` path, plus the 1.x board config once
+    the binding migration no longer needs it. Returns True if anything went."""
+    changed = False
+
+    def drop(node, parts):
+        nonlocal changed
+        if not isinstance(node, dict):
+            return
+        head, rest = parts[0], parts[1:]
+        if not rest:
+            if head in node:
+                node.pop(head)
+                changed = True
+            return
+        drop(node.get(head), rest)
+
+    for path in _RETIRED_SETTINGS:
+        parts = path.split(".")
+        drop(settings, parts)
+        if parts[0] == "overlays" and len(parts) == 3:
+            ns = (settings.get("overlays") or {}).get(parts[1])
+            if isinstance(ns, dict):
+                for key, child in ns.items():
+                    if key.isdigit():
+                        drop(child, parts[2:])
+
+    boards = settings.get("scoreboards")
+    if isinstance(boards, dict) and boards.get("binding_schema", 1) >= 2:
+        for legacy in ("sources", "rotation"):
+            if legacy in boards:
+                boards.pop(legacy)
+                changed = True
+    return changed
+
+
 def _resolve_version() -> str:
     """Resolve app version via scripts/freeze-version.py.
 
@@ -395,18 +459,6 @@ class Settings:
         },
         "general": {
             "disable_export": True,
-            "profanity_filter": True,
-            "disable_autoupdate": False,
-            "disable_overwrite": False
-        },
-        "hotkeys": {
-            "load_set": None,
-            "team1_score_up": None,
-            "team1_score_down": None,
-            "team2_score_up": None,
-            "team2_score_down": None,
-            "reset_scores": None,
-            "swap_teams": None
         },
         "project_rio": {
             "hud_path": "",
@@ -429,13 +481,9 @@ class Settings:
             "aliases": {},
             # Per-scoreboard binding: pool (membership: filters/scope/pinned/
             # excluded) + playback (mode/gameId/interval) + stats_tag.
-            # Created/migrated in Load(); see server/bindings.py for the model
-            # and ~/.claude/plans/pool-playback-unification.md for the design.
-            # `sources` and `rotation` are retained read-only for one release
-            # as migration fallbacks and are no longer written.
-            "sources": {
-                "1": {"type": "manual", "api_game_id": None}
-            },
+            # Created/migrated in Load(); see server/bindings.py for the model.
+            # The 1.x `sources` / `rotation` it migrates from are dropped by
+            # `_drop_retired` once the migration has run.
             # Which `schedule.queues` entry each board takes its next fixture
             # from: {"2": "losers"}. Deliberately NOT part of `binding` — that
             # is pool + playback + stats_tag, "which GAMES fill this board",
@@ -1083,6 +1131,9 @@ class Settings:
                 binding[key] = {"pool": pool, "playback": playback, "stats_tag": stats_tag}
 
             scoreboards["binding_schema"] = 2
+            await cls.Save()
+
+        if _drop_retired(cls.settings):
             await cls.Save()
 
     @classmethod

@@ -724,3 +724,58 @@ async def test_overlay_schema_v5_keeps_a_role_the_file_already_named(isolate_use
     assert glob["displayFont"] == "Bebas Neue"
     assert glob["bodyFont"] == "Bebas Neue"
     assert glob["monoFont"] == "Roboto Mono"
+
+
+"""Retired settings.
+
+`_deep_merge` keeps every key the file had, so a setting the app stopped
+reading stays in settings.json forever unless Load drops it.
+"""
+
+
+async def test_retired_settings_are_dropped_on_load(isolate_user_data):
+    _write_settings(isolate_user_data, {
+        "general": {"disable_export": False, "profanity_filter": True},
+        "hotkeys": {"swap_teams": None},
+        "challonge": {"api_key": "x"},
+        "ongoing_games": {"auto_poll": True},
+        "overlays": {
+            "scene": {"team1ShowYouTube": True},
+            "global": {"textShadowX": 2, "accentColor": "#fff"},
+            "scorecard": {"showBases": True, "1": {"showBases": False, "showStadium": True}},
+        },
+    })
+    await Settings.Load()
+    s = Settings.settings
+    assert s["general"] == {"disable_export": False}
+    for gone in ("hotkeys", "challonge", "ongoing_games"):
+        assert gone not in s
+    assert "scene" not in s["overlays"]
+    assert "textShadowX" not in s["overlays"]["global"]
+    assert s["overlays"]["global"]["accentColor"] == "#fff"
+    assert "showBases" not in s["overlays"]["scorecard"]
+    # the per-board pin goes too, and the board's other settings stay
+    assert s["overlays"]["scorecard"]["1"] == {"showStadium": True}
+    on_disk = orjson.loads((isolate_user_data / "settings.json").read_bytes())
+    assert "hotkeys" not in on_disk
+
+
+async def test_legacy_board_config_goes_once_migrated(isolate_user_data):
+    _write_settings(isolate_user_data, {"scoreboards": {
+        "active": [1],
+        "sources": {"1": {"type": "live_game", "api_game_id": 7}},
+        "rotation": {"1": {"interval": 30}},
+    }})
+    await Settings.Load()
+    boards = Settings.settings["scoreboards"]
+    # migrated from the legacy config first...
+    assert boards["binding"]["1"]["playback"]["gameId"] == 7
+    # ...then the legacy config is gone
+    assert "sources" not in boards and "rotation" not in boards
+
+
+async def test_a_fresh_install_writes_no_retired_defaults(isolate_user_data):
+    await Settings.Load()
+    s = Settings.settings
+    assert "hotkeys" not in s
+    assert "sources" not in s["scoreboards"]

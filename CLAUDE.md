@@ -118,7 +118,7 @@ Every change flows through `State.Set(key, value)` or `State.SetBatch(entries)`.
 - `State.Save()` — diff from tracked keys only.
 - File export off by default (`general.disable_export: True`).
 
-**Scoreboard config lives in Settings, not State.** `scoreboards.active`, `scoreboards.aliases`, `scoreboards.binding.{N}` and `scoreboards.match_queue.{N}` are **Settings** keys. Legacy `scoreboards.sources` / flat `scoreboards.rotation` settings are read-only migration fallbacks — never write them.
+**Scoreboard config lives in Settings, not State.** `scoreboards.active`, `scoreboards.aliases`, `scoreboards.binding.{N}` and `scoreboards.match_queue.{N}` are **Settings** keys. The 1.x `scoreboards.sources` / flat `scoreboards.rotation` settings are read once by the binding migration and then dropped (`_drop_retired`, `server/settings.py`) — never write them. **A setting the app stops reading goes on `_RETIRED_SETTINGS` in the same change** (and a retired state key on `server/state.py`'s lists): `_deep_merge` keeps every key the file had, so otherwise it sits in every settings.json forever.
 
 **A new per-board KEY — state or settings — must be torn down in BOTH `remove_scoreboard` and `POST /scoreboards/reset`.** Board ids are re-used (`_lowest_available_id`), so a leftover isn't dormant, it's inherited by the next board with that id. Read that as per-board **data**, not per-board *setting*: stating it as a settings rule is exactly how `postgame.{N}` — per-board state that doesn't live under `score.{N}`, so `State.Unset("score.{N}")` never reached it — sat outside the teardown while all four settings keys were handled right. The two paths also drifted into opposite halves of the same pair (see below), so **fix both or neither**; `tests/integration/test_scoreboards_api.py` pins the whole set against id re-use.
 
@@ -374,7 +374,7 @@ If the app fails to launch due to corrupt `user_data/state.json`: `echo '{}' > u
 | Game Summary captain hero art (size/placement/mirror) | `public/layout/lib/captain-framing.js` (measured art + per-side frames) + `src/routes/layouts/captain-framing.test.js` (pins the no-clip / face-clear / one-size contract) |
 | Tournament integration | `server/startgg/`, `server/api/v1/startgg.py` |
 | Which bracket phase is on air | `src/routes/production/bracket.jsx` (the shared `useBracketDesk` + `BracketPhasePicker`), surfaced on the **source that draws it** (`stage/bracket.jsx`) and the lower-third's bracket slot. One loaded phase app-wide (`bracket.*`); there is no Bracket desk — both consumers already carried the picker |
-| Update character data | `user_data/games/msb/base_files/config.json` |
+| Update character data | the `server/rio/pyrio` submodule (the server's names and stats) + `src/data/msb.js` (the console's pick lists) |
 | Add team logo | drop `.png` into `user_data/game_assets/msb/teamLogos/` named after the MSB team |
 
 ---

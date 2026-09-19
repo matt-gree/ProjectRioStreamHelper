@@ -35,8 +35,8 @@ description: PRSH match fixture model, scoreboard bindings (pool + playback + de
   shutdown. `PoolManager` (`server/rio/rotation.py`) owns membership refresh +
   cycling and mirrors live status into State `scoreboards.rotation.{N}.*`
   (read-only for everyone else).
-- Legacy `scoreboards.sources` / flat `scoreboards.rotation` Settings are
-  read-only migration fallbacks — never write them.
+- The 1.x `scoreboards.sources` / flat `scoreboards.rotation` Settings are read
+  once by the binding migration and then dropped at load — never write them.
 - `POST /scoreboards/reset` is the escape hatch for stale board/binding state.
 
 ## The Match fixture (`server/match.py`)

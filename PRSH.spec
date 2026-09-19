@@ -111,9 +111,6 @@ a = Analysis(
         # available inside a packaged .app/.exe.
         *([('server/_version.py', 'server')] if Path('server/_version.py').is_file() else []),
 
-        # Default user_data game config (only if directory exists)
-        *([('user_data/games', 'user_data/games')] if os.path.isdir('user_data/games') else []),
-
         # A PACKAGE THAT READS ITS OWN VERSION AT IMPORT TIME NEEDS ITS
         # .dist-info IN THE BUNDLE. PyInstaller bundles modules, not
         # distribution metadata, so `importlib.metadata` finds nothing at

@@ -13,7 +13,7 @@ from server.http_cache import REVALIDATE, RevalidatingStaticFiles
 from server.utils.tasks import spawn, drain
 from server.api.v1.assets import get_msb_assets_path
 from server.api.v1.layouts import layout_url
-from server.paths import app_root, user_data_dir, ensure_game_data, rio_visualizer_dir
+from server.paths import app_root, user_data_dir, rio_visualizer_dir
 from server.rio.game_pool import OngoingGamePool, CompletedGamePool
 from server.rio.rotation import PoolManager
 from server.rio.provider import RioGameDataProvider
@@ -77,7 +77,6 @@ async def load_manifest() -> dict:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # on_startup
-    ensure_game_data()
     consumer = asyncio.create_task(State.Consumer())
     # Owns state.json: the queue raises a dirty flag, this turns it back into a
     # write, at most once per State.PERSIST_INTERVAL. Started before Load() so

@@ -1,5 +1,4 @@
 // Mario Superstar Baseball character and team data
-// Source: ProjectRioStreamHelper/user_data/games/msb/base_files/config.json
 
 export const MSB_CAPTAINS = [
   "Mario", "Luigi", "Peach", "Daisy", "Yoshi", "Birdo",

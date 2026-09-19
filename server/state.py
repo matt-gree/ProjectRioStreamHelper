@@ -59,6 +59,34 @@ def _safe_segment(name) -> str:
 PERSIST_INTERVAL = 1.0
 
 
+
+# State keys nothing writes or reads any more. A board's keys are only ever
+# overwritten, never swept, so a retired key stays in state.json for good
+# unless it is dropped here: the ELO cluster (deleted 2026-08-29), the league
+# TEAM (books have no teams), and `playerSchedule`, whose writer went with the
+# old Setup tab.
+_RETIRED_BOARD_KEYS = (
+    "winner_incoming_elo", "winner_result_elo",
+    "loser_incoming_elo", "loser_result_elo",
+)
+_RETIRED_PLAYER_KEYS = ("league_team",)
+_RETIRED_TOP_KEYS = ("playerSchedule",)
+
+
+def _drop_retired(state: dict) -> None:
+    for key in _RETIRED_TOP_KEYS:
+        state.pop(key, None)
+    for board in (state.get("score") or {}).values():
+        if not isinstance(board, dict):
+            continue
+        for key in _RETIRED_BOARD_KEYS:
+            board.pop(key, None)
+        for side in (board.get("player") or {}).values():
+            if isinstance(side, dict):
+                for key in _RETIRED_PLAYER_KEYS:
+                    side.pop(key, None)
+
+
 class State:
     state = {}
     last_state = {}
@@ -296,6 +324,7 @@ class State:
                 cls.state = await json.loads(await f.read())
         except Exception:
             logger.warning("unable to load state.json, using default dict")
+        _drop_retired(cls.state)
         cls.last_state = copy.deepcopy(cls.state)
 
     @classmethod

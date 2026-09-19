@@ -97,8 +97,10 @@ The classic trap: **scoreboard bindings are Settings, not State.**
 `scoreboards.binding.{N}` (pool + playback + stats_tag, schema in
 `server/bindings.py`) is a Settings key. The State-side
 `scoreboards.rotation.{N}.*` is a **read-only mirror** written by `PoolManager`
-for overlays — never write config there. Legacy `scoreboards.sources` / flat
-`scoreboards.rotation` Settings keys are migration fallbacks — never write them.
+for overlays — never write config there. The 1.x `scoreboards.sources` / flat
+`scoreboards.rotation` Settings keys are read once by the migration and dropped
+at load (`_drop_retired`) — never write them. A key the app stops reading goes
+on `_RETIRED_SETTINGS` (settings) or the retired lists in `server/state.py`.
 
 ## State namespace map
 
