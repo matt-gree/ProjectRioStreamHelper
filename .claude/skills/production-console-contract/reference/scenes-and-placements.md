@@ -281,7 +281,9 @@ that triggered it — the console only edits and reports.
 
 ### The Add picker
 
-`src/routes/production/sources/addsource.jsx`, opened by the **+** in a scene's section
+`src/routes/production/sources/addsource.jsx` (the dialog; its pure row logic —
+`pickKey`, `pairRows`, `offeredOn` and the rest named below — is `addcatalog.js`,
+and **+ New** is `newcontainer.jsx`), opened by the **+** in a scene's section
 header: *layouts (+ boards) → preview → add them all to THIS scene*. Two panes —
 catalog left, live preview right.
 

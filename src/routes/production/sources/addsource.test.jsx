@@ -3,10 +3,11 @@ import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/re
 import { TooltipProvider } from '../../../components/ui/tooltip';
 import { useSettingsStore } from '../../../context/store';
 import { useObsStore } from '../../../context/obs';
+import { AddSourceDialog } from './addsource';
 import {
-    AddSourceDialog, addName, overlayUrl, isBoardScoped, pickKey, pickerPreviewUrl, rowLabel,
+    addName, overlayUrl, isBoardScoped, pickKey, pickerPreviewUrl, rowLabel,
     boardsNote, sceneBoard, picksBoard, offeredOn, pairRows,
-} from './addsource';
+} from './addcatalog';
 
 /*
  * The Add picker is the other half of "the rack lists only what's in the
