@@ -5,10 +5,8 @@ import { useSettingsStore } from '../../../context/store';
 import { useStagingStore } from '../../../context/staging';
 import { invalidateDesignPackages } from '../../design/designPackage';
 import { invalidateLayoutWhitelist } from '../../design/layoutWhitelist';
-import {
-    ElementStyleSettings, ElementStyleOverrides, RENDERABLE, chunkDefs, groupDefs,
-    seedValue,
-} from './overlay-settings';
+import { ElementStyleSettings, RENDERABLE, chunkDefs, groupDefs } from './overlay-settings';
+import { ElementStyleOverrides, seedValue } from './style-overrides';
 import { OVERRIDABLE_GLOBAL_KEYS, GLOBAL_DESIGN_DEFAULTS } from '../../design/designConstants';
 
 /*

@@ -12,7 +12,8 @@ import {
 import { SourceStrip } from '../sources/sourcestrip';
 import { Subject } from '../subject';
 import { DirectStage, FedStage } from './generic';
-import { ElementStyleSettings, ElementStyleOverrides } from './overlay-settings';
+import { ElementStyleSettings } from './overlay-settings';
+import { ElementStyleOverrides } from './style-overrides';
 import { IntroRow, introTypeFor } from './intro';
 import SizeMatchRow from './sizematch';
 import RedrawRow from './resolution';

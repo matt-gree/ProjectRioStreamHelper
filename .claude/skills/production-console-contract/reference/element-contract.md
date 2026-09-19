@@ -61,7 +61,8 @@ arrangement is supposed to mean.
 ### Style, and style overrides
 
 A stage panel carries two settings sections and they are different kinds of
-thing (`stage/overlay-settings.jsx`):
+thing (`stage/overlay-settings.jsx` for Style, `stage/style-overrides.jsx` for
+the overrides):
 
 - **Style** — the element's OWN settings, from `LAYOUT_SETTINGS[type]`. A def
   marked `appPalette` is DROPPED under a package that paints the element itself
