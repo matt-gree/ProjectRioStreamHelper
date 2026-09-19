@@ -4,7 +4,7 @@ import {
     quickFaceFor, isPinnable, stageBodyFor, settingsTypeOf,
 } from './elements';
 import { OVERRIDE_CAPABLE_TYPES, LAYOUT_SETTINGS } from '../design/designConstants';
-import { FEED_OPTION_HOOKS } from './feed-pickers';
+import { FEED_OPTION_HOOKS } from './containers/feed-pickers';
 
 /*
  * PICKABLE_FEEDS decides whether the source strip's Push slot can do anything
@@ -178,7 +178,7 @@ describe('element URL binding (match)', () => {
      * A container's id is slugged from a name the PRODUCER types, and it rides
      * in the query string — so `container.html?container=lowerthird-box` is a
      * legal source for a container built to hold the Lower Third. The rack asks
-     * the direct elements FIRST (./placements) and takes the first yes, so an
+     * the direct elements FIRST (./sources/placements) and takes the first yes, so an
      * element whose matcher answers to that URL doesn't merely mis-label a row:
      * the container loses its member roster, its feed and its stage panel, and
      * the element's panel is left driving a source that ignores every setting

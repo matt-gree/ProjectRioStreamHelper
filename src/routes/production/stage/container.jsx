@@ -7,7 +7,7 @@ import { IconToggle, ListRow, NumberRow, SelectRow, TextRow } from '../kit';
 import {
     CONTAINER_MEMBERS, fitsContainer, isSharedMember, useContainerActions,
     useContainerDefs,
-} from '../containers';
+} from '../containers/containers';
 import { BindingNote } from './generic';
 import AutomationSection from './automation';
 
@@ -212,7 +212,7 @@ export default function ContainerStage({ element, placement }) {
                 delete — and this one has the LARGER blast radius: removing a
                 definition takes its feed, its resting occupant and every
                 automation rule that drove one of its members (`detach`/`dropRules`
-                in ../containers). A producer who has wired a container up cannot
+                in ../containers/containers). A producer who has wired a container up cannot
                 rebuild that from the undo they don't have. */}
             <div className="mt-1 flex min-h-7 items-center border-t border-border/60 pt-2">
                 <Popover open={confirmDel} onOpenChange={setConfirmDel}>

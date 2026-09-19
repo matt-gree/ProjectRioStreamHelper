@@ -6,8 +6,8 @@ import { SimpleTooltip } from '../../../components/ui/simple-tooltip';
 import ScaledIframe from '../../../components/ScaledIframe';
 import { usePersistentState } from '../../../hooks/usePersistentState';
 import { useSettingsStore, useStateStore } from '../../../context/store';
-import { instanceUrl } from '../bindings';
-import { resolveIntent } from '../suggest';
+import { instanceUrl } from '../board/bindings';
+import { resolveIntent } from '../containers/suggest';
 import { introTypeFor } from './intro';
 
 // Stable empty intent — a fresh {} each render would defeat useShallow.

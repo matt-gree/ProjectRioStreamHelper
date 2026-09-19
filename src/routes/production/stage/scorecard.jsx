@@ -31,7 +31,7 @@ import { OverlaySettingGroups, useOverlaySettings } from './overlay-settings';
  * rendering. It used to be a per-element
  * persisted preference resolved separately by each, which meant the surfaces
  * agreed only because they happened to read the same localStorage key. Now the
- * board is part of the selection/pin itself (../instances), so there is nothing
+ * board is part of the selection/pin itself (../sources/instances), so there is nothing
  * left to disagree about, and there is no board dropdown here: switching board
  * means picking the other Scorecard row in the rack.
  */

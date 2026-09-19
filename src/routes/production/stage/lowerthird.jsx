@@ -12,8 +12,8 @@ import {
     ToggleChip, ToggleChips,
 } from '../kit';
 import { MoveButtons, StagedDot, stageStateSet } from '../controls';
-import { matchDisplayLabel } from '../matches';
-import { useActiveBoards, useBoardLabel } from '../boards';
+import { matchDisplayLabel } from '../match/matches';
+import { useActiveBoards, useBoardLabel } from '../board/boards';
 import { BracketPhasePicker, useBracketDesk } from '../bracket';
 import { DirectStage } from './generic';
 

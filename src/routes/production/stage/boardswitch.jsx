@@ -3,11 +3,11 @@ import { useObsStore } from '../../../context/obs';
 import { stageOrRun, usePending } from '../../../context/staging';
 import { notifications } from '../../../lib/notify';
 import { SelectRow } from '../kit';
-import { useActiveBoards, useBoardLabel } from '../boards';
+import { useActiveBoards, useBoardLabel } from '../board/boards';
 import { boardOfUrl } from '../../../lib/obs-binding';
 import { readsBoard } from '../elements';
-import { instanceId } from '../instances';
-import { isFedPlacement, placementId } from '../placements';
+import { instanceId } from '../sources/instances';
+import { isFedPlacement, placementId } from '../sources/placements';
 
 /*
  * "Which board does this source read?" — on the source itself.

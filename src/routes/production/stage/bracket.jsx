@@ -10,12 +10,12 @@ import { BracketPhasePicker, useBracketDesk } from '../bracket';
  * The phase used to be chosen on a Bracket desk, on the reasoning that one
  * global publish deserves one owner. What that missed is that every consumer
  * already carries the picker: this stage's own `useBracketDesk`, and the
- * lower-third's bracket slot (../stage/lowerthird). The desk was a third copy of
+ * lower-third's bracket slot (./lowerthird). The desk was a third copy of
  * a control the two surfaces that need it already had, holding a permanent rack
  * row for a workflow that only matters when something is on air to draw it.
  *
  * So it lives here, on the source. The rack lists sources across EVERY scene
- * (../placements), so a bracket source anywhere in OBS is reachable without
+ * (../sources/placements), so a bracket source anywhere in OBS is reachable without
  * changing scenes — which is what the desk was really providing.
  *
  * The phase is still global (`bracket.*`, one loaded phase for all bracket

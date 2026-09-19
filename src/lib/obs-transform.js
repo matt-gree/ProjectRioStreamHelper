@@ -98,7 +98,7 @@ export function inputSize(t) {
  * For an element that fits its artwork to whatever viewport it is handed, the
  * drawn size IS the whole of "how big is it" and `sizeMatchTransform` is the
  * whole answer. For one that draws at an ABSOLUTE size — today the Player Name,
- * the same one `SCALE_SENSITIVE` names in ../routes/production/placements.js —
+ * the same one `SCALE_SENSITIVE` names in ../routes/production/sources/placements.js —
  * it is half of it. That element's type size is a number of pixels solved
  * against the page's own viewport, so what reaches the canvas is
  *

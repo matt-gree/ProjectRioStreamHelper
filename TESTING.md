@@ -144,7 +144,7 @@ code, a test pins them together — each fails the moment one side changes alone
 | Scoreboard sizes and canvases (`theme_contracts.CONTRACTS`) | `tests/unit/test_size_dims_parity.py` |
 | Which elements come in per-side pairs (`perSide` / `_TEAM_VARIANTS`) | `tests/unit/test_per_side_parity.py` |
 | Catalog display names | `tests/unit/test_catalog_names_parity.py` |
-| A board's lifecycle (`lifecycle_of` / `boardLifecycle`) | one case table, `tests/fixtures/board_lifecycle.json`, read by `test_board_lifecycle_parity.py` **and** `src/routes/production/board-lifecycle.test.js` — a behaviour, so parity is shared cases rather than parsing one language from the other |
+| A board's lifecycle (`lifecycle_of` / `boardLifecycle`) | one case table, `tests/fixtures/board_lifecycle.json`, read by `test_board_lifecycle_parity.py` **and** `src/routes/production/board/board-lifecycle.test.js` — a behaviour, so parity is shared cases rather than parsing one language from the other |
 | A layout's `<meta>` whitelist vs `LAYOUT_SETTINGS` | `src/routes/production/stage/eventheader.test.jsx` and the layouts tests |
 | Theme slot and modifier grammar survives the Figma round trip | `tests/unit/test_figma_template.py` (slot counts per name; every `data-*` a mount reads is in `_MODIFIERS`) |
 | Every layout declares a sample bundle | `tests/overlay/overlay-sample.test.js` |

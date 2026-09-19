@@ -3,12 +3,12 @@ import { useShallow } from 'zustand/react/shallow';
 import { useStateStore } from '../../../context/store';
 import { Text } from '../../../components/ui/primitives';
 import { StatusLine, ToggleRow, KIT_SECTION } from '../kit';
-import { setSourceVisibility, useDisplayedEnabled } from '../bindings';
-import { useContainerBinding } from '../feeds';
-import { useContainerDefs, useContainerOf, useMemberScope } from '../containers';
+import { setSourceVisibility, useDisplayedEnabled } from '../board/bindings';
+import { useContainerBinding } from '../containers/feeds';
+import { useContainerDefs, useContainerOf, useMemberScope } from '../containers/containers';
 import { boardOfUrl } from '../../../lib/obs-binding';
-import { useConsoleOffline } from '../placements';
-import { PostgameCalloutPicker, PostgameVsPicker } from '../feed-pickers';
+import { useConsoleOffline } from '../sources/placements';
+import { PostgameCalloutPicker, PostgameVsPicker } from '../containers/feed-pickers';
 
 /*
  * The two stage bodies every element gets for free from its flavor:
@@ -131,7 +131,7 @@ export const ReadinessNote = memo(function ReadinessNote({ element, board }) {
  *
  * `scoreboard` is the frame of reference the pick is made in, and it is a PROP
  * because the two rows answer it differently: a container slot takes the
- * container's scope (../containers `useMemberScope`), the element's own source
+ * container's scope (../containers/containers `useMemberScope`), the element's own source
  * takes the board its URL names. It used to default to 1 in each picker, so a
  * container scoped to board 2 listed board 1's roster and armed a board-1 pick
  * that Push then sent into it.

@@ -4,14 +4,14 @@ import { useStateStore } from '../../context/store';
 import { isOnStrip } from '../../context/commentary';
 import { boardOfUrl } from '../../lib/obs-binding';
 import { GameStageChip, SubjectRow } from './kit';
-import { resolveIntent } from './suggest';
+import { resolveIntent } from './containers/suggest';
 import { isPickableFeed } from './elements';
-import { useContainerDefs, useContainerOf } from './containers';
-import { isFedPlacement } from './placements';
-import { memberName, useFeedReason } from './automations';
+import { useContainerDefs, useContainerOf } from './containers/containers';
+import { isFedPlacement } from './sources/placements';
+import { memberName, useFeedReason } from './containers/automations';
 import { bandLine, useBands, useFieldValues } from './eventheader';
 import { useSideLabels } from './sides';
-import { boardLifecycle } from './boards';
+import { boardLifecycle } from './board/boards';
 
 /*
  * THE SUBJECT — what an element is currently drawing.
@@ -73,7 +73,7 @@ export function battingSide(homeTeam, halfInning) {
  * The live game on one board: who, the score, and where in the game we are.
  *
  * Exported because the board DESK draws the same line about the same board
- * (./desks/board). One sentence with two homes is how the console's two board
+ * (./board/desk). One sentence with two homes is how the console's two board
  * surfaces would start disagreeing about what is on air.
  */
 export const BoardGameSubject = memo(function BoardGameSubject({ board }) {
@@ -122,7 +122,7 @@ export const BoardGameSubject = memo(function BoardGameSubject({ board }) {
      * capture and the series credit are built on. ENDED is the FEED losing the
      * game (a quit, a crash, an ongoing API game that dropped out of the pool):
      * we know it will not update again, NOT that it finished, so what is on
-     * screen may be a mid-game frame. See `boardLifecycle` (./boards).
+     * screen may be a mid-game frame. See `boardLifecycle` (./board/boards).
      */
     return (
         <SubjectRow

@@ -1,13 +1,13 @@
 import { memo, useState } from 'react';
 import { Text } from '../../components/ui/primitives';
 import { ActionRow, SelectRow } from './kit';
-import { FEED_OPTION_HOOKS, flattenGroups } from './feed-pickers';
+import { FEED_OPTION_HOOKS, flattenGroups } from './containers/feed-pickers';
 import { quickFaceFor, settingsTypeOf, sizeOptionFor } from './elements';
-import { useContainerPush } from './feeds';
-import { useMemberScope } from './containers';
-import { isFedPlacement } from './placements';
-import { boardOfDeskId, useMatchBindableBoards } from './boards';
-import { useNextUp } from './queue';
+import { useContainerPush } from './containers/feeds';
+import { useMemberScope } from './containers/containers';
+import { isFedPlacement } from './sources/placements';
+import { boardOfDeskId, useMatchBindableBoards } from './board/boards';
+import { useNextUp } from './match/queue';
 import { takeNextMatch } from '../../context/match';
 import { notifications } from '../../lib/notify';
 import { BoardGameSubject, Subject } from './subject';
@@ -20,7 +20,7 @@ import { LowerThirdSegmentChips } from './stage/lowerthird';
 import { CommentarySeatChips } from './stage/commentary';
 import { HitVizQuickActions } from './stage/hitvisualizer';
 import { MatchupQuickRow } from './stage/matchup';
-import { useBoardDesk } from './desks/board';
+import { useBoardDesk } from './board/data';
 
 /*
  * Quick faces — the ≤2-row control set an element exposes on a rail card
@@ -205,7 +205,7 @@ const BoardQuickFace = memo(function BoardQuickFace({ id }) {
     // …and nothing to take at all on a rotating board: a match has two fixed
     // sides and a rotation has none, so the server 409s the bind. Same single
     // client statement of the rule the Match desk's chips and the board panel's
-    // fixture slot read (./boards useMatchBindableBoards).
+    // fixture slot read (./board/boards useMatchBindableBoards).
     const canBind = useMatchBindableBoards()(sb);
     const next = canBind ? nextUp : null;
     const [refreshing, setRefreshing] = useState(false);

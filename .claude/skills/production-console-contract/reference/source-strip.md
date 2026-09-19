@@ -5,7 +5,7 @@
 ## The source strip — OBS transport in the panel header
 
 Every stage panel wears the same three-slot strip in `PanelShell`'s
-`primaryAction` slot (`src/routes/production/sourcestrip.jsx`). It is the ONE
+`primaryAction` slot (`src/routes/production/sources/sourcestrip.jsx`). It is the ONE
 place a producer adds a source, shows or hides it, and hands content to a
 shared container — the three verbs that were previously spread across four
 renderings (a `DirectStage` row, a `ContainerTarget` row, hitvisualizer's own

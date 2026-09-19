@@ -2,14 +2,14 @@ import { memo, useMemo } from 'react';
 import { Text } from '../../../components/ui/primitives';
 import { PanelShell, chipFor } from '../kit';
 import { isPinnable, settingsTypeOf, sizeOptionFor } from '../elements';
-import { DESK_PREFIX } from '../instances';
-import { placementDims } from '../bindings';
-import { useContainerDefs } from '../containers';
+import { DESK_PREFIX } from '../sources/instances';
+import { placementDims } from '../board/bindings';
+import { useContainerDefs } from '../containers/containers';
 import {
     isFedPlacement, placementTarget, resolvePlacement, useConsolePlacements, useConsoleScenes,
     usePlacementLabel,
-} from '../placements';
-import { SourceStrip } from '../sourcestrip';
+} from '../sources/placements';
+import { SourceStrip } from '../sources/sourcestrip';
 import { Subject } from '../subject';
 import { DirectStage, FedStage } from './generic';
 import { ElementStyleSettings, ElementStyleOverrides } from './overlay-settings';
@@ -39,7 +39,7 @@ import ContainerStage from './container';
  * heavy authoring.
  *
  * Desk bodies are passed in rather than imported so this module stays free of
- * the page shell (they move into ../desks/ in the next slice).
+ * the page shell (see ../board/desk and ../match/desk).
  */
 
 // Exported for `generic.test.jsx`, which renders every one of them to hold the

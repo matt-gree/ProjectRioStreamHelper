@@ -4,9 +4,11 @@ import { TooltipProvider } from '../../components/ui/tooltip';
 import { useSettingsStore, useStateStore } from '../../context/store';
 import { SocketContext } from '../../context/socket';
 import { useStagingStore } from '../../context/staging';
-import MatchDesk from './desks/match';
-import BoardDesk, { boardTypeTag, sideReasonStatus } from './desks/board';
-import { boardLifecycle } from './boards';
+import MatchDesk from './match/desk';
+import BoardDesk from './board/desk';
+import { boardTypeTag } from './board/data';
+import { sideReasonStatus } from './board/sides';
+import { boardLifecycle } from './board/boards';
 
 // Desks are content workflows, not OBS ones: they must be fully usable with
 // OBS disconnected. Both fetch on mount (game modes / nothing), so stub it.

@@ -217,7 +217,7 @@ async def test_completed_clears_is_starred_for_all_slots(mock_socket):
 # ---------------------------------------------------------------------------
 # 3. Reset key coverage
 #
-# These mirror what `resetGame` in src/routes/production/desks/board.jsx sends.
+# These mirror what `resetGame` in src/routes/production/board/data.js sends.
 # We apply a live game to State (giving everything a non-default value),
 # then apply the same key→value pairs the reset button would send, and
 # assert the resulting state matches what we'd expect from a clean slate.
@@ -325,7 +325,7 @@ async def test_reset_covers_all_live_game_keys(mock_socket):
     """Every key written by a live game must be covered by the reset.
 
     The reset key list in apply_reset() above is the source of truth for what
-    the board desk's `resetGame` sends (src/routes/production/desks/board.jsx).
+    the board desk's `resetGame` sends (src/routes/production/board/data.js).
     This test catches any key a future live-game addition writes that the reset
     doesn't clear.
     """
@@ -340,5 +340,5 @@ async def test_reset_covers_all_live_game_keys(mock_socket):
     uncovered = live_keys - reset_keys
     assert not uncovered, (
         f"Live game writes keys not covered by reset:\n  {sorted(uncovered)}\n"
-        "Add them to resetGame in desks/board.jsx and apply_reset() in this test."
+        "Add them to resetGame in board/data.js and apply_reset() in this test."
     )

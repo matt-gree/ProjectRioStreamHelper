@@ -32,7 +32,7 @@
  * ways to not be on.
  *
  * WHICH KIND OF ROW THIS IS COMES FROM `slot`, not `parent` — the one statement
- * of that question lives in ../placements (`isFedPlacement`), and this asked it
+ * of that question lives in ../sources/placements (`isFedPlacement`), and this asked it
  * a second way. They agree for a row either builder produced, because those
  * carry both; they part company on a row RESOLVED from a stored id, which
  * `sourcelessPlacement` rebuilds with its slot and no parent. Two spellings of

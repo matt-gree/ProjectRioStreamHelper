@@ -1,6 +1,6 @@
 """The board-game lifecycle is derived in TWO runtimes, from one table.
 
-``server/boards.py`` ``lifecycle_of`` and ``src/routes/production/boards.js``
+``server/boards.py`` ``lifecycle_of`` and ``src/routes/production/board/boards.js``
 ``boardLifecycle`` answer the same question — is a feed actually driving this
 board — for the server's projector and the console's chips respectively. They
 share a BEHAVIOUR rather than a literal, so parity is pinned with cases
@@ -39,7 +39,7 @@ def test_the_js_side_reads_the_same_table():
     inlining its own cases) — which would leave this file passing while the two
     implementations were free to disagree again.
     """
-    js = (REPO / "src/routes/production/board-lifecycle.test.js").read_text()
+    js = (REPO / "src/routes/production/board/board-lifecycle.test.js").read_text()
     assert "board_lifecycle.json" in js
 
 

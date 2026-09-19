@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { create } from 'zustand';
 import OBSWebSocket, { EventSubscription } from 'obs-websocket-js';
 import { useSettingsStore } from './store';
-import { renameForUrl, upgradeRetiredName } from '../routes/production/sourcename';
+import { renameForUrl, upgradeRetiredName } from '../routes/production/sources/sourcename';
 import { notifications } from '../lib/notify';
 import {
     renderedSize, sizeMatchTransform, redrawPlan, rescaleForSource, isCropped, stretchOf,

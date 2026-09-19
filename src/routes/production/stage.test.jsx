@@ -148,7 +148,7 @@ describe('stageBodyComponent', () => {
 /*
  * Deleting a container definition takes its feed, its resting occupant and every
  * automation rule driving one of its members with it (`detach`/`dropRules` in
- * ./containers) — a larger blast radius than the match delete one page over,
+ * ./containers/containers) — a larger blast radius than the match delete one page over,
  * which has always confirmed. It must not be reachable in one click.
  */
 describe('Container delete', () => {

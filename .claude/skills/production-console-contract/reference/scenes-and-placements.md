@@ -4,7 +4,7 @@
 
 ## Scenes are the grouping axis
 
-`src/routes/production/placements.js`. A **placement** is the console's row
+`src/routes/production/sources/placements.js`. A **placement** is the console's row
 identity, and it is the third and last term in a chain the console converged on:
 
 | | is | keyed |
@@ -148,7 +148,7 @@ generic element cannot.
 
 ### Containers are producer-built
 
-`src/routes/production/containers.js`. A container is ONE OBS browser source
+`src/routes/production/containers/containers.js`. A container is ONE OBS browser source
 that hosts whichever of its **members** the producer feeds it. It is not a file:
 `settings.production.container_defs.{id}` = `{ name, width, height, members }`,
 and one generic shell (`/layout/shared/container.html?container={id}`) renders
@@ -242,7 +242,7 @@ any of them.
 
 ### Container automations
 
-`src/routes/production/automations.js` + `stage/automation.jsx`. A container can
+`src/routes/production/containers/automations.js` + `stage/automation.jsx`. A container can
 feed **itself**: a rule watches a state key and shows one of its members for a
 dwell, then returns to the container's resting occupant. The engine is
 **server-side, inside the state-write path** (`server/automations.py` on
@@ -281,7 +281,7 @@ that triggered it — the console only edits and reports.
 
 ### The Add picker
 
-`src/routes/production/addsource.jsx`, opened by the **+** in a scene's section
+`src/routes/production/sources/addsource.jsx`, opened by the **+** in a scene's section
 header: *layouts (+ boards) → preview → add them all to THIS scene*. Two panes —
 catalog left, live preview right.
 
@@ -420,7 +420,7 @@ catalog left, live preview right.
 
 ## Instances — the board is part of the identity
 
-`src/routes/production/instances.js` is now just the id grammar; discovery lives
+`src/routes/production/sources/instances.js` is now just the id grammar; discovery lives
 in `placements.js` (above). An element is a TYPE ("Scoreboard"); an instance is
 one of that type on the broadcast ("Scoreboard on board 2"). A `scope: 'board'`
 element is URL-scoped (`?scoreboard=N`), so two of them are two independent

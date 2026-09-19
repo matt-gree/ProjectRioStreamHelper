@@ -778,7 +778,7 @@ describe('Rack fed containers', () => {
 // that never touched OBS, and the producer is told why the scene list is empty
 // rather than shown a blank column.
 /*
- * With no OBS the rack becomes a CATALOG instead of a mirror (./placements
+ * With no OBS the rack becomes a CATALOG instead of a mirror (./sources/placements
  * `catalogPlacements`). It used to collapse to three desk rows and an apology,
  * which made every stage — lower-third authoring, container rosters, scorecard
  * bands, all the previews — unreachable because of the one thing PRSH can't do

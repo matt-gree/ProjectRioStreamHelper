@@ -93,7 +93,7 @@ export const IntroRow = memo(function IntroRow({ element }) {
      * here is in a column, so the label just sits against what it names.
      *
      * The row this ends up on is the overrides section's footer (see
-     * ../stage/index.jsx): two panel-level set-once controls that each had a
+     * ./index.jsx): two panel-level set-once controls that each had a
      * near-empty row to themselves now share one.
      */
     return (

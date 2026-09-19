@@ -217,7 +217,7 @@ Rules the runtime encodes:
 
 Sizes live in three places (the registry here, `ELEMENTS` in the console,
 `container_defs` in Settings) with no shared module between them;
-`production/containers.test.jsx` pins all three. That guard exists because a
+`production/containers/containers.test.jsx` pins all three. That guard exists because a
 census once quoted `stats.html`'s 452×118 for the *fed* stats bar (325×120) and
 seeded a container 2px too short for its only member.
 

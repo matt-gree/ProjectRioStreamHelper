@@ -2,7 +2,7 @@
   "_comment": [
     "SHARED CASE TABLE for the board-game lifecycle, read by BOTH runtimes:",
     "tests/unit/test_board_lifecycle_parity.py (server/boards.py lifecycle_of) and",
-    "src/routes/production/board-lifecycle.test.js (boards.js boardLifecycle).",
+    "src/routes/production/board/board-lifecycle.test.js (boards.js boardLifecycle).",
     "",
     "A behaviour, not a table, is what these two share — so parity is pinned with",
     "cases rather than by parsing one language from the other (the shape",

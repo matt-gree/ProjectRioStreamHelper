@@ -25,7 +25,7 @@ import { cn } from '../../../lib/utils';
  * the one word for the amber case that most sounds like the grey one. A final
  * game has a result to capture; a stalled one has none, and its score and inning
  * are a frozen mid-game frame that goes on looking entirely plausible. The state
- * key underneath stays `stranded` (../boards): it is the better word for the
+ * key underneath stays `stranded` (../board/boards): it is the better word for the
  * condition and the wrong one on a baseball scoreboard, where a stranded runner
  * is a different thing entirely.
  *
@@ -46,7 +46,7 @@ import { cn } from '../../../lib/utils';
  * quietly showing an 18-hour-old score is exactly that.
  *
  * It needs no dismissing — `restored` is cleared by the next real frame
- * (../boards), so the chip retires itself the moment tonight's game starts.
+ * (../board/boards), so the chip retires itself the moment tonight's game starts.
  */
 export const GAME_STAGE = {
     restored: {
@@ -84,7 +84,7 @@ export const GameChip = memo(function GameChip({ children, title, className }) {
 });
 
 /*
- * `lifecycle` is ../boards `boardLifecycle`. Renders nothing for a stage with no
+ * `lifecycle` is ../board/boards `boardLifecycle`. Renders nothing for a stage with no
  * badge (an empty board), so a caller can drop it in unguarded.
  *
  * `at` is an optional ISO timestamp (`score.{N}.restored_at`) folded into the

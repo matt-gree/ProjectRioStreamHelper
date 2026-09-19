@@ -16,7 +16,7 @@ import { cn } from '../../../lib/utils';
 import { FieldRow, KIT_INPUT, TextRow } from '../kit';
 import { StagedDot } from '../controls';
 import { SubFieldPicker } from '../subfield-picker';
-import { matchDisplayLabel, matchIds } from '../matches';
+import { matchDisplayLabel, matchIds } from '../match/matches';
 import { useSideLabels } from '../sides';
 import { DirectStage } from './generic';
 

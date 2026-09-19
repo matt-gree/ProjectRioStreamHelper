@@ -2,13 +2,13 @@ import { memo, useMemo } from 'react';
 import { Plus, Power, Trash2 } from 'lucide-react';
 import { Text } from '../../../components/ui/primitives';
 import { IconToggle, ListRow, NumberRow, SegmentedRow, SelectRow } from '../kit';
-import { useActiveBoards, useBoardLabel } from '../boards';
-import { useContainerActions } from '../containers';
+import { useActiveBoards, useBoardLabel } from '../board/boards';
+import { useContainerActions } from '../containers/containers';
 import { useSideLabels } from '../sides';
 import {
     REASONS, memberName, templatesFor, useAutomationActions, useContainerAutomations,
     useFeedReason,
-} from '../automations';
+} from '../containers/automations';
 
 /*
  * A container's automation panel — where a container is taught to feed itself.

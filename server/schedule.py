@@ -43,7 +43,7 @@ DEFAULT_QUEUE_ID = "main"
 def queue_id_for(title: str, taken) -> str:
     """A stable slug id for a queue title, deduped against ``taken``.
 
-    Mirrors ``containerIdFor`` (src/routes/production/containers.js): the id is
+    Mirrors ``containerIdFor`` (src/routes/production/containers/containers.js): the id is
     minted once from the title and never changes, so renaming edits ``title`` —
     the only field any surface displays — and never breaks a board's assignment.
     """

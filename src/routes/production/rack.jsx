@@ -17,17 +17,17 @@ import { ELEMENTS, isPinnable } from './elements';
 import {
     isFedPlacement, placementTarget, stretchOfPlacement, togglePin as togglePinIn, useConsoleOffline,
     useConsolePlacements, useConsoleScenes, usePlacementLabel,
-} from './placements';
+} from './sources/placements';
 import { GameStageChip, StateChip, chipFor } from './kit';
 import {
     removeSourceFromScene, setSourceVisibility, useDisplayedEnabled, useOtherScenesWith,
     useRemovalStaged,
-} from './bindings';
-import { useContainerPush } from './feeds';
-import { useWaitingCount } from './queue';
-import { useMemberScope } from './containers';
-import { boardDeskId, useActiveBoards, useBoardLabel, useBoardLifecycle } from './boards';
-import { useBoardDeskRow, BOARD_TAG_TITLE } from './desks/board';
+} from './board/bindings';
+import { useContainerPush } from './containers/feeds';
+import { useWaitingCount } from './match/queue';
+import { useMemberScope } from './containers/containers';
+import { boardDeskId, useActiveBoards, useBoardLabel, useBoardLifecycle } from './board/boards';
+import { useBoardDeskRow, BOARD_TAG_TITLE } from './board/data';
 import { notifications } from '../../lib/notify';
 
 /*
@@ -42,7 +42,7 @@ import { notifications } from '../../lib/notify';
  * STATING it, it is already the thing they cut between, and it groups by the
  * only fact that decides whether a source is reaching air.
  *
- * Rows are PLACEMENTS (./placements): one row per source per scene, so the same
+ * Rows are PLACEMENTS (./sources/placements): one row per source per scene, so the same
  * overlay in Game and in Break is two rows with their own air state and their
  * own eye — which is the point, since staging the Break scene before cutting to
  * it means toggling that copy and not this one.
@@ -95,7 +95,7 @@ export function useShutTiers() {
 // never pinned anything starts with the two cards nearly every stream uses.
 // `null` (never touched) is deliberately distinct from `[]` (emptied on
 // purpose) — only the former seeds. Stored in pre-scene form on purpose: they
-// resolve to wherever those sources actually are (./placements).
+// resolve to wherever those sources actually are (./sources/placements).
 export const RAIL_SEED = ['scoreboard', 'statsbar'];
 
 export function seededRail(rail) {
@@ -695,7 +695,7 @@ const AddButton = memo(function AddButton({ scene, onAdd, label }) {
 });
 
 /*
- * The CATALOG tier — the rack with no OBS to mirror (./placements
+ * The CATALOG tier — the rack with no OBS to mirror (./sources/placements
  * `catalogPlacements`).
  *
  * One section, no scenes, because with OBS closed there are none to group by:

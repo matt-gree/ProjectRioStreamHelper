@@ -110,7 +110,7 @@ description: PRSH match fixture model, scoreboard bindings (pool + playback + de
       row ("3 queued" against no matches). It outlived restarts too, which is why
       `ensure_migrated` now re-projects on an already-migrated rig instead of
       returning flat. `reproject` is a no-op when the model and its projection agree.
-  - The client mirrors the rule in `src/routes/production/queue.js` (`useNextUp`)
+  - The client mirrors the rule in `src/routes/production/match/queue.js` (`useNextUp`)
     **for the button's label only**; the take sends no id. Keep the two in step.
   - **Waiting ≠ next.** `not_waiting_reason` is per fixture, so on a night of fresh
     drafts every one of them is waiting and exactly one is next. Any surface saying
@@ -147,7 +147,7 @@ description: PRSH match fixture model, scoreboard bindings (pool + playback + de
   - Tests: `tests/unit/api/test_schedule_next.py`,
     `tests/unit/api/test_schedule_queue.py`,
     `tests/unit/api/test_schedule_queues.py`,
-    `src/routes/production/queue.test.jsx`.
+    `src/routes/production/match/queue.test.jsx`.
 - **`stage` is a constrained input.** `MatchPayload.stage` is
   `Literal["draft", "live", "post"]` because the desk's badge is a control and the
   value gates Up next by an exact match on `"draft"` — an unvalidated string let a
@@ -222,7 +222,7 @@ event, guarded to write once) → `post` (post-game capture, or auto-retire).
 
 Those are the only *automatic* transitions, and they only ever move forward — which
 is why the **producer can set the stage by hand**, from the Match desk's stage badge
-(`StageControl` in `desks/match.jsx`, a `PUT /match/{m}` with `{stage}`). Sending a
+(`StageControl` in `match/desk.jsx`, a `PUT /match/{m}` with `{stage}`). Sending a
 played fixture back to `draft` is the way out of the strand above, and it is the
 only one. The control is **momentary, not staged**, matching that desk's existing
 rule that authoring and lifecycle hops run immediately (Next game is the same write
@@ -262,7 +262,7 @@ Project Rio randomizes away/home per game. Each HUD frame,
   could only be arbitrary, and an arbitrary pin is worse than none: the producer
   would watch one of their two pins silently lose every game.
 - The deciding layer is mirrored to `score.{N}.side_reason`, and the board desk
-  (`src/routes/production/desks/board.jsx`, `sideReasonLine`) is what reads it —
+  (`src/routes/production/board/desk.jsx`, `sideReasonLine`) is what reads it —
   one sentence per layer. A new layer needs a sentence there or the board will
   state nothing about it.
 - Manual scope = current game only: `_preserve_player_sides` clears

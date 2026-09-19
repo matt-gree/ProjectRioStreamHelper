@@ -5,7 +5,7 @@ import { useStateStore } from '../context/store';
 import { bindScoreboard, dismissMatchConflict } from '../context/match';
 import { Button } from './ui/button';
 import { useRackSelection } from '../routes/production/rack';
-import { boardDeskId } from '../routes/production/boards';
+import { boardDeskId } from '../routes/production/board/boards';
 
 /*
  * MatchConflictBanner — app-wide notification for a per-game match identity

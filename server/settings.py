@@ -563,7 +563,7 @@ class Settings:
             # itself is board-agnostic and reads the same on every board.
             #
             # A producer adds rules from the quick-add library (the templates
-            # live with the console, src/routes/production/automations.js — the
+            # live with the console, src/routes/production/containers/automations.js — the
             # engine only interprets rules). The rule id is
             # `{container}:{template}`, which is `ruleIdFor` over there: two
             # containers running one canned rule is how a mirrored pair is

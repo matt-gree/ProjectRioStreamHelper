@@ -15,7 +15,7 @@ import BracketStage from './bracket';
  *
  * The objection to moving it was reachability: with OBS connected the rack lists
  * only sources that are really in a scene. It does not hold — the rack lists
- * every SCENE's sources (../placements), so a bracket source anywhere in OBS
+ * every SCENE's sources (../sources/placements), so a bracket source anywhere in OBS
  * gets a row, and with OBS closed the catalog tier lists every element outright.
  */
 

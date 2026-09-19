@@ -17,7 +17,7 @@
  * the first.
  *
  * So the rule lives here, in the overlay runtime, dependency-free, and
- * `src/routes/production/suggest.js` imports it — the same shape as
+ * `src/routes/production/containers/suggest.js` imports it — the same shape as
  * `container-members.js`, which the console imports rather than keeping a
  * second copy of. A parity TEST would only prove two implementations agreed on
  * the cases someone thought to write down; there is one implementation instead.

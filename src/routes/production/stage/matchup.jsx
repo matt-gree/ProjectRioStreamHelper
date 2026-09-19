@@ -5,7 +5,7 @@ import { stageOrRun, usePending } from '../../../context/staging';
 import { clearMatchup, fetchMatchup } from '../../../context/match';
 import { Text } from '../../../components/ui/primitives';
 import { ActionRow, SelectRow } from '../kit';
-import { matchDisplayLabel, matchIds } from '../matches';
+import { matchDisplayLabel, matchIds } from '../match/matches';
 import { DirectStage } from './generic';
 
 /*

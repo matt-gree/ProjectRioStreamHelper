@@ -64,7 +64,7 @@ const DEFAULT_FADE_MS = 200;
  * DEFINITION (`container_defs.{id}.scope`), and both writers of the feed key
  * apply it before writing: the automation engine via `_scope_of`
  * (server/automations.py), a producer's Push via `useMemberScope`
- * (src/routes/production/feeds.js). So the payload that arrives is already
+ * (src/routes/production/containers/feeds.js). So the payload that arrives is already
  * scoped, and a mirrored pair is two scoped definitions — not two differently
  * URL-scoped sources of one. Don't re-add a `scope` argument: a second place to
  * apply it can only disagree with the first.

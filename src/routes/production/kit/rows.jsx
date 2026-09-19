@@ -96,7 +96,7 @@ export const SubjectRow = memo(function SubjectRow({ text, badge, meta, tone, ti
             {/* `badge` leads, because a state you can see in one glance should
                 not be read. It is a NODE, not a string the row styles: the one
                 thing that belongs here is a lifecycle a caller already has a
-                palette for (../kit GameChip), and inventing a second colour
+                palette for (. GameChip), and inventing a second colour
                 vocabulary in the row that renders it is how the console's hues
                 stop meaning anything. `meta` stays what it always was — the
                 dimmed qualifier, in words. */}

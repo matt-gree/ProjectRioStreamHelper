@@ -16,14 +16,14 @@ import { runObs } from './controls';
 import { Rack, seededRail, useRackSelection, useRailPins } from './rack';
 import {
     togglePin as togglePinIn, useConsolePlacements, useConsoleScenes,
-} from './placements';
-import { AddSourceDialog } from './addsource';
+} from './sources/placements';
+import { AddSourceDialog } from './sources/addsource';
 import { SampleModeSwitch } from './sample';
 import { Stage } from './stage';
 import { Rail } from './rail';
-import MatchDesk from './desks/match';
-import BoardDesk from './desks/board';
-import { boardDeskId, setBoardAlias, useActiveBoards, useBoardLabel } from './boards';
+import MatchDesk from './match/desk';
+import BoardDesk from './board/desk';
+import { boardDeskId, setBoardAlias, useActiveBoards, useBoardLabel } from './board/boards';
 
 /*
  * Production console — the producer's broadcast control board. Three surfaces
@@ -41,7 +41,7 @@ import { boardDeskId, setBoardAlias, useActiveBoards, useBoardLabel } from './bo
  * "fire now" actions (scene switches, Take, replay, spotlight, clock
  * start/pause, post-game capture) always run immediately.
  *
- * Rows come from the SCENES themselves (./placements): every PRSH source in
+ * Rows come from the SCENES themselves (./sources/placements): every PRSH source in
  * every scene the console can see, grouped under the scene it lives in. There
  * is no phase selector — OBS's scene list is the producer stating the shape of
  * their show, where "phase" was PRSH guessing at it.
@@ -305,7 +305,7 @@ export default function Production() {
     // Pins are matched by the placement they resolve to, not by stored string —
     // so unpinning removes the card the producer is looking at even when it is
     // stored in a pre-scene or pre-instance form, and pinning can't produce two
-    // cards for one source. See ./placements.
+    // cards for one source. See ./sources/placements.
     const scenes = useConsoleScenes();
     const placements = useConsolePlacements(scenes);
     const togglePin = (id) => setRail(prev => togglePinIn(seededRail(prev), id, placements));

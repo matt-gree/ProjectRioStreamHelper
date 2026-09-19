@@ -8,8 +8,8 @@ import { Badge } from '../../../components/ui/badge';
 import { notifications } from '../../../lib/notify';
 import { cn } from '../../../lib/utils';
 import { KIT_INPUT, ListRow, StatusLine } from '../kit';
-import { matchDisplayLabel } from '../matches';
-import { useQueueOrder } from '../queue';
+import { matchDisplayLabel } from '../match/matches';
+import { useQueueOrder } from '../match/queue';
 import { LAYOUT_SETTINGS, settingOn } from '../../design/designConstants';
 // THE OVERLAY'S OWN RULE, imported rather than restated — see `useDrawnIds`.
 import { scheduleRows, DEFAULTS } from '../../../../public/layout/lib/schedule-mount';
@@ -25,7 +25,7 @@ import { DirectStage } from './generic';
  * picker, which meant tonight's running order was edited inside a ticker's
  * settings — a second list of the same matches, in a different place from the
  * fixtures it orders, free to disagree with the Match desk's stack. Membership and
- * position now live on the Match desk (`desks/match.jsx`), where the fixtures are
+ * position now live on the Match desk (`match/desk.jsx`), where the fixtures are
  * authored and where the position number sits on the row it belongs to.
  *
  * What stays is what is genuinely this overlay's: its HEADING, and each match's

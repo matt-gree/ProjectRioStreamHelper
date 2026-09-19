@@ -25,7 +25,7 @@ const el = (id) => ELEMENTS.find(e => e.id === id);
 /*
  * A pinned MEMBER'S SLOT — the card for an element's place on a container,
  * which is what the fed face belongs to. A pin of the element's own source
- * gets the direct face instead (see placementFlavor in ./placements), which is
+ * gets the direct face instead (see placementFlavor in ./sources/placements), which is
  * the whole point: Push is the slot's verb, not the element's.
  */
 const slot = (container) => ({

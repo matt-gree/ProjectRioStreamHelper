@@ -26,14 +26,14 @@
  * are real at once, for every element that owns a source — which is now all of
  * them, since being hostable is read off the mount registry
  * (`container-members.js`) rather than declared by a flag here. So `flavor`
- * answers only "does it own a source of its own"; ./placements decides which
+ * answers only "does it own a source of its own"; ./sources/placements decides which
  * kind of row you are looking at, and every surface branches on the placement
  * (see placementFlavor there). An element that is `fed` has one possible answer,
  * which is why the floor still earns a name.
  *
  * Binding is by URL: each element matches the streamer's OBS browser source(s)
  * whose URL is its PRSH layout, so there's no manual wiring in the common case.
- * Rows are derived SOURCE → ROW, per scene (./placements) — matching is not
+ * Rows are derived SOURCE → ROW, per scene (./sources/placements) — matching is not
  * scoped to the program scene, and nothing searches from an element to a source.
  *
  * Console contract (production-console-contract skill) — the registry also
@@ -85,7 +85,7 @@
  *
  *   URL-scoped  — the board is fixed by the source (`?scoreboard=N`). These get
  *                 `scope: 'board'` and per-board settings, and two of them in
- *                 one scene are two instances (./instances). A source's board
+ *                 one scene are two instances (./sources/instances). A source's board
  *                 is re-pointed from its panel's Board row (stage/boardswitch),
  *                 which rewrites the param on the OBS source in place.
  *   `boardParam` — the layout READS `?scoreboard=` but its settings are global,
@@ -522,7 +522,7 @@ export const ELEMENTS = [
         // Anchored to the layout, like the roster's and the callouts'. The
         // bare word answered to `container.html?container=lowerthird-box`,
         // i.e. to a producer's CONTAINER — and the source→row lookup asks
-        // the direct elements first (./placements), so the container lost
+        // the direct elements first (./sources/placements), so the container lost
         // its roster, its feed and its stage to an element whose panel then
         // drove a source that doesn't read `overlays.lowerthird.*`.
         match: (url) => /\/layout\/lowerthird\/lowerthird\.html/i.test(url),
@@ -723,7 +723,7 @@ export const ELEMENTS = [
  * hid behind "Other phases" — four jobs the OBS scene list does better, because
  * the producer already built their scenes around the same structure and already
  * cuts between them. Elements are now listed wherever their SOURCE is
- * (./placements); if an element belongs in your break, put it in your break
+ * (./sources/placements); if an element belongs in your break, put it in your break
  * scene.
  */
 
@@ -809,7 +809,7 @@ export const settingsTypeOf = (el) => el?.settingsType ?? el?.id;
  * Takes the tag rather than the raw value because that is what a placement
  * carries — read off a source's URL when one exists, written by the catalog
  * tier when one doesn't. Callers wanting dimensions should use
- * `placementDims` (./bindings) rather than reaching in here.
+ * `placementDims` (./board/bindings) rather than reaching in here.
  */
 export function sizeOptionFor(element, variant) {
     if (!element?.sizes || !variant) return null;

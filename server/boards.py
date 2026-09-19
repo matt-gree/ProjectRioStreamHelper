@@ -1,7 +1,7 @@
 """WHERE A BOARD'S GAME IS UP TO — the server half of a question the console
 already answered.
 
-``boardLifecycle`` (src/routes/production/boards.js) has derived this for the
+``boardLifecycle`` (src/routes/production/board/boards.js) has derived this for the
 rack and the board desk for a while; the server writes every input it reads
 (``game_over``, ``game_completed``, ``live_following``) and never once read them
 back together. So server-side code that needed to know whether a feed was

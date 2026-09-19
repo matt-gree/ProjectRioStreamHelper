@@ -6,10 +6,10 @@ import { notifications } from '../../../lib/notify';
 import { Button } from '../../../components/ui/button';
 import { FieldRow } from '../kit';
 import { StagedDot } from '../controls';
-import { sideSibling, isScaleSensitive } from '../placements';
-import { sideOfVariant } from '../instances';
+import { sideSibling, isScaleSensitive } from '../sources/placements';
+import { sideOfVariant } from '../sources/instances';
 import { useSideLabels } from '../sides';
-import { useBoardTag } from '../boards';
+import { useBoardTag } from '../board/boards';
 
 /*
  * "Make this one the same size as the other one."

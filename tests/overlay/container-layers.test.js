@@ -11,7 +11,7 @@ import {
  * by absolute `/layout/…` URL and pulls in three.js and GSAP. Splitting the
  * MECHANICS out from the REGISTRY is what makes them testable — the registry
  * (which mount, which native size, which sample) stays in fed-container.js and
- * is pinned against the console by `production/containers.test.jsx`.
+ * is pinned against the console by `production/containers/containers.test.jsx`.
  *
  * What matters here is what the automation in the next phase depends on:
  * members stay mounted so a swap can cross-fade instead of cutting, only the

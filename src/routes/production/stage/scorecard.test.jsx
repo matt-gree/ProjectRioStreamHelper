@@ -26,7 +26,7 @@ afterEach(() => {
     vi.unstubAllGlobals();
 });
 
-// The selection carries the board (../instances), so "the Scorecard stage for
+// The selection carries the board (../sources/instances), so "the Scorecard stage for
 // board 2" is a selection, not a dropdown inside the panel.
 const ui = (selection = 'scorecard:1') =>
     render(<TooltipProvider><Stage selection={selection} /></TooltipProvider>);

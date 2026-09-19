@@ -6,8 +6,10 @@ description: The Production tab console architecture (rack / stage / quick rail)
 # Production Console Contract
 
 > **STATUS: SHIPPED** (2026-07-18). The console is the Production tab: rack
-> (`rack.jsx`) · stage (`stage/`) · rail (`rail.jsx`), with desks under
-> `desks/` and the row kit in `kit/`. `production.jsx` is a ~280-line shell.
+> (`rack.jsx`) · stage (`stage/`) · rail (`rail.jsx`), with the board desk under
+> `board/` (one file per region), the Match desk under `match/`, containers and
+> their feeds under `containers/`, OBS sources under `sources/`, and the row kit
+> in `kit/`. `production.jsx` is a ~280-line shell.
 > If this file and the code disagree, one of them is a bug — fix both in the
 > same change (same rule as CLAUDE.md).
 >

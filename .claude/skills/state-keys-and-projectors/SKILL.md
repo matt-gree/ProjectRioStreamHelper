@@ -118,7 +118,7 @@ score.{N}.*                    per-board live game + projected fixture (N ≥ 1,
   match_conflict   ← identity-gate conflict dict {active, matchId, expected, feed} | None
   series_decided   ← projected match winner side (1|2) or ""
   side_reason      ← which cascade layer decided orientation: manual|match|pin|back_to_back|""
-                     (read by the board desk — desks/board.jsx sideReasonLine)
+                     (read by the board desk — board/desk.jsx sideReasonLine)
   game_completed   ← False for a live game, True for a completed one
   game_over        ← has the game on this board REACHED ITS END? HUD path only,
                      re-derived per frame from pyrio's `HudObj.game_over` (MSB's
@@ -128,7 +128,7 @@ score.{N}.*                    per-board live game + projected fixture (N ≥ 1,
                      draw final framing — setting THAT at the last out would
                      strip a live-looking board the instant the third out lands.
                      This one changes nothing on air; clearing stays the
-                     producer's (desks/board.jsx StaleGameRow).
+                     producer's (board/desk.jsx StaleGameRow).
                      The ONLY staleness signal that survives a restart: it is
                      recomputed from the frame on disk, so a board booting on
                      last night's finished game says so, where `postgame.{N}`
@@ -145,7 +145,7 @@ score.{N}.*                    per-board live game + projected fixture (N ≥ 1,
                      that is what boards did before the key existed. The board
                      desk's live-refresh countdown renders on it — same instinct
                      as side_reason: the server knows, so the server says.
-                     `boardLifecycle` (src/routes/production/boards.js) is the
+                     `boardLifecycle` (src/routes/production/board/boards.js) is the
                      one client statement of what game_over + game_completed +
                      live_following mean together: empty | live | final |
                      stranded. `final` = the game ended; `stranded` = the feed

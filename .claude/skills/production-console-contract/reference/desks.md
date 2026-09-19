@@ -115,7 +115,7 @@ Rules:
 
 ### The Match desk owns the whole fixture
 
-`src/routes/production/desks/match.jsx`. Fixture authoring used to exist twice —
+`src/routes/production/match/desk.jsx`. Fixture authoring used to exist twice —
 here as a single-open accordion and on the Match tab as a stack of fully-expanded
 cards (`MatchPanel`), with different controls on each. `MatchPanel` is **deleted**;
 so is `ScoreControls`, whose Game State panel the board desk's corrections
@@ -158,7 +158,7 @@ somewhere, and the conflict banner's "Go to board" selects the board's desk.
   badge — so tint and chip cannot disagree; the chip keeps its own /15 over the
   tint so it still reads a step louder, as the thing to press.
 - **Every fixture picker names a match `M{id} · …` first** (`matchDisplayLabel`,
-  `src/routes/production/matches.js`), the console's own spelling. Names alone
+  `src/routes/production/match/matches.js`), the console's own spelling. Names alone
   cannot tell two fixtures between one pair apart — the doubleheader, the
   night's common repeat — so every picker built on it offered two identical
   entries. A fixture with nothing else to say keeps `Match {id}`.
@@ -205,7 +205,7 @@ somewhere, and the conflict banner's "Go to board" selects the board's desk.
 
 ### A board is a desk
 
-`src/routes/production/desks/board.jsx` + `boards.js`. A board feeds the
+`src/routes/production/board/desk.jsx` + `boards.js`. A board feeds the
 broadcast, is never on it, has no source of its own and persists for the whole
 event — the desk tier exactly. What it is **not** is an element: pool, playback,
 stats tag and transport belong to the **board**, so hanging them off the
@@ -409,7 +409,7 @@ sources).
   `useMatchBindableBoards` (client) and `bind_scoreboard` (server) both encode.
   The desk both reads and **sets** playback now (`GamesSection`, ../games).
 
-### Games: pool + playback (`src/routes/production/games.jsx`)
+### Games: pool + playback (`src/routes/production/board/games.jsx`)
 
 A board's games are authored on the board, and the surface is an **instrument, not
 a settings list** — the shape `PoolBrowser` had on the Match tab, kept.
@@ -492,7 +492,7 @@ a settings list** — the shape `PoolBrowser` had on the Match tab, kept.
   `games.test.jsx` pins that no timer comes back.
 - **The live-refresh countdown belongs to the BOARD, and it is a readout of the
   SERVER's cadence.** It rides the Games region's rule (`KitColumn action`,
-  `LiveRefreshCountdown` in desks/board.jsx) and is the whole of what the rule's
+  `LiveRefreshCountdown` in board/feed.jsx) and is the whole of what the rule's
   old "following it live" clause was saying
   — never on the game list, which is the browser the countdown used to be
   mistaken for. It fetches nothing: every successful poll emits
@@ -538,5 +538,5 @@ a settings list** — the shape `PoolBrowser` had on the Match tab, kept.
   mid-game.
 - The filter is one element in a `filters` array by design: every field already
   takes a list.
-- Tests: `src/routes/production/games.test.jsx` pins what is on the panel.
+- Tests: `src/routes/production/board/games.test.jsx` pins what is on the panel.
 

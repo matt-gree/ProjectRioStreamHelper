@@ -18,7 +18,7 @@ import {
 } from '../../components/ui/dialog';
 import { cn } from '../../lib/utils';
 import { MAIN_BOOK, logoUrl, useParticipantsStore } from '../../context/participants';
-import { useGameModes, withHeldModes } from '../production/gamemodes';
+import { useGameModes, withHeldModes } from '../production/board/gamemodes';
 
 /*
  * ADDRESS BOOKS — the parts of the page that are about a BOOK rather than a

@@ -9,11 +9,11 @@ import { QuickCard, chipFor } from './kit';
 import {
     resolvePlacement, useConsoleOffline, useConsolePlacements, useConsoleScenes,
     usePlacementLabel,
-} from './placements';
+} from './sources/placements';
 import { EyeAction } from './rack';
 import { deskQuickFace, QuickFace } from './quickface';
-import { boardOfDeskId, useActiveBoards, useBoardLabel } from './boards';
-import { useContainerDefs } from './containers';
+import { boardOfDeskId, useActiveBoards, useBoardLabel } from './board/boards';
+import { useContainerDefs } from './containers/containers';
 
 /*
  * The quick rail — the console's right surface: the producer's own set of

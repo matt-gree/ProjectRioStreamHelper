@@ -7,7 +7,7 @@ import { Button } from '../../../components/ui/button';
 import { Text } from '../../../components/ui/primitives';
 import { FieldRow } from '../kit';
 import { StagedDot } from '../controls';
-import { stretchOfPlacement } from '../placements';
+import { stretchOfPlacement } from '../sources/placements';
 
 /*
  * "OBS is scaling this source."
@@ -104,7 +104,7 @@ const RedrawRow = memo(function RedrawRow({ placement }) {
      * at is not mirrored and is read at run time — see redrawSource.
      *
      * Which rows may say it — the Player Name's, and not a fed one — is
-     * `stretchOfPlacement` in ../placements, shared with the rack badge so the
+     * `stretchOfPlacement` in ../sources/placements, shared with the rack badge so the
      * two surfaces cannot disagree about whether a source has a problem.
      */
     const stretch = stretchOfPlacement(placement);
