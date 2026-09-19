@@ -1,24 +1,24 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useId } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
-import { Stack, Text, Divider, Loader } from './ui/primitives';
+import { Text, Divider, Loader } from './ui/primitives';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Switch } from './ui/switch';
-import { Label } from './ui/label';
 import { SegmentedControl } from './ui/segmented-control';
 import { notifications } from '../lib/notify';
+import { cn } from '../lib/utils';
 import LogsViewer from './LogsViewer';
 import { useSettingsStore, useConfigStore } from '../context/store';
 import { comboFromEvent } from '../context/staging';
-import { useAssetsVersionStore } from '../lib/assets';
 import { SupportLinks } from './SupportLinks';
 import { SIDE_LABEL_MODES, useSideLabels } from '../routes/production/sides';
 
 // Click-to-record hotkey field: focus it, press a combo, done. Esc cancels.
-function HotkeyInput({ value, onChange }) {
+function HotkeyInput({ id, value, onChange }) {
     const [recording, setRecording] = useState(false);
     return (
         <Input
+            id={id}
             readOnly
             value={recording ? 'Press a key…' : (value || '')}
             placeholder="Click to set"
@@ -31,101 +31,111 @@ function HotkeyInput({ value, onChange }) {
                 const combo = comboFromEvent(e);
                 if (combo) { onChange(combo); setRecording(false); e.currentTarget.blur(); }
             }}
-            className="w-44 cursor-pointer text-center"
+            className="h-7 w-36 cursor-pointer text-center text-xs"
         />
     );
 }
 
+/*
+ * The modal's ONE row shape: what the setting is on the left (a label and at
+ * most one short hint), the control on the right. It had three — switch-left,
+ * control-right, and label-and-control inline — so the eye had to find the
+ * control again on every row. `htmlFor` makes the words a click target for the
+ * control and gives it its accessible name; a row without one (a button) is
+ * named by the button's own text.
+ */
+function SettingRow({ label, hint, htmlFor, title, children, className }) {
+    const Words = htmlFor ? 'label' : 'div';
+    return (
+        <div className={cn('flex items-center justify-between gap-6', className)} title={title}>
+            <Words htmlFor={htmlFor} className={cn('flex min-w-0 flex-col gap-0.5', htmlFor && 'cursor-pointer')}>
+                <span className="text-sm leading-tight">{label}</span>
+                {hint && <span className="text-xs leading-snug text-muted-foreground">{hint}</span>}
+            </Words>
+            <div className="flex shrink-0 items-center gap-2">{children}</div>
+        </div>
+    );
+}
+
+function Section({ label, children }) {
+    return (
+        <section className="flex flex-col gap-4">
+            <Divider label={label} />
+            {children}
+        </section>
+    );
+}
+
+// `general.disable_export` is inverted and has been stored as a bool, "" and
+// "1" over its life; the server reads it the same way (`State._is_export_enabled`).
+function exportEnabled(disabled) {
+    if (disabled === undefined || disabled === null) return false; // default: off
+    if (typeof disabled === 'string') return ['', '0', 'false', 'no', 'off'].includes(disabled.trim().toLowerCase());
+    return !disabled;
+}
+
 /**
- * Settings modal with HUD path configuration.
+ * App preferences and the escape hatches. Anything that points OUTSIDE PRSH
+ * (HUD file, MSB pack, gc-overlay, OBS, LAN bind) lives on the Connections tab.
  */
 export default function SettingsModal({ opened, onClose }) {
-    // Stream labels (txt export) state
-    const [streamLabelsEnabled, setStreamLabelsEnabled] = useState(false);
-    const [streamLabelsSaving, setStreamLabelsSaving] = useState(false);
+    const ids = {
+        confirm: useId(), hotkey: useId(),
+        capture: useId(), labels: useId(),
+    };
+    const setSetting = useSettingsStore(state => state.setItem);
 
-    // Announcements state
-    const [announcementCount, setAnnouncementCount] = useState(0);
-    const [announcementsClearing, setAnnouncementsClearing] = useState(false);
-
-    // Reset match/scoreboard state (recovery hatch)
-    const [resetting, setResetting] = useState(false);
-    const [resetConfirm, setResetConfirm] = useState(false);
-
-    // Logs viewer
-    const [logsOpen, setLogsOpen] = useState(false);
-
-    const bumpAssetsVersion = useAssetsVersionStore(s => s.bump);
-
-    // Appearance — color scheme stored as a regular setting for portability.
     const appName = useConfigStore(state => state.name) || 'PRSH';
     const appVersion = useConfigStore(state => state.version);
-    const colorScheme = useSettingsStore(state => state?.ui?.color_scheme) || 'dark';
-    const setSetting = useSettingsStore(state => state.setItem);
-    const handleColorScheme = useCallback((value) => {
-        setSetting('ui.color_scheme', value);
-    }, [setSetting]);
 
-    // Production — confirm-to-live staging (see src/context/staging.js).
+    // ── General ──
+    const colorScheme = useSettingsStore(state => state?.ui?.color_scheme) || 'dark';
+    // `.mode` is the stored value with the fallback applied, so the control
+    // and the words the rest of the app uses cannot disagree.
+    const sideWords = useSideLabels();
+
+    // ── Production ──
     const confirmEnabled = useSettingsStore(state => state?.production?.confirm?.enabled) === true;
     const confirmHotkey = useSettingsStore(state => state?.production?.confirm?.hotkey) || 'F9';
-    const handleConfirmEnabled = useCallback((value) => {
-        setSetting('production.confirm.enabled', !!value);
-    }, [setSetting]);
-    const handleConfirmHotkey = useCallback((combo) => {
-        setSetting('production.confirm.hotkey', combo);
-    }, [setSetting]);
-
-    // What the console calls side 1 and side 2 (src/routes/production/sides.js).
-    // `.mode` is the stored value with the fallback already applied, so the
-    // control's value and the words it hands the rest of this modal cannot
-    // disagree about which mode is selected.
-    const sideWords = useSideLabels();
-    const handleSideLabels = useCallback((value) => {
-        setSetting('production.side_labels', value);
-    }, [setSetting]);
-
-    // Auto-capture — the stat file Project Rio writes at the final out is the
-    // end-of-game signal for a local board (server/postgame_watch.py).
+    // The stat file Project Rio writes at the final out is the end-of-game
+    // signal for a local board (server/postgame_watch.py).
     const autoCapture = useSettingsStore(state => state?.postgame?.auto_capture) !== false;
-    const handleAutoCapture = useCallback((value) => {
-        setSetting('postgame.auto_capture', !!value);
-    }, [setSetting]);
 
-    const fetchStreamLabels = useCallback(async () => {
+    // ── Output ──
+    const labelsEnabled = exportEnabled(useSettingsStore(state => state?.general?.disable_export));
+    const [labelsSaving, setLabelsSaving] = useState(false);
+    const toggleLabels = useCallback(async (enabled) => {
+        setLabelsSaving(true);
         try {
-            const resp = await fetch('/api/v1/settings?key=general.disable_export');
-            const data = await resp.json();
-            // Treat empty string, "0", "false", null, false as enabled (falsy export-disabled)
-            const disabled = data === true
-                || (typeof data === 'string' && !['', '0', 'false', 'no', 'off'].includes(data.toLowerCase()));
-            setStreamLabelsEnabled(!disabled);
-        } catch { /* ignore */ }
-    }, []);
-
-    const handleToggleStreamLabels = useCallback(async (enabled) => {
-        setStreamLabelsEnabled(enabled);
-        setStreamLabelsSaving(true);
-        try {
-            // disable_export is inverted: empty string = enabled (falsy), "1" = disabled (truthy).
-            // Must always PUT — DELETE lets the default (True) re-apply on next load.
-            const value = enabled ? '' : '1';
-            await fetch(`/api/v1/settings?key=general.disable_export&value=${value}`, { method: 'PUT' });
-            // On enable, do a one-shot full export so every key has a file.
-            // Subsequent writes are diff-only (efficient).
-            if (enabled) {
-                await fetch('/api/v1/state/export-all', { method: 'POST' });
-            }
-            notifications.show({
-                message: enabled ? 'Stream labels enabled — writing to user_data/stream_labels/' : 'Stream labels disabled',
-                color: 'green',
-            });
+            // REST rather than the socket, because the one-shot full export
+            // below must run AFTER the setting has landed — ExportAll is a
+            // no-op while export is off. Always PUT: a DELETE would let the
+            // default (disabled) re-apply on the next load.
+            const resp = await fetch(`/api/v1/settings?key=general.disable_export&value=${enabled ? '' : '1'}`, { method: 'PUT' });
+            if (!resp.ok) throw new Error(String(resp.status));
+            setSetting('general.disable_export', enabled ? '' : '1', false);
+            // Regular saves write only what changed; seed every key once.
+            if (enabled) await fetch('/api/v1/state/export-all', { method: 'POST' });
         } catch {
-            notifications.show({ message: 'Failed to update stream labels setting', color: 'red' });
-            setStreamLabelsEnabled(!enabled);
+            notifications.show({ message: 'Couldn’t change the text file export', color: 'red' });
         }
-        setStreamLabelsSaving(false);
+        setLabelsSaving(false);
+    }, [setSetting]);
+    const revealLabels = useCallback(async () => {
+        try {
+            const resp = await fetch('/api/v1/state/stream-labels/reveal', { method: 'POST' });
+            if (!resp.ok) throw new Error(String(resp.status));
+        } catch {
+            notifications.show({ message: 'Couldn’t open the text file folder', color: 'red' });
+        }
     }, []);
+
+    // ── Help & recovery ──
+    const [announcementCount, setAnnouncementCount] = useState(0);
+    const [announcementsClearing, setAnnouncementsClearing] = useState(false);
+    const [resetting, setResetting] = useState(false);
+    const [resetConfirm, setResetConfirm] = useState(false);
+    const [logsOpen, setLogsOpen] = useState(false);
 
     const fetchAnnouncements = useCallback(async () => {
         try {
@@ -135,19 +145,27 @@ export default function SettingsModal({ opened, onClose }) {
         } catch { /* ignore */ }
     }, []);
 
-    const handleResetState = useCallback(async () => {
+    const clearAnnouncements = useCallback(async () => {
+        setAnnouncementsClearing(true);
+        try {
+            const resp = await fetch('/api/v1/announcements/dismiss-all', { method: 'POST' });
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data.error);
+            setAnnouncementCount(0);
+        } catch {
+            notifications.show({ message: 'Couldn’t clear announcements', color: 'red' });
+        }
+        setAnnouncementsClearing(false);
+    }, []);
+
+    const resetBoards = useCallback(async () => {
         setResetting(true);
         try {
             const resp = await fetch('/api/v1/scoreboards/reset', { method: 'POST' });
             const data = await resp.json();
-            if (resp.ok) {
-                notifications.show({
-                    message: 'Match & scoreboard state reset',
-                    color: 'green',
-                });
-            } else {
-                notifications.show({ message: data.detail || 'Reset failed', color: 'red' });
-            }
+            notifications.show(resp.ok
+                ? { message: 'Boards and matches reset', color: 'green' }
+                : { message: data.detail || 'Reset failed', color: 'red' });
         } catch {
             notifications.show({ message: 'Reset failed', color: 'red' });
         }
@@ -155,43 +173,19 @@ export default function SettingsModal({ opened, onClose }) {
         setResetConfirm(false);
     }, []);
 
-    const handleClearAnnouncements = useCallback(async () => {
-        setAnnouncementsClearing(true);
-        try {
-            const resp = await fetch('/api/v1/announcements/dismiss-all', { method: 'POST' });
-            const data = await resp.json();
-            if (resp.ok) {
-                const n = data.dismissed || 0;
-                setAnnouncementCount(0);
-                notifications.show({
-                    message: n === 0 ? 'No announcements to clear' : `Cleared ${n} announcement${n === 1 ? '' : 's'}`,
-                    color: 'green',
-                });
-            } else {
-                notifications.show({ message: data.error || 'Failed to clear announcements', color: 'red' });
-            }
-        } catch {
-            notifications.show({ message: 'Failed to clear announcements', color: 'red' });
-        }
-        setAnnouncementsClearing(false);
-    }, []);
-
     useEffect(() => {
-        if (opened) {
-            fetchStreamLabels();
-            fetchAnnouncements();
-        }
-    }, [opened, fetchStreamLabels, fetchAnnouncements]);
+        if (opened) fetchAnnouncements();
+        else setResetConfirm(false);
+    }, [opened, fetchAnnouncements]);
 
     return (
         <>
-        <Dialog open={opened} onOpenChange={(o) => { if (!o) { bumpAssetsVersion(); onClose(); } }}>
-            <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
+        <Dialog open={opened} onOpenChange={(o) => { if (!o) onClose(); }}>
+            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
                 <DialogHeader>
                     <DialogTitle className="label-display">Settings</DialogTitle>
                 </DialogHeader>
-                <Stack gap="sm">
-                    {/* About blurb — version moved here from the app title */}
+                <div className="flex flex-col gap-6">
                     <div className="flex items-center gap-2">
                         <img src="/favicon.png" alt="" width={28} height={28} className="pixelated" />
                         <div className="flex flex-col">
@@ -204,209 +198,151 @@ export default function SettingsModal({ opened, onClose }) {
                         </div>
                     </div>
 
-                    <Divider label="Appearance" />
-
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                            <Text size="sm">Theme</Text>
+                    <Section label="General">
+                        <SettingRow label="Theme">
                             <SegmentedControl
                                 size="xs"
                                 value={colorScheme}
-                                onChange={handleColorScheme}
+                                onChange={(v) => setSetting('ui.color_scheme', v)}
                                 data={[
                                     { label: 'Light', value: 'light' },
                                     { label: 'Dark', value: 'dark' },
-                                    { label: 'Auto', value: 'auto' },
+                                    { label: 'System', value: 'auto' },
                                 ]}
                             />
+                        </SettingRow>
+                        <SettingRow
+                            label="Side labels"
+                            hint="What the console calls each side. Overlays always use 1 and 2."
+                        >
+                            <SegmentedControl
+                                size="xs"
+                                value={sideWords.mode}
+                                onChange={(v) => setSetting('production.side_labels', v)}
+                                data={SIDE_LABEL_MODES}
+                            />
+                        </SettingRow>
+                    </Section>
+
+                    <Section label="Production">
+                        <div className="flex flex-col gap-2">
+                            <SettingRow
+                                htmlFor={ids.confirm}
+                                label="Confirm changes before going live"
+                                hint="Production-page changes wait for Go Live. Scene switches and one-shot presses (replays, captures, Put on board) still happen at once."
+                            >
+                                <Switch
+                                    id={ids.confirm}
+                                    checked={confirmEnabled}
+                                    onCheckedChange={(v) => setSetting('production.confirm.enabled', !!v)}
+                                />
+                            </SettingRow>
+                            {confirmEnabled && (
+                                <SettingRow htmlFor={ids.hotkey} label="Go Live hotkey" className="pl-4">
+                                    <HotkeyInput
+                                        id={ids.hotkey}
+                                        value={confirmHotkey}
+                                        onChange={(combo) => setSetting('production.confirm.hotkey', combo)}
+                                    />
+                                </SettingRow>
+                            )}
                         </div>
-                        <div className="flex items-center gap-2">
-                            <Text size="sm">Welcome screen</Text>
+                        <SettingRow
+                            htmlFor={ids.capture}
+                            label="Capture the box score when a game ends"
+                            hint="Fills the Character Spotlight and Game Summary, and credits the game to its match. Off: capture from the board’s panel."
+                        >
+                            <Switch
+                                id={ids.capture}
+                                checked={autoCapture}
+                                onCheckedChange={(v) => setSetting('postgame.auto_capture', !!v)}
+                            />
+                        </SettingRow>
+                    </Section>
+
+                    <Section label="Output">
+                        <SettingRow
+                            htmlFor={ids.labels}
+                            label="Write text files for OBS"
+                            hint="One .txt file per value, for OBS Text sources that don’t use the overlays."
+                        >
+                            <Button size="xs" variant="ghost" onClick={revealLabels}>
+                                Open folder
+                            </Button>
+                            <Switch
+                                id={ids.labels}
+                                checked={labelsEnabled}
+                                onCheckedChange={toggleLabels}
+                                disabled={labelsSaving}
+                            />
+                        </SettingRow>
+                    </Section>
+
+                    <Section label="Help & recovery">
+                        <SettingRow label="Logs" hint="Copy the recent log, or open the folder for the full file, when reporting a bug.">
+                            <Button size="xs" variant="outline" onClick={() => setLogsOpen(true)}>
+                                View logs
+                            </Button>
+                        </SettingRow>
+                        <SettingRow label="Welcome checklist" hint="The setup steps shown on first launch.">
                             <Button
                                 size="xs"
                                 variant="outline"
-                                onClick={() => {
-                                    setSetting('ui.welcome_dismissed', false);
-                                    onClose();
-                                }}
+                                onClick={() => { setSetting('ui.welcome_dismissed', false); onClose(); }}
                             >
                                 Show again
                             </Button>
-                        </div>
-                    </div>
-
-                    {/* The HUD file, the MSB image pack, gc-overlay, OBS and
-                        the LAN bind all moved to the CONNECTIONS tab
-                        (src/routes/connections/) — everything that points at
-                        something outside PRSH. They each have a failure state
-                        with a diagnostic readout you check against reality (drag
-                        files in, plug a pad in, start OBS), and a modal has to be
-                        closed to do any of that. What is left here is
-                        preferences and the two escape hatches. */}
-
-                    <Divider label="Production" />
-
-                    {/* Auto-capture. It sat under "Project Rio" because the
-                        stat file is Rio’s, but the SETTING is broadcast
-                        behaviour and stayed behind when that section left for
-                        Connections — it points at nothing outside PRSH.
-                        Project Rio writes one stat file per
-                        finished game, and that file landing is the only reliable
-                        end-of-game signal a local board has — the HUD feed has
-                        no final frame. Off leaves capture manual; the button is
-                        on every board panel either way. */}
-                    <div className="mt-2 flex items-start gap-3">
-                        <Switch checked={autoCapture} onCheckedChange={handleAutoCapture} className="mt-0.5" />
-                        <div className="flex flex-col">
-                            <Text size="sm" fw={500}>Capture the box score when a game ends</Text>
-                            <Text size="xs" dimmed>
-                                Reads the finished game’s stats the moment Project Rio writes them, so the Stat Callout and Game Summary fill themselves in and a bound match advances to post-game. Turn off to capture by hand from the board’s panel.
-                            </Text>
-                        </div>
-                    </div>
-
-
-                    <div className="flex items-start justify-between gap-4">
-                        <span className="flex flex-col">
-                            <Text size="sm">Side labels</Text>
-                            <Text size="xs" dimmed>
-                                What the Production console calls each side. Sides are always 1 and 2 in
-                                state and in overlay URLs — this is only what the panels say, so pick the
-                                pair that matches how your scenes are actually laid out.
-                            </Text>
-                        </span>
-                        <SegmentedControl
-                            size="xs"
-                            value={sideWords.mode}
-                            onChange={handleSideLabels}
-                            data={SIDE_LABEL_MODES}
-                            className="shrink-0"
-                        />
-                    </div>
-
-                    <Label className="flex items-start gap-2">
-                        <Switch checked={confirmEnabled} onCheckedChange={handleConfirmEnabled} className="mt-0.5" />
-                        <span className="flex flex-col">
-                            <Text size="sm">Confirm changes before going live</Text>
-                            <Text size="xs" dimmed>
-                                Element changes on the Production page (source visibility, feeds, content) are staged
-                                and only pushed to OBS and the overlays when you press the Go Live hotkey or button.
-                                Scene switches, Take, and fire-now actions (replay, spotlight) stay immediate.
-                            </Text>
-                        </span>
-                    </Label>
-                    {confirmEnabled && (
-                        <div className="flex items-center justify-between gap-4">
-                            <Text size="sm">Go Live hotkey</Text>
-                            <HotkeyInput value={confirmHotkey} onChange={handleConfirmHotkey} />
-                        </div>
-                    )}
-
-                    <Divider label="Stream Labels" />
-
-                    <div className="flex items-start justify-between gap-4">
-                        <Label className="flex flex-1 items-start gap-2">
-                            <Switch checked={streamLabelsEnabled} onCheckedChange={handleToggleStreamLabels} disabled={streamLabelsSaving} className="mt-0.5" />
-                            <span className="flex flex-col">
-                                <Text size="sm">Enable txt export</Text>
-                                <Text size="xs" dimmed>
-                                    Export every state key as an individual .txt file to user_data/stream_labels/. Use these as Text (GDI+) sources in OBS without needing the HTML overlays. Off by default.
-                                </Text>
-                            </span>
-                        </Label>
-                        <Button
-                            size="xs"
-                            className="shrink-0"
-                            onClick={async () => {
-                                try {
-                                    const resp = await fetch('/api/v1/state/stream-labels/reveal', { method: 'POST' });
-                                    if (!resp.ok) {
-                                        notifications.show({
-                                            message: `Reveal failed (${resp.status}). The server may need a restart to register the endpoint.`,
-                                            color: 'red',
-                                        });
-                                    }
-                                } catch (e) {
-                                    notifications.show({ message: `Reveal failed: ${e?.message ?? e}`, color: 'red' });
-                                }
-                            }}
+                        </SettingRow>
+                        <SettingRow
+                            label="Announcements"
+                            hint={announcementCount === 0
+                                ? 'None active.'
+                                : `${announcementCount} active. Closing a notice hides it until the next launch; clearing hides it for good.`}
                         >
-                            Open Folder
-                        </Button>
-                    </div>
-
-                    <Divider label="Announcements" />
-
-                    <Text size="xs" dimmed>
-                        Announcements reappear each time the app launches until you clear them here or they expire. Closing a toast just hides it for the current session.
-                    </Text>
-                    <div className="flex items-center gap-2">
-                        <Text size="sm" className="whitespace-nowrap">
-                            {announcementCount === 0
-                                ? 'No active announcements'
-                                : `${announcementCount} active announcement${announcementCount === 1 ? '' : 's'}`}
-                        </Text>
-                        <Button
-                            size="xs"
-                            variant="outline"
-                            className="flex-1 border-destructive/40 text-destructive hover:bg-destructive/10"
-                            onClick={handleClearAnnouncements}
-                            disabled={announcementsClearing || announcementCount === 0}
-                        >
-                            {announcementsClearing && <Loader size={12} />}
-                            Clear
-                        </Button>
-                    </div>
-
-                    <Divider label="Reset State" />
-
-                    <Text size="xs" dimmed>
-                        Returns every scoreboard to a clean single board and deletes all authored matches. Use this to recover from stuck state — e.g. a board that refuses a match bind with &ldquo;is rotating,&rdquo; an orphaned match binding, or a stuck match conflict. Your scoreboard tabs and the HUD toggle are kept; live HUD data re-populates board&nbsp;1 automatically.
-                    </Text>
-                    {resetConfirm ? (
-                        <div className="flex items-center gap-2">
-                            <Text size="sm" className="whitespace-nowrap text-destructive">
-                                Reset all match &amp; scoreboard state?
-                            </Text>
                             <Button
                                 size="xs"
                                 variant="outline"
-                                className="border-destructive/40 text-destructive hover:bg-destructive/10"
-                                onClick={handleResetState}
-                                disabled={resetting}
+                                onClick={clearAnnouncements}
+                                disabled={announcementsClearing || announcementCount === 0}
                             >
-                                {resetting && <Loader size={12} />}
-                                Confirm reset
+                                {announcementsClearing && <Loader size={12} />}
+                                Clear all
                             </Button>
-                            <Button size="xs" variant="ghost" onClick={() => setResetConfirm(false)} disabled={resetting}>
-                                Cancel
-                            </Button>
-                        </div>
-                    ) : (
-                        <Button
-                            size="xs"
-                            variant="outline"
-                            className="w-full border-destructive/40 text-destructive hover:bg-destructive/10"
-                            onClick={() => setResetConfirm(true)}
+                        </SettingRow>
+                        <SettingRow
+                            label="Reset boards and matches"
+                            hint="For a board that’s stuck. Deletes every match, and clears each board’s game, capture and playback. Your boards, running orders and HUD setting stay."
                         >
-                            Reset match &amp; scoreboard state
-                        </Button>
-                    )}
+                            {resetConfirm ? (
+                                <>
+                                    <Button size="xs" variant="ghost" onClick={() => setResetConfirm(false)} disabled={resetting}>
+                                        Cancel
+                                    </Button>
+                                    <Button size="xs" variant="destructive" onClick={resetBoards} disabled={resetting}>
+                                        {resetting && <Loader size={12} />}
+                                        Delete and reset
+                                    </Button>
+                                </>
+                            ) : (
+                                <Button
+                                    size="xs"
+                                    variant="outline"
+                                    className="border-destructive/40 text-destructive hover:bg-destructive/10"
+                                    onClick={() => setResetConfirm(true)}
+                                >
+                                    Reset…
+                                </Button>
+                            )}
+                        </SettingRow>
+                    </Section>
 
-                    <Divider label="Logs" />
-
-                    <Text size="xs" dimmed>
-                        View recent application logs. Useful when reporting a bug — you can copy the tail, or open the folder to grab the full rotated file.
-                    </Text>
-                    <Button size="xs" variant="outline" className="w-full" onClick={() => setLogsOpen(true)}>
-                        View logs
-                    </Button>
-
-                    <Text size="xs" dimmed ta="center">
-                        Enjoy PRSH? Consider supporting those who make it all possible.
-                    </Text>
-                    <SupportLinks />
-                </Stack>
+                    <div className="flex flex-col gap-2 border-t border-border pt-4">
+                        <Text size="xs" dimmed ta="center">
+                            Enjoy PRSH? Consider supporting those who make it all possible.
+                        </Text>
+                        <SupportLinks />
+                    </div>
+                </div>
             </DialogContent>
         </Dialog>
         <LogsViewer opened={logsOpen} onClose={() => setLogsOpen(false)} />

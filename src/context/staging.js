@@ -16,8 +16,8 @@
  *
  * What stages: state writes, OBS source visibility, feed picks, the
  * commentary desk. What never stages (momentary "fire now" actions): scene
- * switches, Take, hit replay/spotlight, clock start/pause/reset, post-game
- * capture.
+ * switches, Put on board (take next match), hit replay/spotlight, clock
+ * start/pause/reset, post-game capture.
  */
 import { create } from "zustand";
 import { useSettingsStore } from "./store";
