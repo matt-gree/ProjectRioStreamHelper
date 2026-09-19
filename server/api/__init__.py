@@ -26,6 +26,7 @@ from server.api.v1 import (
     postgame,
     design,
     invariants,
+    network,
 )
 
 router_v1 = APIRouter(
@@ -48,6 +49,7 @@ router_v1.include_router(startgg.router)
 router_v1.include_router(controller.router)
 router_v1.include_router(announcements.router)
 router_v1.include_router(logs.router)
+router_v1.include_router(network.router)
 router_v1.include_router(assets.router)
 router_v1.include_router(visualizer.router)
 router_v1.include_router(participants.router)

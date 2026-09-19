@@ -12,6 +12,7 @@ from loguru import logger
 
 from server import server, socketio
 from server.paths import env_port, suppress_browser
+from server.network import Network
 from server.state import State
 from server.settings import Settings, Config as TSHConfig
 from server.participants import Participants
@@ -75,6 +76,10 @@ async def main() -> int:
     # runs (paired with PRSH_USER_DATA_DIR — see server/paths.py).
     port = env_port() or Settings.Get("server.port", 5260)
     autostart = Settings.Get("server.autostart", True) and not suppress_browser()
+
+    # What the process ACTUALLY binds, as opposed to what the setting now says —
+    # the Network card reads both to know whether a restart is pending.
+    Network.set_bound(host, port)
 
     uvi = Server(Config(
         app=ASGIApp(

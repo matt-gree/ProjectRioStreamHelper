@@ -1,23 +1,17 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Text } from '../../components/ui/primitives';
-import { Panel } from '../../components/ui/panel';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { PasswordInput } from '../../components/ui/password-input';
-import { Switch } from '../../components/ui/switch';
-import { Label } from '../../components/ui/label';
-import { Badge } from '../../components/ui/badge';
-import { cn } from '../../lib/utils';
 import { notifications } from '../../lib/notify';
 import { useSettingsStore } from '../../context/store';
 import { useObsStore } from '../../context/obs';
-import { ConnBody } from './connections';
+import { ConnCard, ErrorLine, FieldLabel, Section, StatusPill, ToggleRow } from './kit';
 
-const OBS_DOT = {
-    connected: 'bg-emerald-500',
-    connecting: 'bg-amber-400 animate-pulse',
-    error: 'bg-destructive',
-    disconnected: 'bg-muted-foreground/50',
+const OBS_TONE = {
+    connected: 'ok',
+    connecting: 'busy',
+    error: 'bad',
+    disconnected: 'idle',
 };
 const OBS_LABEL = {
     connected: 'Connected',
@@ -42,7 +36,8 @@ const OBS_LABEL = {
  *
  * Edited as a local draft and applied on Save & Connect: the manager reconnects
  * whenever host/port/password change, so writing per keystroke would thrash the
- * socket.
+ * socket. With nothing edited the same button is a plain Reconnect — so the
+ * card always offers one press, and it names what that press will do.
  */
 export default function ObsConnection() {
     const setSetting = useSettingsStore(state => state.setItem);
@@ -71,69 +66,69 @@ export default function ObsConnection() {
         setSetting('obs.port', Number(port) || 4455);
         setSetting('obs.password', password);
         connect();
-        notifications.show({ message: 'OBS connection settings saved.', color: 'green' });
+        notifications.show({ message: 'OBS connection settings saved — connecting.', color: 'green' });
     }, [setSetting, host, port, password, connect]);
 
-    return (
-        <Panel
-            title="OBS"
-            actions={
-                <Badge className={status === 'connected'
-                    ? 'bg-[#22c55e] text-black'
-                    : status === 'error' ? 'bg-destructive text-white' : 'bg-muted text-muted-foreground'}>
-                    {OBS_LABEL[status] ?? 'Not connected'}
-                </Badge>
-            }
-        >
-            <ConnBody>
-                <Text size="xs" dimmed>
-                    Connect over the OBS WebSocket server (OBS 28+: Tools → WebSocket Server Settings → enable,
-                    default port 4455). PRSH connects from your browser, so use the address of the machine
-                    running OBS — localhost if that’s this computer.
-                </Text>
+    const tone = OBS_TONE[status] ?? 'idle';
+    const label = `${OBS_LABEL[status] ?? 'Not connected'}${status === 'connected' && obsVersion ? ` · v${obsVersion}` : ''}`;
+    // The draft differs from what is stored — Save & Connect is the loud press
+    // only while there is something to save; otherwise it is a reconnect.
+    const stored = useSettingsStore(state => state?.obs);
+    const dirty = loaded && (
+        (host.trim() || '127.0.0.1') !== (stored?.host ?? '127.0.0.1')
+        || (Number(port) || 4455) !== Number(stored?.port ?? 4455)
+        || password !== (stored?.password ?? '')
+    );
 
-                <div className="grid grid-cols-[1fr_120px] gap-2">
-                    <div className="flex flex-col gap-1">
-                        <Label htmlFor="obs-host"><Text size="xs" dimmed>Host</Text></Label>
+    return (
+        <ConnCard title="OBS" status={<StatusPill tone={tone}>{label}</StatusPill>}>
+            <Section>
+                <div className="grid grid-cols-[minmax(0,1fr)_5.5rem] gap-2">
+                    <div className="flex min-w-0 flex-col gap-1">
+                        <FieldLabel htmlFor="obs-host"
+                            title="OBS → Tools → WebSocket Server Settings. The address of the machine running OBS.">
+                            Host
+                        </FieldLabel>
                         <Input id="obs-host" value={host} placeholder="127.0.0.1"
                             onChange={e => setHost(e.currentTarget.value)} />
                     </div>
                     <div className="flex flex-col gap-1">
-                        <Label htmlFor="obs-port"><Text size="xs" dimmed>Port</Text></Label>
+                        <FieldLabel htmlFor="obs-port">Port</FieldLabel>
                         <Input id="obs-port" inputMode="numeric" value={port} placeholder="4455"
+                            className="tabular-nums"
                             onChange={e => setPort(e.currentTarget.value.replace(/[^0-9]/g, ''))} />
                     </div>
                 </div>
                 <div className="flex flex-col gap-1">
-                    <Label htmlFor="obs-pass"><Text size="xs" dimmed>Password (optional)</Text></Label>
+                    <FieldLabel htmlFor="obs-pass">Password</FieldLabel>
                     <PasswordInput id="obs-pass" value={password}
-                        placeholder="If authentication is enabled in OBS"
+                        placeholder="Only if authentication is on in OBS"
                         onChange={e => setPassword(e.currentTarget.value)} />
                 </div>
-
-                <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                        <span className={cn('size-2 rounded-full', OBS_DOT[status] ?? OBS_DOT.disconnected)} />
-                        <Text size="sm">
-                            {OBS_LABEL[status] ?? 'Not connected'}
-                            {status === 'connected' && obsVersion ? ` · v${obsVersion}` : ''}
-                        </Text>
-                    </div>
-                    <Button size="xs" className="shrink-0" onClick={handleApply}>Save &amp; Connect</Button>
-                </div>
-                {status === 'error' && error && <Text size="xs" className="text-destructive">{error}</Text>}
-
-                <Label className="flex items-start gap-2">
-                    <Switch checked={autoConnect} className="mt-0.5"
-                        onCheckedChange={v => setSetting('obs.auto_connect', !!v)} />
-                    <span className="flex flex-col">
-                        <Text size="sm">Auto-connect on launch</Text>
-                        <Text size="xs" dimmed>
-                            Connect to OBS automatically when PRSH starts, and keep retrying if OBS isn’t open yet.
-                        </Text>
-                    </span>
-                </Label>
-            </ConnBody>
-        </Panel>
+                {/* obs-websocket's own message is often the bare word "Error",
+                    which says nothing a producer can act on. */}
+                {status === 'error' && (
+                    <ErrorLine>
+                        {error && error !== 'Error'
+                            ? error
+                            : 'Couldn’t reach OBS at that address — is it open, with the WebSocket server enabled?'}
+                    </ErrorLine>
+                )}
+            </Section>
+            <Section className="mt-auto flex-row items-center justify-between gap-3">
+                <ToggleRow
+                    checked={autoConnect}
+                    onChange={v => setSetting('obs.auto_connect', !!v)}
+                    label="Auto-connect"
+                    title="Connect at launch, retrying until OBS is open"
+                />
+                <Button
+                    size="sm" variant={dirty ? 'default' : 'outline'} className="shrink-0"
+                    onClick={dirty ? handleApply : () => connect()}
+                >
+                    {dirty ? 'Save & connect' : 'Reconnect'}
+                </Button>
+            </Section>
+        </ConnCard>
     );
 }

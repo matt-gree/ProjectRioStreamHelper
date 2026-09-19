@@ -621,7 +621,6 @@ class Settings:
             "check_for_updates": True,
         },
         "controller_overlay": {
-            "path": "",
             "port": 8069,
             "auto_start": False,
         },

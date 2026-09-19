@@ -48,7 +48,7 @@ Bundled via the `gc-overlay/` git submodule. The resolver tries, in order:
 2. In-repo submodule (`gc-overlay/`)
 3. Sibling checkout (`../gc-overlay/`)
 
-A custom path override (set on the Connections tab) wins over all three.
+There is **no path override** (removed 2026-09-18): the bundle and the submodule cover every install, so a stored path could only point somewhere stale. `controller_overlay.path` in an old settings.json is inert.
 
 **Frozen builds** run the standalone binary — PRSH re-`chmod +x`'s it, because
 the executable bit does not survive every packaging path. **Source checkouts**

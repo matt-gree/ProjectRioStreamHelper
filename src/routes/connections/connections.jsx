@@ -1,14 +1,14 @@
-import { Title, Text } from '../../components/ui/primitives';
-import { Panel } from '../../components/ui/panel';
-import { Badge } from '../../components/ui/badge';
-import { Switch } from '../../components/ui/switch';
-import { Label } from '../../components/ui/label';
+import { Title } from '../../components/ui/primitives';
 import { notifications } from '../../lib/notify';
 import { useSettingsStore } from '../../context/store';
-import { useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { Button } from '../../components/ui/button';
+import { CopyButton } from '../../components/ui/copy-button';
+import { cn } from '../../lib/utils';
 import { RioHudConnection, MsbAssetsConnection } from './rio';
 import ObsConnection from './obs';
 import ControllerConnection from './controller';
+import { ConnCard, FieldLabel, Section, StatusPill, ToggleRow } from './kit';
 
 /*
  * CONNECTIONS — everything PRSH talks to outside itself.
@@ -36,98 +36,113 @@ import ControllerConnection from './controller';
  *
  * Each connection is its own CARD owning its own fetches — not one mega
  * component with everyone's state, which is what the modal became at 995 lines.
+ * The cards share one row kit (./kit.jsx): the status pill in the header, once,
+ * and a body of hairline-split sections.
  */
-
-// A card's health chip. Three states rather than two: "unknown" is honest while
-// a fetch is in flight, and reads better than flashing "Not found" at a producer
-// whose setup is fine.
-export function ConnBadge({ state, ok = 'Connected', bad = 'Not found', idle = 'Checking…' }) {
-    if (state == null) return <Badge className="bg-muted text-muted-foreground">{idle}</Badge>;
-    return state
-        ? <Badge className="bg-[#22c55e] text-black">{ok}</Badge>
-        : <Badge className="bg-destructive text-white">{bad}</Badge>;
-}
-
-// The body every card shares. Cards are titled modules (Panel's flush header),
-// so the padding lives here rather than in each section.
-export function ConnBody({ children }) {
-    return <div className="flex flex-col gap-2 p-4">{children}</div>;
-}
 
 /*
  * How PRSH serves itself. It points outward — at the network — so it belongs
- * here rather than with the preferences, and it is the one card that is a single
- * switch: the warning is the content.
+ * here rather than with the preferences.
+ *
+ * The switch is a SETTING and the bind happens at boot, so the two disagree
+ * until a restart; the card reads both (`GET /network`) and says so in the
+ * pill. What it shows beneath the switch is the one thing a producer turning
+ * LAN on wants next: the address to open on the phone.
  */
 function NetworkConnection() {
     const setSetting = useSettingsStore(state => state.setItem);
     const allowLan = useSettingsStore(state => state?.server?.allow_lan) === true;
+    const [net, setNet] = useState(null);
+
+    const refresh = useCallback(async () => {
+        try { setNet(await (await fetch('/api/v1/network')).json()); } catch { /* keep last */ }
+    }, []);
+    useEffect(() => { refresh(); }, [refresh]);
+
     const handleAllowLan = useCallback((value) => {
         setSetting('server.allow_lan', !!value);
-        notifications.show({
-            message: value
-                ? 'LAN access enabled. Restart PRSH for the change to take effect.'
-                : 'LAN access disabled. Restart PRSH for the change to take effect.',
-            color: 'yellow',
-        });
+        notifications.show({ message: 'Restart PRSH for the change to take effect.', color: 'yellow' });
     }, [setSetting]);
 
+    // null = the server can't say how it is bound; trust the setting then
+    // rather than inventing a pending restart.
+    const live = net?.lan_bound ?? allowLan;
+    const pending = net?.lan_bound != null && net.lan_bound !== allowLan;
+    const port = net?.port ?? window.location.port;
+
+    const pill = pending
+        ? <StatusPill tone="warn" title={allowLan ? 'LAN is on, but PRSH is still bound to this computer' : 'LAN is off, but PRSH is still reachable on the network'}>Restart to apply</StatusPill>
+        : live ? <StatusPill tone="warn">LAN</StatusPill> : <StatusPill>This computer only</StatusPill>;
+
+    // The phone's address once LAN is on (now or after the restart); this
+    // computer's otherwise. Loopback is never offered to a phone.
+    const urls = allowLan
+        ? (net?.addresses ?? []).map(ip => `http://${ip}:${port}`)
+        : [`http://127.0.0.1:${port}`];
+
     return (
-        <Panel
-            title="Network"
-            className="lg:col-span-2"
-            actions={<Badge className={allowLan ? 'bg-[#f5bb00]/15 text-[#f5bb00]' : 'bg-muted text-muted-foreground'}>
-                {allowLan ? 'LAN' : 'This computer only'}
-            </Badge>}
-        >
-            <ConnBody>
-                <Label className="flex items-start gap-2">
-                    <Switch checked={allowLan} onCheckedChange={handleAllowLan} className="mt-0.5" />
-                    <span className="flex flex-col">
-                        <Text size="sm">Allow LAN access (bind 0.0.0.0)</Text>
-                        <Text size="xs" dimmed>
-                            By default PRSH listens on loopback only (127.0.0.1) — only this computer can reach
-                            the UI and OBS overlays. Enable LAN access to use a phone or tablet on the same WiFi
-                            as a remote control. Anyone on the network will be able to read and modify
-                            scoreboards, settings, and any saved tournament API keys, so leave this off on
-                            shared networks (cafes, conventions).
-                        </Text>
-                    </span>
-                </Label>
-            </ConnBody>
-        </Panel>
+        <ConnCard title="Network" status={pill}>
+            <Section>
+                <ToggleRow
+                    checked={allowLan} onChange={handleAllowLan}
+                    tone={allowLan ? 'warn' : undefined}
+                    label="Allow LAN access"
+                    title="Binds 0.0.0.0: anyone on this network can control PRSH and read saved API keys. Applies on restart."
+                />
+            </Section>
+            <Section className="mt-auto gap-1.5">
+                <FieldLabel>
+                    {allowLan ? (pending ? 'Phone / tablet — after restart' : 'Phone / tablet') : 'Address'}
+                </FieldLabel>
+                {urls.length === 0 && allowLan && (
+                    <span className="text-xs text-red-300">No network address found — is this computer on WiFi?</span>
+                )}
+                {urls.map(url => <UrlRow key={url} url={url} dimmed={pending} />)}
+            </Section>
+        </ConnCard>
+    );
+}
+
+function UrlRow({ url, dimmed }) {
+    return (
+        <div className="flex items-center gap-1.5">
+            <span className={cn(
+                'flex h-8 min-w-0 flex-1 items-center truncate rounded-md border border-input bg-input/30 px-2.5 font-mono text-xs',
+                dimmed ? 'text-muted-foreground' : 'text-foreground',
+            )}>
+                {url}
+            </span>
+            <CopyButton value={url}>
+                {({ copied, copy }) => (
+                    <Button size="sm" variant="outline" className="w-16" onClick={copy}>
+                        {copied ? 'Copied' : 'Copy'}
+                    </Button>
+                )}
+            </CopyButton>
+        </div>
     );
 }
 
 export default function Connections() {
     return (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3">
             <Title order={3}>Connections</Title>
-            <Text size="sm" dimmed>
-                Everything PRSH talks to outside itself — the game, your image pack, OBS, the controller
-                reader. Set these once per machine; come back here when something on the broadcast has
-                stopped answering.
-            </Text>
 
-            {/* TWO COLUMNS, because most of these cards are short lines of text
-                and a path input — at full page width they were a few controls
-                marooned in a 1280px band. A card SPANS both only when it has
-                something that genuinely needs the width: the asset census (five
-                counted categories beside the path, then a line of missing
-                filenames per category) and the controller previews (four
-                512×180 frames). Everything else reads better narrow.
+            {/* THREE COLUMNS, then two full-width rows. The three narrow cards are
+                a path, a websocket address and a switch — each reads best at
+                about a third of the page, and side by side they are one row
+                instead of the two-and-a-half they took in two columns. The
+                image pack (five census tiles) and the controller reader (four
+                512×180 previews) genuinely need the width, so they span it.
 
-                `lg:` rather than `md:`: below ~1024px two columns would squeeze
-                the OBS host/port row and the census into each other. */}
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                {/* Narrow cards first and adjacent, so they pair into row 1.
-                    A spanning card between them would be bumped to its own row
-                    and leave the hole beside it. */}
+                `lg:` rather than `md:`: below ~1024px three columns squeeze the
+                OBS host/port row and a path's buttons into each other. */}
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
                 <RioHudConnection />
                 <ObsConnection />
+                <NetworkConnection />
                 <MsbAssetsConnection />
                 <ControllerConnection />
-                <NetworkConnection />
             </div>
         </div>
     );

@@ -151,8 +151,6 @@ def _find_gc_overlay() -> Path | None:
     2. In-repo submodule: ./gc-overlay (PRSH vendors it as a submodule).
     3. Sibling directory: ../gc-overlay (dev convenience).
 
-    A custom override (settings controller_overlay.path) is applied by the
-    caller, not here.
     """
     candidates: list[Path] = []
 
@@ -184,14 +182,10 @@ class ControllerOverlay:
     @classmethod
     async def Start(cls):
         """Initialize and optionally auto-start the overlay."""
+        # Detection only. There is no path override: gc-overlay ships inside
+        # every build and the submodule covers a source checkout, so a stored
+        # path could only ever point somewhere stale.
         cls._gc_overlay_path = _find_gc_overlay()
-
-        # Check for custom path in settings
-        custom_path = Settings.Get("controller_overlay.path", "")
-        if custom_path:
-            p = Path(custom_path)
-            if _is_gc_overlay_dir(p):
-                cls._gc_overlay_path = p
 
         cls._port = Settings.Get("controller_overlay.port", 8069)
         cls._auto_start = Settings.Get("controller_overlay.auto_start", False)
@@ -317,22 +311,6 @@ class ControllerOverlay:
         """Update the port (requires restart to take effect)."""
         cls._port = port
         await Settings.Set("controller_overlay.port", port)
-
-    @classmethod
-    async def SetPath(cls, path: str):
-        """Update the gc-overlay path and re-detect."""
-        await Settings.Set("controller_overlay.path", path)
-        if path:
-            p = Path(path)
-            if _is_gc_overlay_dir(p):
-                cls._gc_overlay_path = p
-                cls._version = _read_gc_version(p)
-                return {"success": True, "path": str(p), "available": True, "version": cls._version}
-            return {"success": False, "error": f"No gc-overlay binary or main.py at {path}"}
-        # Clear custom path and re-run auto-detection
-        cls._gc_overlay_path = _find_gc_overlay()
-        cls._version = _read_gc_version(cls._gc_overlay_path)
-        return {"success": True, "path": str(cls._gc_overlay_path) if cls._gc_overlay_path else None, "available": cls._gc_overlay_path is not None, "version": cls._version}
 
     @classmethod
     async def _kill_process(cls):

@@ -49,14 +49,3 @@ async def controller_set_port(port: int = 8069, session_id: str | None = None) -
     """Set the port for the controller overlay (requires restart)."""
     await ControllerOverlay.SetPort(port)
     return ORJSONResponse({"success": True, "port": port})
-
-
-@method(
-    router.put, "/controller/path",
-    version="1", id="controller.path",
-    response_class=ORJSONResponse,
-)
-async def controller_set_path(path: str = "", session_id: str | None = None) -> ORJSONResponse:
-    """Set the gc-overlay directory path. Empty string resets to auto-detect."""
-    result = await ControllerOverlay.SetPath(path)
-    return ORJSONResponse(result)

@@ -1,26 +1,22 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import { Text, Loader } from '../../components/ui/primitives';
-import { Panel } from '../../components/ui/panel';
+import { Loader } from '../../components/ui/primitives';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
-import { Switch } from '../../components/ui/switch';
-import { Label } from '../../components/ui/label';
-import { Badge } from '../../components/ui/badge';
 import ScaledIframe from '../../components/ScaledIframe';
 import { notifications } from '../../lib/notify';
 import { useSettingsStore, useStateStore } from '../../context/store';
 import { useSideLabels } from '../production/sides';
-import { ConnBody } from './connections';
+import { BusyButton, ConnCard, FieldLabel, Section, StatusPill, ToggleRow } from './kit';
 
 /*
  * gc-overlay — the controller-input reader.
  *
  * It is a SUBPROCESS on its own port (default 8069), not something PRSH renders.
  * It runs on every platform as of gc-overlay 1.1.0, which carries a Dolphin
- * transport for each; what varies is whether it is INSTALLED. Its whole install
- * lives here: where the binary is, what port it serves on, whether it boots with
- * PRSH, and whether it is up right now.
+ * transport for each. It SHIPS with PRSH (bundled in every build, the submodule
+ * in a source checkout), so there is no folder to point at — the card holds
+ * what port it serves on, whether it boots with PRSH, and whether it is up.
  *
  * WHY THE LIFECYCLE MOVED OFF THE PRODUCTION STAGE PANEL. Start/Stop used to sit
  * on the Controller element's stage body, which meant you could not start the
@@ -66,11 +62,11 @@ function PortPreview({ gcPort, baseUrl, owner }) {
     const sides = useSideLabels();
     return (
         <div className="flex min-w-0 flex-col gap-1">
-            <div className="flex items-center gap-2">
-                <Text size="xs" fw={600}>Port {gcPort}</Text>
+            <div className="flex h-5 items-center justify-between gap-2">
+                <FieldLabel>Port {gcPort}</FieldLabel>
                 {owner
-                    ? <Badge className="bg-[#3b82f6]/15 text-[#60a5fa]">{sides.label(owner)}</Badge>
-                    : <Text size="xs" dimmed>not in the game</Text>}
+                    ? <span className="rounded-[4px] bg-sky-500/15 px-1.5 text-[11px] font-semibold text-sky-300">{sides.label(owner)}</span>
+                    : <span className="text-[11px] text-muted-foreground/70">not in the game</span>}
             </div>
             {/* Checkerboard, same reason as the stage preview: gc-overlay draws
                 on transparency, and a flat backdrop makes "transparent" and
@@ -119,10 +115,8 @@ function PortPreview({ gcPort, baseUrl, owner }) {
 
 export default function ControllerConnection() {
     const [status, setStatus] = useState(null);
-    const [path, setPath] = useState('');
-    const [pathSaving, setPathSaving] = useState(false);
     const [portDraft, setPortDraft] = useState('');
-    const [portSaving, setPortSaving] = useState(false);
+    const [saving, setSaving] = useState(false);
     const [busy, setBusy] = useState(false);
     const owners = usePortOwners();
 
@@ -134,7 +128,6 @@ export default function ControllerConnection() {
             const resp = await fetch('/api/v1/controller/status');
             const data = await resp.json();
             setStatus(data);
-            setPath(prev => (prev ? prev : (data.path || '')));
             setPortDraft(prev => (prev ? prev : String(data.port ?? 8069)));
         } catch { /* keep the last-known status */ }
     }, []);
@@ -190,28 +183,11 @@ export default function ControllerConnection() {
         setBusy(false);
     }, [fetchStatus]);
 
-    const handleSavePath = useCallback(async () => {
-        setPathSaving(true);
-        try {
-            const resp = await fetch(`/api/v1/controller/path?path=${encodeURIComponent(path.trim())}`, { method: 'PUT' });
-            const data = await resp.json();
-            notifications.show(data.success
-                ? {
-                    message: data.available ? `Found gc-overlay at ${data.path}` : 'Path saved, but gc-overlay isn’t there',
-                    color: data.available ? 'green' : 'yellow',
-                }
-                : { message: data.error || 'Failed to set path', color: 'red' });
-        } catch {
-            notifications.show({ message: 'Failed to save the path', color: 'red' });
-        }
-        await fetchStatus();
-        setPathSaving(false);
-    }, [path, fetchStatus]);
+    const portDirty = !!status && !!Number(portDraft) && Number(portDraft) !== Number(status.port);
 
     const handleSavePort = useCallback(async () => {
         const n = Number(portDraft);
-        if (!n) return;
-        setPortSaving(true);
+        setSaving(true);
         try {
             await fetch(`/api/v1/controller/port?port=${n}`, { method: 'PUT' });
             notifications.show({
@@ -224,15 +200,14 @@ export default function ControllerConnection() {
             notifications.show({ message: 'Failed to set the port', color: 'red' });
         }
         await fetchStatus();
-        setPortSaving(false);
+        setSaving(false);
     }, [portDraft, status?.running, fetchStatus]);
 
     if (!status) {
         return (
-            <Panel title="Controller reader" className="lg:col-span-2"
-                actions={<Badge className="bg-muted text-muted-foreground">Checking…</Badge>}>
-                <ConnBody><Loader size={16} /></ConnBody>
-            </Panel>
+            <ConnCard title="Controller reader" className="lg:col-span-3" status={<StatusPill>Checking…</StatusPill>}>
+                <Section><Loader size={16} /></Section>
+            </ConnCard>
         );
     }
 
@@ -240,108 +215,72 @@ export default function ControllerConnection() {
     // Same-host assumption is the right one here: gc-overlay is a subprocess of
     // THIS server, so it is reachable at the address this browser used to get here.
     const baseUrl = `http://${window.location.hostname}:${status.port}`;
+    const pill = running
+        ? <StatusPill tone="ok">Running · :{status.port}</StatusPill>
+        : status.available ? <StatusPill>Stopped</StatusPill> : (
+            // Only a source checkout without its submodule lands here.
+            <StatusPill tone="bad" title="gc-overlay is missing from this install — in a source checkout, run git submodule update --init">
+                Not found
+            </StatusPill>
+        );
 
     return (
-        <Panel
+        <ConnCard
             title="Controller reader"
-            className="lg:col-span-2"
+            className="lg:col-span-3"
+            status={pill}
+            // Start/Stop rides the header beside the status it changes — the
+            // body used to restate that status in a bold line just to give the
+            // button somewhere to sit.
             actions={
-                <Badge className={running ? 'bg-[#22c55e] text-black'
-                    : status.available ? 'bg-muted text-muted-foreground' : 'bg-destructive text-white'}>
-                    {running ? 'Running' : status.available ? 'Stopped' : 'Not found'}
-                </Badge>
+                <Button
+                    size="xs"
+                    variant={running ? 'outline' : 'default'}
+                    className={running ? 'border-destructive/40 text-destructive hover:text-destructive' : ''}
+                    onClick={running ? handleStop : handleStart}
+                    disabled={busy || !status.available}
+                >
+                    {busy && <Loader size={10} />}
+                    {running ? 'Stop' : 'Start'}
+                </Button>
             }
         >
-            <ConnBody>
-                <Text size="xs" dimmed>
-                    gc-overlay reads GameCube controller input and draws it as its own browser source. It runs as
-                    a separate process on its own port. Leave the path empty to auto-detect a sibling gc-overlay
-                    folder.
-                </Text>
-
-                <div className="flex items-end gap-2">
-                    <div className="flex min-w-0 flex-1 flex-col gap-1">
-                        <Label htmlFor="gc-path"><Text size="xs" dimmed>Folder</Text></Label>
+            <Section>
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+                    <div className="flex items-center gap-2">
+                        <FieldLabel htmlFor="gc-port">Port</FieldLabel>
                         <Input
-                            id="gc-path"
-                            placeholder={status.available ? status.path : 'Not detected — enter the path manually'}
-                            value={path}
-                            onChange={e => setPath(e.currentTarget.value)}
-                        />
-                    </div>
-                    <Button size="xs" variant="outline" onClick={handleSavePath} disabled={pathSaving}>
-                        {pathSaving && <Loader size={12} />}
-                        Save
-                    </Button>
-                </div>
-
-                <div className="flex items-end gap-2">
-                    <div className="flex w-[120px] flex-col gap-1">
-                        <Label htmlFor="gc-port"><Text size="xs" dimmed>Port</Text></Label>
-                        <Input
-                            id="gc-port" inputMode="numeric" value={portDraft}
+                            id="gc-port" inputMode="numeric" value={portDraft} className="w-20 tabular-nums"
                             onChange={e => setPortDraft(e.currentTarget.value.replace(/[^0-9]/g, ''))}
                         />
+                        <BusyButton busy={saving} disabled={!portDirty} onClick={handleSavePort}>Save</BusyButton>
                     </div>
-                    <Button size="xs" variant="outline" onClick={handleSavePort} disabled={portSaving}>
-                        {portSaving && <Loader size={12} />}
-                        Save
-                    </Button>
-                    {status.version && <Text size="xs" dimmed className="ml-auto">gc-overlay {status.version}</Text>}
-                </div>
-
-                <Label className="mt-1 flex items-start gap-2">
-                    <Switch
-                        checked={autoStart} className="mt-0.5" disabled={!status.available}
-                        onCheckedChange={v => setSetting('controller_overlay.auto_start', !!v)}
+                    <ToggleRow
+                        checked={autoStart} disabled={!status.available}
+                        onChange={v => setSetting('controller_overlay.auto_start', !!v)}
+                        label="Start with PRSH"
                     />
-                    <span className="flex flex-col">
-                        <Text size="sm">Start with PRSH</Text>
-                        <Text size="xs" dimmed>
-                            Launch the reader automatically at boot, so the controller sources are live before
-                            you open OBS.
-                        </Text>
-                    </span>
-                </Label>
-
-                <div className="mt-1 flex items-center justify-between border-t border-border/60 pt-3">
-                    <Text size="sm" fw={600}>
-                        {running ? `Running on port ${status.port}` : status.available ? 'Not running' : 'gc-overlay not found'}
-                    </Text>
-                    <Button
-                        size="xs"
-                        variant={running ? 'outline' : 'default'}
-                        className={running ? 'border-destructive/40 text-destructive' : ''}
-                        onClick={running ? handleStop : handleStart}
-                        disabled={busy || !status.available}
-                    >
-                        {busy && <Loader size={10} />}
-                        {running ? 'Stop' : 'Start'}
-                    </Button>
+                    {status.version && (
+                        <span className="ml-auto text-xs text-muted-foreground tabular-nums">
+                            gc-overlay v{status.version}
+                        </span>
+                    )}
                 </div>
+            </Section>
 
-                {running ? (
-                    <div className="mt-1 flex flex-col gap-2 border-t border-border/60 pt-3">
-                        <Text size="xs" dimmed>
-                            Live input, straight from the reader — press a button on a pad and its box moves. No
-                            game required.
-                        </Text>
-                        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-                            {GC_PORTS.map(gcPort => (
-                                <PortPreview
-                                    key={gcPort} gcPort={gcPort} baseUrl={baseUrl}
-                                    owner={owners[stateIndexOf(gcPort)]}
-                                />
-                            ))}
-                        </div>
-
+            {/* Only while running: stopped / not found is already the pill. */}
+            {running && (
+                <Section>
+                    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                        {GC_PORTS.map(gcPort => (
+                            <PortPreview
+                                key={gcPort} gcPort={gcPort} baseUrl={baseUrl}
+                                owner={owners[stateIndexOf(gcPort)]}
+                            />
+                        ))}
                     </div>
-                ) : status.available && (
-                    <Text size="xs" dimmed className="italic">
-                        Start the reader to see live controller input here.
-                    </Text>
-                )}
-            </ConnBody>
-        </Panel>
+                </Section>
+            )}
+        </ConnCard>
     );
 }
