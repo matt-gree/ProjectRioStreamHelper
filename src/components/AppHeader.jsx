@@ -10,7 +10,7 @@ import { cn } from '../lib/utils';
 import SettingsModal from './SettingsModal';
 import { PatreonIcon, YouTubeIcon } from './SupportLinks';
 
-export default function TSHFields({ tabs = [] }) {
+export default function AppHeader({ tabs = [] }) {
     const app_name = useConfigStore(state => state.name);
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [connected, setConnected] = useState(false);

@@ -273,7 +273,7 @@ PRSH does not ship MSB images (Nintendo IP). Users provide an asset pack under `
 
 ## Build Notes
 
-`npm run dev` sets `TSH_DEV=1`, which enables CORS for the Vite origin. `scripts/freeze-version.py` bakes the version from the git tag during `prebuild`; `pyinstaller PRSH.spec` then produces `dist/PRSH.app` / `dist/PRSH/PRSH.exe`, and `installer/PRSH.iss` produces `PRSH-Setup.exe` on Windows.
+`npm run dev` sets `PRSH_DEV=1`, which enables CORS for the Vite origin. `scripts/freeze-version.py` bakes the version from the git tag during `prebuild`; `pyinstaller PRSH.spec` then produces `dist/PRSH.app` / `dist/PRSH/PRSH.exe`, and `installer/PRSH.iss` produces `PRSH-Setup.exe` on Windows.
 
 **A build that is not LAUNCHED is not tested.** `build-release.yml` runs `PRSH --selftest` (`_selftest` in `main.py`) on every artifact: the module-level import graph, the platform modules imported lazily inside the frozen branch, and the data paths read off disk — the two things importing `main.py` cannot reach, both silent when missing — then exits. It exists because prerelease 12 shipped unlaunchable on every platform at once: `caio`/`aiofile` read their own version via `importlib.metadata` at import, PyInstaller bundles modules and not distribution metadata, and the process died before PRSH's first line — no log, no server, only PyInstaller's dialog. Nothing in PRSH changed; `pip install .` resolved the chain unpinned. `PRSH.spec` now collects that chain's metadata recursively, so the next link to grow the lookup is already covered.
 

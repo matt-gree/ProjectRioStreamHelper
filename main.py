@@ -64,9 +64,9 @@ async def main() -> int:
         Participants.Load()
     )
 
-    # TSH_DEV=1 is set by `npm run server` (via package.json).
+    # PRSH_DEV=1 is set by `npm run server` (via package.json).
     # Running python3 main.py directly uses production mode.
-    dev_mode = os.environ.get("TSH_DEV") == "1"
+    dev_mode = os.environ.get("PRSH_DEV") == "1"
     await Settings.Set("server.dev", dev_mode)
 
     allow_lan = bool(Settings.Get("server.allow_lan", False))
@@ -251,7 +251,7 @@ if __name__ == '__main__':
 
     frozen = getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS')
     if frozen:
-        # CWD is set by hooks/runtime_hook_chdir.py before imports ran.
+        # CWD is set by installer/runtime_hook_chdir.py before imports ran.
         # Use a writable root for logs (macOS .app bundles may be read-only).
         wr = _writable_root()
         log_dir = os.path.join(wr, 'logs')

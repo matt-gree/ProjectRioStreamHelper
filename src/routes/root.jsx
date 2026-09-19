@@ -1,5 +1,5 @@
 import { Routes, Route } from "react-router-dom";
-import TSHFields from '../components/fields';
+import AppHeader from '../components/AppHeader';
 import WelcomeCard from '../components/WelcomeCard';
 import MatchConflictBanner from '../components/MatchConflictBanner';
 import SampleModeBanner from './production/sample';
@@ -10,7 +10,7 @@ import AddressBook from './address_book/address_book';
 import DesignTab from "./design/tab";
 import Connections from "./connections/connections";
 
-// Nav tabs. Rendered in the header row by TSHFields; routes wired below.
+// Nav tabs. Rendered in the header row by AppHeader; routes wired below.
 const allTabs = [
   { name: "Production", path: "/" },
   { name: "Competition", path: "/competition" },
@@ -25,7 +25,7 @@ const allTabs = [
 export default function Root() {
   return (
     <div className="min-h-screen">
-      <TSHFields tabs={allTabs} />
+      <AppHeader tabs={allTabs} />
       <MatchConflictBanner />
       <SampleModeBanner />
       <WelcomeCard />

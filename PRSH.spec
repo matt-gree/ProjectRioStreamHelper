@@ -202,7 +202,7 @@ a = Analysis(
     ],
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=['hooks/runtime_hook_chdir.py'],
+    runtime_hooks=['installer/runtime_hook_chdir.py'],
     excludes=[
         # Exclude dev-only packages to reduce size
         'matplotlib',

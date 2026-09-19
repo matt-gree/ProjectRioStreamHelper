@@ -910,7 +910,7 @@ class RioGameDataProvider:
 
     @classmethod
     def parse_game_data(cls, game_json: dict) -> dict:
-        """Convert a Project Rio game JSON into a TSH-compatible data format.
+        """Convert a Project Rio game JSON into the board's state shape.
 
         Ported directly from the old RioGameDataProvider.parse_game_data().
         """
