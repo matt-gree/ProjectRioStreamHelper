@@ -6,9 +6,9 @@ import { Text } from '../../../components/ui/primitives';
 import {
     LAYOUT_SETTINGS, THEME_ELEMENT, OVERRIDABLE_GLOBAL_KEYS, GLOBAL_DESIGN_DEFAULTS,
     OVERRIDE_CAPABLE_TYPES, TYPE_ROLE_DEFAULTS, themeElementFor, overrideReaches, settingReachesSize,
-} from '../../layouts/designConstants';
-import { usePaintedByApp, useDrawnTypeRoles, useDesignPackages } from '../../layouts/designPackage';
-import { useLayoutWhitelists, declaresAny } from '../../layouts/layoutWhitelist';
+} from '../../design/designConstants';
+import { usePaintedByApp, useDrawnTypeRoles, useDesignPackages } from '../../design/designPackage';
+import { useLayoutWhitelists, declaresAny } from '../../design/layoutWhitelist';
 import { FontCombobox } from '../../../components/ui/font-combobox';
 import { Button } from '../../../components/ui/button';
 import { Popover, PopoverTrigger, PopoverContent } from '../../../components/ui/popover';
@@ -27,7 +27,7 @@ import { stageSettingsSet } from '../controls';
  * DURING a broadcast — bands that animate in and out mid-game. Those are live
  * broadcast decisions, so they belong on the console, not only in Setup where
  * they lived before. The definitions stay single-sourced in
- * LAYOUT_SETTINGS[type] (routes/layouts/designConstants.js); this module
+ * LAYOUT_SETTINGS[type] (routes/design/designConstants.js); this module
  * renders them as rows and routes writes through the staging gateway.
  *
  * Every element-settings type has a kit row now — switch, select, text,
@@ -57,7 +57,7 @@ export function defsFor(type, keys) {
 /*
  * A setting that reaches its overlay through the app's palette is DEAD under a
  * design package that paints that element itself — the mount clears those CSS
- * vars rather than honouring them (see ../../layouts/designPackage.js). It is
+ * vars rather than honouring them (see ../../design/designPackage.js). It is
  * dropped rather than dimmed: switching packages is a deliberate act, and a
  * producer who does it should read the new look as the new look, not go hunting
  * for the customisations that no longer come with it.
@@ -528,7 +528,7 @@ export const ElementStyleSettings = memo(function ElementStyleSettings({ type, b
  * THREE THINGS MUST AGREE before a key is offered:
  *   1. the global registry offers it (`OVERRIDABLE_GLOBAL_KEYS`),
  *   2. the layout DECLARES it (`<meta name="overlay-settings">`, read back
- *      through ../../layouts/layoutWhitelist),
+ *      through ../../design/layoutWhitelist),
  *   3. the mount can honour a PIN, not just the global
  *      (`OVERRIDE_CAPABLE_TYPES`), and the pin is read back on THIS type
  *      (`overrideReaches` — overlay-base reads the card surface and the text

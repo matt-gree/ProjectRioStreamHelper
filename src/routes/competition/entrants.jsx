@@ -18,7 +18,7 @@ import useTournament from '../../hooks/useTournament';
 /*
  * The loaded event's ENTRANTS, and the Address Book mapping over them.
  *
- * It lived inside tournament_info.jsx as that form's right-hand column, which
+ * It lived inside the competition form (form.jsx) as that form's right-hand column, which
  * made the form's own width a function of whether a table was beside it. Both
  * lists about a loaded event — this and the bracket's sets — are peers now, in
  * the Competition page's one right column (../competition), so the form is just

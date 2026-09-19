@@ -1,4 +1,4 @@
-import { LAYOUT_SETTINGS } from '../../layouts/designConstants';
+import { LAYOUT_SETTINGS } from '../../design/designConstants';
 import { DirectStage } from './generic';
 import { OverlaySettingGroups, useOverlaySettings } from './overlay-settings';
 

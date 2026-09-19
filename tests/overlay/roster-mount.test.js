@@ -5,7 +5,7 @@ import { renderRoster, resolvePortraitStyle } from '../../public/layout/lib/rost
 // app-side mirror of overlay-base's, and designConstants.test.js pins the two
 // against each other by parsing the source. Stubbing a hand-written boolean
 // check here would let this suite pass on a rule the overlay does not use.
-import { settingOn } from '../../src/routes/layouts/designConstants';
+import { settingOn } from '../../src/routes/design/designConstants';
 
 /*
  * The roster's Pixel switch — off is smooth (what it always drew), on is what

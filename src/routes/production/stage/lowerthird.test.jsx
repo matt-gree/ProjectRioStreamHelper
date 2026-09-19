@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { TooltipProvider } from '../../../components/ui/tooltip';
 import { useSettingsStore, useStateStore } from '../../../context/store';
 import { useStagingStore } from '../../../context/staging';
-import { LAYOUT_SETTINGS } from '../../layouts/designConstants';
+import { LAYOUT_SETTINGS } from '../../design/designConstants';
 import { Stage } from './index';
 
 beforeEach(() => {

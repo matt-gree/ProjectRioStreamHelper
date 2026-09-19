@@ -83,7 +83,7 @@ Integration tests run **in-process** over `fastapi.testclient.TestClient` and
 
 Tests sit next to the module they cover (`rack.jsx` → `rack.test.jsx`), never in
 a mirror tree. The bulk is in `src/routes/production/` (console, stage panels,
-kit) and `src/routes/layouts/` (the Design tab).
+kit) and `src/routes/design/` (the Design tab).
 
 The one exception is the **overlay runtime** under `public/layout/lib/` (mounts,
 `mount-utils`, `rio-data`, port colours, type roles): its tests are in

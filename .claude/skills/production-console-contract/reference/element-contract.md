@@ -518,7 +518,7 @@ position, not an identity).
   `appPalette: true` in `LAYOUT_SETTINGS` reaches its overlay through the app's
   CSS palette, which a **full-art** theme's mount *clears* rather than honours
   (`clearDesignSettings`) — so it is dead, and dead controls come off the panel
-  (`useLiveDefs` + `routes/layouts/designPackage.js`). Three rules hold it
+  (`useLiveDefs` + `routes/design/designPackage.js`). Three rules hold it
   together: the tier is **per element, never per package** (`classic` is a token
   skin that still ships a full-art callout, and an element a package omits falls
   back to full-art `default`); the answer is read from the **shipped SVG's**

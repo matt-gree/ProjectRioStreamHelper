@@ -5,8 +5,8 @@ import { Text } from '../../components/ui/primitives';
 import { useStateStore } from '../../context/store';
 import TournamentLoader from './tournament_loader';
 import EntrantsPanel from './entrants';
-import TournamentInfo from '../tournament_info/tournament_info';
-import Bracket from '../bracket/bracket';
+import TournamentInfo from './form';
+import Bracket from './sets';
 
 /*
  * Competition — one page about one loaded event.

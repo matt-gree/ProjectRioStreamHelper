@@ -6,8 +6,8 @@ import SampleModeBanner from './production/sample';
 
 import Production from './production/production';
 import Competition from './competition/competition';
-import PlayerList from './player_list/player_list';
-import DesignTab from "./layouts/layouts";
+import AddressBook from './address_book/address_book';
+import DesignTab from "./design/tab";
 import Connections from "./connections/connections";
 
 // Nav tabs. Rendered in the header row by TSHFields; routes wired below.
@@ -43,7 +43,7 @@ export default function Root() {
           {/* The caster desk is authored on its Production stage; the old
               standalone tab duplicated it exactly and is gone. */}
           <Route path="/commentary" element={<Production />} />
-          <Route path="/player_list" element={<PlayerList />} />
+          <Route path="/player_list" element={<AddressBook />} />
           <Route path="/layouts" element={<DesignTab />} />
           <Route path="/connections" element={<Connections />} />
         </Routes>

@@ -3,7 +3,7 @@ import { render, screen, cleanup, fireEvent, within } from '@testing-library/rea
 import { TooltipProvider } from '../../../components/ui/tooltip';
 import { useSettingsStore } from '../../../context/store';
 import { useStagingStore } from '../../../context/staging';
-import { LAYOUT_SETTINGS } from '../../layouts/designConstants';
+import { LAYOUT_SETTINGS } from '../../design/designConstants';
 import { Stage } from './index';
 
 // usePersistentState needs a working localStorage (see rack.test.jsx).

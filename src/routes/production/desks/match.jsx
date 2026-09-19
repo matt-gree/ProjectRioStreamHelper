@@ -16,7 +16,7 @@ import {
     Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
 } from '../../../components/ui/command';
 import { useAssetUrls } from '../../../lib/assets';
-import { usePortColors } from '../../layouts/designPackage';
+import { usePortColors } from '../../design/designPackage';
 import { MSB_CAPTAINS } from '../../../data/msb';
 import { Stack, Group, Text } from '../../../components/ui/primitives';
 import { Badge } from '../../../components/ui/badge';

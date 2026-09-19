@@ -202,7 +202,7 @@ export function mountScoreboard({ host, sb, size }) {
   // hand-editable, so "false" is a shape that really occurs — and under the bare
   // comparison it is not `false`, so the switch read ON while the console that
   // wrote it read OFF. One rule, shared with the Design tab's own `settingOn`
-  // (src/routes/layouts/designConstants.js), pinned by designConstants.test.js.
+  // (src/routes/design/designConstants.js), pinned by designConstants.test.js.
   function readToggles(settings) {
     const on = OverlayBase.settingOn;
     // showLogo is promoted-to-global (per-layout → overlays.global.showLogo);

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { fontOptions } from './font-combobox';
-import { TYPE_ROLE_DEFAULTS } from '../../routes/layouts/designConstants';
+import { TYPE_ROLE_DEFAULTS } from '../../routes/design/designConstants';
 
 const names = (opts) => opts.map(o => o.value);
 

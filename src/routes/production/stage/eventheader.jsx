@@ -4,7 +4,7 @@ import { Text } from '../../../components/ui/primitives';
 import { Button } from '../../../components/ui/button';
 import { cn } from '../../../lib/utils';
 import { boardOfUrl } from '../../../lib/obs-binding';
-import { LAYOUT_SETTINGS } from '../../layouts/designConstants';
+import { LAYOUT_SETTINGS } from '../../design/designConstants';
 import { IconToggle, TextRow, KIT_SECTION } from '../kit';
 import { MoveButtons, StagedDot } from '../controls';
 import { BANDS, FIELDS, useBands, useFieldValues, fieldValue } from '../eventheader';

@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { footerLine, mountScorecard } from '../../public/layout/lib/scorecard-mount.js';
-import { GLOBAL_DESIGN_DEFAULTS, GLOBAL_DESIGN_KEYS, LAYOUT_SETTINGS } from '../../src/routes/layouts/designConstants';
+import { GLOBAL_DESIGN_DEFAULTS, GLOBAL_DESIGN_KEYS, LAYOUT_SETTINGS } from '../../src/routes/design/designConstants';
 
 /*
  * The vertical Scorecard. Three rules, and every one of them fails in a way a

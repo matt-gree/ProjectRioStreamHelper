@@ -3,13 +3,13 @@ import { readFileSync } from 'node:fs';
 import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
 import { useSettingsStore } from '../../../context/store';
 import { useStagingStore } from '../../../context/staging';
-import { invalidateDesignPackages } from '../../layouts/designPackage';
-import { invalidateLayoutWhitelist } from '../../layouts/layoutWhitelist';
+import { invalidateDesignPackages } from '../../design/designPackage';
+import { invalidateLayoutWhitelist } from '../../design/layoutWhitelist';
 import {
     ElementStyleSettings, ElementStyleOverrides, RENDERABLE, chunkDefs, groupDefs,
     seedValue,
 } from './overlay-settings';
-import { OVERRIDABLE_GLOBAL_KEYS, GLOBAL_DESIGN_DEFAULTS } from '../../layouts/designConstants';
+import { OVERRIDABLE_GLOBAL_KEYS, GLOBAL_DESIGN_DEFAULTS } from '../../design/designConstants';
 
 /*
  * Two session caches fetch here — the design packages and the layout catalog —

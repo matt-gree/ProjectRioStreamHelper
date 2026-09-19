@@ -279,7 +279,7 @@ screenshot; get the user's eyes or reason from first principles.
   `zoom` is layout-affecting so the content re-renders crisp at the target
   resolution. Applies to every preview at once.
 
-## Catalog + registration (`server/api/v1/layouts.py`, `src/routes/layouts/designConstants.js`)
+## Catalog + registration (`server/api/v1/layouts.py`, `src/routes/design/designConstants.js`)
 
 - **Layout type** is derived from filename stem + group folder (`bracket/*` →
   `bracket`, else stem minus trailing digits).
@@ -290,7 +290,7 @@ screenshot; get the user's eyes or reason from first principles.
   **missing param defaults to board 1**.
 - `controller/` is listed on **every platform** — gc-overlay has a transport
   for each, so presence (not the OS) gates it. Don't platform-gate a test on it.
-- Style settings are two-tier, defined in `src/routes/layouts/designConstants.js`:
+- Style settings are two-tier, defined in `src/routes/design/designConstants.js`:
   `GLOBAL_DESIGN_KEYS`/`GLOBAL_DESIGN_DEFAULTS` (live at `overlays.global.*`)
   and `LAYOUT_SETTINGS[layoutType]` (live at `overlays.{type}.{key}`;
   scorecard is per-board `overlays.scorecard.{N}.*`).

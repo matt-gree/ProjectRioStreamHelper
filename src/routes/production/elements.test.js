@@ -3,7 +3,7 @@ import {
     ELEMENTS, PICKABLE_FEEDS, isPickableFeed,
     quickFaceFor, isPinnable, stageBodyFor, settingsTypeOf,
 } from './elements';
-import { OVERRIDE_CAPABLE_TYPES, LAYOUT_SETTINGS } from '../layouts/designConstants';
+import { OVERRIDE_CAPABLE_TYPES, LAYOUT_SETTINGS } from '../design/designConstants';
 import { FEED_OPTION_HOOKS } from './feed-pickers';
 
 /*

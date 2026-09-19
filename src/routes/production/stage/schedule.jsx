@@ -10,7 +10,7 @@ import { cn } from '../../../lib/utils';
 import { KIT_INPUT, ListRow, StatusLine } from '../kit';
 import { matchDisplayLabel } from '../matches';
 import { useQueueOrder } from '../queue';
-import { LAYOUT_SETTINGS, settingOn } from '../../layouts/designConstants';
+import { LAYOUT_SETTINGS, settingOn } from '../../design/designConstants';
 // THE OVERLAY'S OWN RULE, imported rather than restated — see `useDrawnIds`.
 import { scheduleRows, DEFAULTS } from '../../../../public/layout/lib/schedule-mount';
 import { resolveSetting, useOverlaySettings } from './overlay-settings';

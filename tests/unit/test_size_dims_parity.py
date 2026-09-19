@@ -39,7 +39,7 @@ def test_scoreboard_mount_size_dims_match_contracts():
 def test_design_jsx_preview_rows_match_contracts():
     # The Design tab's preview tiles (PREVIEW_COLUMNS in design.jsx). A tile
     # quoting the wrong canvas hands the overlay the wrong viewport aspect.
-    src = (REPO / "src/routes/layouts/design.jsx").read_text()
+    src = (REPO / "src/routes/design/design.jsx").read_text()
     for label, size in (("Scoreboard · Large", "l"), ("Scoreboard · Small", "s")):
         m = re.search(
             rf"label:\s*'{label}'.*?w:\s*(\d+),\s*h:\s*(\d+)", src

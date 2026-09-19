@@ -10,7 +10,7 @@
  * rows used to do.
  *
  * Lives here rather than beside either control because there are now two of
- * them: the Design tab's ColorWithOpacity (routes/layouts/shared.jsx) authors
+ * them: the Design tab's ColorWithOpacity (routes/design/shared.jsx) authors
  * the global, and the console kit's ColorRow (routes/production/kit/rows.jsx)
  * authors the per-element pin of that same key. Two copies of this arithmetic
  * is two chances for the global and its override to disagree about what a

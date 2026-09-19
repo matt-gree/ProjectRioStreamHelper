@@ -19,7 +19,7 @@ vi.mock('../../context/organizers', async (importOriginal) => ({
 }));
 
 const { setOrganizers } = await import('../../context/organizers');
-const { OrganizerRows } = await import('./tournament_info');
+const { OrganizerRows } = await import('./form');
 
 beforeEach(() => {
     useStateStore.setState({ tournamentInfo: {} });

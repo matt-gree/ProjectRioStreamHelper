@@ -617,7 +617,7 @@ export const TextRow = memo(function TextRow({
  * air the moment a producer nudged its hue. react-colorful's picker has the
  * alpha slider the platform control lacks, opens in the app instead of a system
  * panel, and is what the Design tab already uses for the very globals these
- * rows pin (routes/layouts/shared.jsx) — so the console and the Design tab now
+ * rows pin (routes/design/shared.jsx) — so the console and the Design tab now
  * ask for a colour the same way.
  *
  * THE FIELD SPEAKS HEX, whatever is stored. `rgba(125, 47, 47, 0.55)` is the

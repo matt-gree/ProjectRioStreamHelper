@@ -187,7 +187,7 @@ export default function WelcomeCard() {
                             {/* The Setup tab is GONE, and this pointed at it by
                                 name — `#/layouts` has been the Design tab since
                                 the layout browser's jobs moved onto the console
-                                (see routes/layouts/layouts.jsx). Adding a source
+                                (see routes/design/layouts.jsx). Adding a source
                                 and copying its URL are both the rack's + now, and
                                 naming it that way also stops the checklist from
                                 promising something that needs OBS: the Add picker

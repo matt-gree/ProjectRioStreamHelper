@@ -624,7 +624,7 @@
   // ── Per-layout element overrides: overlays.{type}.{key} → CSS var ──
   // Declarative so applyDesignSettings below and DESIGN_SETTING_PROPS stay in
   // sync automatically. Mirrors the UI-side registries in
-  // src/routes/layouts/designConstants.js (OVERRIDABLE_GLOBAL_KEYS /
+  // src/routes/design/designConstants.js (OVERRIDABLE_GLOBAL_KEYS /
   // LAYOUT_SETTINGS) — a knob added there needs a row here to reach the DOM.
   // `px: true` appends units (and accepts 0); `dedicated: true` marks a var no
   // global section sets, so it is REMOVED when the setting is unset (an
@@ -684,7 +684,7 @@
    * shadow: the control that is supposed to explain the broadcast said the
    * opposite of what the broadcast was doing.
    *
-   * Mirrored by `settingOn` in src/routes/layouts/designConstants.js. This file
+   * Mirrored by `settingOn` in src/routes/design/designConstants.js. This file
    * is a classic script and cannot import a module, so the two are pinned
    * against one truth table in designConstants.test.js.
    */

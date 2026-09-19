@@ -14,7 +14,7 @@ import { BoardGameSubject, Subject } from './subject';
 import {
     SettingSegments, defsFor, useLiveDefs, useOverlaySettings,
 } from './stage/overlay-settings';
-import { settingReachesSize } from '../layouts/designConstants';
+import { settingReachesSize } from '../design/designConstants';
 import { BracketPhasePicker, useBracketDesk } from './bracket';
 import { LowerThirdSegmentChips } from './stage/lowerthird';
 import { CommentarySeatChips } from './stage/commentary';
