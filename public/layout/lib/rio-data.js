@@ -37,6 +37,18 @@
     return `${OverlayBase.BASE_URL}/game_assets/msb/teamLogos/${id}.png`;
   }
 
+  /*
+   * A side's LEAGUE logo — set by server/league_logos.py when the board's
+   * game is played in a league an address book is linked to, and the player
+   * carries a logo in that book. It outranks the MSB team logo in every logo well:
+   * in a league game the team a player represents is the league's, and the
+   * MSB team is only what their captain happens to imply. "" when none.
+   */
+  function leagueLogoUrl(state, sb, team) {
+    const path = deepGet(state, `score.${sb}.player.${team}.league_logo`, '');
+    return path ? `${OverlayBase.BASE_URL}${path}` : '';
+  }
+
   // ── Number formatting ────────────────────────────────────────────────────
   /*
    * A rate to three places, written the way baseball writes one: no leading
@@ -158,9 +170,10 @@
         slots.push({ kind: 'role', role, imgUrl: roleIconUrl(role) });
       }
       if (opts.includeTeamLogo) {
+        const league = leagueLogoUrl(state, sb, team);
         const teamName = deepGet(player, 'msb_team') || '';
-        if (teamName) {
-          slots.push({ kind: 'teamLogo', imgUrl: teamLogoUrl(teamName) });
+        if (league || teamName) {
+          slots.push({ kind: 'teamLogo', imgUrl: league || teamLogoUrl(teamName) });
         }
       }
     }
@@ -315,6 +328,7 @@
     charIconUrl,
     roleIconUrl,
     teamLogoUrl,
+    leagueLogoUrl,
     fmt1, fmt2, fmt3,
     isHudSource,
     gameMode,

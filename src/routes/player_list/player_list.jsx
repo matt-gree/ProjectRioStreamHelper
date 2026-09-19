@@ -11,9 +11,14 @@ import { cn } from '../../lib/utils';
 import {
     Table, TableHeader, TableBody, TableHead, TableRow, TableCell,
 } from '../../components/ui/table';
-import { useParticipantsStore } from '../../context/participants';
+import { MAIN_BOOK, useParticipantsStore } from '../../context/participants';
 import { useSideLabels } from '../production/sides';
+import { usePersistentState } from '../../hooks/usePersistentState';
 import { SOCIAL_MARKS } from '../../../public/layout/lib/social-marks.js';
+import {
+    AddFromBooks, BOOK_FILE_ACCEPT, BookStrip, LeaguePanel, NewBookDialog, PlayerLogo,
+    downloadBlob, downloadJson, fileSlug,
+} from './books';
 
 /*
  * Address Book — a CRUD view over the participant registry (the streamer's
@@ -186,7 +191,7 @@ function SidePin({ value, onChange }) {
 // body row cannot draw the rules in different places.
 const GROUP = 'border-l border-border/60';
 
-function AddressBookRow({ row, onPersist, onDelete }) {
+function AddressBookRow({ row, showLogo, onPersist, onDelete }) {
     // Local draft so we PUT on blur, not on every keystroke.
     const [draft, setDraft] = useState(() => ({
         rioName: row.identities?.rioName ?? '',
@@ -232,14 +237,17 @@ function AddressBookRow({ row, onPersist, onDelete }) {
 
     return (
         <TableRow className="group/row">
-            {/* PERSON — the record as it reads on air: sponsor prefix, then the
-                name. Behind the monogram so the column has a left rail. */}
+            {/* PERSON — the record as it reads on air: in a league book their
+                logo, then the sponsor prefix (a league's team name, in its own
+                games), then the name. */}
             <TableCell>
                 <div className="flex items-center gap-1">
+                    {showLogo && <PlayerLogo row={row} who={who} />}
                     <BookField
                         {...field('prefix')}
-                        placeholder="—"
-                        aria-label="Sponsor prefix"
+                        placeholder={showLogo ? 'Team' : '—'}
+                        aria-label={showLogo ? 'Team name (shown as the prefix in this league)' : 'Sponsor prefix'}
+                        title={showLogo ? 'In this league’s games this is drawn as the tag above the name' : undefined}
                         className={cn(NAME_FACE, 'w-[54px] px-1.5 text-right text-[11px]',
                                       'tracking-[0.06em] text-muted-foreground')}
                     />
@@ -373,19 +381,42 @@ const searchBlob = (row) => [
 ].filter(Boolean).join(' ').toLowerCase();
 
 export default function PlayerList() {
-    const { participants, load, create, update, remove, exportBook, importBook } = useParticipantsStore(useShallow(s => ({
+    const {
+        participants: everyone, books, load, create, update, remove,
+        exportBook, exportShared, importBook, importShared,
+    } = useParticipantsStore(useShallow(s => ({
         participants: s.participants,
+        books: s.books,
         load: s.load,
         create: s.create,
         update: s.update,
         remove: s.remove,
         exportBook: s.exportBook,
+        exportShared: s.exportShared,
         importBook: s.importBook,
+        importShared: s.importShared,
     })));
 
     useEffect(() => { load(); }, [load]);
 
-    const addPerson = useCallback(() => { create({}); }, [create]);
+    /*
+     * Which book is open. Browser-local, like every other "where was I" on the
+     * console, and RESOLVED AT READ TIME rather than rewritten: a stored id for
+     * a book since deleted (or one that lives on another machine's install)
+     * simply falls back to main.
+     */
+    const [storedBook, setBookId] = usePersistentState('prsh.ui.addressbook.book', MAIN_BOOK);
+    const book = books.find(b => b.id === storedBook) || books.find(b => b.id === MAIN_BOOK) || null;
+    const bookId = book?.id ?? MAIN_BOOK;
+    const isMain = bookId === MAIN_BOOK;
+    const [newOpen, setNewOpen] = useState(false);
+
+    const participants = useMemo(
+        () => everyone.filter(p => (p.book || MAIN_BOOK) === bookId),
+        [everyone, bookId],
+    );
+
+    const addPerson = useCallback(() => { create({ book: bookId }); }, [create, bookId]);
 
     const fileInputRef = useRef(null);
     const [busy, setBusy] = useState(false);
@@ -395,12 +426,15 @@ export default function PlayerList() {
      * WHAT IS LEFT TO DO, said once at the top — the same shape the entrants
      * list uses, because it is the same question. Per-row state answers "is
      * this one finished"; nothing answered "am I finished", and counting forty
-     * rows by eye is not an answer.
+     * rows by eye is not an answer. In a league book the other unfinished
+     * thing is a player with no logo — they play in the league and nothing of
+     * theirs will go on air.
      */
     const census = useMemo(() => {
         const missing = participants.filter(p => !p.identities?.rioName).length;
-        return { total: participants.length, missing };
-    }, [participants]);
+        const logoless = isMain ? 0 : participants.filter(p => !p.logo).length;
+        return { total: participants.length, missing, logoless };
+    }, [participants, isMain]);
 
     const shown = useMemo(() => {
         const q = query.trim().toLowerCase();
@@ -408,23 +442,20 @@ export default function PlayerList() {
         return participants.filter(p => searchBlob(p).includes(q));
     }, [participants, query]);
 
+    /* The main book is people only, so its backup stays one readable JSON
+       file. Any other book can carry logos, and goes out as the shared zip. */
     const handleExport = useCallback(async () => {
         try {
-            const data = await exportBook();
-            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
             const stamp = new Date().toISOString().slice(0, 10);
-            a.href = url;
-            a.download = `prsh-address-book-${stamp}.json`;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            URL.revokeObjectURL(url);
+            if (isMain) {
+                downloadJson(await exportBook(bookId), `prsh-address-book-${stamp}.json`);
+            } else {
+                downloadBlob(await exportShared(bookId), `${fileSlug(book?.name)}.prsh-book.zip`);
+            }
         } catch (e) {
             notifications.show({ message: `Export failed: ${e.message}`, color: 'red' });
         }
-    }, [exportBook]);
+    }, [exportBook, exportShared, bookId, isMain, book?.name]);
 
     const handleImportFile = useCallback(async (e) => {
         const file = e.target.files?.[0];
@@ -432,18 +463,24 @@ export default function PlayerList() {
         if (!file) return;
         setBusy(true);
         try {
-            const parsed = JSON.parse(await file.text());
-            const count = Array.isArray(parsed) ? parsed.length
-                : Array.isArray(parsed?.participants) ? parsed.participants.length : 0;
-            const replace = participants.length > 0 && count > 0 && window.confirm(
-                `Import ${count} ${count === 1 ? 'person' : 'people'}.\n\n` +
-                'OK  — Replace: wipe the current book, then load the file exactly.\n' +
+            // A JSON file can say how many people it holds before anything is
+            // sent; a zip is only opened on the server.
+            let count = null;
+            if (!/\.zip$/i.test(file.name)) {
+                const parsed = JSON.parse(await file.text());
+                count = Array.isArray(parsed) ? parsed.length
+                    : Array.isArray(parsed?.participants) ? parsed.participants.length : 0;
+            }
+            const what = count == null ? 'this file' : `${count} ${count === 1 ? 'person' : 'people'}`;
+            const replace = participants.length > 0 && count !== 0 && window.confirm(
+                `Import ${what} into “${book?.name ?? 'Address Book'}”.\n\n` +
+                'OK  — Replace: wipe this book, then load the file exactly.\n' +
                 'Cancel — Merge: keep everyone; add new people and refresh matches.',
             );
-            const result = await importBook(parsed, replace);
+            const result = await importBook(file, replace, bookId);
             notifications.show({
                 message: replace
-                    ? `Replaced address book: ${result.imported} imported.`
+                    ? `Replaced ${book?.name ?? 'the book'}: ${result.imported} imported.`
                     : `Merged: ${result.created} added, ${result.updated} updated.`,
                 color: 'green',
             });
@@ -452,7 +489,27 @@ export default function PlayerList() {
         } finally {
             setBusy(false);
         }
-    }, [importBook, participants.length]);
+    }, [importBook, participants.length, bookId, book?.name]);
+
+    /* A book someone shared: always a NEW book, so opening a league's file can
+       never overwrite the people you already keep. */
+    const handleOpenShared = useCallback(async (file) => {
+        if (!file) return;
+        setBusy(true);
+        try {
+            const result = await importShared(file);
+            setBookId(result.book);
+            const name = useParticipantsStore.getState().books.find(b => b.id === result.book)?.name;
+            notifications.show({
+                message: `Opened “${name || 'Imported book'}”: ${result.imported} ${result.imported === 1 ? 'person' : 'people'}.`,
+                color: 'green',
+            });
+        } catch (err) {
+            notifications.show({ message: `Could not open that book: ${err.message}`, color: 'red' });
+        } finally {
+            setBusy(false);
+        }
+    }, [importShared, setBookId]);
 
     return (
         <div className="flex flex-col gap-4">
@@ -470,6 +527,11 @@ export default function PlayerList() {
                                     {' · '}{census.missing} without a Rio ID
                                 </span>
                             )}
+                            {census.logoless > 0 && (
+                                <span className="text-[#60a5fa]">
+                                    {' · '}{census.logoless} without a logo
+                                </span>
+                            )}
                         </Text>
                     )}
                 </div>
@@ -477,7 +539,7 @@ export default function PlayerList() {
                     <input
                         ref={fileInputRef}
                         type="file"
-                        accept="application/json,.json"
+                        accept={BOOK_FILE_ACCEPT}
                         className="hidden"
                         onChange={handleImportFile}
                     />
@@ -487,9 +549,28 @@ export default function PlayerList() {
                     <Button size="sm" variant="outline" disabled={participants.length === 0} onClick={handleExport}>
                         <Download size={14} className="mr-1.5" /> Export
                     </Button>
+                    {!isMain && book && (
+                        <AddFromBooks book={book} books={books} participants={everyone} />
+                    )}
                     <Button size="sm" onClick={addPerson}>+ Add Person</Button>
                 </div>
             </div>
+
+            {books.length > 0 && (
+                <BookStrip
+                    books={books}
+                    value={bookId}
+                    onChange={setBookId}
+                    onNew={() => setNewOpen(true)}
+                    onImportShared={handleOpenShared}
+                    busy={busy}
+                />
+            )}
+            <NewBookDialog open={newOpen} onClose={() => setNewOpen(false)} onCreated={b => setBookId(b.id)} />
+
+            {!isMain && book && (
+                <LeaguePanel book={book} participants={participants} onDeleted={() => setBookId(MAIN_BOOK)} />
+            )}
 
             <Panel
                 title="People"
@@ -510,10 +591,16 @@ export default function PlayerList() {
                        instead. It says what to do, not what the feature is. */
                     <div className="flex flex-col items-center gap-3 px-3 py-12 text-center">
                         <Text size="sm" dimmed>
-                            No one saved yet. People you add here resurface on any scoreboard
-                            the moment their Rio ID turns up in a game.
+                            {isMain
+                                ? 'No one saved yet. People you add here resurface on any scoreboard the moment their Rio ID turns up in a game.'
+                                : 'No one in this book yet. Bring in people you already know, or add someone new.'}
                         </Text>
-                        <Button size="sm" onClick={addPerson}>+ Add Person</Button>
+                        <div className="flex items-center gap-2">
+                            {!isMain && book && (
+                                <AddFromBooks book={book} books={books} participants={everyone} />
+                            )}
+                            <Button size="sm" onClick={addPerson}>+ Add Person</Button>
+                        </div>
                     </div>
                 ) : (
                     <>
@@ -524,6 +611,7 @@ export default function PlayerList() {
                                     <AddressBookRow
                                         key={row.id}
                                         row={row}
+                                        showLogo={!isMain}
                                         onPersist={update}
                                         onDelete={remove}
                                     />

@@ -49,6 +49,7 @@ def isolate_user_data(tmp_path, monkeypatch):
                         AsyncPath(str(tmp_path / "settings.json")))
     monkeypatch.setattr(Participants, "_out",
                         AsyncPath(str(tmp_path / "participants.json")))
+    monkeypatch.setattr(Participants, "_logos_dir", tmp_path / "branding" / "leagues")
     return tmp_path
 
 
@@ -91,6 +92,7 @@ def reset_singletons():
         "autocapture_done": set(StatFileWatcher._done),
         "announcements_active": list(Announcements._active),
         "participants": dict(Participants.participants),
+        "books": dict(Participants.books),
         # The API-game pools and the post-game caches are class-level dicts
         # like every entry above. They were missed, so a test that seeded a
         # pool or captured a box score left it visible to every later test —
@@ -122,6 +124,7 @@ def reset_singletons():
     # test would otherwise run inside every later test's writes.
     State.hooks = []
     State.unset_hooks = []
+    Settings.watchers = []
     # Same loop-binding hazard as the queue: an Event/Lock binds on first await.
     State._persist_dirty = None
     State._save_lock = None
@@ -151,6 +154,8 @@ def reset_singletons():
     StatFileWatcher._done = set()
     Announcements._active = []
     Participants.participants = {}
+    Participants.books = {}
+    Participants._ensure_main()
     Participants._reindex()
     OngoingGamePool.games = {}
     OngoingGamePool._follow_misses = {}
@@ -171,6 +176,7 @@ def reset_singletons():
     Automations.reset()
     State.hooks = []
     State.unset_hooks = []
+    Settings.watchers = []
     State.state = saved["state"]
     State.last_state = saved["last_state"]
     State.changed_keys = saved["changed_keys"]
@@ -193,6 +199,7 @@ def reset_singletons():
     StatFileWatcher._done = saved["autocapture_done"]
     Announcements._active = saved["announcements_active"]
     Participants.participants = saved["participants"]
+    Participants.books = saved["books"]
     Participants._reindex()
     OngoingGamePool.games = saved["ongoing_games"]
     OngoingGamePool._follow_misses = saved["ongoing_follow_misses"]

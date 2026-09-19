@@ -7,11 +7,13 @@ event registration is needed or wanted here.
 """
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import ORJSONResponse
+import re
+
+from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi.responses import ORJSONResponse, Response
 from pydantic import BaseModel
 
-from server.participants import Participants
+from server.participants import MAIN_BOOK, Participants
 
 router = APIRouter(prefix="/participants", tags=["participants"])
 
@@ -28,6 +30,9 @@ class ParticipantPayload(BaseModel):
     # still reaches Update.
     prefs: dict[str, Any] | None = None
     meta: dict[str, Any] | None = None
+    # Which book the row is in (schema v2). Its logo is set through
+    # `/{pid}/logo`, never here — a logo is a file, not a field.
+    book: str | None = None
 
 
 class StartGGImportPayload(BaseModel):
@@ -42,6 +47,19 @@ class ImportPayload(BaseModel):
     first; otherwise rows are merged by start.gg userId / rioName."""
     participants: list[dict[str, Any]] = []
     replace: bool = False
+    # The book to import INTO (default `main`), and the export's own `book`
+    # block — consulted only for an OLD file whose logos hung off teams.
+    target: str = MAIN_BOOK
+    book: dict[str, Any] | None = None
+
+
+class BookPayload(BaseModel):
+    name: str | None = None
+    modes: list[str] | None = None
+
+
+class CommunityPayload(BaseModel):
+    community: str
 
 
 @router.get("", response_class=ORJSONResponse)
@@ -75,16 +93,177 @@ async def delete_participant(pid: str):
 
 @router.get("/export", response_class=ORJSONResponse)
 async def export_participants():
-    """Full address-book snapshot for manual backup / transfer between
-    machines. Round-trips through POST /import."""
-    return Participants.Export()
+    """The main book's snapshot — kept at its old path for anything that
+    scripted a backup. Round-trips through POST /import."""
+    return Participants.Export(MAIN_BOOK)
 
 
 @router.post("/import", response_class=ORJSONResponse)
 async def import_participants(payload: ImportPayload):
-    """Restore an exported address book. Merges by default (non-destructive);
-    ``replace=true`` wipes the book first for an exact restore."""
-    return await Participants.ImportRows(payload.participants, replace=payload.replace)
+    """Restore an exported book INTO an existing one (``target``, default
+    main). Merges by default (non-destructive); ``replace=true`` wipes that
+    book's people first for an exact restore."""
+    if payload.target not in Participants.books:
+        raise HTTPException(404, f"book {payload.target!r} not found")
+    return await Participants.ImportRows(
+        payload.participants,
+        replace=payload.replace,
+        book=payload.target,
+        teams=(payload.book or {}).get("teams"),
+    )
+
+
+# ----- books -----------------------------------------------------------------
+
+
+@router.get("/books", response_class=ORJSONResponse)
+async def list_books():
+    """Every book (main first), each with its league modes and a people `count`."""
+    return Participants.ListBooks()
+
+
+@router.post("/books", response_class=ORJSONResponse)
+async def create_book(payload: BookPayload):
+    return await Participants.CreateBook(payload.model_dump(exclude_none=True))
+
+
+async def _read_shared(file: UploadFile):
+    """A shared book file, zip or (older) JSON → (payload, {logo path: bytes})."""
+    import orjson
+
+    data = await file.read()
+    if data[:2] == b"PK":
+        try:
+            return Participants.ReadZip(data)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+    try:
+        payload = orjson.loads(data)
+    except Exception:
+        raise HTTPException(400, "Not an address-book file (expected a .zip or .json)")
+    if isinstance(payload, list):
+        payload = {"participants": payload}
+    if not isinstance(payload, dict):
+        raise HTTPException(400, "Not an address-book file")
+    return payload, {}
+
+
+@router.post("/books/import/file", response_class=ORJSONResponse)
+async def import_shared_book_file(file: UploadFile = File(...)):
+    """Open a shared book — a `.prsh-book.zip`, or a JSON book shared before
+    zips — as a NEW book: league, people and their logos."""
+    payload, files = await _read_shared(file)
+    return await Participants.ImportAsNewBook(payload, files)
+
+
+@router.post("/import/file", response_class=ORJSONResponse)
+async def import_file_into(target: str = MAIN_BOOK, replace: bool = False, file: UploadFile = File(...)):
+    """Import a book file (zip or JSON) INTO an existing book — the page's
+    Import button. Each person's logo comes along."""
+    if target not in Participants.books:
+        raise HTTPException(404, f"book {target!r} not found")
+    payload, files = await _read_shared(file)
+    return await Participants.ImportRows(
+        payload.get("participants") or [], replace=replace, book=target,
+        teams=(payload.get("book") or {}).get("teams") if isinstance(payload.get("book"), dict) else None,
+        files=files,
+    )
+
+
+@router.get("/communities", response_class=ORJSONResponse)
+async def list_communities():
+    """Every Rio community, by name — what a league book can be pulled from."""
+    from server.rio import stats_api
+
+    try:
+        return await stats_api.fetch_communities()
+    except Exception as e:
+        raise HTTPException(502, f"Could not reach Project Rio: {e}")
+
+
+@router.post("/books/{bid}/community", response_class=ORJSONResponse)
+async def pull_community(bid: str, payload: CommunityPayload):
+    """Bring every player in a Rio community into book ``bid``.
+
+    Answers with who came in and HOW: ``source`` is ``members`` when Rio handed
+    over the community's own list, ``games`` when the community is private to
+    this Rio key and its players were taken from the games in its modes."""
+    from server.rio import stats_api
+
+    if bid not in Participants.books:
+        raise HTTPException(404, f"book {bid!r} not found")
+    try:
+        roster = await stats_api.fetch_community_roster(payload.community)
+    except LookupError as e:
+        raise HTTPException(404, str(e))
+    except Exception as e:
+        raise HTTPException(502, f"Could not reach Project Rio: {e}")
+    result = await Participants.AddPlayers(
+        bid, roster["usernames"], community=roster["community"], modes=roster["modes"],
+    )
+    return {**result, "source": roster["source"], "found": len(roster["usernames"])}
+
+
+@router.put("/books/{bid}", response_class=ORJSONResponse)
+async def update_book(bid: str, payload: BookPayload):
+    book = await Participants.UpdateBook(bid, payload.model_dump(exclude_none=True))
+    if book is None:
+        raise HTTPException(404, f"book {bid!r} not found")
+    return book
+
+
+@router.delete("/books/{bid}", response_class=ORJSONResponse)
+async def delete_book(bid: str):
+    if bid == MAIN_BOOK:
+        raise HTTPException(400, "The main address book cannot be deleted")
+    if not await Participants.DeleteBook(bid):
+        raise HTTPException(404, f"book {bid!r} not found")
+    return {"success": True}
+
+
+@router.get("/books/{bid}/export", response_class=ORJSONResponse)
+async def export_book(bid: str):
+    """One book as JSON — people and league, WITHOUT logo files. What
+    the main book's backup is; a book with logos is shared as the zip."""
+    data = Participants.Export(bid)
+    if data is None:
+        raise HTTPException(404, f"book {bid!r} not found")
+    return data
+
+
+@router.get("/books/{bid}/export.zip")
+async def export_book_zip(bid: str):
+    """One book, whole — `book.json` + `logos/` — the file a producer shares."""
+    data = Participants.ExportZip(bid)
+    if data is None:
+        raise HTTPException(404, f"book {bid!r} not found")
+    name = re.sub(r"[^a-z0-9]+", "-", Participants.books[bid]["name"].casefold()).strip("-") or "address-book"
+    return Response(
+        data, media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{name}.prsh-book.zip"'},
+    )
+
+
+@router.post("/{pid}/logo", response_class=ORJSONResponse)
+async def upload_logo(pid: str, file: UploadFile = File(...)):
+    """Replace a person's league logo (PNG/JPEG/WebP/SVG, max 10 MB — the
+    console scales rasters down first). Returns the updated row."""
+    data = await file.read()
+    try:
+        row = await Participants.SetLogo(pid, data, file.content_type or "")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if row is None:
+        raise HTTPException(404, f"participant {pid!r} not found")
+    return row
+
+
+@router.delete("/{pid}/logo", response_class=ORJSONResponse)
+async def delete_logo(pid: str):
+    row = await Participants.SetLogo(pid, None)
+    if row is None:
+        raise HTTPException(404, f"participant {pid!r} not found")
+    return row
 
 
 @router.post("/import/startgg", response_class=ORJSONResponse)

@@ -85,6 +85,7 @@ async function mountWith({ pkg = 'default', state = gameState(), settings = {} }
         // The asset pack is what decides whether a team logo resolves, so an
         // empty answer here is the real "no logo for this side" — not a stub.
         teamLogoUrl: () => '',
+        leagueLogoUrl: (s, sb, t) => deepGet(s, `score.${sb}.player.${t}.league_logo`, ''),
         captainIconUrl: (s, sb, t) => {
             const idx = deepGet(s, `score.${sb}.player.${t}.rio_captainIndex`, null);
             if (idx == null || idx < 0 || idx > 8) return '';
@@ -163,6 +164,14 @@ describe("a logo well falls back to the side's captain", () => {
             expect(slot(`${prefix}2-logo`).getAttribute('href')).toBe('/icons/Mario.png');
         },
     );
+
+    it("puts a league team's logo ahead of the captain", async () => {
+        const state = gameState();
+        state.score[1].player[1] = side({ rio_captainIndex: 4, league_logo: '/branding/leagues/b_1/t_1.png?v=1' });
+        const { slot } = await mountWith({ state });
+        expect(slot('s1-logo').getAttribute('href')).toBe('/branding/leagues/b_1/t_1.png?v=1');
+        expect(slot('s2-logo').getAttribute('href')).toBe('/icons/Mario.png');
+    });
 
     it('leaves the well empty when the side has no captain either', async () => {
         const state = gameState();

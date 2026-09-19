@@ -542,3 +542,82 @@ def game_mode_name(tag_set_id) -> str:
         if tid == tag_set_id:
             return name
     return ""
+
+
+# ----- communities (address-book league import) ------------------------------
+#
+# A Rio COMMUNITY is the league's own membership list, and its game modes are
+# the tags that carry its `comm_id`. Both come off the completer cache (one
+# public, cached payload), so listing them costs nothing per call. The member
+# list is the one live call — and a PRIVATE community only answers it for a Rio
+# key whose account is inside it, which is exactly the case for a league like
+# the NNL. So a refused member list falls back to the people who have actually
+# PLAYED in the community's modes: public, and for a league book the better
+# answer anyway, since a member who has never played has nothing to put on air.
+
+# Games per mode for the fallback. Rio's default is 50 (see DEFAULT_LIMIT on
+# the console); a season is a few hundred games, so ask for them all.
+_COMMUNITY_GAMES_PER_MODE = 1000
+
+
+async def fetch_communities() -> list[str]:
+    client = _get_client()
+    names = await asyncio.to_thread(client.cache.communities)
+    return sorted(set(names), key=str.casefold)
+
+
+def _community_modes_sync(client: RioWeb, name: str) -> list[str]:
+    rows = client.cache._payload("tags").get("rows", [])
+    comm = next((r for r in rows if r.get("type") == "Community" and r.get("name") == name), None)
+    if comm is None:
+        return []
+    modes = client.cache.game_mode_dictionary()
+    return [r["name"] for r in rows
+            if r.get("comm_id") == comm.get("comm_id") and r.get("name") in modes]
+
+
+async def fetch_community_roster(name: str) -> dict:
+    """Everyone in a Rio community, plus the game modes it owns.
+
+    Returns ``{community, modes, usernames, source, note}`` where ``source`` is
+    ``members`` (the community's own list) or ``games`` (the fallback above).
+    Raises ``LookupError`` when there is no such community.
+    """
+    client = _get_client()
+    if name not in await fetch_communities():
+        raise LookupError(f"No Rio community named {name!r}")
+    modes = await asyncio.to_thread(_community_modes_sync, client, name)
+    note = ""
+    try:
+        data = await asyncio.to_thread(client.community_members, name)
+        users = client.cache.users_dictionary()
+        usernames = [
+            users.get(str(m.get("user_id")))
+            for m in (data or {}).get("Members", [])
+            if m.get("active", True) and not m.get("banned")
+        ]
+        usernames = [u for u in usernames if u]
+        source = "members"
+    except RioAPIError as e:
+        logger.info("[StatsAPI] community {} members refused ({}); using its games", name, e)
+        note = str(e)
+        # Three at a time: a burst of a dozen season-sized queries is enough to
+        # draw a 500 from Rio, and a failed mode silently loses its players.
+        gate = asyncio.Semaphore(3)
+
+        async def one(mode):
+            async with gate:
+                return await fetch_completed_games(tag=[mode], limit_games=_COMMUNITY_GAMES_PER_MODE)
+
+        frames = await asyncio.gather(*(one(m) for m in modes))
+        seen = set()
+        usernames = []
+        for df in frames:
+            for col in ("away_user", "home_user"):
+                if col in getattr(df, "columns", []):
+                    for u in df[col].dropna().tolist():
+                        if u and u.casefold() not in seen:
+                            seen.add(u.casefold())
+                            usernames.append(u)
+        source = "games"
+    return {"community": name, "modes": modes, "usernames": usernames, "source": source, "note": note}

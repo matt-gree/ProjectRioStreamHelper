@@ -339,6 +339,11 @@ class Settings:
     # this instead of subscribing — cheaper than a watcher list, and impossible
     # to leak. The first of them is the state write hook in server/automations.py.
     revision = 0
+    # Write observers: `async (keys) -> None`, run after a write has landed and
+    # been emitted. For the few server-side models that derive State from a
+    # setting (today: server/league_logos.py, off a binding's `stats_tag`). An
+    # observer that raises is logged and skipped — it must never lose a write.
+    watchers: list = []
     settings = {
         "server": {
             # When False, bind to 127.0.0.1 (loopback only). When True, bind
@@ -1183,6 +1188,14 @@ class Settings:
         return True
 
     @classmethod
+    async def _notify(cls, keys) -> None:
+        for watcher in cls.watchers:
+            try:
+                await watcher(list(keys))
+            except Exception:
+                logger.exception("settings watcher errored")
+
+    @classmethod
     async def Set(cls, key: str, value, session_id: str | None = None):
         deep_set(cls.settings, key, value)
         cls.revision += 1
@@ -1194,6 +1207,8 @@ class Settings:
             }),
             cls.Save()
         )
+        if cls.watchers:
+            await cls._notify([key])
 
     @classmethod
     async def Unset(cls, key: str, session_id: str | None = None):
@@ -1206,6 +1221,8 @@ class Settings:
             }),
             cls.Save()
         )
+        if cls.watchers:
+            await cls._notify([key])
 
     @classmethod
     async def ApplyBatch(cls, sets, unsets=(), session_id: str | None = None):
@@ -1247,6 +1264,8 @@ class Settings:
             for key, value in sets
         ]
         await asyncio.gather(*emits, cls.Save())
+        if cls.watchers:
+            await cls._notify([*unsets, *(k for k, _ in sets)])
 
     @classmethod
     def Get(cls, key: str, default=None):

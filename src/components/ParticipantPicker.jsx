@@ -51,8 +51,9 @@ export default function ParticipantPicker({
     const [query, setQuery] = useState("");
     const [busy, setBusy] = useState(false);
 
-    const { participants, load, create } = useParticipantsStore(useShallow(s => ({
+    const { participants, books, load, create } = useParticipantsStore(useShallow(s => ({
         participants: s.participants,
+        books: s.books,
         load: s.load,
         create: s.create,
     })));
@@ -71,6 +72,28 @@ export default function ParticipantPicker({
             return tag.includes(ql) || rio.includes(ql) || full.includes(ql);
         });
     }, [participants, ql]);
+
+    /*
+     * Sectioned by BOOK, main first. The same person can be kept in the main
+     * book and in a league's, and two identical rows with no heading between
+     * them is a coin toss for the producer picking one.
+     */
+    const grouped = useMemo(() => {
+        const order = books.length ? books.map(b => b.id) : ["main"];
+        const nameOf = Object.fromEntries(books.map(b => [b.id, b.name]));
+        const byBook = new Map(order.map(id => [id, []]));
+        for (const p of matches) {
+            const id = p.book || "main";
+            if (!byBook.has(id)) byBook.set(id, []);
+            byBook.get(id).push(p);
+        }
+        return [...byBook.entries()]
+            .filter(([, rows]) => rows.length)
+            .map(([id, rows]) => ({
+                id, rows,
+                heading: id === "main" || !nameOf[id] ? "Address book" : nameOf[id],
+            }));
+    }, [matches, books]);
 
     // Exact existing match suppresses the "Add" affordance (avoids dupes).
     const exact = useMemo(
@@ -150,9 +173,9 @@ export default function ParticipantPicker({
                         {matches.length === 0 && !q && (
                             <CommandEmpty>No saved people yet.</CommandEmpty>
                         )}
-                        {matches.length > 0 && (
-                            <CommandGroup heading="Address book">
-                                {matches.map((p) => (
+                        {grouped.map(g => (
+                            <CommandGroup key={g.id} heading={g.heading}>
+                                {g.rows.map((p) => (
                                     <CommandItem
                                         key={p.id}
                                         value={p.id}
@@ -171,7 +194,7 @@ export default function ParticipantPicker({
                                     </CommandItem>
                                 ))}
                             </CommandGroup>
-                        )}
+                        ))}
                         {q && (
                             <CommandGroup heading={matches.length ? undefined : "No match"}>
                                 {onRawValue && (

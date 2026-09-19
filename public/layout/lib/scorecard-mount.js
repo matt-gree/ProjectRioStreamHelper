@@ -344,7 +344,8 @@ export function mountScorecard({ host, sb }) {
   function charIconUrl(name) { return name && window.RioData ? RioData.charIconUrl(name) : ''; }
 
   /*
-   * WHAT GOES IN A SIDE'S LOGO WELL: its MSB team logo, and failing that its
+   * WHAT GOES IN A SIDE'S LOGO WELL: its league team's logo in a league game
+   * (RioData.leagueLogoUrl), else its MSB team logo, and failing that its
    * CAPTAIN. The well is the only square on the row, so an empty one is a hole
    * in the plate rather than a fact left unsaid — and it was empty in the states
    * a producer hits most often on purpose: a completed record with no team
@@ -358,7 +359,8 @@ export function mountScorecard({ host, sb }) {
    */
   function sideLogoUrl(state, team, teamName, vis) {
     if (!vis.showTeamLogos) return '';
-    return teamLogoUrl(teamName) || (window.RioData ? RioData.captainIconUrl(state, SB, team) : '');
+    if (!window.RioData) return teamLogoUrl(teamName);
+    return RioData.leagueLogoUrl(state, SB, team) || teamLogoUrl(teamName) || RioData.captainIconUrl(state, SB, team);
   }
 
   // The inning marker and the FINAL badge, for whichever block is drawing them.

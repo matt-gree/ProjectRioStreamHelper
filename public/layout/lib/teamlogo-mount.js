@@ -49,6 +49,8 @@ export function mountTeamLogo({ host, sb = 1, team = 1 }) {
     // roster-derived team name (msb_team) when no banner is set.
     const LOGO_KEY = `score.${SCOREBOARD}.player.${TEAM}.logo`;
     const TEAM_KEY = `score.${SCOREBOARD}.player.${TEAM}.msb_team`;
+    // A player's league logo outranks both (server/league_logos.py).
+    const LEAGUE_KEY = `score.${SCOREBOARD}.player.${TEAM}.league_logo`;
 
     const root = document.createElement('div');
     root.className = 'tl-root';
@@ -72,11 +74,14 @@ export function mountTeamLogo({ host, sb = 1, team = 1 }) {
     function update(state) {
         const { deepGet: g, teamId, BASE_URL } = OverlayBase;
         stage.innerHTML = '';
+        const league = g(state, LEAGUE_KEY);
         const teamName = g(state, LOGO_KEY) || g(state, TEAM_KEY);
         const id = teamId(teamName);
-        if (id === undefined) return;
+        if (!league && id === undefined) return;
         const img = document.createElement('img');
-        img.src = `${BASE_URL}/game_assets/msb/teamLogos/${id}.png`;
+        img.src = league
+            ? `${BASE_URL}${league}`
+            : `${BASE_URL}/game_assets/msb/teamLogos/${id}.png`;
         img.className = 'tl-img';
         img.onerror = () => { img.style.display = 'none'; };
         stage.appendChild(img);
@@ -90,6 +95,6 @@ export function mountTeamLogo({ host, sb = 1, team = 1 }) {
     return {
         update,
         dispose,
-        shouldRender: (key) => key === LOGO_KEY || key === TEAM_KEY,
+        shouldRender: (key) => key === LOGO_KEY || key === TEAM_KEY || key === LEAGUE_KEY,
     };
 }

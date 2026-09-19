@@ -1,6 +1,7 @@
 import asyncio
 import os
 import platform
+import re
 from pathlib import Path
 
 from loguru import logger
@@ -18,6 +19,9 @@ from server.participants import Participants
 from server.settings import Settings
 from server.state import State
 from server.utils.deep_dict import deep_get
+from server.league_logos import board_mode
+
+_BOARD_OF_SIDE = re.compile(r"^score\.(\d+)\.player\.[12]\.rioName$")
 
 
 def _apply_resurface(entries: list[tuple]) -> None:
@@ -31,11 +35,16 @@ def _apply_resurface(entries: list[tuple]) -> None:
     already set, and only writes non-empty registry values.
     """
     existing = {k for k, _ in entries}
+    pending = dict(entries)
     additions: list[tuple] = []
     for key, value in entries:
         if not key.endswith(".rioName") or not value:
             continue
-        row = Participants.MatchByRioName(value)
+        # A league game asks the league's own book first, so its spelling of a
+        # name wins in its own games (server/participants.py, "Lookup order").
+        m = _BOARD_OF_SIDE.match(key)
+        mode = board_mode(int(m.group(1)), pending) if m else ""
+        row = Participants.resolve_for_mode(value, mode)
         if not row:
             continue
         prefix = key[: -len(".rioName")]

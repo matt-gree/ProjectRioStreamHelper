@@ -703,8 +703,10 @@ export function mountScoreboard({ host, sb, size }) {
     // producer toggle and a side with neither a team nor a resolvable captain.
     // (A URL that 404s still counts as drawn — a missing asset pack is its own
     // problem, surfaced in Settings, not something to reflow around.)
-    const url1 = vis.showTeamLogos ? (teamLogoUrl(d.team1) || d.cap1) : '';
-    const url2 = vis.showTeamLogos ? (teamLogoUrl(d.team2) || d.cap2) : '';
+    // A league team's logo leads (RioData.leagueLogoUrl), then the MSB team's,
+    // then the captain.
+    const url1 = vis.showTeamLogos ? (d.lg1 || teamLogoUrl(d.team1) || d.cap1) : '';
+    const url2 = vis.showTeamLogos ? (d.lg2 || teamLogoUrl(d.team2) || d.cap2) : '';
     swapLogo('s1-logo', url1, fresh);
     swapLogo('s2-logo', url2, fresh);
     reclaimLogoBox('s1-name', 's1-logo', !!url1, fresh);
@@ -1012,6 +1014,8 @@ export function mountScoreboard({ host, sb, size }) {
       team2: g(state, `score.${SB}.player.2.logo`, '') || g(state, `score.${SB}.player.2.msb_team`, ''),
       cap1: captainIconUrl(state, 1),
       cap2: captainIconUrl(state, 2),
+      lg1: window.RioData ? RioData.leagueLogoUrl(state, SB, 1) : '',
+      lg2: window.RioData ? RioData.leagueLogoUrl(state, SB, 2) : '',
       sL: g(state, `score.${SB}.score_left`, 0),
       sR: g(state, `score.${SB}.score_right`, 0),
       inn: g(state, `score.${SB}.inning`, ''),

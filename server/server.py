@@ -25,6 +25,7 @@ from server.controller_overlay import ControllerOverlay
 from server.postgame_watch import StatFileWatcher
 from server.announcements import Announcements
 from server.automations import Automations
+from server.league_logos import LeagueLogos
 from server.participants import Participants
 from server.match import Match
 from server.schedule import Schedule
@@ -100,6 +101,9 @@ async def lifespan(app: FastAPI):
     # header adoption above: the book has to be in memory before anything can be
     # written onto a row, and Settings already is. One-shot; it clears the keys.
     await Participants.adopt_legacy_pin()
+    # League logos ride the State write path, so the hook has to be in place
+    # before the first frame — the provider's boot read — goes through it.
+    LeagueLogos.Start()
     await RioGameDataProvider.Start()
     # AFTER the provider, on purpose. Boards that booted holding a game are
     # flagged as not-current (server/boards.py), and the provider's own boot read
@@ -151,6 +155,9 @@ async def lifespan(app: FastAPI):
     # its resting occupant. Last, so State + Settings are loaded and the boot
     # projections have already landed.
     await Automations.Start()
+    # And settle every board once: a board restored from disk carries whatever
+    # logos it had when PRSH exited, against a book that may have changed since.
+    await run_startup_projection("LeagueLogos", LeagueLogos.project_all())
 
     # If stream labels are enabled but the output dir is missing, do a full
     # export so OBS Text (GDI+) sources don't point at missing files.
@@ -164,6 +171,7 @@ async def lifespan(app: FastAPI):
 
     # on_shutdown
     await Automations.Stop()
+    LeagueLogos.Stop()
     await Announcements.Stop()
     await StatFileWatcher.Stop()
     await ControllerOverlay.Stop()
