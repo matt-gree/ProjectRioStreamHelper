@@ -409,7 +409,7 @@ sources).
   `useMatchBindableBoards` (client) and `bind_scoreboard` (server) both encode.
   The desk both reads and **sets** playback now (`GamesSection`, ../games).
 
-### Games: pool + playback (`src/routes/production/board/games.jsx`)
+### Games: pool + playback (`src/routes/production/board/games.jsx` + `single.jsx` · `rotating.jsx` · `gamelist.jsx`)
 
 A board's games are authored on the board, and the surface is an **instrument, not
 a settings list** — the shape `PoolBrowser` had on the Match tab, kept.
@@ -520,7 +520,7 @@ a settings list** — the shape `PoolBrowser` had on the Match tab, kept.
   `All` placeholder.** A Rio search that names no `limit_games` still returns the
   newest 50, so the one state the console described as unlimited was the most
   limited one on offer — and clearing the box to widen a pool narrowed it back to
-  the default with nothing saying so. `DEFAULT_LIMIT` in `../games.jsx` is the one
+  the default with nothing saying so. `DEFAULT_LIMIT` in `../gamelist.jsx` is the one
   statement of it, seeding `EMPTY_FILTER`, the field's fallback and the completed
   search's query (which had its own, different `?? 100`).
 - **What stages vs what fires now.** Putting a game on a board **stages**
