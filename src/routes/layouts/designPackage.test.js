@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-    paintedByApp, appPaletteThemesAnything, packagePortColors, resolvePortColors, drawnTypeRoles,
+    paintedByApp, appPaletteThemesAnything, packagePortColors, resolvePortColors, drawnTypeRoles, globalReach,
 } from './designPackage';
 import {
     LAYOUT_SETTINGS, THEME_ELEMENT, DEFAULT_PORT_COLORS,
@@ -208,5 +208,30 @@ describe('THEME_ELEMENT', () => {
         // single answer. The fed bar is deleted, so there is.
         expect(gated).toEqual(['statsbar', 'statscard']);
         for (const type of gated) expect(THEME_ELEMENT).toHaveProperty(type);
+    });
+});
+
+describe('globalReach', () => {
+    const pkgs = [
+        { id: 'default', elements: ['scoreboard-l', 'scoreboard-s', 'scorecard', 'ticker'], appVarElements: [] },
+        { id: 'classic', elements: ['scoreboard-l', 'scoreboard-s', 'ticker'], appVarElements: ['scoreboard-l', 'scoreboard-s', 'ticker'] },
+    ];
+
+    it('under a full-art package the palette reaches only the two unthemed overlays', () => {
+        const r = globalReach(pkgs, 'default');
+        expect(r.palette).toEqual(['Event Header', 'Player Name']);
+        expect(r.chrome).toEqual([]);
+        expect(r.badge).toEqual([]);
+    });
+
+    it('under a token skin it reaches every app-painted element, falling back per file', () => {
+        const r = globalReach(pkgs, 'classic');
+        expect(r.chrome).toEqual(['Scoreboard', 'Ticker']);   // scorecard falls back to default: full-art
+        expect(r.badge).toEqual(['Scoreboard']);
+        expect(r.palette).toContain('Event Header');
+    });
+
+    it('says nothing before the package list has loaded', () => {
+        expect(globalReach(null, 'classic')).toBeNull();
     });
 });

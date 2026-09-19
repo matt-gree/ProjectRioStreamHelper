@@ -307,21 +307,44 @@ export const LAYOUT_SETTINGS = {
     // the score block's whole control, so it sits ungrouped between Top bars and
     // Lower bars — the card's own order — rather than under a one-row "Score
     // block" eyebrow. It used to share that region with Rosters and Bases
-    // switches; those are gone, because the parts of the block a producer
-    // actually cuts between are the three the segmented control already names
-    // (full / condensed / off), and a full block missing its rosters or its
-    // diamond was a fourth state nobody asked for. Same def, so it is still the
-    // rail's quick-face row.
+    // switches; those are gone, because the parts of the block a producer cuts
+    // between are WHOLE BLOCKS the theme draws, not parts they subtract from
+    // one. Same def, so it is still the rail's quick-face row.
+    //
+    // ROSTERS is the block that switch pair was really reaching for, and the
+    // reason it had to be a block: turning the diamond off inside the full one
+    // takes the INNING with it (the marker lives at the head of that same
+    // situation row), leaving a card that cannot say what inning it is. The
+    // rosters block is the full block's rows with a strip at its foot carrying
+    // the inning, or FINAL — see `el-rosters` in the theme SVGs. Reads down in
+    // descending detail: full / rosters / condensed / off.
     scorecard: [
         { key: 'showHeader',   group: 'Top bars', type: 'switch', label: 'Header Bar',    description: 'Branding logo + title bar (element 0)', defaultValue: true },
         { key: 'titleText',    group: 'Top bars', type: 'text',   label: 'Header Title',   description: 'Centered next to the logo. Blank uses the branding logo alone.', placeholder: 'Project Rio' },
         { key: 'showPhase',    group: 'Top bars', type: 'switch', label: 'Bracket Phase',  description: 'Bracket-phase bar (element 1)', defaultValue: true },
         { key: 'phaseText',    group: 'Top bars', type: 'text',   label: 'Phase Text',     description: 'Overrides the bracket-phase bar. Leave blank to use the assigned match’s phase; the bar hides when neither is set.', placeholder: 'Winners Final' },
         { key: 'showGameMode', group: 'Top bars', type: 'switch', label: 'Game Mode',      description: 'Game-mode bar (element 2)', defaultValue: true },
-        { key: 'mainMode',     type: 'select', label: 'Score Block',    description: 'Full score block (3), condensed bar (3a), or neither', options: [{ value: 'full', label: 'Full' }, { value: 'condensed', label: 'Condensed' }, { value: 'off', label: 'Off' }], defaultValue: 'full' },
+        { key: 'mainMode',     type: 'select', label: 'Score Block',    description: 'Full block (3), rosters without the at-bat situation (3b), condensed bar (3a), or neither', options: [{ value: 'full', label: 'Full' }, { value: 'rosters', label: 'Rosters' }, { value: 'condensed', label: 'Condensed' }, { value: 'off', label: 'Off' }], defaultValue: 'full' },
         { key: 'showAtBat',    group: 'Lower bars', type: 'switch', label: 'At-Bat Lines',   description: 'Current batter + pitcher game lines (element 4)', defaultValue: true },
         { key: 'showBoxScore', group: 'Lower bars', type: 'switch', label: 'Box Score',      description: 'Per-inning linescore (element 5)', defaultValue: true },
+        /*
+         * THE FOOTER IS TWO FACTS AND ONE LAYOUT QUESTION. Stadium and Date are
+         * peers, so each gets its own eye like every other band here; what they
+         * also have, and no other pair on this card does, is that both are one
+         * short centred line — so WHERE they go is not a third question. A
+         * `footerLayout` picker offering "one line / two bars" shipped for about
+         * an hour and came straight back out: stacking them under six other
+         * bands spends 88 units saying what fits in 44, which makes the second
+         * arrangement the worse one in every state, so the control could only
+         * ever be a way to make the card taller and no better.
+         *
+         * DATE IS OFF BY DEFAULT and Stadium stays on, so nothing already on air
+         * moved. It reads `date_time_end`, falling back to the start, so it is
+         * not a band that only turns up at the final out.
+         */
         { key: 'showStadium',  group: 'Lower bars', type: 'switch', label: 'Stadium',        description: 'Stadium bar (element 6)', defaultValue: true },
+        { key: 'showDate',     group: 'Lower bars', type: 'switch', label: 'Date',           description: "The game's date, on the stadium line. Blank until the feed reports one.", defaultValue: false },
+
     ],
     // The event header is two single-row strips (baselines y=45 top, y=1078
     // bottom), and its settings are ORDERED AND GROUPED BY WHICH STRIP THEY
@@ -536,7 +559,6 @@ export const OVERRIDABLE_GLOBAL_KEYS = [
     { key: 'textColor',      meta: ['textColor'],      type: 'color',         label: 'Text Color',         defaultValue: '#ffffff' },
     { key: 'cardBg',         meta: ['cardBg'],         type: 'color-opacity', label: 'Card Background',    defaultValue: 'rgba(15, 15, 25, 0.88)' },
     { key: 'borderColor',    meta: ['borderColor'],    type: 'color-opacity', label: 'Border Color',       defaultValue: 'rgba(255, 255, 255, 0.08)' },
-    { key: 'borderRadius',   meta: ['borderRadius'],   type: 'number',        label: 'Border Radius',      defaultValue: 16, min: 0, max: 48, step: 2, suffix: 'px' },
     { key: 'borderWidth',    meta: ['borderWidth'],    type: 'number',        label: 'Border Thickness',   defaultValue: 1,  min: 0, max: 16, step: 1, suffix: 'px' },
     { key: 'cardShadowBlur', meta: ['cardShadow'],     type: 'number',        label: 'Card Shadow Blur',   defaultValue: 16, min: 0, max: 80, step: 2, suffix: 'px' },
 
@@ -600,6 +622,15 @@ export const OVERRIDABLE_GLOBAL_KEYS = [
     { key: 'monoFont',    meta: ['monoFont'],    role: 'mono',    type: 'font', label: 'Numeral Font', defaultValue: 'Chivo Mono', description: 'Scores, stats, linescores and clocks' },
 ];
 
+/*
+ * The shipped face for each type role, as the font pickers pin it above every
+ * other font (FontCombobox `pinned`). Derived from the font rows above so the
+ * pickers, the overrides and the Design tab cannot name different defaults.
+ */
+export const TYPE_ROLE_DEFAULTS = OVERRIDABLE_GLOBAL_KEYS
+    .filter(d => d.type === 'font')
+    .map(d => ({ value: d.defaultValue, role: d.role, detail: `${d.label.replace(/ Font$/, '')} default` }));
+
 // ── Which types each override key actually REACHES ──
 // `OVERRIDABLE_GLOBAL_KEYS` says a key CAN be pinned per element; this says on
 // which elements the pin is read back. They are not the same list, because
@@ -634,11 +665,12 @@ export const OVERRIDABLE_GLOBAL_KEYS = [
 // overlay ignores cost more than the theoretical producer whose stored, inert
 // cardBg starts painting.
 //
-// `borderRadius` is the one surface key NOT extended to them, and for a reason
-// that outlives this fix: `rx` cannot take a CSS variable in SVG, so a themed
-// card's corner is a literal in the artwork and `--border-radius` has nothing to
-// bind to. Offering it here would put back exactly the silent no-op this table
-// exists to prevent.
+// THERE IS NO CORNER RADIUS, anywhere. `rx` cannot take a CSS variable in SVG,
+// so a themed card's corner is a literal in the artwork, and no shipped theme
+// (nor the theme contract in public/design/README.md) reads `--border-radius`.
+// It was a Design-tab control and a per-element pin that moved nothing on any
+// package until 2026-09-16, when both came out. `[]` rather than deleting the
+// entry, so the one thing this table says about it is "reaches nothing".
 const OVERRIDE_READ_TYPES = {
     accentColor: null,
     displayFont: null,
@@ -658,10 +690,13 @@ const OVERRIDE_READ_TYPES = {
     textShadowColor: null,
     cardBg: ['scoreboard', 'eventheader', 'statsbar', 'statscard'],
     borderColor: ['scoreboard', 'statsbar', 'statscard'],
-    borderRadius: ['scoreboard'],
+    borderRadius: [],
     borderWidth: ['scoreboard', 'statsbar', 'statscard'],
     textColor: ['scoreboard', 'playername'],
     showLogo: ['scoreboard'],
+    // The two card elements, and only those — they are the only ones whose
+    // themes draw a rail at all.
+    showRail: ['scoreboard', 'scorecard'],
     showCaptains: ['ticker'],
     showShadow: [],
 };
@@ -710,18 +745,28 @@ export const DEFAULT_PORT_COLORS = ['#e53935', '#1e88e5', '#fdd835', '#43a047'];
 // a control the producer can no longer reach.
 export const THEME_ONLY_GLOBAL_KEYS = [
     'cardBg', 'borderColor', 'finalBadgeColor',
-    'borderRadius', 'borderWidth',
+    'borderWidth',
     'showShadow', 'cardShadowBlur', 'cardShadowColor',
 ];
 
 export const GLOBAL_DESIGN_KEYS = [
-    'accentColor', 'cardBg', 'textColor', 'borderRadius', 'borderColor', 'borderWidth',
+    'accentColor', 'cardBg', 'textColor', 'borderColor', 'borderWidth',
     'displayFont', 'bodyFont', 'monoFont',
     'showShadow', 'cardShadowBlur', 'cardShadowColor',
     'textShadowEnabled', 'textShadowBlur', 'textShadowColor',
     'textStrokeWidth', 'textStrokeColor',
     // Promoted from per-layout in v2:
-    'showCaptains', 'showLogo', 'finalBadgeColor',
+    // THE OUTER RAIL IS PACKAGE CHROME, which is why it is up here with the
+    // other two promoted booleans rather than on the two element panels that
+    // draw it. It carries no data and marks no boundary — it is the theme's
+    // opinion about its own edge — so the decision is one decision about the
+    // LOOK, taken once on the Design tab, and a card panel is the wrong place
+    // to take it: as a registry entry it landed ungrouped after the Lower bars
+    // region on the Scorecard, an orphan row with no heading, and last in a
+    // flat list on the Scoreboard. Same resolution as showLogo — global, with a
+    // per-board pin over it for the case where one card wants it and the other
+    // doesn't.
+    'showCaptains', 'showLogo', 'showRail', 'finalBadgeColor',
     // Promoted from the Character Spotlight's own settings in v4 (see above):
     ...PORT_COLOR_KEYS,
     // Design package selector — not a CSS knob, not per-layout overridable; read
@@ -733,7 +778,6 @@ export const GLOBAL_DESIGN_DEFAULTS = {
     accentColor:       '#f59e0b',
     cardBg:            'rgba(15, 15, 25, 0.88)',
     textColor:         '#ffffff',
-    borderRadius:      16,
     borderColor:       'rgba(255, 255, 255, 0.08)',
     borderWidth:       1,
     displayFont:       'Rajdhani',
@@ -750,6 +794,9 @@ export const GLOBAL_DESIGN_DEFAULTS = {
     textStrokeColor:   'rgba(0, 0, 0, 1)',
     showCaptains:      true,
     showLogo:          true,
+    // Theme chrome that says nothing — off unless the producer asks. See the
+    // note beside it in GLOBAL_DESIGN_KEYS.
+    showRail:          false,
     finalBadgeColor:   null,
     // null = inherit (package, then DEFAULT_PORT_COLORS) — never a literal
     // colour here, or a preset would pin the app's palette over the package's.

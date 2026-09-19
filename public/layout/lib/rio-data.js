@@ -5,7 +5,8 @@
  *   - which team is batting vs pitching (getTeamRole)
  *   - captain-aware roster ordering (getRosterSlots)
  *   - per-character stat line selection (getStatsLine)
- *   - character icon URLs (charIconUrl)
+ *   - character icon URLs (charIconUrl) and the captain fallback a logo
+ *     well uses when a side has no team logo (captainIconUrl)
  *
  * Overlays own their own DOM + CSS. This file owns the *logic*: change
  * captain detection, add a new stat, swap which icon marks batting, etc.
@@ -84,6 +85,26 @@
     const awayTeam = homeTeam === 2 ? 1 : 2;
     const battingTeam = halfInning === 'Top' ? awayTeam : homeTeam;
     return battingTeam === team ? 'batting' : 'pitching';
+  }
+
+  /*
+   * The side's CAPTAIN icon — what a logo well falls back to when the side has
+   * no team logo to draw. Every element that draws one faces the same empty
+   * well: a completed record with no MSB team assigned, a fixture bound before
+   * a game, an asset pack that is missing that one file. The Scoreboard and the
+   * Scorecard both answer it, so the answer is here rather than twice.
+   *
+   * By INDEX, because that is what a captain is in a Rio record
+   * (`rio_captainIndex` into the same 9-slot roster the band draws). A side
+   * with no captain index has no captain — it returns nothing rather than
+   * guessing slot 0, which is `getRosterSlots`'s rule for ORDERING a full band
+   * and the wrong one for naming a single icon.
+   */
+  function captainIconUrl(state, sb, team) {
+    const idx = deepGet(state, `score.${sb}.player.${team}.rio_captainIndex`, null);
+    if (idx == null || idx < 0 || idx > 8) return '';
+    const name = deepGet(state, `score.${sb}.player.${team}.character.${idx}.name`, '');
+    return name ? charIconUrl(name) : '';
   }
 
   /** Index of `charName` in team's 9-character roster, or -1. */
@@ -299,6 +320,7 @@
     gameMode,
     getTeamRole,
     findCharIndex,
+    captainIconUrl,
     getRosterSlots,
     getStatsLine,
     getStatsLineForChar,

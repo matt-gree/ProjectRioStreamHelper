@@ -80,6 +80,25 @@ export const useSettingsStore = create((set, get) => ({
             _socketRef.emit('v1.settings.unset', { key });
         }
     },
+    // Many settings as ONE server commit (Settings.ApplyBatch) — a design preset
+    // is a hundred keys, and a hundred `v1.settings.set` frames were a hundred
+    // settings.json rewrites with every overlay repainting between them.
+    // Resolves once the server has written, so a caller can sequence after it.
+    applyBatch: (sets, unsets = []) => {
+        set(state => {
+            let s = state;
+            for (const key of unsets) s = dissocPath(key.split("."), s);
+            for (const { key, value } of sets) s = assocPath(key.split("."), value, s);
+            return s;
+        }, true);
+        if (!_socketRef || (!sets.length && !unsets.length)) return Promise.resolve();
+        return new Promise((resolve, reject) => {
+            _socketRef.emit('v1.settings.apply_batch', { items: sets, unset: unsets }, (resp) => {
+                if (resp?.error) reject(new Error(resp.error));
+                else resolve();
+            });
+        });
+    },
     mergeItems: (items) => set(items)
 }));
 

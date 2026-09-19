@@ -14,6 +14,77 @@ export function dot(engine, name, on, color) {
   if (el) el.style.fill = on ? color : DOT_OFF;
 }
 
+/*
+ * THE CARD'S OUTER RAIL IS A PRODUCER SWITCH, it is OFF by default, and
+ * TURNING IT OFF RECENTRES THE CARD IN ITS SOURCE.
+ *
+ * The accent bar down the outer edge of a card is the one piece of a theme's
+ * chrome that is purely the theme's opinion — it carries no data and marks no
+ * boundary, and on a scene that already has a colour identity it is a second
+ * one arriving with the source. Both card elements in the default package draw
+ * one (Scoreboard S and L, the Scorecard), which is why the rule is here rather
+ * than twice: they read one setting name and hide one slot name.
+ *
+ * DISPLAY, not opacity and not height. Both mounts already write the rail's
+ * opacity and height every frame — the Scorecard sizes it with card-bg, the
+ * Scoreboard melds it — so a switch expressed in either would be overwritten by
+ * the next layout pass, in one of the two mounts only, and look like the switch
+ * working everywhere except one card.
+ *
+ * THE RECENTRE IS SOLVED, NOT APPROXIMATED. A hidden rail otherwise leaves its
+ * lane behind as dead space on one side only, so the card draws off-centre in a
+ * source the producer has already placed. The obvious shift — half the rail's
+ * own footprint — is right on two of the three cards and WRONG on the third,
+ * because it assumes the theme was centred on the rail's outer edge to begin
+ * with. Scoreboard L is not: its card-bg already sits on equal 16-unit gutters
+ * and the rail hangs outside them, so that card is off-centre WITH its rail and
+ * lands dead centre the moment it goes, and shifting it "back" moved a centred
+ * card 4 units right. So solve the thing actually being asked for — equal
+ * gutters either side of card-bg:
+ *
+ *     gutterL == gutterR   ->   viewBox.x = bgX + (bgW - viewBox.w) / 2
+ *
+ * which answers 3 on the Scorecard, 4 on Scoreboard S and 0 on Scoreboard L,
+ * each for its own reason and none of them guessed.
+ *
+ * OFF THE AUTHORED GEOMETRY, NEVER THE LIVE: Scoreboard S melds its card-bg
+ * WIDTH, so a shift solved against that would slide the whole card every time a
+ * segment came or went. Both halves are stashed on first call (`data-basevb` on
+ * the root, `data-basebox` on card-bg — the `data-basefs` trick), which is also
+ * what lets the rail come back to the theme's own framing rather than to an
+ * accumulated offset. A theme swap re-injects the SVG and drops both stashes,
+ * which is exactly when it should.
+ *
+ * The rail coming BACK restores the authored frame and does not recentre: where
+ * the card sits with its full chrome on is the designer's call.
+ *
+ * A theme that draws no rail ignores all of it, the same way a size that
+ * declares no roster band ignores showRoster.
+ */
+export function applyCardRail(engine, on) {
+  const el = engine.slots['card-rail'];
+  if (!el) return;
+  el.style.display = on ? '' : 'none';
+
+  const svg = el.ownerSVGElement;
+  const bg = engine.slots['card-bg'];
+  if (!svg || !bg) return;
+
+  let base = svg.getAttribute('data-basevb');
+  if (base == null) svg.setAttribute('data-basevb', base = svg.getAttribute('viewBox') || '');
+  let box = bg.getAttribute('data-basebox');
+  if (box == null) {
+    box = `${parseFloat(bg.getAttribute('x')) || 0} ${parseFloat(bg.getAttribute('width')) || 0}`;
+    bg.setAttribute('data-basebox', box);
+  }
+  if (on) { if (base) svg.setAttribute('viewBox', base); return; }
+
+  const vb = base.replace(/,/g, ' ').trim().split(/\s+/).map(Number);
+  const [bgX, bgW] = box.split(' ').map(Number);
+  if (vb.length !== 4 || vb.some(v => !isFinite(v)) || !isFinite(bgX) || !bgW) return;
+  svg.setAttribute('viewBox', `${bgX + (bgW - vb[2]) / 2} ${vb[1]} ${vb[2]} ${vb[3]}`);
+}
+
 // Stadium values reach state as slugs (server/rio/provider.py:_stadium_slug),
 // which is right for lookups and wrong on air — "peach_garden" is not a name
 // anyone writes. Title-casing the slug gets six of the seven right and "DK
@@ -185,7 +256,14 @@ export function layoutBox(engine, shown, maxInn) {
 // authored geometry stands. All-or-nothing, so a theme that loses one modifier
 // through a design tool falls back to something coherent instead of drawing a
 // line off the edge of the card.
-export function lineTextBox(el, hasLabel) {
+//
+// `labelEnd` is the label's MEASURED right edge, and `data-x-labelled` is only
+// ever a floor under it. The authored edge is right for the face the designer
+// drew in; a producer's display font is not that face, and in a wide one
+// "GAME" ran straight into the line beside it. So the line starts at whichever
+// is further right — the authored edge, or the label's real end plus a gap —
+// and the right bound stays put, so the line auto-fits into what is left.
+export function lineTextBox(el, hasLabel, labelEnd = null, gap = 0) {
   if (!el) return null;
   const num = (name) => parseFloat(el.getAttribute(name));
   const labelled = num('data-x-labelled');
@@ -195,7 +273,8 @@ export function lineTextBox(el, hasLabel) {
   // the other one would switch layout MODELS when a game arrived — left-aligned
   // while the label is bound, centred the moment it isn't.
   if (![labelled, bare, right].every(Number.isFinite)) return null;
-  const x = hasLabel ? labelled : bare;
+  const pushed = Number.isFinite(labelEnd) ? Math.ceil(labelEnd + gap) : -Infinity;
+  const x = hasLabel ? Math.max(labelled, pushed) : bare;
   if (right <= x) return null;
   return { x, maxw: right - x };
 }

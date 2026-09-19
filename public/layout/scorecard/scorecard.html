@@ -2,10 +2,11 @@
 <html lang="en">
 <!--
   Vertical Scorecard — a re-themable SVG tall scoreboard, bound to one
-  scoreboard via ?scoreboard=N (default 1). The eight design elements
-  (header · bracket phase · game mode · full score · condensed score · at-bat
-  lines · box score · stadium) are each independently toggled/animated by the
-  producer via overlays.scorecard.* switches on the Layouts tab.
+  scoreboard via ?scoreboard=N (default 1). The nine design elements
+  (header · bracket phase · game mode · full score · rosters score · condensed
+  score · at-bat lines · box score · stadium) are each independently
+  toggled/animated by the producer via overlays.scorecard.* switches on the
+  Layouts tab — the three score blocks being branches of one picker.
 
   Thin shell: the look lives in the active DESIGN PACKAGE's theme SVG
   (/design/{package}/scorecard.svg), the binding/animation in
@@ -21,7 +22,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <!-- Per-element toggles (overlays.scorecard.*) + app-design knobs (used only
        when the active package's theme opts into them, e.g. Classic). -->
-  <meta name="overlay-settings" content="showHeader, titleText, showPhase, phaseText, showGameMode, mainMode, showAtBat, showBoxScore, showStadium, accentColor, cardBg, textColor, borderColor, borderRadius, borderWidth, displayFont, bodyFont, monoFont, cardShadow, textShadow, showShadow" />
+  <meta name="overlay-settings" content="showHeader, titleText, showPhase, phaseText, showGameMode, mainMode, showAtBat, showBoxScore, showStadium, showDate, showRail, accentColor, cardBg, textColor, borderColor, borderWidth, displayFont, bodyFont, monoFont, cardShadow, textShadow, showShadow, finalBadgeColor" />
   <link rel="stylesheet" href="/layout/lib/rio-theme/tokens.css" />
   <style>
     html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }

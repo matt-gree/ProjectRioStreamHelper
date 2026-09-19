@@ -71,7 +71,7 @@
     <g data-slot="inn-arrow-down" opacity="0"><polygon points="389,62 411,62 400,74" style="fill:var(--accent)"/></g>
     <text data-slot="inn-num" x="400" y="56" text-anchor="middle" class="sb-num" font-size="24" font-weight="700">1</text>
     <g data-slot="final-badge" opacity="0">
-      <rect x="364" y="31" width="72" height="30" rx="7" style="fill:var(--accent)"/>
+      <rect x="364" y="31" width="72" height="30" rx="7" style="fill:var(--final-badge-color, var(--accent))"/>
       <text x="400" y="52" text-anchor="middle" fill="#ffffff" font-family="var(--font-display)" font-size="16" font-weight="700" letter-spacing="1">FINAL</text>
     </g>
   </g>

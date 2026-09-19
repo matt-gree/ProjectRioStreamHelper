@@ -35,6 +35,11 @@ import { cn } from "@/lib/utils";
  * places. Search still matches the label — and now the detail — through
  * `keywords`.
  *
+ * `detailOnTrigger={false}` keeps the detail in the list only — for a
+ * picker in a narrow column whose detail is a label ABOUT the option (the
+ * font picker's "Display default") rather than half of the answer, where
+ * trailing it on the trigger truncates the name it describes.
+ *
  * `columns` LAYS THE SECTIONS SIDE BY SIDE instead of stacking them, and
  * gives the list the height to finish them. It is for the case where the
  * groups are PEERS of a known, bounded size — the two sides of a ball
@@ -64,7 +69,7 @@ function ItemImage({ src, className }) {
 export const Combobox = React.forwardRef(function Combobox(
   { data = [], value, onChange, placeholder = "Select…", searchPlaceholder = "Search…",
     nothingFound = "Nothing found", clearable = false, clearLabel = "Clear selection",
-    disabled, className, creatable = false, columns = false,
+    disabled, className, creatable = false, columns = false, detailOnTrigger = true,
     onOpen, ...props }, ref
 ) {
   const [open, setOpen] = React.useState(false);
@@ -110,7 +115,7 @@ export const Combobox = React.forwardRef(function Combobox(
             <span className="truncate">
               {selected ? selected.label : (creatable && value) ? value : placeholder}
             </span>
-            {selected?.detail && (
+            {detailOnTrigger && selected?.detail && (
               <span className="min-w-0 truncate text-xs text-muted-foreground">{selected.detail}</span>
             )}
           </span>

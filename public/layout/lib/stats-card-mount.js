@@ -176,7 +176,21 @@ export function mountStatsCard({ host, sb, team, settingsType = 'statsbar',
   // conditional is what makes this two authored positions rather than one.
   function placeLine(hasLabel) {
     const el = engine.slots['line-text'];
-    const box = lineTextBox(el, hasLabel);
+    const label = engine.slots['line-label'];
+    // The label's real end, in whatever face the producer set it in — the
+    // authored `data-x-labelled` assumes the theme's own. Half the label's
+    // type size is the gap, which is roughly what the shipped themes leave.
+    let labelEnd = null, gap = 0;
+    if (hasLabel && label && label.getComputedTextLength) {
+      try {
+        const len = label.getComputedTextLength();
+        if (len > 0) {
+          labelEnd = parseFloat(label.getAttribute('x')) + len;
+          gap = 0.5 * (parseFloat(label.getAttribute('font-size')) || 0);
+        }
+      } catch { /* detached or unrendered: keep the authored edge */ }
+    }
+    const box = lineTextBox(el, hasLabel, labelEnd, gap);
     if (!box) return;                       // centred theme: leave it alone
     if (parseFloat(el.getAttribute('x')) === box.x &&
         parseFloat(el.getAttribute('data-maxw')) === box.maxw) return;

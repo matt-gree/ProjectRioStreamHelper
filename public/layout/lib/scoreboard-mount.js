@@ -88,7 +88,7 @@
 import { createThemeEngine } from './svg-theme-engine.js';
 import { createRevealGate, clearAnimClassOnEnd } from './reveal-gate.js';
 import { ensureGsap } from './gsap-loader.js';
-import { DOT_OFF, dot, bindImageProbe, prettyStadium, linescoreColumns, layoutBox } from './mount-utils.js';
+import { DOT_OFF, dot, applyCardRail, bindImageProbe, prettyStadium, linescoreColumns, layoutBox } from './mount-utils.js';
 import { ensurePortPalette, inkOn, portColor as portPaletteColor } from './port-colors.js';
 
 const SETTINGS_TYPE = 'scoreboard';
@@ -211,7 +211,15 @@ export function mountScoreboard({ host, sb, size }) {
     const showLogo = perSbLogo !== undefined
       ? on(perSbLogo, true)
       : on(OverlayBase.readSetting(SETTINGS_TYPE, 'showLogo', true), true);
+    // The card's outer rail resolves the same way and for the same reason: it is
+    // PACKAGE CHROME, one decision about the look, so it lives on the Design tab
+    // beside this one (Display Toggles) with a per-board pin over it.
+    const perSbRail = g(settings, `overlays.${SETTINGS_TYPE}.${SB}.showRail`, undefined);
+    const showRail = perSbRail !== undefined
+      ? on(perSbRail, false)
+      : on(OverlayBase.readSetting(SETTINGS_TYPE, 'showRail', false), false);
     return {
+      showRail,
       showTeamLogos: on(sbGet(settings, 'showTeamLogos', true), true),
       showGameMode: on(sbGet(settings, 'showGameMode', true), true),
       showLogo,
@@ -568,12 +576,11 @@ export function mountScoreboard({ host, sb, size }) {
   function charIconUrl(name) { return name && window.RioData ? RioData.charIconUrl(name) : ''; }
 
   // The side's captain character icon — the logo-slot fallback when a team logo
-  // isn't available (e.g. a completed game with no assigned MSB team).
+  // isn't available (e.g. a completed game with no assigned MSB team). The rule
+  // is RioData's (the Scorecard's logo wells fall back the same way); this is
+  // the SB binding over it.
   function captainIconUrl(state, t) {
-    const capIdx = g(state, `score.${SB}.player.${t}.rio_captainIndex`, null);
-    if (capIdx == null) return '';
-    const name = g(state, `score.${SB}.player.${t}.character.${capIdx}.name`, '');
-    return name ? charIconUrl(name) : '';
+    return window.RioData ? RioData.captainIconUrl(state, SB, t) : '';
   }
 
   /*
@@ -993,6 +1000,7 @@ export function mountScoreboard({ host, sb, size }) {
     if (!hasGame) { revealKey = ''; return; }
 
     const vis = readToggles(settings);
+    applyCardRail(engine, vis.showRail);
     const half = g(state, `score.${SB}.half_inning`, '');
     const sourceType = g(state, `score.${SB}.source_type`, '');
     const isCompleted = sourceType === 'completed_api' || g(state, `score.${SB}.game_completed`, false) === true;

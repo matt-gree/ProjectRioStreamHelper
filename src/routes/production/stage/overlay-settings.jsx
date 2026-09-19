@@ -5,7 +5,7 @@ import { usePending, useStagingStore } from '../../../context/staging';
 import { Text } from '../../../components/ui/primitives';
 import {
     LAYOUT_SETTINGS, THEME_ELEMENT, OVERRIDABLE_GLOBAL_KEYS, GLOBAL_DESIGN_DEFAULTS,
-    OVERRIDE_CAPABLE_TYPES, themeElementFor, overrideReaches, settingReachesSize,
+    OVERRIDE_CAPABLE_TYPES, TYPE_ROLE_DEFAULTS, themeElementFor, overrideReaches, settingReachesSize,
 } from '../../layouts/designConstants';
 import { usePaintedByApp, useDrawnTypeRoles, useDesignPackages } from '../../layouts/designPackage';
 import { useLayoutWhitelists, declaresAny } from '../../layouts/layoutWhitelist';
@@ -693,6 +693,8 @@ const OverrideRow = memo(function OverrideRow({
         return (
             <FieldRow label={def.label} staged={staged}>
                 <FontCombobox
+                    pinned={TYPE_ROLE_DEFAULTS}
+                    role={def.role}
                     value={value ?? globalValue ?? ''}
                     disabled={disabled}
                     onChange={(v) => set(v || null)}

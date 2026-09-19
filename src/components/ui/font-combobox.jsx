@@ -6,6 +6,31 @@ const BUNDLED_FONTS = [
   'Inter', 'Roboto', 'Open Sans', 'Montserrat', 'Poppins', 'Lato', 'Oswald', 'Rajdhani', 'Bebas Neue', 'Lalezar',
 ];
 
+/*
+ * THE LIST A PICKER SHOWS: the pinned faces first, then everything else A-Z.
+ *
+ * `pinned` is `[{ value, detail, role }]` — the app's default face for each
+ * type role, passed in by the caller (the UI kit does not import app
+ * constants). They lead because they are the answer to "put it back": a
+ * producer who tried a font and wants the shipped look again should not have
+ * to remember that the numerals were Chivo Mono and scroll a few hundred
+ * system fonts to find it. `role` puts THIS picker's own default at the very
+ * top; each pinned face is listed once, never again under All fonts.
+ */
+export function fontOptions({ pinned = [], systemFonts = [], value, role } = {}) {
+  const lead = [...pinned].sort((a, b) => (b.role === role) - (a.role === role));
+  const pinnedNames = new Set(lead.map((p) => p.value));
+  const rest = new Set(BUNDLED_FONTS);
+  (systemFonts ?? []).forEach((f) => rest.add(f));
+  if (value) rest.add(value);
+  const others = Array.from(rest).filter((f) => !pinnedNames.has(f)).sort((a, b) => a.localeCompare(b));
+  if (!lead.length) return others;
+  return [
+    ...lead.map((p) => ({ value: p.value, label: p.value, detail: p.detail, group: "Defaults" })),
+    ...others.map((f) => ({ value: f, label: f, group: "All fonts" })),
+  ];
+}
+
 /* ------------------------------------------------------------------ *
  * FontCombobox — font-family picker that populates itself from the
  * fonts actually installed on the machine, via the Local Font Access
@@ -16,7 +41,7 @@ const BUNDLED_FONTS = [
  * (`creatable`) everywhere else (Safari/Firefox, denied permission,
  * or OBS's embedded browser).
  * ------------------------------------------------------------------ */
-export function FontCombobox({ value, onChange, ...props }) {
+export function FontCombobox({ value, onChange, pinned, role, ...props }) {
   const [systemFonts, setSystemFonts] = React.useState(null);
   const [status, setStatus] = React.useState("idle"); // idle | loading | loaded | unsupported | denied | error
   const attempted = React.useRef(false);
@@ -40,12 +65,10 @@ export function FontCombobox({ value, onChange, ...props }) {
     }
   }, []);
 
-  const data = React.useMemo(() => {
-    const names = new Set(BUNDLED_FONTS);
-    (systemFonts ?? []).forEach((f) => names.add(f));
-    if (value) names.add(value);
-    return Array.from(names).sort((a, b) => a.localeCompare(b));
-  }, [systemFonts, value]);
+  const data = React.useMemo(
+    () => fontOptions({ pinned, systemFonts, value, role }),
+    [pinned, systemFonts, value, role],
+  );
 
   return (
     <div className="flex flex-col gap-1">
@@ -54,6 +77,7 @@ export function FontCombobox({ value, onChange, ...props }) {
         onChange={onChange}
         data={data}
         creatable
+        detailOnTrigger={false}
         searchPlaceholder={status === "loading" ? "Loading system fonts…" : "Search or type a font name…"}
         onOpen={loadSystemFonts}
         {...props}

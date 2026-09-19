@@ -7,7 +7,7 @@
 // The look lives in the active DESIGN PACKAGE's theme SVG
 // (/design/{package}/scorecard.svg, element-by-element fallback to `default`).
 //
-// This mount is a STACK-LAYOUT ENGINE: the eight numbered design elements are
+// This mount is a STACK-LAYOUT ENGINE: the nine numbered design elements are
 // authored in the theme at a local y-origin of 0 (each declaring data-h); the
 // mount melds the active ones into one continuous card — translating each to
 // its stacked Y, sizing the shared card-bg + accent rail, hiding the top
@@ -23,7 +23,7 @@
 import { createThemeEngine } from './svg-theme-engine.js';
 import { createRevealGate, clearAnimClassOnEnd } from './reveal-gate.js';
 import { ensureGsap } from './gsap-loader.js';
-import { DOT_OFF, dot, bindImageProbe, prettyStadium, layoutBox } from './mount-utils.js';
+import { DOT_OFF, dot, applyCardRail, bindImageProbe, prettyStadium, layoutBox } from './mount-utils.js';
 import { ensurePortPalette, portColor as portPaletteColor } from './port-colors.js';
 
 const ELEMENT = 'scorecard';
@@ -41,19 +41,76 @@ const NATIVE_W = 496;
 const NATIVE_H = 766;
 const CARD_GUTTER = 8;
 
-// Count-dot fill when active (matches the classic scoreboard convention).
-const BALL_ON = '#22c55e', STRIKE_ON = '#eab308', OUT_ON = '#ef4444';
-
 // Stacked element order + its visibility predicate over the resolved toggles.
+// The three score blocks are mutually exclusive branches of ONE setting
+// (mainMode), so their order among themselves never shows: whichever is chosen
+// occupies the same slot in the stack.
 const STACK = [
   ['el-header',    v => v.showHeader],
   ['el-phase',     v => v.showPhase && v.hasPhase],
   ['el-mode',      v => v.showGameMode && v.hasMode],
   ['el-main',      v => v.mainMode === 'full'],
+  ['el-rosters',   v => v.mainMode === 'rosters'],
   ['el-condensed', v => v.mainMode === 'condensed'],
   ['el-atbat',     v => v.showAtBat && !v.isFinal],
   ['el-box',       v => v.showBoxScore && v.hasBox],
-  ['el-stadium',   v => v.showStadium && v.hasStadium],
+  ['el-stadium',   v => !!v.footer],
+];
+
+/*
+ * THE FOOTER IS TWO FACTS ON ONE LINE.
+ *
+ * The stadium and the date are peers — each is a thing about the game a
+ * producer may or may not want under the card — so each has its own eye, the
+ * way every other band on this card does. Where they go is NOT a third
+ * question: they are two short centred strings, and stacking them under six
+ * other bands spends 88 units saying what fits in 44. A `footerLayout` picker
+ * offering "one line / two bars" shipped for about an hour and came straight
+ * back out — the second arrangement is the worse one in every state, so the
+ * control could only ever be a way to make the card taller and no better.
+ *
+ * One composition, one band, one string: an empty one self-hides, so `off`
+ * needs no case of its own.
+ */
+export function footerLine(parts) {
+  return parts.filter(Boolean).join(' \u00b7 ');
+}
+
+/*
+ * WHERE EACH SCORE BLOCK DRAWS THE INNING AND THE FINAL BADGE.
+ *
+ * All three answer one pair of facts — which half of which inning, or that the
+ * game is over — and they answered it in three hand-written copies that agreed
+ * only because nothing had changed since each was written. They are one
+ * function over three slot names now (bindGameMark).
+ *
+ * The full block puts the marker at the head of its situation row; the other
+ * two have no situation row, which is exactly why they need their own: a
+ * producer who cuts to a block without a diamond has not asked to stop being
+ * told what inning it is.
+ */
+const MARK_FULL     = { num: 'inn-num',   up: 'inn-arrow-up',   down: 'inn-arrow-down',   final: 'final-badge' };
+const MARK_ROSTERS  = { num: 'r-inn-num', up: 'r-inn-arrow-up', down: 'r-inn-arrow-down', final: 'r-final' };
+const MARK_CONDENSED = { num: 'c-inn-num', up: 'c-inn-arrow-up', down: 'c-inn-arrow-down', final: 'c-final' };
+
+/*
+ * THE COUNT IS 3 · 2 · 2, one short of each terminal value: a fourth ball is a
+ * walk, a third strike and a third out end something, so each resets before the
+ * next frame and a dot drawn for it could never come on. The Scoreboard's
+ * themes and the classic Scorecard have always been authored this way and the
+ * mount looped 4 / 3 / 3 over them — which drew nothing on those packages
+ * (a missing slot is a no-op) and drew a dead fourth dot on default's.
+ *
+ * RETIRED holds the slots that convention leaves out. A package authored before
+ * this still declares them, and an unbound dot is a dot that sits off for the
+ * whole broadcast — worse than the gap left by hiding it, and not something a
+ * producer can fix from the console. Re-export such a package to reclaim the
+ * width.
+ */
+const COUNT = [
+  { prefix: 'ball',   max: 3, on: '#22c55e', retired: ['ball-3'] },
+  { prefix: 'strike', max: 2, on: '#eab308', retired: ['strike-2'] },
+  { prefix: 'out',    max: 2, on: '#ef4444', retired: ['out-2'] },
 ];
 
 const FALLBACK_SVG = `
@@ -120,7 +177,15 @@ export function mountScorecard({ host, sb }) {
     const t = k => scGet(settings, k, null);
     // settingOn, not `!== false` — see the note in scoreboard-mount's readToggles.
     const bool = (k, d) => { const v = t(k); return v == null ? d : OverlayBase.settingOn(v, d); };
+    // The accent bar down the card's outer edge is PACKAGE CHROME, so it is a
+    // global (Design → Display Toggles) with a per-board pin over it — the same
+    // resolution as the Scoreboard's showLogo. See applyCardRail.
+    const perSbRail = t('showRail');
+    const showRail = perSbRail == null
+      ? OverlayBase.settingOn(OverlayBase.readSetting(SETTINGS_TYPE, 'showRail', false), false)
+      : OverlayBase.settingOn(perSbRail, false);
     return {
+      showRail,
       showHeader:   bool('showHeader', true),
       showPhase:    bool('showPhase', true),
       showGameMode: bool('showGameMode', true),
@@ -132,6 +197,7 @@ export function mountScorecard({ host, sb }) {
       showAtBat:    bool('showAtBat', true),
       showBoxScore: bool('showBoxScore', true),
       showStadium:  bool('showStadium', true),
+      showDate:     bool('showDate', false),
       titleText:    t('titleText'),   // null when unset → default brand title
       phaseText:    t('phaseText') || '',
       showTeamLogos: true,
@@ -269,8 +335,41 @@ export function mountScorecard({ host, sb }) {
   }
 
   // ── slot helpers ────────────────────────────────────────────────────────────
+  function setOpacity(name, on) {
+    const el = engine.slots[name];
+    if (el) el.setAttribute('opacity', on ? '1' : '0');
+  }
+
   function teamLogoUrl(team) { return team && window.RioData ? RioData.teamLogoUrl(team) : ''; }
   function charIconUrl(name) { return name && window.RioData ? RioData.charIconUrl(name) : ''; }
+
+  /*
+   * WHAT GOES IN A SIDE'S LOGO WELL: its MSB team logo, and failing that its
+   * CAPTAIN. The well is the only square on the row, so an empty one is a hole
+   * in the plate rather than a fact left unsaid — and it was empty in the states
+   * a producer hits most often on purpose: a completed record with no team
+   * assigned, a fixture bound before the first pitch, an asset pack missing that
+   * one file. The captain is the truest thing the record has to put there (the
+   * team IS the captain's in MSB), which is why the Scoreboard has fallen back
+   * this way all along; the rule itself is RioData's so the two cannot drift.
+   *
+   * Every block on this card draws the same pair of wells, so all three go
+   * through here.
+   */
+  function sideLogoUrl(state, team, teamName, vis) {
+    if (!vis.showTeamLogos) return '';
+    return teamLogoUrl(teamName) || (window.RioData ? RioData.captainIconUrl(state, SB, team) : '');
+  }
+
+  // The inning marker and the FINAL badge, for whichever block is drawing them.
+  // See MARK_FULL / MARK_ROSTERS / MARK_CONDENSED.
+  function bindGameMark(d, mark) {
+    engine.setText(mark.num, d.isFinal ? '' : d.inn);
+    setOpacity(mark.num, !d.isFinal);
+    setOpacity(mark.up, !d.isFinal && d.isTop);
+    setOpacity(mark.down, !d.isFinal && !d.isTop);
+    setOpacity(mark.final, d.isFinal);
+  }
 
   // ── data binding ────────────────────────────────────────────────────────────
   // Standard roster order 0..8 (no captain reordering; the team logo already
@@ -287,24 +386,60 @@ export function mountScorecard({ host, sb }) {
     engine.setText('s2-name', d.p2 || 'Player Two');
     engine.setText('s1-score', d.sL);
     engine.setText('s2-score', d.sR);
-    engine.setImage('s1-logo', vis.showTeamLogos ? teamLogoUrl(d.team1) : '');
-    engine.setImage('s2-logo', vis.showTeamLogos ? teamLogoUrl(d.team2) : '');
+    engine.setImage('s1-logo', sideLogoUrl(state, 1, d.team1, vis));
+    engine.setImage('s2-logo', sideLogoUrl(state, 2, d.team2, vis));
 
     bindRoster('s1', 1);
     bindRoster('s2', 2);
 
-    const innEl = engine.slots['inn-num'];
-    engine.setText('inn-num', d.isFinal ? '' : d.inn);
-    if (innEl) innEl.setAttribute('opacity', d.isFinal ? '0' : '1');
-    if (engine.slots['inn-arrow-up'])   engine.slots['inn-arrow-up'].setAttribute('opacity', !d.isFinal && d.isTop ? '1' : '0');
-    if (engine.slots['inn-arrow-down']) engine.slots['inn-arrow-down'].setAttribute('opacity', !d.isFinal && !d.isTop ? '1' : '0');
-    if (engine.slots['final-badge'])    engine.slots['final-badge'].setAttribute('opacity', d.isFinal ? '1' : '0');
-
-    for (let i = 0; i < 4; i++) dot(engine, `ball-${i}`, i < d.balls, BALL_ON);
-    for (let i = 0; i < 3; i++) dot(engine, `strike-${i}`, i < d.strikes, STRIKE_ON);
-    for (let i = 0; i < 3; i++) dot(engine, `out-${i}`, i < d.outs, OUT_ON);
-
+    bindGameMark(d, MARK_FULL);
+    bindCount(d);
     bindBases(d);
+  }
+
+  // The count, 3 · 2 · 2, plus the retired fourth/third dots a package authored
+  // before that convention still draws. See COUNT.
+  // `at` is the block's slot prefix: the full block's count is unprefixed, the
+  // rosters strip's is `r-`. Same dots, same rule, two places on the card that
+  // can draw them.
+  function bindCount(d, at = '') {
+    const held = { ball: d.balls, strike: d.strikes, out: d.outs };
+    for (const { prefix, max, on, retired } of COUNT) {
+      for (let i = 0; i < max; i++) dot(engine, `${at}${prefix}-${i}`, i < held[prefix], on);
+      for (const name of retired) setOpacity(`${at}${name}`, false);
+    }
+  }
+
+  /*
+   * THE ROSTERS BLOCK — the full block's two plates and two roster bands, with
+   * the situation row replaced by a strip carrying the one thing that row held
+   * which is not about the pitch in flight: what inning it is, or that the game
+   * is over.
+   *
+   * That strip is the whole reason this is a block and not a switch on the full
+   * one. A producer who wants the teams without the count/diamond is asking for
+   * a card that sits on air between at-bats, and the inning is the LAST thing to
+   * drop from one — it was the only fact in the situation row a still frame
+   * still needs. Dropping the row wholesale took it along, which is what made
+   * "hide the diamond" a state nobody could actually use.
+   */
+  function bindRosters(state, d, vis) {
+    engine.setText('r-s1-name', d.p1 || 'Player One');
+    engine.setText('r-s2-name', d.p2 || 'Player Two');
+    engine.setText('r-s1-score', d.sL);
+    engine.setText('r-s2-score', d.sR);
+    engine.setImage('r-s1-logo', sideLogoUrl(state, 1, d.team1, vis));
+    engine.setImage('r-s2-logo', sideLogoUrl(state, 2, d.team2, vis));
+
+    bindRoster('r-s1', 1);
+    bindRoster('r-s2', 2);
+
+    bindGameMark(d, MARK_ROSTERS);
+    bindCount(d, 'r-');
+    // FINAL takes the strip alone: everything else on it describes a pitch that
+    // is coming, so a count left beside the badge is the card's loudest claim
+    // that the game is still going.
+    setOpacity('r-count', !d.isFinal);
   }
 
   function bindBases(d) {
@@ -328,19 +463,14 @@ export function mountScorecard({ host, sb }) {
     }
   }
 
-  function bindCondensed(d, vis) {
+  function bindCondensed(state, d, vis) {
     engine.setText('c-s1-name', d.p1 || 'Player One');
     engine.setText('c-s2-name', d.p2 || 'Player Two');
     engine.setText('c-s1-score', d.sL);
     engine.setText('c-s2-score', d.sR);
-    engine.setImage('c-s1-logo', vis.showTeamLogos ? teamLogoUrl(d.team1) : '');
-    engine.setImage('c-s2-logo', vis.showTeamLogos ? teamLogoUrl(d.team2) : '');
-    const innEl = engine.slots['c-inn-num'];
-    engine.setText('c-inn-num', d.isFinal ? '' : d.inn);
-    if (innEl) innEl.setAttribute('opacity', d.isFinal ? '0' : '1');
-    if (engine.slots['c-inn-arrow-up'])   engine.slots['c-inn-arrow-up'].setAttribute('opacity', !d.isFinal && d.isTop ? '1' : '0');
-    if (engine.slots['c-inn-arrow-down']) engine.slots['c-inn-arrow-down'].setAttribute('opacity', !d.isFinal && !d.isTop ? '1' : '0');
-    if (engine.slots['c-final'])          engine.slots['c-final'].setAttribute('opacity', d.isFinal ? '1' : '0');
+    engine.setImage('c-s1-logo', sideLogoUrl(state, 1, d.team1, vis));
+    engine.setImage('c-s2-logo', sideLogoUrl(state, 2, d.team2, vis));
+    bindGameMark(d, MARK_CONDENSED);
   }
 
   // Batter/pitcher game lines, read straight from state (not HUD-gated).
@@ -399,6 +529,22 @@ export function mountScorecard({ host, sb }) {
      * the two ends of the table drifted out of step with its middle.
      */
     layoutBox(engine, shown, MAX_INN);
+  }
+
+  /*
+   * The game's date, as the footer draws it. `date_time_end` is what a
+   * completed record carries and is the honest answer once there is one; a LIVE
+   * game has only a start, and falling back to it is what stops the Date band
+   * from being a band that appears at the final out. Same `toLocaleDateString`
+   * shape as the Scoreboard's meta pane (scoreboard-mount's bindFinal), so the
+   * two elements can't print the same game's date two ways.
+   */
+  function gameDate(state) {
+    const raw = g(state, `score.${SB}.date_time_end`, '') || g(state, `score.${SB}.date_time_start`, '');
+    if (!raw) return '';
+    const dt = new Date(raw);
+    if (isNaN(dt.getTime())) return '';
+    return dt.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
   function bindHeader(vis) {
@@ -479,8 +625,9 @@ export function mountScorecard({ host, sb }) {
     vis.isFinal = isFinal;
     vis.hasPhase = !!vis.phaseText;
     vis.hasMode = !!modeName;
-    vis.hasStadium = !!stadium;
+
     vis.hasBox = Array.isArray(d.away) && d.away.length > 0;
+    vis.footer = footerLine([vis.showStadium && stadium, vis.showDate && gameDate(state)]);
 
     applyColours(settings, g(state, `score.${SB}.player.1.port`, null), g(state, `score.${SB}.player.2.port`, null));
 
@@ -488,14 +635,19 @@ export function mountScorecard({ host, sb }) {
     engine.setText('phase', vis.phaseText || '', { optional: true });
     engine.setText('mode', modeName ? modeName.toUpperCase() : '', { optional: true });
     bindMain(state, d, vis);
-    bindCondensed(d, vis);
+    bindRosters(state, d, vis);
+    bindCondensed(state, d, vis);
     bindAtBat(state, d);
     bindBox(d);
-    engine.setText('stadium', stadium, { optional: true });
+    engine.setText('stadium', vis.footer, { optional: true });
 
     engine.refitText();
     centerHeader(title);
     relayout(vis, themeChanged);
+    // AFTER relayout: the rail's recentre rewrites the root viewBox, and so does
+    // ensureCardBox's legacy-canvas reframe (which relayout is what triggers).
+    // Stashing the base viewBox before that reframe would stash the wrong frame.
+    applyCardRail(engine, vis.showRail);
 
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => {
       if (!disposed) { engine.refitText(); centerHeader(title); }

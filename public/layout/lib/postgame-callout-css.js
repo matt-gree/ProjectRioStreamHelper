@@ -230,6 +230,7 @@ const CSS = `
 .cs-batcard .minis { flex: 1 1 auto; display: flex; justify-content: space-evenly;
   align-items: flex-start; min-width: 0; }
 .cs-batcard .minis .cs-stat { padding: 0 8px; }
+.cs-batcard .minis .cs-stat .v { font-size: calc(34px * var(--mini-fit, 1)); }
 /* OBP/SLG stay collapsed through the AB walkthrough (their story is still
    being told); the finale animates them open — to a max-width generous
    enough that a four-digit SLG (1.000) never clips — and the other stats

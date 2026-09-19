@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { linescoreColumns, prettyStadium, layoutBox, lineTextBox, layoutStatCells, pinBesideText, applyTextPins } from '../../../public/layout/lib/mount-utils.js';
+import { applyCardRail, linescoreColumns, prettyStadium, layoutBox, lineTextBox, layoutStatCells, pinBesideText, applyTextPins } from '../../../public/layout/lib/mount-utils.js';
 
 /*
  * Two rules a scoreboard gets wrong SILENTLY — nothing throws, nothing logs, and
@@ -241,6 +241,18 @@ describe('lineTextBox', () => {
         expect(lineTextBox(lineEl(BAR), false)).toEqual({ x: 12, maxw: 430 });
     });
 
+    /* The authored labelled edge assumes the theme's own face. In a wider
+     * display font the label's measured end passes it, and the line has to
+     * start after the label rather than under it — shrinking into what is
+     * left, never past the right bound. */
+    it('starts after a label wider than the authored edge allowed', () => {
+        expect(lineTextBox(lineEl(BAR), true, 70, 7)).toEqual({ x: 77, maxw: 365 });
+        // A label that fits leaves the authored edge alone.
+        expect(lineTextBox(lineEl(BAR), true, 40, 7)).toEqual({ x: 56, maxw: 386 });
+        // ...and a bare line ignores a stale measurement.
+        expect(lineTextBox(lineEl(BAR), false, 70, 7)).toEqual({ x: 12, maxw: 430 });
+    });
+
     /* A centred theme (classic's bar, slice26's card) declares none of the
      * three and must keep the geometry it authored. */
     it('declines a theme that declares none of the three', () => {
@@ -411,5 +423,83 @@ describe('applyTextPins', () => {
         const slots = { orphan: imageNode({ x: 10, width: 20, 'data-pin-before': 'nope' }) };
         expect(() => applyTextPins({ slots })).not.toThrow();
         expect(xOf(slots.orphan)).toBe(10);
+    });
+});
+
+/*
+ * THE RAIL'S RECENTRE IS SOLVED, NOT APPROXIMATED, and the three shipped cards
+ * are three different answers — which is the whole reason this is arithmetic
+ * and not a constant. The obvious shift (half the rail's own footprint) is
+ * right on two of them and silently wrong on the third, because it assumes the
+ * theme was centred on the rail's OUTER edge. Scoreboard L is not: its card-bg
+ * already sits on equal 16-unit gutters with the rail hanging outside them, so
+ * it is off-centre WITH the rail and dead centre without one — and "correcting"
+ * it moved a centred card 4 units right, in a source the producer had already
+ * placed. Nothing about that is visible in a screenshot of one card.
+ */
+describe('applyCardRail', () => {
+    const svgNs = 'http://www.w3.org/2000/svg';
+
+    // The three cards as their themes actually author them.
+    const CARDS = {
+        // rail 8..14, bg 14..488 in a 496 frame — 8/8 gutters WITH the rail,
+        // 14/8 without, so hiding it costs 3.
+        scorecard: { vb: '0 0 496 766', rail: 8, bgX: 14, bgW: 474, off: '3 0 496 766' },
+        // rail 8..14 OUTSIDE bg's own 16/16 gutters: already centred without it.
+        'scoreboard-l': { vb: '0 0 800 460', rail: 8, bgX: 16, bgW: 768, off: '0 0 800 460' },
+        // rail at x=0 (the attribute is absent), bg 8..388 flush to the right
+        // edge of a 388 frame.
+        'scoreboard-s': { vb: '0 0 388 156', rail: 0, bgX: 8, bgW: 380, off: '4 0 388 156' },
+    };
+
+    function card({ vb, rail, bgX, bgW }) {
+        const svg = document.createElementNS(svgNs, 'svg');
+        svg.setAttribute('viewBox', vb);
+        const mk = (attrs) => {
+            const r = document.createElementNS(svgNs, 'rect');
+            for (const [k, v] of Object.entries(attrs)) r.setAttribute(k, String(v));
+            svg.appendChild(r);
+            return r;
+        };
+        const slots = { 'card-rail': mk({ x: rail, width: 6 }), 'card-bg': mk({ x: bgX, width: bgW }) };
+        return { engine: { slots }, svg };
+    }
+
+    it.each(Object.entries(CARDS))('centres %s\'s card when its rail goes', (_name, spec) => {
+        const { engine, svg } = card(spec);
+        applyCardRail(engine, false);
+        expect(svg.getAttribute('viewBox')).toBe(spec.off);
+        expect(engine.slots['card-rail'].style.display).toBe('none');
+    });
+
+    it.each(Object.entries(CARDS))('gives %s back its authored framing', (_name, spec) => {
+        const { engine, svg } = card(spec);
+        applyCardRail(engine, false);
+        applyCardRail(engine, true);
+        expect(svg.getAttribute('viewBox')).toBe(spec.vb);
+        expect(engine.slots['card-rail'].style.display).toBe('');
+    });
+
+    /*
+     * Scoreboard S MELDS its card-bg width, so a shift solved against the live
+     * width would slide the whole card every time a segment came or went. The
+     * stash is what makes the answer a property of the theme rather than of
+     * whatever the card happened to be showing when the switch was thrown.
+     */
+    it('solves against the authored width, not a melded one', () => {
+        const { engine, svg } = card(CARDS['scoreboard-s']);
+        applyCardRail(engine, false);
+        engine.slots['card-bg'].setAttribute('width', '232');   // melded compact
+        applyCardRail(engine, false);
+        expect(svg.getAttribute('viewBox')).toBe(CARDS['scoreboard-s'].off);
+    });
+
+    // Every package but `default` — the switch is inert there rather than
+    // reframing a card on geometry it never declared.
+    it('leaves a theme that draws no rail entirely alone', () => {
+        const { engine, svg } = card(CARDS.scorecard);
+        delete engine.slots['card-rail'];
+        applyCardRail(engine, false);
+        expect(svg.getAttribute('viewBox')).toBe(CARDS.scorecard.vb);
     });
 });

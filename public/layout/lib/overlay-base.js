@@ -178,6 +178,8 @@
   let liveBuffer = null;      // live state parked here while demo is on
   let seededKeys = [];        // settings keys the seed actually filled
   let demoOn = false;
+  // Bumped each time the page finishes loading a font face — see init().
+  let fontGeneration = 0;
 
   // Where live state writes land: the exported store normally, the parking
   // buffer while the sample is on screen.
@@ -403,6 +405,29 @@
     document.documentElement.setAttribute('data-prsh-sample', demoOn ? 'on' : 'off');
     render();
 
+    /*
+     * A FACE THAT LANDS AFTER A RENDER MAKES EVERY MEASUREMENT IN IT WRONG.
+     * Every mount auto-fits against the text's measured width, and measures
+     * whatever face is on the page at that instant — so when a producer picks a
+     * new font, the render that applies it measures the FALLBACK (the Google
+     * stylesheet hasn't arrived yet), and nothing measures again when the real
+     * face lands. The mounts' own `document.fonts.ready.then(refit)` cannot see
+     * it: `ready` was already resolved when the render ran, because the load
+     * starts only once the new stylesheet parses. So a name that fitted in
+     * Rajdhani ran straight over the score in a wider face until the source was
+     * reloaded.
+     *
+     * `fontGeneration` is what a fit cache keys on (svg-theme-engine's
+     * refitText), bumped BEFORE the render in the same listener so the order
+     * cannot race.
+     */
+    if (document.fonts && document.fonts.addEventListener) {
+      document.fonts.addEventListener('loadingdone', () => {
+        fontGeneration += 1;
+        render();
+      });
+    }
+
     // SocketIO connection
     const socket = io(BASE_URL, { transports: ['websocket', 'polling'] });
 
@@ -608,7 +633,6 @@
   const CARD_OVERRIDE_VARS = {
     cardBg:       { prop: '--card-bg' },
     borderColor:  { prop: '--border-color' },
-    borderRadius: { prop: '--border-radius', px: true },
     borderWidth:  { prop: '--border-width',  px: true },
   };
   const STATS_VARS = {
@@ -909,7 +933,11 @@
    * Overlays can call this in render() to conditionally display the logo.
    */
   function brandingLogoUrl() {
-    return `${BASE_URL}/branding/tournament_logo.png`;
+    // The file is replaced in place, so its URL never changes — the revision
+    // the server bumps on every upload, removal and look apply is what makes an
+    // <image> already on air fetch the new one (server/api/v1/branding.py).
+    const rev = deepGet(settings, 'overlays.global.logoRev', 0);
+    return `${BASE_URL}/branding/tournament_logo.png${rev ? `?v=${rev}` : ''}`;
   }
 
   /**
@@ -1103,6 +1131,7 @@
     state,
     settings,
     get sampleActive() { return demoOn; },
+    get fontGeneration() { return fontGeneration; },
     deepGet,
     deepSet,
     deepUnset,

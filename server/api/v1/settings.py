@@ -1,3 +1,5 @@
+from loguru import logger
+from server import socketio
 from server.utils.router import method
 from fastapi import APIRouter
 from fastapi.responses import ORJSONResponse, Response
@@ -29,6 +31,24 @@ async def settings_get(key: str | None = None, session_id: str | None = None) ->
 async def settings_set(key: str = "", value: str | None = None, session_id: str | None = None):
     await Settings.Set(key, value, session_id=session_id)
     return ORJSONResponse({"success": True})
+
+# Socket-only, like `v1.state.set_batch`: the app is the one writer, and it
+# talks to settings over the socket already. Echoes carry the caller's sid.
+@socketio.on('v1.settings.apply_batch')
+async def on_settings_apply_batch(sid, data):
+    """Apply {items: [{key, value}], unset: [key]} as one settings commit."""
+    try:
+        items = (data or {}).get("items") or []
+        unset = (data or {}).get("unset") or []
+        await Settings.ApplyBatch(
+            [(item["key"], item.get("value")) for item in items],
+            [str(key) for key in unset],
+            session_id=sid,
+        )
+        return {"success": True}
+    except Exception as e:
+        logger.exception("settings.apply_batch handler failed")
+        return {"error": str(e)}
 
 @method(
     router.delete, "/settings",

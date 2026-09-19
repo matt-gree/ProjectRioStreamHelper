@@ -37,16 +37,16 @@ def test_scoreboard_mount_size_dims_match_contracts():
 
 
 def test_design_jsx_preview_rows_match_contracts():
-    # PREVIEW_ROWS moved out of the layouts.jsx monolith into design.jsx when
-    # that file was split along its show-time / install-time seam.
+    # The Design tab's preview tiles (PREVIEW_COLUMNS in design.jsx). A tile
+    # quoting the wrong canvas hands the overlay the wrong viewport aspect.
     src = (REPO / "src/routes/layouts/design.jsx").read_text()
-    for label, size in (("Large Scoreboard", "l"), ("Small Scoreboard", "s")):
+    for label, size in (("Scoreboard · Large", "l"), ("Scoreboard · Small", "s")):
         m = re.search(
             rf"label:\s*'{label}'.*?w:\s*(\d+),\s*h:\s*(\d+)", src
         )
-        assert m, f"PREVIEW_ROWS entry for {label!r} not found in design.jsx"
+        assert m, f"preview tile {label!r} not found in design.jsx"
         assert (int(m.group(1)), int(m.group(2))) == _canvas(size), (
-            f"PREVIEW_ROWS {label!r} drifted from scoreboard-{size} canvas"
+            f"preview tile {label!r} drifted from scoreboard-{size} canvas"
         )
 
 

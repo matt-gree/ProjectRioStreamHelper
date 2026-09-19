@@ -128,6 +128,12 @@ export function mountPostgameCallout({ host }) {
   window.addEventListener('resize', autoScale);
   autoScale();
 
+  // update() is keyed on the capture, so a render after a font lands (see
+  // OverlayBase init) does not rebuild — which is right for the theater and
+  // means the fits have to be re-run here or they keep the fallback's widths.
+  const onFontsDone = () => { if (root.style.display !== 'none') fitPlateText(); };
+  if (document.fonts) document.fonts.addEventListener('loadingdone', onFontsDone);
+
   // The port palette is the app's, not this scene's — see lib/port-colors.js.
   // A side with no controller port has no port colour to take, so it falls
   // back to the global accent.
@@ -445,6 +451,41 @@ export function mountPostgameCallout({ host }) {
     };
     fit('.cs-id .char', 56, 30);
     fit('.cs-id .rio', 21, 14);
+    fitMinis();
+  }
+
+  // The batting card's mini stats share one row beside the big H-for-AB, and
+  // their sizes were pixels chosen for Chivo Mono. In a wider numeral face the
+  // row outgrew its box — the rates clipped inside their animated max-width and
+  // ".750" ran into "1.500". So the row shrinks UNIFORMLY (one factor for every
+  // value, never per cell, or a column would read as a different kind of
+  // number) until every stat fits with the rates counted OPEN, which is the
+  // state the finale ends in. The factor is published as `--mini-fit`, and
+  // revealRates opens each rate to its own measured width rather than a fixed
+  // pixel guess.
+  function fitMinis() {
+    const minis = stage.querySelector('.cs-batcard .minis');
+    if (!minis) return;
+    minis.style.setProperty('--mini-fit', '1');
+    const room = minis.clientWidth;
+    if (!room) return;
+    const scale = minis.getBoundingClientRect().width / room || 1;
+    let needed = 0;
+    for (const cell of minis.querySelectorAll('.cs-stat')) {
+      let widest = 0;
+      for (const part of cell.querySelectorAll('.v, .l')) {
+        const r = document.createRange();
+        r.selectNodeContents(part);
+        widest = Math.max(widest, r.getBoundingClientRect().width / scale);
+      }
+      needed += widest + 16;   // the 8px padding either side every mini carries
+    }
+    if (needed > room) minis.style.setProperty('--mini-fit', (room / needed).toFixed(3));
+    // A rate the finale already opened holds the width it opened to, which was
+    // measured in the previous face — release it to its content.
+    for (const rate of minis.querySelectorAll('.cs-stat.rate')) {
+      if (rate.style.opacity === '1') rate.style.maxWidth = 'none';
+    }
   }
 
   // Put the hero's ground glow under the character's ACTUAL feet.
@@ -576,6 +617,11 @@ export function mountPostgameCallout({ host }) {
     }
     OverlayBase.setBlank(null, 'Character Spotlight');
 
+    // Type is a SETTING, not part of the capture, so it cannot wait behind the
+    // key check below: a producer's font change used to reach an on-air
+    // spotlight only when the next game was captured.
+    OverlayBase.applyTypeRoles('postgamecallout');
+
     const capturedAt = g(state, `postgame.${sb}.capturedAt`, '');
     const key = `${sb}:${team}:${ci}:${capturedAt}`;
     // No churn on unrelated ticks — including ones that land while the abs
@@ -672,6 +718,7 @@ export function mountPostgameCallout({ host }) {
 
   function dispose() {
     window.removeEventListener('resize', autoScale);
+    if (document.fonts) document.fonts.removeEventListener('loadingdone', onFontsDone);
     gate.dispose();
     theater.dispose();
     if (root.parentNode) root.parentNode.removeChild(root);

@@ -118,21 +118,33 @@ export function createThemeEngine({ host, element, fallbackSvg }) {
   // long value scales down proportionally instead of being squashed horizontally.
   // The authored size is captured once in data-basefs so the text can grow back
   // to full size when it later gets short again. Safe to call before fonts are
-  // ready; callers typically also re-run this once document.fonts.ready resolves
-  // (the fonts-status check below makes that re-run re-measure everything).
+  // ready; a re-run after a face lands re-measures everything (see fontsKey).
   //
   // Runs on every mount update, so it must not thrash layout: slots whose text
   // hasn't changed since their last fit are skipped outright, and the rest are
   // processed in write→read→write phases so all getComputedTextLength() calls
   // share one layout flush instead of forcing one reflow per slot.
-  const lastFit = new WeakMap();   // el -> { text, fontsLoaded } at last fit
-  // Drop a slot's cached fit. The skip above keys on the TEXT, so a caller that
+  const lastFit = new WeakMap();   // el -> { text, fonts } at last fit
+  // Drop a slot's cached fit. The skip above keys on the TEXT and the fonts, so a caller that
   // changes a slot's data-maxw without changing its content (the Commentary /
   // Player Plates drawer narrows its value's fit bound when a platform badge
   // appears beside it) would otherwise keep the stale, too-wide size.
   function invalidateFit(el) { if (el) lastFit.delete(el); }
+  // What a fit was measured AGAINST, beyond the text itself: the three type
+  // roles on :root (a producer's font change swaps these without touching a
+  // single slot's text) and OverlayBase's count of faces that have finished
+  // loading (the face a role names usually lands a render AFTER the one that
+  // named it). Keyed on the text alone, a font change skipped every slot and
+  // a name measured in Rajdhani ran over the score in a wider face.
+  function fontsKey() {
+    const root = document.documentElement.style;
+    const loaded = !!(document.fonts && document.fonts.status === 'loaded');
+    const gen = (globalThis.OverlayBase && globalThis.OverlayBase.fontGeneration) || 0;
+    return `${loaded}|${gen}|${root.getPropertyValue('--font-display')}|`
+      + `${root.getPropertyValue('--font-body')}|${root.getPropertyValue('--font-mono')}`;
+  }
   function refitText() {
-    const fontsLoaded = !!(document.fonts && document.fonts.status === 'loaded');
+    const fonts = fontsKey();
     const dirty = [];
     for (const el of refitList) {
       // Drop any legacy horizontal-squash attributes if a theme still carries them.
@@ -145,8 +157,8 @@ export function createThemeEngine({ host, element, fallbackSvg }) {
       }
       if (!base) continue;
       const prev = lastFit.get(el);
-      if (prev && prev.text === el.textContent && prev.fontsLoaded === fontsLoaded) continue;
-      lastFit.set(el, { text: el.textContent, fontsLoaded });
+      if (prev && prev.text === el.textContent && prev.fonts === fonts) continue;
+      lastFit.set(el, { text: el.textContent, fonts });
       el.style.fontSize = base + 'px';   // reset to full size before measuring
       const maxw = parseFloat(el.getAttribute('data-maxw'));
       if (!maxw || !el.textContent) continue;

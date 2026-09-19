@@ -208,3 +208,65 @@ export function usePortColors() {
     ));
     return resolvePortColors(overrides, packagePortColors(useDesignPackages(), activeId));
 }
+
+/*
+ * WHICH ELEMENTS A GLOBAL CONTROL ACTUALLY MOVES, under the active package.
+ *
+ * The Design tab used to answer this in paragraphs — "the package paints
+ * everything else, so these reach the Event Header and Player Name…" — which
+ * were true and were most of what made the panel a wall of prose. The answer is
+ * a LIST, so it is drawn as one: each group names the elements it reaches.
+ *
+ * Two kinds of reader, and a group is the union of whichever apply:
+ *   themed   an element whose theme SVG is painted from the app palette under
+ *            the active package (paintedByApp) — a full-art element clears
+ *            these vars, so it is never in the list;
+ *   plain    the two DOM overlays with no theme at all, which read their keys
+ *            under every package (UNTHEMED below, from each mount).
+ * Unknown (packages not loaded) answers null, and the caller draws nothing
+ * rather than a guess — the same "unknown is not no" rule as paintedByApp.
+ */
+const THEMED_NAMES = [
+    ['scoreboard-l', 'Scoreboard'], ['scoreboard-s', 'Scoreboard'], ['scorecard', 'Scorecard'],
+    ['statsbar', 'Stat Bar'], ['statscard', 'Stat Card'], ['commentary', 'Commentary'],
+    ['playerplates', 'Player Plates'], ['lowerthird', 'Lower Third'], ['matchup', 'Matchup'],
+    ['schedule', 'Schedule'], ['ticker', 'Ticker'],
+];
+
+// What each plain DOM overlay reads, straight off its mount's CSS.
+const UNTHEMED = {
+    palette: ['Event Header', 'Player Name'],   // --accent, --text-primary
+    textShadow: ['Player Name'],                // --text-shadow
+    textStroke: ['Event Header', 'Player Name'],// --text-stroke-*
+    chrome: [],
+};
+
+// Which themed files draw the FINAL badge at all.
+const BADGE_STEMS = new Set(['scoreboard-l', 'scoreboard-s', 'scorecard']);
+
+export function globalReach(packages, activeId) {
+    if (!packages) return null;
+    // Stricter than paintedByApp's "unknown is yes": a list of what a control
+    // reaches must not name an element no installed package even draws.
+    const byId = id => packages.find(p => p.id === id);
+    const drawn = stem => [byId(activeId), byId(FALLBACK_PACKAGE)].some(p => p?.elements?.includes(stem));
+    const themed = (filter = () => true) => [...new Set(
+        THEMED_NAMES
+            .filter(([stem]) => filter(stem) && drawn(stem) && paintedByApp(packages, activeId, stem))
+            .map(([, n]) => n),
+    )];
+    const any = themed();
+    return {
+        palette: [...any, ...UNTHEMED.palette],
+        chrome: any,
+        badge: themed(stem => BADGE_STEMS.has(stem)),
+        textShadow: [...any, ...UNTHEMED.textShadow],
+        textStroke: UNTHEMED.textStroke,
+    };
+}
+
+/** globalReach() against the live settings store, for a component. */
+export function useGlobalReach() {
+    const active = useSettingsStore(s => s?.overlays?.global?.designPackage) ?? FALLBACK_PACKAGE;
+    return globalReach(useDesignPackages(), active);
+}

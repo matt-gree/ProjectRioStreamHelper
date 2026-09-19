@@ -845,6 +845,15 @@ class Settings:
             if _dirty:
                 await cls.Save()
 
+        # Design "Looks" were renamed Presets (2026-09-18). The saved designs
+        # always lived at `overlays.presets.*`; only the pointer to the applied
+        # one carried the old word.
+        _ov = cls.settings.get("overlays")
+        if isinstance(_ov, dict) and "active_look" in _ov:
+            _ov.setdefault("active_preset", _ov.get("active_look"))
+            _ov.pop("active_look", None)
+            await cls.Save()
+
         # One-time overlay schema migration to v2: keys that were previously
         # duplicated as per-layout overrides (showCaptains, showLogo, etc.)
         # have been promoted to globals. Strip stale per-layout copies so the
@@ -1197,6 +1206,47 @@ class Settings:
             }),
             cls.Save()
         )
+
+    @classmethod
+    async def ApplyBatch(cls, sets, unsets=(), session_id: str | None = None):
+        """Apply many settings writes as ONE commit.
+
+        A design LOOK touches every global design key and every per-element
+        style pin in the show — easily a hundred keys — and applied through
+        `Set` that was a hundred `settings.json` rewrites in a row, with every
+        overlay repainting between each one, so a look arrived on air in pieces.
+        Here the dict is mutated first and written once.
+
+        Consumers still receive ordinary per-key `v1.settings.set` / `unset`
+        frames: every overlay and the app already handle those, and a new frame
+        type would be a new thing for twenty consumers to get wrong. They land
+        in one burst, and both runtimes coalesce a burst into one repaint (the
+        app's rAF flush, OverlayBase's serialized render).
+
+        `sets` is an iterable of (key, value); `unsets` of keys. Unsets run
+        first, so a batch can clear a namespace and repopulate part of it.
+        """
+        sets = [(k, v) for k, v in sets if k]
+        unsets = [k for k in unsets if k]
+        if not sets and not unsets:
+            return
+        for key in unsets:
+            deep_unset(cls.settings, key)
+        for key, value in sets:
+            deep_set(cls.settings, key, value)
+        cls.revision += 1
+        emits = [
+            socketio.emit('v1.settings.unset', {"key": key, "sid": session_id})
+            for key in unsets
+        ] + [
+            socketio.emit('v1.settings.set', {
+                "key": key,
+                "value": redact_value(key, value),
+                "sid": session_id,
+            })
+            for key, value in sets
+        ]
+        await asyncio.gather(*emits, cls.Save())
 
     @classmethod
     def Get(cls, key: str, default=None):

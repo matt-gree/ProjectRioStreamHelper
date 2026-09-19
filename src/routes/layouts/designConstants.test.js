@@ -387,7 +387,7 @@ describe('overrideReaches', () => {
      */
     it('offers the card surface only where LAYOUT_VAR_MAP carries it', () => {
         expect(varMap).toContain('scoreboard: { ...CARD_OVERRIDE_VARS');
-        for (const key of ['cardBg', 'borderColor', 'borderRadius', 'borderWidth']) {
+        for (const key of ['cardBg', 'borderColor', 'borderWidth']) {
             expect(overrideReaches(key, 'scoreboard')).toBe(true);
             expect(overrideReaches(key, 'ticker')).toBe(false);
             expect(overrideReaches(key, 'commentary')).toBe(false);
@@ -419,13 +419,20 @@ describe('overrideReaches', () => {
 
     /*
      * `rx` cannot take a CSS variable in SVG, so a themed card's corner is a
-     * literal in the artwork. Offering the radius on an element drawn by a theme
-     * SVG would be offering a knob that moves nothing — the silent no-op this
-     * whole table exists to prevent.
+     * literal in the artwork — and no shipped theme reads `--border-radius` at
+     * all. The radius was a Design-tab control and a per-element pin that moved
+     * nothing on any package, so it is offered nowhere.
      */
-    it('does not offer the corner radius on a theme-drawn card', () => {
-        for (const type of ['statsbar', 'statscard']) {
-            expect(overrideReaches('borderRadius', type)).toBe(false);
+    it('offers the corner radius nowhere, because no theme draws one', () => {
+        for (const type of OVERRIDE_CAPABLE_TYPES) {
+            expect(overrideReaches('borderRadius', type), type).toBe(false);
+        }
+        expect(OVERRIDABLE_GLOBAL_KEYS.some(d => d.key === 'borderRadius')).toBe(false);
+        for (const pkg of ['default', 'classic']) {
+            for (const file of readdirSync(`public/design/${pkg}`).filter(f => f.endsWith('.svg'))) {
+                expect(readFileSync(`public/design/${pkg}/${file}`, 'utf8'), `${pkg}/${file}`)
+                    .not.toContain('var(--border-radius');
+            }
         }
     });
 
@@ -464,7 +471,7 @@ describe('overrideReaches', () => {
     it('offers the Event Header the card colour, and none of the other surface keys', () => {
         expect(varMap).toContain('eventheader: { cardBg:');
         expect(overrideReaches('cardBg', 'eventheader')).toBe(true);
-        for (const key of ['borderColor', 'borderRadius', 'borderWidth']) {
+        for (const key of ['borderColor', 'borderWidth']) {
             expect(overrideReaches(key, 'eventheader'), key).toBe(false);
         }
     });

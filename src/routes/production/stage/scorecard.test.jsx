@@ -111,9 +111,24 @@ describe('Scorecard stage', () => {
         ui();
         const rows = [...document.querySelectorAll('[data-setting-group]')];
         expect(within(rows[1]).getByText('Score Block')).toBeInTheDocument();
-        // ...and it is the whole block: no Rosters/Bases switches beside it.
-        expect(screen.queryByText('Rosters')).not.toBeInTheDocument();
+    });
+
+    /*
+     * ONE CONTROL, WHOLE BLOCKS. `Rosters` is a block the theme draws, not a
+     * switch that subtracts a band from the full one — which is the difference
+     * that matters, because the full block's inning marker lives inside the
+     * situation row a `Bases / Diamond` switch would have turned off, leaving a
+     * card that could not say what inning it was. So the name is on the picker
+     * and nowhere else on the panel.
+     */
+    it('offers the rosters block as a mode, not as a switch beside it', () => {
+        ui();
+        const rows = [...document.querySelectorAll('[data-setting-group]')];
+        expect(within(rows[1]).getByText('Rosters').closest('button')).toBeTruthy();
         expect(screen.queryByText('Bases / Diamond')).not.toBeInTheDocument();
+        for (const def of LAYOUT_SETTINGS.scorecard.filter(d => d.type === 'switch')) {
+            expect(def.label, def.key).not.toBe('Rosters');
+        }
     });
 
     it('writes an authored text field to the per-board namespace', () => {

@@ -262,24 +262,33 @@
     <text data-slot="inn-num" x="72" y="298" text-anchor="middle" class="sc-num" font-size="58" font-weight="700">1</text>
     <g data-slot="inn-arrow-up"><polygon points="56,246 88,246 72,228" style="fill:var(--accent)"/></g>
     <g data-slot="inn-arrow-down" opacity="0"><polygon points="56,316 88,316 72,334" style="fill:var(--accent)"/></g>
+    <!-- FINAL IS ONE COLOUR ON ALL THREE SCORE BLOCKS, and it is the seam the
+         Final Badge Color setting writes (the final-badge-color var, falling
+         back to this package's accent, which is red). Two of the three drew a
+         white 0.14 pill and one drew the accent, so the same badge changed
+         colour when a producer cut between blocks — and the setting the
+         Scoreboard advertises in its own whitelist reached nothing anywhere in
+         this package, every badge in it being painted straight from the accent. -->
     <g data-slot="final-badge" opacity="0">
-      <rect x="32" y="266" width="80" height="30" rx="6" style="fill:rgba(255,255,255,0.14)"/>
+      <rect x="32" y="266" width="80" height="30" rx="6" style="fill:var(--final-badge-color, var(--accent))"/>
       <text x="72" y="287" text-anchor="middle" fill="#ffffff" font-family="var(--font-display)" font-size="17" font-weight="700" letter-spacing="1">FINAL</text>
     </g>
 
+    <!-- THE COUNT IS 3 · 2 · 2, one short of each terminal value: a fourth
+         ball is a walk, a third strike and a third out end something, so each
+         resets before the next frame and a dot drawn for it could never come
+         on. This file drew the extra one in all three rows until 2026-09-15 —
+         permanently dark, and the only package that did. -->
     <text x="156" y="252" text-anchor="end" class="sc-dim" font-size="17" font-weight="700">B</text>
     <circle data-slot="ball-0" cx="180" cy="246" r="8" style="fill:rgba(255,255,255,0.08)"/>
     <circle data-slot="ball-1" cx="206" cy="246" r="8" style="fill:rgba(255,255,255,0.08)"/>
     <circle data-slot="ball-2" cx="232" cy="246" r="8" style="fill:rgba(255,255,255,0.08)"/>
-    <circle data-slot="ball-3" cx="258" cy="246" r="8" style="fill:rgba(255,255,255,0.08)"/>
     <text x="156" y="286" text-anchor="end" class="sc-dim" font-size="17" font-weight="700">S</text>
     <circle data-slot="strike-0" cx="180" cy="280" r="8" style="fill:rgba(255,255,255,0.08)"/>
     <circle data-slot="strike-1" cx="206" cy="280" r="8" style="fill:rgba(255,255,255,0.08)"/>
-    <circle data-slot="strike-2" cx="232" cy="280" r="8" style="fill:rgba(255,255,255,0.08)"/>
     <text x="156" y="320" text-anchor="end" class="sc-dim" font-size="17" font-weight="700">O</text>
     <circle data-slot="out-0" cx="180" cy="314" r="8" style="fill:rgba(255,255,255,0.08)"/>
     <circle data-slot="out-1" cx="206" cy="314" r="8" style="fill:rgba(255,255,255,0.08)"/>
-    <circle data-slot="out-2" cx="232" cy="314" r="8" style="fill:rgba(255,255,255,0.08)"/>
 
     <!-- diamond bases (WIDE rhombus, ~1.8:1 like the source design). 2B top,
          1B right, 3B left; the three tessellate at y278. Runners padded inside. -->
@@ -289,6 +298,107 @@
     <image data-slot="runner-2" x="356" y="252" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
     <image data-slot="runner-3" x="310" y="277" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
     <image data-slot="runner-1" x="402" y="277" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+  </g>
+
+  <!-- ░░ 3b · ROSTERS SCORE BLOCK ░░
+       The full block's two plates and two roster bands, verbatim, with the
+       situation row replaced by a strip carrying the one thing in that row
+       which is not about the pitch in flight.
+
+       THE INNING IS THE LAST FACT TO DROP FROM A SCORE BLOCK. Everything else
+       the situation row draws — the count, the diamond, the runners — is only
+       true between two pitches, so a card meant to sit on air through an
+       at-bat has no use for it. What inning it is, and whether the game is
+       over, stay true the whole time, and dropping the row wholesale took them
+       along with it — which is what made "the teams without the diamond" a
+       state a producer could ask for and not use.
+
+       A STRIP AT THE FOOT, NOT A COLUMN AT THE SIDE. A right-hand state column
+       is what the condensed bar does, and it works there because that block is
+       40 units tall: at this block's 210 the marker would float in the middle
+       of a 70 x 210 hole. The strip costs 38 units of card height and lets the
+       plates and the roster bands keep the full block's own width and 49-unit
+       icon pitch — the two blocks are the same rows, so they should measure
+       the same.
+
+       THE STRIP CARRIES THE COUNT TOO, and it costs nothing: the marker alone
+       left ~370 of the 440 empty, in the one row of this block that has no
+       second column to fill. So the strip is the situation row minus the two
+       things that are only true between two pitches on a diamond a viewer can
+       see — the bases and the runners on them.
+
+       LAID OUT ON ITS GAPS, not on its content: the inning cluster sits on the
+       card's left margin, the O group's last dot lands on its right, and the
+       three gaps between the four clusters are all 58. Groups of 3 and 2 dots
+       measure differently, so spacing them evenly by group is the only way the
+       row reads as one rhythm.
+
+       FINAL TAKES THE STRIP ALONE. Every other thing on it is about a pitch
+       that is coming, and the badge sits in the middle of where the dots were,
+       so leaving a dead count either side of it would be the card's loudest
+       claim that the game is still going. -->
+  <g data-slot="el-rosters" data-h="254" opacity="0">
+    <rect class="sc-div" x="16" y="0" width="464" height="1.5"/>
+
+    <!-- Side 1 -->
+    <rect class="sc-tick" x="28" y="12" width="440" height="52" rx="8"/>
+    <rect x="28" y="12" width="440" height="52" rx="8" style="fill:url(#sc-name-1)"/>
+    <rect x="28" y="12" width="50" height="52" rx="8" style="fill:var(--side1)" opacity="0.55"/>
+    <rect x="76" y="12" width="2" height="52" style="fill:var(--side1)" opacity="0.7"/>
+    <image data-slot="r-s1-logo" x="34" y="18" width="40" height="40" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+    <text data-slot="r-s1-name" data-maxw="300" x="94" y="48" class="sc-ink" font-size="30" font-weight="700">Player One</text>
+    <text data-slot="r-s1-score" data-maxw="90" x="460" y="52" text-anchor="end" class="sc-num" font-size="40" font-weight="700">0</text>
+    <image data-slot="r-s1-char-0" x="28" y="72" width="32" height="32" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="r-s1-char-1" x="77" y="72" width="32" height="32" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="r-s1-char-2" x="126" y="72" width="32" height="32" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="r-s1-char-3" x="175" y="72" width="32" height="32" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="r-s1-char-4" x="224" y="72" width="32" height="32" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="r-s1-char-5" x="273" y="72" width="32" height="32" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="r-s1-char-6" x="322" y="72" width="32" height="32" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="r-s1-char-7" x="371" y="72" width="32" height="32" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="r-s1-char-8" x="420" y="72" width="32" height="32" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+
+    <!-- Side 2 -->
+    <rect class="sc-tick" x="28" y="118" width="440" height="52" rx="8"/>
+    <rect x="28" y="118" width="440" height="52" rx="8" style="fill:url(#sc-name-2)"/>
+    <rect x="28" y="118" width="50" height="52" rx="8" style="fill:var(--side2)" opacity="0.55"/>
+    <rect x="76" y="118" width="2" height="52" style="fill:var(--side2)" opacity="0.7"/>
+    <image data-slot="r-s2-logo" x="34" y="124" width="40" height="40" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+    <text data-slot="r-s2-name" data-maxw="300" x="94" y="154" class="sc-ink" font-size="30" font-weight="700">Player Two</text>
+    <text data-slot="r-s2-score" data-maxw="90" x="460" y="158" text-anchor="end" class="sc-num" font-size="40" font-weight="700">0</text>
+    <image data-slot="r-s2-char-0" x="28" y="178" width="32" height="32" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="r-s2-char-1" x="77" y="178" width="32" height="32" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="r-s2-char-2" x="126" y="178" width="32" height="32" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="r-s2-char-3" x="175" y="178" width="32" height="32" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="r-s2-char-4" x="224" y="178" width="32" height="32" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="r-s2-char-5" x="273" y="178" width="32" height="32" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="r-s2-char-6" x="322" y="178" width="32" height="32" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="r-s2-char-7" x="371" y="178" width="32" height="32" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="r-s2-char-8" x="420" y="178" width="32" height="32" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+
+    <rect class="sc-div" x="28" y="216" width="440" height="1.5"/>
+
+    <text data-slot="r-inn-num" x="56" y="244" class="sc-num" font-size="26" font-weight="700">1</text>
+    <g data-slot="r-inn-arrow-up"><polygon points="28,242 46,242 37,228" style="fill:var(--accent)"/></g>
+    <g data-slot="r-inn-arrow-down" opacity="0"><polygon points="28,228 46,228 37,242" style="fill:var(--accent)"/></g>
+
+    <g data-slot="r-count">
+      <text x="147" y="241" text-anchor="end" class="sc-dim" font-size="17" font-weight="700">B</text>
+      <circle data-slot="r-ball-0" cx="165" cy="235" r="8" style="fill:rgba(255,255,255,0.08)"/>
+      <circle data-slot="r-ball-1" cx="191" cy="235" r="8" style="fill:rgba(255,255,255,0.08)"/>
+      <circle data-slot="r-ball-2" cx="217" cy="235" r="8" style="fill:rgba(255,255,255,0.08)"/>
+      <text x="294" y="241" text-anchor="end" class="sc-dim" font-size="17" font-weight="700">S</text>
+      <circle data-slot="r-strike-0" cx="312" cy="235" r="8" style="fill:rgba(255,255,255,0.08)"/>
+      <circle data-slot="r-strike-1" cx="338" cy="235" r="8" style="fill:rgba(255,255,255,0.08)"/>
+      <text x="415" y="241" text-anchor="end" class="sc-dim" font-size="17" font-weight="700">O</text>
+      <circle data-slot="r-out-0" cx="433" cy="235" r="8" style="fill:rgba(255,255,255,0.08)"/>
+      <circle data-slot="r-out-1" cx="459" cy="235" r="8" style="fill:rgba(255,255,255,0.08)"/>
+      </g>
+
+    <g data-slot="r-final" opacity="0">
+      <rect x="208" y="222" width="80" height="26" rx="6" style="fill:var(--final-badge-color, var(--accent))"/>
+      <text x="248" y="240" text-anchor="middle" fill="#ffffff" font-family="var(--font-display)" font-size="17" font-weight="700" letter-spacing="1">FINAL</text>
+    </g>
   </g>
 
   <!-- ░░ 3a · CONDENSED SCORE BAR ░░ -->
@@ -352,7 +462,7 @@
     <g data-slot="c-inn-arrow-up"><polygon points="438,30 458,30 448,18" style="fill:var(--accent)"/></g>
     <g data-slot="c-inn-arrow-down" opacity="0"><polygon points="438,82 458,82 448,94" style="fill:var(--accent)"/></g>
     <g data-slot="c-final" opacity="0">
-      <rect x="420" y="43" width="56" height="26" rx="7" style="fill:var(--accent)"/>
+      <rect x="420" y="43" width="56" height="26" rx="7" style="fill:var(--final-badge-color, var(--accent))"/>
       <text x="448" y="61" text-anchor="middle" fill="#ffffff" font-family="var(--font-display)" font-size="14" font-weight="700" letter-spacing="0.5">FINAL</text>
     </g>
   </g>
@@ -470,4 +580,5 @@
     <rect class="sc-div" x="16" y="0" width="464" height="1.5"/>
     <text data-slot="stadium" data-maxw="420" x="248" y="29" text-anchor="middle" class="sc-dim" font-size="19" font-weight="600" letter-spacing="0.5">Stadium</text>
   </g>
+
 </svg>

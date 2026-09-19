@@ -363,9 +363,14 @@ export function createTheater({ stage }) {
       rates.forEach((el) => { el.style.maxWidth = 'none'; el.style.opacity = '1'; el.style.padding = '0 8px'; });
       return;
     }
-    // max-width 130 leaves room for a four-digit SLG (1.000) at full size;
-    // the padding animates in with it so the spacing matches the other minis
-    gsap.to(rates, { maxWidth: 130, opacity: 1, paddingLeft: 8, paddingRight: 8, duration: 0.65, ease: 'power2.inOut', stagger: 0.12 });
+    // Each rate opens to its OWN content width — `scrollWidth` reads it through
+    // the collapsed max-width — so a four-digit SLG (1.000) never clips in a
+    // face wider than the one a fixed pixel guess was sized for. The padding
+    // animates in with it so the spacing matches the other minis.
+    gsap.to(rates, {
+      maxWidth: (i, el) => Math.ceil(el.scrollWidth) + 1,
+      opacity: 1, paddingLeft: 8, paddingRight: 8, duration: 0.65, ease: 'power2.inOut', stagger: 0.12,
+    });
   }
 
   async function playAb(gsap, ab, i, ctx, my) {

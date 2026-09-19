@@ -95,14 +95,14 @@
     <g data-slot="inn-arrow-up"><path d="M250 37H282L266 19L250 37Z" style="fill:var(--accent,#e60012)"/></g>
     <g data-slot="inn-arrow-down" opacity="0"><path d="M250 91H282L266 109L250 91Z" style="fill:var(--accent,#e60012)"/></g>
     <g data-slot="final-badge" opacity="0">
-      <path d="M287.31 51H243.69C240.547 51 238 53.6863 238 57V71C238 74.3137 240.547 77 243.69 77H287.31C290.453 77 293 74.3137 293 71V57C293 53.6863 290.453 51 287.31 51Z" style="fill:var(--accent,#e60012)"/>
+      <path d="M287.31 51H243.69C240.547 51 238 53.6863 238 57V71C238 74.3137 240.547 77 243.69 77H287.31C290.453 77 293 74.3137 293 71V57C293 53.6863 290.453 51 287.31 51Z" style="fill:var(--final-badge-color, var(--accent,#e60012))"/>
       <text x="265.5" y="69.59" text-anchor="middle" fill="#FFFFFF" font-family="var(--font-display, 'Rajdhani', 'Arial Narrow', sans-serif)" font-size="14" font-weight="700" letter-spacing="0.5">FINAL</text>
     </g>
   </g>
 
   <!-- ░░ LIVE segment (toggle + game-state) — melds card to full 380 ░░ -->
   <g data-slot="row-live" data-anim="expand-right" data-cardw="380">
-    <text data-slot="balls" x="319.238" y="111.23" fill="#F5F5F8" font-family="var(--font-mono, 'Chivo Mono', ui-monospace, 'SF Mono', monospace)" font-variant-numeric="tabular-nums" font-size="24" font-weight="700">0</text>
+    <text data-slot="balls" x="333.638" y="111.23" text-anchor="end" fill="#F5F5F8" font-family="var(--font-mono, 'Chivo Mono', ui-monospace, 'SF Mono', monospace)" font-variant-numeric="tabular-nums" font-size="24" font-weight="700">0</text>
     <text x="341.44" y="109.55" text-anchor="middle" fill="#F5F5F8" font-family="var(--font-mono, 'Chivo Mono', ui-monospace, 'SF Mono', monospace)" font-variant-numeric="tabular-nums" font-size="24" font-weight="700">-</text>
     <text data-slot="strikes" x="349.238" y="111.23" fill="#F5F5F8" font-family="var(--font-mono, 'Chivo Mono', ui-monospace, 'SF Mono', monospace)" font-variant-numeric="tabular-nums" font-size="24" font-weight="700">0</text>
     <path data-slot="out-0" d="M331.5 82C335.09 82 338 79.0899 338 75.5C338 71.9101 335.09 69 331.5 69C327.91 69 325 71.9101 325 75.5C325 79.0899 327.91 82 331.5 82Z" style="fill:rgba(255,255,255,0.08)"/>

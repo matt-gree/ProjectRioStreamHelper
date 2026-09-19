@@ -191,7 +191,7 @@
        bleed again and is exactly the inner half of the widest border a producer
        can set. At 16px the cluster and the border meet and neither is cut. -->
   <g data-slot="row-live" data-anim="expand-right" data-cardw="372">
-    <text data-slot="balls" x="309.238" y="112" class="cs-count" font-size="24" font-weight="700">0</text>
+    <text data-slot="balls" x="323.638" y="112" text-anchor="end" class="cs-count" font-size="24" font-weight="700">0</text>
     <text x="331.44" y="110.32" text-anchor="middle" class="cs-dim" font-size="24" font-weight="700">-</text>
     <text data-slot="strikes" x="339.238" y="112" class="cs-count" font-size="24" font-weight="700">0</text>
     <circle data-slot="out-0" cx="321.5" cy="82" r="6.5" style="fill:rgba(255,255,255,0.05);stroke:rgba(255,255,255,0.15);stroke-width:1"/>
