@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
+import { Link } from 'react-router-dom';
 import { Radio, PlugZap, ArrowLeftRight, CircleDot, X } from 'lucide-react';
 import { useObsStore } from '../../context/obs';
 import { useSettingsStore } from '../../context/store';
@@ -75,9 +76,16 @@ const ConnectionPill = memo(function ConnectionPill() {
                     {status === 'error' ? 'Retry' : 'Connect'}
                 </Button>
             )}
+            {/* Wrapped, never truncated: the second half of an OBS error is
+                usually the fix ("…check the OBS WebSocket password"), and a
+                `title` tooltip is unreachable by keyboard or touch. The link
+                goes to where that fix is made. */}
             {status === 'error' && error && (
-                <Text size="xs" className="max-w-[28ch] truncate text-destructive" title={error}>
-                    {error}
+                <Text size="xs" className="max-w-[48ch] text-destructive">
+                    {error}{' '}
+                    <Link to="/connections" className="whitespace-nowrap text-muted-foreground underline hover:text-foreground">
+                        OBS settings
+                    </Link>
                 </Text>
             )}
         </Group>
