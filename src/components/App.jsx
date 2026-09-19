@@ -1,4 +1,4 @@
-import { Component, useEffect } from 'react';
+import { Component } from 'react';
 import Providers from './providers';
 import { useStoresLoaded } from '../context/store';
 import { HashRouter } from 'react-router-dom';
@@ -7,7 +7,6 @@ import { TooltipProvider } from './ui/tooltip';
 import { Toaster } from './ui/sonner';
 import { Button } from './ui/button';
 import { Loader } from './ui/primitives';
-import { useSettingsStore } from '../context/store';
 
 class ErrorBoundary extends Component {
     state = { error: null };
@@ -56,17 +55,6 @@ function LoadingScreen() {
 
 function AppInner() {
     const loaded = useStoresLoaded();
-    // Project Rio's design is dark-only. We keep the `ui.color_scheme`
-    // setting for forward-compat, but force the night theme: the `dark`
-    // class stays on <html> so the UI never flashes light.
-    const scheme = useSettingsStore(state => state?.ui?.color_scheme) || 'dark';
-
-    useEffect(() => {
-        const root = document.documentElement;
-        const useDark = scheme !== 'light';
-        root.classList.toggle('dark', useDark);
-    }, [scheme]);
-
     return (
         <TooltipProvider delayDuration={200}>
             <Toaster position="top-right" />

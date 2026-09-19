@@ -3,7 +3,7 @@
 
 /* ------------------------------------------------------------------ *
  * Project Rio Design System — night arena theme.
- * The app is dark-only; both :root and .dark resolve to the night
+ * The app is dark-only (there is no theme setting): both :root and .dark resolve to the night
  * palette so the UI never flashes light even before the dark class is
  * applied to <html>.
  * ------------------------------------------------------------------ */

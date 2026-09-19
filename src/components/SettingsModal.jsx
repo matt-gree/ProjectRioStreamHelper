@@ -89,7 +89,6 @@ export default function SettingsModal({ opened, onClose }) {
     const appVersion = useConfigStore(state => state.version);
 
     // ── General ──
-    const colorScheme = useSettingsStore(state => state?.ui?.color_scheme) || 'dark';
     // `.mode` is the stored value with the fallback applied, so the control
     // and the words the rest of the app uses cannot disagree.
     const sideWords = useSideLabels();
@@ -199,18 +198,6 @@ export default function SettingsModal({ opened, onClose }) {
                     </div>
 
                     <Section label="General">
-                        <SettingRow label="Theme">
-                            <SegmentedControl
-                                size="xs"
-                                value={colorScheme}
-                                onChange={(v) => setSetting('ui.color_scheme', v)}
-                                data={[
-                                    { label: 'Light', value: 'light' },
-                                    { label: 'Dark', value: 'dark' },
-                                    { label: 'System', value: 'auto' },
-                                ]}
-                            />
-                        </SettingRow>
                         <SettingRow
                             label="Side labels"
                             hint="What the console calls each side. Overlays always use 1 and 2."
