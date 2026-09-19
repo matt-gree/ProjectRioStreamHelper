@@ -4,11 +4,21 @@
  * src/context/match.js — this is display-only.
  */
 
-// "Winners Final — Alice vs Bob", falling back to whatever the fixture has.
+/*
+ * "M3 · Winners Final — Alice vs Bob", falling back to whatever the fixture has.
+ *
+ * LEADS WITH THE ID, in the console's own `M{id}` spelling (the board desk's
+ * fixture slot, `Clear & unbind M3`). Names alone cannot tell two fixtures
+ * between one pair apart — which is the doubleheader, the night's common
+ * repeat — so every picker built on this offered two identical entries. A
+ * fixture with nothing else to say keeps its old "Match 3" rather than a bare
+ * "M3".
+ */
 export function matchDisplayLabel(matches, id) {
     const m = matches?.[id] || {};
     const names = [m?.player?.[1]?.rioName, m?.player?.[2]?.rioName].filter(Boolean).join(' vs ');
-    return m.label ? `${m.label}${names ? ` — ${names}` : ''}` : (names || `Match ${id}`);
+    const rest = m.label ? `${m.label}${names ? ` — ${names}` : ''}` : names;
+    return rest ? `M${id} · ${rest}` : `Match ${id}`;
 }
 
 // The numeric match ids in state, ascending. State keys are strings.
