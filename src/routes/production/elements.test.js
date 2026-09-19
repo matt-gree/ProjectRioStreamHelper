@@ -142,12 +142,12 @@ describe('element URL binding (match)', () => {
     /*
      * The two post-game callouts own their sources and must NOT answer to the
      * shared shell they used to be fed through. Their old matcher was the word
-     * "callout", which also matched callout-stage.html — a CONTAINER. An
+     * "callout", which also matched the Callout Stage — a CONTAINER. An
      * element that identifies as one of its own containers rows twice and
      * drives the wrong source.
      */
     it('the post-game callouts bind their own layouts, not the callout stage', () => {
-        const stage = `${HOST}/layout/shared/callout-stage.html`;
+        const stage = `${HOST}/layout/shared/container.html?container=callout-stage`;
         expect(byId.postgamecallout.match(stage)).toBe(false);
         expect(byId.postgamevs.match(stage)).toBe(false);
         expect(byId.postgamecallout.match(`${HOST}/layout/postgame/spotlight.html`)).toBe(true);
@@ -182,13 +182,6 @@ describe('element URL binding (match)', () => {
                     e.match(`${HOST}/layout/shared/container.html?container=${id}`),
                     `${e.id} claims container "${id}"`,
                 ).toBe(false);
-            }
-        }
-        // …and the pre-2.0 named shells, which are containers by their filename.
-        for (const shell of ['callout-stage', 'split-screen']) {
-            for (const e of direct) {
-                expect(e.match(`${HOST}/layout/shared/${shell}.html`), `${e.id} / ${shell}`)
-                    .toBe(false);
             }
         }
     });

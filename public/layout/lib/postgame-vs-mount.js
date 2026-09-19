@@ -47,7 +47,7 @@ function charArtUrl(name) {
   const id = OverlayBase.charId(name);
   return id === undefined ? '' : `${OverlayBase.BASE_URL}/game_assets/msb/characters/${id}.png`;
 }
-// rio-data.js loads before this module (see callout-stage.html); the
+// rio-data.js loads before this module (see container.html); the
 // window.RioData guard just matches the other mounts' defensive style.
 function teamLogoUrl(teamName) { return teamName && window.RioData ? RioData.teamLogoUrl(teamName) : ''; }
 

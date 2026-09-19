@@ -5,7 +5,7 @@ import { useSettingsStore, useStateStore } from '../../context/store';
 import { useStagingStore } from '../../context/staging';
 import { ELEMENTS } from './elements';
 import { QuickFace } from './quickface';
-import { SEEDED_CONTAINER_DEFS, withContainers } from '../../test/containers';
+import { SAMPLE_CONTAINER_DEFS, withContainers } from '../../test/containers';
 
 beforeEach(() => {
     vi.stubGlobal('localStorage', {
@@ -41,7 +41,7 @@ const ui = (id, placement = slot(defaultContainerFor(id))) => render(
 
 // Which container the shared test rig rosters this member on.
 function defaultContainerFor(id) {
-    const entry = Object.entries(SEEDED_CONTAINER_DEFS)
+    const entry = Object.entries(SAMPLE_CONTAINER_DEFS)
         .find(([, d]) => d.members?.includes(id));
     return entry ? entry[0] : null;
 }

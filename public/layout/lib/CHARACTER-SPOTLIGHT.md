@@ -34,7 +34,7 @@ character's story once, holding on the spray chart.
 | **AB walkthrough sequencer** (renderer plumbing, per-AB choreography, intro/finale) | `public/layout/lib/postgame-callout-theater.js` |
 | **3D hit replay** (Three.js scene, camera modes, ball trails, stadium) | `rio-visualizer/web/renderer.js` (~1615 lines, git submodule) |
 | **Stadium themes** (per-arena palette / fog / lighting / mound repaint) | `rio-visualizer/web/themes.js` |
-| **Host page** (the sized OBS shell + three.js importmap) | `public/layout/shared/callout-stage.html` |
+| **Host page** (the sized OBS shell + three.js importmap) | `public/layout/postgame/spotlight.html` (own source) · `public/layout/shared/container.html` (in a container) |
 | **Data contract** (box score → State; heavy per-AB payload → REST) | `server/postgame.py` (`character_abs`, `_side_block`, `_star_cost`) |
 | **REST/State surface** | `server/api/v1/postgame.py` (`GET /api/v1/postgame/abs`) |
 | **Element registration** | `src/routes/production/elements.js` |

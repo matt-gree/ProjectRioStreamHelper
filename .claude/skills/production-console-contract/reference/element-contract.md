@@ -35,7 +35,7 @@ direct elements first (`placementsInScene`) and takes the first yes, so the
 container loses its roster, its feed and its stage to an element whose panel then
 drives a source that ignores every setting it writes. Same bug as the old
 `/stats/i` (which claimed `roster-stats-2`) and the old `/callout/`
-(which claimed `callout-stage.html`). Pinned for every element by "no element
+(which claimed the since-deleted `callout-stage.html`). Pinned for every element by "no element
 claims a container source" in `elements.test.js`.
 
 **FLAVOR IS THE FLOOR; THE PLACEMENT IS THE ANSWER** (`placementFlavor` in

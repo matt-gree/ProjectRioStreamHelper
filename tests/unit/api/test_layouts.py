@@ -87,11 +87,12 @@ def test_parse_html_meta_case_insensitive_meta(tmp_path):
 
 # --- container catalog rows ---
 
-# The definitions a fresh install ships with (server/settings.py); pinned in
-# full by tests/unit/test_settings_containers.py.
-SEEDED_CONTAINERS = {
-    "callout-stage", "split-screen",
-    "roster-stats-1", "roster-stats-2",
+# A fresh install ships none (server/settings.py), so these tests build their own.
+DEFS = {
+    "callout-stage": {"name": "Callout Stage", "width": 1920, "height": 1080,
+                      "members": ["postgamecallout", "postgamevs"]},
+    "split-screen": {"name": "Split-Screen", "width": 1280, "height": 720,
+                     "members": ["hitvisualizer"]},
 }
 
 async def test_container_rows_come_from_definitions_not_files(isolate_user_data):
@@ -103,10 +104,11 @@ async def test_container_rows_come_from_definitions_not_files(isolate_user_data)
     also the only place a container's name and native size live.
     """
     await Settings.Load()
+    Settings.settings["production"]["container_defs"] = dict(DEFS)
     rows = _container_layouts("http://x")
 
     by_id = {r["container"]: r for r in rows}
-    assert set(by_id) == SEEDED_CONTAINERS
+    assert set(by_id) == set(DEFS)
 
     stage = by_id["callout-stage"]
     assert stage["group"] == "shared"
@@ -117,6 +119,11 @@ async def test_container_rows_come_from_definitions_not_files(isolate_user_data)
     # decides it — not anything parsed out of the shell's CSS.
     assert (stage["width"], stage["height"]) == (1920, 1080)
     assert sorted(stage["members"]) == ["postgamecallout", "postgamevs"]
+
+
+async def test_a_fresh_install_catalogs_no_containers(isolate_user_data):
+    await Settings.Load()
+    assert _container_layouts("http://x") == []
 
 
 async def test_a_producer_built_container_gets_a_row(isolate_user_data):
@@ -132,25 +139,25 @@ async def test_a_producer_built_container_gets_a_row(isolate_user_data):
 async def test_a_malformed_definition_is_skipped_not_fatal(isolate_user_data):
     """Settings are user-editable JSON; one bad entry must not empty the catalog."""
     await Settings.Load()
-    Settings.settings["production"]["container_defs"]["broken"] = "not a dict"
+    Settings.settings["production"]["container_defs"] = {**DEFS, "broken": "not a dict"}
     rows = _container_layouts("http://x")
     assert "broken" not in {r["container"] for r in rows}
-    assert len(rows) == len(SEEDED_CONTAINERS)
+    assert len(rows) == len(DEFS)
 
 
 async def test_the_catalog_does_not_also_list_the_shared_folder(isolate_user_data):
-    """The pre-2.0 named shells stay on disk so existing browser sources keep
-    rendering, but offering them beside the definitions would list the same
-    container twice."""
+    """The folder holds only the generic shell, which is not a container on its
+    own; every shared row comes from a definition."""
     await Settings.Load()
+    Settings.settings["production"]["container_defs"] = dict(DEFS)
 
     class _Req:
         headers = {"host": "x"}
 
     payload = orjson.loads((await list_layouts(_Req())).body)
     shared = [row for row in payload if row["group"] == "shared"]
-    assert {row["container"] for row in shared} == SEEDED_CONTAINERS
-    # No row for the shell itself, and none for the legacy files.
+    assert {row["container"] for row in shared} == set(DEFS)
+    # No row for the shell itself.
     assert all(row["url"].endswith(f"?container={row['container']}") for row in shared)
 
 

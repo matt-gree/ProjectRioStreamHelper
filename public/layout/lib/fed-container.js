@@ -13,10 +13,7 @@
 // Containers are PRODUCER-BUILT: each one is a definition under
 // settings.production.container_defs.{id} (name · native size · member roster ·
 // scope), and container.html renders whichever the URL names. `containerId` is
-// therefore passed in from `?container=`; when it isn't, the id falls back to
-// the page's own filename stem, which is what keeps the pre-2.0 named shells
-// (callout-stage.html, split-screen.html) — and any browser source still
-// pointing at one — rendering exactly as before.
+// therefore passed in from `?container=`.
 //
 // THIS FILE IS THE WIRING, AND ONLY THAT. Two neighbours own the rest, and both
 // import nothing so both are unit tested directly:
@@ -36,13 +33,6 @@
 // loaded first, and the host page's `three` importmap for the hit member.
 import { createLayers, resolveFeed } from '/layout/lib/container-layers.js';
 import { MEMBERS, memberWatches } from '/layout/lib/container-members.js';
-
-// The container id this page is: what `?container=` names, else the filename
-// stem. Exported so the shell and the console agree on one derivation.
-export function containerIdFromLocation(explicit) {
-  if (explicit) return explicit;
-  return window.location.pathname.replace(/^.*\/([^/]+)\.html?(?:\?.*)?$/, '$1');
-}
 
 /*
  * This container's definition, fetched once before init.
@@ -126,7 +116,7 @@ export async function initFedContainer({
   host, perf = false, sample = null, forceElement = null, previewSel = null,
   containerId = null,
 }) {
-  const CONTAINER_ID = containerIdFromLocation(containerId);
+  const CONTAINER_ID = containerId;
   const FEED_KEY = `production.feed.container.${CONTAINER_ID}`;
   const def = containerId ? await fetchDef(CONTAINER_ID) : null;
 
@@ -141,10 +131,8 @@ export async function initFedContainer({
   /*
    * The box members center in. The DEFINITION governs where there is one: it is
    * the size the console created the OBS source at, and it stays right even if
-   * the producer later resized that source's canvas by hand. A pre-2.0 named
-   * shell has no definition, so it measures its own page — which is how
-   * split-screen.html keeps filling its 960×1080 body with a 1280×720 hit
-   * instead of centering an overflowing box in it.
+   * the producer later resized that source's canvas by hand. A source whose
+   * definition was deleted has none, so it measures its own page.
    */
   const container = (def?.width && def?.height)
     ? { width: def.width, height: def.height }

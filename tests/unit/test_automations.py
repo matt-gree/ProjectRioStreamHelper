@@ -442,6 +442,28 @@ async def test_a_pushed_container_with_no_automation_is_left_alone(set_setting):
     assert deep_get(State.state, f"{REASON_KEY}.callout-stage") is None
 
 
+async def test_boot_drops_the_feed_of_a_container_that_no_longer_exists(set_setting):
+    """A definition that left without the console's delete (the settings
+    migration that retired the seeded four) leaves its feed and reason behind.
+    Nothing can clear them, and a container rebuilt under the same id would
+    inherit them — so boot drops them, and leaves a live container's alone."""
+    set_setting("production.container_defs", {
+        "mine": {"name": "Mine", "width": 1920, "height": 1080,
+                 "members": ["postgamevs"]},
+    })
+    set_setting("production.automations", {})
+    await State.SetBatch([
+        (f"{FEED_KEY}.callout-stage", {"element": "postgamevs", "scoreboard": 1}),
+        (f"{REASON_KEY}.callout-stage", MANUAL),
+        (f"{REASON_KEY}.roster-stats-1", RESTING),
+        (f"{FEED_KEY}.mine", {"element": "postgamevs", "scoreboard": 1}),
+        (f"{REASON_KEY}.mine", MANUAL),
+    ])
+    await Automations.Start()
+    assert set(deep_get(State.state, FEED_KEY) or {}) == {"mine"}
+    assert set(deep_get(State.state, REASON_KEY) or {}) == {"mine"}
+
+
 async def test_hooks_do_not_reenter_on_the_engines_own_writes(rule):
     """apply_resting goes through SetBatch like anything else; without the
     write guard the engine would read its own feed write as a Push."""

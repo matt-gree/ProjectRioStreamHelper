@@ -14,9 +14,7 @@ _layout_dir = app_root() / "public" / "layout"
 # One generic shell renders every one of them (?container={id}), and the
 # catalog rows come from `production.container_defs` instead — which is what
 # gives each row the container's own name and native size. The folder is
-# skipped wholesale: the pre-2.0 named shells (callout-stage.html and friends)
-# stay on disk so browser sources already pointing at them keep rendering, but
-# offering them alongside the definitions would list the same container twice.
+# skipped wholesale: the shell alone is not a container, and would row as one.
 _CONTAINER_GROUP = "shared"
 _CONTAINER_SHELL = "/layout/shared/container.html"
 

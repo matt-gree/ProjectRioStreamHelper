@@ -1,7 +1,7 @@
 // hit-mount.js — shared mount for the RioVisualizer HitRenderer.
 //
 // Both the dedicated overlay (public/layout/hitvisualizer/hitvisualizer.html)
-// and the fed split-screen shared source (public/layout/shared/split-screen.html)
+// and a shared container hosting it (public/layout/shared/container.html)
 // drive the renderer identically: load the stadium on demand, auto-play each new
 // contact (score.{N}.hit.id), and re-fire on the producer's replay nonce. Keeping
 // that logic here means both surfaces share one code path.

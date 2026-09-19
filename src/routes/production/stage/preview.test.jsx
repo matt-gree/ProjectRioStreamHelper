@@ -101,14 +101,14 @@ describe('previewUrl', () => {
  * Character Spotlight, whatever panel it was under.
  *
  * `?feed=` is how a preview names the occupant it wants. The container honours
- * it (container.html / callout-stage.html) and falls back to its own default,
+ * it (container.html) and falls back to its own default,
  * so a bare ?preview=1 from the Add picker is unchanged.
  *
  * The element's OWN source names nobody — it isn't a container, and ?feed=
  * there would be a param its layout never reads.
  */
 describe('previewUrl — a fed element names the occupant it wants', () => {
-    const CALLOUT = 'http://x/layout/shared/callout-stage.html';
+    const CALLOUT = 'http://x/layout/shared/container.html?container=callout-stage';
     const fedAt = (carrying) => ({
         item: { id: 3, sourceName: 'Callout', url: CALLOUT, enabled: true },
         scene: 'Game', where: 'program', parent: 'callout@Game',
@@ -246,7 +246,7 @@ describe('StagePreview renders', () => {
     });
     afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
     const ui = (node) => render(<TooltipProvider>{node}</TooltipProvider>);
-    const CALLOUT = 'http://x/layout/shared/callout-stage.html';
+    const CALLOUT = 'http://x/layout/shared/container.html?container=callout-stage';
     const fedBinding = (carrying) => ({
         item: { id: 3, sourceName: 'Callout', url: CALLOUT, enabled: true },
         scene: 'Game', where: 'program', parent: 'callout@Game',

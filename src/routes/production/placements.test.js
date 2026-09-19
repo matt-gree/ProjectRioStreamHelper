@@ -36,7 +36,7 @@ const rows = (sc) => placementsInScene(sc, {}, DEFAULT_DEFS);
 
 const SB = 'http://x/layout/scoreboard1/scoreboard.html';
 const LOWER = 'http://x/layout/lowerthird/lowerthird.html';
-const CALLOUT = 'http://x/layout/shared/callout-stage.html';
+const CALLOUT = 'http://x/layout/shared/container.html?container=callout-stage';
 // The Character Spotlight's OWN source. It is a container member AND a direct
 // element now, which is the pair these tests exist to keep apart.
 const SPOTLIGHT = 'http://x/layout/postgame/spotlight.html';
@@ -183,11 +183,6 @@ describe('placementsInScene — source → row', () => {
 
     // A source still pointing at a pre-2.0 named shell resolves to the same
     // container id its filename always meant, so it keeps rowing and feeding.
-    it('resolves a legacy named shell to its stem', () => {
-        const out = rows(scene('Game', 'program', item(3, 'Callout', CALLOUT)));
-        expect(out[0].container).toBe('callout-stage');
-    });
-
     // An unregistered overlay outside shared/ is NOT a container — it gets a
     // plain row, and nothing nests under it.
     it('does not treat an ordinary unregistered overlay as a container', () => {
@@ -209,7 +204,7 @@ describe('placementsInScene — source → row', () => {
     });
 
     it('names a generic element from its file, not its query', () => {
-        expect(genericElement('http://x/layout/shared/split-screen.html?team=2').name)
+        expect(genericElement('http://x/layout/custom/split-screen.html?team=2').name)
             .toBe('Split Screen');
     });
 

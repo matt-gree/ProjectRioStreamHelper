@@ -42,7 +42,7 @@
 // the mount keys every surface to them, falling back to controller-port
 // colours — which are the APP's palette (Design tab → Controller Ports, with
 // the package's own `portColors` under it; see lib/port-colors.js), not this
-// scene's. Requires the host page's `three` importmap (callout-stage has it).
+// scene's. Requires the host page's `three` importmap (container.html and spotlight.html have it).
 
 //
 // This file is the orchestrator; the CSS, AB-ticker chips, and the AB
@@ -62,7 +62,7 @@ function charArtUrl(name) {
   const id = OverlayBase.charId(name);
   return id === undefined ? '' : `${OverlayBase.BASE_URL}/game_assets/msb/characters/${id}.png`;
 }
-// rio-data.js loads before this module (see callout-stage.html); the
+// rio-data.js loads before this module (see container.html); the
 // window.RioData guard just matches the other mounts' defensive style.
 function teamLogoUrl(teamName) { return teamName && window.RioData ? RioData.teamLogoUrl(teamName) : ''; }
 

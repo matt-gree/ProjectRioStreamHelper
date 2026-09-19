@@ -63,7 +63,7 @@ const obs = (sceneItems, extra = {}) => useObsStore.setState({
 
 const SB = 'http://x/layout/scoreboard1/scoreboard.html';
 const LOWER = 'http://x/layout/lowerthird/lowerthird.html';
-const CALLOUT = 'http://x/layout/shared/callout-stage.html';
+const CALLOUT = 'http://x/layout/shared/container.html?container=callout-stage';
 // The producer-built shell, told which definition to be — how every container
 // but the pre-2.0 named shells above reaches a scene.
 const PAIR = 'http://x/layout/shared/container.html?container=';

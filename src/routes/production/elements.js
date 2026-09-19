@@ -704,20 +704,14 @@ export const isPickableFeed = (el) => PICKABLE_FEEDS.includes(el?.feed);
  * A shared container's stable id, from the URL of the source rendering it.
  *
  * Containers are producer-built definitions (settings.production.container_defs)
- * rendered by ONE generic shell, so the id is what `?container=` names. The
- * filename stem is the fallback, which is what keeps a browser source still
- * pointing at a pre-2.0 named shell ('/layout/shared/callout-stage.html' →
- * 'callout-stage') rowing and feeding exactly as it did. The overlay side derives
- * it the same way, in fed-container.js — the two must agree, or a producer's
- * Push writes a key the source isn't reading.
+ * rendered by ONE generic shell, so the id is what `?container=` names, and a
+ * URL that names none is not a container (null). The overlay side reads the
+ * same param, in container.html — the two must agree, or a producer's Push
+ * writes a key the source isn't reading.
  */
 export function containerId(url) {
     const q = (url || '').split('?')[1];
-    if (q) {
-        const named = new URLSearchParams(q).get('container');
-        if (named) return named;
-    }
-    return (url || '').replace(/^.*\/([^/]+)\.html?(?:\?.*)?$/, '$1');
+    return (q && new URLSearchParams(q).get('container')) || null;
 }
 
 // Key of the element's stage panel (stage/<key>); defaults to the element id.

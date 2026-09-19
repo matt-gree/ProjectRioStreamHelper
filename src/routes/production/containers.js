@@ -40,9 +40,8 @@ export const containerUrl = (id) => `/layout/shared/container.html?container=${e
 /*
  * A source's container id, or null if the source isn't a container.
  *
- * Living in one folder is what makes a source a container — `containerId` alone
- * would happily reduce a scoreboard's URL to the stem "scoreboard" and hand it
- * back as a container id the moment somebody named a container that.
+ * The generic shell's folder AND a `?container=` param: the param alone would
+ * make any overlay that happened to carry one a container.
  */
 const SHARED_PATH = /\/layout\/shared\//i;
 export const containerOfSource = (url) => (SHARED_PATH.test(url || '') ? containerId(url) : null);

@@ -207,6 +207,43 @@ def _eventheader_bands(ns: dict) -> bool:
     return changed
 
 
+# The four containers (and the Roster + Stats pair's two rules) that fresh
+# installs used to be seeded with. See `container_defs` in the defaults.
+_SEEDED_CONTAINER_IDS = ("callout-stage", "split-screen", "roster-stats-1", "roster-stats-2")
+_RETIRED_FLAG = "seeded_containers_retired"
+
+
+def _retire_seeded_containers(production: dict) -> bool:
+    """Remove the formerly seeded containers from an existing install, once.
+
+    All four go whether or not the producer edited them — the decision was that
+    a container is something a producer builds, not something the app hands
+    them — and so does every rule aimed at one, seeded or producer-added, since
+    a rule whose container is gone is inert and would revive the day the id is
+    reused. The container's live feed and reason in State are swept at boot by
+    `Automations.settle_all`, which drops any feed with no definition.
+
+    Run-once, behind a flag rather than on every boot, because container ids are
+    slugged from the NAME: a producer who later builds their own "Callout Stage"
+    gets `callout-stage` back, and an unflagged sweep would delete it on every
+    restart. The flag is written on fresh installs too, where there is nothing
+    to remove, for the same reason.
+    """
+    if production.get(_RETIRED_FLAG):
+        return False
+    defs = production.get("container_defs")
+    if isinstance(defs, dict):
+        for cid in _SEEDED_CONTAINER_IDS:
+            defs.pop(cid, None)
+    rules = production.get("automations")
+    if isinstance(rules, dict):
+        for rid in [rid for rid, rule in rules.items()
+                    if isinstance(rule, dict) and rule.get("container") in _SEEDED_CONTAINER_IDS]:
+            rules.pop(rid)
+    production[_RETIRED_FLAG] = True
+    return True
+
+
 def _resolve_version() -> str:
     """Resolve app version via scripts/freeze-version.py.
 
@@ -300,10 +337,11 @@ def redact_settings(settings_dict: dict) -> dict:
 # unreleased, and the right trade regardless for content that sits in a live
 # show: a producer who deleted a container did so on purpose.
 #
-# Only maps with a non-empty seed are listed. `production.overrides`,
-# `scoreboards.aliases` and friends are producer-owned in the same sense, but
-# their default is `{}` — merging nothing under a loaded map is a no-op, so
-# listing them would assert intent without changing behavior.
+# Both maps below seed `{}` today (nothing ships — see `container_defs`), which
+# makes the exemption a no-op until something is seeded into them again; they
+# stay listed so that seed cannot resurrect a deletion. `production.overrides`,
+# `scoreboards.aliases` and friends are producer-owned in the same sense and
+# were never seeded, so they are not listed.
 _USER_OWNED_MAPS = frozenset({
     "production.container_defs",
     "production.automations",
@@ -451,82 +489,18 @@ class Settings:
             #              containers flash the batter on one and the pitcher on
             #              the other.
             #
-            # SEEDED, NOT DEFAULTED. This map is in `_USER_OWNED_MAPS`, so it
-            # is written once into a settings file that lacks the key and is
-            # never merged over again: a container the producer deletes stays
-            # deleted, and one they edit keeps their fields rather than having
-            # the seed's grafted back. Adding an entry here therefore reaches
-            # new installs only; a settings file that already has this key needs
-            # a one-time migration in Load() to pick it up.
+            # NONE SHIP. A fresh install starts with no containers and no rules:
+            # a container exists because a producer built one, from the Add
+            # picker's + New, and until they do the catalog offers elements and
+            # nothing else. Four used to be seeded (Callout Stage, Split-Screen
+            # and the Roster + Stats pair, with the pair's two batter-card
+            # rules); they read as part of the app rather than as something the
+            # producer had made, and are removed from existing installs once by
+            # `_retire_seeded_containers` below.
             #
-            # These are seeded so a fresh install has the containers the app
-            # already shipped with, at their member's real native size rather
-            # than grandfathered (split-screen 960x1080 -> 1280x720).
-            #
-            # The "Stats Bar" container is gone from the seed: its only member
-            # was the fed 325x120 stats bar, and `stats` is now the dedicated
-            # per-side Stats source instead of a container member. An install
-            # that already has the container keeps it — container_defs is
-            # merge-exempt — but its roster no longer names anything hostable,
-            # so the container's own stage panel is where it gets a new member
-            # or gets deleted.
-            "container_defs": {
-                "callout-stage": {
-                    "name": "Callout Stage",
-                    "width": 1920,
-                    "height": 1080,
-                    "members": ["postgamecallout", "postgamevs"],
-                },
-                # The hit visualizer is both: it owns a dedicated source AND can
-                # occupy a container, which is why a roster is a list of members
-                # rather than a list of fed elements.
-                "split-screen": {
-                    "name": "Split-Screen",
-                    "width": 1280,
-                    "height": 720,
-                    "members": ["hitvisualizer"],
-                },
-                # The mirrored pair that REPLACED the Roster + Stats element:
-                # one container per side, each resting on that side's roster,
-                # each able to flash that side's stat card over it. 452x240 was
-                # that element's own stage — the roster (452x140) centers inside
-                # it, and the card (380x240) fills its height now that it carries
-                # two optional caption bands.
-                #
-                # Seeded because they are a MIGRATION, not a new feature: the
-                # element they replace is gone, so a producer replaces two
-                # browser-source URLs and gets what they had — which is only
-                # true if the FLIP comes with them. The two rules that do it are
-                # seeded below, in `automations`.
-                #
-                # Scope is board 1 / side 1 and board 1 / side 2. A rig running
-                # more boards re-points the Board picker on each container's
-                # stage; there is no seeding a pair per board without inventing
-                # a show structure nobody asked for.
-                #
-                # The names say "Side 1"/"Side 2" for the same reason
-                # `side_labels` defaults to numeric: a container's name is free
-                # text a producer can change, so a SEED must not assume an
-                # arrangement. Only fresh installs see this — `container_defs`
-                # is merge-exempt, so anyone who already has the pair keeps the
-                # name they have.
-                "roster-stats-1": {
-                    "name": "Roster + Stats — Side 1",
-                    "width": 452,
-                    "height": 240,
-                    "members": ["roster", "statscard"],
-                    "resting": "roster",
-                    "scope": {"scoreboard": 1, "team": 1},
-                },
-                "roster-stats-2": {
-                    "name": "Roster + Stats — Side 2",
-                    "width": 452,
-                    "height": 240,
-                    "members": ["roster", "statscard"],
-                    "resting": "roster",
-                    "scope": {"scoreboard": 1, "team": 2},
-                },
-            },
+            # Both maps stay in `_USER_OWNED_MAPS`, so a deletion is durable and
+            # anything seeded here again would reach fresh installs only.
+            "container_defs": {},
             # Container AUTOMATIONS — one rule per entry, interpreted by the
             # server-side engine in server/automations.py:
             #
@@ -544,45 +518,9 @@ class Settings:
             # live with the console, src/routes/production/automations.js — the
             # engine only interprets rules). The rule id is
             # `{container}:{template}`, which is `ruleIdFor` over there: two
-            # containers running one canned rule is exactly how the mirrored pair
-            # below is built, so the container has to be part of the id.
-            #
-            # Only the pair is seeded, and only because it is a MIGRATION. The
-            # flip WAS the Roster + Stats element — that element is deleted, so
-            # shipping its containers without its rule would hand a producer two
-            # sources that rest on a roster and never flash, which is a worse
-            # version of what they had. Everything else in the library stays
-            # opt-in. A rule that misbehaves on air is suspended with the switch
-            # on its container's stage panel, and either disposal survives a
-            # restart: this map is in `_USER_OWNED_MAPS` alongside the container
-            # defs above, so `enabled: false` persists as a value and a DELETED
-            # rule stays deleted rather than being merged back from here.
-            "automations": {
-                "roster-stats-1:batter-card": {
-                    "enabled": True,
-                    "template": "batter-card",
-                    "name": "Batter change → stat card",
-                    "container": "roster-stats-1",
-                    "member": "statscard",
-                    "trigger": "score.{sb}.batter",
-                    "guard": "content",
-                    "dwell": 7,
-                },
-                # Same rule, other scope. `{sb}` and the SIDE both resolve from
-                # the container, which is why the mirror is one rule twice and
-                # not two rules: side 1 shows the batter while it is batting,
-                # side 2 shows the pitcher it is facing.
-                "roster-stats-2:batter-card": {
-                    "enabled": True,
-                    "template": "batter-card",
-                    "name": "Batter change → stat card",
-                    "container": "roster-stats-2",
-                    "member": "statscard",
-                    "trigger": "score.{sb}.batter",
-                    "guard": "content",
-                    "dwell": 7,
-                },
-            },
+            # containers running one canned rule is how a mirrored pair is
+            # built, so the container has to be part of the id.
+            "automations": {},
             # Hit-visualizer "spotlight": on Fire, cut to `scene`, play the
             # animation, then cut back to the previous program scene. `holdMs`
             # is extra time held on the landing before returning.
@@ -979,11 +917,14 @@ class Settings:
         # element's own layout stem as the implicit default; it is now the
         # roster on `production.container_defs.{id}`. Two places storing one
         # relationship is how these drift, so the old key is dropped rather than
-        # translated — 2.0.0 has never shipped, and the seeded defs above
-        # reproduce every pairing the defaults ever had.
+        # translated — 2.0.0 has never shipped.
         production = cls.settings.setdefault("production", {})
         if "containers" in production:
             production.pop("containers", None)
+            await cls.Save()
+
+        # The containers fresh installs used to be seeded with — once.
+        if _retire_seeded_containers(production):
             await cls.Save()
 
         # The combined Roster + Stats element is gone (a container resting on a

@@ -507,10 +507,25 @@ class Automations:
         reason is what tells them apart: a MANUAL feed is the producer's and is
         restored as a suspension, anything else is the engine's and settles back
         to resting.
+
+        A feed or reason for a container with NO definition is dropped first. It
+        is on nothing a producer can see or clear — the container's own panel is
+        gone — and a container rebuilt under the same slugged id would inherit
+        it. The console's delete already unsets both; this covers a definition
+        that left some other way (a settings migration, a hand-edited file).
         """
         defs = Settings.Get("production.container_defs", {}) or {}
         if not isinstance(defs, dict):
             return
+        orphans = [
+            f"{key}.{cid}"
+            for key in (FEED_KEY, REASON_KEY)
+            for cid in (deep_get(State.state, key) or {})
+            if cid not in defs
+        ]
+        if orphans:
+            await State.UnsetBatch(orphans)
+            await State.Save()
         for container, def_ in defs.items():
             if not isinstance(def_, dict):
                 continue

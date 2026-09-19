@@ -184,9 +184,9 @@ Rules the runtime encodes:
 - **Native size, centered, never scaled.** `memberBox` gives a member that fits
   its own native box; a member with no declared size, or one LARGER than its
   container, **fills** instead — that second case is unrepresentable in the
-  console (`fitsContainer`) but a pre-2.0 named shell still produces it
-  (split-screen.html is a 960×1080 page hosting a 1280×720 hit), so it degrades to
-  its old fill behaviour rather than being clipped by a box it overflows.
+  console (`fitsContainer`) but a source whose definition was deleted measures
+  its own page and can still produce it, so it fills rather than being clipped
+  by a box it overflows.
   *Corollary:* **a member mount must measure its own host, not `window`.**
   The since-deleted fed stats bar read the window in its autoScale and would have
   blown a 325×120 card up ~6× inside a 1920×1080 container, out of the box it is
@@ -325,7 +325,7 @@ screenshot; get the user's eyes or reason from first principles.
    picks, and picking writes the live container key, i.e. goes ON AIR — so there
    was no way to preview it off-air. Merge `previewSel` over the `forceElement`
    base; on air neither param exists and the real feed governs. See
-   `callout-stage.html` + `fed-container.js`.
+   `shared/container.html` + `fed-container.js`.
    **Adding a container MEMBER?** You add one entry to the `MEMBERS` registry in
    `container-members.js` — never control flow. See "The container runtime" below.
 

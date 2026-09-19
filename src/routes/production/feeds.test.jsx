@@ -5,7 +5,7 @@ import { useStagingStore } from '../../context/staging';
 import { ELEMENTS } from './elements';
 import { useMemberScope } from './containers';
 import { useContainerPush } from './feeds';
-import { SEEDED_CONTAINER_DEFS, withContainers } from '../../test/containers';
+import { SAMPLE_CONTAINER_DEFS, withContainers } from '../../test/containers';
 
 /*
  * What a Push actually sends — the frame of reference half.
@@ -55,8 +55,8 @@ const remember = (id, value) => useStateStore.getState().setItems([
 const scopedAs = (container, scope) => useSettingsStore.setState({
     production: withContainers({
         container_defs: {
-            ...SEEDED_CONTAINER_DEFS,
-            [container]: { ...SEEDED_CONTAINER_DEFS[container], scope },
+            ...SAMPLE_CONTAINER_DEFS,
+            [container]: { ...SAMPLE_CONTAINER_DEFS[container], scope },
         },
     }),
 });

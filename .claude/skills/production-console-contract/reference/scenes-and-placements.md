@@ -177,7 +177,7 @@ any of them.
   row's container when it has one, else the roster that claims the element, else
   board 1 / side 1 (the same default `_scope_of` takes server-side). *Every*
   surface that asks a member anything asks through it, because the two ways of
-  guessing are both wrong on the shipped mirrored pair: a lookup from the element
+  guessing are both wrong on a mirrored pair: a lookup from the element
   answers with whichever roster comes first (which is how the rack's fed radio fed
   the left container from the right container's rows, while the row's chip — which
   reads the placement — disagreed with its own radio), and a hardcoded board 1
@@ -217,11 +217,9 @@ any of them.
   (the mounts it can stand up); `containers.test.jsx` pins the two together
   until the mount registry makes them one list.
 - **The container id comes off the URL the same way in both runtimes**:
-  `?container=` first, filename stem as fallback (`containerId` in
-  `elements.js`, `containerIdFromLocation` in `fed-container.js`). The fallback
-  is what keeps a browser source still pointing at a pre-2.0 named shell
-  (`callout-stage.html`) rowing and feeding. Those files stay on disk; the
-  catalog offers only definitions, or the same container would list twice.
+  `?container=` and nothing else (`containerId` in `elements.js`, the shell's
+  own param read in `container.html`). The pre-2.0 named shells and their
+  filename-stem fallback are deleted; a URL naming no container is not one.
 - **The id is never all digits** (`containerIdFor`). A container's row id is
   `container:{id}` and `parseInstanceId` reads a colon-plus-DIGITS as the board
   suffix. A container really is an element, so it has no way out of that rule —

@@ -116,7 +116,7 @@ describe('SourceStrip copy slot', () => {
     });
 
     it('stays on a member’s slot on a container', () => {
-        const item = src(7, 'Callout Stage', 'http://x/layout/shared/callout-stage.html', false);
+        const item = src(7, 'Callout Stage', 'http://x/layout/shared/container.html?container=callout-stage', false);
         connected([item]);
         ui(<SourceStrip element={el('postgamevs')} placement={on('callout-stage', item)} />);
         expect(screen.getByRole('button', { name: /copy url/i })).toBeEnabled();
@@ -203,7 +203,7 @@ describe('SourceStrip push slot', () => {
     // A slot's Air commands the CONTAINER, not a source of its own — which is
     // exactly what its placement is (./placements).
     it('binds Air to the shared container the element feeds', () => {
-        const item = src(7, 'Callout Stage', 'http://x/layout/shared/callout-stage.html', false);
+        const item = src(7, 'Callout Stage', 'http://x/layout/shared/container.html?container=callout-stage', false);
         connected([item]);
         ui(<SourceStrip element={el('postgamevs')} placement={on('callout-stage', item)} />);
         expect(screen.getByRole('button', { name: /show callout stage on air/i })).toBeInTheDocument();

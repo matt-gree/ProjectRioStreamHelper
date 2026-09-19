@@ -202,8 +202,7 @@ export function useContainerPush(element, scoreboard = 1, onContainer = null) {
  *
  * Matched by resolving each source URL to a container id, which is the same
  * derivation the overlay itself uses — so a definition-backed source
- * (`container.html?container=x`) and a pre-2.0 named shell (`x.html`) both
- * answer to the container they render.
+ * (`container.html?container=x`) answers to the container it renders.
  */
 export function useContainerBinding(container) {
     const scenes = useConsoleScenes();

@@ -186,11 +186,9 @@ describe('memberBox — native size, centered, never scaled', () => {
 
     /*
      * A member larger than its container is unrepresentable in the console
-     * (`fitsContainer` filters it out), but a pre-2.0 named shell can still
-     * produce one — split-screen.html is a 960×1080 page hosting a 1280×720 hit.
-     * Filling is what that did before containers became definitions, so it
-     * degrades to its old behaviour instead of being clipped by a box it
-     * overflows.
+     * (`fitsContainer` filters it out), but a source whose definition is gone
+     * measures its own page and can still produce one. Filling degrades
+     * gracefully instead of clipping it to a box it overflows.
      */
     it('fills instead of overflowing when the member is bigger than the container', () => {
         expect(memberBox([1280, 720], { width: 960, height: 1080 }))

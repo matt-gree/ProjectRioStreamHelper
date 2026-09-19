@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { render, cleanup } from '@testing-library/react';
 import { useSettingsStore, useStateStore } from '../../context/store';
@@ -33,14 +32,12 @@ describe('container id resolution', () => {
     });
 
     /*
-     * A browser source added before containers became definitions points at a
-     * named shell, and it must keep rowing and feeding — the id it always meant
-     * is its filename stem.
+     * The pre-2.0 named shells (callout-stage.html, split-screen.html) are
+     * deleted, so a URL that names no container is not one — never its stem.
      */
-    it('falls back to the filename stem for a pre-2.0 named shell', () => {
-        expect(containerId('http://x/layout/shared/split-screen.html')).toBe('split-screen');
-        expect(containerId('http://x/layout/shared/callout-stage.html?preview=1'))
-            .toBe('callout-stage');
+    it('names no container without ?container=', () => {
+        expect(containerId('http://x/layout/shared/split-screen.html')).toBeNull();
+        expect(containerOfSource('http://x/layout/shared/callout-stage.html?preview=1')).toBeNull();
     });
 
     it('survives other params riding along', () => {
@@ -213,37 +210,6 @@ describe('members the engine can actually mount', () => {
         // Settings are a separate channel (shouldRenderSettings) — a state
         // watcher matching one would only add wake-ups that never fire.
         expect(memberWatches('overlays.global.accentColor')).toBe(false);
-    });
-});
-
-/*
- * The seeded definitions have to obey the rule the console enforces on the
- * producer's own containers: a member must FIT. They are written in Python and
- * read here as text for the same reason as above — one fact, two runtimes.
- */
-describe('the seeded container definitions', () => {
-    const src = readFileSync('server/settings.py', 'utf8');
-    const start = src.indexOf('"container_defs": {');
-    const raw = src.slice(src.indexOf('{', start), src.indexOf('\n            },', start) + 14);
-    const defs = JSON.parse(
-        raw.split('\n')
-            .filter(line => !/^\s*#/.test(line))   // drop comment-only lines
-            .join('\n')
-            .replace(/,(\s*[}\]])/g, '$1'),        // Python's trailing commas
-    );
-
-    it('seeds every container at a size its members fit', () => {
-        for (const [id, def] of Object.entries(defs)) {
-            for (const m of def.members) {
-                const el = CONTAINER_MEMBERS.find(e => e.id === m);
-                expect(el, `"${id}" rosters "${m}", which is not a container member`).toBeTruthy();
-                expect(
-                    fitsContainer(el, def.width, def.height),
-                    `"${id}" is ${def.width}×${def.height}, too small for its member "${m}" `
-                    + `(${el.width}×${el.height})`,
-                ).toBe(true);
-            }
-        }
     });
 });
 
