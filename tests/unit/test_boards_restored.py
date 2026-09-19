@@ -25,7 +25,7 @@ async def test_a_board_that_booted_holding_a_game_is_marked_not_current():
 
     assert deep_get(State.state, "score.1.restored") is True
     assert boards.board_lifecycle(1) == "restored"
-    assert boards.board_is_stale(1) is True
+    assert boards.is_stale(boards.board_lifecycle(1)) is True
     # An empty board is not "restored empty" — the flag describes a GAME's
     # provenance, so a board with no game gets no key at all.
     assert deep_get(State.state, "score.2.restored") is None

@@ -34,7 +34,7 @@ def stub_stats(monkeypatch):
 
 def _payload(tag_set_id):
     data = {"GameID": "42", "TagSetID": tag_set_id, "Events": []}
-    return PostGame._build_payload(1, _StubStat(), data, "decoded.Game_42.json")
+    return PostGame._build_payload(("", ""), _StubStat(), data, "decoded.Game_42.json")
 
 
 def test_capture_names_the_mode_from_the_cached_tag_set(monkeypatch, stub_stats):
@@ -55,3 +55,41 @@ def test_a_cold_mode_cache_never_goes_to_the_network(monkeypatch, stub_stats):
     monkeypatch.setattr(stats_api, "fetch_game_modes", lambda: (_ for _ in ()).throw(
         AssertionError("capture fetched the mode list")))
     assert _payload(198)["meta"]["gameMode"] == ""
+
+
+@pytest.mark.asyncio
+async def test_a_rebuilt_capture_is_oriented_by_the_capture_not_the_board(
+    tmp_path, monkeypatch, stub_stats,
+):
+    """After a restart the cache is re-parsed from the stat file. The board may
+    hold the next game by then; orienting against it fell back to away = side 1
+    while the persisted projection had Bob (home) on side 1, so the Spotlight
+    walked Alice's at-bats under a character picked from Bob's list."""
+    from server import postgame_files
+    import server.postgame as pg_mod
+    from server.state import State
+
+    (tmp_path / "decoded.Game_42.json").write_text("{}")
+    monkeypatch.setattr(postgame_files, "stat_dir", lambda: tmp_path)
+    monkeypatch.setattr(postgame_files, "load_json",
+                        lambda path: {"GameID": "42", "Events": []})
+    monkeypatch.setattr(pg_mod, "StatObj", lambda data: _StubStat())
+
+    await State.SetBatch([
+        ("postgame.1", {
+            "present": True, "sourceFile": "decoded.Game_42.json",
+            "capturedAt": "2026-09-18T22:00:00+00:00", "capturedBy": "auto",
+            # Captured with Bob — the file's HOME player — on side 1.
+            "player": {"1": {"rioName": "Bob"}, "2": {"rioName": "Alice"}},
+        }),
+        # The board has since moved on to other players entirely.
+        ("score.1.player.1.rioName", "Cara"),
+        ("score.1.player.2.rioName", "Dev"),
+    ])
+    PostGame._captured.pop(1, None)
+
+    payload = PostGame.get_payload(1)
+
+    assert payload["teamNums"] == {"1": 1, "2": 0}
+    assert payload["capturedAt"] == "2026-09-18T22:00:00+00:00"
+    assert payload["capturedBy"] == "auto"

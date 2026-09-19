@@ -6,19 +6,8 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import ORJSONResponse
 from server.rio.provider import RioGameDataProvider, get_default_hud_file_path, get_user_hud_path
 from server.settings import Settings
-from server.state import State
 
 router = APIRouter()
-
-
-@method(
-    router.get, "/rio/game",
-    version="1", id="rio.game",
-    response_class=ORJSONResponse
-)
-async def rio_game(session_id: str | None = None) -> ORJSONResponse:
-    """Get the current parsed game state from the HUD file."""
-    return ORJSONResponse(RioGameDataProvider.current_game)
 
 
 @method(
@@ -32,25 +21,6 @@ async def rio_refresh(session_id: str | None = None) -> ORJSONResponse:
     if not game:
         raise HTTPException(status_code=404, detail="No HUD data available")
     return ORJSONResponse({"success": True, "game": game})
-
-
-@method(
-    router.post, "/rio/release",
-    version="1", id="rio.release",
-    response_class=ORJSONResponse
-)
-async def rio_release(session_id: str | None = None) -> ORJSONResponse:
-    """Stop treating the cached HUD frame as what is on the board.
-
-    Called when the producer clears a HUD board by hand. The frame itself is
-    kept — /rio/refresh is how they ask for it back — but until the next real
-    frame arrives, nothing re-applies it behind their back. Without this, a
-    manual swap after a reset resurrected the whole game, because the swap
-    re-orients the last frame (see RioGameDataProvider._feed_released).
-    """
-    await State.SetBatch(RioGameDataProvider.release_feed())
-    await State.Save()
-    return ORJSONResponse({"success": True, "released": True})
 
 
 @method(

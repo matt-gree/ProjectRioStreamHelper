@@ -86,31 +86,3 @@ export function urlsMatch(layoutUrl, obsUrl) {
     if (a.pathname.replace(/\/$/, '') !== b.pathname.replace(/\/$/, '')) return false;
     return paramsMatch(layoutUrl, obsUrl);
 }
-
-/*
- * Resolve a layout URL against the OBS scene mirror. The store only tracks the
- * program + preview scenes (where firing happens), so binding is reported
- * relative to those:
- *   live    — present in the program scene
- *   preview — present only in the preview scene (studio mode)
- *   absent  — not in either tracked scene
- * `matches` lists every hit so callers can show counts / disambiguate.
- */
-export function bindingForUrl(layoutUrl, { sceneItems = {}, programScene, previewScene } = {}) {
-    let program = null;
-    let preview = null;
-    const matches = [];
-    for (const [scene, items] of Object.entries(sceneItems)) {
-        for (const it of items || []) {
-            if (it?.url && urlsMatch(layoutUrl, it.url)) {
-                const hit = { scene, sourceName: it.sourceName, enabled: it.enabled };
-                matches.push(hit);
-                if (scene === programScene && !program) program = hit;
-                else if (scene === previewScene && !preview) preview = hit;
-            }
-        }
-    }
-    if (program) return { state: 'live', ...program, matches };
-    if (preview) return { state: 'preview', ...preview, matches };
-    return { state: 'absent', matches };
-}

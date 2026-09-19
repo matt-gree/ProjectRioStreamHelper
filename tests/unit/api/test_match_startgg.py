@@ -1,12 +1,8 @@
 """start.gg → Match loading: apply_startgg_set (seating, bestOf import, series
-seeding) and the match-first /startgg/load-set route (reuse-by-setId + bind)."""
-import orjson
+seeding). Reuse-by-setId is /match/from-startgg's."""
 import pytest
-from fastapi import HTTPException
-from unittest.mock import AsyncMock
 
 from server.api.v1.match import apply_startgg_set
-from server.api.v1 import startgg as startgg_api
 from server.match import Match, default_match
 from server.state import State
 from server.utils.deep_dict import deep_get
@@ -39,11 +35,6 @@ async def make_match() -> int:
     return m
 
 
-# The @method decorator registers the handler on the router without returning
-# it, so fetch the endpoint back off the route table to call it directly.
-startgg_load_set = next(
-    r.endpoint for r in startgg_api.router.routes if r.path == "/startgg/load-set"
-)
 
 
 # --- apply_startgg_set ---
@@ -138,56 +129,3 @@ async def test_apply_odd_totalgames_unchanged():
     m = await make_match()
     await apply_startgg_set(m, sgg_set(totalGames=3), 555)
     assert Match.get(m)["format"]["bestOf"] == 3
-
-
-# --- /startgg/load-set (match-first) ---
-
-@pytest.mark.asyncio
-async def test_load_set_creates_match_and_binds_board(monkeypatch, rig):
-    rig(1, 2)
-    from server.startgg import provider
-    monkeypatch.setattr(provider.StartGGProvider, "GetSet",
-                        AsyncMock(return_value=sgg_set()))
-
-    resp = await startgg_load_set(set_id=555, scoreboard_number=2)
-    body = orjson.loads(resp.body)
-    assert body["success"] is True
-
-    m = body["match"]
-    assert deep_get(State.state, f"score.2.match") == m
-    assert deep_get(Match.get(m), "provider.startgg.setId") == 555
-    # Projection landed: the round label drives the board's phase display.
-    assert deep_get(State.state, "score.2.phase") == "Winners Round 2"
-
-
-@pytest.mark.asyncio
-async def test_load_set_reuses_match_holding_the_set(monkeypatch, rig):
-    rig(1, 2, 3)
-    from server.startgg import provider
-    monkeypatch.setattr(provider.StartGGProvider, "GetSet",
-                        AsyncMock(return_value=sgg_set()))
-
-    first = orjson.loads((await startgg_load_set(set_id=555, scoreboard_number=2)).body)
-    second = orjson.loads((await startgg_load_set(set_id=555, scoreboard_number=3)).body)
-
-    assert first["match"] == second["match"]
-    assert len(State.state.get("match", {})) == 1
-    # A match fills exactly ONE board, so the second load MOVES it — this route
-    # used to write score.{N}.match directly and leave the set on both boards,
-    # which is two boards claiming one game. It goes through bind_board now.
-    assert Match.bound_scoreboards(first["match"]) == [3]
-    assert deep_get(State.state, "score.2.match") is None
-    # The vacated board is blanked, not left showing the fixture it no longer has.
-    assert deep_get(State.state, "score.2.phase") == ""
-
-
-@pytest.mark.asyncio
-async def test_load_set_rejects_rotating_set_board(monkeypatch, rig):
-    rig(1, 2)
-    import server.bindings
-    monkeypatch.setattr(server.bindings, "is_rotating", lambda sb: True)
-
-    with pytest.raises(HTTPException) as exc:
-        await startgg_load_set(set_id=555, scoreboard_number=2)
-    assert exc.value.status_code == 409
-    assert not State.state.get("match")  # nothing created

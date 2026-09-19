@@ -153,7 +153,7 @@ description: PRSH match fixture model, scoreboard bindings (pool + playback + de
   value gates Up next by an exact match on `"draft"` — an unvalidated string let a
   typo strand a fixture with a reason blaming a stage nothing set.
 - **A board id off a request must be in the rig** — `require_board(sb)` (404),
-  called by `bind_scoreboard`, `take_next_match` and `/startgg/load-set`. Without
+  called by `bind_scoreboard` and `take_next_match`. Without
   it, binding to a board outside `scoreboards.active` wrote `score.{sb}.match` for
   a board no layout reads and no rack row lists: persisted phantom state with no
   surface able to show or clear it. The guard is on the **routes**, not in
@@ -164,12 +164,15 @@ description: PRSH match fixture model, scoreboard bindings (pool + playback + de
 - **A MATCH FILLS EXACTLY ONE BOARD, and `bind_board`
   (`server/api/v1/match.py`) is the only writer of `score.{N}.match`.** Binding
   a match that another board holds **moves** it: vacate the old holder (its
-  binding, its `match_conflict`, and the projected keys), then bind. A match
+  binding, its `match_conflict`, and the projected keys), then bind, project,
+  and SETTLE — gate then re-orient, the same pair `_resettle_bound_boards` runs.
+  Projecting alone wrote the fixture's names over whichever player's roster and
+  logo the feed had on that side, until the next frame. A match
   owns the series score for its fixture, so two boards holding one match is two
   boards claiming one game.
   - Route it through `bind_board`, never a bare `State.Set`. That rule used to
     be a loop in the Match desk's `selectBoard`, so nothing else inherited it:
-    the bind route didn't, and `/startgg/load-set` wrote the key directly —
+    the bind route didn't, and a since-deleted `/startgg/load-set` wrote the key directly —
     loading one set onto two boards left it bound to both. The console's version
     also wasn't atomic under confirm mode (each sibling unbind was a separately
     discardable staged entry), so a partial commit produced a state the UI
@@ -316,7 +319,5 @@ records `provider.startgg.setId`. Unseeded phases produce string preview ids
 
 **There is no direct set→score path, and no other provider.** Challonge was
 fully removed in July 2026 — do not reintroduce provider branching or write
-`score.{N}.match` from anywhere but `bind_board`. `/startgg/load-set` binds
-through it with `project=False`, because `apply_startgg_set` already ends in
-`project_match` + `_regate_bound_boards` and a fixture must not be projected
-twice — once empty, then once filled.
+`score.{N}.match` from anywhere but `bind_board`. A set reaches a board only as a
+match: `/match/from-startgg` creates (or reuses) it, the producer binds it.

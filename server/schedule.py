@@ -283,37 +283,6 @@ class Schedule:
         return await cls._commit(qs)
 
     @classmethod
-    async def set_queue(cls, ids: list[int], qid=None) -> list[int]:
-        """Replace ONE queue's order wholesale (validated against real matches).
-
-        The legacy whole-list write. Kept for callers that genuinely own an entire
-        order; the UI must not use it for a one-match change — see ``move``.
-        """
-        target = str(qid) if qid else cls.first_queue_id()
-        if target is None:
-            await cls.ensure_migrated()
-            target = cls.first_queue_id()
-        matches = State.state.get("match", {}) or {}
-        wanted: list[int] = []
-        for v in ids:
-            try:
-                m = int(v)
-            except (TypeError, ValueError):
-                continue
-            if m not in wanted and str(m) in matches:
-                wanted.append(m)
-        qs = cls.queues()
-        for q in qs:
-            if q["id"] == target:
-                q["matches"] = wanted
-            else:
-                # Exclusivity: taking a match into this queue takes it out of
-                # whichever one held it.
-                q["matches"] = [m for m in q["matches"] if m not in wanted]
-        await cls._commit(qs)
-        return cls.matches(target)
-
-    @classmethod
     async def append(cls, m, qid=None) -> list[int]:
         """Put match ``m`` at the end of a queue (no-op if it is already in that one).
 

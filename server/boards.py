@@ -117,11 +117,6 @@ def board_lifecycle(sb) -> str:
     )
 
 
-def board_is_stale(sb) -> bool:
-    """Convenience for the common server-side question."""
-    return is_stale(board_lifecycle(sb))
-
-
 async def mark_restored() -> None:
     """Flag every board that booted holding a game as not-current.
 

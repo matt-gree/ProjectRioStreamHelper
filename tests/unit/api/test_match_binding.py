@@ -30,6 +30,12 @@ async def make_match(name1: str = "Alice", name2: str = "Bob") -> int:
     return m
 
 
+async def enqueue(*ids: int) -> None:
+    """Put ``ids`` on the running order, in order (none are enrolled yet)."""
+    for m in ids:
+        await Schedule.append(m)
+
+
 @pytest.mark.asyncio
 async def test_binding_a_second_board_moves_the_match():
     m = await make_match()
@@ -146,7 +152,7 @@ async def test_binding_a_board_outside_the_rig_is_a_404():
 @pytest.mark.asyncio
 async def test_taking_the_next_fixture_onto_a_board_outside_the_rig_is_a_404():
     a = await make_match()
-    await Schedule.set_queue([a])
+    await enqueue(a)
     with pytest.raises(HTTPException) as exc:
         await take_next_match(3)
     assert exc.value.status_code == 404
@@ -172,3 +178,65 @@ async def test_route_rejects_a_match_that_does_not_exist():
         await bind_scoreboard(1, BindPayload(match=999))
     assert exc.value.status_code == 404
     assert deep_get(State.state, "score.1.match") is None
+
+
+@pytest.mark.asyncio
+async def test_binding_a_live_hud_board_seats_the_feed_under_the_fixture():
+    """Binding runs the side cascade, not just the projector.
+
+    The projector writes the fixture's names; the live roster, logo and port
+    underneath them belong to the feed and only move when the cascade re-runs.
+    Binding used to run the identity gate alone, so a fixture whose sides were
+    the reverse of the feed's put one player's name over the other's team until
+    the next frame — forever on a paused or finished game.
+    """
+    from server.rio.provider import RioGameDataProvider as P
+
+    P._hud_targets = [1]
+    # Feed order: Bob on the left, Alice on the right, each with their own team.
+    frame = {
+        "entrants": [[{"rioName": "Bob", "msb_team": "Bowser Monsters"}],
+                     [{"rioName": "Alice", "msb_team": "Mario Fireballs"}]],
+        "team1score": 3, "team2score": 1, "inning": 4, "game_id": 77,
+    }
+    await P._apply_game_to_state(frame)
+    assert deep_get(State.state, "score.1.player.1.msb_team") == "Bowser Monsters"
+
+    m = await make_match("Alice", "Bob")
+    await bind_board(1, m)
+
+    assert deep_get(State.state, "score.1.side_reason") == "match"
+    assert deep_get(State.state, "score.1.player.1.rioName") == "Alice"
+    # The team under the name is Alice's, and the score travelled with it.
+    assert deep_get(State.state, "score.1.player.1.msb_team") == "Mario Fireballs"
+    assert deep_get(State.state, "score.1.score_left") == 1
+
+
+@pytest.mark.asyncio
+async def test_auto_retire_unbinds_a_finished_fixture():
+    """Different players taking a board whose fixture is complete retire it: the
+    board is unbound and follows the feed, and the fixture is stamped `post`."""
+    from server.rio.provider import RioGameDataProvider as P
+
+    P._hud_targets = [1]
+    m = await make_match("Alice", "Bob")
+    await State.Set(f"match.{m}.decided", 1)          # complete: nothing left to play
+    await bind_board(1, m)
+    await P._apply_game_to_state({
+        "entrants": [[{"rioName": "Bob"}], [{"rioName": "Alice"}]],
+        "team1score": 0, "team2score": 0, "inning": 1, "game_id": 1,
+    })
+    assert deep_get(State.state, "score.1.side_reason") == "match"
+
+    # Different players start the next game on this board.
+    frame = {
+        "entrants": [[{"rioName": "Cara"}], [{"rioName": "Dev"}]],
+        "team1score": 0, "team2score": 0, "inning": 1, "game_id": 2,
+    }
+    await P._apply_game_to_state(frame)
+    await P._evaluate_match_gates(frame)
+
+    assert deep_get(State.state, "score.1.match") is None
+    assert deep_get(State.state, f"match.{m}.stage") == "post"
+    assert deep_get(State.state, "score.1.side_reason") != "match"
+    assert deep_get(State.state, "score.1.match_conflict") is None

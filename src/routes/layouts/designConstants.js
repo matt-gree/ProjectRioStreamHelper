@@ -46,18 +46,6 @@ const TOP_LINE_SETTINGS = [
     { key: 'topLineText', type: 'text', showWhen: { key: 'topLine', is: 'custom' }, label: 'Custom Top Text', description: 'Shown when Top Line is set to Custom Text', placeholder: 'e.g. Tournament Stats' },
 ];
 
-/*
- * A per-element pin over an app-wide default: "leave it alone" first, then the
- * two answers. Spelled Shown/Hidden rather than On/Off because each of these
- * names a PART of the drawing, not a behaviour — see the LAYOUT_SETTINGS note
- * on why a switch label names the part.
- */
-export const INHERIT_OPTIONS = [
-    { value: 'inherit', label: 'Use Connections' },
-    { value: 'shown', label: 'Shown' },
-    { value: 'hidden', label: 'Hidden' },
-];
-
 export const LAYOUT_SETTINGS = {
     // A switch's label names the PART, not the verb: a row of "Show …" repeats
     // the control's own affordance once per line and pushes the word that
@@ -725,33 +713,6 @@ export const PORT_COLOR_KEYS = ['port0Color', 'port1Color', 'port2Color', 'port3
 // unthemed install matches what the producer sees in game. Mirrored in
 // public/layout/lib/port-colors.js (pinned by designConstants.test.js).
 export const DEFAULT_PORT_COLORS = ['#e53935', '#1e88e5', '#fdd835', '#43a047'];
-
-// ── Which global keys only reach an overlay through a THEME ──
-// The Design tab's knobs are not all the same kind of thing, and a design
-// package that paints every element itself kills only one kind: the ones whose
-// ONLY consumers are the design-package SVGs and the themed mounts that draw
-// them (via applyDesignSettings, which a full-art mount CLEARS — see
-// ./designPackage.js).
-//
-// Everything NOT listed here survives any package, and that is a fact about the
-// overlays rather than a judgement call:
-//   accentColor / textColor / the font roles / textShadow* / textStroke*  the Event
-//     Header and Player Name are plain DOM overlays with no theme SVG at all,
-//     so their mounts call applyDesignSettings unconditionally and read
-//     --accent, --text-primary, --font-display/body/mono, --text-shadow and
-//     --text-stroke-* whatever is installed.
-//   showCaptains / showLogo   content toggles read through readSetting, never a
-//     CSS var — the ticker and the scoreboard honour them under any theme.
-//   PORT_COLOR_KEYS   resolved by port-colors.js, with the package's own
-//     declaration UNDER them rather than instead of them.
-//
-// Add a key here only after checking who reads it; a key wrongly listed becomes
-// a control the producer can no longer reach.
-export const THEME_ONLY_GLOBAL_KEYS = [
-    'cardBg', 'borderColor', 'finalBadgeColor',
-    'borderWidth',
-    'showShadow', 'cardShadowBlur', 'cardShadowColor',
-];
 
 export const GLOBAL_DESIGN_KEYS = [
     'accentColor', 'cardBg', 'textColor', 'borderColor', 'borderWidth',

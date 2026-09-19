@@ -51,6 +51,7 @@ from server.postgame_files import norm_game_id
 from server.rio import stats_api
 from server.rio.pyrio.stat_file_parser import StatObj
 from server.state import State
+from server.utils.deep_dict import deep_get
 
 
 class PostGame:
@@ -66,9 +67,9 @@ class PostGame:
     _contacts: dict[int, dict] = {}
 
     # Serializes capture(): two concurrent captures for the same board (double-
-    # click, watcher + manual) would otherwise both pass _promote_match's
-    # stage-!="post" check across its awaits and double-credit the series.
-    # Created lazily so it binds to the running event loop (tests reset it).
+    # click, watcher + manual) would otherwise interleave their projections and
+    # cache writes. The series is safe either way — `award_game` dedups on the
+    # game id, durably. Created lazily so it binds to the running event loop.
     _capture_lock: asyncio.Lock | None = None
 
     @classmethod
@@ -79,26 +80,31 @@ class PostGame:
 
     # ----- parse / shape ---------------------------------------------------
 
+    @staticmethod
+    def _seated(players: dict | None) -> tuple[str, str]:
+        """The (side 1, side 2) rioNames out of a ``player`` block."""
+        players = players if isinstance(players, dict) else {}
+        return tuple(
+            ((players.get(str(t)) or {}).get("rioName") or "") for t in (1, 2)
+        )
+
     @classmethod
-    def _orient(cls, sb: int, away_name: str, home_name: str) -> tuple[int, int]:
-        """Map (away, home) → (side1_team_num, side2_team_num) for board ``sb``.
+    def _live_seated(cls, sb: int) -> tuple[str, str]:
+        """Who board ``sb`` has on each side right now."""
+        return cls._seated(deep_get(State.state, f"score.{sb}.player"))
 
-        Side 1 = left, 2 = right. We honor the board's *current* orientation (the
-        producer may have swapped sides via the match/manual) by matching live
-        ``score.{sb}.player.{T}.rioName`` to the stat file's player names. Falls
-        back to away→side1, home→side2 when neither resolves.
+    @classmethod
+    def _orient(cls, seated: tuple[str, str], away_name: str, home_name: str) -> tuple[int, int]:
+        """Map (away, home) → (side1_team_num, side2_team_num).
+
+        ``seated`` is the (side 1, side 2) rioNames to honour: the board's live
+        orientation at capture (the producer may have swapped sides via the
+        match/manual), or the capture's own when rebuilding it. Falls back to
+        away→side1, home→side2 when neither resolves.
         """
-        score = State.state.get("score", {}) or {}
-        sc = score.get(str(sb)) or score.get(sb) or {}
-        players = (sc.get("player") or {}) if isinstance(sc, dict) else {}
-
-        def live(t):
-            p = players.get(str(t)) or players.get(t) or {}
-            return (p.get("rioName") or "").strip().casefold()
-
         a = (away_name or "").strip().casefold()
         h = (home_name or "").strip().casefold()
-        l1, l2 = live(1), live(2)
+        l1, l2 = (n.strip().casefold() for n in seated)
         if a and l1 == a:
             return 0, 1
         if h and l1 == h:
@@ -110,9 +116,10 @@ class PostGame:
         return 0, 1  # default: away=left, home=right
 
     @classmethod
-    def _build_payload(cls, sb: int, stat: StatObj, data: dict, src_name: str) -> dict:
+    def _build_payload(cls, seated: tuple[str, str], stat: StatObj, data: dict,
+                       src_name: str) -> dict:
         away_name, home_name = stat.player(0), stat.player(1)
-        t1, t2 = cls._orient(sb, away_name, home_name)
+        t1, t2 = cls._orient(seated, away_name, home_name)
 
         # Stars won / per-inning runs / event-derived character counters per raw
         # team, indexable by the corrected team_num (0=away, 1=home — same space
@@ -220,30 +227,17 @@ class PostGame:
         stat file (the producer sees ``reason``).
         """
         async with cls._lock():
-            score = State.state.get("score", {}) or {}
-            sc = score.get(str(sb)) or score.get(sb) or {}
-            game_id = sc.get("game_id") if isinstance(sc, dict) else None
-
-            if file:
-                path, reason = postgame_files.resolve_pick(file)
-            else:
-                path, reason = postgame_files.find_file(game_id)
-            if path is None:
-                logger.warning("[PostGame] sb{} capture failed: {}", sb, reason)
-                return {"success": False, "scoreboard": sb, "reason": reason}
-
-            data = postgame_files.load_json(path)
-            if data is None:
-                return {"success": False, "scoreboard": sb,
-                        "reason": f"Could not read stat file {path.name}."}
-
-            try:
-                stat = StatObj(data)
-                payload = cls._build_payload(sb, stat, data, path.name)
-            except Exception as e:
-                logger.exception("[PostGame] sb{} parse failed for {}", sb, path.name)
-                return {"success": False, "scoreboard": sb,
-                        "reason": f"Failed to parse stat file: {e}"}
+            game_id = deep_get(State.state, f"score.{sb}.game_id")
+            # Read the board BEFORE leaving the loop: the file work below runs on
+            # a worker thread, and State is the event loop's.
+            seated = cls._live_seated(sb)
+            # Finding, reading and parsing a stat file is all blocking disk and
+            # CPU work, and auto-capture fires the moment a game ends — on the
+            # loop it held every HUD frame behind a full box-score parse.
+            result = await asyncio.to_thread(cls._load, sb, seated, file, game_id)
+            if "reason" in result:
+                return {"success": False, "scoreboard": sb, "reason": result["reason"]}
+            path, stat, payload = result["path"], result["stat"], result["payload"]
 
             payload["capturedBy"] = by if by in ("auto", "manual") else "manual"
             cls._captured[sb] = payload
@@ -263,6 +257,32 @@ class PostGame:
                 "winnerSide": payload["meta"]["winnerSide"],
                 "eventCount": len(payload["events"]),
             }
+
+    @classmethod
+    def _load(cls, sb: int, seated: tuple[str, str], file: str | None, game_id) -> dict:
+        """Find, read and parse a board's stat file. Blocking — run in a thread.
+
+        Returns ``{path, stat, payload}``, or ``{reason}`` saying why not.
+        """
+        if file:
+            path, reason = postgame_files.resolve_pick(file)
+        else:
+            path, reason = postgame_files.find_file(game_id)
+        if path is None:
+            logger.warning("[PostGame] sb{} capture failed: {}", sb, reason)
+            return {"reason": reason}
+
+        data = postgame_files.load_json(path)
+        if data is None:
+            return {"reason": f"Could not read stat file {path.name}."}
+
+        try:
+            stat = StatObj(data)
+            payload = cls._build_payload(seated, stat, data, path.name)
+        except Exception as e:
+            logger.exception("[PostGame] sb{} parse failed for {}", sb, path.name)
+            return {"reason": f"Failed to parse stat file: {e}"}
+        return {"path": path, "stat": stat, "payload": payload}
 
     @classmethod
     async def _promote_match(cls, sb: int) -> None:
@@ -332,7 +352,14 @@ class PostGame:
         server restart wiped it. State durably records which stat file backs
         the projected box score (``postgame.{sb}.sourceFile``); re-parsing that
         file restores ``_captured``/``_stat_objs`` so the heavy REST consumers
-        (events, the Spotlight walkthrough) survive restarts."""
+        (events, the Spotlight walkthrough) survive restarts.
+
+        THE REBUILD IS ORIENTED BY THE CAPTURE, NOT BY THE BOARD. By the time a
+        restart asks, the board may hold the next game, be swapped, or have been
+        filled from a hand-picked file whose names it never carried — and
+        orienting against it fell back to away = side 1 while the persisted
+        projection said otherwise, so the Spotlight replayed the other team's
+        at-bats under the character the producer picked."""
         payload = cls._captured.get(sb)
         if payload:
             return payload
@@ -351,10 +378,14 @@ class PostGame:
             return None
         try:
             stat = StatObj(data)
-            payload = cls._build_payload(sb, stat, data, path.name)
+            payload = cls._build_payload(cls._seated(pg.get("player")), stat, data, path.name)
         except Exception:
             logger.exception("[PostGame] sb{} cache rebuild failed from {}", sb, src)
             return None
+        # The capture's own receipt, not the rebuild's.
+        for key in ("capturedAt", "capturedBy"):
+            if pg.get(key):
+                payload[key] = pg[key]
         cls._captured[sb] = payload
         cls._stat_objs[sb] = stat
         cls._contacts.pop(sb, None)

@@ -161,7 +161,7 @@ async def lifespan(app: FastAPI):
 
     # If stream labels are enabled but the output dir is missing, do a full
     # export so OBS Text (GDI+) sources don't point at missing files.
-    if await State._is_export_enabled():
+    if State._is_export_enabled():
         import os
         if not os.path.isdir(str(State._labels_dir())):
             await State.ExportAll()
@@ -256,8 +256,10 @@ async def msb_asset(file_path: str):
         requested.relative_to(base.resolve())  # path-traversal guard
     except ValueError:
         return HTMLResponse("Forbidden", status_code=403)
+    # Revalidated like the /game_assets mount this route shadows: a producer
+    # replaces the pack in place, under the same filenames, mid-event.
     if requested.is_file():
-        return FileResponse(str(requested))
+        return FileResponse(str(requested), headers={"cache-control": REVALIDATE})
     # Dev fallback: assets dropped into the repo's public/game_assets/msb/.
     # This route is registered before the /game_assets static mount and would
     # otherwise shadow it for every /msb/* path, so resolve it here. No-op in
@@ -269,7 +271,7 @@ async def msb_asset(file_path: str):
     except ValueError:
         return HTMLResponse("Forbidden", status_code=403)
     if fallback.is_file():
-        return FileResponse(str(fallback))
+        return FileResponse(str(fallback), headers={"cache-control": REVALIDATE})
     return HTMLResponse("Not Found", status_code=404)
 
 # game assets (non-MSB) — served from public/game_assets/

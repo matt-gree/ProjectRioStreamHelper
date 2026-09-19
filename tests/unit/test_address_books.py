@@ -237,7 +237,7 @@ async def test_a_shared_book_is_a_zip_of_json_and_real_logo_files(tmp_path, monk
 
     await _fresh_machine(monkeypatch, tmp_path)
     result = await Participants.ImportAsNewBook(*Participants.ReadZip(data))
-    new = Participants.GetBook(result["book"])
+    new = Participants.books[result["book"]]
     assert (new["name"], new["modes"]) == ("NNL", ["NNL Season 7"])
     row = Participants.MatchByRioName("Alice", book=new["id"])
     assert row["display"]["tag"] == "Al"

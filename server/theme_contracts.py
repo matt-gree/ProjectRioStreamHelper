@@ -14,15 +14,12 @@ a slot, update the table here in the same change.
 from dataclasses import dataclass, field
 
 
-# Expected node kind for a slot. "any" skips the tag check.
+# A slot's `kind` is the node it expects. "any" skips the tag check.
 #   text  -> <text>   (the engine sets textContent; a <path> here means the
 #                      design tool outlined the text on export)
 #   image -> <image>
 #   group -> <g>
 #   rect  -> <rect>
-KINDS = ("text", "image", "group", "rect", "any")
-
-
 @dataclass(frozen=True)
 class Slot:
     kind: str = "any"

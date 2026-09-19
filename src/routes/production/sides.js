@@ -51,8 +51,6 @@
 import { useMemo } from 'react';
 import { useSettingsStore } from '../../context/store';
 
-export const SIDE_LABEL_SETTING = 'production.side_labels';
-
 export const DEFAULT_SIDE_LABELS = 'numeric';
 
 const LABELS = {

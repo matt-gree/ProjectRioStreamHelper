@@ -18,13 +18,13 @@ from server.match import Match
 from server.participants import Participants
 from server.settings import Settings
 from server.state import State
+from server.utils.deep_dict import deep_get
+from server.league_logos import board_mode
 
 # Where a hand clear's HUD release is remembered across restarts — the
 # fingerprint of the frame that was on the board (see _released_frame). App-wide,
 # like the HUD transport itself: one file, one cached frame.
 RELEASED_FRAME_KEY = "rio_hud.released_frame"
-from server.utils.deep_dict import deep_get
-from server.league_logos import board_mode
 
 _BOARD_OF_SIDE = re.compile(r"^score\.(\d+)\.player\.[12]\.rioName$")
 
@@ -272,6 +272,7 @@ async def apply_parsed_game_to_state(parsed: dict, scoreboard_number: int, home_
         (f"{sb}.home_linescore", right.get("inning_scores", [])),
     ]
 
+    eff_names: list[str] = []
     for team_idx in range(2):
         team_num = team_idx + 1
         player = entrants[team_idx][0] if entrants[team_idx] else {}
@@ -285,6 +286,7 @@ async def apply_parsed_game_to_state(parsed: dict, scoreboard_number: int, home_
         # on a new HUD game (see `_clear_name_overrides`).
         override = deep_get(State.state, f"{prefix}.rioName_override", "")
         eff_rio = override or player.get("rioName", "")
+        eff_names.append(eff_rio)
         entries.append((f"{prefix}.rioName", eff_rio))
         entries.append((f"{prefix}.msb_team", player.get("msb_team", "")))
         entries.append((f"{prefix}.rio_captainIndex", player.get("captainIndex", 0)))
@@ -318,11 +320,7 @@ async def apply_parsed_game_to_state(parsed: dict, scoreboard_number: int, home_
     # stays authoritative for everything else.
     # Overrides drive identity, so the match gate sees the pinned names too
     # (left → display slot 1, right → display slot 2).
-    eff_left = deep_get(State.state, f"{sb}.player.1.rioName_override", "") or left.get("rioName", "")
-    eff_right = deep_get(State.state, f"{sb}.player.2.rioName_override", "") or right.get("rioName", "")
-    entries.extend(
-        Match.identity_entries(scoreboard_number, eff_left, eff_right)
-    )
+    entries.extend(Match.identity_entries(scoreboard_number, *eff_names))
     await State.SetBatch(entries)
     await State.Save()
     await Match.note_live(scoreboard_number)
@@ -380,7 +378,7 @@ async def apply_completed_game_to_state(game: dict, scoreboard_number: int, side
     - No live game state (batter, pitcher, runners, count)
     - No MSB team / controller port — overlays fall back to the captain icon
       and the default side colours
-    - Includes final scores, ELO changes, timestamps, stadium, game mode
+    - Includes final scores, timestamps, stadium, game mode
     - DOES include both rosters: away_roster/home_roster are in the default
       /games/ response (no include_roster param — that is a no-op), as nine
       character IDs in roster order.
@@ -425,12 +423,6 @@ async def apply_completed_game_to_state(game: dict, scoreboard_number: int, side
         # also return a list [[away...], [home...]] for some game records.
         (f"{sb}.away_linescore", _linescore_side(game.get("linescore"), 0)),
         (f"{sb}.home_linescore", _linescore_side(game.get("linescore"), 1)),
-
-        # ELO
-        (f"{sb}.winner_incoming_elo", game.get("winner_incoming_elo")),
-        (f"{sb}.winner_result_elo", game.get("winner_result_elo")),
-        (f"{sb}.loser_incoming_elo", game.get("loser_incoming_elo")),
-        (f"{sb}.loser_result_elo", game.get("loser_result_elo")),
 
         # Winner/loser (processed columns from pyrio)
         (f"{sb}.winner_user", game.get("winner_user", "")),
@@ -574,14 +566,12 @@ def clear_game_entries(scoreboard_number: int) -> list[tuple]:
         (f"{base}.away_linescore", []),
         (f"{base}.home_linescore", []),
     ]
-    # THE COMPLETED-GAME PATH WRITES ELEVEN MORE, and the clear covered none of
+    # THE COMPLETED-GAME PATH WRITES SEVEN MORE, and the clear covered none of
     # them: a board can hold either kind of game, so the inverse has to invert
     # both appliers. `innings_played` is the worst of it — the scoreboard sizes its
     # linescore from it (`linescoreColumns`), so a cleared board drew a table for
     # the game that was just cleared — and `date_time_*` is what `meta-date`
-    # renders. The elo four are the dead keys CLAUDE.md already flags as written
-    # and read by nothing, and they are cleared anyway: "nothing reads it today" is
-    # not a reason to leave a fact about a game on a board that has none.
+    # renders.
     entries.extend([
         (f"{base}.date_time_start", ""),
         (f"{base}.date_time_end", ""),
@@ -590,10 +580,6 @@ def clear_game_entries(scoreboard_number: int) -> list[tuple]:
         (f"{base}.loser_user", ""),
         (f"{base}.winner_score", 0),
         (f"{base}.loser_score", 0),
-        (f"{base}.winner_incoming_elo", None),
-        (f"{base}.winner_result_elo", None),
-        (f"{base}.loser_incoming_elo", None),
-        (f"{base}.loser_result_elo", None),
     ])
     for pos in _FIELD_POSITIONS:
         entries.append((f"{base}.field.{pos}", ""))
@@ -703,6 +689,14 @@ def pin_swap(left: str, right: str) -> bool | None:
     if want_left is None:
         want_left = 1 if want_right == 2 else 2
     return want_left == 2
+
+
+def _feed_names(parsed: dict | None) -> tuple[str, str]:
+    """The (left, right) rioNames of a parsed frame, in the order it carries them."""
+    entrants = (parsed or {}).get("entrants") or [[{}], [{}]]
+    left = entrants[0][0].get("rioName", "") if entrants[0] else ""
+    right = entrants[1][0].get("rioName", "") if entrants[1] else ""
+    return left, right
 
 
 class RioGameDataProvider:
@@ -858,24 +852,15 @@ class RioGameDataProvider:
 
     @classmethod
     async def FetchHUDGame(cls) -> dict | None:
-        """Immediate one-shot read of the HUD file. Updates state and returns parsed game."""
-        await cls.ReloadHudPath()
-        if cls.hud_watcher and cls.hud_watcher.latest_game_data:
-            # An explicit re-read is the producer asking for the feed back, so it
-            # ends a hand reset's hold on the board (see _feed_released).
-            cls._feed_released = False
-            game_json = cls.hud_watcher.latest_game_data
-            for sb in cls._hud_targets:
-                StatsTracker.on_hud_update(game_json, sb)
-            parsed = cls.parse_game_data(game_json)
-            parsed = cls._preserve_player_sides(parsed)
-            cls.current_game = parsed
-            swaps = await cls._apply_game_to_state(parsed)
-            await cls._maybe_apply_hit(game_json)
+        """Immediate one-shot read of the HUD file. Updates state and returns parsed game.
 
-            for sb in cls._hud_targets:
-                await StatsTracker.push_stats_to_state(sb, swaps.get(sb, cls._sides_swapped))
-            return parsed
+        `ReloadHudPath` already applies the frame, through the same locked path a
+        watcher event takes — and ends a hand reset's hold on the board, since an
+        explicit re-read is the producer asking for the feed back. This used to
+        apply it a second time, outside the lock.
+        """
+        if await cls.ReloadHudPath():
+            return cls.current_game
         return None
 
     @classmethod
@@ -1123,9 +1108,7 @@ class RioGameDataProvider:
         {scoreboard: sides_swapped} map so the caller pushes stats with the same
         per-board orientation.
         """
-        entrants = parsed.get("entrants") or [[{}], [{}]]
-        raw_left = entrants[0][0].get("rioName", "") if entrants[0] else ""
-        raw_right = entrants[1][0].get("rioName", "") if entrants[1] else ""
+        raw_left, raw_right = _feed_names(parsed)
 
         # The frame in RAW feed order, kept so one board can be re-decided later
         # without another frame (see reorient_board). `current_game` below is
@@ -1157,9 +1140,7 @@ class RioGameDataProvider:
         Returns whether the board's sides ended up swapped, so the caller can
         push stats the same way round.
         """
-        entrants = parsed.get("entrants") or [[{}], [{}]]
-        raw_left = entrants[0][0].get("rioName", "") if entrants[0] else ""
-        raw_right = entrants[1][0].get("rioName", "") if entrants[1] else ""
+        raw_left, raw_right = _feed_names(parsed)
         swapped, reason = cls._decide(raw_left, raw_right, sb=sb)
         board = cls._orient_copy(parsed) if swapped else parsed
         await apply_parsed_game_to_state(
@@ -1223,6 +1204,9 @@ class RioGameDataProvider:
         """
         logger.info("[Match] board {} auto-retiring decided match {} (new game, "
                     "different players)", sb, m)
+        # No re-settle needed, unlike `_unbind_board`: the gate runs after the
+        # frame is applied, and a retire means the fixture's players are not in
+        # it, so the match layer never seated this frame in the first place.
         await State.Unset(f"score.{sb}.match")
         await State.Set(f"match.{m}.stage", "post")
         await State.Save()
@@ -1260,9 +1244,7 @@ class RioGameDataProvider:
         notification; a clean resolve clears any stale conflict; a decided-match
         mismatch auto-retires.
         """
-        entrants = parsed.get("entrants") or [[{}], [{}]]
-        left = entrants[0][0].get("rioName", "") if entrants[0] else ""
-        right = entrants[1][0].get("rioName", "") if entrants[1] else ""
+        left, right = _feed_names(parsed)
 
         for sb in cls._hud_targets:
             await cls._gate_board(sb, left, right)
@@ -1281,9 +1263,7 @@ class RioGameDataProvider:
         """
         if sb not in cls._hud_targets or cls.current_game is None:
             return
-        entrants = cls.current_game.get("entrants") or [[{}], [{}]]
-        left = entrants[0][0].get("rioName", "") if entrants[0] else ""
-        right = entrants[1][0].get("rioName", "") if entrants[1] else ""
+        left, right = _feed_names(cls.current_game)
         await cls._gate_board(sb, left, right)
 
     # --- Player side preservation (3-layer system) ---
@@ -1381,7 +1361,7 @@ class RioGameDataProvider:
             StatsTracker.on_hud_update(game_json, sb)
 
         parsed = cls.parse_game_data(game_json)
-        parsed = cls._preserve_player_sides(parsed)
+        parsed = cls._preserve_player_sides(parsed, is_new_game)
         cls.current_game = parsed
         swaps = await cls._apply_game_to_state(parsed)
         # Per-game identity gate: on a new game, check the live players against
@@ -1591,9 +1571,7 @@ class RioGameDataProvider:
             return
 
         parsed = cls.parse_game_data(live)
-        entrants = parsed.get("entrants") or [[{}], [{}]]
-        left = entrants[0][0].get("rioName", "") if entrants[0] else ""
-        right = entrants[1][0].get("rioName", "") if entrants[1] else ""
+        left, right = _feed_names(parsed)
 
         # A RELEASE IS NOT A FLIP. The toggle knows every board moves — manual
         # decides them all the same way — so it carries display identity across
@@ -1728,13 +1706,14 @@ class RioGameDataProvider:
         return False, ""
 
     @classmethod
-    def _preserve_player_sides(cls, parsed: dict) -> dict:
+    def _preserve_player_sides(cls, parsed: dict, is_new_game: bool | None = None) -> dict:
         """PRE-step for the side cascade — runs once per HUD event.
 
         Updates only the manual-override state machine; it does NOT swap
         `parsed` (per-board orientation, including pin/match/back-to-back, is
         applied in `_apply_game_to_state` via `_decide`). Returns `parsed`
-        unchanged (raw away/home order).
+        unchanged (raw away/home order). Pass `is_new_game` when the caller has
+        already asked `_is_new_game` of this frame.
 
         - New game (inning decreased): clear the manual override and reseed the
           manual base (`_sides_swapped`) from pin→back-to-back, so a later swap-
@@ -1742,12 +1721,11 @@ class RioGameDataProvider:
         - Mid-game: if the user manually swapped back to the pinned orientation,
           release the override so pin/match resume control.
         """
-        current_inning = parsed.get("inning", 1)
-        entrants = parsed.get("entrants") or [[{}], [{}]]
-        left = entrants[0][0].get("rioName", "") if entrants[0] else ""
-        right = entrants[1][0].get("rioName", "") if entrants[1] else ""
+        left, right = _feed_names(parsed)
+        if is_new_game is None:
+            is_new_game = cls._is_new_game(parsed.get("inning", 1), parsed.get("game_id"))
 
-        if cls._is_new_game(current_inning, parsed.get("game_id")):
+        if is_new_game:
             cls._user_overridden = False
             cls._sides_swapped, _ = cls._decide(left, right, sb=None, allow_manual=False)
         elif cls._user_overridden:

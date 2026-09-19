@@ -13,7 +13,6 @@ from loguru import logger
 from server import server, socketio
 from server.paths import env_port, suppress_browser
 from server.network import Network
-from server.state import State
 from server.settings import Settings, Config as TSHConfig
 from server.participants import Participants
 from server.utils.uvilogger import setup_logger

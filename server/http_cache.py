@@ -29,22 +29,12 @@ from starlette.staticfiles import StaticFiles
 # Cache it, but ask first. Every time.
 REVALIDATE = "no-cache"
 
-# Served from the repo/bundle: overlay shells + lib/*.js (edited with no build
+# Which trees get it is decided where they are served (server/server.py):
+# served from the repo/bundle, overlay shells + lib/*.js (edited with no build
 # step), theme SVGs, the hit visualizer's shared renderer (moves on a submodule
-# bump). Served from user_data: branding logos and the MSB asset pack, both of
+# bump); served from user_data, branding logos and the MSB asset pack, both of
 # which a producer replaces in place, under the same filename, mid-event.
-REVALIDATE_PREFIXES = (
-    "/layout/",
-    "/design/",
-    "/rio-visualizer/",
-    "/branding/",
-    "/game_assets/",
-)
-
-
-def must_revalidate(path: str) -> bool:
-    """Is this one of the trees a producer edits while OBS holds it open?"""
-    return path.startswith(REVALIDATE_PREFIXES)
+# tests/unit/test_http_cache.py checks the real app, not a copy of this list.
 
 
 class RevalidatingStaticFiles(StaticFiles):

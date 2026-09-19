@@ -190,14 +190,7 @@ async def test_refresh_prunes_stale_update_dismissals_into_settings(
         ["update-2.0.0", "manual-id"]
 
 
-# --- Dismiss / DismissAll ---
-
-async def test_dismiss_removes_from_active_and_persists_id():
-    Announcements._active = [{"id": "a1"}, {"id": "a2"}]
-    await Announcements.Dismiss("a1")
-    assert [it["id"] for it in Announcements.GetActive()] == ["a2"]
-    assert "a1" in Settings.Get("announcements.dismissed_ids", [])
-
+# --- DismissAll ---
 
 async def test_dismiss_all_empties_active_and_persists_every_id():
     Announcements._active = [{"id": "a1"}, {"id": "a2"}]

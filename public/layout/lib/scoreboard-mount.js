@@ -806,9 +806,8 @@ export function mountScoreboard({ host, sb, size }) {
    *
    * The ELO swing used to lead this cluster and is GONE — a one-game rating
    * change reset every season, so it was spending the two widest thirds of the
-   * band on a number most viewers could not place. The board still carries the
-   * ratings in state (score.N.{winner,loser}_{incoming,result}_elo, written by
-   * the provider off the Rio record); nothing draws them now.
+   * band on a number most viewers could not place. The provider stopped writing
+   * the ratings into state at the same time.
    */
   function bindFinal(state, d) {
     let dateStr = '';

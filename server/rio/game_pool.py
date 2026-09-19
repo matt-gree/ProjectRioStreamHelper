@@ -125,17 +125,6 @@ class OngoingGamePool:
         cls._poll_task = None
 
     @classmethod
-    async def set_auto_poll(cls, enabled: bool, interval: float | None = None):
-        """Adjust the live-poll interval. Retained for the legacy
-        /game-pool/ongoing/auto-poll endpoint; the `enabled` flag is now a
-        no-op because polling is demand-driven (see _live_consumers_exist).
-        Only the interval is honored."""
-        if interval is not None:
-            cls._poll_interval = interval
-            await Settings.Set("ongoing_games.poll_interval", interval)
-        cls._start_polling()
-
-    @classmethod
     def _live_consumers_exist(cls) -> bool:
         """True if any board needs the ongoing feed kept fresh: a single-mode
         board currently following a live (not completed) game, or a running

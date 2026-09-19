@@ -30,12 +30,18 @@ async def make_match(name1: str = "Alice", name2: str = "Bob", **over) -> int:
     return m
 
 
+async def enqueue(*ids: int) -> None:
+    """Put ``ids`` on the running order, in order (none are enrolled yet)."""
+    for m in ids:
+        await Schedule.append(m)
+
+
 # --- eligibility ---
 
 @pytest.mark.asyncio
 async def test_next_up_is_the_first_queued_fixture():
     a, b = await make_match("Alice", "Bob"), await make_match("Carol", "Dave")
-    await Schedule.set_queue([a, b])
+    await enqueue(a, b)
     assert Schedule.next_up() == a
 
 
@@ -48,7 +54,7 @@ async def test_an_empty_queue_has_nothing_next():
 @pytest.mark.asyncio
 async def test_a_bound_fixture_is_not_waiting_for_a_board():
     a, b = await make_match(), await make_match("Carol", "Dave")
-    await Schedule.set_queue([a, b])
+    await enqueue(a, b)
     await bind_board(1, a)
     assert Schedule.next_up() == b
 
@@ -56,7 +62,7 @@ async def test_a_bound_fixture_is_not_waiting_for_a_board():
 @pytest.mark.asyncio
 async def test_a_decided_fixture_is_finished():
     a, b = await make_match(), await make_match("Carol", "Dave")
-    await Schedule.set_queue([a, b])
+    await enqueue(a, b)
     await State.Set(f"match.{a}.decided", 1)
     assert Schedule.next_up() == b
 
@@ -69,7 +75,7 @@ a board and been fed has started, so it is not offered as fresh."""
 @pytest.mark.asyncio
 async def test_a_started_fixture_is_not_offered_as_fresh():
     a, b = await make_match(), await make_match("Carol", "Dave")
-    await Schedule.set_queue([a, b])
+    await enqueue(a, b)
     await bind_board(1, a)
     await State.Set(f"match.{a}.stage", "live")
     # Moving the board off it must not make it "next" again — that is the
@@ -82,7 +88,7 @@ async def test_a_started_fixture_is_not_offered_as_fresh():
 async def test_a_bound_but_never_fed_fixture_comes_back():
     """Still `draft`, so nothing happened to it: unbinding puts it back in line."""
     a = await make_match()
-    await Schedule.set_queue([a])
+    await enqueue(a)
     await bind_board(1, a)
     assert Schedule.next_up() is None
     await State.UnsetBatch([f"score.1.match"])
@@ -91,10 +97,10 @@ async def test_a_bound_but_never_fed_fixture_comes_back():
 
 @pytest.mark.asyncio
 async def test_a_queued_id_whose_match_was_deleted_is_skipped():
-    """set_queue validates, but a match can be deleted afterwards — and delete
+    """Enrolment validates, but a match can be deleted afterwards — and delete
     prunes the queue, so this is belt-and-braces on the read path."""
     a = await make_match()
-    await Schedule.set_queue([a])
+    await enqueue(a)
     await State.Unset(f"match.{a}")
     assert Schedule.next_up() is None
 
@@ -104,7 +110,7 @@ async def test_a_queued_id_whose_match_was_deleted_is_skipped():
 @pytest.mark.asyncio
 async def test_take_next_binds_the_first_waiting_fixture():
     a, b = await make_match(), await make_match("Carol", "Dave")
-    await Schedule.set_queue([a, b])
+    await enqueue(a, b)
 
     result = await take_next_match(1)
 
@@ -120,7 +126,7 @@ async def test_take_next_leaves_the_queue_alone():
     """The queue is the ORDER; taking a fixture does not consume its slot. What
     makes it stop being 'next' is that a board now holds it."""
     a, b = await make_match(), await make_match("Carol", "Dave")
-    await Schedule.set_queue([a, b])
+    await enqueue(a, b)
     await take_next_match(1)
     assert Schedule.queue() == [a, b]
 
@@ -131,7 +137,7 @@ async def test_two_boards_take_two_different_fixtures(rig):
     case is below."""
     rig(1, 2)
     a, b = await make_match(), await make_match("Carol", "Dave")
-    await Schedule.set_queue([a, b])
+    await enqueue(a, b)
 
     first = await take_next_match(1)
     second = await take_next_match(2)
@@ -155,7 +161,7 @@ async def test_concurrent_takes_do_not_land_on_one_fixture(monkeypatch, rig):
     """
     rig(1, 2)
     a, b = await make_match(), await make_match("Carol", "Dave")
-    await Schedule.set_queue([a, b])
+    await enqueue(a, b)
 
     import server.api.v1.match as match_api
     real_bind = match_api.bind_board
@@ -177,7 +183,7 @@ async def test_concurrent_takes_do_not_land_on_one_fixture(monkeypatch, rig):
 async def test_take_next_says_why_when_nothing_is_waiting(rig):
     rig(1, 2)
     a = await make_match()
-    await Schedule.set_queue([a])
+    await enqueue(a)
     await take_next_match(1)
 
     with pytest.raises(HTTPException) as exc:
@@ -196,7 +202,7 @@ async def test_take_next_refuses_a_rotating_board(monkeypatch, rig):
     monkeypatch.setattr(server.bindings, "transport", lambda sb: "api")
     rig(1, 2)
     a = await make_match()
-    await Schedule.set_queue([a])
+    await enqueue(a)
 
     with pytest.raises(HTTPException) as exc:
         await take_next_match(2)
@@ -225,7 +231,7 @@ async def test_take_next_turns_the_board_over(rig):
         ("score.1.score_left", 8),
     ])
     a = await make_match()
-    await Schedule.set_queue([a])
+    await enqueue(a)
 
     await take_next_match(1)
 

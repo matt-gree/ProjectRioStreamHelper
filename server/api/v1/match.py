@@ -45,9 +45,13 @@ async def _resettle_bound_boards(m) -> None:
     what the cascade decides.
     """
     for sb in Match.bound_scoreboards(m):
-        await RioGameDataProvider.evaluate_match_gate_for_board(sb)
-    for sb in Match.bound_scoreboards(m):
-        await RioGameDataProvider.reorient_board(sb)
+        await _settle_board(sb)
+
+
+async def _settle_board(sb: int) -> None:
+    """Gate, then re-orient, one board against the live game (see above)."""
+    await RioGameDataProvider.evaluate_match_gate_for_board(sb)
+    await RioGameDataProvider.reorient_board(sb)
 
 
 def _sync_primary_if(m) -> None:
@@ -209,15 +213,8 @@ async def delete_match(m: int):
     if not Match.exists(m):
         raise HTTPException(404, f"match {m!r} not found")
 
-    bound = Match.bound_scoreboards(m)
-    if bound:
-        await State.UnsetBatch(
-            [k for sb in bound
-             for k in (f"score.{sb}.match", f"score.{sb}.match_conflict")]
-        )
-    for sb in bound:
-        await Match.clear_scoreboard(sb)
-        await RioGameDataProvider.reorient_board(sb)
+    for sb in Match.bound_scoreboards(m):
+        await _unbind_board(sb)
 
     await State.Unset(f"match.{m}")
     await State.Save()
@@ -461,7 +458,7 @@ async def _clear_superseded_game(sb: int) -> None:
     conflating them is a bug this function used to carry.
 
     It ran inside `bind_board`, so EVERY path that attaches a fixture inherited it
-    — the Match desk's board chips, the board desk's bind, `/startgg/load-set`.
+    — the Match desk's board chips, the board desk's bind, the start.gg set loader.
     Attaching a match to a HUD board therefore BLANKED THE PRODUCER'S SCOREBOARD:
     on a HUD board the game on screen is whatever Project Rio is showing, saying
     "this game is Match 5" is the ordinary working gesture, and PRSH answered it by
@@ -508,7 +505,7 @@ async def _clear_superseded_game(sb: int) -> None:
     await release_and_clear_game(sb, reproject=False)
 
 
-async def bind_board(sb: int, m, *, project: bool = True, supersede: bool = False) -> None:
+async def bind_board(sb: int, m, *, supersede: bool = False) -> None:
     """Put match ``m`` on board ``sb``, moving it off any board already holding it.
 
     A MATCH FILLS EXACTLY ONE BOARD. A match exists so the stream can show a
@@ -522,10 +519,6 @@ async def bind_board(sb: int, m, *, project: bool = True, supersede: bool = Fals
     confirm mode the console's version wasn't even atomic — each sibling unbind was
     a separately discardable staged entry, so committing the bind without one put a
     match on two boards, a state nothing in the UI can draw.
-
-    ``project=False`` is for a caller that projects immediately afterwards
-    (`apply_startgg_set` ends in `project_match` + `_resettle_bound_boards`), so a
-    fixture isn't projected twice — once empty, then once filled.
 
     ``supersede=True`` ALSO CLEARS the board's outgoing game, and belongs to the
     turnover verb alone (`take_next_match`). It defaults off because binding is
@@ -541,12 +534,14 @@ async def bind_board(sb: int, m, *, project: bool = True, supersede: bool = Fals
         await _clear_superseded_game(sb)
     await State.Set(f"score.{sb}.match", m)
     await State.Save()
-    if project:
-        await Match.project_scoreboard(sb, m)
-        # Re-run the identity gate against the current live game so a mismatch
-        # created by binding mid-game surfaces the conflict now, rather than
-        # waiting for the next new-game event (or an app restart).
-        await RioGameDataProvider.evaluate_match_gate_for_board(sb)
+    await Match.project_scoreboard(sb, m)
+    # Settle the board against the live game now rather than on the next frame:
+    # the gate surfaces a mismatch created by binding mid-game, and the cascade
+    # seats the live roster/logo under the names just projected — without it a
+    # HUD board whose fixture sides are the reverse of the feed's showed one
+    # player's name over the other's team until the feed spoke again, which on a
+    # paused or finished game is never.
+    await _settle_board(sb)
 
 
 @bind_router.put("/{sb}/match", response_class=ORJSONResponse)
@@ -569,19 +564,26 @@ async def bind_scoreboard(sb: int, payload: BindPayload):
     if m is None:
         await _unbind_board(sb)
     else:
-        from server.bindings import is_rotating, transport
-        # A HUD-transport board is single by construction — its stored
-        # playback.mode is ignored while HUD is on (see server/bindings.py), so
-        # a board left in "rotate" from a prior HUD-off session must not be
-        # rejected here. Only a board that is *actually* rotating (API transport
-        # + rotate mode) has no fixed sides to project a match onto.
-        if transport(sb) != "hud" and is_rotating(sb):
-            raise HTTPException(
-                409,
-                f"scoreboard {sb} is rotating — bind a match to a single-game board",
-            )
+        _require_single_game(sb)
         await bind_board(sb, m)
     return {"success": True, "match": m}
+
+
+def _require_single_game(sb: int) -> None:
+    """409 unless board ``sb`` can hold one fixture.
+
+    A HUD-transport board is single by construction — its stored playback.mode
+    is ignored while HUD is on (see server/bindings.py), so a board left in
+    "rotate" from a prior HUD-off session must not be rejected. Only a board that
+    is *actually* rotating (API transport + rotate mode) has no fixed sides to
+    project a match onto.
+    """
+    from server.bindings import is_rotating
+    if transport(sb) != "hud" and is_rotating(sb):
+        raise HTTPException(
+            409,
+            f"scoreboard {sb} is rotating — bind a match to a single-game board",
+        )
 
 
 # Taking the next queued fixture has to be ATOMIC — resolve and bind under one
@@ -613,16 +615,11 @@ async def take_next_match(sb: int, queue: str | None = None):
     require_board(sb)
     if queue and Schedule.get_queue(queue) is None:
         raise HTTPException(404, f"queue {queue!r} does not exist")
+    _require_single_game(sb)
     async with _take_next_lock:
         m = Schedule.next_up(queue) if queue else Schedule.next_up_for_board(sb)
         if m is None:
             raise HTTPException(409, "nothing in the queue is waiting for a board")
-        from server.bindings import is_rotating, transport
-        if transport(sb) != "hud" and is_rotating(sb):
-            raise HTTPException(
-                409,
-                f"scoreboard {sb} is rotating — bind a match to a single-game board",
-            )
         # The one superseding bind: this verb's entire meaning is "this board is
         # done with what it has", and the button that calls it says so.
         await bind_board(sb, m, supersede=True)

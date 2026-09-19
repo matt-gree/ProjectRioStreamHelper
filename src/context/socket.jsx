@@ -137,17 +137,20 @@ export const SocketProvider = ({children}) => {
             }
         }
 
-        // Listen BEFORE asking. Registering inside the response callback left a
-        // window the length of a round trip in which every push was dropped —
-        // on a busy key the next HUD frame papered over it, on a rarely-written
-        // one (a match binding, a container feed) it stayed wrong until someone
-        // touched it again.
-        socket.on('v1.state.set', doSet);
-        socket.on('v1.state.set_batch', doBatchSet);
-        socket.on('v1.state.unset', doUnset);
-        socket.on('v1.state.unset_batch', doBatchUnset);
-
-        if(!useStateStore.getState().loaded) {
+        /*
+         * A SNAPSHOT ON EVERY CONNECT, not once per mount. socket.io reconnects
+         * on its own after PRSH restarts or the network drops, and everything
+         * pushed during the gap is simply gone — the console went on drawing
+         * pre-restart state, including keys the server had since removed, until
+         * the page was reloaded. The overlays have always re-asked on `connect`
+         * (overlay-base.js); this is the console doing the same.
+         */
+        const snapshot = () => {
+            // Pushes that arrive while the reply is in flight are newer than it:
+            // hold them and replay them on top. Anything queued before the ask
+            // is older than the snapshot and superseded by it.
+            ready = false;
+            pending = [];
             socket.emit('v1.state.get', {}, resp => {
                 // A response that outlives the provider must not write to a
                 // store it has already let go of.
@@ -158,18 +161,29 @@ export const SocketProvider = ({children}) => {
                     return;
                 }
 
-                useStateStore.getState().mergeItems(resp);
+                useStateStore.getState().replaceItems(resp);
                 ready = true;
                 useStateStore.getState().setLoaded(true);
                 flushState();       // replay whatever arrived during the trip
             });
-        } else {
-            ready = true;
-        }
+        };
+
+        // Listen BEFORE asking. Registering inside the response callback left a
+        // window the length of a round trip in which every push was dropped —
+        // on a busy key the next HUD frame papered over it, on a rarely-written
+        // one (a match binding, a container feed) it stayed wrong until someone
+        // touched it again.
+        socket.on('v1.state.set', doSet);
+        socket.on('v1.state.set_batch', doBatchSet);
+        socket.on('v1.state.unset', doUnset);
+        socket.on('v1.state.unset_batch', doBatchUnset);
+        socket.on('connect', snapshot);
+        if (socket.connected) snapshot();
 
         return () => {
             cancelled = true;
             if (rafId !== null) cancelAnimationFrame(rafId);
+            socket.off('connect', snapshot);
             socket.off('v1.state.set', doSet);
             socket.off('v1.state.set_batch', doBatchSet);
             socket.off('v1.state.unset', doUnset);
@@ -180,7 +194,7 @@ export const SocketProvider = ({children}) => {
 
     // Same shape as the state channel above, and for the same reasons: one
     // ordered queue, listeners registered before the snapshot is asked for,
-    // nothing applied until it has been merged.
+    // nothing applied until it has landed, and a fresh snapshot per connect.
     useEffect(() => {
         let pending = [];
         let rafId = null;
@@ -217,10 +231,9 @@ export const SocketProvider = ({children}) => {
             scheduleFlush();
         }
 
-        socket.on('v1.settings.set', doSet);
-        socket.on('v1.settings.unset', doUnset);
-
-        if(!useSettingsStore.getState().loaded) {
+        const snapshot = () => {
+            ready = false;
+            pending = [];
             socket.emit('v1.settings.get', {}, resp => {
                 if(cancelled) return;
                 if('error' in resp) {
@@ -229,18 +242,22 @@ export const SocketProvider = ({children}) => {
                     return;
                 }
 
-                useSettingsStore.getState().mergeItems(resp);
+                useSettingsStore.getState().replaceItems(resp);
                 ready = true;
                 useSettingsStore.getState().setLoaded(true);
                 flushSettings();
             });
-        } else {
-            ready = true;
-        }
+        };
+
+        socket.on('v1.settings.set', doSet);
+        socket.on('v1.settings.unset', doUnset);
+        socket.on('connect', snapshot);
+        if (socket.connected) snapshot();
 
         return () => {
             cancelled = true;
             if (rafId !== null) cancelAnimationFrame(rafId);
+            socket.off('connect', snapshot);
             socket.off('v1.settings.set', doSet);
             socket.off('v1.settings.unset', doUnset);
             useSettingsStore.getState().setLoaded(false);

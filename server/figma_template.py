@@ -364,7 +364,6 @@ def _meld_stages(root: ET.Element) -> list[tuple[str, float, float, float, float
     rest_w = compact_w if compact_w is not None else (_num(bg, "width") or 0.0)
     rest_h = compact_h if compact_h is not None else (_num(bg, "height") or 0.0)
     full_w = max([rest_w] + [w for _, w in widths])
-    full_h = max([rest_h] + [h for _, h in heights])
 
     stages = [("resting", x, y, rest_w, rest_h, rx)]
     # A width stage is drawn at the resting height and a height stage at the

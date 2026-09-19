@@ -217,15 +217,6 @@ class Announcements:
         logger.debug("[Announcements] broadcast {} item(s)", len(active))
 
     @classmethod
-    async def Dismiss(cls, announcement_id: str):
-        dismissed = list(Settings.Get("announcements.dismissed_ids", []))
-        if announcement_id not in dismissed:
-            dismissed.append(announcement_id)
-            await Settings.Set("announcements.dismissed_ids", dismissed)
-        cls._active = [it for it in cls._active if it.get("id") != announcement_id]
-        await socketio.emit("v1.announcements.set", {"items": cls._active})
-
-    @classmethod
     async def DismissAll(cls):
         """Permanently dismiss every currently-active announcement."""
         dismissed = list(Settings.Get("announcements.dismissed_ids", []))

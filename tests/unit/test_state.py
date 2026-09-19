@@ -496,3 +496,28 @@ async def test_concurrent_saves_cannot_interleave_on_the_shared_tmp_file(
     raw = (isolate_user_data / "state.json").read_bytes()
     loaded = orjson.loads(raw)             # must parse at all
     assert loaded in ({"big": "x" * 200_000}, small), "state.json is a blend"
+
+
+@pytest.mark.asyncio
+async def test_a_jpg_stream_label_downloads_and_is_stored_as_png(tmp_path, monkeypatch):
+    """Both halves were dead: `httpx.stream` is the SYNC API, so `async with` on
+    it raised before a byte arrived, and the conversion then called str methods
+    on an AsyncPath. Every image label failed into the log."""
+    import io
+    import httpx
+    from aiopath import AsyncPath
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (4, 4), "red").save(buf, format="JPEG")
+    transport = httpx.MockTransport(lambda req: httpx.Response(200, content=buf.getvalue()))
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(httpx, "AsyncClient",
+                        lambda **kw: real_client(transport=transport, **kw))
+
+    target = AsyncPath(str(tmp_path / "logo.jpg"))
+    await State._download_image("https://example.test/logo.jpg", target)
+
+    assert not (tmp_path / "logo.jpg").exists()
+    with Image.open(tmp_path / "logo.png") as img:
+        assert img.format == "PNG"

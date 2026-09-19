@@ -8,46 +8,6 @@ router = APIRouter()
 
 
 @method(
-    router.get, "/rio/stats",
-    version="1", id="rio.stats",
-    response_class=ORJSONResponse
-)
-async def rio_stats(
-    scoreboard: int | None = None,
-    session_id: str | None = None,
-) -> ORJSONResponse:
-    """Get all merged character stats for the active game on a scoreboard."""
-    return ORJSONResponse(StatsTracker.get_all_stats(scoreboard_number=scoreboard))
-
-
-@method(
-    router.get, "/rio/stats/character",
-    version="1", id="rio.stats.character",
-    response_class=ORJSONResponse
-)
-async def rio_stats_character(
-    team: int = 1,
-    roster_index: int = 0,
-    scoreboard: int | None = None,
-    session_id: str | None = None,
-) -> ORJSONResponse:
-    """Get merged stats for a single character by team and roster index."""
-    all_stats = StatsTracker.get_all_stats(scoreboard_number=scoreboard)
-    team_key = f"team_{team}"
-    team_data = all_stats.get(team_key, {})
-    characters = team_data.get("characters", {})
-
-    char_data = characters.get(roster_index)
-    if char_data:
-        return ORJSONResponse({
-            "team": team,
-            **char_data,
-        })
-
-    raise HTTPException(status_code=404, detail=f"No character at team {team}, roster index {roster_index}")
-
-
-@method(
     router.post, "/rio/stats/refresh",
     version="1", id="rio.stats.refresh",
     response_class=ORJSONResponse

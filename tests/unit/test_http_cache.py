@@ -11,44 +11,58 @@ import pytest
 from starlette.applications import Starlette
 from starlette.testclient import TestClient
 
-from server.http_cache import (
-    REVALIDATE,
-    REVALIDATE_PREFIXES,
-    RevalidatingStaticFiles,
-    must_revalidate,
-)
+from server.http_cache import REVALIDATE, RevalidatingStaticFiles
 
 REPO = Path(__file__).resolve().parents[2]
 
 
-@pytest.mark.parametrize(
-    "path",
-    [
-        "/design/default/statscard.svg",       # theme SVGs — fetched as a subresource
-        "/layout/scoreboard1/statsbar.html",   # overlay shells
-        "/layout/lib/stats-card-mount.js",     # ...and their mounts, which have no build step
-        "/branding/logo.png",                  # replaced in place, same filename
-        "/game_assets/msb/teamLogos/Mario.png",
-        "/rio-visualizer/renderer.js",
-    ],
-)
-def test_a_tree_a_producer_edits_is_revalidated(path: str):
-    assert must_revalidate(path)
+@pytest.fixture
+def app_module(tmp_path, monkeypatch):
+    """The real app. Imported with user_data redirected: the module creates
+    `branding/` under it at import time."""
+    monkeypatch.setenv("PRSH_USER_DATA_DIR", str(tmp_path / "user_data"))
+    import server.server as srv
+    return srv
 
 
-@pytest.mark.parametrize("path", ["/assets/index-a1b2c3.js", "/api/v1/state", "/", "/favicon.png"])
-def test_everything_else_is_left_alone(path: str):
-    """`/assets` is the interesting one: Vite content-hashes it, so the URL
-    changes when the content does and revalidating it is pure cost."""
-    assert not must_revalidate(path)
+def test_every_tree_a_producer_edits_is_mounted_revalidating(app_module):
+    """Asked of the app itself rather than of a list beside it — a list is what
+    let the MSB route below ship without the header while its test passed."""
+    from starlette.routing import Mount
+
+    mounts = {r.path: r.app for r in app_module.app.routes if isinstance(r, Mount)}
+    for path in ("/layout", "/branding", "/game_assets", "/rio-visualizer"):
+        if path == "/rio-visualizer" and path not in mounts:
+            continue  # submodule not checked out
+        assert isinstance(mounts[path], RevalidatingStaticFiles), path
 
 
-def test_the_prefixes_are_prefixes():
-    """A bare `/design` or a `/designs-of-mine` must not match — the trailing
-    slash is what makes `startswith` safe to use here."""
-    for prefix in REVALIDATE_PREFIXES:
-        assert prefix.startswith("/") and prefix.endswith("/")
-        assert not must_revalidate(prefix.rstrip("/") + "-elsewhere/x")
+def test_vite_output_is_left_alone(app_module):
+    """`/assets` is content-hashed, so the URL changes when the content does and
+    revalidating it is pure cost. Only mounted once the frontend is built."""
+    from starlette.routing import Mount
+
+    mounts = {r.path: r.app for r in app_module.app.routes if isinstance(r, Mount)}
+    if "/assets" in mounts:
+        assert not isinstance(mounts["/assets"], RevalidatingStaticFiles)
+
+
+@pytest.mark.asyncio
+async def test_the_msb_pack_is_revalidated(app_module, tmp_path, monkeypatch):
+    """The pack is served by a ROUTE, registered ahead of the /game_assets mount
+    it shadows, so the mount's header never reached it — character icons and team
+    logos, the files a producer most often replaces in place, were heuristically
+    cached by OBS."""
+    pack = tmp_path / "msb"
+    (pack / "teamLogos").mkdir(parents=True)
+    (pack / "teamLogos" / "Mario.png").write_bytes(b"png")
+
+    async def pack_path():
+        return pack
+
+    monkeypatch.setattr(app_module, "get_msb_assets_path", pack_path)
+    resp = await app_module.msb_asset("teamLogos/Mario.png")
+    assert resp.headers["cache-control"] == REVALIDATE
 
 
 def test_the_static_mount_sends_the_header_on_a_hit_and_on_a_304():

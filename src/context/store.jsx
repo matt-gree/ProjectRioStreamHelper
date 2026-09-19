@@ -6,6 +6,20 @@ import { assocPath, dissocPath, path as rPath } from "ramda";
 let _socketRef = null;
 export const setSocketRef = (ref) => { _socketRef = ref; };
 
+/*
+ * A server snapshot REPLACES the data, it does not merge into it. The snapshot
+ * is re-taken on every reconnect, and anything the server removed while we were
+ * away (an unbound board, a deleted match) is exactly what a merge would keep.
+ * The store's own members — its actions and `loaded` — are not data and survive.
+ */
+const replaceData = (set) => (items) => set(state => {
+    const own = {};
+    for (const [k, v] of Object.entries(state)) {
+        if (typeof v === 'function' || k === 'loaded') own[k] = v;
+    }
+    return { ...items, ...own };
+}, true);
+
 export const useStateStore = create((set, get) => ({
     loaded: false,
     setLoaded: (loaded=true) => set({ loaded }),
@@ -58,7 +72,7 @@ export const useStateStore = create((set, get) => ({
             });
         }
     },
-    mergeItems: (items) => set(items)
+    replaceItems: replaceData(set),
 }));
 
 export const useSettingsStore = create((set, get) => ({
@@ -99,7 +113,7 @@ export const useSettingsStore = create((set, get) => ({
             });
         });
     },
-    mergeItems: (items) => set(items)
+    replaceItems: replaceData(set),
 }));
 
 export const useConfigStore = create((set) => ({

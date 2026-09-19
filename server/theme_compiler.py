@@ -48,7 +48,6 @@ from server.theme_contracts import CONTRACTS, Contract
 SVG_NS = "http://www.w3.org/2000/svg"
 XLINK_NS = "http://www.w3.org/1999/xlink"
 
-_MARKERS = ("slot", "part", "tpl")
 # modifier key (grammar) -> attribute suffix (data-<suffix>)
 _MODIFIERS = {
     "maxw": "maxw", "w": "w", "h": "h", "x": "x", "y": "y",

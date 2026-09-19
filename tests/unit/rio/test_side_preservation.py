@@ -353,14 +353,31 @@ async def test_a_real_frame_takes_the_board_back_from_a_reset():
 
 
 async def test_an_explicit_re_read_takes_the_board_back(monkeypatch):
-    P.hud_watcher = _FakeWatcher(_hud_frame())
-    monkeypatch.setattr(P, "ReloadHudPath", classmethod(lambda cls: _noop()))
-    monkeypatch.setattr(P, "_apply_game_to_state", classmethod(lambda cls, parsed: _dict()))
+    """Through the real re-read, applied ONCE: `FetchHUDGame` used to apply the
+    frame a second time on top of `ReloadHudPath`'s own apply."""
+    from pathlib import Path
+    import server.rio.provider as provider
+
+    hud = Path("/tmp/decoded.hud.json")
+    watcher = _FakeWatcher(_hud_frame())
+    watcher.hud_file = hud
+    watcher.reload = lambda: _value(_hud_frame())
+    P.hud_watcher = watcher
+    monkeypatch.setattr(provider, "get_user_hud_path", lambda: _value(hud))
+    applied = []
+    monkeypatch.setattr(P, "_apply_game_to_state", classmethod(
+        lambda cls, parsed: _record(applied, parsed)))
     monkeypatch.setattr(P, "_maybe_apply_hit", classmethod(lambda cls, g: _noop()))
 
     P.release_feed()
+    assert P._feed_released is True
     await P.FetchHUDGame()
     assert P._feed_released is False
+    assert len(applied) == 1
+
+
+async def _value(v):
+    return v
 
 
 async def _record(sink, parsed):

@@ -68,7 +68,7 @@ def _adopt_opaque_stroke(overlays: dict) -> bool:
     Changing the default alone would reach NEW INSTALLS ONLY. `_deep_merge`
     writes the whole settings dict back, so a default is persisted the moment
     anything else is saved and from then on is indistinguishable from a value
-    the producer chose (the same trap `loaded_display` is captured for) — every
+    the producer chose (the same trap `loaded_server` is captured for) — every
     existing install would keep 90% and the new default would be invisible.
 
     Exact match only, and every namespace under `overlays`: the global, each
@@ -671,13 +671,9 @@ class Settings:
     @classmethod
     async def Load(cls) -> dict:
         loaded_server: dict = {}
-        # The raw controller display block, captured for the same reason
-        # `loaded_server` is: once `_deep_merge` has run, a default is
-        # indistinguishable from a value the producer set to the same thing —
-        # and for `idle_fill_opacity` the default IS 0.0, the value a legacy
-        # `idle_fill: False` migrates to.
-        loaded_display: dict = {}
-        # Same reason again, for the v5 type-role split: after `_deep_merge` the
+        # Captured for the same reason as `loaded_server`: once `_deep_merge` has
+        # run, a default is indistinguishable from a value the producer set to
+        # the same thing. For the v5 type-role split: after `_deep_merge` the
         # three seeded faces are present on `global` whether or not the file
         # named them, so the only way to tell a producer's explicit `displayFont`
         # from the shipped one is to have looked before the merge.
@@ -691,10 +687,6 @@ class Settings:
                 )
                 file_existed = isinstance(loaded, dict)
                 loaded_server = (loaded.get("server") or {}) if isinstance(loaded, dict) else {}
-                loaded_display = (
-                    ((loaded.get("controller_overlay") or {}).get("display") or {})
-                    if isinstance(loaded, dict) else {}
-                )
                 loaded_overlays = (loaded.get("overlays") or {}) if isinstance(loaded, dict) else {}
                 cls.settings = _deep_merge(cls.settings, loaded)
         except Exception:

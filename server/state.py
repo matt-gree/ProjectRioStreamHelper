@@ -101,8 +101,9 @@ class State:
         return cls._program_state_out
 
     @classmethod
-    async def _is_export_enabled(cls) -> bool:
+    def _is_export_enabled(cls) -> bool:
         disable_export = Settings.Get("general.disable_export", True)
+        # May come in as a string ("1"/"") from query-param PUTs; coerce to bool.
         if isinstance(disable_export, str):
             disable_export = disable_export.strip().lower() not in ("", "0", "false", "no", "off")
         return not disable_export
@@ -115,7 +116,7 @@ class State:
         populate all files — regular Save() only writes diffs, which leaves
         unchanged keys as missing files.
         """
-        if not await cls._is_export_enabled():
+        if not cls._is_export_enabled():
             return
         for key, value in cls.state.items():
             await cls._create_files_dict(_safe_segment(key), value)
@@ -132,11 +133,7 @@ class State:
         # PERSIST_INTERVAL for why a write per change is not affordable.
         cls.MarkDirty()
 
-        disable_export = Settings.Get("general.disable_export", True)
-        # Setting may come in as a string ("1"/"") from query-param PUTs; coerce to bool.
-        if isinstance(disable_export, str):
-            disable_export = disable_export.strip().lower() not in ("", "0", "false", "no", "off")
-        if not disable_export:
+        if cls._is_export_enabled():
             for change in changes:
                 key = change["key"]
                 filename = "/".join(_safe_segment(p) for p in key.split("."))
@@ -429,23 +426,27 @@ class State:
         return deep_get(cls.state, key, default)
 
     @classmethod
-    async def _download_image(cls, url: str, dlpath: str):
+    async def _download_image(cls, url: str, dlpath: AsyncPath):
         try:
-            async with httpx.stream("GET", url, follow_redirects=True) as r:
-                if r.status_code == httpx.codes.OK:
-                    _out = AsyncPath(dlpath)
-                    async with _out.open(mode='wb') as f:
-                        async for data in r.iter_bytes():
-                            await f.write(data)
+            async with httpx.AsyncClient(follow_redirects=True) as client:
+                async with client.stream("GET", url) as r:
+                    if r.status_code == httpx.codes.OK:
+                        async with dlpath.open(mode='wb') as f:
+                            async for data in r.aiter_bytes():
+                                await f.write(data)
 
-                    if url.endswith(".jpg"):
-                        original = Image.open(str(dlpath))
-                        await asyncio.to_thread(
-                            original.save,
-                            dlpath.rsplit(".", 1)[0] + ".png",
-                            format="png"
-                        )
-                        await dlpath.unlink(missing_ok=True)
+            # A .jpg label is stored as .png. `dlpath` is an AsyncPath, so this
+            # used to call str methods on it and raise — every conversion failed
+            # into the log below and the .jpg stayed where it was.
+            if url.endswith(".jpg") and await dlpath.exists():
+                png = dlpath.with_suffix(".png")
+
+                def convert():
+                    with Image.open(str(dlpath)) as original:
+                        original.save(str(png), format="png")
+
+                await asyncio.to_thread(convert)
+                await dlpath.unlink(missing_ok=True)
         except Exception:
             logger.exception("unable to download image")
 

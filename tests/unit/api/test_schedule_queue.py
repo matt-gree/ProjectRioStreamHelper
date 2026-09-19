@@ -22,8 +22,6 @@ from server.api.v1.schedule import (
     dequeue_match,
     enqueue_match,
     move_queued_match,
-    update_schedule,
-    SchedulePayload,
 )
 from server.match import Match, default_match
 from server.schedule import Schedule
@@ -152,10 +150,9 @@ async def test_moving_does_not_drop_a_match_added_meanwhile():
 
     await move_queued_match(b, -1)
     assert Schedule.queue() == [b, a, c]
-
-    # And the shape of the bug, for contrast: replaying the stale list loses c.
-    await update_schedule(SchedulePayload(queue=stale))
-    assert c not in Schedule.queue()
+    # The list the client read is now missing a fixture — the reason there is no
+    # whole-list write any more.
+    assert c not in stale
 
 
 # --- the order vs the board binding ---

@@ -1,26 +1,6 @@
 // Mario Superstar Baseball character and team data
 // Source: ProjectRioStreamHelper/user_data/games/msb/base_files/config.json
 
-export const MSB_CHARACTERS = [
-  "Baby Luigi", "Baby Mario", "Birdo", "Boo", "Bowser", "Bowser Jr",
-  "Bro(H)", "Bro(F)", "Bro(B)",
-  "Daisy", "Diddy", "Dixie", "DK",
-  "Dry Bones(Gy)", "Dry Bones(G)", "Dry Bones(R)", "Dry Bones(B)",
-  "Goomba", "King Boo",
-  "Koopa(G)", "Koopa(R)",
-  "Luigi",
-  "Magikoopa(B)", "Magikoopa(R)", "Magikoopa(G)", "Magikoopa(Y)",
-  "Mario", "Monty",
-  "Noki(B)", "Noki(R)", "Noki(G)",
-  "Paragoomba", "Paratroopa(R)", "Paratroopa(G)",
-  "Peach", "Petey",
-  "Pianta(B)", "Pianta(R)", "Pianta(Y)",
-  "Shy Guy(R)", "Shy Guy(B)", "Shy Guy(Y)", "Shy Guy(G)", "Shy Guy(Bk)",
-  "Toad(R)", "Toad(B)", "Toad(Y)", "Toad(G)", "Toad(P)",
-  "Toadette", "Toadsworth",
-  "Waluigi", "Wario", "Yoshi",
-];
-
 export const MSB_CAPTAINS = [
   "Mario", "Luigi", "Peach", "Daisy", "Yoshi", "Birdo",
   "Wario", "Waluigi", "DK", "Diddy", "Bowser", "Bowser Jr",

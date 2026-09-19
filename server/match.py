@@ -266,9 +266,9 @@ class Match:
         picks, because an 18-hour-old frame still looked like a feed.
 
         The general turnover case (a game that ENDED this session, and the next
-        fixture going up over it) is not fixed here and should not be: `bind_board`
-        clears a stale board's game before it projects, so the projection that
-        follows sees no game at all. Removing the game is a truer answer than
+        fixture going up over it) is not fixed here and should not be: the take
+        (`bind_board(..., supersede=True)`) clears a stale board's game before it
+        projects, so the projection that follows sees no game at all. Removing the game is a truer answer than
         reasoning about whose it was.
         """
         if board_lifecycle(sb) == "restored":

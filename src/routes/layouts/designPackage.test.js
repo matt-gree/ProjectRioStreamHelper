@@ -2,10 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
     paintedByApp, appPaletteThemesAnything, packagePortColors, resolvePortColors, drawnTypeRoles, globalReach,
 } from './designPackage';
-import {
-    LAYOUT_SETTINGS, THEME_ELEMENT, DEFAULT_PORT_COLORS,
-    GLOBAL_DESIGN_KEYS, THEME_ONLY_GLOBAL_KEYS,
-} from './designConstants';
+import { LAYOUT_SETTINGS, THEME_ELEMENT, DEFAULT_PORT_COLORS } from './designConstants';
 
 // Shapes as the server reports them (server/design_packages.py _package_info).
 const DEFAULT = { id: 'default', elements: ['statscard', 'stats', 'callout'], appVarElements: [] };
@@ -105,27 +102,6 @@ describe('appPaletteThemesAnything', () => {
         expect(appPaletteThemesAnything(null, 'default')).toBe(true);        // still loading
         expect(appPaletteThemesAnything([], 'default')).toBe(true);          // no packages at all
         expect(appPaletteThemesAnything(PACKAGES, 'deleted-on-disk')).toBe(false); // falls back to default
-    });
-});
-
-describe('THEME_ONLY_GLOBAL_KEYS', () => {
-    it('names only real global design keys', () => {
-        for (const key of THEME_ONLY_GLOBAL_KEYS) {
-            expect(GLOBAL_DESIGN_KEYS).toContain(key);
-        }
-    });
-
-    /*
-     * These reach the Event Header and Player Name, which are plain DOM
-     * overlays with no theme SVG — their mounts call applyDesignSettings
-     * unconditionally. Listing one here would hide a control that is live under
-     * every package, which is the failure this whole mechanism is meant to avoid.
-     */
-    it('never claims a key an unthemed overlay reads', () => {
-        for (const key of ['accentColor', 'textColor', 'fontFamily', 'textShadowEnabled',
-            'textShadowBlur', 'textShadowColor', 'showCaptains', 'showLogo', 'designPackage']) {
-            expect(THEME_ONLY_GLOBAL_KEYS).not.toContain(key);
-        }
     });
 });
 

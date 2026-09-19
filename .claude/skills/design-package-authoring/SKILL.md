@@ -52,12 +52,12 @@ whether the palette still reaches *any* themed element
 (`appPaletteThemesAnything`), because one colour there reaches all of them at
 once — so under an all-full-art package (`default` included) Card Chrome and
 the card-surface colours are hidden outright. What survives every package is
-listed in `THEME_ONLY_GLOBAL_KEYS`' comment (`designConstants.js`) and is a
+listed in `UNTHEMED` beside `globalReach` (`designPackage.js`) and is a
 fact about the OVERLAYS, not a judgement: the Event Header and Player Name
 carry no theme SVG, so their mounts call `applyDesignSettings` unconditionally
 and always read `--accent`, `--text-primary` and `--text-shadow` (the three type
 roles reach every element on every package — see Type roles below); `showCaptains`/`showLogo` are `readSetting` content toggles,
-never CSS vars. Add a key to that list only after checking who reads it —
+never CSS vars. Add a reader to that table only after checking its mount —
 hiding a live control is the worse failure, which is why every unknown answers
 "show it".
 

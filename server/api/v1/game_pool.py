@@ -35,25 +35,6 @@ async def refresh_ongoing_games(session_id: str | None = None) -> ORJSONResponse
     return ORJSONResponse({"success": True, "count": len(OngoingGamePool.games)})
 
 
-@method(
-    router.post, "/game-pool/ongoing/auto-poll",
-    version="1", id="game_pool.ongoing.auto_poll",
-    response_class=ORJSONResponse
-)
-async def set_ongoing_auto_poll(
-    enabled: bool = False,
-    interval: float | None = None,
-    session_id: str | None = None,
-) -> ORJSONResponse:
-    """Enable or disable auto-polling for ongoing games."""
-    await OngoingGamePool.set_auto_poll(enabled, interval)
-    return ORJSONResponse({
-        "success": True,
-        "auto_poll": enabled,
-        "interval": interval or OngoingGamePool._poll_interval,
-    })
-
-
 # --- Completed games ---
 
 @method(
@@ -221,15 +202,3 @@ async def assign_game(
         raise HTTPException(status_code=404, detail="Game not found in any pool")
 
     return ORJSONResponse({"success": success})
-
-
-# --- Backward compatibility: /game-pool still lists ongoing ---
-
-@method(
-    router.get, "/game-pool",
-    version="1", id="game_pool.list",
-    response_class=ORJSONResponse
-)
-async def list_games_compat(session_id: str | None = None) -> ORJSONResponse:
-    """List ongoing games (backward compatibility)."""
-    return ORJSONResponse(OngoingGamePool.list_games())

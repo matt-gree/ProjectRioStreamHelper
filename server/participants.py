@@ -575,10 +575,6 @@ class Participants:
         return out
 
     @classmethod
-    def GetBook(cls, bid: str) -> dict | None:
-        return cls.books.get(bid)
-
-    @classmethod
     async def CreateBook(cls, partial: dict | None = None) -> dict:
         partial = partial or {}
         bid = _new_id("b_")

@@ -290,3 +290,51 @@ describe('SocketProvider handshake window', () => {
         expect(useStateStore.getState().getItem('score.1.inning')).toBeUndefined();
     });
 });
+
+describe('SocketProvider reconnect', () => {
+    /*
+     * socket.io reconnects on its own after PRSH restarts or the network drops,
+     * and whatever was pushed during the gap never arrives. The console used to
+     * snapshot once per mount, so it went on drawing pre-restart state —
+     * including keys the server had removed — until the page was reloaded.
+     */
+    it('re-snapshots state on reconnect and drops keys the server no longer has', async () => {
+        h.socket.rpc['v1.state.get'] = { score: { 1: { match: 4, inning: 2 } } };
+        await renderProvider();
+        expect(useStateStore.getState().getItem('score.1.match')).toBe(4);
+
+        // While disconnected, the board was unbound and the game moved on.
+        h.socket.rpc['v1.state.get'] = { score: { 1: { inning: 6 } } };
+        h.socket.server('connect');
+
+        await waitFor(() =>
+            expect(useStateStore.getState().getItem('score.1.inning')).toBe(6));
+        expect(useStateStore.getState().getItem('score.1.match')).toBeUndefined();
+        expect(useStateStore.getState().loaded).toBe(true);
+    });
+
+    it('keeps pushes that land while the reconnect snapshot is in flight', async () => {
+        await renderProvider();
+        h.socket.defer.add('v1.state.get');
+        h.socket.server('connect');
+
+        h.socket.server('v1.state.set', { key: 'score.1.batter', value: 'Mario' });
+        h.socket.resolve('v1.state.get', { score: { 1: { batter: '' } } });
+
+        await waitFor(() =>
+            expect(useStateStore.getState().getItem('score.1.batter')).toBe('Mario'));
+    });
+
+    it('re-snapshots settings on reconnect', async () => {
+        h.socket.rpc['v1.settings.get'] = { obs: { port: 4455 }, gone: 1 };
+        await renderProvider();
+        await waitFor(() => expect(useSettingsStore.getState().getItem('gone')).toBe(1));
+
+        h.socket.rpc['v1.settings.get'] = { obs: { port: 4460 } };
+        h.socket.server('connect');
+
+        await waitFor(() =>
+            expect(useSettingsStore.getState().getItem('obs.port')).toBe(4460));
+        expect(useSettingsStore.getState().getItem('gone')).toBeUndefined();
+    });
+});

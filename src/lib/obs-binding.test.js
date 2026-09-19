@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { paramsMatch, urlsMatch, bindingForUrl } from './obs-binding';
+import { paramsMatch, urlsMatch } from './obs-binding';
 
 /*
  * This module answers "is this overlay already a source in OBS, and where?" for
@@ -81,69 +81,5 @@ describe('paramsMatch — same instance', () => {
     it('says nothing about WHICH overlay — that is urlsMatch\'s job', () => {
         expect(paramsMatch(`${P}/layout/a.html?team=1`, `${P}/layout/b.html?team=1`)).toBe(true);
         expect(urlsMatch(`${P}/layout/a.html?team=1`, `${P}/layout/b.html?team=1`)).toBe(false);
-    });
-});
-
-describe('bindingForUrl', () => {
-    const url = '/layout/scoreboard1/scoreboard.html';
-    const item = (sourceName, u, enabled = true) => ({ sourceName, url: u, enabled });
-
-    it('reports live when the source is in the program scene', () => {
-        const b = bindingForUrl(url, {
-            sceneItems: { Main: [item('Board', `${P}${url}`)] },
-            programScene: 'Main', previewScene: 'Staging',
-        });
-        expect(b.state).toBe('live');
-        expect(b.sourceName).toBe('Board');
-    });
-
-    it('program wins when the same overlay is in both scenes', () => {
-        const b = bindingForUrl(url, {
-            sceneItems: {
-                Staging: [item('Preview copy', `${P}${url}`)],
-                Main: [item('Program copy', `${P}${url}`)],
-            },
-            programScene: 'Main', previewScene: 'Staging',
-        });
-        expect(b.state).toBe('live');
-        expect(b.sourceName).toBe('Program copy');
-        expect(b.matches).toHaveLength(2);
-    });
-
-    it('reports preview when it is only staged', () => {
-        const b = bindingForUrl(url, {
-            sceneItems: { Staging: [item('Board', `${P}${url}`)] },
-            programScene: 'Main', previewScene: 'Staging',
-        });
-        expect(b.state).toBe('preview');
-    });
-
-    it('is absent when nothing matches, and never returns a bare undefined', () => {
-        const b = bindingForUrl(url, {
-            sceneItems: { Main: [item('Cam', 'rtmp://camera')] },
-            programScene: 'Main',
-        });
-        expect(b.state).toBe('absent');
-        expect(b.matches).toEqual([]);
-    });
-
-    it('picks the board it was asked for, not the first source in the scene', () => {
-        const b = bindingForUrl(`${url}?scoreboard=2`, {
-            sceneItems: {
-                Main: [
-                    item('Board 1', `${P}${url}?scoreboard=1`),
-                    item('Board 2', `${P}${url}?scoreboard=2`),
-                ],
-            },
-            programScene: 'Main',
-        });
-        expect(b.sourceName).toBe('Board 2');
-        expect(b.matches).toHaveLength(1);
-    });
-
-    it('survives an untracked scene and a null-url item', () => {
-        expect(() => bindingForUrl(url, {
-            sceneItems: { Other: [{ sourceName: 'x' }, null] },
-        })).not.toThrow();
     });
 });

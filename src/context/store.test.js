@@ -70,9 +70,16 @@ describe('state store mutations', () => {
         expect(typeof st().setItem).toBe('function');   // actions survive replace
     });
 
-    it('mergeItems merges a server snapshot', () => {
-        st().mergeItems({ score: { 1: { inning: 7 } } });
+    it('replaceItems replaces the data with a server snapshot', () => {
+        st().setItem('stale', 1, false);
+        st().setLoaded(true);
+        st().replaceItems({ score: { 1: { inning: 7 } } });
         expect(st().getItem('score.1.inning')).toBe(7);
+        // A key the snapshot no longer has is gone — a merge would have kept it.
+        expect(st().getItem('stale')).toBeUndefined();
+        // The store's own members are not data.
+        expect(st().loaded).toBe(true);
+        expect(typeof st().setItem).toBe('function');
     });
 });
 

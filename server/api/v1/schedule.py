@@ -28,9 +28,10 @@ router = APIRouter(prefix="/schedule", tags=["schedule"])
 
 
 class SchedulePayload(BaseModel):
-    """Partial update: only the fields present are applied."""
+    """The schedule overlay's heading. Order and membership are the per-id
+    verbs below — a whole-list write drops whatever was added between the
+    client's read and its PUT."""
 
-    queue: list[int] | None = None
     title: str | None = None
 
 
@@ -68,11 +69,7 @@ async def get_schedule():
 
 @router.put("", response_class=ORJSONResponse)
 async def update_schedule(payload: SchedulePayload):
-    """Replace the FIRST queue's order (validated against existing matches)
-    and/or its title. The legacy single-queue shape; per-id verbs below are what
-    the UI uses."""
-    if payload.queue is not None:
-        await Schedule.set_queue(payload.queue)
+    """Set the schedule overlay's heading."""
     if payload.title is not None:
         # The OVERLAY's heading, not any order's title — see
         # Schedule.ensure_migrated for why those must stay separate.
