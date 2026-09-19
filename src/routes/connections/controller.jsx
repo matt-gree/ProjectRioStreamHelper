@@ -22,9 +22,9 @@ import { BusyButton, ConnCard, FieldLabel, Section, StatusPill, ToggleRow } from
  * on the Controller element's stage body, which meant you could not start the
  * subprocess until you had already added an OBS source for it — you created the
  * source for a reader that wasn't running, to reach the button that runs it.
- * Backwards, and invisible until you hit it. The element's panel keeps what is
- * genuinely about the BROADCAST (the per-side follow URLs) and states the status
- * read-only; one owner for the lifecycle, no second copy to disagree.
+ * Backwards, and invisible until you hit it. The element's panel states the
+ * status read-only (its source's own link is the header's Copy URL); one owner
+ * for the lifecycle, no second copy to disagree.
  *
  * THE PREVIEWS are the point of this card. gc-overlay draws a physical pad, so
  * the only way to know the chain works — reader up, pad plugged in, right port —

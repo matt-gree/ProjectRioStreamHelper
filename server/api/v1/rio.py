@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import ORJSONResponse
 from server.rio.provider import RioGameDataProvider, get_default_hud_file_path, get_user_hud_path
 from server.settings import Settings
+from server.state import State
 
 router = APIRouter()
 
@@ -47,7 +48,8 @@ async def rio_release(session_id: str | None = None) -> ORJSONResponse:
     manual swap after a reset resurrected the whole game, because the swap
     re-orients the last frame (see RioGameDataProvider._feed_released).
     """
-    RioGameDataProvider.release_feed()
+    await State.SetBatch(RioGameDataProvider.release_feed())
+    await State.Save()
     return ORJSONResponse({"success": True, "released": True})
 
 

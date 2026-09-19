@@ -165,9 +165,12 @@ existed — you built a source for a reader that wasn't running in order to reac
 the button that runs it.
 
 The element's stage body (`src/routes/production/stage/controller.jsx`) keeps
-only what is about the BROADCAST: the two per-side follow URLs, plus a read-only
-status line linking to Connections. **Don't add a second Start there** — one
-owner for the lifecycle is the whole point of the split.
+only a read-only status line linking to Connections. **Don't add a second Start
+there** — one owner for the lifecycle is the whole point of the split. **Nor a
+list of per-side URLs**: the panel is ONE source that already names its side, so
+the header's Copy URL is its link and the Add picker offers both sides — a
+"Side 1 Copy · Side 2 Copy" list on a Side 1 panel read as though one source
+needed two links (removed 2026-09-18).
 
 `controller` is a registered Production element, offered by the Add picker on
 every platform. If gc-overlay isn't installed the source simply draws its

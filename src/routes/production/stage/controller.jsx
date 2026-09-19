@@ -1,12 +1,7 @@
 import { memo, useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Copy, Check } from 'lucide-react';
 import { Text, Loader } from '../../../components/ui/primitives';
-import { Button } from '../../../components/ui/button';
-import { CopyButton } from '../../../components/ui/copy-button';
 import { DirectStage } from './generic';
-import { useSideLabels } from '../sides';
-import { KIT_SECTION } from '../kit';
 
 /*
  * Controller stage — what is true of this element ON THE BROADCAST.
@@ -18,34 +13,18 @@ import { KIT_SECTION } from '../kit';
  * for a process that wasn't running in order to reach the button that runs it.
  * One owner for the lifecycle; this panel states the status and links to it.
  *
- * What stays is the wiring a producer does while building a scene: the two
- * per-side follow URLs. They are PRSH-served layouts, so they are copyable
- * whether or not the reader is up — `?team=1|2` iframes gc-overlay at
- * score.{N}.player.{T}.port, so a source tracks whoever is on that side even
- * when Rio reassigns away/home. Host-qualified from the address this browser
- * reached PRSH on, which is the address OBS should use too.
+ * NO URLS HERE. This panel is ONE source, and that source already names its
+ * side (`?team=`): the header's Copy URL copies exactly it, and the Add picker
+ * offers both sides. A "Per-side follow · Side 1 Copy · Side 2 Copy" list on a
+ * Side 1 panel was the pre-source-strip way of handing out URLs, and it read as
+ * though one source needed two links. What follow MEANS — the source iframes
+ * gc-overlay at score.{N}.player.{T}.port, so it tracks whoever is on that side
+ * even when Rio reassigns away/home — is the element's behaviour, not a control.
  *
  * Offered on every platform — gc-overlay 1.1.0 carries a Dolphin transport for
  * each. When the reader isn't installed this body says so rather than being
  * unreachable, which is how a producer discovers there is something to install.
  */
-
-// A url + a copy button, kit-row shaped.
-const UrlRow = memo(function UrlRow({ label, url }) {
-    return (
-        <div className="flex items-center justify-between gap-2">
-            <Text size="xs" span truncate className="min-w-0 flex-1 text-foreground">{label}</Text>
-            <CopyButton value={url}>
-                {({ copied, copy }) => (
-                    <Button variant="ghost" size="xs" className={copied ? 'text-[#14b8a6]' : ''} onClick={copy}>
-                        {copied ? <Check size={13} className="mr-1" /> : <Copy size={13} className="mr-1" />}
-                        {copied ? 'Copied' : 'Copy'}
-                    </Button>
-                )}
-            </CopyButton>
-        </div>
-    );
-});
 
 export default function ControllerStage({ element, placement }) {
     return (
@@ -57,7 +36,6 @@ export default function ControllerStage({ element, placement }) {
 }
 
 const ControllerContent = memo(function ControllerContent() {
-    const sides = useSideLabels();
     const [status, setStatus] = useState(null);
 
     const fetchStatus = useCallback(async () => {
@@ -74,45 +52,28 @@ const ControllerContent = memo(function ControllerContent() {
     if (!status.available) {
         return (
             <Text size="xs" className="text-muted-foreground">
-                The controller reader isn’t installed — it needs the gc-overlay
-                repository beside this project, or a folder set on the{' '}
+                The controller reader wasn’t found — it ships with PRSH, and a
+                source checkout needs the gc-overlay submodule. See the{' '}
                 <Link to="/connections" className="underline hover:text-foreground">Connections</Link> tab.
             </Text>
         );
     }
 
-    const origin = window.location.origin;
-
+    // Read-only. The one control is on Connections, so this says which way the
+    // reader is pointing and gets out of the way — a second Start button here
+    // is the duplication the move existed to end.
     return (
-        <div className="flex flex-col gap-2">
-            {/* Read-only. The one control is on Connections, so this says which
-                way the reader is pointing and gets out of the way — a second
-                Start button here is the duplication the move existed to end. */}
-            <div className="flex items-center gap-2">
-                <span
-                    className="size-2 rounded-full"
-                    style={{ backgroundColor: status.running ? '#22c55e' : '#6b7280' }}
-                />
-                <Text size="xs" className="text-muted-foreground">
-                    {status.running
-                        ? `Reader running on port ${status.port}.`
-                        : 'Reader stopped — these sources will be blank.'}{' '}
-                    <Link to="/connections" className="underline hover:text-foreground">Connections</Link>
-                </Text>
-            </div>
-
-            <div className={KIT_SECTION}>
-                <Text size="xs" className="label-display text-muted-foreground">Per-side follow</Text>
-                {[1, 2].map(side => (
-                    <UrlRow
-                        key={side} label={sides.label(side)}
-                        url={`${origin}/layout/controller/controller.html?team=${side}`}
-                    />
-                ))}
-                <Text size="xs" className="text-muted-foreground">
-                    Tracks whoever is on that side — follows the port even when Rio swaps away/home.
-                </Text>
-            </div>
+        <div className="flex items-center gap-2">
+            <span
+                className="size-2 rounded-full"
+                style={{ backgroundColor: status.running ? '#22c55e' : '#6b7280' }}
+            />
+            <Text size="xs" className="text-muted-foreground">
+                {status.running
+                    ? `Reader running on port ${status.port}.`
+                    : 'Reader stopped — this source will be blank.'}{' '}
+                <Link to="/connections" className="underline hover:text-foreground">Connections</Link>
+            </Text>
         </div>
     );
 });

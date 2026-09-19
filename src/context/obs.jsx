@@ -2,6 +2,8 @@ import { useEffect } from 'react';
 import { create } from 'zustand';
 import OBSWebSocket, { EventSubscription } from 'obs-websocket-js';
 import { useSettingsStore } from './store';
+import { renameForUrl, upgradeRetiredName } from '../routes/production/sourcename';
+import { notifications } from '../lib/notify';
 import {
     renderedSize, sizeMatchTransform, redrawPlan, rescaleForSource, isCropped, stretchOf,
     inputSize, sameInputSize,
@@ -497,6 +499,23 @@ export const useObsStore = create((set) => ({
         return { inputName: name, sceneName: scene, enabled };
     },
 
+    /*
+     * Point an existing browser source at a different URL — the console's
+     * board switch (`?scoreboard=N`). An OBS input is GLOBAL, so this re-points
+     * the source in every scene that draws it; the caller says so. The NAME is
+     * not this action's: the InputSettingsChanged echo renames a PRSH-named
+     * source for any URL change, this one included (followUrlWithName).
+     */
+    repointBrowserSource: async ({ sourceName, url }) => {
+        if (!obs) throw new Error('Not connected to OBS');
+        await obs.call('SetInputSettings', {
+            inputName: sourceName,
+            inputSettings: { url },
+            overlay: true,
+        });
+        return { sourceName };
+    },
+
     // Flip the intro animation on every live PRSH browser source that serves a
     // given layout (matched by URL path, so all size/team/scoreboard variants of
     // it are covered). Rewrites each source's `?intro=` param AND its shutdown
@@ -594,6 +613,8 @@ export const useObsStore = create((set) => ({
             reconnectAttempts = 0;
             set({ status: 'connected', error: null, obsVersion: obsWebSocketVersion });
             await refreshAll(myGen);
+            // Background: a rename pass must never hold up the console coming up.
+            upgradeRetiredNames(myGen);
         } catch (e) {
             // A timed-out handshake leaves a socket still trying: drop it so it
             // can't land later behind the store's back. Events are already
@@ -890,10 +911,27 @@ function wireEvents(client, gen) {
         reconcileShutdown(inputName, settings);
         const url = settings.url || null;
         const isPrsh = isPrshUrl(url, gcPort());
+        followUrlWithName(inputName, url);
         useObsStore.setState(state => ({
             sceneItems: Object.fromEntries(Object.entries(state.sceneItems).map(([scene, items]) => [
                 scene,
                 items.map(it => (it.sourceName === inputName ? { ...it, url, isPrsh } : it)),
+            ])),
+        }));
+    });
+
+    // A rename — ours (the board switch) or the producer's in OBS — moves the
+    // cached settings and every mirrored item to the new name, or the rack keeps
+    // a row for a source OBS no longer has by that name.
+    client.on('InputNameChanged', ({ oldInputName, inputName }) => {
+        if (!alive()) return;
+        const hit = inputCache.get(oldInputName);
+        inputCache.delete(oldInputName);
+        if (hit) inputCache.set(inputName, hit);
+        useObsStore.setState(state => ({
+            sceneItems: Object.fromEntries(Object.entries(state.sceneItems).map(([scene, items]) => [
+                scene,
+                items.map(it => (it.sourceName === oldInputName ? { ...it, sourceName: inputName } : it)),
             ])),
         }));
     });
@@ -903,6 +941,80 @@ function wireEvents(client, gen) {
     client.on('InputRemoved', ({ inputName }) => {
         if (alive()) inputCache.delete(inputName);
     });
+}
+
+/*
+ * A source's NAME follows its URL — when PRSH named it.
+ *
+ * The URL is what a source reads; the name is only what OBS lists it as. When a
+ * board switch or a producer's own edit in OBS Properties changes the URL, a
+ * name PRSH gave it ("Stat Bar — Side 1 (Board 1)") would go on describing the
+ * old one. So a name that is one PRSH gives the OLD url is rewritten to the one
+ * it gives the new url; anything else is the producer's and is never touched
+ * (../routes/production/sourcename). Every PRSH console receives the event, so a
+ * second one's rename finds the old name gone and is dropped.
+ */
+function followUrlWithName(inputName, url) {
+    if (!url || !isPrshUrl(url, gcPort())) return;
+    const items = Object.values(useObsStore.getState().sceneItems).flat();
+    const before = items.find(it => it.sourceName === inputName)?.url;
+    const settings = useSettingsStore.getState() || {};
+    const active = settings?.scoreboards?.active;
+    const next = renameForUrl(inputName, before, url, {
+        boards: Array.isArray(active) && active.length ? active : [1],
+        mode: settings?.production?.side_labels,
+    });
+    if (!next) return;
+    obs?.call('SetInputName', { inputName, newInputName: next })
+        .catch(() => { /* name taken, or another console got there first */ });
+}
+
+/*
+ * THE ONE-TIME RENAME PASS — every PRSH browser source still wearing a name in a
+ * retired form ("Stat Bar — Side 1 1", "Scoreboard Small 2") gets today's
+ * ("Stat Bar — Side 1 (Board 1)"). See `upgradeRetiredName`.
+ *
+ * Runs on every connect, and that is what "one-time" means here: it only ever
+ * matches a retired form, so after the first pass there is nothing left for it
+ * to do and a name the producer typed is never a candidate. ALL inputs, not the
+ * mirrored scenes — a source in a scene nobody has expanded is exactly the one
+ * that would otherwise keep its old name forever. One toast, only when
+ * something moved.
+ */
+async function upgradeRetiredNames(gen) {
+    if (!obs) return;
+    let inputs;
+    try {
+        ({ inputs } = await obs.call('GetInputList', { inputKind: 'browser_source' }));
+    } catch {
+        return;
+    }
+    const settings = useSettingsStore.getState() || {};
+    const active = settings?.scoreboards?.active;
+    const ctx = {
+        boards: Array.isArray(active) && active.length ? active : [1],
+        mode: settings?.production?.side_labels,
+    };
+    let renamed = 0;
+    for (const { inputName } of inputs || []) {
+        if (gen !== generation) return;
+        const url = (await inputSettingsFor(inputName, gen))?.url;
+        if (!url || !isPrshUrl(url, gcPort())) continue;
+        const next = upgradeRetiredName(inputName, url, ctx);
+        if (!next) continue;
+        try {
+            // InputNameChanged moves the mirror and the settings cache.
+            await obs.call('SetInputName', { inputName, newInputName: next });
+            renamed++;
+        } catch { /* the new name is taken — leave this one as it is */ }
+    }
+    if (renamed && gen === generation) {
+        notifications.show({
+            color: 'green',
+            message: `Renamed ${renamed} PRSH source${renamed === 1 ? '' : 's'} in OBS to name `
+                + 'the side and board plainly — e.g. “Stat Bar — Side 1 (Board 2)”.',
+        });
+    }
 }
 
 function scheduleReconnect() {

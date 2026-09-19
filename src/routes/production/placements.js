@@ -3,7 +3,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useObsStore } from '../../context/obs';
 import { useStateStore } from '../../context/store';
 import { boardOfUrl } from '../../lib/obs-binding';
-import { ELEMENTS } from './elements';
+import { ELEMENTS, readsBoard } from './elements';
 import {
     CONTAINER_MEMBERS, containerOfSource, fedTargets, useContainerDefs,
 } from './containers';
@@ -232,7 +232,10 @@ export function placementsInScene({ scene, where, items = [] }, feeds = {}, defs
         // A direct element owns its source outright.
         const direct = DIRECT_ELEMENTS.find(el => el.match(url));
         if (direct) {
-            const board = direct.scope === 'board' ? boardOfUrl(url) : null;
+            // Every source that NAMES a board carries it — not only the
+            // board-scoped elements — or a board-1 and a board-2 Stat Bar on
+            // the same side are one id in one scene (see readsBoard).
+            const board = readsBoard(direct) ? boardOfUrl(url) : null;
             const variant = variantOf(url);
             const instance = instanceId(direct, board, url);
             out.push({
@@ -704,7 +707,13 @@ export function resolvePlacement(id, placements, defs = null) {
     // 'scoreboard@Break' means the Break copy, and answering with the program
     // one would hand the producer a card that flies the wrong scene.
     const inScene = scene ? pool.filter(p => p.scene === scene) : [];
-    const candidates = inScene.length ? inScene : pool;
+    const scoped = inScene.length ? inScene : pool;
+    // Then the same VARIANT: a stale id that said side 2 still means side 2.
+    // Without this a `statsbar~t2` pin written before board-reading sources
+    // carried their board resolved to whichever side OBS listed first.
+    const wanted = parseInstanceId(instance).variant ?? '';
+    const sameVariant = scoped.filter(p => (p.variant || '') === wanted);
+    const candidates = sameVariant.length ? sameVariant : scoped;
     return candidates.slice()
         .sort((a, b) => (ROLE_RANK[a.where] ?? 9) - (ROLE_RANK[b.where] ?? 9)
             /*

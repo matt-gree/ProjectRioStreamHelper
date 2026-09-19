@@ -301,6 +301,46 @@ async def test_a_restored_board_is_not_treated_as_a_live_feed():
 
 
 @pytest.mark.asyncio
+async def test_a_restored_roster_keeps_its_captain_slot():
+    """The restored narrowing is for names and ports, never the roster.
+
+    Binding a fixture with no captain over last night's game blanked slot 0 and
+    the captain index of a real nine — a hole on air, on both sides. With a
+    captain picked it spliced tonight's captain onto last night's team. The
+    projector only ever writes slot 0, so a roster beyond it is the feed's.
+    """
+    roster = [(f"score.1.player.1.character.{i}.name", n)
+              for i, n in enumerate(["Peach", "Bowser", "Wario", "Yoshi"])]
+    await State.SetBatch([
+        ("score.1.game_id", "yesterday"),
+        ("score.1.restored", True),
+        ("score.1.player.1.rioName", "Alice"),
+        ("score.1.player.1.rio_captainIndex", 0),
+        *roster,
+    ])
+    for captain in ("", "Birdo"):
+        m = await make_match(captain=captain)
+        await Match.project_scoreboard(1, m)
+        assert deep_get(State.state, "score.1.player.1.character.0.name") == "Peach"
+        assert deep_get(State.state, "score.1.player.1.rio_captainIndex") == 0
+    # ...and unbinding leaves it too.
+    await Match.project_scoreboard(1, None)
+    assert deep_get(State.state, "score.1.player.1.character.0.name") == "Peach"
+
+
+@pytest.mark.asyncio
+async def test_a_captain_pick_still_lands_on_a_board_with_no_roster():
+    """The other half: an emptied board is where the stand-in belongs."""
+    await State.SetBatch([("score.1.restored", True)])
+    m = await make_match(captain="Birdo")
+    await Match.project_scoreboard(1, m)
+    assert deep_get(State.state, "score.1.player.1.character.0.name") == "Birdo"
+    assert deep_get(State.state, "score.1.player.1.rio_captainIndex") == 0
+    await Match.project_scoreboard(1, None)
+    assert deep_get(State.state, "score.1.player.1.character.0.name") == ""
+
+
+@pytest.mark.asyncio
 async def test_a_game_still_being_shown_outranks_the_picks():
     """The other half of the same rule, so neither can be widened alone.
 

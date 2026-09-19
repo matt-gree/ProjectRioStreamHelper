@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Search, Copy, Check, X, Eye } from 'lucide-react';
 import { useMirrorScene, useObsStore } from '../../context/obs';
+import { useStateStore } from '../../context/store';
 import { urlsMatch } from '../../lib/obs-binding';
 import { CopyButton } from '../../components/ui/copy-button';
 import {
@@ -13,7 +14,8 @@ import { SimpleTooltip } from '../../components/ui/simple-tooltip';
 import ScaledIframe from '../../components/ScaledIframe';
 import { cn } from '../../lib/utils';
 import { notifications } from '../../lib/notify';
-import { ELEMENTS } from './elements';
+import { ELEMENTS, readsBoard } from './elements';
+import { withBoard } from './sourcename';
 import { sideLabel, useSideLabels } from './sides';
 import { useActiveBoards, useBoardLabel } from './boards';
 import {
@@ -84,21 +86,20 @@ import {
 /*
  * Which catalog rows take a `?scoreboard=N`, and therefore get a board step.
  *
- * Deliberately derived from the two places that already answer this rather than
- * a third hand-written list: the `scoreboard1` group (what Setup's board tabs
- * qualify — layouts.jsx sets the param for `mode === 'scoreboard'`) and the
- * `scope: 'board'` elements in the registry (what the console's own instance
- * identity is built on). Their union is scoreboard1/*, scorecard and
- * hitvisualizer. Everything else is added board-less, which is exactly what
- * Setup does today — so the picker makes no new claim about any layout.
+ * Every layout whose overlay READS the param — `readsBoard` in the registry,
+ * the same answer the stage's Board row gives, so a source the picker adds
+ * board-less is never one the panel then offers to re-point (or the reverse).
+ * The `scoreboard1` group stays in the union for a catalog row the registry
+ * has not caught up with. Matched by layout type AND by url, because two of
+ * them are named differently in the two places (the post-game callouts are
+ * `spotlight`/`summary` in the catalog).
  */
-const BOARD_SCOPED_TYPES = new Set(
-    ELEMENTS.filter(el => el.scope === 'board').map(el => el.id),
-);
+const BOARD_READERS = ELEMENTS.filter(readsBoard);
 
 export function isBoardScoped(layout) {
     if (!layout) return false;
-    return layout.group === 'scoreboard1' || BOARD_SCOPED_TYPES.has(layout.type);
+    if (layout.group === 'scoreboard1') return true;
+    return BOARD_READERS.some(el => el.id === layout.type || el.match(layout.url ?? ''));
 }
 
 // The overlay's URL, with the chosen board written in. Origin is left as the
@@ -132,13 +133,19 @@ export function overlayUrl(layout, board) {
  * Resolved against this origin and returned path-only, so a dual-machine rig's
  * host-qualified catalog URL still loads in the producer's own browser.
  */
-export function pickerPreviewUrl(layout, board) {
+export function pickerPreviewUrl(layout, board, { live = false } = {}) {
     const base = overlayUrl(layout, board);
     if (!base) return null;
     try {
         const u = new URL(base, window.location.origin);
         u.searchParams.set('preview', '1');
-        u.searchParams.set('sample', '1');
+        // LIVE when the board has a game on it. The sample bundle replaces the
+        // whole store, so it can only ever draw the bundle's own teams — never
+        // the producer's league logos, their Address Book names, or their MSB
+        // asset pack's art for tonight's teams. A producer adding a Stat Bar to a
+        // board that holds a game is asking what THAT will look like, so the
+        // sample is the fallback for an empty board, not the default.
+        if (!live) u.searchParams.set('sample', '1');
         return `${u.pathname}${u.search}`;
     } catch {
         return null;
@@ -184,9 +191,7 @@ export const pickKey = (layout, board) => `${layout?.url ?? ''}|${board ?? ''}`;
  */
 export function addName(layout, board, boards, mode) {
     const base = layout ? rowLabel(layout, mode) : 'PRSH Overlay';
-    return isBoardScoped(layout) && board != null && boards.length > 1
-        ? `${base} ${board}`
-        : base;
+    return isBoardScoped(layout) ? withBoard(base, board, boards) : base;
 }
 
 // The layout catalog, fetched once per open. Rows are already one-per-variant.
@@ -312,8 +317,15 @@ const PickerPreview = memo(function PickerPreview({
         setFit(prev => (prev && prev.w === f.w && prev.scale === f.scale ? prev : f));
     }, []);
 
-    const src = layout ? pickerPreviewUrl(layout, board) : null;
-    const askBoards = !!layout && isBoardScoped(layout) && boards.length > 1;
+    const boardScoped = !!layout && isBoardScoped(layout);
+    // Whether the board this previews has a game to show (see pickerPreviewUrl).
+    const live = useStateStore(s => {
+        if (!boardScoped) return false;
+        const p = s?.score?.[board ?? 1]?.player;
+        return !!(p?.[1]?.rioName || p?.[2]?.rioName);
+    });
+    const src = layout ? pickerPreviewUrl(layout, board, { live }) : null;
+    const askBoards = boardScoped && boards.length > 1;
     const detail = askBoards && board != null ? ` · ${boardLabel(board)}` : '';
 
     return (
@@ -322,6 +334,16 @@ const PickerPreview = memo(function PickerPreview({
                 <Text size="xs" span truncate className="min-w-0 flex-1 text-foreground">
                     {layout ? `${rowLabel(layout, mode)}${detail}` : 'Preview'}
                 </Text>
+                {layout && (
+                    <SimpleTooltip label={live
+                        ? 'Drawing the game on this board right now — your logos and names included'
+                        : 'No game on this board, so the preview draws sample data'}
+                    >
+                        <Text size="xs" span dimmed className="shrink-0">
+                            {live ? 'live' : 'sample'}
+                        </Text>
+                    </SimpleTooltip>
+                )}
                 {layout && fit && (
                     <SimpleTooltip label="Source size in OBS, and how far down the preview is scaled">
                         <Text size="xs" span dimmed className="tabular-nums">

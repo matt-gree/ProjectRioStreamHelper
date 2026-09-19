@@ -16,6 +16,7 @@ from server.api import router_v1
 from server.bindings import get_binding
 from server.match import Match, default_match
 from server.postgame import PostGame
+from server.rio.provider import RioGameDataProvider
 from server.settings import Settings
 from server.state import State
 from server.utils.deep_dict import deep_get
@@ -379,15 +380,8 @@ def test_name_override_rejects_bad_team(client, no_stats_fetch):
 # POST /scoreboards/{sb}/clear-game — the between-games verb
 # ---------------------------------------------------------------------------
 
-def test_clear_game_blanks_the_board_and_keeps_the_capture(client):
-    """It clears a GAME, not a board.
-
-    The captured box score is a different broadcast surface (the Game Summary and
-    Character Spotlight draw it) and the thing most likely to be on air while the
-    next fixture is prepped, so it survives and keeps its own Clear on the
-    post-game region — dropping it here would be the irreversible half of a verb
-    whose reversible half is what was asked for.
-    """
+def test_clear_game_blanks_the_board(client):
+    """It clears a GAME, not a board."""
     State.state.setdefault("score", {})["1"] = {
         "game_id": "123", "score_left": 7, "inning": 6, "stadium": "Mario Stadium",
     }
@@ -487,17 +481,64 @@ def test_a_release_on_an_unbound_board_is_a_plain_clear(client):
     assert deep_get(State.state, "score.1.game_id") is None
 
 
-def test_clear_game_never_drops_the_capture_even_when_releasing(client):
-    """A Bo1 decides the moment it is captured, so the release fires at exactly
-    the moment its Game Summary is most likely to be on air."""
-    asyncio.run(State.Set("postgame.1", {"present": True, "gameId": "123"}))
+@pytest.mark.parametrize("release", ["false", "true"])
+def test_clear_game_takes_the_capture_with_it(client, release):
+    """A capture is the cleared game's receipt. Kept, it went on driving the Game
+    Summary and Spotlight and read CAPTURED beside a board that no longer held
+    the game it described (user call, 2026-09-18). Both modes."""
+    asyncio.run(State.SetBatch(PostGame._project_entries(1, _PG_PAYLOAD)))
+    PostGame._captured[1] = dict(_PG_PAYLOAD)
     asyncio.run(State.Set("match.1", {"format": {"bestOf": 1}, "decided": 1}))
     asyncio.run(State.Set("score.1.match", 1))
     State.state["score"]["1"]["game_id"] = "123"
 
-    client.post("/api/v1/scoreboards/1/clear-game", params={"release_match": "true"})
+    client.post("/api/v1/scoreboards/1/clear-game", params={"release_match": release})
 
-    assert deep_get(State.state, "postgame.1.present") is True
+    assert not deep_get(State.state, "postgame.1.present")
+    assert 1 not in PostGame._captured
+
+
+def test_a_cleared_hud_game_stays_cleared_through_a_restart(client, monkeypatch):
+    """The boot read of decoded.hud.json re-applied the cleared game's last frame,
+    because the release lived only in memory (user report, 2026-09-18).
+
+    The frame's fingerprint is persisted with the clear, so reading the SAME
+    frame back (a restart) holds the board empty; a DIFFERENT frame — Project
+    Rio writing again — ends the hold.
+    """
+    from server.rio.provider import RELEASED_FRAME_KEY
+    frame = {"game_id": 777, "event_num": 42}
+
+    class Watcher:
+        latest_game_data = frame
+
+    monkeypatch.setattr(RioGameDataProvider, "hud_watcher", Watcher())
+    State.state.setdefault("score", {})["1"] = {"game_id": "777", "inning": 9}
+
+    client.post("/api/v1/scoreboards/1/clear-game")
+    assert deep_get(State.state, RELEASED_FRAME_KEY) == "777:42"
+
+    # A restart: memory is gone, the persisted key is not (Start reloads it).
+    RioGameDataProvider._feed_released = False
+    RioGameDataProvider._released_frame = deep_get(State.state, RELEASED_FRAME_KEY)
+    asyncio.run(RioGameDataProvider._on_hud_game_update(dict(frame)))
+    assert RioGameDataProvider._feed_released is True
+    assert deep_get(State.state, "score.1.game_id") is None
+    assert deep_get(State.state, "score.1.inning") == 1
+
+    # The next EVENT is the feed speaking: the hold ends before the frame is
+    # processed (stopped there — the rest is the ordinary per-frame path).
+    class Stop(Exception):
+        pass
+
+    def stop(*_a, **_k):
+        raise Stop
+
+    monkeypatch.setattr(RioGameDataProvider, "_is_new_game", classmethod(stop))
+    with pytest.raises(Stop):
+        asyncio.run(RioGameDataProvider._on_hud_game_update({"game_id": 777, "event_num": 43}))
+    assert RioGameDataProvider._released_frame is None
+    assert not deep_get(State.state, RELEASED_FRAME_KEY)
 
 
 def test_clear_game_404s_on_a_board_that_does_not_exist(client):

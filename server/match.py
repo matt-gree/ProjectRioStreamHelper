@@ -107,6 +107,12 @@ _OPTIONAL_PICK_KEYS = frozenset({"port", "rio_captainIndex", "character.0.name"}
 # whether the board has a game_id AND is not `restored` (server/boards.py) — NOT
 # "is the side populated", because a projection's own output populates the side.
 #
+# THE CAPTAIN HAS ONE MORE GATE, `_side_has_roster`: a side carrying a roster
+# (anything in slots 1..8, which the projector never writes) keeps its slot 0
+# and captain index whatever the lifecycle. The `restored` narrowing is right for
+# names and ports and was wrong for these two — it blanked slot 0 of last night's
+# real nine whenever a fixture with no captain was bound over it.
+#
 # Adding a fixture field? Decide which column it is in before writing it. Every
 # bug this table records was a field that looked like it had no column at all.
 
@@ -272,6 +278,32 @@ class Match:
         return not cls._board_side_is_empty(sb, t)
 
     @classmethod
+    def _side_has_roster(cls, sb: int, t: int) -> bool:
+        """True if the side carries a ROSTER — any character beyond slot 0.
+
+        The projector only ever writes slot 0 (the captain stand-in), so a name in
+        slots 1..8 was put there by a feed, whatever the board's lifecycle. That
+        is the one fact the captain keys need, and `_board_side_has_feed_data`
+        cannot give it: it deliberately answers False for a `restored` board, so
+        that tonight's names and port win over last night's residue — and the
+        captain rode along, writing the fixture's pick (or, with no pick, a
+        blank) into slot 0 of last night's real nine. A blank there is a hole in
+        the roster on air; a pick is tonight's captain spliced onto last night's
+        team. Neither is a stand-in for a roster, because there IS one.
+        """
+        chars = deep_get(State.state, f"score.{sb}.player.{t}.character") or {}
+        if isinstance(chars, list):
+            chars = dict(enumerate(chars))
+        if not isinstance(chars, dict):
+            return False
+        for idx, ch in chars.items():
+            if str(idx) == "0" or not isinstance(ch, dict):
+                continue
+            if ch.get("name"):
+                return True
+        return False
+
+    @classmethod
     def _side_entries(cls, sb: int, t: int, player: dict | None) -> list[tuple]:
         """Resolve one side's projected score keys (value or "" for each)."""
         base = f"score.{sb}.player.{t}"
@@ -329,6 +361,15 @@ class Match:
         if captain and not has_feed:
             vals["character.0.name"] = captain
             vals["rio_captainIndex"] = 0
+
+        # ...and over a side that already HAS a roster, the captain keys are not
+        # the projector's at all — neither the pick nor the blank. This is the
+        # restored board, where `has_feed` is False on purpose (see
+        # `_side_has_roster`); on a live board the deferral below already drops
+        # the blank, so this changes nothing there.
+        if cls._side_has_roster(sb, t):
+            vals.pop("character.0.name", None)
+            vals.pop("rio_captainIndex", None)
 
         if row:
             display = row.get("display") or {}

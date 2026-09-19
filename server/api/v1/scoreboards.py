@@ -252,11 +252,18 @@ async def clear_board_game(
     fixture's names gone with nothing to restore them — the fixture slot still said
     `M2 · Alice vs Bob` while the scoreboard drew nobody.
 
-    Deliberately does NOT touch `postgame.{N}`. The captured box score is a
-    different broadcast surface (the Game Summary and Character Spotlight draw it),
-    it is the thing most likely to be on air while the next fixture is prepped, and
-    it has its own Clear on the post-game region. Dropping it here would be the
-    irreversible half of a verb whose reversible half is what was asked for.
+    IT CLEARS THE POST-GAME CAPTURE TOO (`PostGame.clear`). It used to keep
+    `postgame.{N}` on the argument that the box score is a separate surface — but
+    a producer who clears a board means the GAME is gone, and a capture is that
+    game's receipt: kept, it went on driving the Game Summary and Spotlight and
+    sat on the board desk as `CAPTURED` beside a board that no longer held the
+    game it described (user call, 2026-09-18). The file it came from is still on
+    disk, so the post-game region's file picker is the way back.
+
+    And the clear SURVIVES A RESTART on a HUD board: `release_and_clear_game`
+    persists which frame was released, so the boot read of decoded.hud.json —
+    which still holds that game's last frame — does not put it back. Re-read HUD
+    is the way back for that half.
 
     Nor the pool. The STATS TAG it does clear (``clear_stats_tag``): the mode is
     the game's, not the board's — it is the feed's answer unless a producer
@@ -285,12 +292,7 @@ async def clear_board_game(
     longer there). Restating any of that here is how the two paths drift. Clearing
     afterwards then finds no match to re-project, which is exactly the intent.
 
-    Deliberately does NOT touch ``postgame.{N}`` in either mode. The captured box
-    score is a different broadcast surface (the Game Summary and Character
-    Spotlight draw it), it is the thing most likely to be on air while the next
-    fixture is prepped — a Bo1 that decides the moment it is captured would have
-    its own summary stripped by the very release this flag performs — and it has
-    its own Clear on the post-game region.
+    Clears ``postgame.{N}`` in both modes (see above).
     """
     active = Settings.Get("scoreboards.active", [1])
     if sb_id not in active:
@@ -302,6 +304,7 @@ async def clear_board_game(
         await _unbind_board(sb_id)
 
     await release_and_clear_game(sb_id)
+    await PostGame.clear(sb_id)
     await clear_stats_tag(sb_id)
     StatsTracker.reset_scoreboard(sb_id)
     return ORJSONResponse(

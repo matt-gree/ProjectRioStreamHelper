@@ -340,7 +340,7 @@ export default function Production() {
                     onAdd={(scene) => setAdd({ scene: scene ?? null })}
                 />
                 <Stage
-                    selection={selection} deskBodies={deskBodies}
+                    selection={selection} deskBodies={deskBodies} onSelect={setSelection}
                     pins={pins} onPinToggle={togglePin}
                 />
                 <Rail

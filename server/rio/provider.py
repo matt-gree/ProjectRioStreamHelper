@@ -18,6 +18,11 @@ from server.match import Match
 from server.participants import Participants
 from server.settings import Settings
 from server.state import State
+
+# Where a hand clear's HUD release is remembered across restarts — the
+# fingerprint of the frame that was on the board (see _released_frame). App-wide,
+# like the HUD transport itself: one file, one cached frame.
+RELEASED_FRAME_KEY = "rio_hud.released_frame"
 from server.utils.deep_dict import deep_get
 from server.league_logos import board_mode
 
@@ -640,12 +645,14 @@ async def release_and_clear_game(scoreboard_number: int, *, reproject: bool = Tr
     """
     from server.bindings import transport
 
+    released: list[tuple] = []
     if transport(scoreboard_number) == "hud":
         # App-wide, like the `/rio/release` endpoint the client used to call for
-        # this: there is one cached HUD frame, not one per board.
-        RioGameDataProvider.release_feed()
+        # this: there is one cached HUD frame, not one per board. The entry it
+        # hands back is what keeps the clear through a restart.
+        released = RioGameDataProvider.release_feed()
 
-    await State.SetBatch(clear_game_entries(scoreboard_number))
+    await State.SetBatch(clear_game_entries(scoreboard_number) + released)
     await State.Save()
 
     # `reproject=False` is for a caller that is about to project anyway — today
@@ -748,6 +755,18 @@ class RioGameDataProvider:
     # restores, which is the pairing the desk already offers.
     _feed_released: bool = False
 
+    # ...and WHICH frame was released, so the hold survives a restart.
+    #
+    # `_feed_released` is memory, and the boot read (`Start`) re-applies whatever
+    # is in decoded.hud.json — which after a finished game is that game's last
+    # frame, forever. So clearing a board and relaunching PRSH put the cleared
+    # game straight back (user report, 2026-09-18). The fingerprint is the frame's
+    # `game_id:event_num`, persisted at RELEASED_FRAME_KEY: a frame that matches it
+    # is the one the producer cleared, re-read from disk, and nothing but an
+    # explicit re-read may apply it. A frame that DIFFERS is Project Rio writing
+    # again — a new event or a new game — and takes the board back as before.
+    _released_frame: str | None = None
+
     # Serializes the two entry points that read-modify-write the shared side
     # state (_sides_swapped/_user_overridden/current_game): a HUD frame landing
     # mid-swap would otherwise interleave with toggle_sides_swapped and apply a
@@ -770,6 +789,9 @@ class RioGameDataProvider:
     async def Start(cls):
         """Resolve HUD path and start the file watcher."""
         cls._hud_targets = _read_hud_targets()
+        # A board cleared in a previous session stays cleared through this
+        # boot's read of the same frame (see _released_frame).
+        cls._released_frame = deep_get(State.state, RELEASED_FRAME_KEY) or None
 
         hud_path = await get_user_hud_path()
         if not hud_path:
@@ -803,6 +825,11 @@ class RioGameDataProvider:
         new_path = await get_user_hud_path()
         if not new_path:
             raise FileNotFoundError("No valid HUD path found")
+
+        # Both callers are the producer asking for the feed (Re-read HUD, a new
+        # HUD path), so a durable release ends here rather than holding the
+        # frame they just asked for.
+        await cls._forget_release()
 
         if cls.hud_watcher:
             if cls.hud_watcher.hud_file == new_path:
@@ -1271,23 +1298,55 @@ class RioGameDataProvider:
         async with cls._lock():
             await cls._on_hud_game_update_impl(game_json)
 
+    @staticmethod
+    def _frame_sig(game_json: dict | None) -> str | None:
+        """A frame's identity for the durable release — `game_id:event_num`."""
+        if not game_json:
+            return None
+        gid, ev = game_json.get("game_id"), game_json.get("event_num")
+        if gid in (None, "") and ev in (None, ""):
+            return None
+        return f"{gid}:{ev}"
+
     @classmethod
-    def release_feed(cls):
+    def release_feed(cls) -> list[tuple]:
         """Stop treating the cached HUD frame as what is on the board.
 
-        Called when the producer clears a HUD board by hand. See _feed_released.
+        Called when the producer clears a HUD board by hand. See _feed_released
+        and _released_frame. Returns the state entry that makes the release
+        survive a restart — the caller writes it in its own batch.
         """
         if not cls._feed_released:
             logger.info("[RIO] HUD feed released — board cleared by hand")
         cls._feed_released = True
+        latest = cls.hud_watcher.latest_game_data if cls.hud_watcher else None
+        cls._released_frame = cls._frame_sig(latest) or cls._released_frame
+        return [(RELEASED_FRAME_KEY, cls._released_frame or "")]
+
+    @classmethod
+    async def _forget_release(cls) -> None:
+        """The feed is back — drop the durable hold (no-op when there is none)."""
+        if cls._released_frame is None and not deep_get(State.state, RELEASED_FRAME_KEY):
+            return
+        cls._released_frame = None
+        await State.Set(RELEASED_FRAME_KEY, "")
 
     @classmethod
     async def _on_hud_game_update_impl(cls, game_json: dict):
+        # The frame the producer cleared, read back off disk (the boot read, or a
+        # file touch that changed nothing) — hold the board empty. Only an
+        # explicit re-read (ReloadHudPath) forgets the release first.
+        sig = cls._frame_sig(game_json)
+        if cls._released_frame and sig == cls._released_frame:
+            cls._feed_released = True
+            return
+
         # A real frame from the watcher is the feed speaking again, so it takes
         # the board back from a hand reset. The watcher is OS-event driven, so
         # this only fires when Project Rio actually rewrites the file — a reset
         # holds for as long as the game is genuinely not moving.
         cls._feed_released = False
+        await cls._forget_release()
 
         # Check for new game before parsing (uses raw inning from game_json)
         current_inning = game_json.get("inning", 1)

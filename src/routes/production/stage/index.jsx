@@ -16,6 +16,7 @@ import { ElementStyleSettings, ElementStyleOverrides } from './overlay-settings'
 import { IntroRow, introTypeFor } from './intro';
 import SizeMatchRow from './sizematch';
 import RedrawRow from './resolution';
+import BoardSwitchRow from './boardswitch';
 import { PlayerNameStage } from './playername';
 import StagePreview from './preview';
 import HitVisualizerStage from './hitvisualizer';
@@ -109,7 +110,7 @@ function useContainerDims(placement) {
 }
 
 const ElementStage = memo(function ElementStage({
-    placement, placements, title, pinned, onPinToggle,
+    placement, placements, title, pinned, onPinToggle, onSelect,
 }) {
     const { element, board } = placement;
     /* The settings NAMESPACE, never the element id — Matchup History is
@@ -139,6 +140,12 @@ const ElementStage = memo(function ElementStage({
                 the stage's own column is the widest space on the page. Width is
                 what a preview is worth; a side-by-side split spends it. */}
             <div className="flex min-w-0 flex-col gap-1.5">
+                {/* Which board this source reads — its `?scoreboard=`, rewritten
+                    on the OBS source in place. First, because it decides what
+                    every row under it is describing. Renders nothing unless the
+                    element is board-scoped, has a real source, and the rig has
+                    more than one board (see boardswitch.jsx). */}
+                <BoardSwitchRow placement={placement} placements={placements} onSelect={onSelect} />
                 <Body element={element} board={board} placement={placement} />
                 {/* An OBS ACTION on this source, so it sits with the body's
                     controls rather than under two sections of settings — and
@@ -206,7 +213,9 @@ const ElementStage = memo(function ElementStage({
 
 // selection is either a placement id ('scoreboard:2@Break', 'lowerthird@Game')
 // or a 'desk:<name>' key; deskBodies maps the latter to { title, meta, body }.
-export const Stage = memo(function Stage({ selection, deskBodies = {}, pins = [], onPinToggle }) {
+export const Stage = memo(function Stage({
+    selection, deskBodies = {}, pins = [], onPinToggle, onSelect,
+}) {
     const scenes = useConsoleScenes();
     const placements = useConsolePlacements(scenes);
     const label = usePlacementLabel(placements);
@@ -278,6 +287,7 @@ export const Stage = memo(function Stage({ selection, deskBodies = {}, pins = []
             title={detail ? `${name} · ${detail}` : name}
             pinned={pinnedIds.has(placement.id)}
             onPinToggle={() => onPinToggle?.(placement.id)}
+            onSelect={onSelect}
         />
     );
 });

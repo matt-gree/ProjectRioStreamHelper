@@ -1767,12 +1767,10 @@ const ScoreBox = memo(function ScoreBox({ side, d }) {
  * says so and offers nothing — a receipt, not a second button.
  *
  * Clear is the panel's existing `resetGame`, not a second clear: it blanks the
- * live `score.{N}` keys and deliberately leaves `postgame.{N}` alone. The
- * captured box score is a DIFFERENT broadcast surface (the Game Summary and
- * Character Spotlight draw it), it is the thing most likely to be on air while
- * the next fixture is being prepped, and it has its own Clear in the post-game
- * region. Dropping it here would be the irreversible half of a verb whose
- * reversible half is what was asked for.
+ * live `score.{N}` keys AND the capture (`postgame.{N}`) — a capture is the
+ * cleared game's receipt, and kept it went on driving the Game Summary beside a
+ * board that no longer held the game (user call, 2026-09-18). The stat file is
+ * still on disk; the post-game region's file picker brings it back.
  *
  * THE TAKE IS NOT GATED ON A DECIDED FIXTURE. It only ever lived in the fixture
  * slot behind `done`, which is the right gate for a Bo3 — you do not take the

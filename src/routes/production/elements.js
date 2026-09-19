@@ -78,9 +78,15 @@
  *
  *   URL-scoped  — the board is fixed by the source (`?scoreboard=N`). These get
  *                 `scope: 'board'` and per-board settings, and two of them in
- *                 one scene are two instances (./instances). There is no board
- *                 picker inside a panel: switching board means selecting the
- *                 other rack row.
+ *                 one scene are two instances (./instances). A source's board
+ *                 is re-pointed from its panel's Board row (stage/boardswitch),
+ *                 which rewrites the param on the OBS source in place.
+ *   `boardParam` — the layout READS `?scoreboard=` but its settings are global,
+ *                 so it takes no `scope`: the per-side elements (Stat Bar/Card,
+ *                 Roster, Player Name, Team Logo, Controller), the post-game
+ *                 callouts, the Event Header and the Results Ticker. `readsBoard`
+ *                 is the one question "does this source name a board", asked by
+ *                 the Add picker's board step and the stage's Board row.
  *   Feed-scoped — the board is fixed by the pushed CONTENT ({ element,
  *                 scoreboard } in the feed payload). The shared container is
  *                 board-agnostic on purpose, so fed elements never take `scope`.
@@ -163,6 +169,7 @@ export const ELEMENTS = [
     },
     {
         id: 'statsbar',
+        boardParam: true,
         // NAMED BY SHAPE, because the shape is the difference. This and the
         // Stat Card are the same data — whoever this side has on the field —
         // so "Stats" and "Stat Card" left the producer nothing to tell them
@@ -209,6 +216,7 @@ export const ELEMENTS = [
     },
     {
         id: 'statscard',
+        boardParam: true,
         name: 'Stat Card',
         /*
          * The same stat line as the Stat Bar, wearing the design package's
@@ -263,6 +271,7 @@ export const ELEMENTS = [
     },
     {
         id: 'roster',
+        boardParam: true,
         name: 'Roster',
         // The captain-first 9-character roster for one side. A dedicated source
         // (?scoreboard=N&team=T) like any direct element, AND a container member
@@ -288,6 +297,7 @@ export const ELEMENTS = [
     },
     {
         id: 'playername',
+        boardParam: true,
         name: 'Player Name',
         // One side's name (?scoreboard=N&team=T) as its own source, with the
         // Address Book prefix beside it — for placing a name somewhere the
@@ -333,6 +343,7 @@ export const ELEMENTS = [
     },
     {
         id: 'teamlogo',
+        boardParam: true,
         name: 'Team Logo',
         // One side's MSB team banner (?scoreboard=N&team=T), from the user's own
         // asset pack. No settings of its own — the logo is the whole element —
@@ -391,6 +402,7 @@ export const ELEMENTS = [
     },
     {
         id: 'postgamecallout',
+        boardParam: true,
         name: 'Character Spotlight',
         // Post-game only: the full-screen per-character callout — identity column
         // (hero art, team-logo badge, H-AB premier stat, batting/pitching/defense
@@ -426,6 +438,7 @@ export const ELEMENTS = [
     },
     {
         id: 'postgamevs',
+        boardParam: true,
         name: 'Game Summary',
         // Post-game only: the full-screen player-vs-player end-of-game callout —
         // both captains with team logos, the match context (tournament · round ·
@@ -532,6 +545,7 @@ export const ELEMENTS = [
     },
     {
         id: 'ticker',
+        boardParam: true,
         name: 'Results Ticker',
         // The scrolling results strip (rotator group) — completed games cycling
         // along the bottom. Nothing to decide live but whether it's up: its
@@ -545,6 +559,7 @@ export const ELEMENTS = [
     },
     {
         id: 'eventheader',
+        boardParam: true,
         name: 'Event Header',
         // The two persistent bands framing the canvas: top (competition ·
         // location · dates) and bottom (message · event · phase · round). It
@@ -598,6 +613,7 @@ export const ELEMENTS = [
     },
     {
         id: 'controller',
+        boardParam: true,
         name: 'Controller',
         // The optional gc-overlay controller-input display. Offered on every
         // platform: gc-overlay 1.1.0 carries two peer Dolphin transports, so the
@@ -668,6 +684,9 @@ export function quickFaceFor(el) {
     if (el.quickFace === null) return null;
     return el.quickFace ?? QUICK_FACE_DEFAULTS[el.flavor] ?? null;
 }
+
+// Whether this element's source names a board (`?scoreboard=N`, absent = 1).
+export const readsBoard = (el) => el?.scope === 'board' || el?.boardParam === true;
 
 export const isPinnable = (el) => quickFaceFor(el) !== null;
 

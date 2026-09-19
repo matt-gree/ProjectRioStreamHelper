@@ -243,7 +243,7 @@ describe('placementsInScene — source → row', () => {
         const out = rows(scene('Game', 'program',
             item(6, 'Roster L', `${ROSTER}?scoreboard=1&team=1`),
             item(7, 'Roster R', `${ROSTER}?scoreboard=1&team=2`)));
-        expect(out.map(p => p.id)).toEqual(['roster~t1@Game', 'roster~t2@Game']);
+        expect(out.map(p => p.id)).toEqual(['roster:1~t1@Game', 'roster:1~t2@Game']);
         expect(out.every(p => p.element.generic)).toBe(false);
     });
 
@@ -257,8 +257,31 @@ describe('placementsInScene — source → row', () => {
         const out = rows(scene('Game', 'program',
             item(8, 'Name L', `${PLAYERNAME}?scoreboard=1&team=1`),
             item(9, 'Name R', `${PLAYERNAME}?scoreboard=1&team=2`)));
-        expect(out.map(p => p.id)).toEqual(['playername~t1@Game', 'playername~t2@Game']);
+        expect(out.map(p => p.id)).toEqual(['playername:1~t1@Game', 'playername:1~t2@Game']);
         expect(out.every(p => p.element.generic)).toBe(false);
+    });
+
+    /*
+     * A source that READS a board carries it in its id even though its settings
+     * are global (`boardParam`): side 1's Stat Bar on board 1 and on board 2 are
+     * two sources, and without the board they were one id in one scene —
+     * duplicate React keys and a panel driving whichever came first.
+     */
+    it('keeps two boards of a board-reading element apart', () => {
+        const STATSBAR = 'http://127.0.0.1:5260/layout/scoreboard1/statsbar.html';
+        const out = rows(scene('Game', 'program',
+            item(1, 'Bar 1', `${STATSBAR}?scoreboard=1&team=1`),
+            item(2, 'Bar 2', `${STATSBAR}?scoreboard=2&team=1`)));
+        expect(out.map(p => p.id)).toEqual(['statsbar:1~t1@Game', 'statsbar:2~t1@Game']);
+        expect(out.map(p => p.board)).toEqual([1, 2]);
+    });
+
+    // A stale id from before that keeps its SIDE when it falls back.
+    it('resolves a pre-board side id to the same side', () => {
+        const out = rows(scene('Game', 'program',
+            item(6, 'Roster L', `${ROSTER}?scoreboard=1&team=1`),
+            item(7, 'Roster R', `${ROSTER}?scoreboard=1&team=2`)));
+        expect(resolvePlacement('roster~t2@Game', out).id).toBe('roster:1~t2@Game');
     });
 
     // Same axis on a registered element: one board, two sizes, two sources.
@@ -286,7 +309,7 @@ describe('placementsInScene — source → row', () => {
             item(1, 'Spotlight', SPOTLIGHT),
             item(2, 'Callout Stage', CALLOUT)));
 
-        const own = out.find(p => p.id === 'postgamecallout@Game');
+        const own = out.find(p => p.id === 'postgamecallout:1@Game');
         expect(own.item.sourceName).toBe('Spotlight');
         expect(own.slot).toBeUndefined();
         expect(placementFlavor(own)).toBe('direct');

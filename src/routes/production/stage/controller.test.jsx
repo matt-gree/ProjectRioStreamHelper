@@ -1,12 +1,13 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
-import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, cleanup } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { TooltipProvider } from '../../../components/ui/tooltip';
 import ControllerStage from './controller';
 
 /*
- * The controller stage owns what is true of this element ON THE BROADCAST — the
- * two per-side follow URLs, and a read-only line about the reader.
+ * The controller stage owns what is true of this element ON THE BROADCAST — a
+ * read-only line about the reader. No URLs: the panel is one source, and the
+ * header's Copy URL is its link.
  *
  * The gc-overlay SUBPROCESS moved to the Connections tab: start/stop used to
  * live here, which meant the reader could only be started from a panel that
@@ -41,7 +42,7 @@ describe('ControllerStage', () => {
     it('shows the not-installed note when gc-overlay is absent, and points at Connections', async () => {
         vi.stubGlobal('fetch', mockFetch({ available: false }));
         ui();
-        expect(await screen.findByText(/isn.t installed/i)).toBeInTheDocument();
+        expect(await screen.findByText(/wasn.t found/i)).toBeInTheDocument();
         expect(screen.getByRole('link', { name: /connections/i })).toHaveAttribute('href', '/connections');
     });
 
@@ -60,29 +61,13 @@ describe('ControllerStage', () => {
         expect(await screen.findByText(/Reader running on port 8071/)).toBeInTheDocument();
     });
 
-    /*
-     * Per-side follow is the recommended pair and must not depend on the
-     * subprocess running — it's a PRSH-served layout, so the URL is copyable
-     * while a producer builds the scene and the reader comes up later.
-     */
-    it('always offers the two per-side follow URLs, reader or no reader', async () => {
+    // The panel is ONE source (it already names its side), so a list of both
+    // sides' links read as though one source needed two.
+    it('hands out no per-side URLs of its own', async () => {
         vi.stubGlobal('fetch', mockFetch({ available: true, running: false, port: 8069 }));
         ui();
-        expect(await screen.findByText('Side 1')).toBeInTheDocument();
-        expect(screen.getByText('Side 2')).toBeInTheDocument();
-        const copies = screen.getAllByRole('button', { name: /copy/i });
-        expect(copies).toHaveLength(2);
-        expect(copies.filter(b => b.disabled)).toHaveLength(0);
-    });
-
-    it('copies the per-side URL host-qualified from the browser origin', async () => {
-        vi.stubGlobal('fetch', mockFetch({ available: true, running: true, port: 8069 }));
-        ui();
-        const side1 = await screen.findByText('Side 1');
-        const row = side1.closest('div');
-        fireEvent.click(row.querySelector('button'));
-        await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
-            `${window.location.origin}/layout/controller/controller.html?team=1`,
-        ));
+        await screen.findByText(/Reader stopped/);
+        expect(screen.queryByText(/Per-side follow/i)).toBeNull();
+        expect(screen.queryAllByRole('button', { name: /copy/i })).toHaveLength(0);
     });
 });

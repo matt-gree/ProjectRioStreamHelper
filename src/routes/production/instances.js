@@ -281,7 +281,7 @@ export function variantLabel(variant, mode) {
  */
 export function instanceId(element, board, url) {
     if (!element) return null;
-    const base = element.scope === 'board' && board != null
+    const base = (element.scope === 'board' || element.boardParam === true) && board != null
         ? `${element.id}:${board}`
         : element.id;
     return withVariant(base, variantOf(url));

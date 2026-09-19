@@ -46,9 +46,24 @@ describe('isBoardScoped — derived, not hand-listed', () => {
         expect(isBoardScoped(layout({ group: 'hitvisualizer', type: 'hitvisualizer' }))).toBe(true);
     });
 
+    // Every overlay that READS ?scoreboard= gets the step, including the ones
+    // whose settings are global — the post-game callouts are named differently
+    // in the catalog than in the registry, so they match by url.
+    it('covers every overlay that reads the board, not just the board-scoped ones', () => {
+        const at = (group, type, path) => layout({ group, type, url: `http://host:5260/layout/${path}` });
+        expect(isBoardScoped(at('postgame', 'spotlight', 'postgame/spotlight.html'))).toBe(true);
+        expect(isBoardScoped(at('postgame', 'summary', 'postgame/summary.html'))).toBe(true);
+        expect(isBoardScoped(at('eventheader', 'eventheader', 'eventheader/eventheader.html'))).toBe(true);
+        expect(isBoardScoped(at('rotator', 'ticker', 'rotator/ticker.html'))).toBe(true);
+        expect(isBoardScoped(at('controller', 'controller', 'controller/controller.html?team=1'))).toBe(true);
+    });
+
     it('leaves everything else board-less, exactly as Setup adds it', () => {
         expect(isBoardScoped(lowerthird)).toBe(false);
-        expect(isBoardScoped(layout({ group: 'shared', type: 'stats' }))).toBe(false);
+        expect(isBoardScoped(layout({
+            group: 'shared', type: 'container',
+            url: 'http://host:5260/layout/shared/container.html?container=callout-stage',
+        }))).toBe(false);
         expect(isBoardScoped(null)).toBe(false);
     });
 });
@@ -102,6 +117,14 @@ describe('pickerPreviewUrl', () => {
         expect(src).toContain('sample=1');
     });
 
+    // The sample replaces the whole store, so it can never draw the producer's
+    // own logos or names — a board holding a game previews that game.
+    it('previews live when the board has a game', () => {
+        const src = pickerPreviewUrl(layout(), 1, { live: true });
+        expect(src).toContain('preview=1');
+        expect(src).not.toContain('sample=1');
+    });
+
     // A dual-machine rig's catalog URL points at the PRSH host by IP; the
     // producer's browser still has to load it from wherever the app is served.
     it('drops the origin so a host-qualified URL loads locally', () => {
@@ -121,8 +144,18 @@ describe('addName', () => {
         expect(addName(lowerthird, null, [1])).toBe('Lower Third');
     });
 
+    // A bare trailing number beside a side read as part of the side:
+    // "Stat Bar — Side 1 1". The board is a word.
+    it('names the board as a word, never a bare number beside a side', () => {
+        const bar = {
+            group: 'scoreboard1', name: 'Stat Bar', type: 'statsbar', team: 1,
+            url: '/layout/scoreboard1/statsbar.html?team=1',
+        };
+        expect(addName(bar, 1, [1, 2])).toBe('Stat Bar — Side 1 (Board 1)');
+    });
+
     it('suffixes the board only on a multi-board rig', () => {
-        expect(addName(layout(), 2, [1, 2])).toBe('Scoreboard — Large 2');
+        expect(addName(layout(), 2, [1, 2])).toBe('Scoreboard — Large (Board 2)');
         // A "1" that means nothing is worse than no suffix at all.
         expect(addName(layout(), 1, [1])).toBe('Scoreboard — Large');
         expect(addName(lowerthird, 2, [1, 2])).toBe('Lower Third');
@@ -281,11 +314,11 @@ describe('AddSourceDialog', () => {
         await waitFor(() => expect(addBrowserSource).toHaveBeenCalledTimes(2));
         expect(addBrowserSource.mock.calls[0][0]).toMatchObject({
             url: 'http://host:5260/layout/scoreboard1/scoreboard.html?size=l&scoreboard=1',
-            inputName: 'Scoreboard — Large 1',
+            inputName: 'Scoreboard — Large (Board 1)',
         });
         expect(addBrowserSource.mock.calls[1][0]).toMatchObject({
             url: 'http://host:5260/layout/scoreboard1/scoreboard.html?size=l&scoreboard=2',
-            inputName: 'Scoreboard — Large 2',
+            inputName: 'Scoreboard — Large (Board 2)',
         });
     });
 

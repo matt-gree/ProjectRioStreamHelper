@@ -149,3 +149,36 @@ bolted on:
   header and the rows cannot disagree. Never re-derive a board or a scene inside
   a body or a quick face — take the prop.
 
+- **A board-reading source can be RE-POINTED, not just created.** "Reads a
+  board" is ONE registry question, `readsBoard(el)` (`elements.js`): `scope:
+  'board'` elements plus `boardParam: true` ones — whose overlay reads
+  `?scoreboard=` while their settings stay global (Stat Bar/Card, Roster,
+  Player Name, Team Logo, Controller, both post-game callouts, Event Header,
+  Results Ticker). It drives three things that must agree: the Add picker's
+  board step (`isBoardScoped`), the placement's `board` + instance id (so a
+  board-1 and a board-2 copy of one side are two rows, `statsbar:2~t1`), and the
+  stage's **Board** row (`stage/boardswitch.jsx`), which rewrites `?scoreboard=`
+  on the existing OBS input (`repointBrowserSource` in `obs.jsx`) so position,
+  crop and `?intro=` survive. Staged like Air. It re-selects the new placement
+  id, refuses
+  a board this element+variant already has a source for in the scene, and never
+  renders for a fed row, a sourceless row, or a one-board rig. An input is
+  global, so the switch reaches every scene that draws it. A stale id from
+  before boards were in the id (`roster~t2`) resolves to the same SIDE.
+- **A source's NAME is a function of its URL** (`sourcename.js`):
+  `Stat Bar — Side 1 (Board 2)` — the board as a word, only on a multi-board
+  rig, never a bare number (beside a side it read `Side 1 1`). Add, Bind and the
+  rename all use it. The name FOLLOWS the URL: `followUrlWithName` in `obs.jsx`
+  runs on every `InputSettingsChanged`, so a board switch or a producer's own URL
+  edit in OBS Properties renames the source — but only when its current name is
+  one PRSH gives the OLD url (today's form, or the retired bare-number forms),
+  so a name the producer chose is never touched.
+- **The Add picker previews LIVE when the board holds a game** and the sample
+  bundle only for an empty board — the sample replaces the whole store, so it
+  can never draw the producer's league logos or Address Book names.
+- **Retired names are upgraded on every OBS connect** (`upgradeRetiredNames` in
+  `obs.jsx` over `upgradeRetiredName`): every PRSH browser source in OBS — all
+  inputs, not just mirrored scenes — still named in a pre-`(Board N)` form gets
+  today's name, with one toast. It matches ONLY retired forms, never today's, so
+  it is idempotent and a board count change never churns names; plain
+  `Scoreboard` is excluded as a name a producer plausibly typed.

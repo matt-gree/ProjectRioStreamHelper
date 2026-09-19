@@ -10,7 +10,8 @@ import { IconToggle } from './kit';
 import {
     absoluteOverlayUrl, instanceUrl, placementDims, setSourceVisibility, useDisplayedEnabled,
 } from './bindings';
-import { sizeOptionFor } from './elements';
+import { sourceNameFor } from './sourcename';
+import { useSideLabels } from './sides';
 import { useActiveBoards } from './boards';
 import { useContainerPush } from './feeds';
 import { useContainerOf, useMemberScope, useSharedContainers } from './containers';
@@ -70,6 +71,7 @@ function useAddTargetScene() {
 function useBindTarget(element, board, placement) {
     const containers = useSharedContainers();
     const boards = useActiveBoards();
+    const { mode } = useSideLabels();
     const { container } = useContainerOf(element);
     const variant = placement?.variant ?? '';
     if (!isFedPlacement(placement)) {
@@ -77,16 +79,14 @@ function useBindTarget(element, board, placement) {
         // Suffix the name only on a multi-board rig — otherwise the producer
         // gets two identically-named sources they can tell apart only by opening
         // the URL, and on a single-board rig a "1" that means nothing.
-        const suffix = element.scope === 'board' && board != null && boards.length > 1;
-        // A size variant is a different canvas AND a different source, so it
-        // earns its own name — two browser sources both called "Scoreboard"
-        // that differ only by dimensions is the thing a producer can't undo
-        // later without opening each one.
-        const size = sizeOptionFor(element, variant);
-        const base = size ? `${element.name} ${size.label}` : element.name;
+        // A size or side variant is a different source and earns its own name —
+        // two browser sources both called "Scoreboard" that differ only by
+        // dimensions is the thing a producer can't undo later without opening
+        // each one. Named by the one function every add path shares
+        // (./sourcename), so Bind and the Add picker agree.
         const dims = placementDims({ element, variant });
         return {
-            inputName: suffix ? `${base} ${board}` : base,
+            inputName: sourceNameFor({ element, variant, board, boards, mode }),
             url: instanceUrl(element, board, variant),
             width: dims.width,
             height: dims.height,

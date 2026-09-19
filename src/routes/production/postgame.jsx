@@ -87,8 +87,9 @@ export function usePostGame(sb) {
     /*
      * IS THIS CAPTURE ABOUT THE GAME ON THE BOARD?
      *
-     * Nothing clears `postgame.{N}` when a new game starts — only the Clear
-     * route, board removal and /scoreboards/reset do — so after game 1 of a Bo3
+     * Nothing clears `postgame.{N}` when a new game starts — only a Clear
+     * (the region's or the board's Clear game), board removal and
+     * /scoreboards/reset do — so after game 1 of a Bo3
      * the region kept reporting game 1's box score while game 2 played, and it
      * could not have known better: it never read the capture's own gameId, so
      * it had nothing to compare. Which is the same disease as a board showing a

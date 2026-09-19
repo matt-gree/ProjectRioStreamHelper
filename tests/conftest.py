@@ -83,6 +83,7 @@ def reset_singletons():
         "sides_swapped": Provider._sides_swapped,
         "user_overridden": Provider._user_overridden,
         "feed_released": Provider._feed_released,
+        "released_frame": Provider._released_frame,
         "hud_targets": list(Provider._hud_targets),
         "hud_watcher": Provider.hud_watcher,
         "stats_slots": dict(StatsTracker._slots),
@@ -137,6 +138,7 @@ def reset_singletons():
     Provider._sides_swapped = False
     Provider._user_overridden = False
     Provider._feed_released = False
+    Provider._released_frame = None
     Provider._hud_targets = []
     Provider.hud_watcher = None
     # Sticky across games by design (it drives the next frame's mode retry), so
@@ -188,6 +190,7 @@ def reset_singletons():
     Provider._sides_swapped = saved["sides_swapped"]
     Provider._user_overridden = saved["user_overridden"]
     Provider._feed_released = saved["feed_released"]
+    Provider._released_frame = saved["released_frame"]
     Provider._hud_targets = saved["hud_targets"]
     Provider.hud_watcher = saved["hud_watcher"]
     Provider._update_lock = None
