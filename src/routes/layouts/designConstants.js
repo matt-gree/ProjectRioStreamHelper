@@ -19,7 +19,7 @@
 // one namespace, so it is one element wherever it is drawn.
 const STAT_CARD_SETTINGS = [
     { key: 'transitionType', type: 'select', label: 'Batter Transition', description: 'Animation when switching to a new batter', options: [{ value: 'fade', label: 'Fade' }, { value: 'none', label: 'None' }], defaultValue: 'fade' },
-    { key: 'subLine', type: 'select', label: 'Bottom Line', description: 'What the bottom row shows: the live game line, your own text, or nothing (the card shrinks)', options: [{ value: 'gameLine', label: 'Game Line' }, { value: 'custom', label: 'Custom Text' }, { value: 'off', label: 'Off' }], defaultValue: 'gameLine' },
+    { key: 'subLine', type: 'select', label: 'Bottom Line', description: 'What the bottom row shows: the live game line, your own text, or nothing (the card shrinks)', options: [{ value: 'gameLine', label: 'Game Line', railLabel: 'Game' }, { value: 'custom', label: 'Custom Text', railLabel: 'Custom' }, { value: 'off', label: 'Off' }], defaultValue: 'gameLine' },
     // showWhen: the mode that gives this field a job. On any other mode nothing
     // it holds reaches the card, so it is INERT rather than merely inactive —
     // which is the bar for hiding a control instead of disabling it.
@@ -104,7 +104,11 @@ export const LAYOUT_SETTINGS = {
         // switch cannot say no — and a control that keeps offering a choice it
         // doesn't have is the producer's next bug report. The console shows it
         // held on instead.
-        { key: 'showLive', type: 'switch', label: 'Live Cluster', description: 'The live count + base diamond. Off keeps it hidden even during a live game (the card stays compact).', defaultValue: true },
+        // `railLabel` (on a def, or on a select's option): the name a rail card
+        // uses where the full one would wrap at ~216px (the `compact` shape in
+        // stage/overlay-settings); the full label stays on the stage, and on a
+        // chip it stays the accessible name.
+        { key: 'showLive', type: 'switch', label: 'Live Cluster', railLabel: 'Live', description: 'The live count + base diamond. Off keeps it hidden even during a live game (the card stays compact).', defaultValue: true },
         /*
          * The Large board's own three, in the order they sit on the card: the
          * stats inside the live row, then the two BANDS below it. Between them
@@ -124,7 +128,7 @@ export const LAYOUT_SETTINGS = {
             defaultValue: true,
         },
         {
-            key: 'showBox', type: 'switch', label: 'Box Score', sizes: ['l'],
+            key: 'showBox', type: 'switch', label: 'Box Score', railLabel: 'Box', sizes: ['l'],
             description: 'The per-inning linescore, and the pane beside it carrying the game mode, stadium and date. Off drops ~112 units.',
             defaultValue: true,
         },
@@ -324,7 +328,7 @@ export const LAYOUT_SETTINGS = {
         { key: 'showPhase',    group: 'Top bars', type: 'switch', label: 'Bracket Phase',  description: 'Bracket-phase bar (element 1)', defaultValue: true },
         { key: 'phaseText',    group: 'Top bars', type: 'text',   label: 'Phase Text',     description: 'Overrides the bracket-phase bar. Leave blank to use the assigned match’s phase; the bar hides when neither is set.', placeholder: 'Winners Final' },
         { key: 'showGameMode', group: 'Top bars', type: 'switch', label: 'Game Mode',      description: 'Game-mode bar (element 2)', defaultValue: true },
-        { key: 'mainMode',     type: 'select', label: 'Score Block',    description: 'Full block (3), rosters without the at-bat situation (3b), condensed bar (3a), or neither', options: [{ value: 'full', label: 'Full' }, { value: 'rosters', label: 'Rosters' }, { value: 'condensed', label: 'Condensed' }, { value: 'off', label: 'Off' }], defaultValue: 'full' },
+        { key: 'mainMode',     type: 'select', label: 'Score Block',    description: 'Full block (3), rosters without the at-bat situation (3b), condensed bar (3a), or neither', options: [{ value: 'full', label: 'Full' }, { value: 'rosters', label: 'Rosters' }, { value: 'condensed', label: 'Condensed', railLabel: 'Bar' }, { value: 'off', label: 'Off' }], defaultValue: 'full' },
         { key: 'showAtBat',    group: 'Lower bars', type: 'switch', label: 'At-Bat Lines',   description: 'Current batter + pitcher game lines (element 4)', defaultValue: true },
         { key: 'showBoxScore', group: 'Lower bars', type: 'switch', label: 'Box Score',      description: 'Per-inning linescore (element 5)', defaultValue: true },
         /*

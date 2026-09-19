@@ -103,20 +103,23 @@ export function seededRail(rail) {
     return RAIL_SEED.filter(id => ELEMENTS.some(e => e.id === id && isPinnable(e)));
 }
 
-// The row's inline quick action: the quick face's primary control as one
-// compact button — for OBS-bound elements that's the visibility eye, staged
-// through the confirm-to-live buffer like everywhere else.
-const EyeAction = memo(function EyeAction({ placement }) {
+// The row's inline quick action: the visibility eye, staged through the
+// confirm-to-live buffer like everywhere else. Also the rail card's (../rail),
+// which is why it can NAME ITS SCENE: a rack row sits under its scene's header,
+// a rail card does not, and the same overlay can be pinned from two scenes.
+export const EyeAction = memo(function EyeAction({ placement, namesScene = false }) {
     const { enabled, staged } = useDisplayedEnabled(placement?.scene, placement?.item);
     if (!placement) return null;
     const Icon = enabled ? Eye : EyeOff;
+    const verb = enabled ? 'Hide' : 'Show';
+    const what = namesScene && placement.scene ? `${verb} in ${placement.scene}` : `${verb} source`;
     return (
-        <SimpleTooltip label={staged ? 'Staged — goes live on confirm' : enabled ? 'Hide source' : 'Show source'}>
+        <SimpleTooltip label={staged ? 'Staged — goes live on confirm' : what}>
             <button
                 type="button"
                 onClick={() => setSourceVisibility(placement.scene, placement.item, !enabled)}
                 aria-pressed={enabled}
-                aria-label={enabled ? 'Hide source' : 'Show source'}
+                aria-label={what}
                 className={cn(
                     'shrink-0 transition-colors',
                     staged ? 'text-amber-400' : enabled ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
@@ -916,13 +919,20 @@ export const Rack = memo(function Rack({
      * the rest slide under it. So the rack takes this at `lg` (where it first earns
      * a column) and the rail at `xl` (where it does), each matching the track it
      * appears in; stacked, both keep the old fixed box.
+     *
+     * `lg:row-span-2` is what makes that column the rack's ALONE. Between `lg`
+     * and `xl` the grid has two columns and the rail wraps to a second row; a
+     * sticky box is bounded by the whole GRID, not its own cell, so with the
+     * rail auto-placed under it in column 1 the pinned rack slid down over the
+     * rail's cards as the page scrolled. The rail goes under the STAGE there
+     * (../rail), and the rack spans both rows of its column.
      */
     return (
         <Panel
             title="Rack"
             className={cn(
                 'flex flex-col h-[calc(100vh-13rem)]',
-                'lg:sticky lg:top-4 lg:h-[calc(100vh-2rem)]',
+                'lg:sticky lg:top-4 lg:row-span-2 lg:h-[calc(100vh-2rem)]',
             )}
         >
             <ScrollArea className="min-h-0 flex-1">

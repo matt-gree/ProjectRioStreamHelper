@@ -235,18 +235,51 @@ position, not an identity).
 
 - **Every element must declare a quick face — or explicitly `null`.** Defaults
   are derivable, so most elements write nothing:
-  - `direct` → **subject + toggle row** (what it's drawing, then show/hide). A
-    card carrying only a visibility switch is a worse copy of the rack row it was
-    pinned from — the same control, minus the scene — and eleven of the console's
-    elements defaulted to exactly that, which made the rail look like a surface
-    for the two elements with custom faces that everything else was tolerated on.
+  - `direct` → **subject** (what it's drawing). Show/hide is NOT a face row:
+    it is the card HEADER's eye (`QuickCard action`, `CardAction` in
+    `rail.jsx`) — the rack row's own control in the rack row's place, naming
+    its scene in the tooltip because a card sits under no scene header. It was
+    a labelled switch row on every card until 2026-09-19, which made a card a
+    worse copy of the rack row it was pinned from and cost the row the card was
+    pinned for. An element with no live subject is a header-only card.
   - `fed` with pickable content → the content pick + push/clear (picking ARMS
     the element's intent; Push airs it — see "Pick vs air" below)
-  - `fed` with nothing to pick → container toggle + push/clear
-- Row vocabulary: `subject` · `visibility` · `content` · `push` · `setting` (one
-  of the element's own live overlay settings). An element deviating from its flavor
-  default declares `quickFace` in the registry *and* a component in
-  `ELEMENT_QUICK_FACES` (`quickface.jsx`) — both, or the two surfaces disagree.
+  - `fed` with nothing to pick → subject + push/clear. The header eye on a
+    member's slot shows and hides the CONTAINER, whose source a slot is.
+- Row vocabulary: `subject` · `content` · `push` · `setting` (the element's
+  `quickSettings`) · `strip` (show/hide chips over the element's own CONTENT,
+  which is state and so cannot ride `quickSettings` — the Lower Third's
+  segments, the Commentary seats) · `action` (the element's own one-shot
+  verbs — the Hit Visualizer's Replay, Matchup History's match + Fetch, each
+  sharing its stage body's hook). An element deviating from its flavor
+  default declares `quickFace` in the registry — with `quickSettings` when the
+  face has a `setting` row (below), or a component in `ELEMENT_QUICK_FACES`
+  (`quickface.jsx`) for `strip`, `action` and any other face that is not
+  settings. A verb that is only occasionally usable stays OFF the card rather
+  than greyed on it (Spotlight shows once the auto-cut is set up), and a verb
+  that takes content off air (Matchup's Clear) stays on the stage.
+  A strip component lives beside the stage code whose reads and staged writes
+  it reuses (`LowerThirdSegmentChips`, `CommentarySeatChips`), and says so when
+  it has nothing to show rather than leaving a blank card.
+- **A `setting` row is declared, not written.** The element lists the keys in
+  `quickSettings` (registry) and names its rows (`['subject', 'setting']`,
+  `['visibility', 'setting']`, `['setting']`); `RowsQuickFace` renders them
+  through the stage's own `SettingSegments`, in the namespace the stage writes
+  (per board for `scope: 'board'`) and filtered by the pinned source's size
+  (`settingReachesSize`) — so a Small scoreboard card never offers Rosters.
+  A lone switch on the rail is a plain chip, never the stage's label-column
+  pair (which truncated the Schedule's "Decided Matches").
+  `elements.test.js` pins row ⇔ list and that every key is real. List only the
+  LOOK a producer changes to match the moment (box score between innings, a
+  stat bar's bottom line), never a set-once preference. Scoreboard, Stat Bar,
+  Stat Card, Scorecard and Event Header are this face; `ELEMENT_QUICK_FACES` is
+  now only for a face that is not settings (Bracket).
+- **The rail is ~216px of content, and settings render `compact` there**: a
+  select drops its 128px label column (the name moves to the row's `title`)
+  and takes the card's width, and a def or option may carry `railLabel` — a
+  short name used only on the rail (`Live`, `Box`, `Game`, `Bar`); on a chip
+  the full label stays the accessible name. Measure a new strip at rail width
+  before shipping it: a strip that wraps is a third row in all but name.
 - **The two-row cap is hard.** No custom blocks on rail cards, ever — the rail
   is where "toggle and push" would creep back into mishmash. If an element's
   only useful quick controls need a custom block, declare `quickFace: null`:

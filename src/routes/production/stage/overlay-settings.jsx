@@ -140,8 +140,20 @@ function useForcedOn(os, def) {
     return v ? force : null;
 }
 
-// One setting as a row, showing the staged value while it waits on confirm.
-export const OverlaySettingRow = memo(function OverlaySettingRow({ os, def }) {
+/*
+ * One setting as a row, showing the staged value while it waits on confirm.
+ *
+ * `compact` is the rail's shape: a card is ~234px, so the 128px label column
+ * left a four-way segmented control about ninety pixels and clipped it. There
+ * the select drops its label and takes the card's width — the card's title
+ * already names the element, the options name the choice, and the setting's
+ * own name moves to the row's tooltip. An option's `railLabel` stands in for
+ * its label there, for the same width. Only selects change; the rail never
+ * carries the other kinds.
+ */
+const railOptions = (options) => options.map(o => (o.railLabel ? { value: o.value, label: o.railLabel } : o));
+
+export const OverlaySettingRow = memo(function OverlaySettingRow({ os, def, compact = false }) {
     const pending = usePending(`settings:${settingKey(os.ns, def.key)}`);
     const shown = useShowWhen(os, def);
     const forced = useForcedOn(os, def);
@@ -152,7 +164,9 @@ export const OverlaySettingRow = memo(function OverlaySettingRow({ os, def }) {
     if (def.type === 'select') {
         return (
             <SegmentedRow
-                label={def.label} value={value} data={def.options} fill={false}
+                label={compact ? null : def.label} value={value}
+                data={compact ? railOptions(def.options) : def.options}
+                fill={compact} title={compact ? def.label : undefined}
                 onChange={(v) => os.set(def, v)}
             />
         );
@@ -204,7 +218,11 @@ export const OverlaySettingRow = memo(function OverlaySettingRow({ os, def }) {
 // The same setting as a chip, for a def that `chunkDefs` put in a part set.
 // Same reads as the row (staged value wins, showWhen gates) — only the shape
 // differs, so the two can never disagree about what a setting says.
-export const OverlaySettingChip = memo(function OverlaySettingChip({ os, def, className }) {
+//
+// `compact` takes the def's `railLabel` where it has one: the rail's strip is
+// ~216px and the scoreboard's four Large parts need 281 at their full names.
+// The full name stays the chip's accessible name.
+export const OverlaySettingChip = memo(function OverlaySettingChip({ os, def, className, compact = false }) {
     const pending = usePending(`settings:${settingKey(os.ns, def.key)}`);
     const shown = useShowWhen(os, def);
     const forced = useForcedOn(os, def);
@@ -215,7 +233,9 @@ export const OverlaySettingChip = memo(function OverlaySettingChip({ os, def, cl
     // weight (it IS on) and takes a dashed edge, and its title stays hoverable.
     return (
         <ToggleChip
-            label={def.label} checked={forced ? true : !!value}
+            label={(compact && def.railLabel) || def.label}
+            ariaLabel={compact && def.railLabel ? def.label : undefined}
+            checked={forced ? true : !!value}
             staged={!forced && !!pending} locked={!!forced}
             title={forced ? forced.note : def.description} className={className}
             onChange={(v) => os.set(def, v)}
@@ -312,10 +332,22 @@ const PairedField = memo(function PairedField({ os, def }) {
     );
 });
 
-// A def list as pairs, chip strips and rows, in registry order.
-export const SettingSegments = memo(function SettingSegments({ os, defs }) {
+// A def list as pairs, chip strips and rows, in registry order. `compact` is
+// the rail card's shape (see OverlaySettingRow).
+export const SettingSegments = memo(function SettingSegments({ os, defs, compact = false }) {
     return chunkDefs(defs).map((seg) => {
         const key = seg.defs[0].key;
+        // A LONE chip on the rail is still just a chip. The label-column
+        // alignment below is for lining up with the rows of a stage panel; a
+        // card has no column to line up with, and the 128px slot truncated the
+        // schedule's "Decided Matches" to "Decid…".
+        if (compact && seg.kind === 'pair' && seg.defs.length === 1) {
+            return (
+                <ToggleChips key={key}>
+                    <OverlaySettingChip os={os} def={seg.defs[0]} compact />
+                </ToggleChips>
+            );
+        }
         if (seg.kind === 'pair') {
             const [sw, field] = seg.defs;
             return (
@@ -330,11 +362,11 @@ export const SettingSegments = memo(function SettingSegments({ os, defs }) {
         if (seg.kind === 'chips') {
             return (
                 <ToggleChips key={key}>
-                    {seg.defs.map(def => <OverlaySettingChip key={def.key} os={os} def={def} />)}
+                    {seg.defs.map(def => <OverlaySettingChip key={def.key} os={os} def={def} compact={compact} />)}
                 </ToggleChips>
             );
         }
-        return seg.defs.map(def => <OverlaySettingRow key={def.key} os={os} def={def} />);
+        return seg.defs.map(def => <OverlaySettingRow key={def.key} os={os} def={def} compact={compact} />);
     });
 });
 

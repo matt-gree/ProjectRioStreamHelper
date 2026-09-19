@@ -40,8 +40,15 @@
  * carries each element's console declaration:
  *   - `quickFace` : the rail card's rows (≤ 2), or explicit null (= not
  *                   pinnable). OMITTED on most elements — the default derives
- *                   from flavor via quickFaceFor(): direct → visibility
- *                   toggle; fed → content pick + push.
+ *                   from flavor via quickFaceFor(): direct → subject (the
+ *                   eye is the card header's); fed → content pick + push.
+ *   - `quickSettings`: the element's own settings (keys of
+ *                   LAYOUT_SETTINGS[settingsType]) that its `setting` row
+ *                   carries — the LOOK a producer changes to match the moment
+ *                   (the scoreboard's box score between innings), never a
+ *                   set-once preference. Required exactly when the face has a
+ *                   `setting` row. Switches pack into one chip strip, so
+ *                   several of them still spend one row.
  *   - `stageBody` : key of the element's stage panel under stage/ — defaults
  *                   to the element id via stageBodyFor(); declare only to
  *                   deviate.
@@ -140,6 +147,20 @@ export const ELEMENTS = [
             { value: 'l', label: 'Large',  width: 800, height: 460, default: true },
         ],
         match: (url) => /\/layout\/scoreboard\d*\/scoreboard/i.test(url) || /scoreboard\.html/i.test(url),
+        /*
+         * What the game is doing, then the parts of the card that follow it —
+         * the box score up between innings, stats up for an at-bat, the live
+         * cluster down once it's over. No source toggle: the scoreboard sits
+         * resident on air (the Event Header's argument), and the chip in the
+         * card header already says whether it is.
+         *
+         * One list for both sizes, filtered per source by `sizes`
+         * (settingReachesSize), so a Small card offers Inning · Live · Mode and
+         * a Large card Live · Stats · Rosters · Box. Team Logos is left out on
+         * purpose: it is a set-once look, not a moment.
+         */
+        quickFace: { rows: ['subject', 'setting'] },
+        quickSettings: ['showInning', 'showLive', 'showStats', 'showRoster', 'showBox', 'showGameMode'],
     },
     {
         id: 'scorecard',
@@ -168,9 +189,11 @@ export const ELEMENTS = [
         // Deliberately narrow so 'scorecard' is not swallowed by the Scoreboard
         // matcher (which also answers to a bare *.html stem).
         match: (url) => /scorecard\/scorecard/i.test(url) || /scorecard\.html/i.test(url),
-        // Two rows: is it on air, and which score block is showing — the pair a
-        // producer reaches for mid-game. Everything else is stage work.
-        quickFace: { rows: ['visibility', 'setting'] },
+        // What the game is doing, and which score block is showing — the pair a
+        // producer reaches for mid-game. On/off is the card header's eye;
+        // everything else is stage work.
+        quickFace: { rows: ['subject', 'setting'] },
+        quickSettings: ['mainMode'],
     },
     {
         id: 'statsbar',
@@ -218,6 +241,15 @@ export const ELEMENTS = [
         // claiming to be one of its own occupants.
         match: (url) => /\/layout\/scoreboard\d*\/statsbar\.html/i.test(url),
         perSide: true,
+        /*
+         * Who it is drawing, then its bottom line — the live game line, a
+         * caption of your own, or off so the bar shrinks. Shown or not (it
+         * comes and goes with the at-bat) is the card header's eye. The caption's TEXT is stage work; the card only picks the
+         * mode. Settings are one namespace for both sides, so this card sets
+         * the pair — which is what a pair framing a scoreboard wants.
+         */
+        quickFace: { rows: ['subject', 'setting'] },
+        quickSettings: ['subLine'],
     },
     {
         id: 'statscard',
@@ -267,6 +299,10 @@ export const ELEMENTS = [
         match: (url) => /\/layout\/scoreboard\d*\/statscard\.html/i.test(url),
         // One source per side (?team=1|2) — see `perSide` in the header note.
         perSide: true,
+        // The Stat Bar's card, for the same reason. The Top Line is a caption
+        // set once per event, so it stays on the stage.
+        quickFace: { rows: ['subject', 'setting'] },
+        quickSettings: ['subLine'],
         // On a container's roster its frame of reference is the CONTAINER's, not
         // its own URL's: a manual Push takes scoreboard AND team from the
         // definition, the same pair the automation engine feeds it. Gated on the
@@ -386,6 +422,10 @@ export const ELEMENTS = [
         width: 1920,
         height: 240,
         match: (url) => /\/layout\/commentary\//i.test(url) || /commentary\.html/i.test(url),
+        // One chip per seated caster, show/hide on the strip — someone steps
+        // away, someone joins. The chips name the casters, so a subject line
+        // above them would say the same names twice.
+        quickFace: { rows: ['strip'] },
     },
     {
         id: 'playerplates',
@@ -486,6 +526,12 @@ export const ELEMENTS = [
         // its roster, its feed and its stage to an element whose panel then
         // drove a source that doesn't read `overlays.lowerthird.*`.
         match: (url) => /\/layout\/lowerthird\/lowerthird\.html/i.test(url),
+        // One chip per filled segment, lit while it is in the band — the
+        // ribbon's eye, on the rail: the merch in for the break, the clock up
+        // before the start. No subject: "4 of 5 segments on" is what the lit
+        // chips already say, and five chips need the card's width twice over.
+        // Content and order stay stage work.
+        quickFace: { rows: ['strip'] },
     },
     {
         id: 'schedule',
@@ -506,6 +552,10 @@ export const ELEMENTS = [
         height: 1080,
         // Deliberately narrow: bracket/player_schedule.html must NOT bind here.
         match: (url) => /\/layout\/schedule\//i.test(url),
+        // What's queued, then whether played matches stay on the card — the
+        // end-of-night recap flip.
+        quickFace: { rows: ['subject', 'setting'] },
+        quickSettings: ['showDecided'],
     },
     {
         id: 'matchuphistory',
@@ -525,6 +575,9 @@ export const ELEMENTS = [
         width: 1920,
         height: 480,
         match: (url) => /\/layout\/matchup\//i.test(url) || /matchup\.html/i.test(url),
+        // What's on air, then the match and Fetch on one line — a new set's
+        // head-to-head is one press from the rail.
+        quickFace: { rows: ['subject', 'action'] },
     },
     {
         id: 'bracket',
@@ -596,10 +649,11 @@ export const ELEMENTS = [
         // Anchored — see the Lower Third's note. A container named
         // "Eventheader" slugs to an id this word matched.
         match: (url) => /\/layout\/eventheader\/eventheader\.html/i.test(url),
-        // Its source visibility plus the two band switches would be three rows;
-        // the bands are the pair that matters live, and the source toggle stays
-        // one click away on the stage.
-        quickFace: { rows: ['setting', 'setting'] },
+        // What the bands are carrying, then the two band switches (one chip
+        // strip) — the header is resident, so which band is up is the live
+        // decision. The source itself is the card header's eye.
+        quickFace: { rows: ['subject', 'setting'] },
+        quickSettings: ['showHeader', 'showFooter'],
     },
     {
         id: 'hitvisualizer',
@@ -617,6 +671,9 @@ export const ELEMENTS = [
         // producer naming the container after its occupant is the ordinary
         // case, not a corner one.
         match: (url) => /\/layout\/hitvisualizer\/hitvisualizer\.html/i.test(url),
+        // The latest hit, then Replay (and Spotlight, once it is set up) — a
+        // big swing replayed on demand, without opening the panel.
+        quickFace: { rows: ['subject', 'action'] },
         // Also a container MEMBER, so it is one of the elements that is both a
         // dedicated source and an occupant — two rows, and the Push lives on the
         // slot row's source strip. (Its stage used to carry a bespoke "Split
@@ -674,19 +731,24 @@ export const ELEMENTS = [
 // Quick-face row vocabulary (interpreted by the rail when it renders a card):
 //   'subject'    — what the element is currently DRAWING, read from live state
 //                  (../subject). A readout, never a control.
-//   'visibility' — toggle the element's source (direct default)
 //   'content'    — pick what feeds the shared container (uses el.feed)
 //   'push'       — push the picked content to the container
-//   'setting'    — one of the element's own live overlay settings (a band
-//                  switch, the scorecard's score block)
+//   'setting'    — the element's own live overlay settings, named by its
+//                  `quickSettings` (a band switch, the scorecard's score block)
+//   'strip'      — show/hide chips over the element's own CONTENT, which is
+//                  state rather than settings (lower-third segments, caster
+//                  seats); a component in quickface.jsx's ELEMENT_QUICK_FACES
+//   'action'     — the element's own one-shot verbs (Replay, Fetch), also an
+//                  ELEMENT_QUICK_FACES component
 //
-// The direct default leads with the subject because a card carrying only a
-// visibility switch is a worse copy of the rack row it was pinned from — the
-// same control, minus the scene. An element with no live content of its own
-// renders no subject row and degrades to the toggle alone; two rows is the
-// budget, not the quota.
+// There is no visibility ROW: showing and hiding the source is the card
+// header's eye, the rack row's own control (../rail). As a labelled switch row
+// it made every card a worse copy of the rack row it was pinned from and cost
+// the row the card was pinned for. An element with no live content renders no
+// subject, so its card is the header alone; two rows is the budget, not the
+// quota.
 const QUICK_FACE_DEFAULTS = {
-    direct: { rows: ['subject', 'visibility'] },
+    direct: { rows: ['subject'] },
     fed: { rows: ['content', 'push'] },
 };
 

@@ -25,7 +25,13 @@ export default function MatchupStage({ element, placement }) {
     );
 }
 
-const MatchupContent = memo(function MatchupContent() {
+/*
+ * The fetch, as the stage and the rail card both drive it: which match is
+ * selected (the producer's pick, else the one on air, else the first), and the
+ * two staged verbs. One hook so the card and the panel open on the same match
+ * and stage the same entry; a pick made on one is local to it.
+ */
+function useMatchupFetch() {
     const mu = useStateStore(useShallow(s => s?.matchup ?? {}));
     const matches = useStateStore(useShallow(s => s?.match ?? {}));
     const pending = usePending('matchup:fetch');
@@ -47,14 +53,46 @@ const MatchupContent = memo(function MatchupContent() {
 
     const fetchedFor = mu.matchId != null ? String(mu.matchId) : '';
     const stale = mu.present && sel && fetchedFor !== sel;
+    const options = ids.length
+        ? ids.map(id => ({ label: matchDisplayLabel(matches, id), value: id }))
+        : [{ label: 'No matches yet', value: '' }];
+
+    return { mu, pending, sel, setSel: setSelRaw, options, doFetch, doClear, stale };
+}
+
+/*
+ * The rail card's row: the match and Fetch, side by side on one line — a new
+ * set's head-to-head is one press from the rail. Clear stays on the stage: it
+ * takes a band off air, which is not a thing to do from a glance. Stale (on air
+ * for another match) is the button's tooltip and its fill, since the card has
+ * no line to spare for the stage's sentence.
+ */
+export const MatchupQuickRow = memo(function MatchupQuickRow() {
+    const m = useMatchupFetch();
+    return (
+        <div className="flex min-h-7 min-w-0 items-center gap-2">
+            <SelectRow
+                label={null} value={m.sel} onChange={m.setSel} staged={!!m.pending}
+                options={m.options} className="min-w-0 flex-1"
+            />
+            <ActionRow fit actions={[{
+                label: 'Fetch', onClick: m.doFetch, disabled: !m.sel,
+                variant: !m.mu.present || m.stale ? 'default' : 'secondary',
+                title: m.stale ? 'On air for another match — Fetch to replace it'
+                    : 'Pull this match’s head-to-head from Project Rio',
+            }]} />
+        </div>
+    );
+});
+
+const MatchupContent = memo(function MatchupContent() {
+    const { mu, pending, sel, setSel: setSelRaw, options, doFetch, doClear, stale } = useMatchupFetch();
 
     return (
         <>
             <SelectRow
                 label="Match" value={sel} onChange={setSelRaw} staged={!!pending}
-                options={ids.length
-                    ? ids.map(id => ({ label: matchDisplayLabel(matches, id), value: id }))
-                    : [{ label: 'No matches yet', value: '' }]}
+                options={options}
             />
             <ActionRow actions={[
                 { label: 'Fetch', onClick: doFetch, disabled: !sel, variant: 'default' },

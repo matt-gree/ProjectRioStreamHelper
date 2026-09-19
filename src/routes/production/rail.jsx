@@ -7,8 +7,10 @@ import { isPinnable } from './elements';
 import { MoveButtons } from './controls';
 import { QuickCard, chipFor } from './kit';
 import {
-    resolvePlacement, useConsolePlacements, useConsoleScenes, usePlacementLabel,
+    resolvePlacement, useConsoleOffline, useConsolePlacements, useConsoleScenes,
+    usePlacementLabel,
 } from './placements';
+import { EyeAction } from './rack';
 import { deskQuickFace, QuickFace } from './quickface';
 import { boardOfDeskId, useActiveBoards, useBoardLabel } from './boards';
 import { useContainerDefs } from './containers';
@@ -47,6 +49,30 @@ import { useContainerDefs } from './containers';
  * board 2 would be one card disagreeing with itself, and the same is now true
  * of a card flying the Game scene's copy while showing the Break scene's state.
  */
+/*
+ * The header's control: the eye for the source this card flies. On a member's
+ * SLOT that source is the CONTAINER's (a fed placement is its container's
+ * source), so the eye shows and hides the container — what the switch row on
+ * those cards did — while the face keeps the Push that is the slot's own verb.
+ *
+ * A sourceless card with OBS connected says so in the eye's place, because the
+ * missing eye is otherwise the only sign; with OBS closed every card is
+ * sourceless and the app's own banner has said it once already.
+ */
+const CardAction = memo(function CardAction({ placement }) {
+    const offline = useConsoleOffline();
+    if (placement.item) return <EyeAction placement={placement} namesScene />;
+    if (offline) return null;
+    return (
+        <Text
+            size="xs" span title="Not in any scene we can see."
+            className="label-display shrink-0 text-muted-foreground"
+        >
+            NO SOURCE
+        </Text>
+    );
+});
+
 const ElementRailCard = memo(function ElementRailCard({
     placement, title, onOpen, onUnpin, move,
 }) {
@@ -55,6 +81,7 @@ const ElementRailCard = memo(function ElementRailCard({
         <QuickCard
             state={chipFor(placement)} title={title}
             onOpen={onOpen} onUnpin={onUnpin} move={move}
+            action={<CardAction placement={placement} />}
         >
             <QuickFace element={element} placement={placement} board={board} />
         </QuickCard>
@@ -164,19 +191,37 @@ export const Rail = memo(function Rail({ pins, onReorder, onUnpin, onOpen }) {
      * the rest slide under it. So the rack takes this at `lg` (where it first earns
      * a column) and the rail at `xl` (where it does), each matching the track it
      * appears in; stacked, both keep the old fixed box.
+     *
+     * BETWEEN `lg` AND `xl` THE RAIL SITS UNDER THE STAGE (column 2), never under
+     * the rack: the rack is a sticky column there and would slide over anything
+     * placed beneath it in its own column (../rack). It is a stacked block in
+     * that range, so it sizes to its cards rather than holding a viewport-tall
+     * box, and the cards flow in rail-width columns across the stage's width —
+     * one 250px card stretched to a 900px track is a strip of empty chips.
+     * Reading order is still pin order, so the producer's order survives.
      */
     return (
         <Panel
             title="Quick rail"
             className={cn(
                 'flex flex-col h-[calc(100vh-13rem)]',
-                'xl:sticky xl:top-4 xl:h-[calc(100vh-2rem)]',
+                'lg:col-start-2 lg:h-auto',
+                'xl:col-start-3 xl:sticky xl:top-4 xl:h-[calc(100vh-2rem)]',
             )}
         >
             <ScrollArea className="min-h-0 flex-1">
-                <div className="flex flex-col gap-2 p-2">
+                <div className={cn(
+                    'flex flex-col gap-2 p-2',
+                    'lg:grid lg:grid-cols-[repeat(auto-fill,minmax(236px,1fr))] lg:items-start',
+                    // Back to a column at xl — and back to STRETCH: the grid's
+                    // items-start otherwise survives into the column, and a
+                    // card then sizes to its longest line (a hit's subject ran
+                    // one to 314px in a 252px rail).
+                    'xl:flex xl:items-stretch',
+                )}
+                >
                     {entries.length === 0 ? (
-                        <div className="rounded-lg border border-dashed border-border p-3">
+                        <div className="col-span-full rounded-lg border border-dashed border-border p-3">
                             <Text size="xs" className="text-muted-foreground">
                                 Nothing pinned. Hit ◇ on any rack row — or on a stage panel’s header —
                                 to keep its live controls here, in your own order, whatever scene
@@ -195,7 +240,9 @@ export const Rail = memo(function Rail({ pins, onReorder, onUnpin, onOpen }) {
                                 if (dragging != null) moveToId(dragging, entry.id);
                                 setDragging(null);
                             }}
-                            className={cn('cursor-grab', dragging === entry.id && 'opacity-50')}
+                            // min-w-0: a grid item (the lg layout) otherwise holds its
+                            // track open to its longest unbroken line.
+                            className={cn('min-w-0 cursor-grab', dragging === entry.id && 'opacity-50')}
                         >
                             <RailCard
                                 entry={entry}

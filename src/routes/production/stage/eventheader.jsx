@@ -43,11 +43,6 @@ export function useEventHeader() {
     return useOverlaySettings('eventheader', 'eventheader', 'Event header');
 }
 
-// The bands' on/off pair — also the rail quick face.
-export const EventHeaderBandRows = memo(function EventHeaderBandRows({ os }) {
-    return <OverlaySettingRows os={os} type="eventheader" keys={BANDS.map(b => b.master)} />;
-});
-
 /*
  * One band, as a ribbon of its fields.
  *

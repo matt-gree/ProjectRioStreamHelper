@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { RotateCcw, Sparkles } from 'lucide-react';
 import { useObsStore } from '../../../context/obs';
@@ -91,6 +91,26 @@ function useHitViz(scoreboard = 1) {
         replay, setSpot, canSpotlight, fireSpotlight,
     };
 }
+
+/*
+ * The rail card's verb row: Replay, and Spotlight only once the auto-cut is
+ * set up. On the stage a disabled Spotlight earns its place — its tooltip
+ * points at the config right below it — but on a card it would be a button
+ * greyed out all night for every producer who never turned it on.
+ */
+export const HitVizQuickActions = memo(function HitVizQuickActions({ board }) {
+    const v = useHitViz(board ?? 1);
+    return (
+        <ActionRow actions={[
+            { label: 'Replay', icon: RotateCcw, disabled: !v.hasHit, onClick: v.replay },
+            ...(v.spotlight.enabled ? [{
+                label: v.firing ? 'On air…' : 'Spotlight', icon: Sparkles, variant: 'default',
+                disabled: !v.canSpotlight || v.firing, onClick: v.fireSpotlight,
+                title: v.canSpotlight ? 'Cut to the spotlight scene and play' : 'Pick a spotlight scene on the stage',
+            }] : []),
+        ]} />
+    );
+});
 
 /*
  * The latest-hit line this body used to render as its own `HitSummary` is now

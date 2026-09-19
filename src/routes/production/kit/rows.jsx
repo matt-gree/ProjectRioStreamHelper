@@ -903,10 +903,10 @@ export const FieldRow = memo(function FieldRow({ label, staged, stacked, childre
  * from the label that names it.
  */
 export const SegmentedRow = memo(function SegmentedRow({
-    label, value, onChange, data, disabled, fill = true, className,
+    label, value, onChange, data, disabled, fill = true, className, title,
 }) {
     return (
-        <div className={cn(ROW, className)}>
+        <div className={cn(ROW, className)} title={title || undefined}>
             <RowLabel label={label} />
             <SegmentedControl
                 size="xs" fullWidth={fill} data={data} value={value}

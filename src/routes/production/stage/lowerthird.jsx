@@ -9,6 +9,7 @@ import { notifications } from '../../../lib/notify';
 import { cn } from '../../../lib/utils';
 import {
     ActionRow, FieldRow, IconToggle, KIT_INPUT, NumberRow, SegmentedRow, SelectRow, TextRow,
+    ToggleChip, ToggleChips,
 } from '../kit';
 import { MoveButtons, StagedDot, stageStateSet } from '../controls';
 import { matchDisplayLabel } from '../matches';
@@ -316,6 +317,52 @@ const BandRibbon = memo(function BandRibbon({ selected, onSelect, title }) {
                 })}
             </div>
         </Group>
+    );
+});
+
+/*
+ * The ribbon's eyes, as the rail card's strip: one chip per FILLED segment, in
+ * band order, lit while it is in the band. Same reads and the same staged
+ * write as the ribbon, so the rail and the stage cannot disagree about a slot.
+ *
+ * Space is left out — it is a gap, and switching a gap is not a decision
+ * anyone makes mid-break. Two segments of one type are told apart by their
+ * slot number; the chip's tooltip is the segment's summary, which is the
+ * content the producer is actually checking.
+ */
+export const LowerThirdSegmentChips = memo(function LowerThirdSegmentChips() {
+    const { matches, slot, val, isStaged, setKey } = useLowerThird();
+    const active = useActiveBoards();
+    const boardLabel = useBoardLabel();
+    const ctx = { matches, boardLabel, firstBoard: active[0] };
+
+    const segs = [];
+    for (let i = 1; i <= LT_SLOT_COUNT; i++) {
+        const s = slot(i);
+        const type = val(`slots.${i}.type`, s.type) || '';
+        if (!type || type === 'space') continue;
+        segs.push({
+            i, type, s,
+            on: !!val(`slots.${i}.enabled`, s.enabled),
+            staged: isStaged(`slots.${i}`) || isStaged(`slots.${i}.enabled`),
+        });
+    }
+    // The chips are the card's only row, so an empty band says so.
+    if (segs.length === 0) return <Text size="xs" className="text-muted-foreground">No segments set</Text>;
+    const count = (t) => segs.filter(g => g.type === t).length;
+    return (
+        <ToggleChips>
+            {segs.map(({ i, type, s, on, staged }) => (
+                <ToggleChip
+                    key={i}
+                    label={count(type) > 1 ? `${LT_TYPE_SHORT[type]} ${i}` : LT_TYPE_SHORT[type]}
+                    checked={on} staged={staged}
+                    title={slotSummary(s, type, ctx) || undefined}
+                    onChange={(v) => setKey(`slots.${i}.enabled`, v,
+                        `Lower third: slot ${i} ${v ? 'shown' : 'hidden'}`)}
+                />
+            ))}
+        </ToggleChips>
     );
 });
 

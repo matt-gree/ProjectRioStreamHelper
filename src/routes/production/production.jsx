@@ -332,8 +332,14 @@ export default function Production() {
                 and rail took 532 between them, and the preview inside it
                 rendered its 1920×1080 source at 21%. A min on the middle track
                 inverts that: the rack and rail give up their last ~90px each
-                before the thing the producer is actually looking at does. */}
-            <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,280px)_minmax(0,1fr)] xl:grid-cols-[minmax(0,280px)_minmax(560px,1fr)_minmax(0,252px)]">
+                before the thing the producer is actually looking at does.
+
+                `lg:grid-rows-[auto_1fr]`: between lg and xl the rack spans both
+                rows of its column and the rail sits under the stage (../rack,
+                ../rail). The rack is viewport-tall, so its height has to go
+                somewhere — auto rows split it evenly and opened a gap between
+                the stage and the rail; this hands all of it to the rail's row. */}
+            <div className="grid grid-cols-1 items-start gap-4 lg:grid-rows-[auto_1fr] lg:grid-cols-[minmax(0,280px)_minmax(0,1fr)] xl:grid-cols-[minmax(0,280px)_minmax(560px,1fr)_minmax(0,252px)]">
                 <Rack
                     selection={selection} onSelect={setSelection}
                     pins={pins} onPinToggle={togglePin}

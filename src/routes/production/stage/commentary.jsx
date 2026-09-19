@@ -11,6 +11,7 @@ import { Switch } from '../../../components/ui/switch';
 import { Group, Text } from '../../../components/ui/primitives';
 import { cn } from '../../../lib/utils';
 import { StagedDot, MoveButtons } from '../controls';
+import { ToggleChip, ToggleChips } from '../kit';
 import { SubFieldPicker } from '../subfield-picker';
 import { DirectStage } from './generic';
 
@@ -249,6 +250,35 @@ const CasterRow = memo(function CasterRow({ i, slot, desk }) {
                 />
             </div>
         </div>
+    );
+});
+
+/*
+ * The seats' show/hide, as the rail card's strip: one chip per SEATED caster,
+ * named, lit while their plate is on the strip. The desk's own staged write, so
+ * a flip here is the same whole-array stage as the switch on the stage panel.
+ *
+ * An empty desk says so rather than drawing nothing — the chips are the card's
+ * only row, and a card with a header alone would read as a broken one.
+ */
+export const CommentarySeatChips = memo(function CommentarySeatChips() {
+    const desk = useCommentaryDesk();
+    const seats = desk.slots
+        .map((slot, i) => ({ slot, i }))
+        .filter(({ slot }) => slot?.participantId);
+    if (seats.length === 0) {
+        return <Text size="xs" className="text-muted-foreground">No casters seated</Text>;
+    }
+    return (
+        <ToggleChips>
+            {seats.map(({ slot, i }) => (
+                <ToggleChip
+                    key={i} label={desk.nameFor(slot) || `Seat ${i + 1}`}
+                    checked={slot.visible !== false} staged={desk.staged}
+                    onChange={(v) => desk.update(i, { visible: v })}
+                />
+            ))}
+        </ToggleChips>
     );
 });
 

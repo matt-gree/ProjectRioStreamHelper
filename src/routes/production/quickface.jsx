@@ -1,20 +1,25 @@
 import { memo, useState } from 'react';
 import { Text } from '../../components/ui/primitives';
-import { ActionRow, SelectRow, StatusLine } from './kit';
+import { ActionRow, SelectRow } from './kit';
 import { FEED_OPTION_HOOKS, flattenGroups } from './feed-pickers';
-import { quickFaceFor } from './elements';
+import { quickFaceFor, settingsTypeOf, sizeOptionFor } from './elements';
 import { useContainerPush } from './feeds';
 import { useMemberScope } from './containers';
-import { isFedPlacement, useConsoleOffline } from './placements';
+import { isFedPlacement } from './placements';
 import { boardOfDeskId, useMatchBindableBoards } from './boards';
 import { useNextUp } from './queue';
 import { takeNextMatch } from '../../context/match';
 import { notifications } from '../../lib/notify';
 import { BoardGameSubject, Subject } from './subject';
-import { SourceToggleRow } from './stage/generic';
-import { ScorecardModeRow, useScorecard } from './stage/scorecard';
-import { EventHeaderBandRows, useEventHeader } from './stage/eventheader';
+import {
+    SettingSegments, defsFor, useLiveDefs, useOverlaySettings,
+} from './stage/overlay-settings';
+import { settingReachesSize } from '../layouts/designConstants';
 import { BracketPhasePicker, useBracketDesk } from './bracket';
+import { LowerThirdSegmentChips } from './stage/lowerthird';
+import { CommentarySeatChips } from './stage/commentary';
+import { HitVizQuickActions } from './stage/hitvisualizer';
+import { MatchupQuickRow } from './stage/matchup';
 import { useBoardDesk } from './desks/board';
 
 /*
@@ -27,64 +32,9 @@ import { useBoardDesk } from './desks/board';
  * them. An element with quickFace: null never reaches here — it isn't pinnable.
  */
 
-// What the toggle row calls itself. The scene is part of the answer now: the
-// same overlay can be pinned twice from two scenes, and "On air" is true of at
-// most one of them.
-function whereLabel(placement, what) {
-    const where = placement.where === 'program' ? 'on air'
-        : placement.where === 'preview' ? 'in preview'
-            : `in ${placement.scene}`;
-    return what ? `${what} ${where}` : where[0].toUpperCase() + where.slice(1);
-}
-
 /*
- * Direct element, row 2: the one decision that matters live — is it on the
- * broadcast. Kept as its own single-row component because the custom faces
- * (Scorecard) compose it as their state row and must not inherit a subject on
- * top of their own second row.
- */
-const DirectQuickFace = memo(function DirectQuickFace({ element: _element, placement }) {
-    const offline = useConsoleOffline();
-    if (!placement?.item) {
-        /*
-         * OFFLINE SAYS NOTHING — and the rail is where that matters most. Every
-         * card is unbound with OBS closed, so "OBS not connected." was printed
-         * once per pinned card down a column that exists to be scanned, saying
-         * what the app's own banner says once at the top of the page.
-         */
-        if (offline) return null;
-        return <StatusLine label="NO SOURCE" title="Not in any scene we can see." />;
-    }
-    return (
-        <SourceToggleRow
-            label={whereLabel(placement)}
-            item={placement.item} sceneName={placement.scene}
-        />
-    );
-});
-
-// The container's state — the first row of every fed quick face. A fed
-// placement IS its container's source, so the pin already names which scene's
-// copy this card flies.
-const ContainerRow = memo(function ContainerRow({ placement }) {
-    const offline = useConsoleOffline();
-    if (!placement?.item) {
-        if (offline) return null;
-        return <StatusLine label="NO SOURCE" title="That container isn’t in any scene we can see." />;
-    }
-    return (
-        <SourceToggleRow
-            label={whereLabel(placement, 'Container')}
-            item={placement.item} sceneName={placement.scene}
-        />
-    );
-});
-
-/*
- * Fed element with choices (Stats, Character Spotlight): pick the content, then
- * push it. Two rows, so the container-visibility toggle steps aside — the card
- * chip already reports on-air state, and pick+push is what makes the card
- * self-sufficient.
+ * Fed element with choices (Character Spotlight): pick the content, then push
+ * it. The container's own show/hide is the card header's eye (../rail).
  *
  * Picking ARMS (writes the element's intent); it airs only if this element
  * already holds the container. Push is what takes an armed pick on air — the
@@ -121,14 +71,15 @@ const PickableFedQuickFace = memo(function PickableFedQuickFace({ element, useOp
     );
 });
 
-// Fed element with nothing to pick (Game Summary): push it, or hand the
-// container back. The only decision is timing.
+// Fed element with nothing to pick (Game Summary): what it would put up, then
+// push it or hand the container back. The only decision is timing. Showing
+// the container itself is the card header's eye (../rail).
 const PushOnlyFedQuickFace = memo(function PushOnlyFedQuickFace({ element, placement }) {
     const { scoreboard } = useMemberScope(element, placement?.slot);
     const { mine, canPush, toggle } = useContainerPush(element, scoreboard, placement?.slot);
     return (
         <>
-            <ContainerRow placement={placement} />
+            <Subject placement={placement} />
             <ActionRow actions={[
                 {
                     label: mine ? 'Clear' : 'Push',
@@ -150,48 +101,69 @@ const FedQuickFace = memo(function FedQuickFace({ element, placement }) {
 });
 
 /*
- * The direct flavor's DEFAULT face: what it's drawing, then whether it's on.
+ * The direct flavor's DEFAULT face: what it's drawing.
  *
- * A card that is only an on/off switch is a worse copy of the rack row it was
- * pinned from — same control, minus the scene it sits in. Eleven of the
- * console's elements defaulted to exactly that, which made the rail look like a
- * surface for one kind of element (Scorecard, Event Header) that everything
- * else was tolerated on. The subject is what the rail can say that the rack
- * deliberately won't: the rack is a dense scannable monitor and a second line
- * per row would cost it that, while a card has the height and is already
- * opt-in.
+ * Whether it's ON is the card header's eye (../rail) — the rack row's control,
+ * in the rack row's place. It was a labelled switch row here, which made a card
+ * a worse copy of the rack row it was pinned from; the subject is what the rail
+ * can say that the rack deliberately won't (a second line per rack row would
+ * cost the density that makes it a monitor).
  *
  * `Subject` renders nothing for an element with no live content of its own, so
- * those cards degrade to the single toggle they were, rather than carrying an
- * empty row — the two-row cap is a budget, not a quota.
+ * those cards are the header alone — the eye and the pin.
  */
-const DefaultDirectQuickFace = memo(function DefaultDirectQuickFace({ element, placement }) {
-    return (
-        <>
-            <Subject placement={placement} />
-            <DirectQuickFace element={element} placement={placement} />
-        </>
-    );
+const DefaultDirectQuickFace = memo(function DefaultDirectQuickFace({ placement }) {
+    return <Subject placement={placement} />;
 });
 
-// Scorecard: on air + which score block. Its other eight bands are stage work —
-// these are the two a producer reaches for without leaving the rail.
-const ScorecardQuickFace = memo(function ScorecardQuickFace({ element, placement, board }) {
-    const sc = useScorecard(board);
-    return (
-        <>
-            <DirectQuickFace element={element} placement={placement} />
-            <ScorecardModeRow sc={sc} />
-        </>
+/*
+ * The `setting` row: the element's declared `quickSettings`, drawn exactly as
+ * its stage draws them (SettingSegments — switches pack into one chip strip,
+ * so a run of them spends one row), writing through the same staging gateway.
+ *
+ * It resolves its namespace the way the stage does (./stage/index): a
+ * board-scoped element stores per board, so the card writes the board its chip
+ * reads. And it takes the SOURCE's size: the scoreboard's sizes are one layout
+ * with one registry list, so a key whose part the pinned size doesn't draw is
+ * dropped here exactly as the stage drops it — a Small card never offers
+ * Rosters. Palette settings dead under the active package drop out too
+ * (useLiveDefs).
+ */
+const QuickSettingsRow = memo(function QuickSettingsRow({ element, placement, board }) {
+    const type = settingsTypeOf(element);
+    const scoped = element.scope === 'board' && board != null;
+    const os = useOverlaySettings(
+        type,
+        scoped ? `${type}.${board}` : type,
+        scoped ? `${element.name} ${board}` : element.name,
+        scoped ? board : null,
     );
+    const size = sizeOptionFor(element, placement?.variant)?.value;
+    const defs = useLiveDefs(type, defsFor(type, element.quickSettings ?? [])
+        .filter(def => settingReachesSize(def, type, size)));
+    if (defs.length === 0) return null;
+    return <SettingSegments os={os} defs={defs} compact />;
 });
 
-// Event header: the two bands. Its source is almost always resident on air, so
-// the useful live decision is which band is showing, not the source toggle —
-// that stays one click away on the stage.
-const EventHeaderQuickFace = memo(function EventHeaderQuickFace() {
-    const os = useEventHeader();
-    return <EventHeaderBandRows os={os} />;
+const FACE_ROWS = {
+    subject: ({ placement }) => <Subject placement={placement} />,
+    setting: QuickSettingsRow,
+};
+
+/*
+ * A direct face declared in the registry as rows — subject and setting, in the
+ * order the element names them. This is what
+ * lets an element put its live look on the rail with one registry entry rather
+ * than a component here: the Scoreboard, both stat cards, the Scorecard and the
+ * Event Header are all this face.
+ */
+const RowsQuickFace = memo(function RowsQuickFace({ element, placement, board, rows }) {
+    return rows.map((row) => {
+        const Row = FACE_ROWS[row];
+        return Row
+            ? <Row key={row} element={element} placement={placement} board={board} />
+            : null;
+    });
 });
 
 /*
@@ -312,10 +284,39 @@ export function deskQuickFace(id) {
 
 // Elements whose quick face isn't the flavor default. Adding one is a design
 // decision, not a convenience: it must still fit the two-row cap.
+/*
+ * `strip` faces: show/hide over the element's own CONTENT — state, not
+ * settings, so it cannot ride `quickSettings`. Each strip lives beside the
+ * stage code whose reads and staged writes it reuses.
+ */
+/*
+ * `action` faces: what the element is showing, then its own one-shot verbs.
+ * The verbs live beside the stage code they share a hook with.
+ */
+const HitVizQuickFace = memo(function HitVizQuickFace({ placement, board }) {
+    return (
+        <>
+            <Subject placement={placement} />
+            <HitVizQuickActions board={board} />
+        </>
+    );
+});
+
+const MatchupQuickFace = memo(function MatchupQuickFace({ placement }) {
+    return (
+        <>
+            <Subject placement={placement} />
+            <MatchupQuickRow />
+        </>
+    );
+});
+
 const ELEMENT_QUICK_FACES = {
-    scorecard: ScorecardQuickFace,
-    eventheader: EventHeaderQuickFace,
     bracket: BracketQuickFace,
+    hitvisualizer: HitVizQuickFace,
+    matchuphistory: MatchupQuickFace,
+    lowerthird: LowerThirdSegmentChips,
+    commentary: CommentarySeatChips,
 };
 
 // The quick face for a registered element, by flavor. Returns null when the
@@ -332,8 +333,12 @@ export const QuickFace = memo(function QuickFace({ element, placement, board }) 
      */
     if (isFedPlacement(placement)) return <FedQuickFace element={element} placement={placement} />;
     const Custom = ELEMENT_QUICK_FACES[element.id];
-    // `board` is the pinned placement's board — a board-scoped face (Scorecard)
+    // `board` is the pinned placement's board — a board-scoped face (Scoreboard)
     // must write the same board the card's chip reads.
     if (Custom) return <Custom element={element} placement={placement} board={board} />;
-    return <DefaultDirectQuickFace element={element} placement={placement} />;
+    // A face with a `setting` row is declared rows, rendered as declared.
+    if (face.rows.includes('setting')) {
+        return <RowsQuickFace element={element} placement={placement} board={board} rows={face.rows} />;
+    }
+    return <DefaultDirectQuickFace placement={placement} />;
 });

@@ -12,8 +12,14 @@ import { StateChip } from './StateChip';
 // `move` is the reorder slot (the rail passes MoveButtons). It is a SLOT rather
 // than a drag handle because pointer drag is not an input every producer has:
 // see the note on MoveButtons in ../controls.
+//
+// `action` is the header's own control — the same one the rack row carries
+// (the visibility eye), in the same place relative to the pin. Show/hide was
+// a labelled switch ROW on every card, which spent one of the two rows on a
+// control the producer already knew as an eye, and left the look or content
+// the card was pinned for fighting a subject line for the other one.
 export const QuickCard = memo(function QuickCard({
-    state, title, onOpen, onUnpin, move, children, className,
+    state, title, onOpen, onUnpin, move, action, children, className,
 }) {
     const rows = Children.toArray(children).slice(0, 2);
     return (
@@ -27,6 +33,7 @@ export const QuickCard = memo(function QuickCard({
                         </Text>
                     </button>
                 </SimpleTooltip>
+                {action}
                 {move}
                 <SimpleTooltip label="Unpin from quick rail">
                     <button
@@ -37,7 +44,10 @@ export const QuickCard = memo(function QuickCard({
                     </button>
                 </SimpleTooltip>
             </header>
-            <div className="flex flex-col gap-1 px-2 py-1.5">{rows}</div>
+            {/* `empty:hidden`: a face whose rows all render nothing (an element
+                with no live subject) leaves a header-only card, not a padded
+                blank under it. */}
+            <div className="flex flex-col gap-1 px-2 py-1.5 empty:hidden">{rows}</div>
         </section>
     );
 });

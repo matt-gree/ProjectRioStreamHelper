@@ -9,6 +9,10 @@ import { Rail } from './rail';
 import { withContainers } from '../../test/containers';
 
 const SB = 'http://x/layout/scoreboard1/scoreboard.html';
+// For the tests that read a card's source-toggle row: the Scorecard has the
+// scoreboard's pin grammar (board + scene) and, unlike the resident
+// scoreboard, still carries the toggle on its card.
+const SC = 'http://x/layout/scorecard/scorecard.html';
 const item = (id, sourceName, url, enabled = false) =>
     ({ id, sourceName, url, enabled, inputKind: 'browser_source', isGroup: false, isPrsh: true });
 
@@ -143,19 +147,21 @@ describe('Rail', () => {
     });
 
     it('flies the scene the pin names, not whichever copy comes first', () => {
-        obs({ Game: [item(1, 'Game SB', SB, true)], Break: [item(9, 'Break SB', SB, false)] },
+        obs({ Game: [item(1, 'Game SC', SC, true)], Break: [item(9, 'Break SC', SC, false)] },
             { mirroredScenes: ['Game', 'Break'] });
-        ui(<Rail pins={['scoreboard@Break']} onReorder={noop} onUnpin={noop} onOpen={noop} />);
+        ui(<Rail pins={['scorecard@Break']} onReorder={noop} onUnpin={noop} onOpen={noop} />);
         // Off-air scene: the chip is OFF and the row names the scene, so the
         // producer can see it is staging Break rather than driving air.
         expect(document.querySelector('[data-chip-state]').getAttribute('data-chip-state')).toBe('off');
-        expect(screen.getByText('In Break')).toBeInTheDocument();
+        // The card's eye names the scene it flies — a rail card sits under no
+        // scene header.
+        expect(screen.getByRole('button', { name: 'Show in Break' })).toBeInTheDocument();
     });
 
     it('resolves a pin written before scenes were the axis to the copy nearest air', () => {
-        obs({ Game: [item(1, 'SB', SB, true)] });
-        ui(<Rail pins={['scoreboard']} onReorder={noop} onUnpin={noop} onOpen={noop} />);
-        expect(screen.getByText('On air')).toBeInTheDocument();
+        obs({ Game: [item(1, 'SC', SC, true)] });
+        ui(<Rail pins={['scorecard']} onReorder={noop} onUnpin={noop} onOpen={noop} />);
+        expect(screen.getByRole('button', { name: 'Hide in Game' })).toBeInTheDocument();
     });
 
     /*
@@ -166,7 +172,7 @@ describe('Rail', () => {
     it('keeps a card for a pin with no source rather than dropping it', () => {
         // OBS connected, so the source really is nowhere we can see.
         obs({ Game: [] });
-        ui(<Rail pins={['scoreboard:9@Nowhere']} onReorder={noop} onUnpin={noop} onOpen={noop} />);
+        ui(<Rail pins={['scorecard:9@Nowhere']} onReorder={noop} onUnpin={noop} onOpen={noop} />);
         expect(document.querySelectorAll('header').length).toBe(1);
         expect(screen.getByText('NO SOURCE')).toBeInTheDocument();
         expect(screen.getByTitle(/Not in any scene we can see/)).toBeInTheDocument();

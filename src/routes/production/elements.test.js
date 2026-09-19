@@ -53,7 +53,7 @@ describe('element registry invariants', () => {
 });
 
 describe('console contract (production-console-contract skill)', () => {
-    const KNOWN_ROWS = new Set(['subject', 'visibility', 'content', 'push', 'setting']);
+    const KNOWN_ROWS = new Set(['subject', 'content', 'push', 'setting', 'strip', 'action']);
 
     it('every element resolves a quick face or an explicit null — never undefined', () => {
         for (const e of ELEMENTS) {
@@ -73,14 +73,11 @@ describe('console contract (production-console-contract skill)', () => {
     });
 
     /*
-     * The direct default leads with the SUBJECT (../subject): a card carrying
-     * only a visibility switch is a worse copy of the rack row it was pinned
-     * from — the same control, minus the scene. An element with no live content
-     * renders no subject row and degrades to the toggle alone, so two rows
-     * stays a budget rather than a quota.
+     * The direct default is the SUBJECT alone (../subject). Show/hide is the
+     * card header's eye — the rack row's own control — never a face row.
      */
-    it('flavor defaults: direct → subject + visibility, fed → content pick + push', () => {
-        expect(quickFaceFor({ flavor: 'direct' })).toEqual({ rows: ['subject', 'visibility'] });
+    it('flavor defaults: direct → subject, fed → content pick + push', () => {
+        expect(quickFaceFor({ flavor: 'direct' })).toEqual({ rows: ['subject'] });
         expect(quickFaceFor({ flavor: 'fed' })).toEqual({ rows: ['content', 'push'] });
     });
 
@@ -90,6 +87,23 @@ describe('console contract (production-console-contract skill)', () => {
         expect(isPinnable({ flavor: 'direct' })).toBe(true);
         const custom = { rows: ['visibility', 'push'] };
         expect(quickFaceFor({ flavor: 'fed', quickFace: custom })).toBe(custom);
+    });
+
+    /*
+     * A `setting` row draws the element's declared `quickSettings`, so the two
+     * travel together: a setting row with no list draws nothing, and a list with
+     * no row is a look nobody can reach from the rail. Every key must be a real
+     * setting of the namespace the element's mount reads, or it silently drops
+     * out of the card (defsFor skips unknown keys by design).
+     */
+    it('a setting row names its quickSettings, and every key is a real setting', () => {
+        for (const e of ELEMENTS) {
+            const face = quickFaceFor(e);
+            const hasRow = !!face?.rows.includes('setting');
+            expect(hasRow, `${e.id}: setting row ⇔ quickSettings`).toBe(!!e.quickSettings?.length);
+            const known = new Set((LAYOUT_SETTINGS[settingsTypeOf(e)] ?? []).map(d => d.key));
+            for (const key of e.quickSettings ?? []) expect(known.has(key), `${e.id}: ${key}`).toBe(true);
+        }
     });
 
     it('fed elements with a content row name their feed picker', () => {
