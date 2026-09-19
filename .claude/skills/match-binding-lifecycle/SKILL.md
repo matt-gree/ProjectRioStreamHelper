@@ -222,7 +222,7 @@ event, guarded to write once) → `post` (post-game capture, or auto-retire).
 
 Those are the only *automatic* transitions, and they only ever move forward — which
 is why the **producer can set the stage by hand**, from the Match desk's stage badge
-(`StageControl` in `match/desk.jsx`, a `PUT /match/{m}` with `{stage}`). Sending a
+(`StageControl` in `match/stage.jsx`, a `PUT /match/{m}` with `{stage}`). Sending a
 played fixture back to `draft` is the way out of the strand above, and it is the
 only one. The control is **momentary, not staged**, matching that desk's existing
 rule that authoring and lifecycle hops run immediately (Next game is the same write

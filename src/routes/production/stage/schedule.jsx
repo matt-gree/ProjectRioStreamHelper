@@ -25,7 +25,7 @@ import { DirectStage } from './generic';
  * picker, which meant tonight's running order was edited inside a ticker's
  * settings — a second list of the same matches, in a different place from the
  * fixtures it orders, free to disagree with the Match desk's stack. Membership and
- * position now live on the Match desk (`match/desk.jsx`), where the fixtures are
+ * position now live on the Match desk (`match/`), where the fixtures are
  * authored and where the position number sits on the row it belongs to.
  *
  * What stays is what is genuinely this overlay's: its HEADING, and each match's

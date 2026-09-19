@@ -115,7 +115,7 @@ Rules:
 
 ### The Match desk owns the whole fixture
 
-`src/routes/production/match/desk.jsx`. Fixture authoring used to exist twice —
+`src/routes/production/match/` — `desk.jsx` plus one file per region. Fixture authoring used to exist twice —
 here as a single-open accordion and on the Match tab as a stack of fully-expanded
 cards (`MatchPanel`), with different controls on each. `MatchPanel` is **deleted**;
 so is `ScoreControls`, whose Game State panel the board desk's corrections
