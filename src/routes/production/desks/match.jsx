@@ -547,6 +547,23 @@ const DRAFT_STAGE_BADGE = {
 };
 
 /*
+ * THE HEADER WEARS ITS BADGE'S COLOUR. A stack of fixtures is
+ * scanned for state before it is read for names, and a 10px chip at the far end
+ * of each row made that scan a hunt; the row itself carries the hue now, so a
+ * night reads as a column of colours. Keyed by the ONE badge a row shows —
+ * decided and split outrank the stage exactly as they replace its badge — so the
+ * tint and the chip cannot disagree. The chip carries the same /15 over it, so it
+ * still reads a step louder, as the thing to press.
+ */
+const HEADER_TINT = {
+    draft:   'bg-[#a855f7]/15',
+    live:    'bg-emerald-500/15',
+    post:    'bg-[#64748b]/15',
+    decided: 'bg-emerald-500/15',
+    split:   'bg-secondary',
+};
+
+/*
  * What each stage MEANS, in the producer's terms rather than the key's.
  *
  * `stage` has no producer-facing writer on the server — `note_live` promotes
@@ -967,7 +984,8 @@ const MatchAccordion = memo(function MatchAccordion({
                 set is a state worth interrupting for, unlike a live 0–0. */}
             <div className={cn(
                 'flex items-center gap-2 px-2 py-1.5',
-                open && 'border-b border-border bg-night-700/50',
+                HEADER_TINT[decided ? 'decided' : split ? 'split' : stage] || HEADER_TINT.draft,
+                open && 'border-b border-border',
             )}>
                 {/* THE POSITION IN THE RUNNING ORDER, and the two verbs that
                     change it — at the head of the row, because that is what the
