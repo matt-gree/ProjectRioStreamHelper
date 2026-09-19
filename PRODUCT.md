@@ -27,7 +27,7 @@ Runs locally on the operator's machine (loopback-bound by default) alongside a r
 - Ships as a standalone macOS/Windows app (PyInstaller) or run from source (`npm run dev`).
 - Does not ship MSB game assets (Nintendo IP) — the operator supplies their own character/team-logo/game-icon pack.
 - Binds to loopback (`127.0.0.1`) only by default; LAN access is opt-in, because PRSH exposes stateful APIs that can mutate the live broadcast.
-- No native mobile app. The optional controller-input overlay (`gc-overlay`) is macOS-only.
+- No native mobile app. The optional controller-input overlay (`gc-overlay`) runs on macOS, Windows and Linux.
 - Console degrades gracefully with no OBS connection (catalog tier) — this is a deliberate design constraint, not a gap to fix.
 
 ## Brand Commitments

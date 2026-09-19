@@ -151,7 +151,7 @@ Overlays subscribe to `v1.state.set` / `v1.state.set_batch` over SocketIO and re
 
 > ⚠ When *editing* an overlay HTML file, hard-refresh the browser source (Cmd/Ctrl+Shift+R) to bypass the cache. Safari may also need Option+Cmd+E first.
 
-You can also wire **OBS Text Sources** to individual values — enable export under **Settings → General** and PRSH will mirror each state key into a `.txt` file under `user_data/stream_labels/`.
+You can also wire **OBS Text Sources** to individual values — enable **Write text files for OBS** under **Settings → Output** and PRSH will mirror each state key into a `.txt` file under `user_data/stream_labels/`.
 
 ---
 

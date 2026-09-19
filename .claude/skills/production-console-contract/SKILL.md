@@ -1,6 +1,6 @@
 ---
 name: production-console-contract
-description: The Production tab console architecture (rack / stage / quick rail), the element contract every broadcast element must satisfy to appear there (registration, quick face, stage body), the six-row kit that all three surfaces compose from, and the desk tier for non-element workflows (boards, Match). Read before adding an element to the Production page, changing production UI, or touching src/routes/production/. This file is a router — the depth lives in reference/, loaded per area.
+description: The Production tab console architecture (rack / stage / quick rail), the element contract every broadcast element must satisfy to appear there (registration, quick face, stage body), the shared row kit that all three surfaces compose from, and the desk tier for non-element workflows (boards, Match). Read before adding an element to the Production page, changing production UI, or touching src/routes/production/. This file is a router — the depth lives in reference/, loaded per area.
 ---
 
 # Production Console Contract

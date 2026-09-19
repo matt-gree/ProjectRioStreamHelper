@@ -283,12 +283,13 @@ screenshot; get the user's eyes or reason from first principles.
 
 - **Layout type** is derived from filename stem + group folder (`bracket/*` →
   `bracket`, else stem minus trailing digits).
-- Variant expansion: `?size=s|m|l` (scoreboard type only; legacy xs/xl fall
-  back to l), `?team=1|2` (stats, roster, teamlogo, controller,
-  playername). `?scoreboard=N` binds board data —
+- Variant expansion: `?size=s|l` (scoreboard type only; any retired or
+  unknown size — `xs`, `m`, `xl` — resolves to `l`), `?team=1|2` (statsbar,
+  statscard, roster, teamlogo, controller, playername — every source names its
+  side, there is no bare row). `?scoreboard=N` binds board data —
   **missing param defaults to board 1**.
-- `controller/` is **macOS-only** (omitted from the catalog off-Darwin) —
-  platform-gate any test that asserts on it.
+- `controller/` is listed on **every platform** — gc-overlay has a transport
+  for each, so presence (not the OS) gates it. Don't platform-gate a test on it.
 - Style settings are two-tier, defined in `src/routes/layouts/designConstants.js`:
   `GLOBAL_DESIGN_KEYS`/`GLOBAL_DESIGN_DEFAULTS` (live at `overlays.global.*`)
   and `LAYOUT_SETTINGS[layoutType]` (live at `overlays.{type}.{key}`;

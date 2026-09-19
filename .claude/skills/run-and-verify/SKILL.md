@@ -8,9 +8,9 @@ description: How to run PRSH's test suites, boot the app for verification, and s
 ## The commands
 
 ```bash
-./venv/bin/python -m pytest                  # backend suite (~900 tests, ~8s)
+./venv/bin/python -m pytest                  # backend suite (~1,540 tests, ~13s)
 ./venv/bin/python -m pytest tests/unit/rio/test_side_preservation.py -k match   # one test
-npm run test:run                             # frontend suite (vitest, ~830 tests / 51 files, ~13s)
+npm run test:run                             # frontend suite (vitest, ~1,510 tests / 76 files, ~25s)
 npx vitest run src/routes/production/rack.test.jsx   # one frontend file
 npm run vite:lint                            # ESLint, --max-warnings 0 (CI fails on any)
 npm run build                                # frontend production build (also a type/import check)
@@ -106,14 +106,15 @@ never work around them:
   `State._stream_labels_out`, `Settings._settings_out` at `tmp_path`. A test
   must **never** touch real `user_data/`.
 - `reset_singletons` — snapshots/restores the class state of State, Settings,
-  Provider, StatsTracker, PoolManager, Match, Participants, PostGame,
-  Automations, Announcements, GameEndWatcher and StatFileWatcher, and gives
-  each test a fresh `State.queue`. If you add a new class-level singleton with
+  Provider, StatsTracker, PoolManager, the ongoing/completed game pools,
+  Participants (+ books), PostGame, Automations, Announcements, GameEndWatcher,
+  StatFileWatcher and StartGGProvider, and gives each test a fresh
+  `State.queue`. If you add a new class-level singleton with
   mutable state, **add it to this fixture in the same change** — this list has
   grown with nearly every new model, and a singleton missing from it leaks
   across tests as an order-dependent failure.
 
-Two opt-in fixtures:
+Three opt-in fixtures:
 
 - `set_setting(key, value)` — set a dotted Settings key. It bumps
   `Settings.revision`, which consumers that cache a normalized subtree need in
@@ -122,6 +123,9 @@ Two opt-in fixtures:
   one board and the bind routes 404 anything outside it** (`require_board`), so
   a test exercising a two- or three-board rig must actually declare one, or it
   fails as a confusing 404 rather than as the thing under test.
+- `pin_player(rio_name, side=1)` — write the address-book row the side
+  cascade's `pin` layer reads. A pin is `prefs.side` on a **person**, never a
+  setting, so a pin test seeds the book, not Settings.
 
 Integration tests run **in-process** — no uvicorn/socketio boot:
 
@@ -186,11 +190,14 @@ afterEach(cleanup);
 ```
 
 Reset every store a component reads in `beforeEach` — Zustand stores are
-module singletons and leak across files otherwise. **The whole 51-file suite
-contains four `vi.mock` calls**, and three of them are external boundaries
-(`socket.io-client`, `obs-websocket-js`, the notification toast). That ratio
-is the convention: reach for `vi.mock` when you're standing in for something
-outside the app, and otherwise seed the store.
+module singletons and leak across files otherwise. **The whole 76-file suite
+contains eight `vi.mock` calls, and every one is a boundary**: two external
+clients (`socket.io-client`, `obs-websocket-js`), a third-party widget
+(`react-colorful`), the notification toast (×2), and three context modules'
+REST writers — *partial* mocks (`...(await importOriginal())`) that keep the
+real store and replace only the call to the server. That is the convention:
+reach for `vi.mock` when you're standing in for something outside the app, and
+otherwise seed the store.
 
 `src/test/setup.js` supplies two jsdom gaps, and the reasons matter:
 `ResizeObserver` (absent in jsdom; anything observing its own box throws on
@@ -202,10 +209,11 @@ with the same kind of note rather than stubbing it per-file.
 
 ## Platform gotchas
 
-- CI runs **Linux**; the controller layout (and gc-overlay generally) is
-  macOS-only and absent from the layout catalog there. Platform-gate any
-  assertion touching it (`platform.system() == "Darwin"`), or it passes
-  locally and fails in CI.
+- CI runs **Linux**. The controller layout is in the catalog on every
+  platform now (gc-overlay has a Dolphin transport for each), so the old
+  `platform.system() == "Darwin"` gate on it is gone — don't add one back. A
+  test that genuinely depends on the OS monkeypatches `platform.system`
+  (`tests/unit/rio/test_hud_default_path.py`) rather than skipping.
 - `import main` from the repo root can pick up a submodule's `main.py`
   (rio-visualizer) — use `py_compile` or import `server.server` for sanity
   checks instead.

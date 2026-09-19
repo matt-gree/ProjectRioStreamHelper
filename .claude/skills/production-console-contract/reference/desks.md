@@ -151,6 +151,17 @@ somewhere, and the conflict banner's "Go to board" selects the board's desk.
 - All three stage (`match:{m}:flip` / `match:{m}:decide`) — they re-project onto
   the bound board. Decide passes `liveValue: decided`, so Reopen-then-Decide
   leaves nothing pending, the same toggle-twice rule as every other staged control.
+- **A row's header wears its badge's colour** (`HEADER_TINT`). A stack of fixtures
+  is scanned for state before it is read for names, and a 10px chip at the far
+  end of each row made that scan a hunt. The tint is keyed by the ONE badge the
+  row shows — decided and split outrank the stage exactly as they replace its
+  badge — so tint and chip cannot disagree; the chip keeps its own /15 over the
+  tint so it still reads a step louder, as the thing to press.
+- **Every fixture picker names a match `M{id} · …` first** (`matchDisplayLabel`,
+  `src/routes/production/matches.js`), the console's own spelling. Names alone
+  cannot tell two fixtures between one pair apart — the doubleheader, the
+  night's common repeat — so every picker built on it offered two identical
+  entries. A fixture with nothing else to say keeps `Match {id}`.
 
 #### The stack IS the running order
 
