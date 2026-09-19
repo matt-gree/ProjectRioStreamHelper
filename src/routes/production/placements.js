@@ -571,8 +571,8 @@ export function usePlacementLabel(placements) {
 }
 
 /*
- * THE OTHER HALF OF A PAIR — this placement's own element, on the same board,
- * in the same scene, wearing the other `?team=`.
+ * THE OTHER HALF OF A PAIR — this placement's own element, in the same scene,
+ * wearing the other `?team=` (on the same board when there is one).
  *
  * Derived from the SAME placement list every other surface reads, rather than
  * scanning OBS for a URL: a sibling found any other way is a source the rack
@@ -585,6 +585,17 @@ export function usePlacementLabel(placements) {
  * THIS scene. Reaching across scenes would offer to size a source against one
  * the producer isn't looking at.
  *
+ * The BOARD is a preference, not a coordinate. It used to be the fourth, which
+ * was harmless while a source's board was fixed at Add time and stopped being
+ * so the day the stage's Board row could re-point one half: a Roster with side
+ * 1 moved to board 2 and side 2 left on board 1 lost its Size row, although
+ * nothing about the two boxes in OBS had changed — a size is geometry, and
+ * which board a source READS has nothing to do with it. So the same board wins
+ * where there is one (a rig with a board-1 and a board-2 pair in one scene
+ * matches within its own pair), and otherwise the lowest-numbered board's other
+ * half answers; the row names that board, so a cross-board match is never a
+ * surprise.
+ *
  * A FED row is excluded on purpose. A member's row commands the CONTAINER's
  * source (see placementFlavor), which is shared with every other member and
  * sized as the container — resizing it there would be a panel quietly editing
@@ -595,15 +606,17 @@ export function sideSibling(placement, placements = []) {
     if (!placement?.item || !placement.scene || isFedPlacement(placement)) return null;
     const other = flipSideVariant(placement.variant);
     if (!other) return null;
-    return placements.find(p => (
+    const halves = placements.filter(p => (
         p.scene === placement.scene
         && sidePairVariant(p.variant) === other
-        && p.board === placement.board
         && p.element?.id === placement.element?.id
         && p.item
         && p.item.id !== placement.item.id
         && !isFedPlacement(p)
-    )) ?? null;
+    ));
+    return halves.find(p => p.board === placement.board)
+        ?? [...halves].sort((a, b) => (a.board ?? 0) - (b.board ?? 0))[0]
+        ?? null;
 }
 
 /*

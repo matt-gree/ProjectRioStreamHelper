@@ -99,6 +99,39 @@ describe('matching a pair’s size', () => {
         expect(screen.queryByRole('button', { name: /Match/ })).not.toBeInTheDocument();
     });
 
+    /*
+     * A size is geometry; which board a source READS is not part of it. The
+     * stage's Board row re-points one half at a time, and doing that used to
+     * make the Size row vanish from both panels.
+     */
+    it('still offers the other side after one half moves to another board', () => {
+        obs({
+            Game: [
+                item(1, 'Roster 1', `${ROSTER}?scoreboard=2&team=1`),
+                item(2, 'Roster 2', `${ROSTER}?scoreboard=1&team=2`),
+            ],
+        });
+        ui(<Stage selection="roster:2~t1@Game" />);
+        const btn = screen.getByRole('button', { name: /Match Side 2 · B1/ });
+        fireEvent.click(btn);
+        expect(match).toHaveBeenCalledWith(expect.objectContaining({ itemId: 1, modelItemId: 2 }));
+    });
+
+    // Two pairs in one scene: each half matches within its own board's pair.
+    it('prefers the other side on its own board', () => {
+        obs({
+            Game: [
+                item(1, 'Roster 1', `${ROSTER}?scoreboard=1&team=1`),
+                item(2, 'Roster 2', `${ROSTER}?scoreboard=1&team=2`),
+                item(3, 'Roster 1 B2', `${ROSTER}?scoreboard=2&team=1`),
+                item(4, 'Roster 2 B2', `${ROSTER}?scoreboard=2&team=2`),
+            ],
+        });
+        ui(<Stage selection="roster:2~t1@Game" />);
+        fireEvent.click(screen.getByRole('button', { name: /^Match Side 2$/ }));
+        expect(match).toHaveBeenCalledWith(expect.objectContaining({ itemId: 3, modelItemId: 4 }));
+    });
+
     // The situation it serves is "both are placed". A single-sided element has
     // nothing to match, and a disabled button saying so would sit on every
     // Roster, Team Logo and Player Name panel in the console.

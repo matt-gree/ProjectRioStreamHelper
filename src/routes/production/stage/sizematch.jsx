@@ -9,6 +9,7 @@ import { StagedDot } from '../controls';
 import { sideSibling, isScaleSensitive } from '../placements';
 import { sideOfVariant } from '../instances';
 import { useSideLabels } from '../sides';
+import { useBoardTag } from '../boards';
 
 /*
  * "Make this one the same size as the other one."
@@ -95,6 +96,7 @@ export function matchSize(placement, sibling, label) {
 const SizeMatchRow = memo(function SizeMatchRow({ placement, placements }) {
     const sibling = sideSibling(placement, placements);
     const { label } = useSideLabels();
+    const boardTag = useBoardTag();
     // Hooks before the bail-out: a placement that gains or loses its sibling
     // mid-session (the producer adds the other side while this panel is open)
     // must not change how many hooks this component runs.
@@ -105,7 +107,10 @@ const SizeMatchRow = memo(function SizeMatchRow({ placement, placements }) {
     );
     if (!sibling) return null;
 
-    const other = label(sideOfVariant(sibling.variant));
+    // Across boards the side alone is ambiguous — say which board's half it is.
+    const crossBoard = sibling.board != null && sibling.board !== placement.board;
+    const other = label(sideOfVariant(sibling.variant))
+        + (crossBoard ? ` · ${boardTag(sibling.board)}` : '');
     return (
         <FieldRow label="Size" staged={staged}>
             <Button
