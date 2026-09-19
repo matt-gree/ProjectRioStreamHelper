@@ -36,7 +36,7 @@ _PLAYER_KEYS = [
     "rioName", "port", "rio_captainIndex", "character.0.name", *RESURFACE_MAP.values(),
 ]
 
-# Which of those keys the LIVE FEED also writes (provider.apply_parsed_game_to_state
+# Which of those keys the LIVE FEED also writes (apply.apply_parsed_game_to_state
 # and its `_apply_resurface` pass). `score.{N}.player.{T}.*` is the one place a
 # projector and a feed meet, and for this projector the overlap is total — every
 # key above is feed-shared.

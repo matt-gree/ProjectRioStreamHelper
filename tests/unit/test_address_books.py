@@ -202,7 +202,7 @@ async def test_a_replaced_logo_reaches_a_board_already_showing_it():
 
 def test_resurface_uses_the_leagues_own_row_in_its_games():
     """Its tag AND its prefix — the prefix is how a league shows a team name."""
-    from server.rio.provider import _apply_resurface
+    from server.rio.apply import _apply_resurface
 
     Participants.books["b_x"] = {"id": "b_x", "name": "NNL", "modes": ["NNL Season 7"], "community": ""}
     for pid, bk, tag, prefix in (("p_m", MAIN_BOOK, "MainTag", "SPONSOR"), ("p_l", "b_x", "LeagueTag", "Mercs")):

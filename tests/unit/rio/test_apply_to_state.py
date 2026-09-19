@@ -3,11 +3,8 @@
 These write the score.{N}.* keys that every overlay and the React store read —
 an external contract. Both must collapse to a single SetBatch frame.
 """
-from server.rio.provider import (
-    RioGameDataProvider as P,
-    apply_parsed_game_to_state,
-    apply_completed_game_to_state,
-)
+from server.rio.provider import RioGameDataProvider as P
+from server.rio.apply import apply_parsed_game_to_state, apply_completed_game_to_state
 from server.state import State
 from server.utils.deep_dict import deep_get
 

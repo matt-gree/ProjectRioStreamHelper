@@ -6,12 +6,8 @@ import numpy as np
 import pandas as pd
 from loguru import logger
 from server import socketio
-from server.rio.provider import (
-    RioGameDataProvider,
-    apply_parsed_game_to_state,
-    apply_completed_game_to_state,
-    pin_swap,
-)
+from server.rio.provider import RioGameDataProvider, pin_swap
+from server.rio.apply import apply_parsed_game_to_state, apply_completed_game_to_state
 from server.rio import stats_api
 from server.rio.stats_api import get_last_completed_fetch_info
 from server.rio.pyrio.lookup import LookupDicts

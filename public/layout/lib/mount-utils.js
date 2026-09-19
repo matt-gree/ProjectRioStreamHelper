@@ -85,7 +85,7 @@ export function applyCardRail(engine, on) {
   svg.setAttribute('viewBox', `${bgX + (bgW - vb[2]) / 2} ${vb[1]} ${vb[2]} ${vb[3]}`);
 }
 
-// Stadium values reach state as slugs (server/rio/provider.py:_stadium_slug),
+// Stadium values reach state as slugs (server/rio/apply.py:_stadium_slug),
 // which is right for lookups and wrong on air — "peach_garden" is not a name
 // anyone writes. Title-casing the slug gets six of the seven right and "DK
 // Jungle" wrong ("Dk"), so the names are SPELLED here rather than derived; the

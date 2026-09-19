@@ -122,7 +122,7 @@ def test_game_over_rides_the_flat_dict(name, expected):
 
 @pytest.mark.asyncio
 async def test_the_last_frame_of_a_game_marks_the_board_over(mock_socket):
-    from server.rio.provider import apply_parsed_game_to_state
+    from server.rio.apply import apply_parsed_game_to_state
     from server.state import State
     from server.utils.deep_dict import deep_get
 
@@ -136,7 +136,7 @@ async def test_the_last_frame_of_a_game_marks_the_board_over(mock_socket):
 
 @pytest.mark.asyncio
 async def test_a_game_in_progress_leaves_the_board_live(mock_socket):
-    from server.rio.provider import apply_parsed_game_to_state
+    from server.rio.apply import apply_parsed_game_to_state
     from server.state import State
     from server.utils.deep_dict import deep_get
 
@@ -148,7 +148,7 @@ async def test_a_game_in_progress_leaves_the_board_live(mock_socket):
 async def test_a_new_game_clears_the_previous_ones_over_flag(mock_socket):
     """The flag is re-derived per frame, never latched — otherwise a board that
     had finished a game would come up 'over' for the next one."""
-    from server.rio.provider import apply_parsed_game_to_state
+    from server.rio.apply import apply_parsed_game_to_state
     from server.state import State
     from server.utils.deep_dict import deep_get
 
@@ -163,7 +163,7 @@ async def test_an_ongoing_api_game_is_never_marked_over_by_this_key(mock_socket)
     reports a finished game through `live_following` / `game_completed`
     instead, so the absent field must default to False rather than carrying the
     previous frame's answer."""
-    from server.rio.provider import apply_parsed_game_to_state
+    from server.rio.apply import apply_parsed_game_to_state
     from server.state import State
     from server.utils.deep_dict import deep_get
 

@@ -23,8 +23,8 @@ Two concerns:
 """
 import pytest
 
-from server.rio.provider import (
-    RioGameDataProvider as P,
+from server.rio.provider import RioGameDataProvider as P
+from server.rio.apply import (
     apply_parsed_game_to_state,
     apply_completed_game_to_state,
     clear_game_entries,
@@ -230,7 +230,7 @@ EXEMPT_FROM_CLEAR_COMPLETED: set[str] = set()
 def apply_reset(sb: int):
     """Apply the canonical clear — the same entries the endpoint writes.
 
-    Not a re-listing: `clear_game_entries` IS the contract (server/rio/provider.py),
+    Not a re-listing: `clear_game_entries` IS the contract (server/rio/apply.py),
     and a test that restated it could only ever pin the restatement.
     """
     for key, val in clear_game_entries(sb):

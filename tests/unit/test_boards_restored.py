@@ -8,7 +8,7 @@ moment a feed writes.
 import pytest
 
 from server import boards
-from server.rio.provider import apply_parsed_game_to_state
+from server.rio.apply import apply_parsed_game_to_state
 from server.settings import Settings
 from server.state import State
 from server.utils.deep_dict import deep_get
