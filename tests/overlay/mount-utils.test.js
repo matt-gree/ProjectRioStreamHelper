@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyCardRail, linescoreColumns, prettyStadium, layoutBox, lineTextBox, layoutStatCells, pinBesideText, applyTextPins } from '../../../public/layout/lib/mount-utils.js';
+import { applyCardRail, linescoreColumns, prettyStadium, layoutBox, lineTextBox, layoutStatCells, pinBesideText, applyTextPins } from '../../public/layout/lib/mount-utils.js';
 
 /*
  * Two rules a scoreboard gets wrong SILENTLY — nothing throws, nothing logs, and

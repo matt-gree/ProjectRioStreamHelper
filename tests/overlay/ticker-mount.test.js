@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { cardOutcome, metaLine, mountTicker } from '../../../public/layout/lib/ticker-mount.js';
+import { cardOutcome, metaLine, mountTicker } from '../../public/layout/lib/ticker-mount.js';
 
 /*
  * The Results Ticker's card. Three things, and only the first of them is

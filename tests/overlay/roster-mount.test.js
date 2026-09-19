@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach } from 'vitest';
-import { renderRoster, resolvePortraitStyle } from '../../../public/layout/lib/roster-mount.js';
+import { renderRoster, resolvePortraitStyle } from '../../public/layout/lib/roster-mount.js';
 // The REAL rule, not a third copy of it: designConstants' settingOn is the
 // app-side mirror of overlay-base's, and designConstants.test.js pins the two
 // against each other by parsing the source. Stubbing a hand-written boolean
 // check here would let this suite pass on a rule the overlay does not use.
-import { settingOn } from './designConstants';
+import { settingOn } from '../../src/routes/layouts/designConstants';
 
 /*
  * The roster's Pixel switch — off is smooth (what it always drew), on is what

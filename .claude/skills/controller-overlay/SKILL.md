@@ -71,7 +71,7 @@ PRSH and gc-overlay are two programs on two ports, and everything PRSH asks of
 the reader it asks in a query string. Nothing fails, logs, or previews
 differently when a param is dropped; it just goes out on air wrong. So the
 broadcast string lives in ONE constant, `GC_CHROME` in `lib/controller-mount.js`,
-and is pinned by `src/routes/layouts/controller-mount.test.js`.
+and is pinned by `tests/overlay/controller-mount.test.js`.
 
 | Param | Broadcast source | Connections preview | Why |
 |---|---|---|---|

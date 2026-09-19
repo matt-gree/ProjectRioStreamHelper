@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
-import { rowOutcome, LOSER_DIM } from '../../../public/layout/lib/matchup-mount.js';
+import { rowOutcome, LOSER_DIM } from '../../public/layout/lib/matchup-mount.js';
 
 /*
  * WHO WON A MATCHUP CARD. The band's only cue was a dim on the losing score,

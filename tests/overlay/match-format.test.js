@@ -10,7 +10,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     FORMATS, formatLabel, gamesToWin, isSplit, matchComplete, seriesContinues,
-} from '../../../public/layout/lib/match-format.js';
+} from '../../public/layout/lib/match-format.js';
 
 describe('match format', () => {
     it('never prints Bo2, because nobody calls a doubleheader that', () => {

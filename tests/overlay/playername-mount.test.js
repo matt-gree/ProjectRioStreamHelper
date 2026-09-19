@@ -20,7 +20,7 @@ import {
     DEFAULT_PREFIX_SIZE,
     MIN_PREFIX_SIZE,
     MAX_PREFIX_SIZE,
-} from '../../../public/layout/lib/playername-mount.js';
+} from '../../public/layout/lib/playername-mount.js';
 
 /*
  * The Player Name's sizing rule.

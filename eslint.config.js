@@ -23,7 +23,7 @@ export default [
 
   // React app (Vite build) — src/
   {
-    files: ['src/**/*.{js,jsx}'],
+    files: ['src/**/*.{js,jsx}', 'tests/overlay/**/*.js'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',

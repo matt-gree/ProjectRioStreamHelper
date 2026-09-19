@@ -29,6 +29,8 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: './src/test/setup.js',
-    include: ['src/**/*.test.{js,jsx}'],
+    // The overlay runtime's tests live beside the Python suite: public/ is
+    // served as-is, so a test there would be a page anyone could load.
+    include: ['src/**/*.test.{js,jsx}', 'tests/overlay/**/*.test.js'],
   },
 });

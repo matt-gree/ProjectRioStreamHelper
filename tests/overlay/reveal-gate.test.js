@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { createRevealGate } from '../../../public/layout/lib/reveal-gate.js';
+import { createRevealGate } from '../../public/layout/lib/reveal-gate.js';
 
 /*
  * The show/hide sequencing every animated overlay shares.

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mountController, watchesSetting } from '../../../public/layout/lib/controller-mount.js';
+import { mountController, watchesSetting } from '../../public/layout/lib/controller-mount.js';
 
 /*
  * The URL `lib/controller-mount.js` hands gc-overlay.

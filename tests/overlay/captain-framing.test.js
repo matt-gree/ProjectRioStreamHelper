@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
     CAPTAIN_ART, CAPTAIN_FRAMES, DEFAULT_FRAME, captainFrame,
     STAGE_W, BOARD, MARGIN, BASELINE, CEILING, HEAD_CLEAR,
-} from '../../../public/layout/lib/captain-framing.js';
+} from '../../public/layout/lib/captain-framing.js';
 
 /*
  * The Game Summary's per-captain hero framing

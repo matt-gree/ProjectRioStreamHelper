@@ -17,7 +17,7 @@
 //
 // So the art is measured once, here, and each captain gets an explicit frame
 // per side. Three things had to come out right, and all three are pinned by
-// `src/routes/layouts/captain-framing.test.js` — change a number and the test
+// `tests/overlay/captain-framing.test.js` — change a number and the test
 // tells you which promise you broke:
 //
 //   1. NOTHING CLIPS. The art's outer edge never crosses `MARGIN`, so no

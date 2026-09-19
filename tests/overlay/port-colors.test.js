@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { DEFAULT_PORT_COLORS, inkOn } from '../../../public/layout/lib/port-colors.js';
+import { DEFAULT_PORT_COLORS, inkOn } from '../../public/layout/lib/port-colors.js';
 
 /*
  * Text ON a port colour. The scoreboard's live row fills its AB / P tag with

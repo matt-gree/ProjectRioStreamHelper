@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
     createLayers, memberBox, memberOffset, resolveFeed, _resetCssForTests,
-} from '../../../public/layout/lib/container-layers.js';
+} from '../../public/layout/lib/container-layers.js';
 
 /*
  * The shared-container runtime (`public/layout/lib/container-layers.js`).

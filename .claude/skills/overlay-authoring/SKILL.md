@@ -158,7 +158,7 @@ fed to it. The engine is split in two on purpose:
   if-chain, which is why only four of the thirteen `{ host }` mounts were
   reachable.
 - **`container-layers.js` = the MECHANICS**, importing nothing. That is what makes
-  them testable (`src/routes/layouts/container-layers.test.js`, 28 tests):
+  them testable (`tests/overlay/container-layers.test.js`, 28 tests):
   fed-container imports its mounts by absolute `/layout/…` URL and drags in
   three.js and GSAP, so nothing inside it can be unit tested.
 
@@ -203,7 +203,7 @@ Rules the runtime encodes:
   padding is a FRACTION of the height, which is what keeps a half-size preview
   half-size; and the scale reads the prefix-position SETTING, never whether this
   participant has a prefix, because two sources framing a scoreboard have to
-  draw at one type size. `src/routes/layouts/playername-mount.test.js`.
+  draw at one type size. `tests/overlay/playername-mount.test.js`.
 - **Scope is applied LAST and beats the payload.** A scoped source carries its own
   frame of reference on its URL (`?scoreboard=N&team=T`, via `scopeFromParams`),
   and every source of one definition shares ONE feed key — so the feed says WHAT
@@ -354,7 +354,7 @@ passes `preview=1` alone and gets the truth.
 
 ### Sample bundles — `init({ sample })`
 
-**Every Layout declares one. `src/routes/layouts/overlay-sample.test.js` fails
+**Every Layout declares one. `tests/overlay/overlay-sample.test.js` fails
 if it doesn't.** A layout with no bundle previews as an empty box in the Add
 picker on a machine with no game running, which reads as a broken element rather
 than an unconfigured one.

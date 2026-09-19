@@ -83,9 +83,13 @@ Integration tests run **in-process** over `fastapi.testclient.TestClient` and
 
 Tests sit next to the module they cover (`rack.jsx` → `rack.test.jsx`), never in
 a mirror tree. The bulk is in `src/routes/production/` (console, stage panels,
-kit) and `src/routes/layouts/`, which also tests the **overlay runtime** under
-`public/layout/lib/` (mounts, `mount-utils`, `rio-data`, port colours, type
-roles) — those modules are plain ES modules and import straight into vitest.
+kit) and `src/routes/layouts/` (the Design tab).
+
+The one exception is the **overlay runtime** under `public/layout/lib/` (mounts,
+`mount-utils`, `rio-data`, port colours, type roles): its tests are in
+`tests/overlay/`, because everything under `public/` is served as-is and a test
+file there would be a page anyone could load. Those modules are plain ES modules
+and import straight into vitest.
 Config is the `test:` block in `vite.config.js` (jsdom, globals, setup at
 `src/test/setup.js`).
 
@@ -143,7 +147,7 @@ code, a test pins them together — each fails the moment one side changes alone
 | A board's lifecycle (`lifecycle_of` / `boardLifecycle`) | one case table, `tests/fixtures/board_lifecycle.json`, read by `test_board_lifecycle_parity.py` **and** `src/routes/production/board-lifecycle.test.js` — a behaviour, so parity is shared cases rather than parsing one language from the other |
 | A layout's `<meta>` whitelist vs `LAYOUT_SETTINGS` | `src/routes/production/stage/eventheader.test.jsx` and the layouts tests |
 | Theme slot and modifier grammar survives the Figma round trip | `tests/unit/test_figma_template.py` (slot counts per name; every `data-*` a mount reads is in `_MODIFIERS`) |
-| Every layout declares a sample bundle | `src/routes/layouts/overlay-sample.test.js` |
+| Every layout declares a sample bundle | `tests/overlay/overlay-sample.test.js` |
 
 Where one runtime can **import** the other's module, it does instead of pinning
 a copy: the console imports `container-members.js`, `spotlight-intent.js`,

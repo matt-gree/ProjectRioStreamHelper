@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
     scheduleRows, plateFor, blankReason, DEFAULTS, RAIL_OPACITY, DONE_DIM,
-} from '../../../public/layout/lib/schedule-mount.js';
+} from '../../public/layout/lib/schedule-mount.js';
 
 /*
  * The Upcoming Schedule's row selection. The element draws `schedule.queue`,
