@@ -131,7 +131,7 @@ def is_rotating(sb_id: int) -> bool:
 
 def pool(sb_id: int) -> dict:
     """The scoreboard's pool config (filters/scope/pinned/excluded)."""
-    return get_binding(sb_id).get("pool", dict(DEFAULT_POOL))
+    return get_binding(sb_id)["pool"]
 
 
 def binding_stats_tag(sb_id: int) -> str | None:

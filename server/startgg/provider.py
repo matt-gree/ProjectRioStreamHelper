@@ -95,7 +95,6 @@ class StartGGProvider:
 
     _client: httpx.AsyncClient | None = None
     _event_slug: str | None = None
-    _event_url: str | None = None
     _tournament_data: dict | None = None
     _bracket_cache: dict[int, dict] = {}  # phase_group_id -> parsed bracket dict
     # Created lazily so it binds to the RUNNING event loop, matching
@@ -127,7 +126,6 @@ class StartGGProvider:
             slug = cls._parse_slug(bracket_link)
             if slug:
                 cls._event_slug = slug
-                cls._event_url = bracket_link
                 logger.info("[startgg] restored event slug from state: {}", slug)
                 # Background refresh — same pattern as RotationManager: don't
                 # block startup, just shoot the API to update tournament data.
@@ -162,7 +160,6 @@ class StartGGProvider:
     async def Clear(cls):
         """Clear cached tournament data and the persisted bracket link."""
         cls._event_slug = None
-        cls._event_url = None
         cls._tournament_data = None
         cls._bracket_cache = {}
         await State.SetBatch([
@@ -261,7 +258,6 @@ class StartGGProvider:
         if cls._event_slug != slug:
             cls._bracket_cache = {}
         cls._event_slug = slug
-        cls._event_url = canonical_url
 
         data = await cls._query(
             "TournamentDataQuery",

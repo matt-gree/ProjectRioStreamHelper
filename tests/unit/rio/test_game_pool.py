@@ -186,3 +186,23 @@ async def test_live_following_cleared_by_a_completed_game(mock_socket):
     await State.Set("score.1.live_following", True)
     await apply_completed_game_dict(_completed(), 1)
     assert s("score.1.live_following") is False
+
+
+async def test_a_re_applied_live_game_does_not_rewrite_settings(mock_socket, monkeypatch):
+    """A followed live game is re-applied on every poll. Persisting its id each
+    tick was a settings.json write and a `v1.settings.set` frame every ~10s for
+    a value that never moved."""
+    from server.rio.game_pool import OngoingGamePool
+
+    monkeypatch.setattr(OngoingGamePool, "games", {7: {
+        "game_id": 7, "away_player": "Alice", "home_player": "Bob",
+        "away_user": "Alice", "home_user": "Bob", "game_completed": False,
+    }})
+    await OngoingGamePool.apply_game_to_scoreboard(7, 1)
+    first = [c for c in mock_socket.await_args_list if c.args[0] == "v1.settings.set"]
+    assert any(c.args[1]["key"] == "scoreboards.binding.1.playback.gameId" for c in first)
+
+    mock_socket.reset_mock()
+    await OngoingGamePool.apply_game_to_scoreboard(7, 1)
+    again = [c for c in mock_socket.await_args_list if c.args[0] == "v1.settings.set"]
+    assert not any(c.args[1]["key"] == "scoreboards.binding.1.playback.gameId" for c in again)

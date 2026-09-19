@@ -360,14 +360,23 @@ class OngoingGamePool:
         # mode here: that would (a) override the user's selected game mode
         # and (b) trigger a stats refetch on every poll via the frontend's
         # tag-change effect.
-        await Settings.Set(
-            f"scoreboards.binding.{scoreboard_number}.playback.gameId", game_id
-        )
+        await _record_game_id(scoreboard_number, game_id)
         # A game from the ongoing feed is on this board, so the feed is worth
         # polling for it — the flag the console's countdown renders on.
         await cls._set_following(scoreboard_number, True)
 
         return True
+
+
+async def _record_game_id(scoreboard_number: int, game_id) -> None:
+    """Persist the game a board is showing — on CHANGE only. A followed live
+    game is re-applied on every poll, and a settings write is a disk write, a
+    `v1.settings.set` frame and a pass through every settings watcher; doing it
+    each tick for a value that has not moved is the same waste `_set_following`
+    avoids."""
+    key = f"scoreboards.binding.{scoreboard_number}.playback.gameId"
+    if Settings.Get(key) != game_id:
+        await Settings.Set(key, game_id)
 
 
 async def apply_completed_game_dict(game: dict, scoreboard_number: int) -> bool:
@@ -391,9 +400,7 @@ async def apply_completed_game_dict(game: dict, scoreboard_number: int) -> bool:
         game["away_captain"], game["home_captain"] = game.get("home_captain", ""), game.get("away_captain", "")
 
     await apply_completed_game_to_state(game, scoreboard_number, side_reason=reason)
-    await Settings.Set(
-        f"scoreboards.binding.{scoreboard_number}.playback.gameId", game.get("game_id")
-    )
+    await _record_game_id(scoreboard_number, game.get("game_id"))
     # A completed game never updates again, so nothing is following anything —
     # and a board moving from a live game to a completed one has to clear the
     # flag, or it keeps the last live game's countdown running under it.
@@ -406,12 +413,12 @@ class CompletedGamePool:
 
     Pool rotations no longer use this — each PoolState holds its own filters
     and game cache (server.rio.rotation.PoolState). What remains here is
-    a thin convenience layer for the Game Pool Manager modal: a single
+    a thin convenience layer for the board desk's completed-game search: a single
     `fetch(filters)` call that runs a query, caches the latest result so
     `assign_game` can resolve it by id, and emits a SocketIO update for the
-    modal table.
+    search table.
 
-    There is no auto-poll loop and no persisted filter set. The modal calls
+    There is no auto-poll loop and no persisted filter set. The search calls
     fetch on user action; the cache is purely a transient memo of the most
     recent search.
     """
@@ -433,7 +440,7 @@ class CompletedGamePool:
 
         Updates `cls.games` with the result (so the manual browser's `assign`
         endpoint can resolve game_ids back to dicts) and emits an update
-        event for the modal. Returns the {game_id: game} dict; callers that
+        event for the search table. Returns the {game_id: game} dict; callers that
         own their own cache (rotations) should use this return value rather
         than relying on the class-level cache.
         """
@@ -472,6 +479,3 @@ class CompletedGamePool:
         """Apply a cached completed game (by id) to a scoreboard."""
         return await apply_completed_game_dict(cls.get_game(game_id), scoreboard_number)
 
-
-# Backward-compatible alias for imports that reference the old name
-RioGamePool = OngoingGamePool

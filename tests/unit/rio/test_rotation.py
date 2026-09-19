@@ -101,3 +101,32 @@ async def test_hud_board_never_resumed_even_if_marked_rotating(monkeypatch, set_
     )
     await PoolManager.Start()
     resume.assert_not_called()
+
+
+async def test_two_starts_at_once_leave_one_rotation(monkeypatch, set_setting):
+    """Start awaited between claiming the board and spawning its loop, so a
+    second Start (a double-click, or a resume racing a press) replaced the
+    first's entry while the first went on to spawn a loop nothing could stop."""
+    from server.rio.rotation import PoolState
+
+    set_setting("project_rio.hud_enabled", False)
+    _configure(set_setting, [1], {"1": {"playback": {"mode": "rotate"}, "pool": {"filters": []}}})
+
+    async def slow_refresh(self):
+        await asyncio.sleep(0.01)
+
+    loops = []
+
+    async def run(self):
+        loops.append(self)
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(PoolState, "refresh_now", slow_refresh)
+    monkeypatch.setattr(PoolState, "run", run)
+
+    await asyncio.gather(PoolManager.start_rotation(1), PoolManager.start_rotation(1))
+    await asyncio.sleep(0)
+    live = [s for s in loops if not s.task.done()]
+    assert live == [PoolManager._rotations[1]]
+    await PoolManager.stop_rotation(1)
+    assert all(s.task.done() for s in loops)

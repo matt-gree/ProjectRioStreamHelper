@@ -475,7 +475,9 @@ class Participants:
         return cls.participants.get(pid)
 
     @classmethod
-    async def Create(cls, partial: dict | None = None) -> dict:
+    async def Create(cls, partial: dict | None = None, *, reproject: bool = True) -> dict:
+        """Add a row. ``reproject=False`` is for a caller that fans out once
+        for a whole batch itself (the start.gg import)."""
         partial = partial or {}
         pid = _new_id()
         while pid in cls.participants:
@@ -501,7 +503,8 @@ class Participants:
         # A NEW row matters too: the resolvers fall back to a rioName lookup
         # (`MatchByRioName`), so adding the player who is on air right now is
         # what makes their plate stop showing a bare Rio username.
-        await cls.reproject_dependents()
+        if reproject:
+            await cls.reproject_dependents()
         return row
 
     @classmethod
@@ -1145,7 +1148,8 @@ class Participants:
           Never clobbers a manual edit (re-import enriches, doesn't overwrite).
         - Missing → Create a new row with meta.source="startgg". rioName stays
           EMPTY until the user maps it.
-        Returns the row.
+        Returns the row. Does NOT re-project: an event import calls this once
+        per entrant and fans out once for the batch (``import_startgg``).
         """
         player = player or {}
         user_id = player.get("userId")
@@ -1199,4 +1203,4 @@ class Participants:
             "identities": {"startgg": startgg_identity},
             "display": new_display,
             "meta": {"source": "startgg"},
-        })
+        }, reproject=False)

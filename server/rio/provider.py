@@ -167,7 +167,7 @@ async def get_user_hud_path() -> Path | None:
 async def apply_parsed_game_to_state(parsed: dict, scoreboard_number: int, home_team: int = 2, side_reason: str = ""):
     """Write parsed game data into State under score.{scoreboard_number}.
 
-    Shared by RioGameDataProvider (HUD) and RioGamePool (API).
+    Shared by RioGameDataProvider (HUD) and OngoingGamePool (API).
     Uses SetBatch to emit a single SocketIO event instead of 30+ individual ones.
 
     Args:

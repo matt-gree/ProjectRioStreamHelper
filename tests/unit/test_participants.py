@@ -515,3 +515,24 @@ def test_a_retired_display_field_is_dropped_off_a_stored_row():
 
     assert "mainCharacter" not in row["display"]
     assert row["display"]["tag"] == "Alice"
+
+
+async def test_a_startgg_import_reprojects_once_for_the_batch(monkeypatch):
+    """Every projector writes its full key set, so the import fans out once for
+    the whole event. New entrants went through Create, which fanned out per row
+    as well — a 64-player first import re-projected 65 times."""
+    from server.api.v1.participants import StartGGImportPayload, import_startgg
+
+    calls = []
+
+    async def count():
+        calls.append(1)
+
+    monkeypatch.setattr(Participants, "reproject_dependents", count)
+    await import_startgg(StartGGImportPayload(players=[
+        {"userId": 1, "gamerTag": "Ann"},
+        {"userId": 2, "gamerTag": "Ben"},
+        {"userId": 3, "gamerTag": "Cy"},
+    ]))
+    assert len(Participants.participants) == 3
+    assert len(calls) == 1

@@ -61,7 +61,6 @@ def reset_singletons():
     from server.participants import Participants
     from server.state import State
     from server.settings import Settings
-    from server.match import Match
     from server.postgame import PostGame
     from server.postgame.watch import StatFileWatcher
     from server.rio.game_end import GameEndWatcher
@@ -110,7 +109,6 @@ def reset_singletons():
         # that already has an event.
         "sgg_bracket_cache": dict(StartGGProvider._bracket_cache),
         "sgg_event_slug": StartGGProvider._event_slug,
-        "sgg_event_url": StartGGProvider._event_url,
         "sgg_tournament_data": StartGGProvider._tournament_data,
     }
 
@@ -151,6 +149,7 @@ def reset_singletons():
 
     StatsTracker._slots = {}
     PoolManager._rotations = {}
+    PoolManager._locks = {}
     GameEndWatcher._pending = set()
     GameEndWatcher._done = set()
     StatFileWatcher._done = set()
@@ -168,7 +167,6 @@ def reset_singletons():
     PostGame._contacts = {}
     StartGGProvider._bracket_cache = {}
     StartGGProvider._event_slug = None
-    StartGGProvider._event_url = None
     StartGGProvider._tournament_data = None
     # Same loop-binding hazard as the two locks above.
     StartGGProvider._load_lock = None
@@ -213,7 +211,6 @@ def reset_singletons():
     PostGame._contacts = saved["pg_contacts"]
     StartGGProvider._bracket_cache = saved["sgg_bracket_cache"]
     StartGGProvider._event_slug = saved["sgg_event_slug"]
-    StartGGProvider._event_url = saved["sgg_event_url"]
     StartGGProvider._tournament_data = saved["sgg_tournament_data"]
 
 

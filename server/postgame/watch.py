@@ -69,10 +69,6 @@ class StatFileWatcher:
     _done: set[tuple[int, str]] = set()
 
     @classmethod
-    def reset(cls) -> None:
-        cls._done = set()
-
-    @classmethod
     async def Start(cls) -> None:
         if cls._task is not None:
             return

@@ -116,6 +116,14 @@ class PoolManager:
     # {scoreboard_number: PoolState}
     _rotations: dict[int, "PoolState"] = {}
     _resume_task: asyncio.Task | None = None
+    # One per board. Start and Stop both await between reading and writing
+    # `_rotations`, so two presses (or a resume racing a press) interleaved and
+    # the loser's loop ran on with no entry left for Stop to cancel.
+    _locks: dict[int, asyncio.Lock] = {}
+
+    @classmethod
+    def _lock(cls, sb_id: int) -> asyncio.Lock:
+        return cls._locks.setdefault(sb_id, asyncio.Lock())
 
     @classmethod
     async def Start(cls):
@@ -236,8 +244,13 @@ class PoolManager:
     async def start_rotation(cls, sb_id: int):
         """Start rotating a scoreboard's pool. Puts the binding into
         playback.mode="rotate" if it wasn't already."""
+        async with cls._lock(sb_id):
+            await cls._start(sb_id)
+
+    @classmethod
+    async def _start(cls, sb_id: int):
         if sb_id in cls._rotations:
-            await cls.stop_rotation(sb_id, user_stop=False)
+            await cls._stop(sb_id, user_stop=False)
 
         binding = get_binding(sb_id)
         if binding["playback"].get("mode") != "rotate":
@@ -276,6 +289,11 @@ class PoolManager:
         tab. Pass `user_stop=False` when merely pausing for shutdown or
         orphan-cleanup, so resume-on-startup still picks it back up.
         """
+        async with cls._lock(sb_id):
+            await cls._stop(sb_id, user_stop)
+
+    @classmethod
+    async def _stop(cls, sb_id: int, user_stop: bool):
         state = cls._rotations.pop(sb_id, None)
         if state:
             if state.task and not state.task.done():
