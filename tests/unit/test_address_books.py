@@ -225,6 +225,10 @@ def test_resurface_uses_the_leagues_own_row_in_its_games():
 
 async def test_a_shared_book_is_a_zip_of_json_and_real_logo_files(tmp_path, monkeypatch):
     book = await _league()
+    # The WHOLE league rides the file, community included: the export is what
+    # one producer hands another, so anything the book knows about its league
+    # that the file drops is something the receiver has to be told in words.
+    book["community"] = "National Netplay League"
     await _player(book, "Alice", tag="Al")
     data = Participants.ExportZip(book["id"])
 
@@ -239,6 +243,7 @@ async def test_a_shared_book_is_a_zip_of_json_and_real_logo_files(tmp_path, monk
     result = await Participants.ImportAsNewBook(*Participants.ReadZip(data))
     new = Participants.books[result["book"]]
     assert (new["name"], new["modes"]) == ("NNL", ["NNL Season 7"])
+    assert new["community"] == "National Netplay League"
     row = Participants.MatchByRioName("Alice", book=new["id"])
     assert row["display"]["tag"] == "Al"
     assert (tmp_path / "elsewhere" / new["id"] / row["logo"]).read_bytes() == PNG
@@ -363,9 +368,14 @@ def test_the_book_api_end_to_end():
     opened = c.post("/api/v1/participants/books/import/file",
                     files={"file": ("nnl.prsh-book.zip", z.content, "application/zip")}).json()
     assert opened["created"] == 1 and opened["book"] != book["id"]
-    into = c.post(f"/api/v1/participants/import/file?target={book['id']}",
-                  files={"file": ("nnl.prsh-book.zip", z.content, "application/zip")}).json()
-    assert into["updated"] == 1
+    # A file only ever OPENS a book. The route that loaded one into an
+    # existing book is gone, and a merge/replace restore is the body-taking
+    # POST /import instead.
+    assert c.post(f"/api/v1/participants/import/file?target={book['id']}",
+                  files={"file": ("nnl.prsh-book.zip", z.content, "application/zip")}).status_code == 404
+    assert c.post("/api/v1/participants/import",
+                  json={"participants": [{"identities": {"rioName": "A"}}],
+                        "target": book["id"]}).json()["updated"] == 1
     assert c.post("/api/v1/participants/books/import/file",
                   files={"file": ("x.txt", b"nope", "text/plain")}).status_code == 400
     assert c.delete(f"/api/v1/participants/{row['id']}/logo").json()["logo"] == ""

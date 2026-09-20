@@ -150,24 +150,18 @@ async def _read_shared(file: UploadFile):
 
 @router.post("/books/import/file", response_class=ORJSONResponse)
 async def import_shared_book_file(file: UploadFile = File(...)):
-    """Open a shared book — a `.prsh-book.zip`, or a JSON book shared before
-    zips — as a NEW book: league, people and their logos."""
+    """Open a book file — a `.prsh-book.zip`, or a JSON book shared before
+    zips — as a NEW book: league, people and their logos.
+
+    THE ONLY FILE WAY IN. A sibling `POST /import/file` took the same file
+    INTO an existing book, merging or replacing it; it existed for the page's
+    Import button and went with it on 2026-09-19, because a file somebody
+    sends you is their book and opening it must not be able to rewrite yours.
+    A scripted merge or exact restore is still `POST /import`, which takes
+    rows in a body rather than a file — a caller that means it, not a click.
+    """
     payload, files = await _read_shared(file)
     return await Participants.ImportAsNewBook(payload, files)
-
-
-@router.post("/import/file", response_class=ORJSONResponse)
-async def import_file_into(target: str = MAIN_BOOK, replace: bool = False, file: UploadFile = File(...)):
-    """Import a book file (zip or JSON) INTO an existing book — the page's
-    Import button. Each person's logo comes along."""
-    if target not in Participants.books:
-        raise HTTPException(404, f"book {target!r} not found")
-    payload, files = await _read_shared(file)
-    return await Participants.ImportRows(
-        payload.get("participants") or [], replace=replace, book=target,
-        teams=(payload.get("book") or {}).get("teams") if isinstance(payload.get("book"), dict) else None,
-        files=files,
-    )
 
 
 @router.get("/communities", response_class=ORJSONResponse)

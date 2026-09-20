@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, Trash2, Share2, ImagePlus, X, UserPlus, Upload, FolderUp } from 'lucide-react';
+import { Plus, Trash2, Share2, ImagePlus, X, UserPlus, FolderUp } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import { notifications } from '../../lib/notify';
 import { Button } from '../../components/ui/button';
@@ -7,7 +7,7 @@ import { TextField } from '../../components/ui/text-field';
 import { MultiSelect } from '../../components/ui/multi-select';
 import { Combobox } from '../../components/ui/combobox';
 import { FileButton } from '../../components/ui/file-button';
-import { Text } from '../../components/ui/primitives';
+import { Group, Stack, Text } from '../../components/ui/primitives';
 import { Label } from '../../components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '../../components/ui/popover';
 import {
@@ -62,7 +62,7 @@ export const fileSlug = (name) =>
  * opening it. A league book carries its league as a small caption, because
  * "which one of these goes on air by itself" is the question the strip is for.
  */
-export function BookStrip({ books, value, onChange, onNew, onImportShared, busy }) {
+export function BookStrip({ books, value, onChange, onNew }) {
     return (
         <div className="flex flex-wrap items-center gap-1.5">
             <div role="tablist" aria-label="Address books"
@@ -94,17 +94,14 @@ export function BookStrip({ books, value, onChange, onNew, onImportShared, busy 
                     );
                 })}
             </div>
+            {/* The BLANK-book verb, and the only one here: a book from a
+                file arrives through the page's Import, beside the Export that
+                wrote it. Two file buttons for one format — this one and that
+                one — differed only in what they did to the open book, which
+                is the one thing neither label said. */}
             <Button size="sm" variant="ghost" onClick={onNew}>
                 <Plus size={14} className="mr-1" /> New book
             </Button>
-            <FileButton accept={BOOK_FILE_ACCEPT} onChange={onImportShared}>
-                {(p) => (
-                    <Button size="sm" variant="ghost" disabled={busy} {...p}
-                            title="Load a book someone shared with you — its league, people and logos come with it">
-                        <Upload size={14} className="mr-1" /> Open shared book
-                    </Button>
-                )}
-            </FileButton>
         </div>
     );
 }
@@ -330,7 +327,9 @@ export function LeaguePanel({ book, participants, onDeleted }) {
     useEffect(() => { setCommunity(book.community || ''); }, [book.community]);
     const [pulling, setPulling] = useState(false);
     const [logosOpen, setLogosOpen] = useState(false);
+    const [confirmDel, setConfirmDel] = useState(false);
     const options = useModeOptions(book.modes);
+    const logoCount = useMemo(() => participants.filter(p => p.logo).length, [participants]);
 
     const pull = async () => {
         if (!community || pulling) return;
@@ -347,15 +346,23 @@ export function LeaguePanel({ book, participants, onDeleted }) {
         }
     };
 
+    /*
+     * ASKED WHERE IT IS ANSWERED. This was the page's last `window.confirm`,
+     * the sibling of the one Import used to raise — a modal drawn by the OS
+     * over the top of the app, in the wrong type, whose buttons the producer
+     * cannot be sure of. The delete is genuinely destructive and irreversible,
+     * so the confirm stays; it is the house shape now (the Match desk's), a
+     * popover hung off the trash itself: the question on one line, what goes
+     * with it on the next, Cancel and the red verb where the eye already is.
+     */
     const remove = async () => {
-        const n = participants.length;
-        if (!window.confirm(
-            `Delete the “${book.name}” book?\n\n` +
-            `Its ${n} ${n === 1 ? 'person' : 'people'} and their logos are removed. ` +
-            'Your main address book is not touched.',
-        )) return;
-        await deleteBook(book.id);
-        onDeleted?.();
+        setConfirmDel(false);
+        try {
+            await deleteBook(book.id);
+            onDeleted?.();
+        } catch (err) {
+            notifications.show({ message: `Could not delete that book: ${err.message}`, color: 'red' });
+        }
     };
 
     return (
@@ -410,10 +417,34 @@ export function LeaguePanel({ book, participants, onDeleted }) {
                         title="Download this book as one .zip — its people and their logo files — to send to another producer">
                     <Share2 size={15} />
                 </Button>
-                <Button size="icon-sm" variant="ghost" className="size-8 text-destructive" onClick={remove}
-                        aria-label="Delete book" title="Delete this book">
-                    <Trash2 size={15} />
-                </Button>
+                <Popover open={confirmDel} onOpenChange={setConfirmDel}>
+                    <PopoverTrigger asChild>
+                        <Button size="icon-sm" variant="ghost" className="size-8 text-destructive"
+                                aria-label="Delete book" title="Delete this book">
+                            <Trash2 size={15} />
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent align="end" className="w-64">
+                        <Stack gap="xs">
+                            <Text size="sm" className="text-foreground">
+                                Delete the “{book.name}” book?
+                            </Text>
+                            {/* What LEAVES with it, counted — the two things a
+                                producer would have to rebuild by hand — and
+                                what does not, because "delete a book" on a page
+                                of books is a sentence worth finishing. */}
+                            <Text size="xs" className="text-muted-foreground">
+                                Its {participants.length} {participants.length === 1 ? 'person' : 'people'}
+                                {logoCount > 0 && ` and ${logoCount} logo${logoCount === 1 ? '' : 's'}`} go with it.
+                                Your main address book is not touched.
+                            </Text>
+                            <Group gap="xs" className="justify-end">
+                                <Button size="xs" variant="ghost" onClick={() => setConfirmDel(false)}>Cancel</Button>
+                                <Button size="xs" variant="destructive" onClick={remove}>Delete book</Button>
+                            </Group>
+                        </Stack>
+                    </PopoverContent>
+                </Popover>
             </div>
         </div>
     );

@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { X, Download, Upload, Search } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import { notifications } from '../../lib/notify';
 import { Button } from '../../components/ui/button';
+import { FileButton } from '../../components/ui/file-button';
 import { Panel } from '../../components/ui/panel';
 import { TextField } from '../../components/ui/text-field';
 import { Badge } from '../../components/ui/badge';
@@ -383,7 +384,7 @@ const searchBlob = (row) => [
 export default function PlayerList() {
     const {
         participants: everyone, books, load, create, update, remove,
-        exportBook, exportShared, importBook, importShared,
+        exportBook, exportShared, importShared,
     } = useParticipantsStore(useShallow(s => ({
         participants: s.participants,
         books: s.books,
@@ -393,7 +394,6 @@ export default function PlayerList() {
         remove: s.remove,
         exportBook: s.exportBook,
         exportShared: s.exportShared,
-        importBook: s.importBook,
         importShared: s.importShared,
     })));
 
@@ -418,7 +418,6 @@ export default function PlayerList() {
 
     const addPerson = useCallback(() => { create({ book: bookId }); }, [create, bookId]);
 
-    const fileInputRef = useRef(null);
     const [busy, setBusy] = useState(false);
     const [query, setQuery] = useState('');
 
@@ -457,51 +456,34 @@ export default function PlayerList() {
         }
     }, [exportBook, exportShared, bookId, isMain, book?.name]);
 
-    const handleImportFile = useCallback(async (e) => {
-        const file = e.target.files?.[0];
-        e.target.value = ''; // allow re-selecting the same file later
-        if (!file) return;
-        setBusy(true);
-        try {
-            // A JSON file can say how many people it holds before anything is
-            // sent; a zip is only opened on the server.
-            let count = null;
-            if (!/\.zip$/i.test(file.name)) {
-                const parsed = JSON.parse(await file.text());
-                count = Array.isArray(parsed) ? parsed.length
-                    : Array.isArray(parsed?.participants) ? parsed.participants.length : 0;
-            }
-            const what = count == null ? 'this file' : `${count} ${count === 1 ? 'person' : 'people'}`;
-            const replace = participants.length > 0 && count !== 0 && window.confirm(
-                `Import ${what} into “${book?.name ?? 'Address Book'}”.\n\n` +
-                'OK  — Replace: wipe this book, then load the file exactly.\n' +
-                'Cancel — Merge: keep everyone; add new people and refresh matches.',
-            );
-            const result = await importBook(file, replace, bookId);
-            notifications.show({
-                message: replace
-                    ? `Replaced ${book?.name ?? 'the book'}: ${result.imported} imported.`
-                    : `Merged: ${result.created} added, ${result.updated} updated.`,
-                color: 'green',
-            });
-        } catch (err) {
-            notifications.show({ message: `Import failed: ${err.message}`, color: 'red' });
-        } finally {
-            setBusy(false);
-        }
-    }, [importBook, participants.length, bookId, book?.name]);
-
-    /* A book someone shared: always a NEW book, so opening a league's file can
-       never overwrite the people you already keep. */
-    const handleOpenShared = useCallback(async (file) => {
+    /*
+     * A BOOK FILE ALWAYS ARRIVES AS A NEW BOOK, so opening one someone sent
+     * can never touch the people you already keep.
+     *
+     * There were two ways in until 2026-09-19 — this one, and an Import that
+     * loaded the file INTO the open book behind a `window.confirm` whose OK
+     * and Cancel had been repurposed as Replace and Merge. Two file buttons
+     * for one file format, differing in the only thing a producer cares about
+     * (what happens to the book they are looking at), and the second asked
+     * that question in the one dialog shape where Cancel does not cancel. The
+     * merge is gone rather than redrawn: pulling people OUT of an opened book
+     * is `AddFromBooks`, one person at a time and visibly, and a scripted
+     * exact restore is still `POST /participants/import`.
+     */
+    const handleImport = useCallback(async (file) => {
         if (!file) return;
         setBusy(true);
         try {
             const result = await importShared(file);
             setBookId(result.book);
-            const name = useParticipantsStore.getState().books.find(b => b.id === result.book)?.name;
+            // Named with its league, because that is the half of a shared book
+            // a producer cannot see in the row count — and the half that says
+            // whose games these logos will turn up in.
+            const opened = useParticipantsStore.getState().books.find(b => b.id === result.book);
+            const league = opened?.modes?.length ? ` · ${opened.modes.join(', ')}` : '';
             notifications.show({
-                message: `Opened “${name || 'Imported book'}”: ${result.imported} ${result.imported === 1 ? 'person' : 'people'}.`,
+                message: `Opened “${opened?.name || 'Imported book'}”${league}: `
+                    + `${result.imported} ${result.imported === 1 ? 'person' : 'people'}.`,
                 color: 'green',
             });
         } catch (err) {
@@ -536,20 +518,28 @@ export default function PlayerList() {
                     )}
                 </div>
                 <div className="flex items-center gap-2">
-                    <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept={BOOK_FILE_ACCEPT}
-                        className="hidden"
-                        onChange={handleImportFile}
-                    />
-                    <Button size="sm" variant="outline" disabled={busy} onClick={() => fileInputRef.current?.click()}>
-                        <Upload size={14} className="mr-1.5" /> Import
-                    </Button>
-                    <Button size="sm" variant="outline" disabled={participants.length === 0} onClick={handleExport}>
+                    {/* The file pair, together: out as a book, in as a book.
+                        Import names its outcome, because the one question a
+                        producer asks a file button is what it will do to the
+                        book in front of them. */}
+                    <FileButton accept={BOOK_FILE_ACCEPT} onChange={handleImport}>
+                        {(trigger) => (
+                            <Button size="sm" variant="outline" disabled={busy} {...trigger}
+                                    title="Open a book file (.prsh-book.zip or .json) as a NEW book — its league, people and logos come with it. Nothing already here is changed.">
+                                <Upload size={14} className="mr-1.5" /> Import book
+                            </Button>
+                        )}
+                    </FileButton>
+                    <Button size="sm" variant="outline" disabled={participants.length === 0} onClick={handleExport}
+                            title={isMain
+                                ? 'Download this book as JSON'
+                                : 'Download this book as one .zip — its league, its people and their logo files'}>
                         <Download size={14} className="mr-1.5" /> Export
                     </Button>
-                    {!isMain && book && (
+                    {/* Also on main, which is how an opened book gets copied
+                        back into the book you actually keep — the one thing the
+                        old merge-on-import did that nothing else could. */}
+                    {book && books.length > 1 && (
                         <AddFromBooks book={book} books={books} participants={everyone} />
                     )}
                     <Button size="sm" onClick={addPerson}>+ Add Person</Button>
@@ -562,8 +552,6 @@ export default function PlayerList() {
                     value={bookId}
                     onChange={setBookId}
                     onNew={() => setNewOpen(true)}
-                    onImportShared={handleOpenShared}
-                    busy={busy}
                 />
             )}
             <NewBookDialog open={newOpen} onClose={() => setNewOpen(false)} onCreated={b => setBookId(b.id)} />

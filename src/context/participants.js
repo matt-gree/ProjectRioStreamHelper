@@ -115,19 +115,6 @@ export const useParticipantsStore = create((set, get) => ({
     /** Fetch the full address book in backup shape ({version, exportedAt, participants}). */
     exportBook: async (bookId = MAIN_BOOK) => req(`/books/${bookId}/export`, { method: "GET" }),
 
-    /**
-     * Import a book FILE into an existing book (`target`, default main): a
-     * shared `.prsh-book.zip`, or a JSON backup. Merges by default
-     * (non-destructive); replace=true wipes that book's people first. Teams in
-     * the file merge by name, logos included. Refetches so the store reflects
-     * the server's authoritative de-dupe. Returns { imported, created, updated }.
-     */
-    importBook: async (file, replace = false, target = MAIN_BOOK) => {
-        const result = await postFile(`/import/file?target=${encodeURIComponent(target)}&replace=${replace}`, file);
-        await get().load(true);
-        return result;
-    },
-
     getById: (id) => get().participants.find(p => p.id === id) || null,
 
     // ----- books -----------------------------------------------------------
@@ -233,7 +220,14 @@ export const useParticipantsStore = create((set, get) => ({
         return resp.blob();
     },
 
-    /** Open a shared book file (zip, or an older JSON book) as a NEW book. */
+    /**
+     * Open a book file (a `.prsh-book.zip`, or a JSON book) as a NEW book,
+     * league and logos included. THE ONLY WAY A FILE GETS IN: there was a
+     * second one until 2026-09-19 (`importBook`, `POST /import/file`) that
+     * loaded a file into an existing book, merging or replacing, and it could
+     * overwrite people the producer already kept. A scripted exact restore is
+     * still `POST /participants/import`.
+     */
     importShared: async (file) => {
         const result = await postFile("/books/import/file", file);
         await get().load(true);
