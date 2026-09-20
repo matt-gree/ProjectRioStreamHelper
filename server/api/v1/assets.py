@@ -1,5 +1,6 @@
 import asyncio
 import platform
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -275,6 +276,135 @@ async def assets_msb_browse(session_id: str | None = None) -> ORJSONResponse:
     if selected:
         return ORJSONResponse({"success": True, "path": selected})
     return ORJSONResponse({"success": False, "path": None})
+
+
+def _find_pack_root(start: Path) -> Path | None:
+    """The directory inside `start` that actually holds the category folders.
+
+    An unzipped pack is almost never shaped the way the picker leaves it. The
+    archive may wrap everything in one folder (`msb-assets-v3/characterIcons/`),
+    or the producer may pick the parent of what they meant, or the pack may sit
+    beside a readme in a download folder. Requiring the exact directory turns a
+    correct pack into "Incomplete" with five red chips and nothing saying why.
+
+    So: search `start`, then its children, then one level below that — enough
+    to absorb a wrapper folder and a stray parent, shallow enough that pointing
+    at a home directory doesn't walk the disk. A directory counts as the root
+    when it holds at least one category folder BY NAME; partial packs are a
+    real state the census already reports per folder, so finding a root is not
+    the same question as the pack being complete.
+    """
+    names = set(REQUIRED_CATEGORIES)
+
+    def holds_a_category(d: Path) -> bool:
+        try:
+            return any(c.is_dir() and c.name in names for c in d.iterdir())
+        except OSError:
+            return False
+
+    if holds_a_category(start):
+        return start
+
+    for depth_one in sorted(p for p in _safe_iterdir(start) if p.is_dir()):
+        if holds_a_category(depth_one):
+            return depth_one
+        for depth_two in sorted(p for p in _safe_iterdir(depth_one) if p.is_dir()):
+            if holds_a_category(depth_two):
+                return depth_two
+    return None
+
+
+def _safe_iterdir(d: Path) -> list[Path]:
+    try:
+        return list(d.iterdir())
+    except OSError:
+        return []
+
+
+def _copy_pack(src_root: Path, dest_root: Path) -> int:
+    """Copy every category folder's PNGs from `src_root` into `dest_root`.
+
+    Copies BY CANONICAL FILENAME, never the whole tree: the category lists are
+    pyrio's and are what the census validates against, so anything else in a
+    downloaded pack (a readme, a .DS_Store, a nested source folder, a stray
+    100MB psd) is not ours to move into the producer's app data.
+
+    Overwrites: importing twice is how a producer replaces a pack, and a copy
+    that skipped existing files would leave them running a half-updated one.
+    """
+    copied = 0
+    for sub, expected_fn in REQUIRED_CATEGORIES.items():
+        src_dir = src_root / sub
+        if not src_dir.is_dir():
+            continue
+        dest_dir = dest_root / sub
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        present = {f.name: f for f in _safe_iterdir(src_dir) if f.is_file()}
+        for name in expected_fn():
+            f = present.get(name)
+            if f is None:
+                continue
+            try:
+                shutil.copy2(f, dest_dir / name)
+                copied += 1
+            except OSError:
+                continue
+    return copied
+
+
+@method(
+    router.post, "/assets/msb/import",
+    version="1", id="assets.msb.import",
+    response_class=ORJSONResponse
+)
+async def assets_msb_import(path: str = "", session_id: str | None = None) -> ORJSONResponse:
+    """Copy an image pack from `path` into PRSH's own assets folder.
+
+    The difference from `PUT /assets/msb` is ownership, and it is the whole
+    point: that route POINTS at a folder somebody else controls, so a pack in
+    Downloads breaks the overlays the day it is tidied away, and one in a
+    synced folder breaks whenever the sync is offline — mid-broadcast, with the
+    only symptom being missing art. A copy makes the install self-contained.
+
+    Pointing is still supported (`Browse…`) for the documented case of a pack
+    deliberately shared across tools. Importing CLEARS that override, because
+    the two are the same decision stated twice: having just copied a pack in,
+    the folder PRSH should read is its own.
+    """
+    if not path:
+        raise HTTPException(status_code=400, detail="No folder given")
+    src = Path(path)
+    if not src.exists() or not src.is_dir():
+        raise HTTPException(status_code=400, detail="Path must be an existing directory")
+
+    root = await asyncio.to_thread(_find_pack_root, src)
+    if root is None:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "No image pack found there. Expected a folder containing "
+                + ", ".join(REQUIRED_CATEGORIES)
+                + "."
+            ),
+        )
+
+    dest = default_msb_assets_dir()
+    copied = await asyncio.to_thread(_copy_pack, root, dest)
+    if not copied:
+        raise HTTPException(status_code=400, detail="Found the pack folders, but no matching images in them")
+
+    # The copy IS the answer to "which folder", so a stale override must not
+    # outrank it — otherwise a producer imports a pack and the census keeps
+    # reporting the old pointed-at folder.
+    await Settings.Set("assets.msb_path", "", session_id=session_id)
+
+    return ORJSONResponse({
+        "success": True,
+        "copied": copied,
+        "source": str(root),
+        "resolved": str(dest),
+        **_inspect_assets(dest),
+    })
 
 
 @method(

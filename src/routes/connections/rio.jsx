@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { notifications } from '../../lib/notify';
 import { useAssetsVersionStore } from '../../lib/assets';
+import { MSB_DISCORD_URL } from '../../lib/links';
 import { cn } from '../../lib/utils';
+import { Anchor } from '../../components/ui/primitives';
+import { Button } from '../../components/ui/button';
 import {
     BusyButton, ConnCard, ErrorLine, FieldLabel, PathField, Section, StatusPill, ToggleRow,
 } from './kit';
@@ -175,6 +178,7 @@ export function MsbAssetsConnection() {
     const [defaultPath, setDefaultPath] = useState('');
     const [categories, setCategories] = useState({});
     const [browsing, setBrowsing] = useState(false);
+    const [importing, setImporting] = useState(false);
     const [saving, setSaving] = useState(false);
     const [revealing, setRevealing] = useState(false);
     const [error, setError] = useState('');
@@ -238,6 +242,50 @@ export function MsbAssetsConnection() {
         setBrowsing(false);
     }, [save]);
 
+    /*
+     * Pick a folder, and COPY what's in it — the new-user path, and the reason
+     * it is the primary button.
+     *
+     * A producer's pack arrives as a download from Discord, which means the
+     * folder they point at is a folder they will later tidy up. `Browse…`
+     * stores a POINTER to it, so the overlays keep working right up until the
+     * day they don't, and the failure is missing art mid-broadcast with the
+     * Connections card reporting a path that no longer exists. Importing
+     * leaves nothing to break.
+     *
+     * The server finds the real pack root inside whatever was picked, so the
+     * common near-misses (the zip's wrapper folder, the parent of it) import
+     * cleanly instead of reporting an empty census.
+     */
+    const doImport = useCallback(async () => {
+        setImporting(true);
+        setError('');
+        try {
+            const picked = await (await fetch('/api/v1/assets/msb/browse', { method: 'POST' })).json();
+            if (!picked?.path) { setImporting(false); return; }
+            const resp = await fetch(`/api/v1/assets/msb/import?path=${encodeURIComponent(picked.path)}`, { method: 'POST' });
+            const data = await resp.json();
+            if (resp.ok) {
+                setPath('');
+                setCategories(data.categories || {});
+                bumpAssetsVersion();
+                notifications.show({
+                    message: data.complete
+                        ? `Imported ${data.copied} images — pack complete`
+                        : `Imported ${data.copied} images — some are still missing`,
+                    color: data.complete ? 'green' : 'yellow',
+                });
+            } else {
+                const msg = data.detail || data.error || 'Import failed';
+                setError(msg);
+                notifications.show({ message: msg, color: 'red' });
+            }
+        } catch (e) {
+            setError(String(e));
+        }
+        setImporting(false);
+    }, [bumpAssetsVersion]);
+
     const reveal = useCallback(async () => {
         setRevealing(true);
         try {
@@ -259,10 +307,19 @@ export function MsbAssetsConnection() {
             <Section>
                 <FieldLabel>Folder</FieldLabel>
                 <PathField value={path} fallback={defaultPath} onReset={() => save('')} resetting={saving}>
+                    {/* Import is the only FILLED button on this tab. PRSH states
+                        this pack as required and every other control here just
+                        reports or re-points — so on a fresh install this is the
+                        one press that changes the card's own status, and the
+                        card is where a blocked producer lands. */}
+                    <Button size="sm" onClick={doImport} disabled={importing}>
+                        {importing ? 'Importing…' : 'Import…'}
+                    </Button>
                     <BusyButton busy={revealing} onClick={reveal}>Open folder</BusyButton>
                     <BusyButton busy={browsing} onClick={browse}>Browse…</BusyButton>
                 </PathField>
                 <ErrorLine>{error}</ErrorLine>
+                {missing > 0 && <PackSourceHint />}
             </Section>
 
             {/* Every folder, marked present or missing — and no counts. A pack is
@@ -275,6 +332,30 @@ export function MsbAssetsConnection() {
                 </Section>
             )}
         </ConnCard>
+    );
+}
+
+/*
+ * Where the pack comes from — the one thing this card never said.
+ *
+ * PRSH cannot ship MSB images (Nintendo IP) and says so in three places, all
+ * of which explained where to PUT a pack and none of which said where to GET
+ * one. For a producer who isn't already in the community that is a hard
+ * requirement with no next step, on the first screen that matters.
+ *
+ * Shown only while something is missing: once the pack is complete this is a
+ * solved problem, and a permanent line telling a producer where to get what
+ * they already have is the kind of sediment a settings page dies of.
+ */
+function PackSourceHint() {
+    return (
+        <p className="text-xs leading-snug text-muted-foreground">
+            PRSH can&rsquo;t ship the MSB images. Get the pack from the{' '}
+            <Anchor href={MSB_DISCORD_URL} target="_blank" rel="noopener noreferrer">
+                Mario Superstar Baseball Discord
+            </Anchor>
+            , unzip it, then Import.
+        </p>
     );
 }
 

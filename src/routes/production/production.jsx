@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { Radio, PlugZap, ArrowLeftRight, CircleDot, X } from 'lucide-react';
 import { useObsStore } from '../../context/obs';
 import { useSettingsStore } from '../../context/store';
+import { settingOn } from '../design/designConstants';
 import {
     useStagingStore, commitPending, eventMatchesHotkey,
 } from '../../context/staging';
@@ -54,12 +55,33 @@ const STATUS_META = {
     disconnected: { dot: 'bg-muted-foreground/50',     label: 'OBS not connected' },
 };
 
+/*
+ * A FAILURE BEFORE THE FIRST SUCCESS IS NOT AN ERROR — it is a machine nobody
+ * has set up yet, and this is the first thing a new user reads.
+ *
+ * OBS ships with its websocket server off and PRSH auto-connects at launch, so
+ * a first run is GUARANTEED to fail one and land on 'error': red dot, "OBS
+ * connection error", Retry. The neutral face this app already has for exactly
+ * that situation ('disconnected' — grey, "not connected", Connect) was
+ * therefore unreachable on the one run where it was the truth.
+ *
+ * Presentation only. The status stays 'error', so backoff, useConsoleOffline
+ * and the catalog tier are untouched — what changes is the word, the colour and
+ * the verb, which now point at setup rather than at a retry that will fail the
+ * same way until somebody opens OBS.
+ */
+const NOT_SET_UP = { dot: 'bg-muted-foreground/50', label: 'OBS not set up' };
+
 const ConnectionPill = memo(function ConnectionPill() {
     const { status, error, obsVersion } = useObsStore(useShallow(s => ({
         status: s.status, error: s.error, obsVersion: s.obsVersion,
     })));
     const connect = useObsStore(s => s.connect);
-    const meta = STATUS_META[status] ?? STATUS_META.disconnected;
+    // settingOn, not `=== true`: the REST settings route is string-typed, so
+    // this can legitimately arrive as the string "true".
+    const everConnected = settingOn(useSettingsStore(s => s?.obs?.ever_connected), false);
+    const unconfigured = !everConnected && (status === 'error' || status === 'disconnected');
+    const meta = unconfigured ? NOT_SET_UP : (STATUS_META[status] ?? STATUS_META.disconnected);
 
     return (
         <Group gap="sm" className="min-w-0 items-center">
@@ -71,16 +93,28 @@ const ConnectionPill = memo(function ConnectionPill() {
                 )}
             </Group>
             {(status === 'disconnected' || status === 'error') && (
-                <Button size="sm" variant="secondary" onClick={() => connect()}>
-                    <PlugZap size={14} className="mr-1" />
-                    {status === 'error' ? 'Retry' : 'Connect'}
-                </Button>
+                unconfigured ? (
+                    // Retry is the wrong verb before the first success: nothing
+                    // about pressing it again changes whether OBS is listening.
+                    // The press that does is on the Connections tab.
+                    <Button asChild size="sm" variant="secondary">
+                        <Link to="/connections">
+                            <PlugZap size={14} className="mr-1" />
+                            Set up OBS
+                        </Link>
+                    </Button>
+                ) : (
+                    <Button size="sm" variant="secondary" onClick={() => connect()}>
+                        <PlugZap size={14} className="mr-1" />
+                        {status === 'error' ? 'Retry' : 'Connect'}
+                    </Button>
+                )
             )}
             {/* Wrapped, never truncated: the second half of an OBS error is
                 usually the fix ("…check the OBS WebSocket password"), and a
                 `title` tooltip is unreachable by keyboard or touch. The link
                 goes to where that fix is made. */}
-            {status === 'error' && error && (
+            {status === 'error' && error && !unconfigured && (
                 <Text size="xs" className="max-w-[48ch] text-destructive">
                     {error}{' '}
                     <Link to="/connections" className="whitespace-nowrap text-muted-foreground underline hover:text-foreground">

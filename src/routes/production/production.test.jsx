@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { TooltipProvider } from '../../components/ui/tooltip';
 import { useSettingsStore, useStateStore } from '../../context/store';
 import { useObsStore } from '../../context/obs';
@@ -32,7 +33,16 @@ afterEach(() => {
     });
 });
 
-const ui = () => render(<TooltipProvider><Production /></TooltipProvider>);
+/*
+ * A router, because the console links out of itself — the connection pill
+ * points an unconfigured producer at the Connections tab, and `<Link>` outside
+ * a Router throws rather than degrading. The real app always mounts this inside
+ * HashRouter (components/App.jsx), so the router is part of the launch path
+ * this file exists to cover, not scaffolding for the assertions.
+ */
+const ui = () => render(
+    <MemoryRouter><TooltipProvider><Production /></TooltipProvider></MemoryRouter>,
+);
 
 /*
  * Whole-page mount — the launch path.

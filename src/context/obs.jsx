@@ -2,6 +2,9 @@ import { useEffect } from 'react';
 import { create } from 'zustand';
 import OBSWebSocket, { EventSubscription } from 'obs-websocket-js';
 import { useSettingsStore } from './store';
+// Pure helper, no imports of its own — the one rule for reading a boolean
+// setting that the string-typed REST route can deliver as "true".
+import { settingOn } from '../routes/design/designConstants';
 import { renameForUrl, upgradeRetiredName } from '../routes/production/sources/sourcename';
 import { notifications } from '../lib/notify';
 import {
@@ -612,6 +615,16 @@ export const useObsStore = create((set) => ({
             if (myGen !== generation) return; // superseded while connecting
             reconnectAttempts = 0;
             set({ status: 'connected', error: null, obsVersion: obsWebSocketVersion });
+            /*
+             * One success is what turns a later failure into an ERROR rather
+             * than into "not set up yet" — see obs.ever_connected in
+             * server/settings.py. Written once and never cleared: the claim is
+             * that this install has talked to OBS at some point, which a
+             * subsequent outage does not undo.
+             */
+            if (!settingOn(useSettingsStore.getState()?.obs?.ever_connected, false)) {
+                useSettingsStore.getState().setItem('obs.ever_connected', true);
+            }
             await refreshAll(myGen);
             // Background: a rename pass must never hold up the console coming up.
             upgradeRetiredNames(myGen);

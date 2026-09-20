@@ -41,13 +41,17 @@ npm run dev:win        # Windows
 
 PRSH does **not** ship Mario Superstar Baseball images (Nintendo IP). Without them, the UI and overlays will render with broken images. You need to supply the asset folder yourself before the app is usable.
 
-**Where to put it.** PRSH looks for assets in a writable folder under your user data directory:
+**Where to get it.** The community image pack lives in the [Mario Superstar Baseball Discord](https://discord.gg/WfkYyaHBEu).
+
+**The fast way in.** Download the pack, unzip it, then **Connections → MSB image pack → Import…** and select the unzipped folder. PRSH finds the pack inside whatever you pick (a wrapper folder from the zip is fine) and **copies** the images into its own folder, so nothing breaks later when you tidy up your Downloads. The card's census re-checks itself the moment the copy lands.
+
+**Where it puts them.** PRSH's own assets folder, under your user data directory:
 
 - **macOS** — `~/Library/Application Support/PRSH/user_data/game_assets/msb/`
 - **Windows** — `%LOCALAPPDATA%\PRSH\user_data\game_assets\msb\`
 - **Run from source** — `./user_data/game_assets/msb/`
 
-The folder is created automatically on first launch. Drop your asset pack inside so the layout looks like:
+The folder is created automatically on first launch. Import fills it for you; to populate it by hand, drop your asset pack inside so the layout looks like:
 
 ```
 .../user_data/game_assets/msb/
@@ -58,9 +62,9 @@ The folder is created automatically on first launch. Drop your asset pack inside
 
 The **Connections** tab's MSB image pack card validates the folder against the canonical filename lists from [pyrio](https://github.com/matt-gree/pyrio) and shows exactly what's missing per category.
 
-The fastest way to find the folder is **Connections → MSB image pack → Open Folder**, which reveals it in Finder/Explorer — drop your files in, tab back to PRSH, and the census re-checks itself. The Welcome screen also shows whether assets were found on first launch.
+**Open Folder** on the same card reveals it in Finder/Explorer, for dropping files in by hand — tab back to PRSH and the census re-checks itself. The Welcome screen also shows whether assets were found on first launch.
 
-**Custom location.** If you keep a shared asset pack for use across multiple tools, point PRSH at it via **Connections → MSB image pack → Browse…** and select your folder. The override persists in `settings.json`.
+**Custom location.** If you keep a shared asset pack for use across multiple tools, point PRSH at it via **Connections → MSB image pack → Browse…** and select your folder — that stores a *pointer* rather than copying, and the override persists in `settings.json`. Importing clears it again, since the pack PRSH just copied in is the one it should read.
 
 ---
 

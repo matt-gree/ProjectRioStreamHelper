@@ -221,7 +221,11 @@ export const RotatingGames = memo(function RotatingGames({
             // so the status line reflects the result on its own. The only thing we
             // can't derive there is a failed request.
             if (data == null) {
-                setSearchError('Could not reach the game pool. Check your Rio API key and connection.');
+                // Names the ONE thing a producer can act on. It used to say
+                // "check your Rio API key" — a setting that has no field
+                // anywhere in PRSH, so the advice was unfollowable; the game
+                // pool reads Rio's public endpoints and needs no key.
+                setSearchError('Could not reach the game pool — check your internet connection.');
             } else {
                 setDirty(false);
             }

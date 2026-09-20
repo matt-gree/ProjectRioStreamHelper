@@ -502,7 +502,22 @@ class Settings:
             "host": "127.0.0.1",
             "port": 4455,
             "password": "",
-            "auto_connect": True
+            "auto_connect": True,
+            # Has a connection to OBS EVER succeeded on this install?
+            #
+            # Purely a presentation flag, and it exists because auto_connect is
+            # on by default: OBS ships with its websocket server OFF, so the
+            # very first launch always fails a connect and the console led with
+            # a red "OBS connection error" — the app's alarm vocabulary spent on
+            # the expected state of a machine nobody has set up yet. Before the
+            # first success a failure is "not set up"; after it, a failure is a
+            # real error, including for the common rig that never touches the
+            # host, port or password and so would look unconfigured forever.
+            #
+            # Deliberately NOT part of the status machine (src/context/obs.jsx):
+            # backoff, the catalog tier and useConsoleOffline all keep reading
+            # the same 'error' they always did.
+            "ever_connected": False,
         },
         "production": {
             # Producer page. Elements themselves are dev-defined in the

@@ -3,6 +3,8 @@ import { Dialog, DialogContent, DialogTitle } from './ui/dialog';
 import { Button } from './ui/button';
 import { Anchor } from './ui/primitives';
 import { useSettingsStore, useConfigStore, useStateStore } from '../context/store';
+import { useObsStore } from '../context/obs';
+import { MSB_DISCORD_URL } from '../lib/links';
 import { SupportLinks } from './SupportLinks';
 
 // Tiny inline icons so we don't pull in a new dep.
@@ -65,6 +67,19 @@ export default function WelcomeCard() {
     const [opened, setOpened] = useState(false);
     const [hudResolved, setHudResolved] = useState(null);
     const [assetsState, setAssetsState] = useState(null); // null | { complete, total_found, total_expected }
+
+    /*
+     * EVERY ROW HAS TO BE ABLE TO TICK.
+     *
+     * "Add OBS browser sources" was hardcoded `done={false}`, so the checklist
+     * could never read finished however much setup a producer did — three of
+     * four, forever, which is a progress indicator that has stopped being one.
+     * Both facts it needed are already in the OBS store.
+     */
+    const obsConnected = useObsStore(s => s.status) === 'connected';
+    const sceneItems = useObsStore(s => s.sceneItems);
+    const hasPrshSource = Object.values(sceneItems || {})
+        .some(items => (items || []).some(i => i?.isPrsh));
 
     const tournamentLoaded = !!(bracketLink && String(bracketLink).trim());
 
@@ -169,20 +184,49 @@ export default function WelcomeCard() {
                             Here's a quick checklist to get your stream overlay up and running.
                         </p>
 
+                        {/*
+                            ART → DATA → OUTPUT → ON SCREEN, then the optional one.
+                            The order is the dependency: you cannot add a source
+                            from the rack until OBS is connected, and the first two
+                            decide whether what lands there draws anything.
+
+                            PROJECT RIO ITSELF IS ASSUMED INSTALLED. Anyone running
+                            a stream overlay for a Rio mod already has the mod; a
+                            row telling them to go get it would be the one item on
+                            the list that never applies to the person reading it.
+                            The HUD row is about POINTING PRSH at a file, which is
+                            a real step and a real failure state.
+                        */}
                         <div className="flex flex-col gap-2 text-white">
-                            <ChecklistRow done={assetsState?.complete === true} title="MSB image assets (required)">
+                            <ChecklistRow done={assetsState?.complete === true} title="MSB image pack (required)">
                                 {assetsState === null
                                     ? 'Checking…'
                                     : assetsState.complete
                                         ? `Complete (${assetsState.total_found} images) — overlays will render correctly.`
-                                        : assetsState.total_found > 0
-                                            ? `Incomplete (${assetsState.total_found}/${assetsState.total_expected}). Open the Connections tab to see what's missing.`
-                                            : 'Not found. Open the Connections tab and click "Open Folder" to drop your image pack in.'}
+                                        : <>
+                                            {assetsState.total_found > 0
+                                                ? `Incomplete (${assetsState.total_found}/${assetsState.total_expected}). `
+                                                : 'Not found. '}
+                                            PRSH can&rsquo;t ship these — get the pack from the{' '}
+                                            <Anchor href={MSB_DISCORD_URL} target="_blank" rel="noopener noreferrer" style={{ color: '#ffb3b8' }}>
+                                                MSB Discord
+                                            </Anchor>
+                                            , then Import it on the{' '}
+                                            <Anchor href="#/connections" onClick={handleDismiss} style={{ color: '#ffb3b8' }}>Connections tab</Anchor>.
+                                        </>}
                             </ChecklistRow>
                             <ChecklistRow done={hudResolved === true} title="Project Rio HUD file">
                                 {hudResolved
                                     ? 'Found — game data will sync automatically.'
-                                    : 'Not found yet. Set the path on the Connections tab.'}
+                                    : <>Not found yet. Turn on HUD output in Project Rio, then set the path on the{' '}
+                                        <Anchor href="#/connections" onClick={handleDismiss} style={{ color: '#ffb3b8' }}>Connections tab</Anchor>.</>}
+                            </ChecklistRow>
+                            <ChecklistRow done={obsConnected} title="Connect OBS">
+                                {obsConnected
+                                    ? 'Connected — PRSH can add and drive your browser sources.'
+                                    : <>OBS ships with its WebSocket server off. The{' '}
+                                        <Anchor href="#/connections" onClick={handleDismiss} style={{ color: '#ffb3b8' }}>Connections tab</Anchor>
+                                        {' '}walks you through turning it on.</>}
                             </ChecklistRow>
                             {/* The Setup tab is GONE, and this pointed at it by
                                 name — `#/layouts` has been the Design tab since
@@ -192,8 +236,10 @@ export default function WelcomeCard() {
                                 naming it that way also stops the checklist from
                                 promising something that needs OBS: the Add picker
                                 opens without it, for Copy URL. */}
-                            <ChecklistRow done={false} title="Add OBS browser sources">
-                                Open the <Anchor href="#/" onClick={handleDismiss} style={{ color: '#ffb3b8' }}>Production tab</Anchor> and hit the + beside a scene to add scoreboards, lower thirds and the rest — or copy their URLs to paste into OBS yourself.
+                            <ChecklistRow done={hasPrshSource} title="Add your first overlay">
+                                {hasPrshSource
+                                    ? 'Done — add the rest from the same + whenever you need them.'
+                                    : <>Open the <Anchor href="#/" onClick={handleDismiss} style={{ color: '#ffb3b8' }}>Production tab</Anchor> and hit the + beside a scene to add scoreboards, lower thirds and the rest — or copy their URLs to paste into OBS yourself.</>}
                             </ChecklistRow>
                             <ChecklistRow done={tournamentLoaded} title="Tournament integration (optional)">
                                 Load a bracket from start.gg on the Competition tab.

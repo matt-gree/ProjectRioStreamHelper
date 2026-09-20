@@ -69,7 +69,9 @@ export const SingleGameFinder = memo(function SingleGameFinder({ sb, tagOptions 
         try {
             const resp = await fetch(`/api/v1/game-pool/completed/refresh?${queryStr}`, { method: 'POST' }).then(r => r.json());
             if (resp && resp.success === false) {
-                setCompletedError(resp?.diagnostics?.error || 'Search failed. Check your Rio API key and connection.');
+                // See the sibling string in rotating.jsx: no key, no field,
+                // so the fallback names the connection and nothing else.
+                setCompletedError(resp?.diagnostics?.error || 'Search failed — check your internet connection.');
                 setCompletedGames([]);
                 return;
             }

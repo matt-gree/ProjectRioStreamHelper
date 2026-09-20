@@ -1047,16 +1047,38 @@
       blankNote = document.createElement('div');
       blankNote.setAttribute('data-prsh-blank-note', '');
       blankNote.style.cssText = [
-        'position:fixed', 'inset:0', 'display:flex', 'align-items:center',
-        'justify-content:center', 'padding:16px', 'box-sizing:border-box',
+        'position:fixed', 'inset:0', 'display:flex', 'flex-direction:column',
+        'align-items:center', 'justify-content:center', 'gap:6px',
+        'padding:16px', 'box-sizing:border-box',
         'font:500 13px/1.45 Inter,system-ui,sans-serif', 'text-align:center',
         'color:rgba(255,255,255,0.82)', 'background:rgba(10,10,16,0.55)',
         'border:1px dashed rgba(255,255,255,0.22)', 'border-radius:10px',
         'z-index:2147483647', 'pointer-events:none',
       ].join(';');
+      blankNote.appendChild(document.createElement('span'));
+      blankNote.appendChild(document.createElement('span'));
+      blankNote.lastChild.style.cssText =
+        'font-size:11px;opacity:0.62;font-weight:400';
       document.body.appendChild(blankNote);
     }
-    blankNote.textContent = reason;
+    blankNote.firstChild.textContent = reason;
+    /*
+     * The hint a first source needs and no other surface gives.
+     *
+     * A producer builds their scene before a game exists, so their FIRST
+     * overlay is blank — correctly, and the reason above says so. What it
+     * doesn't say is that PRSH can fill it: demo mode renders every layout's
+     * sample bundle, which is the whole point of `production.sample`, and it
+     * is a two-word switch in the top bar that announces nothing about being
+     * the answer to this.
+     *
+     * Only when there is something to offer: the layout must HAVE a sample
+     * bundle, and the switch must be off — with demo mode already on, a still
+     * blank overlay is a different problem and this line would be a lie.
+     * Preview chrome like the note it rides on, so it is never on air.
+     */
+    blankNote.lastChild.textContent =
+      (!demoOn && sampleState) ? 'Turn on Sample in the top bar to fill it with placeholder data' : '';
   }
 
   /*
