@@ -1,5 +1,5 @@
 import { Panel } from '../../components/ui/panel';
-import { Switch } from '../../components/ui/switch';
+import { SegmentedControl } from '../../components/ui/segmented-control';
 import { Button } from '../../components/ui/button';
 import { Loader } from '../../components/ui/primitives';
 import { SimpleTooltip } from '../../components/ui/simple-tooltip';
@@ -14,10 +14,19 @@ import { cn } from '../../lib/utils';
  * body saying the same word), and OBS three times on an error. The pill is the
  * answer; the body holds only what changes it.
  *
- * NO PROSE ON THE PAGE. The cards opened with a paragraph each, then a tagline
- * each — text a producer reads once per machine, and most of it restating a
- * label or a pill. What a field is for is its label; anything more rides a
- * `title`. Text in a card body is state — an error, a count — never a caption.
+ * NO PROSE ON THE PAGE, WITH ONE EXCEPTION, AND THE EXCEPTION IS THE POINT.
+ * The cards opened with a paragraph each, then a tagline each — text a
+ * producer reads once per machine, and most of it restating a label or a
+ * pill. For a LABELLED VALUE the rule still holds: a path field shows you the
+ * path, a host field shows you the host, and a caption over either is a second
+ * name for what is already on screen.
+ *
+ * A SWITCH IS THE EXCEPTION, because a switch shows you nothing but its own
+ * position. `Allow LAN access` does not say that anyone on the WiFi can then
+ * drive your broadcast, and `Follow on Scoreboard 1` does not say what board 1
+ * does instead when it is off. That lived in a `title` — an explanation for
+ * whoever already knows to hover, on a page visited once per machine. So every
+ * switch carries one line saying what the other state does; nothing else does.
  */
 
 // Four tones, not two: `idle` is honest while a fetch is in flight or a thing is
@@ -133,37 +142,91 @@ export function PathField({ value, fallback, onReset, resetting, children }) {
     );
 }
 
+/*
+ * ONE TYPE SCALE FOR THE TAB, AND A BUTTON IS NOT THE TOP OF IT. `Button`'s
+ * `sm` sets a height and inherits the base 14px, which on these cards made
+ * `Browse…` and `Refresh` the LARGEST text in the card — larger than the card's
+ * own title, which every PRSH panel draws at 12px. Measured, the Project Rio
+ * card ranked: two buttons and a switch label at 14, the title at 12, its
+ * labels at 11, its tags at 10. The fix is down, not up: a panel title is 12px
+ * app-wide and raising it here would put this tab out of step with the console.
+ *
+ * So `CONN_BTN` is the tab's button type, and every `sm` button on these cards
+ * carries it — the height stays 8 (it lines up with a path field and an input),
+ * only the type comes to 12. The scale is then: 12 title · 12 value · 12 button
+ * · 12 hint · 11 label · 10 tag, with caps, weight and the header band doing
+ * the ranking instead of size.
+ */
+export const CONN_BTN = 'text-xs';
+
 // A button that shows its own spinner — every action on this tab is a round
 // trip, and each card used to spell the `{busy && <Loader/>}` out by hand.
-export function BusyButton({ busy, disabled, children, ...props }) {
+export function BusyButton({ busy, disabled, className, children, ...props }) {
     return (
-        <Button size="sm" variant="outline" {...props} disabled={busy || disabled}>
+        <Button size="sm" variant="outline" className={cn(CONN_BTN, className)} {...props} disabled={busy || disabled}>
             {busy && <Loader size={12} />}
             {children}
         </Button>
     );
 }
 
+/* One line under a label, saying what the control does. See the switch rule
+ * above for when a row has earned one. */
+export function Hint({ className, children }) {
+    if (!children) return null;
+    return <p className={cn('text-xs leading-snug text-muted-foreground', className)}>{children}</p>;
+}
+
 /*
- * A switch with its label beside it and at most one line of hint under it.
- * `tone="warn"` tints the row for a switch whose ON state carries a risk.
+ * A SETTING AND WHAT IT DOES: the label and its one line on the left, the
+ * control on the right — the same row the Settings modal is built from, which
+ * is the other place in the app that is nothing but preferences.
+ *
+ * THE CONTROL NAMES BOTH STATES, and is a segmented pair rather than a
+ * `Switch` for the reason the stage's intro row already settled (see
+ * production/stage/intro.jsx): a switch marks ON with `bg-primary`, so on a
+ * page of four set-once knobs the loudest things were preferences, painted in
+ * the colour the console keeps for on-air and destructive. A switch also says
+ * its state ONLY by its fill, and fill-as-state needs the filled siblings of a
+ * strip to read as state at all — every switch on this tab stands alone in its
+ * own card, with nothing to compare against. A pair that spells `On` and `Off`
+ * is legible with nothing beside it and spends no colour to do it.
+ *
+ * It sizes to its content, so a caller can drop it inline in a flex row (the
+ * OBS footer, the controller's port line) and get a tight label·control pair,
+ * or in a column Section and get the full-width row with the control at the
+ * right margin. `tone="warn"` tints the row for a switch whose ON state
+ * carries a risk.
  */
-export function ToggleRow({ checked, onChange, label, hint, title, disabled, tone, id }) {
+export function ToggleRow({ checked, onChange, label, hint, title, disabled, tone }) {
     return (
-        <label
-            htmlFor={id}
+        <div
             title={title}
             className={cn(
-                'flex cursor-pointer items-start gap-2.5',
-                disabled && 'cursor-default opacity-60',
+                'flex items-center justify-between gap-4',
+                disabled && 'opacity-60',
                 tone === 'warn' && '-mx-2 rounded-md border border-amber-400/30 bg-amber-400/5 px-2 py-1.5',
             )}
         >
-            <Switch id={id} checked={checked} onCheckedChange={onChange} disabled={disabled} className="mt-0.5" />
-            <span className="flex min-w-0 flex-col gap-0.5">
-                <span className="text-sm leading-tight">{label}</span>
-                {hint && <span className="text-xs leading-snug text-muted-foreground">{hint}</span>}
+            {/* The label is a FieldLabel because it is the same THING as
+                `HUD FILE` and `PORT` — the name of one control inside a
+                section. It was 14px sentence case (inherited from the Settings
+                modal's row, where the whole page runs one size larger), which
+                made `Follow on Scoreboard 1` a heading outranking the card it
+                sits in. */}
+            <span className="flex min-w-0 flex-col gap-1">
+                <FieldLabel>{label}</FieldLabel>
+                <Hint>{hint}</Hint>
             </span>
-        </label>
+            <SegmentedControl
+                size="xs"
+                className="shrink-0"
+                aria-label={label}
+                disabled={disabled}
+                value={checked ? 'on' : 'off'}
+                onChange={(v) => onChange(v === 'on')}
+                data={[{ label: 'On', value: 'on' }, { label: 'Off', value: 'off' }]}
+            />
+        </div>
     );
 }

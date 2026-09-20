@@ -6,7 +6,7 @@ import { cn } from '../../lib/utils';
 import { Anchor } from '../../components/ui/primitives';
 import { Button } from '../../components/ui/button';
 import {
-    BusyButton, ConnCard, ErrorLine, FieldLabel, PathField, Section, StatusPill, ToggleRow,
+    BusyButton, CONN_BTN, ConnCard, ErrorLine, FieldLabel, Hint, PathField, Section, StatusPill, ToggleRow,
 } from './kit';
 
 /*
@@ -124,10 +124,13 @@ export function RioHudConnection() {
                     <BusyButton busy={browsing} onClick={browse}>Browse…</BusyButton>
                 </PathField>
                 <ErrorLine>{error}</ErrorLine>
+                {/* The one thing a path field cannot show: what WRITES the file
+                    it points at. */}
+                <Hint>Project Rio writes this file (decoded.hud.json) while a game is running.</Hint>
                 <ToggleRow
                     checked={enabled} onChange={toggle}
                     label="Follow on Scoreboard 1"
-                    title="Off makes Scoreboard 1 an ordinary API board"
+                    hint="On, Scoreboard 1 shows the game running on this computer. Off makes it an ordinary board that can follow a game from the Rio API."
                 />
             </Section>
             <RioApiRow />
@@ -158,9 +161,17 @@ function RioApiRow() {
     }, []);
 
     return (
-        <Section className="mt-auto flex-row items-center justify-between gap-3">
-            <FieldLabel title="Game modes, tags and users — also refreshed at every launch">Online API</FieldLabel>
-            <BusyButton busy={busy} onClick={refresh}>Refresh</BusyButton>
+        <Section className="gap-1.5">
+            <div className="flex items-center justify-between gap-3">
+                <FieldLabel>Online API</FieldLabel>
+                <BusyButton busy={busy} onClick={refresh}>Refresh</BusyButton>
+            </div>
+            {/* What the button is FOR, which a button that says `Refresh` on a
+                cache nobody can see cannot say by itself. */}
+            <Hint>
+                Game modes from Project Rio are cached when PRSH starts.
+                Refresh if a new mode was added.
+            </Hint>
         </Section>
     );
 }
@@ -312,7 +323,7 @@ export function MsbAssetsConnection() {
                         reports or re-points — so on a fresh install this is the
                         one press that changes the card's own status, and the
                         card is where a blocked producer lands. */}
-                    <Button size="sm" onClick={doImport} disabled={importing}>
+                    <Button size="sm" className={CONN_BTN} onClick={doImport} disabled={importing}>
                         {importing ? 'Importing…' : 'Import…'}
                     </Button>
                     <BusyButton busy={revealing} onClick={reveal}>Open folder</BusyButton>

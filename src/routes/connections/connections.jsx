@@ -8,7 +8,7 @@ import { cn } from '../../lib/utils';
 import { RioHudConnection, MsbAssetsConnection } from './rio';
 import ObsConnection from './obs';
 import ControllerConnection from './controller';
-import { ConnCard, FieldLabel, Section, StatusPill, ToggleRow } from './kit';
+import { CONN_BTN, ConnCard, FieldLabel, Hint, Section, StatusPill, ToggleRow } from './kit';
 
 /*
  * CONNECTIONS — everything PRSH talks to outside itself.
@@ -76,9 +76,8 @@ function NetworkConnection() {
 
     // The phone's address once LAN is on (now or after the restart); this
     // computer's otherwise. Loopback is never offered to a phone.
-    const urls = allowLan
-        ? (net?.addresses ?? []).map(ip => `http://${ip}:${port}`)
-        : [`http://127.0.0.1:${port}`];
+    const lanUrls = (net?.addresses ?? []).map(ip => `http://${ip}:${port}`);
+    const urls = allowLan ? lanUrls : [`http://127.0.0.1:${port}`];
 
     return (
         <ConnCard title="Network" status={pill}>
@@ -87,17 +86,36 @@ function NetworkConnection() {
                     checked={allowLan} onChange={handleAllowLan}
                     tone={allowLan ? 'warn' : undefined}
                     label="Allow LAN access"
-                    title="Binds 0.0.0.0: anyone on this network can control PRSH and read saved API keys. Applies on restart."
+                    /* The restart is named in the OFF state only. Turning it
+                       on puts RESTART TO APPLY in the pill and `— after
+                       restart` on the address label; a third copy in the hint
+                       would be the header rule ("the status, once") broken on
+                       the one row already shouting. Off, nothing else says it,
+                       and it is what a producer needs before they flip. */
+                    hint={allowLan
+                        ? 'Any device on this network can open PRSH — which means controlling your broadcast and reading saved API keys. Turn it off when you are not using a second device.'
+                        : 'PRSH answers only on this computer. Turn it on to open the console from a phone, a tablet, or a second PC on the same network — applies when PRSH restarts.'}
                 />
             </Section>
-            <Section className="mt-auto gap-1.5">
+            <Section className="gap-1.5">
                 <FieldLabel>
-                    {allowLan ? (pending ? 'Phone / tablet — after restart' : 'Phone / tablet') : 'Address'}
+                    {allowLan ? (pending ? 'Phone / tablet — after restart' : 'Phone / tablet') : 'This computer'}
                 </FieldLabel>
                 {urls.length === 0 && allowLan && (
                     <span className="text-xs text-red-300">No network address found — is this computer on WiFi?</span>
                 )}
                 {urls.map(url => <UrlRow key={url} url={url} dimmed={pending} />)}
+                {/* WHAT THE SWITCH WOULD GIVE YOU, at the address it would give
+                    it to you at. With LAN off this section said `Address:
+                    127.0.0.1` — the one address a producer already has, since
+                    they are reading it in the app it serves — and said nothing
+                    about the thing the card is actually for. */}
+                {!allowLan && lanUrls.length > 0 && (
+                    <Hint>
+                        With LAN access on, this computer answers at{' '}
+                        <span className="font-mono text-foreground/80">{lanUrls[0]}</span>.
+                    </Hint>
+                )}
             </Section>
         </ConnCard>
     );
@@ -114,7 +132,7 @@ function UrlRow({ url, dimmed }) {
             </span>
             <CopyButton value={url}>
                 {({ copied, copy }) => (
-                    <Button size="sm" variant="outline" className="w-16" onClick={copy}>
+                    <Button size="sm" variant="outline" className={cn(CONN_BTN, 'w-16')} onClick={copy}>
                         {copied ? 'Copied' : 'Copy'}
                     </Button>
                 )}
@@ -136,7 +154,20 @@ export default function Connections() {
                 512×180 previews) genuinely need the width, so they span it.
 
                 `lg:` rather than `md:`: below ~1024px three columns squeeze the
-                OBS host/port row and a path's buttons into each other. */}
+                OBS host/port row and a path's buttons into each other.
+
+                ONE HEIGHT FOR THE ROW, AND THE SLACK GOES TO THE BOTTOM.
+                The grid's default stretch is what keeps the three cards level;
+                what made a stretched card look broken was never the stretch but
+                `mt-auto` on its last section, which pushed the leftover space
+                into the MIDDLE to buy a footer line that only ever aligned two
+                of the three. A hole between two sections reads as content
+                failing to load; the same space under the last one reads as a
+                card with less in it, which is the truth. So: no `mt-auto`
+                anywhere on this tab, and each card's sections flow from the
+                top. `items-start` was tried in between and is the other trade —
+                no slack at all, ragged bottoms — and the producer wants the
+                level row. */}
             <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
                 <RioHudConnection />
                 <ObsConnection />

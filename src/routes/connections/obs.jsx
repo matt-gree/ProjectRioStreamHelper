@@ -6,7 +6,8 @@ import { notifications } from '../../lib/notify';
 import { useSettingsStore } from '../../context/store';
 import { settingOn } from '../design/designConstants';
 import { useObsStore } from '../../context/obs';
-import { ConnCard, ErrorLine, FieldLabel, Section, StatusPill, ToggleRow } from './kit';
+import { cn } from '../../lib/utils';
+import { CONN_BTN, ConnCard, ErrorLine, FieldLabel, Section, StatusPill, ToggleRow } from './kit';
 
 const OBS_TONE = {
     connected: 'ok',
@@ -167,15 +168,15 @@ export default function ObsConnection() {
                     </ErrorLine>
                 )}
             </Section>
-            <Section className="mt-auto flex-row items-center justify-between gap-3">
+            <Section className="flex-row items-center justify-between gap-3">
                 <ToggleRow
                     checked={autoConnect}
                     onChange={v => setSetting('obs.auto_connect', !!v)}
                     label="Auto-connect"
-                    title="Connect at launch, retrying until OBS is open"
+                    hint="Connect when PRSH starts, retrying until OBS is open."
                 />
                 <Button
-                    size="sm" variant={dirty ? 'default' : 'outline'} className="shrink-0"
+                    size="sm" variant={dirty ? 'default' : 'outline'} className={cn(CONN_BTN, 'shrink-0')}
                     onClick={dirty ? handleApply : () => connect()}
                 >
                     {dirty ? 'Save & connect' : 'Reconnect'}

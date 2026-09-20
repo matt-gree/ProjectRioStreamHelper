@@ -259,6 +259,7 @@ export default function ControllerConnection() {
                         checked={autoStart} disabled={!status.available}
                         onChange={v => setSetting('controller_overlay.auto_start', !!v)}
                         label="Start with PRSH"
+                        hint="Launch the reader whenever PRSH starts."
                     />
                     {status.version && (
                         <span className="ml-auto text-xs text-muted-foreground tabular-nums">
