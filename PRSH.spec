@@ -90,6 +90,23 @@ if _vite_src.is_file():
 # Platform-specific separator for --add-data paths
 SEP = ';' if platform.system() == 'Windows' else ':'
 
+def _public_game_assets() -> list:
+    """`public/game_assets` minus the user-supplied MSB pack.
+
+    Returns one (src, dest) per top-level entry so a new Rio logo is picked up
+    with no edit here, while `msb/` can never ride along. See the note at the
+    call site for why that distinction is load-bearing.
+    """
+    root = Path('public/game_assets')
+    out = []
+    for child in sorted(root.iterdir()) if root.is_dir() else []:
+        if child.name == 'msb':
+            continue
+        dest = str(root) if child.is_file() else str(root / child.name)
+        out.append((str(child), dest))
+    return out
+
+
 a = Analysis(
     ['main.py'],
     pathex=[],
@@ -103,7 +120,16 @@ a = Analysis(
         ('dist/index.html', 'dist'),
 
         # Public directory (game assets, layouts, design packages, favicon, tray logo)
-        ('public/game_assets', 'public/game_assets'),
+        #
+        # game_assets is enumerated rather than copied wholesale, to keep
+        # `public/game_assets/msb/` OUT of the bundle. That folder is
+        # .gitignored (it is the developer's own copy of the MSB image pack,
+        # which PRSH does not ship — Nintendo IP, user-supplied at runtime
+        # under user_data/). A blanket copy meant the artifact's size and its
+        # CONTENTS depended on whose machine built it: CI produced ~30kB of Rio
+        # logos, while a local build silently baked in 75MB of game rips and
+        # shipped them. Non-reproducible, and the wrong thing to hand someone.
+        *_public_game_assets(),
         ('public/layout', 'public/layout'),
         ('public/design', 'public/design'),
         ('public/favicon.png', 'public'),
@@ -198,7 +224,9 @@ a = Analysis(
         'watchfiles',
         'httpx',
         'aiopath',
-        'pillow',
+        # 'PIL' only — `pillow` is the DISTRIBUTION name, not an importable
+        # module, so listing it made PyInstaller log
+        # "ERROR: Hidden import 'pillow' not found" on every single build.
         'PIL',
         'pystray',
         'pystray._darwin',   # macOS tray backend
@@ -244,11 +272,31 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=['installer/runtime_hook_chdir.py'],
     excludes=[
-        # Exclude dev-only packages to reduce size
+        # Dev-only, and pyrio-only. pyrio is a general-purpose library and PRSH
+        # imports a slice of it: game_summary, draw/draw_stadium and
+        # hit_simulator/hit_sim_visualizer are the matplotlib users and nothing
+        # here reaches them, so the plotting stack is pure weight.
         'matplotlib',
         'scipy',
         'pytest',
         'setuptools',
+
+        # THE CRYPTOGRAPHY CHAIN, pulled in by nothing PRSH calls.
+        #
+        # pyrio talks to the Rio API through `requests`, and requests reaches
+        # `urllib3.contrib.pyopenssl` — a legacy shim for injecting pyOpenSSL
+        # as the TLS backend, deprecated in urllib3 2.x and inert unless a
+        # caller explicitly runs inject_into_urllib3(). Nothing does. But
+        # PyInstaller's analysis follows the import statically, which dragged
+        # in `cryptography` and its OpenSSL bindings: ~9MB of the bundle to
+        # support a code path that cannot execute. Ordinary HTTPS is unaffected
+        # — that goes through Python's own `ssl`/`_ssl`, which is untouched
+        # here. If a future dependency genuinely needs pyOpenSSL, this is the
+        # line that will tell you why it vanished.
+        'cryptography',
+        'OpenSSL',
+        'urllib3.contrib.pyopenssl',
+        'urllib3.contrib.securetransport',
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
