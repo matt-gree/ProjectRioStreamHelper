@@ -1,15 +1,15 @@
+import ast
 import asyncio
 import copy
 import importlib.util
 import sys
-import tomllib
 import orjson
 from pathlib import Path
 
 from aiopath import AsyncPath
 from loguru import logger
 from server import socketio
-from server.paths import app_root, user_data_dir
+from server.paths import user_data_dir
 from server.utils import json
 from server.utils.deep_dict import deep_set, deep_unset, deep_get
 
@@ -308,15 +308,84 @@ def _drop_retired(settings: dict) -> bool:
     return changed
 
 
-def _resolve_version() -> str:
-    """Resolve app version via scripts/freeze-version.py.
+def _load_freeze_version_module():
+    """Load scripts/freeze-version.py by PATH, or None.
 
-    Used by Config.Load(). The freeze-version module lives outside the
-    `server` package because it has to be runnable as a standalone build
-    script too (Vite prebuild, PyInstaller hook, CI checks). We import it
-    by file path so the import works in dev *and* in PyInstaller bundles
-    where the layout is flattened.
+    The module lives outside the `server` package because it has to be
+    runnable as a standalone build script too (Vite prebuild, PyInstaller
+    hook, CI checks), and its filename's hyphen means it can never be a
+    plain import. Loaded by file path so it resolves in dev *and* in
+    PyInstaller bundles, where the layout is flattened.
     """
+    candidates = [
+        Path(__file__).resolve().parent.parent / "scripts" / "freeze-version.py",
+        Path(getattr(sys, "_MEIPASS", "")) / "scripts" / "freeze-version.py"
+            if getattr(sys, "_MEIPASS", None) else None,
+    ]
+    for path in filter(None, candidates):
+        if not path.is_file():
+            continue
+        try:
+            spec = importlib.util.spec_from_file_location("_freeze_version", path)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)  # type: ignore[union-attr]
+            return mod
+        except Exception as e:
+            logger.warning("[Config] freeze-version load failed at {}: {}", path, e)
+    return None
+
+
+def _resolve_metadata() -> dict:
+    """Name/description/authors, resolved by the same chain as the version.
+
+    pyproject.toml in a source checkout, the frozen `_version.py` in a
+    packaged build. Returns {} when neither is readable, which leaves
+    `Config.config`'s own defaults in place.
+
+    This exists because `pyproject.toml` is a BUILD file and is not bundled,
+    so a frozen app had no source for it and silently served the defaults —
+    `"authors": []` from every release, while a dev server served the real
+    list off the same endpoint.
+    """
+    mod = _load_freeze_version_module()
+    if mod is not None:
+        try:
+            meta = mod.resolve_metadata()
+            if meta:
+                return meta
+        except Exception as e:
+            logger.warning("[Config] metadata resolve failed: {}", e)
+
+    # THE FROZEN PATH, and the one that actually runs in a release.
+    #
+    # `scripts/` is not in the bundle — nothing lists it in PRSH.spec's datas —
+    # so `_load_freeze_version_module` returns None in every packaged build and
+    # the branch above never fires there. The version survives that only
+    # because `_resolve_version` carries this same direct read; metadata
+    # without it went on serving `"authors": []` from the bundle after the
+    # resolver was supposedly fixed. Read the generated file ourselves.
+    #
+    # Flat line scan + literal_eval rather than an import, matching
+    # `_read_frozen_metadata` in freeze-version.py: a generated file must not
+    # be able to execute anything, and this has to work whatever state the
+    # package is in.
+    frozen = Path(__file__).resolve().parent / "_version.py"
+    if frozen.is_file():
+        try:
+            for line in frozen.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line.startswith("METADATA") and "=" in line:
+                    _, _, rhs = line.partition("=")
+                    value = ast.literal_eval(rhs.strip())
+                    if isinstance(value, dict) and value:
+                        return value
+        except (OSError, ValueError, SyntaxError) as e:
+            logger.warning("[Config] frozen metadata read failed: {}", e)
+    return {}
+
+
+def _resolve_version() -> str:
+    """Resolve app version via scripts/freeze-version.py."""
     candidates = [
         Path(__file__).resolve().parent.parent / "scripts" / "freeze-version.py",
         Path(getattr(sys, "_MEIPASS", "")) / "scripts" / "freeze-version.py"
@@ -1272,7 +1341,12 @@ class Settings:
 class Config:
     config = {
         "name": "ProjectRioStreamHelper",
-        "version": "1.0.0",
+        # Last-resort only: reached when neither pyproject nor a frozen
+        # _version.py is readable. Says "unidentified build" rather than
+        # naming a release that shipped years ago — the same hardcoded 1.0.0
+        # that made the macOS bundle misreport itself for the whole of 2.x.
+        # Matches FALLBACK_VERSION in scripts/freeze-version.py.
+        "version": "0.0.0-dev",
         "description": "Tournament scoreboard helper and overlays for Mario Superstar Baseball via Project Rio",
         "authors": [],
         "server_url": "",
@@ -1284,21 +1358,15 @@ class Config:
 
     @classmethod
     async def Load(cls) -> dict:
-        # Read non-version metadata from pyproject.toml (name, description,
-        # authors). Version is resolved separately via scripts/freeze-version.py
-        # so it stays anchored to the git tag (or the frozen _version.py
-        # generated at build time) rather than a hand-edited file. See
-        # scripts/freeze-version.py for the resolution chain.
-        try:
-            text = await asyncio.to_thread(
-                (app_root() / 'pyproject.toml').read_text, encoding='utf-8'
-            )
-            context = tomllib.loads(text)["tool"]["poetry"]
-            cls.config["name"] = context["name"]
-            cls.config["description"] = context["description"]
-            cls.config["authors"] = context["authors"]
-        except Exception:
-            pass  # frozen build or missing file; hardcoded defaults used
+        # Name, description and authors follow the SAME chain as the version
+        # (pyproject in a checkout, the frozen _version.py in a packaged
+        # build) — see scripts/freeze-version.py. This used to read
+        # pyproject.toml directly, which a frozen app has no copy of, so every
+        # release served the defaults below and reported `"authors": []`.
+        # Whatever the chain can't answer is simply left at its default.
+        for key, value in (await asyncio.to_thread(_resolve_metadata)).items():
+            if key in cls.config and value:
+                cls.config[key] = value
 
         cls.config["version"] = await asyncio.to_thread(_resolve_version)
         return cls.config
