@@ -33,7 +33,7 @@ function fmtMtime(epoch) {
 export default function LogsViewer({ opened, onClose }) {
     const [files, setFiles] = useState([]);
     const [dir, setDir] = useState('');
-    const [selected, setSelected] = useState('tsh_info.txt');
+    const [selected, setSelected] = useState('prsh_info.txt');
     const [text, setText] = useState('');
     const [meta, setMeta] = useState(null);
     const [loading, setLoading] = useState(false);

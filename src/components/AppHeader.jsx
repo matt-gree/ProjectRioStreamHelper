@@ -38,9 +38,28 @@ export default function AppHeader({ tabs = [] }) {
         <div className="px-5 pt-4">
             {/* One top row: app name (left), nav tabs (centered), actions (right). */}
             <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-4 border-b border-border">
-                <div className="flex items-center gap-2 pb-3">
-                    <img src="/favicon.png" alt="" width={24} height={24} className="pixelated" />
-                    <Title order={4}>{app_name || 'TSH'}</Title>
+                {/*
+                    THE MARK IS `PRSH`, WITH THE FULL NAME UNDER IT.
+                    `ProjectRioStreamHelper` set as one run-together 22-character
+                    all-caps word is a string, not a wordmark — nothing in it
+                    tells the eye where the words break, and it was the widest
+                    thing in a header whose middle column has to hold five tabs.
+                    PRSH is what this app is called in every file of its own
+                    source; the expansion rides beneath so the name is still
+                    stated, at a size that suits a thing you read once.
+
+                    The fallback was `TSH` — the UPSTREAM project's initials,
+                    which is what a fork shows when its own config fails to
+                    load. It is the one moment the header is read closely.
+                */}
+                <div className="flex items-center gap-2.5 pb-3">
+                    <img src="/favicon.png" alt="" width={26} height={26} className="pixelated" />
+                    <div className="flex min-w-0 flex-col leading-none">
+                        <Title order={4} className="leading-none">PRSH</Title>
+                        <span className="label-display truncate text-[10px] leading-none tracking-wide text-muted-foreground">
+                            {app_name || 'ProjectRioStreamHelper'}
+                        </span>
+                    </div>
                 </div>
                 {/* Rio nav: Rajdhani labels, rio-red active underline aligned to the row border. */}
                 <nav className="flex items-end gap-1">

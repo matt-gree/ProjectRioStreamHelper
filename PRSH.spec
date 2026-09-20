@@ -28,6 +28,46 @@ _freeze = Path('scripts/freeze-version.py')
 if _freeze.is_file():
     subprocess.run([sys.executable, str(_freeze)], check=True)
 
+# The same version, for the OS-level metadata below (Windows VERSIONINFO, macOS
+# Info.plist). Both used to be HARDCODED — the plist said 1.0.0 for the whole
+# of 2.x, so Finder, Get Info and Spotlight all reported a version the app had
+# not shipped in a year, while this script sat two lines above resolving the
+# real one. Read it back from the file we just wrote.
+# Loaded by PATH, not by import: the file is `freeze-version.py` and a hyphen
+# is not a legal module name. server/settings.py already reaches it this way.
+def _resolve_app_version() -> str:
+    import importlib.util
+    try:
+        spec = importlib.util.spec_from_file_location(
+            '_freeze_version', str(_freeze.resolve()))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod.resolve_version()
+    except Exception:
+        return '0.0.0'
+
+
+_app_version = _resolve_app_version() if _freeze.is_file() else '0.0.0'
+
+
+def _win_version_tuple(v: str) -> tuple:
+    """`2.0.0-prerelease.14` -> (2, 0, 0, 0).
+
+    A Windows VERSIONINFO block takes four INTEGERS and nothing else, so the
+    prerelease tail and the git suffix have to come off. The readable string
+    keeps the full version; only the numeric field is reduced.
+    """
+    core = v.lstrip('vV').split('-')[0].split('+')[0]
+    parts = []
+    for piece in core.split('.')[:4]:
+        try:
+            parts.append(int(piece))
+        except ValueError:
+            break
+    while len(parts) < 4:
+        parts.append(0)
+    return tuple(parts[:4])
+
 # Freeze the bundled gc-overlay submodule into its own one-folder app before
 # we vendor it below. Built on every platform as of gc-overlay 1.1.0, which
 # carries a transport for each. Builds in an isolated venv (gc-overlay's own
@@ -220,6 +260,41 @@ pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 _exe_icon = 'public/logo.ico' if platform.system() == 'Windows' else 'public/logo.icns'
 
+# ── Windows VERSIONINFO ───────────────────────────────────────────────────
+#
+# Without this, PRSH.exe → right-click → Properties → Details is BLANK: no
+# product name, no version, no company. That reads as "somebody's script" to a
+# user, and it is also one of the signals SmartScreen and AV engines weigh —
+# which matters more here than it would elsewhere, because these builds are
+# unsigned. It costs a generated file and nothing at runtime.
+_version_file = None
+if platform.system() == 'Windows':
+    _vt = _win_version_tuple(_app_version)
+    _version_file = Path('build') / 'win_version_info.txt'
+    _version_file.parent.mkdir(parents=True, exist_ok=True)
+    _version_file.write_text(f"""VSVersionInfo(
+  ffi=FixedFileInfo(filevers={_vt}, prodvers={_vt}, mask=0x3f, flags=0x0,
+                    OS=0x40004, fileType=0x1, subtype=0x0, date=(0, 0)),
+  kids=[
+    StringFileInfo([
+      StringTable('040904B0', [
+        StringStruct('CompanyName', 'Project Rio'),
+        StringStruct('FileDescription', 'ProjectRioStreamHelper'),
+        StringStruct('FileVersion', {_app_version!r}),
+        StringStruct('InternalName', 'PRSH'),
+        StringStruct('LegalCopyright',
+                     'Copyright (c) 2024 Joao Ribeiro Bezerra; '
+                     '(c) 2026 Matt Greene. MIT License.'),
+        StringStruct('OriginalFilename', 'PRSH.exe'),
+        StringStruct('ProductName', 'ProjectRioStreamHelper'),
+        StringStruct('ProductVersion', {_app_version!r}),
+      ])
+    ]),
+    VarFileInfo([VarStruct('Translation', [1033, 1200])])
+  ]
+)
+""", encoding='utf-8')
+
 exe = EXE(
     pyz,
     a.scripts,
@@ -237,6 +312,7 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon=_exe_icon,
+    version=str(_version_file) if _version_file else None,
 )
 
 coll = COLLECT(
@@ -259,9 +335,19 @@ if platform.system() == 'Darwin':
         name='PRSH.app',
         icon='public/logo.icns',
         bundle_identifier='com.projectrio.streamhelper',
+        # CFBundleShortVersionString was HARDCODED at '1.0.0' through the
+        # whole of 2.x, so Finder, Get Info and Spotlight reported a version
+        # the app had not shipped in a year. CFBundleVersion (the build
+        # string) was absent entirely, which macOS expects alongside it.
         info_plist={
-            'CFBundleShortVersionString': '1.0.0',
+            'CFBundleShortVersionString': '.'.join(
+                str(n) for n in _win_version_tuple(_app_version)[:3]),
+            'CFBundleVersion': _app_version,
             'CFBundleName': 'ProjectRioStreamHelper',
+            'CFBundleDisplayName': 'PRSH',
+            'NSHumanReadableCopyright':
+                'Copyright (c) 2024 João Ribeiro Bezerra; '
+                '(c) 2026 Matt Greene. MIT License.',
             'NSHighResolutionCapable': True,
         },
     )

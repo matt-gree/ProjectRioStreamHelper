@@ -204,12 +204,20 @@ const ThemeSection = memo(function ThemeSection() {
                     >
                         Themes {selected.elements?.length ?? 0} elements
                     </Badge>
-                    {selected.description && (
-                        <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground" title={selected.description}>
-                            {selected.description}
-                        </span>
-                    )}
                 </div>
+            )}
+            {/* The description gets its OWN line rather than the strip left
+                over beside the badges. Sharing the row it had ~100px of a
+                330px column, so a package blurb rendered as four words and an
+                ellipsis ("The Project Rio brand l…") — present, unreadable,
+                and taking up space to be so. Two lines it can actually be
+                read; still clamped, because a package author can write any
+                length and this is a header, not a body. */}
+            {selected?.description && (
+                <p className="line-clamp-2 text-[11px] leading-snug text-muted-foreground"
+                    title={selected.description}>
+                    {selected.description}
+                </p>
             )}
             {report && <InstallReport report={report} onDismiss={() => setReport(null)} />}
         </Section>

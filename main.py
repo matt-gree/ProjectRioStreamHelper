@@ -40,8 +40,12 @@ async def main() -> int:
     log_dir = os.path.join(wr, 'logs')
     os.makedirs(log_dir, exist_ok=True)
 
+    # prsh_*, not tsh_* — these files are the app's name on the user's disk and
+    # in the in-app log viewer they open to report a bug, and they carried the
+    # UPSTREAM project's initials (TournamentStreamHelper). Old tsh_* files are
+    # left alone and still listed by GET /api/v1/logs, so nothing is lost.
     logger.add(
-        os.path.join(log_dir, "tsh_info.txt"),
+        os.path.join(log_dir, "prsh_info.txt"),
         format="[{time:YYYY-MM-DD HH:mm:ss}] - {level} - {file}:{function}:{line} | {message} | {extra}",
         encoding="utf-8",
         level="INFO",
@@ -50,7 +54,7 @@ async def main() -> int:
     )
 
     logger.add(
-        os.path.join(log_dir, "tsh_error.txt"),
+        os.path.join(log_dir, "prsh_error.txt"),
         format="[{time:YYYY-MM-DD HH:mm:ss}] - {level} - {file}:{function}:{line} | {message} | {extra}",
         encoding="utf-8",
         level="ERROR",
@@ -256,8 +260,8 @@ if __name__ == '__main__':
         wr = _writable_root()
         log_dir = os.path.join(wr, 'logs')
         os.makedirs(log_dir, exist_ok=True)
-        sys.stderr = open(os.path.join(log_dir, 'tsh_error.txt'), 'w', encoding='utf-8')
-        sys.stdout = open(os.path.join(log_dir, 'tsh_info.txt'), 'w', encoding='utf-8')
+        sys.stderr = open(os.path.join(log_dir, 'prsh_error.txt'), 'w', encoding='utf-8')
+        sys.stdout = open(os.path.join(log_dir, 'prsh_info.txt'), 'w', encoding='utf-8')
 
     if frozen and sys.platform in ("darwin", "win32"):
         # Pre-flight port check on the main thread. If the configured port is
@@ -284,7 +288,7 @@ if __name__ == '__main__':
             # Reveal the log directory so the user can grab the file.
             try:
                 from server.port_conflict import reveal_in_file_manager
-                reveal_in_file_manager(Path(log_dir) / "tsh_error.txt")
+                reveal_in_file_manager(Path(log_dir) / "prsh_error.txt")
             except Exception:
                 pass
             sys.exit(1)

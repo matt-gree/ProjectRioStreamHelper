@@ -16,9 +16,15 @@ About panel and on the GitHub Release. Resolution order:
      build is unidentified.
 
 Usage:
-  As a library:
-      from freeze_version import resolve_version
-      print(resolve_version())
+  As a library (by PATH — the filename's hyphen is not a legal module
+  name, so a plain `import freeze_version` has never worked; both real
+  callers, server/settings.py and PRSH.spec, load it like this):
+      import importlib.util
+      spec = importlib.util.spec_from_file_location(
+          "_freeze_version", "scripts/freeze-version.py")
+      mod = importlib.util.module_from_spec(spec)
+      spec.loader.exec_module(mod)
+      print(mod.resolve_version())
 
   As a CLI (writes `server/_version.py` and prints the version):
       python scripts/freeze-version.py            # writes default path

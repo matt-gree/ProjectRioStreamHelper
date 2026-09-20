@@ -59,7 +59,7 @@ async def logs_list(session_id: str | None = None) -> ORJSONResponse:
     response_class=ORJSONResponse,
 )
 async def logs_tail(
-    name: str = "tsh_info.txt",
+    name: str = "prsh_info.txt",
     bytes: int = 262144,  # 256 KB default; query-param name kept for API stability
     session_id: str | None = None,
 ) -> ORJSONResponse:

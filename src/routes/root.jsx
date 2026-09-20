@@ -1,14 +1,48 @@
+import { lazy, Suspense } from 'react';
 import { Routes, Route } from "react-router-dom";
 import AppHeader from '../components/AppHeader';
 import WelcomeCard from '../components/WelcomeCard';
 import MatchConflictBanner from '../components/MatchConflictBanner';
 import SampleModeBanner from './production/sample';
+import { Loader } from '../components/ui/primitives';
 
 import Production from './production/production';
-import Competition from './competition/competition';
-import AddressBook from './address_book/address_book';
-import DesignTab from "./design/tab";
-import Connections from "./connections/connections";
+
+/*
+ * THE CONSOLE IS EAGER; THE OTHER FOUR TABS ARE NOT.
+ *
+ * Everything shipped as one ~1MB chunk, so a producer paid for the Design
+ * tab's colour pickers and the Competition tab's bracket views before the
+ * console — the page the app opens on, and the one they spend the night in —
+ * could draw anything. The build had been printing Rollup's 500kB warning on
+ * every run for long enough that it read as part of the output.
+ *
+ * Production stays a STATIC import deliberately: it is the default route, so
+ * lazying it would only add a spinner to the one navigation that never happens
+ * (and `/scoreboard` and `/commentary` are back-compat aliases onto it).
+ *
+ * Splitting here needed a server-side fix first — `load_manifest` emitted a
+ * <script> per manifest record, which would have eagerly loaded every chunk
+ * this creates. See server/server.py.
+ */
+const Competition = lazy(() => import('./competition/competition'));
+const AddressBook = lazy(() => import('./address_book/address_book'));
+const DesignTab = lazy(() => import('./design/tab'));
+const Connections = lazy(() => import('./connections/connections'));
+
+/*
+ * The fallback is deliberately quiet and CENTRED IN THE CONTENT AREA, not the
+ * viewport: the header and both banners are outside <Suspense>, so they never
+ * blink. On localhost a chunk arrives in a few frames and this is usually
+ * never painted at all — it exists for a cold cache and a slow disk.
+ */
+function TabFallback() {
+    return (
+        <div className="flex min-h-[60vh] items-center justify-center">
+            <Loader size="md" />
+        </div>
+    );
+}
 
 // Nav tabs. Rendered in the header row by AppHeader; routes wired below.
 const allTabs = [
@@ -30,6 +64,7 @@ export default function Root() {
       <SampleModeBanner />
       <WelcomeCard />
       <div className="p-5">
+        <Suspense fallback={<TabFallback />}>
         <Routes>
           <Route path="/" element={<Production />} />
           <Route path="/competition" element={<Competition />} />
@@ -47,6 +82,7 @@ export default function Root() {
           <Route path="/layouts" element={<DesignTab />} />
           <Route path="/connections" element={<Connections />} />
         </Routes>
+        </Suspense>
       </div>
     </div>
   );

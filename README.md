@@ -13,12 +13,24 @@ PRSH is forked from [TournamentStreamHelper](https://github.com/TournamentStream
 
 ### Install (end users)
 
-Pre-built installers are produced from `PRSH.spec` (PyInstaller) and `installer/PRSH.iss` (Inno Setup, Windows):
+Grab a build from the [latest release](https://github.com/matt-gree/ProjectRioStreamHelper/releases/latest):
 
-- **macOS** — `PRSH-macOS-arm64.zip` or `PRSH-macOS-x86_64.zip` from the [latest release](https://github.com/matt-gree/PRSH/releases/latest); unzip and drag `PRSH.app` to Applications.
-- **Windows** — `PRSH-Setup.exe` from the [latest release](https://github.com/matt-gree/PRSH/releases/latest); run the installer.
+- **macOS** — `PRSH-macOS-arm64.zip` (Apple Silicon) or `PRSH-macOS-x86_64.zip` (Intel); unzip and drag `PRSH.app` to Applications.
+- **Windows** — `PRSH-Setup.exe`; run the installer.
 
 Launch the app, then open `http://localhost:5260` in any browser. A system-tray icon stays running while the server is up.
+
+#### First launch: your OS will warn you
+
+PRSH is **not code-signed** — a signing certificate is an annual fee this project doesn't carry. The builds are produced in the open by [GitHub Actions](.github/workflows/build-release.yml) from the tagged source, but your computer has no way to know that, so it will object the first time. This is expected, and here's how to get past it:
+
+- **macOS** — right-click (or Control-click) `PRSH.app` and choose **Open**, then **Open** again in the dialog. Using the normal double-click gives you "unidentified developer" with no way through; the right-click route is the supported override. If macOS says the app is **damaged**, that's the quarantine flag on a downloaded zip rather than actual damage — clear it with:
+  ```bash
+  xattr -dr com.apple.quarantine /Applications/PRSH.app
+  ```
+- **Windows** — SmartScreen shows "Windows protected your PC". Click **More info**, then **Run anyway**.
+
+You only have to do this once per install. If you'd rather not, [run from source](#run-from-source) instead.
 
 ### Run from source
 
@@ -199,4 +211,9 @@ For development guidance — module layout, performance rules, and patterns for 
 
 ## License
 
-See [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).
+
+PRSH is a fork of [TournamentStreamHelper](https://github.com/joaorb64/TournamentStreamHelper)
+by João Ribeiro Bezerra, rebuilt as a single-game web app for Mario Superstar
+Baseball. TSH is MIT-licensed and its copyright notice is retained in
+[LICENSE](LICENSE) as that licence requires.

@@ -373,7 +373,7 @@ class ControllerOverlay:
         """Continuously read and log stdout from the subprocess.
 
         INFO, not DEBUG. main.py registers its file sinks at INFO/ERROR, so a
-        debug line reaches the dev console and never the `tsh_info.txt` a
+        debug line reaches the dev console and never the `prsh_info.txt` a
         producer actually sends you — and gc-overlay's stdout is the only
         account of WHY an overlay is sitting on "Waiting for controller
         data...". It is not chatty: every print site fires on startup or on a

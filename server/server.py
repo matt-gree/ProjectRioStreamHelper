@@ -63,13 +63,31 @@ async def load_manifest() -> dict:
         logger.exception("[manifest] failed to parse {}: {}", manifest_json, exc)
         return {"css": css, "js": js}
 
+    # ONLY ENTRY CHUNKS GET A <script> TAG.
+    #
+    # This used to inject `entry["file"]` for EVERY manifest record. That was
+    # harmless only because the build produced exactly one chunk — the moment
+    # anything is code-split, the manifest also lists each lazy chunk, and
+    # emitting a tag per record would load the whole app up front and defeat
+    # the split entirely. A dynamic `import()` fetches its own chunk; the
+    # document must reference the entry and nothing else.
+    #
+    # CSS is collected from every record on purpose: Vite files a lazy route's
+    # stylesheet under that route's chunk, and a stylesheet arriving with the
+    # chunk would repaint the page mid-navigation.
     for name, entry in manifest.items():
-        if "file" in entry:
-            logger.debug("[manifest] adding js: {}", entry["file"])
+        if entry.get("isEntry") and "file" in entry:
+            logger.debug("[manifest] adding js entry: {}", entry["file"])
             js.append(entry["file"])
         for css_file in entry.get("css", []):
             logger.debug("[manifest] adding css: {}", css_file)
             css.append(css_file)
+
+    # A manifest with no `isEntry` record at all is a build we don't understand;
+    # shipping a page with no script is a white screen, so fall back loudly.
+    if not js:
+        logger.warning("[manifest] no entry chunk found — falling back to every record")
+        js = [e["file"] for e in manifest.values() if "file" in e]
 
     logger.info("[manifest] loaded {} js / {} css entries", len(js), len(css))
     return {"css": css, "js": js}

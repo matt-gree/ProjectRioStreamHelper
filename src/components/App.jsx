@@ -47,7 +47,7 @@ function LoadingScreen() {
         <div className="flex h-screen items-center justify-center">
             <div className="flex flex-col items-center gap-2">
                 <Loader size="md" />
-                <p className="text-sm text-muted-foreground">Connecting to server...</p>
+                <p className="text-sm text-muted-foreground">Connecting to server…</p>
             </div>
         </div>
     );
