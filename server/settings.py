@@ -335,6 +335,19 @@ def _load_freeze_version_module():
     return None
 
 
+def _frozen_version_file() -> Path:
+    """The generated `server/_version.py` — the frozen build's ONLY source.
+
+    Its own function because both resolvers below read it directly and had
+    the same path literal twice, and because it is the seam a test points at
+    a fixture. The file is GITIGNORED (written by `scripts/freeze-version.py`
+    at prebuild), so a test that asserted against whatever happened to be on
+    disk passed on any machine that had run a build and failed in CI, where
+    nothing generates it — which is exactly how it failed.
+    """
+    return Path(__file__).resolve().parent / "_version.py"
+
+
 def _resolve_metadata() -> dict:
     """Name/description/authors, resolved by the same chain as the version.
 
@@ -369,7 +382,7 @@ def _resolve_metadata() -> dict:
     # `_read_frozen_metadata` in freeze-version.py: a generated file must not
     # be able to execute anything, and this has to work whatever state the
     # package is in.
-    frozen = Path(__file__).resolve().parent / "_version.py"
+    frozen = _frozen_version_file()
     if frozen.is_file():
         try:
             for line in frozen.read_text(encoding="utf-8").splitlines():
@@ -404,7 +417,7 @@ def _resolve_version() -> str:
 
     # Fallback: the resolver couldn't be loaded at all. Try the frozen
     # _version.py directly so a packaged build still shows something useful.
-    frozen = Path(__file__).resolve().parent / "_version.py"
+    frozen = _frozen_version_file()
     if frozen.is_file():
         try:
             for line in frozen.read_text(encoding="utf-8").splitlines():

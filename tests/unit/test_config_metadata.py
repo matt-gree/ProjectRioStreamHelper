@@ -101,7 +101,7 @@ async def test_config_load_publishes_real_authors():
 
 
 @pytest.mark.asyncio
-async def test_metadata_resolves_with_the_freeze_script_unavailable(monkeypatch):
+async def test_metadata_resolves_with_the_freeze_script_unavailable(monkeypatch, tmp_path):
     """THE ACTUAL FROZEN CASE, and the one that shipped broken twice.
 
     `scripts/` is not in PRSH.spec's datas, so `_load_freeze_version_module`
@@ -111,10 +111,27 @@ async def test_metadata_resolves_with_the_freeze_script_unavailable(monkeypatch)
     script and so no test ever took the path a release takes.
 
     Simulate it by removing the module, exactly as the bundle does.
+
+    The generated `_version.py` is WRITTEN HERE rather than read off disk.
+    It is gitignored — `prebuild` produces it — so asserting against whatever
+    happens to be in `server/` passes on any machine that has run a build and
+    fails in CI, which nothing there generates. That is not a flake: the test
+    was silently measuring the developer's build state instead of the
+    behaviour, and it went green locally while failing the moment it ran
+    anywhere clean.
     """
     import server.settings as settings
 
+    frozen = tmp_path / "_version.py"
+    frozen.write_text(
+        'VERSION = "9.9.9-test"\n'
+        'METADATA = {"name": "ProjectRioStreamHelper", '
+        '"description": "test", "authors": ["Matt Greene"]}\n',
+        encoding="utf-8",
+    )
+
     monkeypatch.setattr(settings, "_load_freeze_version_module", lambda: None)
+    monkeypatch.setattr(settings, "_frozen_version_file", lambda: frozen)
     meta = settings._resolve_metadata()
 
     assert meta.get("authors"), (
