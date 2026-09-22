@@ -126,3 +126,53 @@ describe('Production page mounts', () => {
         }
     });
 });
+
+
+/*
+ * THE BAND'S ERROR LINE CARRIES WHAT THE PILL CANNOT — the address, or the
+ * rejection — and nothing else. The pill an inch to its left already says the
+ * connection failed, and the line used to say it again at length; before that
+ * it said the bare word "Error", which is String() of the empty-reason 1006
+ * that OBS-not-running raises. The way to the fix is the PILL, which is a link
+ * in every state — the readout is the way to its own settings.
+ */
+describe('the OBS error line', () => {
+    const errored = (error) => {
+        useSettingsStore.setState({ obs: { ever_connected: true } });
+        useObsStore.setState({ status: 'error', error });
+    };
+
+    it('draws the address, with no second link beside it', () => {
+        errored('Nothing listening at 127.0.0.1:4455.');
+        ui();
+        expect(screen.getByText('Nothing listening at 127.0.0.1:4455.')).toBeInTheDocument();
+        expect(screen.queryByRole('link', { name: /Connections tab/ })).not.toBeInTheDocument();
+    });
+
+    it('makes the status readout itself the way to the Connections tab', () => {
+        errored('Password rejected.');
+        ui();
+        expect(screen.getByRole('link', { name: /OBS connection error/ }))
+            .toHaveAttribute('href', '/connections');
+    });
+
+    it('is a link when connected too — the address is changed from the same page', () => {
+        useSettingsStore.setState({ obs: { ever_connected: true } });
+        useObsStore.setState({ status: 'connected', error: null, obsVersion: '5.3.0' });
+        ui();
+        expect(screen.getByRole('link', { name: /OBS connected/ }))
+            .toHaveAttribute('href', '/connections');
+    });
+
+    /*
+     * A failure before the first success is not an error — it is a machine
+     * nobody has set up, and that face carries its own verb and no message.
+     */
+    it('is silent before the first successful connection', () => {
+        useSettingsStore.setState({ obs: { ever_connected: false } });
+        useObsStore.setState({ status: 'error', error: 'Nothing listening at 127.0.0.1:4455.' });
+        ui();
+        expect(screen.queryByText(/Nothing listening/)).not.toBeInTheDocument();
+        expect(screen.getByText('OBS not set up')).toBeInTheDocument();
+    });
+});

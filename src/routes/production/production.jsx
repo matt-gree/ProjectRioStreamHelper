@@ -85,13 +85,23 @@ const ConnectionPill = memo(function ConnectionPill() {
 
     return (
         <Group gap="sm" className="min-w-0 items-center">
-            <Group gap="xs" className="shrink-0 items-center rounded-full border border-border bg-card px-3 py-1.5">
+            {/* The readout IS the way to its own settings — the one
+                destination it could ever point at. It carried a separate
+                "Connections tab" link beside the error text, which spent a
+                second control on a place the thing it sat next to already
+                named. Clickable in every state: a connected producer changing
+                the address wants the same page. */}
+            <Link
+                to="/connections"
+                title="OBS connection — open the Connections tab"
+                className="flex shrink-0 flex-row items-center gap-1 rounded-full border border-border bg-card px-3 py-1.5 transition-colors hover:border-muted-foreground/60 hover:bg-card/80"
+            >
                 <span className={cn('size-2 rounded-full', meta.dot)} />
                 <Text size="sm" className="text-foreground">{meta.label}</Text>
                 {status === 'connected' && obsVersion && (
                     <Badge className="ml-1 bg-emerald-500/15 text-emerald-300 text-[10px]">v{obsVersion}</Badge>
                 )}
-            </Group>
+            </Link>
             {(status === 'disconnected' || status === 'error') && (
                 unconfigured ? (
                     // Retry is the wrong verb before the first success: nothing
@@ -110,17 +120,10 @@ const ConnectionPill = memo(function ConnectionPill() {
                     </Button>
                 )
             )}
-            {/* Wrapped, never truncated: the second half of an OBS error is
-                usually the fix ("…check the OBS WebSocket password"), and a
-                `title` tooltip is unreachable by keyboard or touch. The link
-                goes to where that fix is made. */}
+            {/* What the pill can't say: which address, or which rejection
+                (see friendlyError in context/obs). */}
             {status === 'error' && error && !unconfigured && (
-                <Text size="xs" className="max-w-[48ch] text-destructive">
-                    {error}{' '}
-                    <Link to="/connections" className="whitespace-nowrap text-muted-foreground underline hover:text-foreground">
-                        OBS settings
-                    </Link>
-                </Text>
+                <Text size="xs" className="text-destructive">{error}</Text>
             )}
         </Group>
     );

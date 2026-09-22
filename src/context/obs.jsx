@@ -636,7 +636,7 @@ export const useObsStore = create((set) => ({
                 Promise.resolve(client.disconnect()).catch(() => { /* already gone */ });
             }
             if (myGen !== generation) return;
-            const error = friendlyError(e);
+            const error = friendlyError(e, { host, port });
             // Same failure as last time on a background retry — writing it
             // again would only churn subscribers.
             const prev = useObsStore.getState();
@@ -698,16 +698,24 @@ function withConnectTimeout(promise) {
     return Promise.race([promise, limit]).finally(() => clearTimeout(timer));
 }
 
-function friendlyError(e) {
-    const msg = e?.message || String(e);
+/*
+ * The pill beside this already says the connection failed, so the line only
+ * ever carries what the pill CAN'T: which address, or which rejection. Short
+ * enough to sit on the band's one row — the fix is the link, not a sentence.
+ *
+ * Never `String(e)`: a socket that never opens closes 1006 with an EMPTY
+ * reason, so obs-websocket-js raises an Error whose message is '' — and
+ * String() of that is the bare word "Error", which is what the band printed
+ * for the likeliest failure there is.
+ */
+export function friendlyError(e, { host, port } = {}) {
+    const at = host ? `${host}:${port}` : 'OBS';
     // obs-websocket auth failure code is 4009.
-    if (e?.code === 4009) return 'Authentication failed — check the OBS WebSocket password.';
-    // A drop reads as a hang, so name the likely causes rather than the symptom.
-    if (e?.name === TIMED_OUT) {
-        return `${msg} Check the host and port on the Connections tab, and that a firewall `
-            + 'or VPN is not blocking the connection.';
-    }
-    return msg;
+    if (e?.code === 4009) return 'Password rejected.';
+    if (e?.name === TIMED_OUT) return `No response from ${at}.`;
+    // 1006 is an abnormal close: refused, or dropped without a close frame.
+    if (!e?.code || e.code === 1006) return `Nothing listening at ${at}.`;
+    return e.message || `Connection closed (code ${e.code}).`;
 }
 
 async function refreshAll(gen) {

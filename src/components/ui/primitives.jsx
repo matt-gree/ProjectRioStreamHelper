@@ -81,7 +81,16 @@ export const Text = React.forwardRef(function Text(
         TEXT_SIZE[size] ?? "text-sm",
         fw != null && FW[fw],
         dimmed && "text-muted-foreground",
-        truncate && "truncate",
+        // `truncate` is overflow-hidden + ellipsis, and BOTH are inert on an
+        // INLINE box — so `<Text span truncate>` silently did nothing unless
+        // something else blockified it. Every site that works does: it is a
+        // direct flex child, which blockifies `inline` to `block`. The quick
+        // rail's card title is not (its parent is a plain `<button>`), so a
+        // title carrying a board segment — `Scoreboard · B1 · Large` — ran 11px
+        // past its button and painted over the reorder arrows beside it.
+        // Declaring `block` here fixes that and is a no-op everywhere else: a
+        // flex item's used display is already `block`.
+        truncate && (span ? "truncate block" : "truncate"),
         className
       )}
       style={{ color: dimmed ? undefined : c, textAlign: ta, ...style }}

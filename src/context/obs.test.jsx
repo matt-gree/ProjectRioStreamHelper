@@ -165,7 +165,26 @@ describe('connect + scene mirror', () => {
         await useObsStore.getState().connect();
         const s = useObsStore.getState();
         expect(s.status).toBe('error');
-        expect(s.error).toMatch(/password/i);
+        expect(s.error).toBe('Password rejected.');
+    });
+
+    /*
+     * The likeliest OBS failure of all — nothing listening on the port —
+     * closes with 1006 and an EMPTY reason, so obs-websocket-js raises an
+     * Error whose message is '' and whose String() is the bare word "Error".
+     * That word was the whole of what the console band printed.
+     */
+    it('names the address when a refused socket arrives with no message', async () => {
+        useSettingsStore.setState({
+            obs: { auto_connect: false, host: '192.168.1.40', port: 4455 },
+        });
+        h.nextConnectImpl = async () => {
+            throw Object.assign(new Error(''), { code: 1006 });
+        };
+        await useObsStore.getState().connect();
+        const s = useObsStore.getState();
+        expect(s.status).toBe('error');
+        expect(s.error).toBe('Nothing listening at 192.168.1.40:4455.');
     });
 
     it('disconnect clears the mirror', async () => {
@@ -640,7 +659,7 @@ describe('events + reconnect', () => {
         await pending;
 
         expect(useObsStore.getState().status).toBe('error');
-        expect(useObsStore.getState().error).toMatch(/within 5s/);
+        expect(useObsStore.getState().error).toBe('No response from 127.0.0.1:4455.');
     });
 
     // The ceiling must not clip a slow-but-real handshake, and must not leave a

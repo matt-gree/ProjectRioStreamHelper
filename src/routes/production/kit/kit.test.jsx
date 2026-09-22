@@ -410,6 +410,25 @@ describe('QuickCard two-row cap', () => {
         expect(screen.getByText('row two')).toBeInTheDocument();
         expect(screen.queryByText('row three')).not.toBeInTheDocument();
     });
+
+    /*
+     * A CARD TITLE MUST CLIP, NOT PAINT OVER ITS NEIGHBOURS.
+     *
+     * The title is a `<Text span truncate>` inside a plain `<button>` — not a
+     * flex container, so nothing blockified the span and `truncate`'s
+     * overflow-hidden + ellipsis were both inert on an inline box. Measured in
+     * Chrome: `Scoreboard · B1 · Large` (a rig with more than one board, so the
+     * label carries a board segment) rendered 11px past the button and over the
+     * reorder arrows. A class assertion, because the bug is a MISSING display
+     * declaration and jsdom computes no layout to catch it with.
+     */
+    it('gives the title a block box, or `truncate` is inert on the inline span', () => {
+        ui(<QuickCard title="Scoreboard · B1 · Large" state="off" />);
+        const title = screen.getByText('Scoreboard · B1 · Large');
+        expect(title.tagName).toBe('SPAN');
+        expect(title).toHaveClass('truncate');
+        expect(title).toHaveClass('block');
+    });
 });
 
 
