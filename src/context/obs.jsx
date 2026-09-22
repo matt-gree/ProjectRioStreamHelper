@@ -9,7 +9,7 @@ import { renameForUrl, upgradeRetiredName } from '../routes/production/sources/s
 import { notifications } from '../lib/notify';
 import {
     renderedSize, sizeMatchTransform, redrawPlan, rescaleForSource, isCropped, stretchOf,
-    inputSize, sameInputSize,
+    inputSize, sameInputSize, typeScaleOf,
 } from '../lib/obs-transform';
 
 /*
@@ -392,7 +392,14 @@ export const useObsStore = create((set) => ({
      * The corrections go out together so the window in which another scene is
      * drawing the new resolution at the old scale is a frame, not a loop.
      */
-    redrawSourceAtSize: async ({ scene, itemId, sourceName }) => {
+    /*
+     * `rewriteUrl(url, typeScale)` — optional, for a source whose CONTENT has to
+     * follow the redraw (the Player Name keeps the size its text was drawn at;
+     * see scaleSourceSizes). Its URL rides the same SetInputSettings as the new
+     * resolution, so the source reloads once, at the new size, with the new
+     * type. `typeScale` is measured off the item the producer pressed on.
+     */
+    redrawSourceAtSize: async ({ scene, itemId, sourceName, rewriteUrl = null }) => {
         if (!obs) throw new Error('Not connected to OBS');
         const { sceneItemTransform } = await obs.call('GetSceneItemTransform', {
             sceneName: scene, sceneItemId: itemId,
@@ -415,11 +422,15 @@ export const useObsStore = create((set) => ({
                 + 'render would move what the crop cuts. Set its size in OBS Properties instead.');
         }
 
-        await obs.call('SetInputSettings', {
-            inputName: sourceName,
-            inputSettings: { width: plan.width, height: plan.height },
-            overlay: true,
-        });
+        const inputSettings = { width: plan.width, height: plan.height };
+        let url = null;
+        if (rewriteUrl) {
+            const { inputSettings: current } = await obs.call('GetInputSettings', { inputName: sourceName });
+            url = rewriteUrl(current?.url || '', typeScaleOf(sceneItemTransform));
+            if (url) inputSettings.url = url;
+        }
+
+        await obs.call('SetInputSettings', { inputName: sourceName, inputSettings, overlay: true });
 
         await Promise.all(occurrences.map((o) => {
             const patch = rescaleForSource(o.transform, plan);
@@ -429,7 +440,7 @@ export const useObsStore = create((set) => ({
             }).catch(() => { /* one scene's correction failing must not strand the rest */ });
         }).filter(Boolean));
 
-        return { width: plan.width, height: plan.height, scenes: occurrences.length };
+        return { width: plan.width, height: plan.height, scenes: occurrences.length, url };
     },
 
     // Pull a scene's items into the mirror and keep them live from then on.

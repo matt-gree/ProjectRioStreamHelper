@@ -42,7 +42,7 @@ const obs = (sceneItems) => useObsStore.setState({
 
 let redraw;
 beforeEach(() => {
-    useSettingsStore.setState({ production: withContainers() });
+    useSettingsStore.setState({ production: withContainers(), overlays: {} });
     redraw = vi.fn(() => Promise.resolve({ width: 1440, height: 360, scenes: 1 }));
     useObsStore.setState({ redrawSourceAtSize: redraw });
 });
@@ -64,7 +64,29 @@ describe('the stage panel of a stretched source', () => {
         fireEvent.click(screen.getByRole('button', { name: /Scaled 1\.8× — redraw at true size/ }));
         expect(redraw).toHaveBeenCalledWith({
             scene: 'Game', itemId: 1, sourceName: 'Player Name 1',
+            rewriteUrl: expect.any(Function),
         });
+    });
+
+    /*
+     * THE NAME KEEPS THE SIZE IT LOOKED. The producer dragged the box bigger to
+     * get a bigger name; redrawing used to put the type back to the shared 48px
+     * in the bigger box. The redraw now hands the store a rewrite that scales
+     * THIS source's sizes by the stretch, off the shared setting.
+     */
+    it('scales this source’s name size by the stretch, off the shared setting', () => {
+        useSettingsStore.setState({
+            production: withContainers(),
+            overlays: { playername: { nameSize: 50, prefixSize: 20 } },
+        });
+        obs({ Game: [item(1, 'Player Name 1', `${NAME}?team=1`, { stretch: 1.5 })] });
+        ui(<Stage selection="playername~t1@Game" />);
+        fireEvent.click(screen.getByRole('button', { name: /redraw at true size/ }));
+        const { rewriteUrl } = redraw.mock.calls[0][0];
+        const next = new URL(rewriteUrl(`${NAME}?team=1`, 1.5));
+        expect(next.searchParams.get('nameSize')).toBe('75');
+        expect(next.searchParams.get('prefixSize')).toBe('30');
+        expect(next.searchParams.get('team')).toBe('1');
     });
 
     /*
@@ -209,6 +231,38 @@ describe('which sources are entitled to complain', () => {
  * what was binding. (Measured in a real browser: 1600x60, 2400x60 and 3200x60
  * all draw 33.23px.)
  */
+describe('a Player Name with its own size', () => {
+    const own = (url, over = {}) => obs({
+        Game: [item(1, 'Player Name 1', url, over)],
+    });
+
+    it('says so, and measures the readout against ITS size', () => {
+        own(`${NAME}?team=1&nameSize=72&prefixSize=36`, { renderWidth: 1200, renderHeight: 300 });
+        ui(<Stage selection="playername~t1@Game" />);
+        expect(screen.getByText(/72px name · 36px prefix — overrides the shared size/)).toBeInTheDocument();
+        expect(screen.getByText(/1200 × 300 holds 72px/)).toBeInTheDocument();
+    });
+
+    it('goes back to the shared size on Use shared', async () => {
+        const repoint = vi.fn(() => Promise.resolve({}));
+        useObsStore.setState({ repointBrowserSource: repoint });
+        own(`${NAME}?team=1&nameSize=72&prefixSize=36`);
+        ui(<Stage selection="playername~t1@Game" />);
+        fireEvent.click(screen.getByRole('button', { name: 'Use shared' }));
+        await vi.waitFor(() => expect(repoint).toHaveBeenCalled());
+        const { sourceName, url } = repoint.mock.calls[0][0];
+        expect(sourceName).toBe('Player Name 1');
+        expect(new URL(url).searchParams.has('nameSize')).toBe(false);
+        expect(new URL(url).searchParams.get('team')).toBe('1');
+    });
+
+    it('draws no row for a source on the shared size', () => {
+        own(`${NAME}?team=1`);
+        ui(<Stage selection="playername~t1@Game" />);
+        expect(screen.queryByText(/overrides the shared size/)).not.toBeInTheDocument();
+    });
+});
+
 describe('the Player Name size readout', () => {
     const sized = (w, h) => obs({
         Game: [item(1, 'Player Name 1', `${NAME}?team=1`, { renderWidth: w, renderHeight: h })],

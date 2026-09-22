@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
     BOUNDS_NONE, renderedSize, sizeMatchTransform,
     renderFactor, redrawPlan, rescaleForSource, isCropped, stretchOf, SCALE_TOLERANCE,
-    inputSize, sameInputSize,
+    inputSize, sameInputSize, typeScaleOf,
 } from './obs-transform';
 import {
     requestedScale, fitToHeight, heightForNameSize,
@@ -178,6 +178,22 @@ describe('stretchOf — the verdict a rack row carries', () => {
         const cropped = item({ scaleX: 2, scaleY: 2, cropTop: 10 });
         expect(stretchOf(cropped)).not.toBeNull();
         expect(redrawPlan(cropped)).toBeNull();
+    });
+});
+
+describe('typeScaleOf — how much bigger TYPE looks', () => {
+    it('is the vertical factor', () => {
+        expect(typeScaleOf(item({ scaleX: 1.5, scaleY: 1.5 }))).toBe(1.5);
+        expect(typeScaleOf(item({ scaleX: 0.5, scaleY: 0.5 }))).toBe(0.5);
+    });
+
+    // Dragged only wider: the same letters with more room, not bigger ones.
+    it('ignores a stretch that is only horizontal', () => {
+        expect(typeScaleOf(item({ scaleX: 2, scaleY: 1 }))).toBe(1);
+    });
+
+    it('is null when the source size is unknown', () => {
+        expect(typeScaleOf(item({ sourceHeight: 0 }))).toBeNull();
     });
 });
 

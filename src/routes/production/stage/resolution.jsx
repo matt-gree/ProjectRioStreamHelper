@@ -8,6 +8,10 @@ import { Text } from '../../../components/ui/primitives';
 import { FieldRow } from '../kit';
 import { StagedDot } from '../controls';
 import { stretchOfPlacement } from '../sources/placements';
+import { useSettingsStore } from '../../../context/store';
+import {
+    scaleSourceSizes, sourceSizeOverride,
+} from '../../../../public/layout/lib/playername-mount.js';
 
 /*
  * "OBS is scaling this source."
@@ -28,9 +32,12 @@ import { stretchOfPlacement } from '../sources/placements';
  * Redrawing reconciles them: the page re-renders at the size the item occupies
  * and the scaling comes out. THE BOX DOES NOT MOVE OR CHANGE SIZE — same
  * rectangle on the canvas, drawn instead of resampled — so an element that fits
- * its viewport looks identical and merely sharper, and fixed-size type comes
- * back to its real size. Which is precisely what a producer means when they
- * drag a Player Name box: the box got bigger, the name did not.
+ * its viewport looks identical and merely sharper. The Player Name, which
+ * draws type at an absolute size, is the exception in the other direction: a
+ * producer who drags its box bigger meant a bigger name, so its redraw keeps
+ * the size the name LOOKED and gives that source its own size (typeRewrite
+ * below). Putting the type back to the shared size in the bigger box — what
+ * this did until 2026-09-21 — read as the app undoing the drag.
  *
  * That is not an exotic failure — it is what happens the first time anyone
  * drags a corner. The console can see it (the item's rendered size against its
@@ -58,6 +65,33 @@ import { stretchOfPlacement } from '../sources/placements';
 
 const pendingKey = (placement) => `obs:redraw:${placement.scene}:${placement.item.id}`;
 
+/*
+ * THE PLAYER NAME KEEPS THE SIZE IT WAS DRAWN AT. A producer who drags a name
+ * box bigger is asking for a bigger name — that is what they were looking at
+ * while OBS resampled it — so a redraw that put the type back to the shared
+ * size in the bigger box read as the app undoing the drag. For this one element
+ * the redraw also multiplies THIS source's sizes by the stretch and writes them
+ * onto its URL (scaleSourceSizes); every other Player Name keeps the shared
+ * size. Read at run time, like the size, so a staged redraw scales by the drag
+ * that is on screen when it goes live.
+ */
+function typeRewrite(placement) {
+    if (placement?.element?.id !== 'playername') return null;
+    return (url, factor) => scaleSourceSizes(
+        url, factor, useSettingsStore.getState()?.overlays?.playername ?? {},
+    );
+}
+
+function landedOn(done) {
+    if (!done?.url) return '';
+    try {
+        const { nameSize } = sourceSizeOverride(new URL(done.url).search);
+        return nameSize ? ` Name is now ${nameSize}px on this source.` : '';
+    } catch {
+        return '';
+    }
+}
+
 export function redrawSource(placement) {
     const name = placement.item.sourceName;
     stageOrRun({
@@ -84,11 +118,13 @@ export function redrawSource(placement) {
                 scene: placement.scene,
                 itemId: placement.item.id,
                 sourceName: name,
+                rewriteUrl: typeRewrite(placement),
             });
             notifications.show({
                 color: 'green',
                 message: `${name} now renders at ${done.width} × ${done.height}`
-                    + (done.scenes > 1 ? `, in all ${done.scenes} scenes that use it.` : '.'),
+                    + (done.scenes > 1 ? `, in all ${done.scenes} scenes that use it.` : '.')
+                    + landedOn(done),
             });
         },
     });
@@ -137,8 +173,11 @@ const RedrawRow = memo(function RedrawRow({ placement }) {
                 title={`OBS is drawing this source at ${factor} the resolution it renders at, so `
                     + `what goes out is a resampled picture of it rather than it. Redrawing `
                     + `re-renders the page at the size this box occupies, in every scene that uses `
-                    + `the source. The box does not move or change size; anything drawn at a fixed `
-                    + `size — the Player Name's type — comes back to that size.`}
+                    + `the source. The box does not move or change size`
+                    + (placement.element?.id === 'playername'
+                        ? `, and the name keeps the size it looks now — this source gets its own `
+                          + `name size, scaled by the stretch; other Player Names keep the shared one.`
+                        : `.`)}
             >
                 <TriangleAlert size={11} className="mr-1 shrink-0 text-amber-400" />
                 <span className="truncate">Scaled {factor} — redraw at true size</span>

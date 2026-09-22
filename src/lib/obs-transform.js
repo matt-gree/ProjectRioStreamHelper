@@ -247,6 +247,20 @@ export function stretchOf(t) {
 }
 
 /*
+ * How much bigger TYPE looks on this item than it renders — the VERTICAL
+ * factor, not `renderFactor`'s furthest-from-1 axis. Height is what reads as a
+ * type size: a source dragged only wider draws the same letters with more room
+ * (1 here), where one dragged taller draws taller letters. For the uniform
+ * corner-drag that is almost every case, the two agree. Null when unreadable.
+ */
+export function typeScaleOf(t) {
+    const size = renderedSize(t);
+    const sh = num(t?.sourceHeight);
+    if (!size || !(sh > 0)) return null;
+    return size.height / sh;
+}
+
+/*
  * The input dimensions that would make this item render 1:1, or null when there
  * is nothing to fix and nothing safe to do.
  *

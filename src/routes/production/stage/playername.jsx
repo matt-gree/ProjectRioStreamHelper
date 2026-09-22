@@ -1,11 +1,17 @@
 import { memo } from 'react';
 import { useSettingsStore } from '../../../context/store';
-import { usePending } from '../../../context/staging';
+import { useObsStore } from '../../../context/obs';
+import { stageOrRun, usePending } from '../../../context/staging';
+import { notifications } from '../../../lib/notify';
+import { Button } from '../../../components/ui/button';
+import { Text } from '../../../components/ui/primitives';
 import { DirectStage } from './generic';
-import { StatusLine } from '../kit';
+import { FieldRow, StatusLine } from '../kit';
+import { StagedDot } from '../controls';
 import { OverlaySettingGroups, useOverlaySettings } from './overlay-settings';
 import {
-    heightForNameSize, resolveNameSize, resolvePrefixPosition, resolvePrefixSize,
+    clearSourceSizes, heightForNameSize, resolveNameSize, resolvePrefixPosition,
+    resolvePrefixSize, sourceSizeOverride,
 } from '../../../../public/layout/lib/playername-mount.js';
 
 /*
@@ -69,10 +75,68 @@ function useLiveSetting(key, fallback) {
     return pending ? pending.value : (stored ?? fallback);
 }
 
+// This source's own sizes, off its URL (a Redraw writes them — see
+// SIZE_PARAMS in the mount). Nulls for a fed row or a source that has none.
+function useOwnSizes(placement) {
+    const url = placement?.item?.url;
+    if (!url || placement?.slot) return { nameSize: null, prefixSize: null };
+    try {
+        return sourceSizeOverride(new URL(url).search);
+    } catch {
+        return { nameSize: null, prefixSize: null };
+    }
+}
+
+/*
+ * THIS SOURCE HAS ITS OWN SIZE — said where the shared size is set, because a
+ * Name Size field reading 48 above a source drawing 72 is exactly the
+ * disagreement this panel exists to prevent. `Use shared` is the way back: it
+ * drops the two params and the source follows the setting again.
+ */
+export const OwnSizeRow = memo(function OwnSizeRow({ placement }) {
+    const own = useOwnSizes(placement);
+    const key = `obs:pnsize:${placement?.item?.sourceName}`;
+    const staged = !!usePending(key);
+    if (own.nameSize == null && own.prefixSize == null) return null;
+    const name = placement.item.sourceName;
+    const useShared = () => stageOrRun({
+        key,
+        label: `${name}: use the shared name size`,
+        value: 'shared',
+        run: async () => {
+            const url = clearSourceSizes(placement.item.url);
+            if (!url) return;
+            await useObsStore.getState().repointBrowserSource({ sourceName: name, url });
+            notifications.show({ color: 'green', message: `${name} uses the shared name size again.` });
+        },
+    });
+    const parts = [
+        own.nameSize != null && `${own.nameSize}px name`,
+        own.prefixSize != null && `${own.prefixSize}px prefix`,
+    ].filter(Boolean).join(' · ');
+    return (
+        <FieldRow label="This source" staged={staged}>
+            <Text
+                size="xs" className="min-w-0 flex-1 truncate text-amber-200/90"
+                title="Set by a Redraw, which kept the size the name looked while OBS was stretching it. Only this source; the others use the shared sizes above."
+            >
+                {parts} — overrides the shared size
+            </Text>
+            <Button size="xs" variant="ghost" className="h-7 shrink-0" onClick={useShared}>
+                Use shared
+            </Button>
+            <StagedDot show={staged} />
+        </FieldRow>
+    );
+});
+
 export const NameSizeNote = memo(function NameSizeNote({ placement }) {
-    const size = resolveNameSize(useLiveSetting('nameSize', 48));
+    const own = useOwnSizes(placement);
+    const sharedSize = useLiveSetting('nameSize', 48);
+    const sharedTag = useLiveSetting('prefixSize', 24);
+    const size = own.nameSize ?? resolveNameSize(sharedSize);
     const prefix = resolvePrefixPosition(useLiveSetting('prefixPosition', 'above'));
-    const tag = resolvePrefixSize(useLiveSetting('prefixSize', 24));
+    const tag = own.prefixSize ?? resolvePrefixSize(sharedTag);
     const frame = sourceFrame(placement);
     /*
      * Ceiled off a value nudged past its own float error. 48px with no prefix
@@ -149,6 +213,7 @@ export function PlayerNameStage({ element, board, placement }) {
         <>
             <DirectStage element={element} board={board} placement={placement} />
             <OverlaySettingGroups os={os} type="playername" keys={FIT_KEYS} />
+            <OwnSizeRow placement={placement} />
             <NameSizeNote placement={placement} />
         </>
     );
