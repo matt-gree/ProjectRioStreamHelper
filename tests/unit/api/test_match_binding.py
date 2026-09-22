@@ -240,3 +240,90 @@ async def test_auto_retire_unbinds_a_finished_fixture():
     assert deep_get(State.state, f"match.{m}.stage") == "post"
     assert deep_get(State.state, "score.1.side_reason") != "match"
     assert deep_get(State.state, "score.1.match_conflict") is None
+
+
+# ── the stage a board gives back ────────────────────────────────────────────
+#
+# `note_live` promotes draft→live on the first feed frame, and that promotion is
+# one of the four conditions in `Schedule.not_waiting_reason`. Nothing gave it
+# back, so a fixture bound by mistake and unbound before a pitch was held out of
+# Up next for the rest of the night by a flag no board was backing any more —
+# with the stage badge, a button that does not look like one, as the only way
+# out. The guard is asked of the MATCH (was anything played), never of the
+# board: see `Match.note_unbound`.
+
+@pytest.mark.asyncio
+async def test_unbinding_an_unplayed_fixture_gives_back_its_live_stage():
+    m = await make_match()
+    await bind_scoreboard(1, BindPayload(match=m))
+    await State.Set(f"match.{m}.stage", "live")
+
+    await bind_scoreboard(1, BindPayload(match=None))
+
+    assert Match.get(m)["stage"] == "draft"
+
+
+@pytest.mark.asyncio
+async def test_an_unplayed_fixture_is_offered_again_after_it_is_unbound():
+    """The whole point of the roll-back, stated where a producer feels it."""
+    m = await make_match()
+    await enqueue(m)
+    await bind_scoreboard(1, BindPayload(match=m))
+    await State.Set(f"match.{m}.stage", "live")
+
+    await bind_scoreboard(1, BindPayload(match=None))
+
+    assert Schedule.not_waiting_reason(m) is None
+
+
+@pytest.mark.asyncio
+async def test_a_series_with_a_game_in_it_keeps_live_when_it_comes_off_a_board():
+    """A Bo3 unbound at 1-0 is genuinely mid-series — nothing to give back."""
+    m = await make_match()
+    await State.Set(f"match.{m}.format.bestOf", 3)
+    await bind_scoreboard(1, BindPayload(match=m))
+    await State.SetBatch([(f"match.{m}.stage", "live"), (f"match.{m}.series.1", 1)])
+
+    await bind_scoreboard(1, BindPayload(match=None))
+
+    assert Match.get(m)["stage"] == "live"
+
+
+@pytest.mark.asyncio
+async def test_a_hand_decided_fixture_keeps_live_even_at_0_0():
+    """`force_decide` never touches the series, so 0-0 is not a record of
+    nothing having happened — the producer said who won."""
+    m = await make_match()
+    await bind_scoreboard(1, BindPayload(match=m))
+    await State.SetBatch([(f"match.{m}.stage", "live"), (f"match.{m}.decided", 1)])
+
+    await bind_scoreboard(1, BindPayload(match=None))
+
+    assert Match.get(m)["stage"] == "live"
+
+
+@pytest.mark.asyncio
+async def test_a_draft_fixture_is_left_alone_on_unbind():
+    """The move is draft←live and nothing else; `post` is the post-game
+    slice's and a fixture that never went live has nothing to give back."""
+    m = await make_match()
+    await bind_scoreboard(1, BindPayload(match=m))
+    await State.Set(f"match.{m}.stage", "post")
+
+    await bind_scoreboard(1, BindPayload(match=None))
+
+    assert Match.get(m)["stage"] == "post"
+
+
+@pytest.mark.asyncio
+async def test_moving_a_fixture_between_boards_does_not_strand_it_in_draft():
+    """`bind_board` vacates the old holder through the same unbind, so the
+    roll-back fires mid-move. Harmless — the fixture is bound again in the
+    same call, and the next feed frame promotes it back."""
+    m = await make_match()
+    await bind_scoreboard(1, BindPayload(match=m))
+    await State.Set(f"match.{m}.stage", "live")
+
+    await bind_board(2, m)
+
+    assert Match.bound_scoreboards(m) == [2]

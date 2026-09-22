@@ -22,10 +22,13 @@ const DRAFT_STAGE_BADGE = {
  * What each stage MEANS, in the producer's terms rather than the key's.
  *
  * `stage` has no producer-facing writer on the server — `note_live` promotes
- * draft→live on the first feed event and the post-game paths set post — so this
- * badge was a read-only word for a flag that silently decides whether the fixture
- * is ever offered as a board's next one. Naming the consequence is half the fix;
- * the control below is the other half.
+ * draft→live on the first feed event, the post-game paths set post, and
+ * `note_unbound` gives `live` back when an UNPLAYED fixture comes off its board —
+ * so this badge was a read-only word for a flag that silently decides whether the
+ * fixture is ever offered as a board's next one. Naming the consequence is half
+ * the fix; the control below is the other half. The roll-back covers the one case
+ * that was pure trap (bound by mistake, unbound before a pitch, stranded out of
+ * Up next all night); every other way back is still this button.
  */
 /*
  * Each line describes what the STAGE does, never what this particular fixture is

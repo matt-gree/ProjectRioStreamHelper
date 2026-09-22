@@ -878,3 +878,36 @@ class Match:
         if cls.get(m).get("stage") == "draft":
             await State.Set(f"match.{m}.stage", "live")
             logger.info("[Match] {} → live (board {} feed started)", m, sb)
+
+    @classmethod
+    async def note_unbound(cls, m) -> bool:
+        """Roll ``m`` back draft←live when it comes off a board UNPLAYED.
+
+        THE ONE BACKWARD MOVE, AND IT IS NARROW. ``note_live`` promotes on the
+        first feed frame, which is right while the fixture is on a board and
+        wrong the moment it comes off one with nothing recorded: `live` is also
+        one of the four conditions in ``Schedule.not_waiting_reason``, so a
+        fixture bound by mistake — wrong board, wrong fixture, a bind taken back
+        before first pitch — was held out of Up next for the rest of the night
+        by a flag no board was backing any more. The producer's way out was the
+        stage badge, which is a button that does not look like one.
+
+        UNPLAYED is the whole guard, and it is asked of the MATCH, never of the
+        board: `series` at 0-0 with no `decided`. A Bo3 unbound at 1-0 is
+        genuinely mid-series and keeps `live`; so does a hand-decided fixture,
+        whose 0-0 series is not a record of nothing happening. A game that ended
+        without crediting anybody (a quit game reports no ``winnerSide``) does
+        roll back, and should: PRSH has no record it was played, and the
+        producer unbinding it is the only statement about it there is.
+
+        A move between boards goes through here too — ``bind_board`` vacates the
+        old holder first — which is harmless: the fixture is bound again in the
+        same call and the next frame's ``note_live`` puts it back.
+        """
+        if not m or cls.get(m).get("stage") != "live":
+            return False
+        if cls.games_played(m) > 0 or _norm_side(cls.get(m).get("decided")) is not None:
+            return False
+        await State.Set(f"match.{m}.stage", "draft")
+        logger.info("[Match] {} → draft (came off its board unplayed)", m)
+        return True

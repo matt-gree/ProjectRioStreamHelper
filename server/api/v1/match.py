@@ -444,9 +444,15 @@ async def _unbind_board(sb: int) -> None:
     away, so without this the board keeps reporting `side_reason` as `match` —
     explaining its orientation by a layer no longer there — and keeps the
     orientation that layer chose, until the next feed frame.
+
+    An UNPLAYED fixture also gives back the `live` stage the feed gave it — see
+    ``Match.note_unbound``, which owns that rule and its guard. Read the id
+    first: the unset below is what makes it unreachable.
     """
+    m = Match.scoreboard_match(sb)
     await State.UnsetBatch([f"score.{sb}.match", f"score.{sb}.match_conflict"])
     await State.Save()
+    await Match.note_unbound(m)
     await Match.clear_scoreboard(sb)
     await RioGameDataProvider.reorient_board(sb)
 
