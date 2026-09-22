@@ -907,10 +907,20 @@ export const Rack = memo(function Rack({
      * while the producer worked in the stage — so the rack, which is how you get to
      * anything, was off screen exactly when the panel you scrolled to see was on it.
      *
-     * `sticky` is the missing half. The column now holds the viewport (less a
-     * margin), its list fills it (`flex-1` over the panel's own height, never a
-     * second copy of that arithmetic), and it stays put while the middle column
-     * scrolls under it. `items-start` on the grid is what leaves it free to.
+     * `sticky` is the missing half. The column now holds the space actually
+     * BELOW it, its list fills that (`flex-1` over the panel's own height, never
+     * a second copy of that arithmetic), and it stays put while the middle
+     * column scrolls under it. `items-start` on the grid is what leaves it free
+     * to.
+     *
+     * THE HEIGHT IS MEASURED, NOT `100vh`. A sticky box is still in flow, so a
+     * column sized `100vh - 2rem` that starts ~146px down the document made the
+     * document 150px taller than the window whatever was on the stage — the
+     * console carried a scrollbar at rest, and the rack, as the tallest thing in
+     * the grid, is what the grid then sized itself to. `--console-h` is the real
+     * distance from this column's top to the bottom of the window, published by
+     * the page (../production); CSS has no way to name it. The page now scrolls
+     * when the STAGE needs it to and not before.
      *
      * ONLY WHILE IT IS ACTUALLY A SIDE COLUMN. Below the breakpoint that gives it
      * one, the grid is a single column and these are stacked blocks — a sticky
@@ -931,7 +941,7 @@ export const Rack = memo(function Rack({
             title="Rack"
             className={cn(
                 'flex flex-col h-[calc(100vh-13rem)]',
-                'lg:sticky lg:top-4 lg:row-span-2 lg:h-[calc(100vh-2rem)]',
+                'lg:sticky lg:top-4 lg:row-span-2 lg:h-[var(--console-h)] xl:row-span-1',
             )}
         >
             <ScrollArea className="min-h-0 flex-1">

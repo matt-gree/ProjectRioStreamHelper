@@ -180,10 +180,13 @@ export const Rail = memo(function Rail({ pins, onReorder, onUnpin, onOpen }) {
      * while the producer worked in the stage — so the rack, which is how you get to
      * anything, was off screen exactly when the panel you scrolled to see was on it.
      *
-     * `sticky` is the missing half. The column now holds the viewport (less a
-     * margin), its list fills it (`flex-1` over the panel's own height, never a
-     * second copy of that arithmetic), and it stays put while the middle column
-     * scrolls under it. `items-start` on the grid is what leaves it free to.
+     * `sticky` is the missing half. The column now holds the space actually
+     * BELOW it — `--console-h`, measured and published by the page, because a
+     * sticky box is still in flow and a `100vh` one forces the whole document
+     * taller than the window (see the long note in ../rack). Its list fills that
+     * (`flex-1` over the panel's own height, never a second copy of that
+     * arithmetic), and it stays put while the middle column scrolls under it.
+     * `items-start` on the grid is what leaves it free to.
      *
      * ONLY WHILE IT IS ACTUALLY A SIDE COLUMN. Below the breakpoint that gives it
      * one, the grid is a single column and these are stacked blocks — a sticky
@@ -206,7 +209,7 @@ export const Rail = memo(function Rail({ pins, onReorder, onUnpin, onOpen }) {
             className={cn(
                 'flex flex-col h-[calc(100vh-13rem)]',
                 'lg:col-start-2 lg:h-auto',
-                'xl:col-start-3 xl:sticky xl:top-4 xl:h-[calc(100vh-2rem)]',
+                'xl:col-start-3 xl:sticky xl:top-4 xl:h-[var(--console-h)]',
             )}
         >
             <ScrollArea className="min-h-0 flex-1">

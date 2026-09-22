@@ -129,6 +129,31 @@ describe('Production page mounts', () => {
 
 
 /*
+ * THE COLUMN HEIGHT IS PUBLISHED, OR THE COLUMNS HAVE NO HEIGHT AT ALL.
+ *
+ * The rack and the rail read `lg:h-[var(--console-h)]` / `xl:h-[var(--console-h)]`,
+ * which only resolves because `useConsoleColumnHeight` sets the variable on the
+ * grid they sit in. Unset, the declaration is invalid and both columns fall back
+ * to `height: auto` — the whole bug this replaced, where a `100vh` column made
+ * the document 150px taller than the window and the console carried a scrollbar
+ * at rest on a page with nothing below the fold.
+ *
+ * jsdom computes no layout, so the NUMBER means nothing here and is not asserted.
+ * What is pinned is the wiring: the ref is on the grid, the effect runs, and the
+ * variable lands on the element the two columns inherit from. A refactor that
+ * moves the ref or drops the hook fails here rather than in OBS.
+ */
+describe('the side columns are told how tall they may be', () => {
+    it('publishes --console-h on the grid the columns inherit from', () => {
+        const { container } = ui();
+        const grid = container.querySelector('[class*="grid-cols-1"][class*="items-start"]');
+        expect(grid).not.toBeNull();
+        expect(grid.style.getPropertyValue('--console-h')).toMatch(/^-?\d+px$/);
+    });
+});
+
+
+/*
  * THE BAND'S ERROR LINE CARRIES WHAT THE PILL CANNOT — the address, or the
  * rejection — and nothing else. The pill an inch to its left already says the
  * connection failed, and the line used to say it again at length; before that

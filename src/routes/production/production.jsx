@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { Link } from 'react-router-dom';
 import { Radio, PlugZap, ArrowLeftRight, CircleDot, X } from 'lucide-react';
@@ -320,9 +320,69 @@ function useDeskBodies() {
     return useMemo(() => deskBodiesFor(boards, label, rename), [boards, label, rename]);
 }
 
+/*
+ * HOW TALL A SIDE COLUMN MAY BE — measured, because CSS cannot ask.
+ *
+ * The rack and the rail are sticky viewport-tall boxes, and a sticky box is
+ * still in flow: sized `100vh - 2rem` while starting ~146px down the document,
+ * each one made the document 150px taller than the window whatever was on the
+ * stage. The console had a scrollbar at rest, on a page with nothing below the
+ * fold — and the rack, being the tallest thing in the grid, is what the grid
+ * then sized itself to, so no amount of `1fr`/`stretch`/`min-h-0` moves it.
+ * (Measured: the grid stayed 968px with every one of those applied.)
+ *
+ * The number a column actually wants is the distance from its own top to the
+ * bottom of the window, and nothing in CSS can name that. So measure it once
+ * and publish it as `--console-h` on the grid, which both columns inherit.
+ *
+ * The trade, stated: the height is the AT-REST one, so once the stage is long
+ * enough to scroll and a column pins at `top-4`, it ends short of the window
+ * bottom by however much chrome sits above the grid. That is the right way
+ * round — a column that is occasionally short costs a little of its own list,
+ * where a column that is always too tall costs the whole page a scrollbar it
+ * never needed.
+ *
+ * `document.body` is the observed element on purpose: the chrome above the grid
+ * is not just the console band (the OBS bar and the announcement card come and
+ * go above the page entirely), so anything narrower would miss a move. The
+ * write-guard is what keeps that from looping — setting the height changes the
+ * body's size and fires the observer again, which then measures the same top
+ * and writes nothing.
+ */
+function useConsoleColumnHeight(ref) {
+    useLayoutEffect(() => {
+        const el = ref.current;
+        if (!el) return undefined;
+        let last = null;
+        const measure = () => {
+            // Document-relative, so it is the same number at any scroll offset.
+            const top = el.getBoundingClientRect().top + window.scrollY;
+            // The shell's own bottom padding (p-5), or the column would end
+            // flush with the window and the page would scroll by that much.
+            const h = Math.max(0, Math.round(window.innerHeight - top - 20));
+            if (h === last) return;
+            last = h;
+            el.style.setProperty('--console-h', `${h}px`);
+        };
+        // Measure FIRST and unconditionally: a column with no height at all is
+        // worse than one that stops tracking, so the observer is the optional
+        // half, never the gate.
+        measure();
+        window.addEventListener('resize', measure);
+        const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+        ro?.observe(document.body);
+        return () => {
+            ro?.disconnect();
+            window.removeEventListener('resize', measure);
+        };
+    }, [ref]);
+}
+
 export default function Production() {
     // Selection + rail pins live here so the rack and the stage read one copy
     // (usePersistentState is per-hook, not a shared store).
+    const grid = useRef(null);
+    useConsoleColumnHeight(grid);
     const [selection, setSelection] = useRackSelection();
     const deskBodies = useDeskBodies();
     const [rail, setRail] = useRailPins();
@@ -379,12 +439,22 @@ export default function Production() {
                 inverts that: the rack and rail give up their last ~90px each
                 before the thing the producer is actually looking at does.
 
-                `lg:grid-rows-[auto_1fr]`: between lg and xl the rack spans both
-                rows of its column and the rail sits under the stage (../rack,
-                ../rail). The rack is viewport-tall, so its height has to go
-                somewhere — auto rows split it evenly and opened a gap between
-                the stage and the rail; this hands all of it to the rail's row. */}
-            <div className="grid grid-cols-1 items-start gap-4 lg:grid-rows-[auto_1fr] lg:grid-cols-[minmax(0,280px)_minmax(0,1fr)] xl:grid-cols-[minmax(0,280px)_minmax(560px,1fr)_minmax(0,252px)]">
+                `lg:grid-rows-[auto_minmax(0,1fr)]`: between lg and xl the rack
+                spans both rows of its column and the rail sits under the stage
+                (../rack, ../rail). The rack is the tall one, so its height has
+                to go somewhere — plain `auto` rows split it evenly and opened a
+                135px gap between the stage and the rail; this hands all of it to
+                the rail's row. The `minmax(0,` is not decoration: a bare `1fr`
+                has an `auto` MINIMUM, and against an indefinite grid height that
+                minimum resolved the row to 816px for a 161px rail — 417px of
+                page scroll, measured, on a console whose columns now fit.
+
+                `xl:grid-rows-none` puts it back to one row, because at xl the
+                rail has its own column and nothing else is in row 2 — an empty
+                track costs nothing but the GAP above it, and that 16px was the
+                whole of the page's remaining scrollbar once the columns stopped
+                over-reaching (see `useConsoleColumnHeight`). */}
+            <div ref={grid} className="grid grid-cols-1 items-start gap-4 lg:grid-rows-[auto_minmax(0,1fr)] lg:grid-cols-[minmax(0,280px)_minmax(0,1fr)] xl:grid-rows-none xl:grid-cols-[minmax(0,280px)_minmax(560px,1fr)_minmax(0,252px)]">
                 <Rack
                     selection={selection} onSelect={setSelection}
                     pins={pins} onPinToggle={togglePin}
