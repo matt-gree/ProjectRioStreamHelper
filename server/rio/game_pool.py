@@ -90,7 +90,11 @@ class OngoingGamePool:
 
     @classmethod
     async def Start(cls):
-        cls._poll_interval = Settings.Get("ongoing_games.poll_interval", 10.0)
+        # Floored: this is the one standing poll of Project Rio, and a settings
+        # value of 0 would ask it for every live game as fast as the loop turns.
+        cls._poll_interval = max(
+            float(Settings.Get("ongoing_games.poll_interval", 10.0) or 0), 5.0
+        )
         GameEndWatcher.reset()
         # Polling is demand-driven: the loop always runs but only hits the API
         # on ticks where a board actually needs live data (see

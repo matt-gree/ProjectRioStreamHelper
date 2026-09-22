@@ -23,6 +23,8 @@ def _reset_module_cache(monkeypatch):
     monkeypatch.setattr(stats_api, "_game_modes", {}, raising=False)
     monkeypatch.setattr(stats_api, "_game_modes_lock", None, raising=False)
     monkeypatch.setattr(stats_api, "_cache_refresh_lock", None, raising=False)
+    monkeypatch.setattr(stats_api, "_modes_task", None, raising=False)
+    monkeypatch.setattr(stats_api, "_modes_failed_at", None, raising=False)
     yield
 
 
@@ -299,3 +301,99 @@ async def test_re_reading_never_overrides_a_producers_pick(monkeypatch):
 
     await P._apply_hud_game_mode({"tag_set": 7})
     assert Settings.Get("scoreboards.binding.1.stats_tag") == "My Season"
+
+
+# --- a Project Rio that is down must not be asked once per frame ----------
+
+class _Failing(_Client):
+    def __init__(self):
+        super().__init__()
+        self.calls = 0
+
+    def list_game_modes(self, active=False):
+        self.calls += 1
+        raise ConnectionError("rio is down")
+
+
+async def test_a_failed_mode_fetch_is_not_repeated_by_every_caller(monkeypatch):
+    """Each HUD frame of a cold-start game and each ongoing-pool tick finds the
+    cache empty. Without a backoff every one of them re-asked a Rio that had
+    just failed — one request per frame per streamer while it was down."""
+    client = _Failing()
+    monkeypatch.setattr(stats_api, "_get_client", lambda: client)
+
+    for _ in range(10):
+        assert await stats_api.fetch_game_modes() == {}
+    assert client.calls == 1
+
+    # Past the backoff it asks again — once.
+    monkeypatch.setattr(stats_api, "MODES_RETRY_AFTER", 0.0)
+    await stats_api.fetch_game_modes()
+    assert client.calls == 2
+
+
+async def test_an_explicit_refresh_ignores_the_backoff(monkeypatch):
+    client = _Failing()
+    monkeypatch.setattr(stats_api, "_get_client", lambda: client)
+    monkeypatch.setattr(stats_api, "refresh_completer_cache", _noop)
+    await stats_api.fetch_game_modes()
+    await stats_api.fetch_game_modes(force=True)   # the producer's Refresh
+    assert client.calls == 2
+
+
+async def _noop():
+    return None
+
+
+async def test_budgeted_resolves_share_one_in_flight_fetch(monkeypatch):
+    """A run of HUD frames waits on ONE request, not one queued per frame."""
+    client = _Client(list_delay=0.2)
+    calls = []
+    real = client.list_game_modes
+
+    def counted(active=False):
+        calls.append(1)
+        return real(active)
+    client.list_game_modes = counted
+    monkeypatch.setattr(stats_api, "_get_client", lambda: client)
+
+    for _ in range(5):
+        assert await stats_api.resolve_tag_set_name(7, timeout=0) == ""
+    await asyncio.sleep(0.4)
+    assert len(calls) == 1
+    assert await stats_api.resolve_tag_set_name(7, timeout=0) == "Ranked"
+
+
+async def test_a_retry_frame_does_not_wait_on_the_api(monkeypatch):
+    """The new-game frame spends the budget; the frames after it must not each
+    spend it again, or an unreachable Rio is a stall on every frame."""
+    from server.rio.provider import RioGameDataProvider as P
+
+    monkeypatch.setattr(P, "_hud_targets", [1])
+    seen = []
+
+    async def resolve(_id, timeout=None):
+        seen.append(timeout)
+        return ""
+    monkeypatch.setattr(stats_api, "resolve_tag_set_name", resolve)
+    monkeypatch.setattr(stats_api, "modes_ready", lambda: False)
+
+    await P._apply_hud_game_mode({"tag_set": 7}, budget=0)
+    assert seen == [0]
+
+
+def test_the_rio_session_carries_a_default_timeout():
+    """pyrio builds its session with none, so a hung Rio held a worker thread —
+    from the pool the HUD file read shares — forever."""
+    seen = {}
+
+    class _Session:
+        def request(self, method, url, **kw):
+            seen.update(kw)
+
+    s = _Session()
+    stats_api._with_default_timeout(s)
+    s.request("GET", "u")
+    assert seen["timeout"] == stats_api.HTTP_TIMEOUT
+    s.request("GET", "u", timeout=3)
+    assert seen["timeout"] == 3

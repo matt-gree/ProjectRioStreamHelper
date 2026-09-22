@@ -102,6 +102,27 @@ def load_rio_key() -> str | None:
     return None
 
 
+# (connect, read) seconds for every request PRSH makes through pyrio. pyrio
+# builds its session with NO timeout, so a Project Rio that accepts the
+# connection and never answers held a worker thread forever — and every
+# `asyncio.to_thread` in the process (the HUD file read, stat-file captures,
+# JSON dumps) shares that one bounded pool. A few hung polls starved the board.
+# The read budget is generous because the community fallback asks for a whole
+# season's games in one query.
+HTTP_TIMEOUT = (5.0, 60.0)
+
+
+def _with_default_timeout(session) -> None:
+    """Give a requests.Session a default timeout without touching pyrio."""
+    request = session.request
+
+    def timed(method, url, **kwargs):
+        kwargs.setdefault("timeout", HTTP_TIMEOUT)
+        return request(method, url, **kwargs)
+
+    session.request = timed
+
+
 def _get_client() -> RioWeb:
     """Lazy singleton for the RioWeb API client."""
     global _client
@@ -109,6 +130,7 @@ def _get_client() -> RioWeb:
         key = load_rio_key()
         cache_dir = str(user_data_dir() / "cache")
         _client = RioWeb(rio_key=key, cache_dir=cache_dir)
+        _with_default_timeout(_client.session)
     return _client
 
 
@@ -315,6 +337,17 @@ async def fetch_ongoing_games() -> dict:
 _game_modes: dict[str, int] = {}
 _game_modes_lock: asyncio.Lock | None = None
 _cache_refresh_lock: asyncio.Lock | None = None
+# The one in-flight fetch every budgeted (live-path) resolve shares, so a run of
+# HUD frames waits on ONE request rather than queueing one each behind the lock.
+_modes_task: asyncio.Task | None = None
+# When the last mode fetch failed (loop time). Until MODES_RETRY_AFTER has passed
+# an unforced fetch answers from the (empty) cache instead of asking again: every
+# caller that finds the cache empty — each HUD frame of a cold-start game, each
+# ongoing-pool tick — used to make its own request, so a Project Rio that was
+# down or erroring got one call per frame per streamer for as long as it stayed
+# down.
+_modes_failed_at: float | None = None
+MODES_RETRY_AFTER = 30.0
 
 # How long a LIVE path (a HUD frame resolving its game mode) will wait on the
 # game-mode cache before giving up and leaving the tag alone. pyrio builds its
@@ -345,6 +378,13 @@ def modes_ready() -> bool:
     return bool(_game_modes)
 
 
+def _modes_backing_off() -> bool:
+    """True while a recent failed mode fetch says not to ask again yet."""
+    if _modes_failed_at is None:
+        return False
+    return asyncio.get_running_loop().time() - _modes_failed_at < MODES_RETRY_AFTER
+
+
 def _get_cache_refresh_lock() -> asyncio.Lock:
     global _cache_refresh_lock
     if _cache_refresh_lock is None:
@@ -365,8 +405,10 @@ async def fetch_game_modes(force: bool = False) -> dict[str, int]:
     completed games (RioWeb._process_games), so a stale pickle can hide a
     just-added game mode there even after fetch_game_modes() itself refreshes.
     """
-    global _game_modes
+    global _game_modes, _modes_failed_at
     if _game_modes and not force:
+        return _game_modes
+    if not force and _modes_backing_off():
         return _game_modes
 
     client = _get_client()
@@ -378,14 +420,21 @@ async def fetch_game_modes(force: bool = False) -> dict[str, int]:
         # Double-check after acquiring lock (another coroutine may have filled it)
         if _game_modes and not force:
             return _game_modes
+        # Re-checked under the lock: callers queued behind a failing fetch would
+        # otherwise each go on to repeat it.
+        if not force and _modes_backing_off():
+            return _game_modes
         try:
             raw = await asyncio.to_thread(client.list_game_modes, active=True)
             tag_sets = raw.get("Tag Sets", [])
             _game_modes = {ts["name"]: ts["id"] for ts in tag_sets}
+            _modes_failed_at = None
             logger.info(f"[StatsAPI] Fetched {len(_game_modes)} active game modes")
         except RioAPIError as e:
+            _modes_failed_at = asyncio.get_running_loop().time()
             logger.warning(f"[StatsAPI] API error fetching game modes: {e}")
         except Exception as e:
+            _modes_failed_at = asyncio.get_running_loop().time()
             logger.error(f"[StatsAPI] Unexpected error fetching game modes: {e}")
 
     if force:
@@ -491,6 +540,7 @@ async def resolve_tag_set_name(tag_set_id, timeout: float | None = None) -> str:
     the "unknown mode" answer, and already means "leave the current selection
     alone".
     """
+    global _modes_task
     if tag_set_id is None or tag_set_id == -1:
         return ""
     modes = _game_modes
@@ -498,9 +548,11 @@ async def resolve_tag_set_name(tag_set_id, timeout: float | None = None) -> str:
         if timeout is None:
             modes = await fetch_game_modes()
         else:
+            if _modes_task is None or _modes_task.done():
+                _modes_task = asyncio.ensure_future(fetch_game_modes())
             try:
                 modes = await asyncio.wait_for(
-                    asyncio.shield(fetch_game_modes()), timeout
+                    asyncio.shield(_modes_task), timeout
                 )
             except Exception:
                 # shield: the in-flight fetch keeps going and fills the cache for

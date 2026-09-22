@@ -833,7 +833,11 @@ class RioGameDataProvider:
             # or the game plays out with no stats tag — which is what "skipping
             # API stats fetch" in the log means. Only retried while the answer
             # was "we never got to look"; a genuinely unknown mode settles.
-            await cls._apply_hud_game_mode(game_json)
+            # NO budget here: the new-game frame already spent one, and waiting
+            # again on every following frame is a stall per frame for as long as
+            # Project Rio is unreachable. The shared in-flight fetch keeps
+            # running; a later frame finds its answer in the cache.
+            await cls._apply_hud_game_mode(game_json, budget=0)
 
         for sb in cls._hud_targets:
             if is_new_game:
@@ -894,7 +898,7 @@ class RioGameDataProvider:
         await State.Save()
 
     @classmethod
-    async def _apply_hud_game_mode(cls, game_json: dict):
+    async def _apply_hud_game_mode(cls, game_json: dict, budget: float | None = None):
         """Set each HUD-target scoreboard's game-mode tag from the HUD tag set.
 
         Resolves the HUD game's TagSetID to its game-mode name and writes it to
@@ -911,7 +915,8 @@ class RioGameDataProvider:
         # (and every queued frame behind it) off air. The mode is a nicety; the
         # board is the product.
         name = await stats_api.resolve_tag_set_name(
-            tag_set_id, timeout=stats_api.LIVE_RESOLVE_TIMEOUT
+            tag_set_id,
+            timeout=stats_api.LIVE_RESOLVE_TIMEOUT if budget is None else budget,
         )
         if not name:
             # Worth another go next frame only if the modes hadn't loaded yet.
