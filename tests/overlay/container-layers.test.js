@@ -463,3 +463,64 @@ describe('createLayers — the cross-fade', () => {
         expect(layers.active()).toBeNull();
     });
 });
+
+/*
+ * A layer is retained, not torn down — so a member that animates on its own
+ * clock (the spotlight's spray orbit renders every frame) must be told when it
+ * has faded out, or it goes on drawing, invisibly, for the rest of the night.
+ */
+describe('idle — the member that faded out stops working', () => {
+    function idler() {
+        const calls = { idles: 0 };
+        return {
+            calls,
+            spec: {
+                size: [100, 100],
+                mount: () => ({
+                    update() {}, dispose() {}, replay() {},
+                    idle: () => { calls.idles += 1; },
+                }),
+            },
+        };
+    }
+
+    it('idles the outgoing member after the fade, not before', async () => {
+        vi.useFakeTimers();
+        try {
+            const a = idler();
+            const b = fakeMember([100, 100]);
+            const layers = createLayers({
+                host: host(), registry: { a: a.spec, b: b.spec }, raf: now, fadeMs: 200,
+            });
+            await layers.show('a', {});
+            await layers.show('b', {});
+            expect(a.calls.idles).toBe(0);   // still dissolving
+            vi.advanceTimersByTime(200);
+            expect(a.calls.idles).toBe(1);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('idles on a clear, and not if the member came straight back', async () => {
+        vi.useFakeTimers();
+        try {
+            const a = idler();
+            const b = fakeMember([100, 100]);
+            const layers = createLayers({
+                host: host(), registry: { a: a.spec, b: b.spec }, raf: now, fadeMs: 200,
+            });
+            await layers.show('a', {});
+            await layers.show('b', {});
+            await layers.show('a', {});      // back before the fade finished
+            vi.advanceTimersByTime(200);
+            expect(a.calls.idles).toBe(0);
+
+            layers.clear();
+            vi.advanceTimersByTime(200);
+            expect(a.calls.idles).toBe(1);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+});
