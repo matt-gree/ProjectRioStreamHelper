@@ -751,12 +751,19 @@ export const placementTarget = (pin, placements) =>
  * `scoreboard` pin and a freshly written `scoreboard:1@Game` from sitting on the
  * rail as two cards for one source; new pins are written canonical, so a rail
  * converges as it is used rather than needing a rewrite pass.
+ *
+ * BOTH SIDES ARE RESOLVED, because the callers hand over different forms: the
+ * rack passes the row's placement id, but the rail's ◆ passes the pin AS STORED
+ * — and a stored legacy `scoreboard` resolves to `scoreboard:1@Game`, never to
+ * itself, so comparing targets against the raw id found no match and APPENDED
+ * a second copy. Unpinning from the rail duplicated the card it meant to remove.
  */
 export function togglePin(pins, id, placements) {
     const cur = pins ?? [];
-    return cur.some(p => placementTarget(p, placements) === id)
-        ? cur.filter(p => placementTarget(p, placements) !== id)
-        : [...cur, id];
+    const target = placementTarget(id, placements);
+    return cur.some(p => placementTarget(p, placements) === target)
+        ? cur.filter(p => placementTarget(p, placements) !== target)
+        : [...cur, target];
 }
 
 /*
