@@ -32,6 +32,31 @@ def test_parse_version(raw, expected):
     assert _parse_version(raw) == expected
 
 
+# --- _release_key: "is this tag newer" must see prereleases ---
+
+@pytest.mark.parametrize("tag,current,newer", [
+    ("v2.0.0", "2.0.0-prerelease.16", True),   # why: the release a preview was OF
+    ("v2.0.0", "2.0.0-prerelease.15-15-gb30cb5f8-dirty", True),  # dev describe
+    ("v2.0.0-prerelease.17", "2.0.0-prerelease.16", True),
+    ("v2.0.0-prerelease.16", "2.0.0-prerelease.16", False),
+    ("v2.0.0", "2.0.0", False),
+    ("v2.0.0-prerelease.16", "2.0.0", False),  # never offer a downgrade
+    ("v2.0.1", "2.0.0", True),
+    ("v1.9.0", "2.0.0-prerelease.3", False),
+])
+def test_release_key_orders_prereleases_below_their_release(tag, current, newer):
+    assert (ann._release_key(tag) > ann._release_key(current)) is newer
+
+
+async def test_a_prerelease_user_is_told_the_release_shipped(fake_http, at_version):
+    at_version("2.0.0-prerelease.16")
+    fake_http.responses[ann.LATEST_RELEASE_URL] = _FakeResponse(200, {
+        "tag_name": "v2.0.0", "html_url": "u",
+    })
+    await Announcements.Refresh()
+    assert [it["id"] for it in Announcements.GetActive()] == ["update-v2.0.0"]
+
+
 # --- _version_in_range ---
 
 @pytest.mark.parametrize("current,min_v,max_v,expected", [

@@ -25,6 +25,7 @@ Dismissals are stored in user settings under announcements.dismissed_ids.
 """
 
 import asyncio
+import re
 from datetime import datetime, timezone
 
 import httpx
@@ -56,6 +57,27 @@ def _parse_version(v: str | None) -> tuple:
         return (0,)
 
 
+def _release_key(v: str | None) -> tuple:
+    """Order two versions for "is this tag newer than what I'm running".
+
+    `_parse_version` drops the prerelease tail, which is right for an
+    announcement's min/max bounds and wrong here: it made `2.0.0-prerelease.16`
+    and `2.0.0` EQUAL, so everyone on a prerelease was never told the release
+    it was a preview of had shipped. A release outranks every prerelease of the
+    same number, and prereleases order by their own counter (`.16` < `.17`).
+    A git-describe suffix on a dev build (`-15-gabc-dirty`) is ignored.
+    """
+    base = _parse_version(v)
+    if not v:
+        return (base, 1, ())
+    tail = v.lstrip("vV").split("+")[0]
+    if "-" not in tail:
+        return (base, 1, ())
+    pre = tail.split("-", 1)[1]
+    nums = re.findall(r"\d+", pre.split("-")[0])
+    return (base, 0, tuple(int(n) for n in nums))
+
+
 def _version_in_range(current: str, min_v: str | None, max_v: str | None) -> bool:
     cv = _parse_version(current)
     if min_v and cv < _parse_version(min_v):
@@ -80,13 +102,13 @@ def _prune_stale_update_dismissals(
     version get treated as version 0.0.0 by `_parse_version` and so are also
     pruned — they were never going to match anything either.
     """
-    cv = _parse_version(current_version)
+    cv = _release_key(current_version)
     pruned: list = []
     changed = False
     for aid in dismissed:
         if isinstance(aid, str) and aid.startswith("update-"):
             tag = aid[len("update-"):]
-            if _parse_version(tag) <= cv:
+            if _release_key(tag) <= cv:
                 changed = True
                 continue
         pruned.append(aid)
@@ -185,7 +207,7 @@ class Announcements:
                         rel = r.json()
                         tag = (rel.get("tag_name") or "").strip()
                         url = rel.get("html_url") or ""
-                        if tag and _parse_version(tag) > _parse_version(current_version):
+                        if tag and _release_key(tag) > _release_key(current_version):
                             items.append({
                                 "id": f"update-{tag}",
                                 "title": f"Update available: {tag}",
